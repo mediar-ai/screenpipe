@@ -1,7 +1,7 @@
 # screen-pipe
 
 ## Overview
-**ScreenPipe** is a versatile library designed to facilitate the piping of screen data—including frames, video, OCR text, and metadata—from multiple screens to a defined storage solution. Written in Rust and compiled to WebAssembly (WASM), it ensures high performance and cross-platform compatibility, making it suitable for use on macOS, Linux, Windows, and other platforms.
+**ScreenPipe** is a versatile library designed to facilitate the piping of screen data—including frames, video, OCR text, and metadata—from multiple screens to a defined storage solution, designed to be processed by LLMs. Written in Rust and compiled to WebAssembly (WASM), it ensures high performance and cross-platform compatibility, making it suitable for use on macOS, Linux, Windows, and other platforms.
 
 Takes inspiration on adept.ai, rewind.ai, Apple Shortcut, and more.
 
