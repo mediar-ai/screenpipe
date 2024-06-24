@@ -37,17 +37,26 @@ Here's an example of server-side code written in TypeScript that takes the strea
 
 ```typescript
 import { ScreenPipe } from "screenpipe";
-import { OpenAI } from "openai";
+import { generateObject } from 'ai';
+import { z } from 'zod';
 
 const screenPipe = new ScreenPipe();
-const openai = new OpenAI();
 
 export async function onTick() {
   const data = await screenPipe.tick([1], {frames: 60}); // or screen [1, 2, 3, ...]
 
-  const response = await openai.chat({
-    model: "gpt4-o",
-    prompt: "Fill salesforce CRM based on Bob's sales activity: " + data.map((frame) => frame.text).join("\n")
+  const { object } = await generateObject({
+    model: openai("gpt4-o"),
+    schema: z.object({
+      leads: z.array(z.object({
+        name: z.string(),
+        company: z.string(),
+        role: z.string(),
+        status: z.string(),
+        messages: z.array(z.string()),
+      }),
+    })),
+    prompt: "Fill salesforce CRM based on Bob's sales activity (this is what appeared on his screen): " + data.map((frame) => frame.text).join("\n"),
   });
 
   // Add to Salesforce API ...
