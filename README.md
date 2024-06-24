@@ -36,19 +36,18 @@ screenpipe --storage s3://yourbucket/path --screen 1
 Here's an example of server-side code written in TypeScript that takes the streamed data from ScreenPipe and uses a Large Language Model like OpenAI's to process text and images for analyzing sales conversations:
 
 ```typescript
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { ScreenPipe } from "screenpipe";
 import { OpenAI } from "openai";
 
-const s3 = new S3Client({ region: "your-region" });
+const screenPipe = new ScreenPipe();
 const openai = new OpenAI();
 
-export async function onTick(bucket: string, key: string) {
-  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-  const data = await s3.send(command);
+export async function onTick() {
+  const data = await screenPipe.tick([1], {frames: 60}); // or screen [1, 2, 3, ...]
 
   const response = await openai.chat({
     model: "gpt4-o",
-    prompt: "Fill salesforce CRM based on Bob's sales activity: " + data,
+    prompt: "Fill salesforce CRM based on Bob's sales activity: " + data.map((frame) => frame.text).join("\n")
   });
 
   // Add to Salesforce API ...
