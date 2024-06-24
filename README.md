@@ -56,7 +56,8 @@ export async function onTick() {
         messages: z.array(z.string()),
       }),
     })),
-    prompt: "Fill salesforce CRM based on Bob's sales activity (this is what appeared on his screen): " + data.map((frame) => frame.text).join("\n"),
+    prompt: "Fill salesforce CRM based on Bob's sales activity (this is what appeared on his screen): " +
+     data.map((frame) => frame.text).join("\n"),
   });
 
   // Add to Salesforce API ...
