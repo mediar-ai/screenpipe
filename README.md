@@ -1,5 +1,10 @@
 # screen-pipe
 
+Like this repo? Drop a ⭐️.
+
+Also, say 👋 in our public Discord channel <a href="https://discord.gg/dU9EBuw7Uq"><img alt="Join us on Discord" src="https://img.shields.io/discord/823813159592001537?color=5865F2&logo=discord&logoColor=white"></a>. We discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
+
+
 ## Overview
 Turn your screen into actions (using LLMs). Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Rust + WASM.
 
