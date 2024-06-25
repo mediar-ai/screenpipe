@@ -57,19 +57,11 @@ screenpipe --path ./second-memory
 To install ScreenPipe, run the following command in your terminal:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
+git clone https://github.com/louis030195/screen-pipe
+cargo install --path screenpipe
+# test
+screenpipe --path ./second-memory
 ```
-
-Make sure to add `$HOME/.local/bin` to your `PATH` if it's not already included:
-
-```bash
-export PATH=$HOME/.local/bin:$PATH
-```
-
-
-## Documentation
-
-For more detailed information about the API and advanced configurations, please refer to the [ScreenPipe Documentation](https://github.com/yourusername/screenpipe/docs).
 
 ## Contributing
 
