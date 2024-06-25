@@ -5,7 +5,7 @@ use std::fs::create_dir_all;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, sleep};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use xcap::image::{ImageBuffer, Rgba};
 use xcap::Monitor;
 const DISPLAY: &str = r"

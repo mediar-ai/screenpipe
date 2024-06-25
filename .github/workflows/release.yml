@@ -8,6 +8,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
 
     steps:
       - name: Checkout code
@@ -23,12 +28,8 @@ jobs:
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
-      - name: Build for Linux
-        run: cross build --release --target x86_64-unknown-linux-gnu
-        working-directory: screenpipe
-
-      - name: Build for macOS
-        run: cross build --release --target x86_64-apple-darwin
+      - name: Build for ${{ matrix.target }}
+        run: cross build --release --target ${{ matrix.target }}
         working-directory: screenpipe
 
       - name: Create Release
@@ -42,22 +43,12 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload Release Asset for Linux
+      - name: Upload Release Asset for ${{ matrix.target }}
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: screenpipe/target/x86_64-unknown-linux-gnu/release/screenpipe
-          asset_name: screenpipe-linux
-          asset_content_type: application/octet-stream
-
-      - name: Upload Release Asset for macOS
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: screenpipe/target/x86_64-apple-darwin/release/screenpipe
-          asset_name: screenpipe-macos
+          asset_path: screenpipe/target/${{ matrix.target }}/release/screenpipe
+          asset_name: screenpipe-${{ matrix.target }}
           asset_content_type: application/octet-stream
