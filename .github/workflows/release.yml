@@ -13,6 +13,8 @@ jobs:
         target:
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
 
     steps:
       - name: Checkout code
@@ -30,7 +32,6 @@ jobs:
 
       - name: Build for ${{ matrix.target }}
         run: cross build --release --target ${{ matrix.target }}
-        working-directory: screenpipe
 
       - name: Create Release
         id: create_release
@@ -49,6 +50,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: screenpipe/target/${{ matrix.target }}/release/screenpipe
+          asset_path: target/${{ matrix.target }}/release/screenpipe
           asset_name: screenpipe-${{ matrix.target }}
           asset_content_type: application/octet-stream

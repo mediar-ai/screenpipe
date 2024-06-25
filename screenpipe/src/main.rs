@@ -47,7 +47,9 @@ fn normalized(filename: &str) -> String {
 fn screenpipe(path: &str, interval: f32, running: Arc<AtomicBool>) {
     // delete and recreate the directory
     println!("Deleting and recreating directory {}", path);
-    std::fs::remove_dir_all(path).unwrap();
+    if std::fs::metadata(path).is_ok() {
+        std::fs::remove_dir_all(path).unwrap();
+    }
     create_dir_all(path).unwrap();
     let monitors = Monitor::all().unwrap();
     let mut frame_count = 0;
