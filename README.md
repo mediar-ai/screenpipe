@@ -1,8 +1,8 @@
-# screen-pipe
+# screen | ⭐️
 
 <p align="center">
     <br>
-       <img src="https://github.com/louis030195/screen-pipe/assets/25003283/466e2ff6-adff-44dc-8eff-553047c9ea73" width="200"/>
+       <img src="https://github.com/louis030195/screen-pipe/assets/25003283/289bbee7-79bb-4251-9516-878a1c40dcd0" width="200"/>
     <br>
 <p>
 <p align="center">
