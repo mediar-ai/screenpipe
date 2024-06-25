@@ -44,6 +44,10 @@ screenpipe --path ./second-memory
 ```
 
 
+https://github.com/louis030195/screen-pipe/assets/25003283/08a8c9d6-0be6-44c2-b37f-62d0721fe8c3
+
+
+
 ## Features
 - **Multi-Screen Support**: Capture and aggregate data from multiple screens simultaneously.
 - **Video Recording**: Record continuous or event-triggered screen activities.
