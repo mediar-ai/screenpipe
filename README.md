@@ -58,9 +58,7 @@ screenpipe --storage s3://yourbucket/path --screen 1
 To install ScreenPipe, run the following command in your terminal:
 
 ```bash
-brew install screenpipe
-# or
-apt install screenpipe
+curl -sL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
 ```
 
 
