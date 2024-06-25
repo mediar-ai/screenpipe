@@ -1,4 +1,6 @@
 # screen-pipe
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Flouis030195%2Fscreen-pipe.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Flouis030195%2Fscreen-pipe?ref=badge_shield)
+
 
 ## Overview
 **ScreenPipe** is a versatile library designed to facilitate the piping of screen data—including frames, video, OCR text, and metadata—from multiple screens to a defined storage solution, designed to be processed by LLMs. Written in Rust and compiled to WebAssembly (WASM), it ensures high performance and cross-platform compatibility, making it suitable for use on macOS, Linux, Windows, and other platforms.
@@ -77,3 +79,6 @@ Contributions are welcome! If you'd like to contribute, please fork the reposito
 The code in this project is licensed under MIT license. See the [LICENSE](LICENSE.md) file for more information.
 
 
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Flouis030195%2Fscreen-pipe.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Flouis030195%2Fscreen-pipe?ref=badge_large)
