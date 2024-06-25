@@ -3,7 +3,7 @@
 ## Overview
 Turn your screen into actions (using LLMs). Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Rust + WASM.
 
-Would love this product with an amazing UI and simple to use like Rewind? [Get 50% off now](https://buy.stripe.com/5kA6p7gSG3NwesweV0):
+Would love this product with an amazing UI and simple to use like Rewind? [Pay once, use forever, 50% off now](https://buy.stripe.com/5kA6p7gSG3NwesweV0):
 
 - Refunded anytime you want (just dm me on x.com/@louis030195) 
 - 50% off the production-ready version that will allow you to use this daily, in addition to support the development.
