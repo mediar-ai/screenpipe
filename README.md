@@ -2,7 +2,7 @@
 
 <p align="center">
     <br>
-       <img src="https://github.com/louis030195/screen-pipe/assets/25003283/466e2ff6-adff-44dc-8eff-553047c9ea73" width="400"/>
+       <img src="https://github.com/louis030195/screen-pipe/assets/25003283/466e2ff6-adff-44dc-8eff-553047c9ea73" width="200"/>
     <br>
 <p>
 <p align="center">
