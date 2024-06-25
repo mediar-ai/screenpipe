@@ -56,13 +56,9 @@ https://github.com/louis030195/screen-pipe/assets/25003283/08a8c9d6-0be6-44c2-b3
 
 
 
-## Features
-- **Multi-Screen Support**: Capture and aggregate data from multiple screens simultaneously.
-- **Video Recording**: Record continuous or event-triggered screen activities.
-- **OCR Capabilities**: Extract text from captured frames or videos for further analysis.
-- **Metadata Extraction**: Collect and store metadata related to screen activities for enhanced insights.
-- **Flexible Storage Options**: Configure storage on local drives, cloud storage, or custom solutions tailored to enterprise needs.
-- **Cross-Platform**: Runs smoothly on various operating systems thanks to its Rust base and WASM compilation.
+## Status 
+
+Alpha: runs on my computer. Capture things and do things.
 
 ## Installation
 
@@ -85,4 +81,6 @@ Say 👋 in our [public Discord channel](https://discord.gg/dU9EBuw7Uq) . We dis
 
 The code in this project is licensed under MIT license. See the [LICENSE](LICENSE.md) file for more information.
 
+## Related projects
 
+https://github.com/louis030195/screen-to-crm
