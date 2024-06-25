@@ -1,9 +1,7 @@
 # screen-pipe
 
 ## Overview
-**ScreenPipe** is a versatile library designed to facilitate the piping of screen data—including frames, video, OCR text, and metadata—from multiple screens to a defined storage solution, designed to be processed by **LLMs**. Written in Rust and compiled to WebAssembly (WASM), it ensures high performance and cross-platform compatibility, making it suitable for use on macOS, Linux, Windows, and other platforms.
-
-Takes inspiration on `adept.ai`, `rewind.ai`, `Apple Shortcut`, and more.
+Turn your screen into actions (using LLMs). Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Rust + WASM.
 
 ## Screen to action using LLMs
 Here's an example of server-side code written in TypeScript that takes the streamed data from ScreenPipe and uses a Large Language Model like OpenAI's to process text and images for analyzing sales conversations:
