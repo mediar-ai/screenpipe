@@ -20,15 +20,15 @@ jobs:
           profile: minimal
           override: true
 
-      - name: Add macOS target
-        run: rustup target add x86_64-apple-darwin
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build for Linux
-        run: cargo build --release --target x86_64-unknown-linux-gnu
+        run: cross build --release --target x86_64-unknown-linux-gnu
         working-directory: screenpipe
 
       - name: Build for macOS
-        run: cargo build --release --target x86_64-apple-darwin
+        run: cross build --release --target x86_64-apple-darwin
         working-directory: screenpipe
 
       - name: Create Release
