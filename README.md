@@ -60,6 +60,12 @@ To install ScreenPipe, run the following command in your terminal:
 curl -sL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
 ```
 
+Make sure to add `$HOME/.local/bin` to your `PATH` if it's not already included:
+
+```bash
+export PATH=$HOME/.local/bin:$PATH
+```
+
 
 ## Documentation
 
