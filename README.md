@@ -5,34 +5,7 @@
 
 Takes inspiration on adept.ai, rewind.ai, Apple Shortcut, and more.
 
-## Features
-- **Multi-Screen Support**: Capture and aggregate data from multiple screens simultaneously.
-- **Video Recording**: Record continuous or event-triggered screen activities.
-- **OCR Capabilities**: Extract text from captured frames or videos for further analysis.
-- **Metadata Extraction**: Collect and store metadata related to screen activities for enhanced insights.
-- **Flexible Storage Options**: Configure storage on local drives, cloud storage, or custom solutions tailored to enterprise needs.
-- **Cross-Platform**: Runs smoothly on various operating systems thanks to its Rust base and WASM compilation.
-
-## Installation
-
-To install ScreenPipe, run the following command in your terminal:
-
-```bash
-brew install screenpipe
-# or
-apt install screenpipe
-```
-
-## Usage
-
-### On Computers
-To start capturing screen data and send it to a specific storage location such as Amazon S3, use the following command line interface (CLI) command:
-
-```bash
-screenpipe --storage s3://yourbucket/path --screen 1
-```
-
-### On Server
+## Trigger actions based on your screen in the cloud with LLMs
 Here's an example of server-side code written in TypeScript that takes the streamed data from ScreenPipe and uses a Large Language Model like OpenAI's to process text and images for analyzing sales conversations:
 
 ```typescript
@@ -63,6 +36,33 @@ export async function onTick() {
   // Add to Salesforce API ...
 }
 ```
+
+## On your computer
+To start capturing screen data and send it to a specific storage location such as Amazon S3, use the following command line interface (CLI) command:
+
+```bash
+screenpipe --storage s3://yourbucket/path --screen 1
+```
+
+## Features
+- **Multi-Screen Support**: Capture and aggregate data from multiple screens simultaneously.
+- **Video Recording**: Record continuous or event-triggered screen activities.
+- **OCR Capabilities**: Extract text from captured frames or videos for further analysis.
+- **Metadata Extraction**: Collect and store metadata related to screen activities for enhanced insights.
+- **Flexible Storage Options**: Configure storage on local drives, cloud storage, or custom solutions tailored to enterprise needs.
+- **Cross-Platform**: Runs smoothly on various operating systems thanks to its Rust base and WASM compilation.
+
+## Installation
+
+To install ScreenPipe, run the following command in your terminal:
+
+```bash
+brew install screenpipe
+# or
+apt install screenpipe
+```
+
+
 
 ## Documentation
 
