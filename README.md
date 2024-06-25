@@ -1,9 +1,9 @@
 # screen-pipe
 
 ## Overview
-**ScreenPipe** is a versatile library designed to facilitate the piping of screen data—including frames, video, OCR text, and metadata—from multiple screens to a defined storage solution, designed to be processed by LLMs. Written in Rust and compiled to WebAssembly (WASM), it ensures high performance and cross-platform compatibility, making it suitable for use on macOS, Linux, Windows, and other platforms.
+**ScreenPipe** is a versatile library designed to facilitate the piping of screen data—including frames, video, OCR text, and metadata—from multiple screens to a defined storage solution, designed to be processed by **LLMs**. Written in Rust and compiled to WebAssembly (WASM), it ensures high performance and cross-platform compatibility, making it suitable for use on macOS, Linux, Windows, and other platforms.
 
-Takes inspiration on adept.ai, rewind.ai, Apple Shortcut, and more.
+Takes inspiration on `adept.ai`, `rewind.ai`, `Apple Shortcut`, and more.
 
 ## Trigger actions based on your screen in the cloud with LLMs
 Here's an example of server-side code written in TypeScript that takes the streamed data from ScreenPipe and uses a Large Language Model like OpenAI's to process text and images for analyzing sales conversations:
@@ -17,6 +17,7 @@ const screenPipe = new ScreenPipe();
 
 export async function onTick() {
   const data = await screenPipe.tick([1], {frames: 60}); // or screen [1, 2, 3, ...]
+  // [{frame: [...], text: [...], metadata: [...]}, ...]
 
   const { object } = await generateObject({
     model: openai("gpt4-o"),

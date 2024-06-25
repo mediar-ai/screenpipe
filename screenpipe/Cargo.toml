@@ -1,0 +1,15 @@
+[package]
+name = "screenpipe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+xcap = "0.0.10"
+clap = { version = "4.0", features = ["derive"] }
+chrono = "0.4.38"
+crossbeam = "0.8"
+ctrlc = "3.4"
+
+[[bin]]
+name = "screenpipe"
+path = "src/main.rs"
