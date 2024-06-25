@@ -5,8 +5,8 @@ Turn your screen into actions (using LLMs). Inspired by `adept.ai`, `rewind.ai`,
 
 Would love this product with an amazing UI and simple to use like Rewind? [Pay once, use forever, 50% off now](https://buy.stripe.com/5kA6p7gSG3NwesweV0):
 
-- Refunded anytime you want (just dm me on x.com/@louis030195) 
-- 50% off the Linux/Mac/Windows version that will allow you to use this daily, in addition to support the development.
+- Refunded anytime you want (just dm me on x.com/@louis030195). 
+- 50% off the Linux/Mac/Windows version.
 
 ## Screen to action using LLMs
 Here's an example of server-side code written in TypeScript that takes the streamed data from ScreenPipe and uses a Large Language Model like OpenAI's to process text and images for analyzing sales conversations:
