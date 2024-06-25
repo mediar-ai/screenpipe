@@ -42,7 +42,7 @@ export async function onTick() {
 To start capturing screen data and send it to a specific storage location such as Amazon S3, use the following command line interface (CLI) command:
 
 ```bash
-screenpipe --storage s3://yourbucket/path --screen 1
+screenpipe --path ./second-memory
 ```
 
 
