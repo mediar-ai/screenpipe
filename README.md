@@ -1,9 +1,9 @@
 # screen-pipe
 
 ## Overview
-**ScreenPipe** is a versatile library designed to facilitate the piping of screen data—including frames, video, OCR text, and metadata—from multiple screens to a defined storage solution, designed to be processed by LLMs. Written in Rust and compiled to WebAssembly (WASM), it ensures high performance and cross-platform compatibility, making it suitable for use on macOS, Linux, Windows, and other platforms.
+**ScreenPipe** is a versatile library designed to facilitate the piping of screen data—including frames, video, OCR text, and metadata—from multiple screens to a defined storage solution, designed to be processed by **LLMs**. Written in Rust and compiled to WebAssembly (WASM), it ensures high performance and cross-platform compatibility, making it suitable for use on macOS, Linux, Windows, and other platforms.
 
-Takes inspiration on adept.ai, rewind.ai, Apple Shortcut, and more.
+Takes inspiration on `adept.ai`, `rewind.ai`, `Apple Shortcut`, and more.
 
 ## Features
 - **Multi-Screen Support**: Capture and aggregate data from multiple screens simultaneously.
@@ -18,9 +18,7 @@ Takes inspiration on adept.ai, rewind.ai, Apple Shortcut, and more.
 To install ScreenPipe, run the following command in your terminal:
 
 ```bash
-brew install screenpipe
-# or
-apt install screenpipe
+curl -sL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
 ```
 
 ## Usage
@@ -44,6 +42,7 @@ const screenPipe = new ScreenPipe();
 
 export async function onTick() {
   const data = await screenPipe.tick([1], {frames: 60}); // or screen [1, 2, 3, ...]
+  // [{frame: [...], text: [...], metadata: [...]}, ...]
 
   const { object } = await generateObject({
     model: openai("gpt4-o"),
