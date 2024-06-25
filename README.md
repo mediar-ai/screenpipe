@@ -1,4 +1,3 @@
-# screen | ⭐️
 
 <p align="center">
     <br>
