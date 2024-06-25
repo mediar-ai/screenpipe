@@ -20,6 +20,9 @@ jobs:
           profile: minimal
           override: true
 
+      - name: Add macOS target
+        run: rustup target add x86_64-apple-darwin
+
       - name: Build for Linux
         run: cargo build --release --target x86_64-unknown-linux-gnu
         working-directory: screenpipe
