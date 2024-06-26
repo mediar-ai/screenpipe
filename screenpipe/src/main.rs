@@ -1,7 +1,10 @@
 use chrono::Local;
 use clap::Parser;
 use crossbeam::channel;
-use std::fs::create_dir_all;
+use reqwest::Client;
+use std::fs::{create_dir_all, File};
+use std::io::Read;
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, sleep};
@@ -46,12 +49,40 @@ fn normalized(filename: &str) -> String {
         .replace("/", "")
 }
 
+async fn call_ocr_api(image_path: &str) -> Result<String, reqwest::Error> {
+    let client = Client::new();
+    let mut file = File::open(image_path).expect("Failed to open image file");
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)
+        .expect("Failed to read image file");
+
+    let part = reqwest::multipart::Part::bytes(buffer).file_name(image_path.to_string());
+    let form = reqwest::multipart::Form::new().part("file", part);
+
+    let response = client
+        .post("http://127.0.0.1:8000/ocr/")
+        .multipart(form)
+        .send()
+        .await?;
+
+    let text = response.text().await?;
+    Ok(text)
+}
+
 async fn process_image(filename: String) {
     // Example async post-processing function
     // Perform tasks like extracting text or making API calls here
     println!("Processing image asynchronously: {}", filename);
     // Simulate async work
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // tokio::time::sleep(Duration::from_secs(1)).await;
+    let text = call_ocr_api(&filename).await.unwrap();
+    println!("OCR result: {}", text);
+
+    // Create a JSON object
+    let json = serde_json::json!({ "text": text });
+    let new_filename = filename.replace(".png", ".json");
+    let mut file = File::create(new_filename).unwrap();
+    file.write_all(json.to_string().as_bytes()).unwrap();
 }
 
 fn screenpipe(path: &str, interval: f32, running: Arc<AtomicBool>) {

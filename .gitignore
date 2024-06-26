@@ -16,3 +16,10 @@
 .idea/
 .vscode/
 *.rs.bk
+
+
+
+# todo remove these when deleted python dirty stuff
+env 
+__pycache__
+

@@ -45,32 +45,43 @@ export async function onTick() {
 }
 ```
 
-## On your computer
-To start capturing screen data and send it to a specific storage location such as Amazon S3, use the following command line interface (CLI) command:
-
-```bash
-screenpipe --path ./second-memory
-```
-
-
-https://github.com/louis030195/screen-pipe/assets/25003283/08a8c9d6-0be6-44c2-b37f-62d0721fe8c3
-
-
-
 ## Status 
 
 Alpha: runs on my computer. Capture things and do things.
 
-## Installation
 
-To install ScreenPipe, run the following command in your terminal:
+## Usage
+
+Keep in mind that it's still experimental but got a working prototype, see the [Related projects](#related-projects) section.
+
+To try the current version, which capture your screen and extract the text, run:
 
 ```bash
 git clone https://github.com/louis030195/screen-pipe
-cargo install --path screenpipe
-# test
-screenpipe --path ./second-memory
+cd screen-pipe
 ```
+
+Then, in one terminal run the OCR API [(just a temporary hack until something cleaner)](https://github.com/louis030195/screen-pipe/issues/7):
+
+```bash
+virtualenv env
+source env/bin/activate
+pip install fastapi uvicorn pytesseract pillow
+uvicorn main:app --reload
+```
+
+And (you need Rust + Cargo installed) the Rust CLI:
+
+```bash
+cargo install --path screenpipe
+screenpipe
+```
+
+Check the `target/screenshots` directory now :)
+
+
+https://github.com/louis030195/screen-pipe/assets/25003283/08a8c9d6-0be6-44c2-b37f-62d0721fe8c3
+
 
 ## Why open source?
 
