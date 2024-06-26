@@ -72,6 +72,10 @@ cargo install --path screenpipe
 screenpipe --path ./second-memory
 ```
 
+## Why open source?
+
+Recent breakthroughs in AI have shown that context is the final frontier. AI will soon be able to incorporate the context of an entire human life into its 'prompt', and the technologies that enable this kind of personalisation should be available to all developers to accelerate access to the next stage of our evolution.  
+
 ## Contributing
 
 Contributions are welcome! If you'd like to contribute, please fork the repository and use a feature branch. Pull requests are warmly welcome.
