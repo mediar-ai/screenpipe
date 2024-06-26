@@ -104,6 +104,12 @@ Recent breakthroughs in AI have shown that context is the final frontier. AI wil
 This is a library intended to stick to simple use case:
 - record the screen & associated metadata (generated locally or in the cloud) and pipe it somewhere (local, cloud)
 
+Think of this as an API that let's you do this:
+
+```bash
+screenpipe | ocr | llm "turn what i see into my CRM" | api "send data to salesforce api"
+```
+
 Any interfaces are out of scope and should be built outside this repo, for example:
 - UI to search on these files (like rewind)
 - UI to spy on your employees
