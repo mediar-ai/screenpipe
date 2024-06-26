@@ -97,7 +97,8 @@ And the idea is to feed this to an LLM that do rest of the work
 </details>
 
 
-https://github.com/louis030195/screen-pipe/assets/25003283/08a8c9d6-0be6-44c2-b37f-62d0721fe8c3
+
+https://github.com/louis030195/screen-pipe/assets/25003283/bdce0793-3db4-4233-a276-65c3e4f8a333
 
 
 ## Why open source?
