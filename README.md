@@ -79,6 +79,18 @@ screenpipe
 
 Check the `target/screenshots` directory now :)
 
+<details>
+  <summary>Sample file</summary>
+
+  Basically ends up with bunch of image + JSON pairs with the OCR:
+  
+  ```json
+{"text":"{\"text\":\"e P& screen-pipe Ow 33\\nOo Pe Av @ Cargo.toml M ® main.rs MX {} ® main.py 1, U cay\\n\\\\Y OPEN EDITORS screenpipe > src > ® main.rs > @ process_image\\n© Cargo.tom! screenpipe M async fn call_ocr_api(image_path: &str) — Result<String, reqwest::Error> {\\nX ® main.rs screenpipe/src M let text = response.text().await?;\\n{} Ok( text)\\n@ main.py 1,U }\\n\\\\ SCREEN-PIPE\\n> __pycache_ async fn process_image(filename: String) {\\n> .github // Example async post-processing function\\n> cy // Perform tasks like extracting text or making API calls here\\nMrecicervine println!(\\\"Processing image asynchronously: {}\\\", filename);\\nv ste // Simulate async work Lr\\n. j // tokio:: time :: sleep(Duration:: from_secs(1)).await;\\n® main.rs M y , . .\\n. y let text = call_ocr_api( &filename).await.unwrap();\\ny println!(\\\"OCR result: {}\\\", text);\\n80,\\n Cargo.toml M y // Create a JSON object\\n¥ y let json = serde_json::json!({ \\\"text\\\": text });\\n> y let new_filename = filename.replace( \\\"\\\\png\\\", \\\",json\\\");\\n> y let mut file = File::create( new_filename).unwrap();\\n> y file.write_all( json.to_string().as_bytes()).unwrap();\\n>  ¥\\n>\\n> fn screenpipe(path: &Sstr, interval: f32, running: Arc<AtomicBool>) {\\n{} // delete and recreate the directory\\nPROBLEMS 9 OUTPUT DEBUGCONSOLE TERMINAL PORTS tu we A xX\\n® .gitignore Found 1 monitors | (9 screenpipe A\\nScreenshots will be saved to target/screenshots =\\nInterval: @ seconds (g bash A\\n Cargo.toml Press Ctrl+C to stop I @ Python A\\n® Cross.toml\\n$ install.sh TN TN TN TN JN /_/\\\\ TIN TN TW\\nf{ LICENSE.md J f:/_ / /:/ VEEN J f:/_ J f:/_ \\\\OA\\\\:\\\\ J /::\\\\ 1 IN I PS I Pl.\\nnr . ar wn ee a eee ee ee ee VAN J L:1\\\\:\\\\1 131 J 1:1\\\\:\\\\7_ 1:7 /N\\n> CET PS? 11U 1 i ee ee ee ee ee A 9 hod? ee ee 9 ey ee 2 —--\\\\--\\\\:\\\\ J f:/~1:1__12\\\\ ee shed et ee\\n@ README.md 7 Aa AY ee ee A 9 a ® ®  ® a  ® \\\\ JA 1 121N\\\\_NIN?\\\\_S S31 121131 1:1 /N\\nNONE /e7N ONIN ZN NM ttt NEE NO NAA IN \\\\i\\\\ee\\\\e\\\\/ \\\\A\\\\HW:/ NONE AINA 27\\nNONE 722 NNN LSD NX Nit/eere NONE DD NONE Lt NONI ee \\\\ \\\\is/ \\\\Ne/\\\\ N\\\\esZ NO NitZ /:/\\nVW Jf NNN NNN VON: NONE NNN \\\\O\\\\N\\\\ J_S:/ \\\\ \\\\:\\\\ XN NINA:/\\n/_/:/ \\\\ \\\\is/ VAN \\\\ \\\\is/ \\\\ \\\\sa/ \\\\O\\\\N\\\\ \\\\O\\\\N\\\\ \\\\_V \\\\ Vt \\\\ \\\\s2/\\n\\\\__V \\\\__V \\\\__V \\\\__V \\\\__V \\\\__V \\\\__V \\\\__V \\\\__V\\n* Update Cursor? I\\n> BRILLIANT Ai. .--.-. --- eee eee\\n\\n& mains 2 @©®1A1@7_ rust-analyzer Ln80,Col1 Rust Copilot++ &\\n\"}"}
+  ```
+
+And the idea is to feed this to an LLM that do rest of the work
+</details>
+
 
 https://github.com/louis030195/screen-pipe/assets/25003283/08a8c9d6-0be6-44c2-b37f-62d0721fe8c3
 
