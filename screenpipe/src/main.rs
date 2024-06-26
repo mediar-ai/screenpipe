@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, sleep};
 use std::time::Duration;
+use tokio::runtime::Runtime;
+use tokio::task;
 use xcap::image::{ImageBuffer, Rgba};
 use xcap::Monitor;
 const DISPLAY: &str = r"
@@ -44,6 +46,14 @@ fn normalized(filename: &str) -> String {
         .replace("/", "")
 }
 
+async fn process_image(filename: String) {
+    // Example async post-processing function
+    // Perform tasks like extracting text or making API calls here
+    println!("Processing image asynchronously: {}", filename);
+    // Simulate async work
+    tokio::time::sleep(Duration::from_secs(1)).await;
+}
+
 fn screenpipe(path: &str, interval: f32, running: Arc<AtomicBool>) {
     // delete and recreate the directory
     println!("Deleting and recreating directory {}", path);
@@ -60,12 +70,31 @@ fn screenpipe(path: &str, interval: f32, running: Arc<AtomicBool>) {
     println!("{}", DISPLAY);
 
     let (tx, rx) = channel::unbounded::<(ImageBuffer<Rgba<u8>, Vec<u8>>, String)>();
-
+    let (post_tx, post_rx) = channel::unbounded::<String>();
+    let post_tx_clone = post_tx.clone();
     // Thread for saving images
     let save_thread = thread::spawn(move || {
         while let Ok((image, filename)) = rx.recv() {
             image.save(&filename).unwrap();
+            post_tx_clone.send(filename).unwrap(); // Send filename to post-processing
         }
+    });
+
+    // Async task for post-processing
+    let post_processing_thread = thread::spawn(move || {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            while let Ok(filename) = post_rx.recv() {
+                task::spawn(async move {
+                    // Perform async post-processing here
+                    println!("Post-processing image: {}", filename);
+                    // Example: Call an async function to process the image
+                    process_image(filename).await;
+                })
+                .await
+                .unwrap();
+            }
+        });
     });
 
     while running.load(Ordering::SeqCst) {
@@ -91,6 +120,8 @@ fn screenpipe(path: &str, interval: f32, running: Arc<AtomicBool>) {
     }
     drop(tx); // Close the channel
     save_thread.join().unwrap(); // Wait for the saving thread to finish
+    drop(post_tx); // Close the post-processing channel
+    post_processing_thread.join().unwrap(); // Wait for the post-processing thread to finish
 }
 
 fn main() {

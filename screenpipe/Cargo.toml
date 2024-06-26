@@ -9,6 +9,7 @@ clap = { version = "4.0", features = ["derive"] }
 chrono = "0.4.38"
 crossbeam = "0.8"
 ctrlc = "3.4"
+tokio = { version = "1.38", features = ["full"] }
 
 [[bin]]
 name = "screenpipe"
