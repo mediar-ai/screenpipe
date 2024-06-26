@@ -47,14 +47,13 @@ export async function onTick() {
 
 ## Status 
 
-Alpha: runs on my computer. Capture things and do things.
-
+Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Capture things and do things.
 
 ## Usage
 
 Keep in mind that it's still experimental but got a working prototype, see the [Related projects](#related-projects) section.
 
-To try the current version, which capture your screen and extract the text, run:
+To try the current version, which capture your screen, extract the text, and do some LLM magic, run:
 
 ```bash
 git clone https://github.com/louis030195/screen-pipe
@@ -68,6 +67,12 @@ virtualenv env
 source env/bin/activate
 pip install fastapi uvicorn pytesseract pillow
 uvicorn main:app --reload
+```
+
+In another terminal run [ollama](https://github.com/ollama/ollama):
+
+```bash
+ollama run llama3
 ```
 
 And (you need Rust + Cargo installed) the Rust CLI:
