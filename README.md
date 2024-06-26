@@ -88,4 +88,5 @@ The code in this project is licensed under MIT license. See the [LICENSE](LICENS
 
 ## Related projects
 
+This is a very quick & dirty example of the end goal that works in a few lines of python:
 https://github.com/louis030195/screen-to-crm
