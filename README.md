@@ -99,6 +99,16 @@ https://github.com/louis030195/screen-pipe/assets/25003283/08a8c9d6-0be6-44c2-b3
 
 Recent breakthroughs in AI have shown that context is the final frontier. AI will soon be able to incorporate the context of an entire human life into its 'prompt', and the technologies that enable this kind of personalisation should be available to all developers to accelerate access to the next stage of our evolution.  
 
+## Principles 
+
+This is a library intended to stick to simple use case:
+- record the screen & associated metadata (generated locally or in the cloud) and pipe it somewhere (local, cloud)
+
+Any interfaces are out of scope and should be built outside this repo, for example:
+- UI to search on these files (like rewind)
+- UI to spy on your employees
+- etc.
+
 ## Contributing
 
 Contributions are welcome! If you'd like to contribute, please fork the repository and use a feature branch. Pull requests are warmly welcome.
