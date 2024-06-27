@@ -6,13 +6,10 @@ on:
       - "v*.*.*"
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, macos-latest-arm64]
-
-    runs-on: ${{ matrix.os }}
-
+  build-ubuntu:
+    runs-on: ubuntu-latest
+    outputs:
+      asset_path: ${{ steps.upload.outputs.asset_path }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -27,34 +24,77 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Check if Release Exists
-        id: check_release
-        run: |
-          if gh release view ${{ github.ref }} > /dev/null 2>&1; then
-            echo "release_exists=true" >> $GITHUB_ENV
-          else
-            echo "release_exists=false" >> $GITHUB_ENV
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+      - name: Upload Artifact
+        id: upload
+        uses: actions/upload-artifact@v2
+        with:
+          name: screenpipe-ubuntu
+          path: target/release/screenpipe
 
-      - name: Create Release
-        if: env.release_exists == 'false'
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+  build-macos:
+    runs-on: macos-latest
+    outputs:
+      asset_path: ${{ steps.upload.outputs.asset_path }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload Artifact
+        id: upload
+        uses: actions/upload-artifact@v2
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/release/screenpipe
-          asset_name: screenpipe-${{ matrix.os }}
-          asset_content_type: application/octet-stream
+          name: screenpipe-macos
+          path: target/release/screenpipe
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-ubuntu, build-macos] # todo windows
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: screenpipe-ubuntu
+          path: ./artifacts/ubuntu
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: screenpipe-macos
+          path: ./artifacts/macos
+
+      - name: Set Version
+        shell: bash
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          echo "RELEASE_VERSION=$(echo ${GITHUB_REF_NAME} | cut -f1 -d-)" >> $GITHUB_ENV
+
+      - name: Create or update Release
+        run: |
+          echo "Looking for existing release for ${{ env.RELEASE_VERSION }}"
+          OLD_TAG=$(gh release ls --json name,tagName | jq -r ".[] | select(.name == \"${{ env.RELEASE_VERSION }}\") | .tagName")
+          if [ -n "$OLD_TAG" ]; then
+            echo "Updating release ${{ env.RELEASE_VERSION }} to point to new tag ${GITHUB_REF_NAME}"
+            gh release edit ${OLD_TAG} --tag ${GITHUB_REF_NAME}
+          else
+            echo "Creating new release ${{ env.RELEASE_VERSION }} pointing to tag ${GITHUB_REF_NAME}"
+            gh release create ${GITHUB_REF_NAME} \
+              --title ${{ env.RELEASE_VERSION }} \
+              --draft \
+              --generate-notes \
+              --prerelease
+          fi
+          echo "Uploading artifacts for tag ${GITHUB_REF_NAME}"
+          gh release upload ${GITHUB_REF_NAME} dist/* --clobber
