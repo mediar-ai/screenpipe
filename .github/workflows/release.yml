@@ -7,14 +7,11 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - aarch64-unknown-linux-gnu
-          - x86_64-apple-darwin
-          - aarch64-apple-darwin
+        os: [ubuntu-latest, macos-latest, macos-latest-arm64]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout code
@@ -27,11 +24,8 @@ jobs:
           profile: minimal
           override: true
 
-      - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build for ${{ matrix.target }}
-        run: cross build --release --target ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release
 
       - name: Create Release
         id: create_release
@@ -44,12 +38,12 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload Release Asset for ${{ matrix.target }}
+      - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/${{ matrix.target }}/release/screenpipe
-          asset_name: screenpipe-${{ matrix.target }}
+          asset_path: target/release/screenpipe
+          asset_name: screenpipe-${{ matrix.os }}
           asset_content_type: application/octet-stream
