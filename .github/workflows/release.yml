@@ -30,15 +30,12 @@ jobs:
       - name: Check if Release Exists
         id: check_release
         run: |
-          if gh release view ${{ github.ref }}; then
-            echo "Release already exists"
-            exit 0
-          fi
+          gh release view ${{ github.ref }} || echo "release_not_found=true" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
 
       - name: Create Release
-        if: steps.check_release.outputs.release_exists == 'false'
+        if: env.release_not_found == 'true'
         id: create_release
         uses: actions/create-release@v1
         env:
