@@ -30,12 +30,16 @@ jobs:
       - name: Check if Release Exists
         id: check_release
         run: |
-          gh release view ${{ github.ref }} || echo "release_not_found=true" >> $GITHUB_ENV
+          if gh release view ${{ github.ref }} > /dev/null 2>&1; then
+            echo "release_exists=true" >> $GITHUB_ENV
+          else
+            echo "release_exists=false" >> $GITHUB_ENV
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
 
       - name: Create Release
-        if: env.release_not_found == 'true'
+        if: env.release_exists == 'false'
         id: create_release
         uses: actions/create-release@v1
         env:
@@ -45,7 +49,6 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
-
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
