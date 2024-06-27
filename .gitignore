@@ -17,7 +17,8 @@
 .vscode/
 *.rs.bk
 
-
+# act cli
+.secrets
 
 # todo remove these when deleted python dirty stuff
 env 
