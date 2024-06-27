@@ -1,5 +1,10 @@
-# to test:
-# act --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out
+# testing locally with act cli
+
+# ubuntu:
+# act --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
+
+# for mac target
+# act --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-macos -P macos-latest=-self-hosted --env-file .env --secret-file .secrets
 
 name: Release
 
@@ -49,12 +54,27 @@ jobs:
           profile: minimal
           override: true
 
+      - name: key
+        env:
+          MACOS_SIGNING_KEY: ${{ secrets.MACOS_SIGNING_KEY }}
+          MACOS_SIGNING_KEY_PASSWORD: ${{ secrets.MACOS_SIGNING_KEY_PASSWORD }}
+        run: |
+          echo $MACOS_SIGNING_KEY | base64 --decode > certificate.p12
+          security create-keychain -p password build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p password build.keychain
+          security import certificate.p12 -k build.keychain -P $MACOS_SIGNING_KEY_PASSWORD -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k password build.keychain
+          security set-keychain-settings -lut 3600 build.keychain
+
       - name: Build
         run: cargo build --release
 
       - name: Sign Binary
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
-          codesign --sign "{{ secrets.MACOS_SIGNING_IDENTITY }}" --timestamp --options runtime target/release/screenpipe
+          codesign --sign "$MACOS_SIGNING_IDENTITY" --timestamp --options runtime target/release/screenpipe
 
       - name: Upload Artifact
         id: upload
