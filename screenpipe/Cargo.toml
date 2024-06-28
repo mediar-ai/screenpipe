@@ -1,19 +1,52 @@
 [package]
 name = "screenpipe"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
-xcap = "0.0.10"
-clap = { version = "4.0", features = ["derive"] }
-chrono = "0.4.38"
-crossbeam = "0.8"
-ctrlc = "3.4"
-reqwest = { version = "0.11", features = ["json", "multipart"] }
-tokio = { version = "1.38", features = ["full"] }
-serde = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-[[bin]]
-name = "screenpipe"
-path = "src/main.rs"
+# Cross-platform screen capture
+# screenshots = "0.8.10" # todo xcap
+xcap = "0.0.10"
+
+# threadpool
+threadpool = "1.8.1"
+
+# Image processing
+# image = "0.24.7"
+image = "0.25.0"
+
+# OCR
+# rusty-tesseract = "1.1.9"
+rusty-tesseract = "1.1.10"
+
+# Dates
+chrono = "0.4.31"
+
+rusqlite = { version = "0.30.0", features = ["chrono", "bundled", "array"] }
+
+# FFmpeg bindings
+# ffmpeg-next = "6.1.0"
+ffmpeg-next = "7.0.2"
+
+# Embeddings
+candle = { package = "candle-core", version = "0.3.2" }
+candle-nn = "0.3.2"
+candle-transformers = "0.3.2"
+tokenizers = "0.15.0"
+lazy_static = "1.4.0"
+base64 = "0.21.7"
+
+# Server
+axum = "0.7.4"
+tokio = { version = "1", features = ["full"] }
+hyper = "1.1"
+tower-http = { version = "0.5.0", features = ["cors"] }
+
+[profile.release]
+opt-level = 3
+
