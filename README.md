@@ -47,56 +47,47 @@ export async function onTick() {
 
 ## Status 
 
-Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Capture things and do things.
+Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Record your screen 24/7 into mp4 and extract the text from every frame.
 
 ## Usage
 
-Keep in mind that it's still experimental but got a working prototype, see the [Related projects](#related-projects) section.
+Keep in mind that it's still experimental.
 
-To try the current version, which capture your screen, extract the text, and do some LLM magic, run:
+To try the current version, which capture your screen and extract the text, do:
+
+1. Install [ffmpeg](https://www.ffmpeg.org/download.html).
+2. Clone the repo:
 
 ```bash
 git clone https://github.com/louis030195/screen-pipe
-cd screen-pipe
+cd screen-pipe/screenpipe
 ```
 
-Then, in one terminal run the OCR API [(just a temporary hack until something cleaner)](https://github.com/louis030195/screen-pipe/issues/7):
+3. Run the API (make sure to install [Rust](https://www.rust-lang.org/tools/install)):
 
 ```bash
-virtualenv env
-source env/bin/activate
-pip install fastapi uvicorn pytesseract pillow
-uvicorn main:app --reload
+cargo run
 ```
 
-In another terminal run [ollama](https://github.com/ollama/ollama):
+Get today's context (all the text you've seen):
 
 ```bash
-ollama run llama3
+curl "http://localhost:3030/texts?date=$(date +%Y-%m-%d%%20%H:%M:%S)"
 ```
 
-And (you need Rust + Cargo installed) the Rust CLI:
+Or search for a specific text:
 
 ```bash
-cargo install --path screenpipe
-screenpipe
+curl "http://localhost:3030/frames?limit=10&offset=0&search='louis'"
 ```
 
-Check the `target/screenshots` directory now :)
+Now pipe this into a LLM to build:
+- memory extension apps
+- automatic summaries
+- automatic action triggers (say every time you see a dog, send a tweet)
+- automatic CRM (fill salesforce while you spam ppl on linkedin)
 
-<details>
-  <summary>Sample file</summary>
-
-  Basically ends up with bunch of image + JSON pairs with the OCR:
-  
-  ```json
-{"text":"{\"text\":\"e P& screen-pipe Ow 33\\nOo Pe Av @ Cargo.toml M ® main.rs MX {} ® main.py 1, U cay\\n\\\\Y OPEN EDITORS screenpipe > src > ® main.rs > @ process_image\\n© Cargo.tom! screenpipe M async fn call_ocr_api(image_path: &str) — Result<String, reqwest::Error> {\\nX ® main.rs screenpipe/src M let text = response.text().await?;\\n{} Ok( text)\\n@ main.py 1,U }\\n\\\\ SCREEN-PIPE\\n> __pycache_ async fn process_image(filename: String) {\\n> .github // Example async post-processing function\\n> cy // Perform tasks like extracting text or making API calls here\\nMrecicervine println!(\\\"Processing image asynchronously: {}\\\", filename);\\nv ste // Simulate async work Lr\\n. j // tokio:: time :: sleep(Duration:: from_secs(1)).await;\\n® main.rs M y , . .\\n. y let text = call_ocr_api( &filename).await.unwrap();\\ny println!(\\\"OCR result: {}\\\", text);\\n80,\\n Cargo.toml M y // Create a JSON object\\n¥ y let json = serde_json::json!({ \\\"text\\\": text });\\n> y let new_filename = filename.replace( \\\"\\\\png\\\", \\\",json\\\");\\n> y let mut file = File::create( new_filename).unwrap();\\n> y file.write_all( json.to_string().as_bytes()).unwrap();\\n>  ¥\\n>\\n> fn screenpipe(path: &Sstr, interval: f32, running: Arc<AtomicBool>) {\\n{} // delete and recreate the directory\\nPROBLEMS 9 OUTPUT DEBUGCONSOLE TERMINAL PORTS tu we A xX\\n® .gitignore Found 1 monitors | (9 screenpipe A\\nScreenshots will be saved to target/screenshots =\\nInterval: @ seconds (g bash A\\n Cargo.toml Press Ctrl+C to stop I @ Python A\\n® Cross.toml\\n$ install.sh TN TN TN TN JN /_/\\\\ TIN TN TW\\nf{ LICENSE.md J f:/_ / /:/ VEEN J f:/_ J f:/_ \\\\OA\\\\:\\\\ J /::\\\\ 1 IN I PS I Pl.\\nnr . ar wn ee a eee ee ee ee VAN J L:1\\\\:\\\\1 131 J 1:1\\\\:\\\\7_ 1:7 /N\\n> CET PS? 11U 1 i ee ee ee ee ee A 9 hod? ee ee 9 ey ee 2 —--\\\\--\\\\:\\\\ J f:/~1:1__12\\\\ ee shed et ee\\n@ README.md 7 Aa AY ee ee A 9 a ® ®  ® a  ® \\\\ JA 1 121N\\\\_NIN?\\\\_S S31 121131 1:1 /N\\nNONE /e7N ONIN ZN NM ttt NEE NO NAA IN \\\\i\\\\ee\\\\e\\\\/ \\\\A\\\\HW:/ NONE AINA 27\\nNONE 722 NNN LSD NX Nit/eere NONE DD NONE Lt NONI ee \\\\ \\\\is/ \\\\Ne/\\\\ N\\\\esZ NO NitZ /:/\\nVW Jf NNN NNN VON: NONE NNN \\\\O\\\\N\\\\ J_S:/ \\\\ \\\\:\\\\ XN NINA:/\\n/_/:/ \\\\ \\\\is/ VAN \\\\ \\\\is/ \\\\ \\\\sa/ \\\\O\\\\N\\\\ \\\\O\\\\N\\\\ \\\\_V \\\\ Vt \\\\ \\\\s2/\\n\\\\__V \\\\__V \\\\__V \\\\__V \\\\__V \\\\__V \\\\__V \\\\__V \\\\__V\\n* Update Cursor? I\\n> BRILLIANT Ai. .--.-. --- eee eee\\n\\n& mains 2 @©®1A1@7_ rust-analyzer Ln80,Col1 Rust Copilot++ &\\n\"}"}
-  ```
-
-And the idea is to feed this to an LLM that do rest of the work
-</details>
-
-
+We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
 
 https://github.com/louis030195/screen-pipe/assets/25003283/bdce0793-3db4-4233-a276-65c3e4f8a333
 
@@ -135,3 +126,5 @@ The code in this project is licensed under MIT license. See the [LICENSE](LICENS
 
 This is a very quick & dirty example of the end goal that works in a few lines of python:
 https://github.com/louis030195/screen-to-crm
+
+Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Although screenpipe is going in a different direction.
