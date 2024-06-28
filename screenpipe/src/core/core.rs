@@ -27,7 +27,7 @@ enum ControlMessage {
 }
 
 pub struct CaptureHandles {
-    // pub capture_handle: thread::JoinHandle<()>,
+    pub capture_handle: thread::JoinHandle<()>,
     pub stream_handle: thread::JoinHandle<()>,
     pub control_sender: mpsc::Sender<ControlMessage>,
 }
@@ -100,7 +100,7 @@ pub fn start_recording(
     });
 
     return CaptureHandles {
-        // capture_handle,
+        capture_handle,
         stream_handle,
         control_sender,
     };
@@ -198,7 +198,7 @@ fn perform_ocr(dynamic_image: &DynamicImage) -> Result<String, Box<dyn std::erro
 
     // OCR
     let text = image_to_string(&image, &args)?;
-    println!("OCR: {}", text);
+    // println!("OCR: {}", text);
 
     Ok(text)
 }
@@ -230,7 +230,8 @@ fn stream_to_ffmpeg(
             "-pix_fmt",
             "yuv420p",
             "-crf",
-            "25",
+            // "25",
+            "18",
             &output_name,
         ])
         .stdin(Stdio::piped())

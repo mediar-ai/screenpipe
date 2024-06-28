@@ -49,6 +49,12 @@ pub struct DatabaseManager {
     fps: i32,
 }
 
+#[derive(Debug)]
+pub struct TextWithTimestamp {
+    pub text: String,
+    pub timestamp: NaiveDateTime,
+}
+
 impl DatabaseManager {
     // Initialize a new DatabaseManager instance
     pub fn new(database_path: &str) -> Result<DatabaseManager> {
@@ -170,6 +176,7 @@ impl DatabaseManager {
 
     // Method to insert a frame and return its ID
     pub fn insert_frame(&mut self, active_application_name: Option<String>) -> Result<i64> {
+        // println!("inserting frame... {:?}", Utc::now().naive_utc());
         let frame_id = self.conn.execute(
             "INSERT INTO frames (chunk_id, offset_index, timestamp, active_application_name)
              VALUES (?1, ?2, ?3, ?4)",
@@ -225,18 +232,21 @@ impl DatabaseManager {
     }
 
     // Method to get a frame by index
-    pub fn get_frame(&self, index: i64) -> Result<Option<(i64, String)>> {
+    pub fn get_frame(&self, index: i64) -> Result<Option<(i64, String, Option<String>)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT f.offset_index, vc.file_path FROM frames f
-         JOIN video_chunks vc ON f.chunk_id = vc.id
-         WHERE f.id = ?1",
+            "SELECT f.offset_index, vc.file_path, at.text 
+             FROM frames f
+             JOIN video_chunks vc ON f.chunk_id = vc.id
+             LEFT JOIN all_text at ON f.id = at.frame_id
+             WHERE f.id = ?1",
         )?;
         let mut rows = stmt.query(params![index])?;
 
         if let Some(row) = rows.next()? {
             let offset_index: i64 = row.get(0)?;
             let file_path: String = row.get(1)?;
-            Ok(Some((offset_index, file_path)))
+            let text: Option<String> = row.get(2)?;
+            Ok(Some((offset_index, file_path, text)))
         } else {
             Ok(None)
         }
@@ -346,9 +356,10 @@ impl DatabaseManager {
         selected_filter_app: Option<&str>,
     ) -> Result<Vec<SearchResult>> {
         let mut query = String::from(
-            "SELECT f.id, NULL, f.active_application_name, f.timestamp, vc.file_path, f.offset_index
+            "SELECT f.id, at.text, f.active_application_name, f.timestamp, vc.file_path, f.offset_index
              FROM frames f
-             JOIN video_chunks vc ON f.chunk_id = vc.id ",
+             JOIN video_chunks vc ON f.chunk_id = vc.id
+             LEFT JOIN all_text at ON f.id = at.frame_id ",
         );
 
         let mut params: Vec<rusqlite::types::Value> = Vec::new();
@@ -360,7 +371,6 @@ impl DatabaseManager {
                 format!("WHERE uan.active_application_name LIKE ?{} ", params_count).as_str(),
             );
             params.push(String::from(app_name).into());
-            // Added a param
             params_count = params.len() + 1;
         }
 
@@ -372,10 +382,10 @@ impl DatabaseManager {
             )
             .as_str(),
         );
-        params.push(String::from(limit.to_string()).into());
-        params.push(String::from(offset.to_string()).into());
-        // Update params count
-        params_count = params.len() + 1;
+        params.push(limit.into());
+        params.push(offset.into());
+
+        println!("Query: {}", query); // Debug: Print the query
 
         let mut stmt = self.conn.prepare(&query)?;
         let final_params = params_from_iter(params);
@@ -383,7 +393,7 @@ impl DatabaseManager {
             .query_map(final_params, |row| {
                 Ok(SearchResult {
                     frame_id: row.get(0)?,
-                    full_text: None, // Since the full text is not being fetched here
+                    full_text: row.get(1)?,
                     application_name: row.get(2)?,
                     timestamp: row.get(3)?,
                     file_path: row.get(4)?,
@@ -394,15 +404,23 @@ impl DatabaseManager {
 
         Ok(results)
     }
-
     // Method to get recent text context
-    pub fn get_recent_text_context(&self) -> Result<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT text FROM all_text ORDER BY frame_id DESC LIMIT ?1")?;
+    pub fn get_recent_text_context(&self, date: NaiveDateTime) -> Result<Vec<TextWithTimestamp>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT at.text, f.timestamp 
+             FROM all_text at
+             JOIN frames f ON at.frame_id = f.id
+             WHERE DATE(f.timestamp) = DATE(?1)
+             ORDER BY f.id DESC",
+        )?;
         let texts = stmt
-            .query_map(params![self.recent_frames_threshold], |row| Ok(row.get(0)?))?
-            .collect::<Result<Vec<String>, rusqlite::Error>>()?;
+            .query_map(params![date], |row| {
+                Ok(TextWithTimestamp {
+                    text: row.get(0)?,
+                    timestamp: row.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<TextWithTimestamp>, rusqlite::Error>>()?;
 
         Ok(texts)
     }

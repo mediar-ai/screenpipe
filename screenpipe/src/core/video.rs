@@ -30,6 +30,7 @@ pub fn extract_frames_from_video(
         decoder.width(),
         decoder.height(),
         scaling::Flags::BILINEAR,
+        // scaling::Flags::LANCZOS,
     )?;
 
     let mut sorted_frame_numbers: BTreeSet<_> = frame_numbers.iter().copied().collect();

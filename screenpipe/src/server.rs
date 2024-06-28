@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::{io::Cursor, sync::Arc};
 
@@ -9,7 +10,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
@@ -40,6 +41,12 @@ struct ImageParams {
     thumbnail: Option<bool>,
 }
 
+#[derive(Serialize)]
+struct TextWithTimestampResponse {
+    text: String,
+    timestamp: String, // Use String to serialize NaiveDateTime easily
+}
+
 // TODO: Optimize this to do chunk loading, instead of starting from scratch with the
 // frame every single time
 // TODO: Also, cache the frames in memory using an LRU cache
@@ -57,7 +64,8 @@ async fn get_frame_handler(
             .get_frame(frame_number)
             .expect("Failed to get frame")
     };
-    if let Some((offset_index, video_path)) = maybe_video_path {
+    if let Some((offset_index, video_path, _)) = maybe_video_path {
+        println!("video path: {:?}", video_path);
         match extract_frames_from_video(&video_path, &[offset_index]) {
             Ok(frames) => {
                 if let Some(frame) = frames.into_iter().next() {
@@ -68,15 +76,27 @@ async fn get_frame_handler(
                             .write_to(&mut cursor, image::ImageFormat::Png)
                             .is_ok()
                         {
+                            println!("Thumbnail generated successfully");
                             return (StatusCode::OK, Bytes::from(cursor.into_inner()));
+                        } else {
+                            println!("Failed to generate thumbnail");
                         }
                     } else if frame.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
+                        println!("Frame generated successfully");
                         return (StatusCode::OK, Bytes::from(cursor.into_inner()));
+                    } else {
+                        println!("Failed to generate frame");
                     }
+                } else {
+                    println!("No frames found");
                 }
             }
-            _ => {}
+            Err(e) => {
+                println!("Error extracting frames: {:?}", e);
+            }
         }
+    } else {
+        println!("No video path found for frame number: {}", frame_number);
     }
     (StatusCode::NOT_FOUND, Bytes::new())
 }
@@ -98,6 +118,7 @@ async fn get_max_frame_handler(State(state): State<Arc<AppState>>) -> Json<Frame
 struct Frame {
     frame_number: i64,
     timestamp: i64,
+    text: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -135,9 +156,39 @@ async fn search_frames_handler(
         data.push(Frame {
             frame_number,
             timestamp: timestamp.timestamp_millis(),
+            text: frame.full_text,
         });
     }
     Json(PaginatedFrames { data })
+}
+
+async fn get_texts_by_date_handler(
+    Query(query): Query<HashMap<String, String>>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<TextWithTimestampResponse>>, StatusCode> {
+    let date_str = query.get("date").ok_or(StatusCode::BAD_REQUEST)?;
+    let date = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S")
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let db_video_ref = state.db.clone();
+    let texts_with_timestamps = {
+        let mut db_clone = db_video_ref.lock().unwrap();
+        db_clone
+            .as_mut()
+            .unwrap()
+            .get_recent_text_context(date)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    };
+
+    let response: Vec<TextWithTimestampResponse> = texts_with_timestamps
+        .into_iter()
+        .map(|item| TextWithTimestampResponse {
+            text: item.text,
+            timestamp: item.timestamp.to_string(),
+        })
+        .collect();
+
+    Ok(Json(response))
 }
 
 pub async fn start_frame_server(
@@ -151,6 +202,7 @@ pub async fn start_frame_server(
         .route("/frames", get(search_frames_handler))
         .route("/frames/max", get(get_max_frame_handler))
         .route("/frames/:frame_number", get(get_frame_handler))
+        .route("/texts", get(get_texts_by_date_handler))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
