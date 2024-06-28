@@ -25,7 +25,7 @@ async fn start_server(local_data_dir: String, db: Arc<Mutex<Option<DatabaseManag
 }
 
 fn ensure_local_data_dir() -> Result<String, ()> {
-    let local_data_dir = Option::Some("./data");
+    let local_data_dir = Option::Some("./data"); // TODO $HOME/.screenpipe/data
     if let Some(dir) = local_data_dir.clone() {
         if let Ok(()) = fs::create_dir_all(dir) {
             return Ok(dir.to_string());

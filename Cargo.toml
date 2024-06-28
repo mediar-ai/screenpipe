@@ -1,4 +1,4 @@
 [workspace]
-members = ["screenpipe"]
+members = ["screenpipe", "examples/maintain-a-log-of-my-day"]
 exclude = []
 resolver = "2"
