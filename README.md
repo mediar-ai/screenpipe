@@ -89,7 +89,8 @@ Now pipe this into a LLM to build:
 
 We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
 
-https://github.com/louis030195/screen-pipe/assets/25003283/bdce0793-3db4-4233-a276-65c3e4f8a333
+
+https://github.com/louis030195/screen-pipe/assets/25003283/9a26469f-5bd0-4905-ad6a-c52ef912c235
 
 
 ## Why open source?
