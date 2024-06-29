@@ -10,6 +10,9 @@
     <a href="https://twitter.com/screen_pipe"><img alt="X account" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe"></a>
 </p>
 
+> Civilization progresses by the number of operations it can perform without conscious effort.  
+> — **Whitehead**
+
 Turn your screen into actions (using LLMs). Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Rust + WASM.
 
 ## Screen to action using LLMs
