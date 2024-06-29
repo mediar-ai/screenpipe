@@ -22,6 +22,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libavutil-dev pkg-config
+
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -46,6 +49,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: brew install ffmpeg
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
