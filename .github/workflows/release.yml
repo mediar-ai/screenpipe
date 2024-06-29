@@ -118,18 +118,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
-          echo "Looking for existing release for ${{ env.RELEASE_VERSION }}"
-          OLD_TAG=$(gh release ls --json name,tagName | jq -r ".[] | select(.name == \"${{ env.RELEASE_VERSION }}\") | .tagName")
-          if [ -n "$OLD_TAG" ]; then
-            echo "Updating release ${{ env.RELEASE_VERSION }} to point to new tag ${GITHUB_REF_NAME}"
-            gh release edit ${OLD_TAG} --tag ${GITHUB_REF_NAME}
-          else
-            echo "Creating new release ${{ env.RELEASE_VERSION }} pointing to tag ${GITHUB_REF_NAME}"
-            gh release create ${GITHUB_REF_NAME} \
-              --title ${{ env.RELEASE_VERSION }} \
-              --draft \
-              --generate-notes \
-              --prerelease
-          fi
-          echo "Uploading artifacts for tag ${GITHUB_REF_NAME}"
-          gh release upload ${GITHUB_REF_NAME} ./artifacts/ubuntu/* ./artifacts/macos/* --clobber
+          gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} 
+          gh release upload ${{ env.RELEASE_VERSION }} ./artifacts/ubuntu/* ./artifacts/macos/* --clobber
+
+    
