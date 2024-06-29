@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libavutil-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
