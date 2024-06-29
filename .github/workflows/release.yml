@@ -83,7 +83,17 @@ jobs:
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
-          codesign --sign "$MACOS_SIGNING_IDENTITY" --timestamp --options runtime target/release/screenpipe
+          codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" target/release/screenpipe
+
+      - name: Notarize Binary
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          zip screenpipe.zip target/release/screenpipe
+          xcrun notarytool submit screenpipe.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$TEAM_ID" --wait
+          xcrun stapler staple screenpipe.zip
 
       - name: Upload Artifact
         id: upload
@@ -124,6 +134,4 @@ jobs:
           gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} --generate-notes
           mv ./artifacts/ubuntu/screenpipe ./artifacts/ubuntu/screenpipe-ubuntu
           mv ./artifacts/macos/screenpipe ./artifacts/macos/screenpipe-macos
-          gh release upload ${{ env.RELEASE_VERSION }} ./artifacts/ubuntu/* ./artifacts/macos/* 
-
-    
+          gh release upload ${{ env.RELEASE_VERSION }} ./artifacts/ubuntu/* ./artifacts/macos/*

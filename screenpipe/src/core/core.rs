@@ -1,5 +1,7 @@
+use crate::core::start_audio_recording;
 use crate::core::DatabaseManager;
 use chrono::Utc;
+use cpal::Stream;
 use image::DynamicImage;
 use rusty_tesseract::{image_to_string, Args, Image};
 use std::io::Cursor;
@@ -13,7 +15,9 @@ use std::time::Duration;
 use threadpool::ThreadPool;
 use xcap::Monitor;
 
+use super::audio::AudioControl;
 use super::embed;
+use super::AudioHandle;
 
 const FRAME_BUFFER_SIZE: usize = 30;
 const SCREENSHOT_INTERVAL: Duration = Duration::from_secs(2);
@@ -29,7 +33,9 @@ enum ControlMessage {
 pub struct CaptureHandles {
     pub capture_handle: thread::JoinHandle<()>,
     pub stream_handle: thread::JoinHandle<()>,
+    pub audio_handle: thread::JoinHandle<()>,
     pub control_sender: mpsc::Sender<ControlMessage>,
+    pub audio_stream: Arc<Mutex<Option<AudioHandle>>>,
 }
 
 impl CaptureHandles {
@@ -40,6 +46,26 @@ impl CaptureHandles {
     pub fn stop_recording(&self) {
         self.control_sender.send(ControlMessage::Stop).unwrap();
     }
+
+    pub fn pause_audio(&self) {
+        if let Some(audio_handle) = self.audio_stream.lock().unwrap().as_ref() {
+            *audio_handle.is_paused.lock().unwrap() = true;
+        }
+    }
+
+    pub fn resume_audio(&self) {
+        if let Some(audio_handle) = self.audio_stream.lock().unwrap().as_ref() {
+            *audio_handle.is_paused.lock().unwrap() = false;
+        }
+    }
+
+    pub fn stop_audio(&self) {
+        if let Some(audio_handle) = self.audio_stream.lock().unwrap().take() {
+            if let Err(e) = audio_handle.control_sender.send(AudioControl::Stop) {
+                eprintln!("Failed to send stop signal to audio stream: {}", e);
+            }
+        }
+    }
 }
 
 pub fn start_recording(
@@ -47,40 +73,66 @@ pub fn start_recording(
     db: Arc<Mutex<Option<DatabaseManager>>>,
 ) -> CaptureHandles {
     println!("starting recording...");
+
+    // Initialize control channels
+    let (control_sender, control_receiver) = mpsc::channel();
+
+    // Initialize shared resources
+    let frame_buffer = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
+    let ocr_pool = ThreadPool::new(OCR_THREAD_POOL_SIZE);
+    let audio_stream = Arc::new(Mutex::new(None));
+
+    // Clone shared resources for thread use
+    let buffer_clone = frame_buffer.clone();
+    let audio_stream_clone = audio_stream.clone();
+    let db_capture_ref = db.clone();
+    let db_stream_ref = db.clone();
+
+    // Clone local_data_dir for different threads
+    let local_data_dir_capture = local_data_dir.clone();
+    let local_data_dir_stream = local_data_dir.clone();
+    let local_data_dir_audio = local_data_dir.clone();
+
+    // Initialize embedding model
     let config_path = "models/gte-small/config.json";
     let tokenizer_path = "models/gte-small/tokenizer.json";
     let weights_path = "models/gte-small/model.safetensors";
-
-    let (control_sender, control_receiver) = mpsc::channel();
-
-    // Initialize the model first
     embed::init_model(config_path, tokenizer_path, weights_path, false);
 
-    let frame_buffer = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
-    let ocr_pool = ThreadPool::new(OCR_THREAD_POOL_SIZE);
+    // Start audio recording
+    let audio_handle = thread::spawn(move || {
+        let output_file = format!("{}/audio_output.wav", local_data_dir);
+        match start_audio_recording(&output_file) {
+            Ok(audio_handle) => {
+                *audio_stream_clone.lock().unwrap() = Some(audio_handle);
+                // Keep the thread alive
+                loop {
+                    thread::sleep(Duration::from_secs(1));
+                    if let Some(handle) = audio_stream_clone.lock().unwrap().as_ref() {
+                        if *handle.is_paused.lock().unwrap() {
+                            break;
+                        }
+                    }
+                }
+            }
+            Err(e) => eprintln!("Failed to start audio recording: {}", e),
+        }
+    });
 
-    // Capture thread
-    let buffer_clone = frame_buffer.clone();
-
-    let local_data_dir_capture_handle = local_data_dir.clone();
-
-    let db_capture_ref = db.clone();
+    // Start screen capture
     let capture_handle = thread::spawn(move || {
         capture_screenshots(
             buffer_clone,
             &ocr_pool,
             control_receiver,
-            local_data_dir_capture_handle,
+            local_data_dir_capture,
             db_capture_ref,
         )
         .expect("Error capturing screenshots");
     });
 
-    let local_data_dir_stream_handle = local_data_dir.clone();
-
-    let db_stream_ref = db.clone();
+    // Start video processing
     let stream_handle = thread::spawn(move || {
-        // Main thread for processing frames
         let (buffer, cvar) = &*frame_buffer;
         loop {
             let mut frames = buffer.lock().unwrap();
@@ -88,24 +140,23 @@ pub fn start_recording(
                 println!("waiting for frames...");
                 frames = cvar.wait(frames).unwrap();
             }
-
-            // Drain frames and process with FFmpeg
             let frames_to_process = frames.drain(..).collect::<Vec<_>>();
             stream_to_ffmpeg(
                 frames_to_process,
-                local_data_dir_stream_handle.clone(),
+                local_data_dir_stream.clone(),
                 db_stream_ref.clone(),
             );
         }
     });
 
-    return CaptureHandles {
+    CaptureHandles {
         capture_handle,
         stream_handle,
+        audio_handle,
         control_sender,
-    };
+        audio_stream,
+    }
 }
-
 fn capture_screenshots(
     frame_buffer: Arc<(Mutex<Vec<DynamicImage>>, Condvar)>,
     ocr_pool: &ThreadPool,
@@ -301,5 +352,15 @@ fn process_remaining_frames(
     if !frames.is_empty() {
         let frames_to_process = frames.drain(..).collect::<Vec<_>>();
         stream_to_ffmpeg(frames_to_process, local_data_dir_clone, db.clone());
+    }
+}
+
+fn process_audio(audio_receiver: mpsc::Receiver<Vec<u8>>, local_data_dir: String) {
+    let output_file = format!("{}/audio_output.raw", local_data_dir);
+    let mut file = std::fs::File::create(output_file).expect("Failed to create audio file");
+
+    while let Ok(audio_data) = audio_receiver.recv() {
+        file.write_all(&audio_data)
+            .expect("Failed to write audio data");
     }
 }
