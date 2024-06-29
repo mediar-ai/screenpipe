@@ -6,6 +6,9 @@
 # for mac target
 # act --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-macos -P macos-latest=-self-hosted --env-file .env --secret-file .secrets
 
+# run the whole thing
+# act --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
+
 name: Release
 
 on:
@@ -118,7 +121,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
-          gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} 
-          gh release upload ${{ env.RELEASE_VERSION }} ./artifacts/ubuntu/* ./artifacts/macos/* --clobber
+          gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} --generate-notes
+          gh release upload ${{ env.RELEASE_VERSION }} ./artifacts/ubuntu/* ./artifacts/macos/* 
 
     
