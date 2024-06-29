@@ -67,6 +67,7 @@ fn main() {
                                 Rules:
                                 - Keep the log small and concise, formatted as a bullet list
                                 - Your responses are NOT in a code block e.g. no ```plaintext ```markdown etc.!
+                                - DO WRITE A LOG OF THE USER'S DAY IN MARKDOWN FORMAT. NOTHING ELSE
 
                                 Now update the log based on the user's screen and respond with only the updated log. 
                                 LOG OF THE USER'S DAY:
