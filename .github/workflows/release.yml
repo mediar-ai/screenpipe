@@ -116,7 +116,7 @@ jobs:
 
       - name: Create or update Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT }}
         run: |
           echo "Looking for existing release for ${{ env.RELEASE_VERSION }}"
           OLD_TAG=$(gh release ls --json name,tagName | jq -r ".[] | select(.name == \"${{ env.RELEASE_VERSION }}\") | .tagName")
