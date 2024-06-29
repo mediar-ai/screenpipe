@@ -122,6 +122,8 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
           gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} --generate-notes
+          mv ./artifacts/ubuntu/screenpipe ./artifacts/ubuntu/screenpipe-ubuntu
+          mv ./artifacts/macos/screenpipe ./artifacts/macos/screenpipe-macos
           gh release upload ${{ env.RELEASE_VERSION }} ./artifacts/ubuntu/* ./artifacts/macos/* 
 
     

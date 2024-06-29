@@ -67,7 +67,7 @@ fn main() {
                                 Rules:
                                 - Keep the log small and concise, formatted as a bullet list
                                 - Your responses are NOT in a code block e.g. no ```plaintext ```markdown etc.!
-                                - DO WRITE A LOG OF THE USER'S DAY IN MARKDOWN FORMAT. NOTHING ELSE
+                                - DO WRITE A LOG OF THE USER'S DAY. NOTHING ELSE
 
                                 Now update the log based on the user's screen and respond with only the updated log. 
                                 LOG OF THE USER'S DAY:
@@ -78,19 +78,24 @@ fn main() {
                         }
                     ]
                 }))
-                .send()
-                .unwrap();
-            let text: serde_json::Value = response.json().unwrap();
-            // remove first " and last " from the response
-            let llm_response = text["message"]["content"].to_string().trim_matches('"').to_string();
+                .send();
 
-            println!("{}", llm_response);
+            if let Ok(response) = response {
+                let text: serde_json::Value = response.json().unwrap();
+                // remove first " and last " from the response
+                let llm_response = text["message"]["content"].to_string().trim_matches('"').to_string();
 
-            // replace all \n with \n\n
-            let llm_response = llm_response.replace("\\n", "\n\n");
+                println!("{}", llm_response);
 
-            // update to file
-            fs::write("log.md", llm_response).unwrap();
+                // replace all \n with \n\n
+                let llm_response = llm_response.replace("\\n", "\n\n");
+
+                // update to file
+                fs::write("log.md", llm_response).unwrap();
+            } else {
+                eprintln!("Request failed, skipping to next iteration.");
+                continue;
+            }
         }
 
         // Sleep for a while before checking again

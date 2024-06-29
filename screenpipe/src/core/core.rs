@@ -230,8 +230,8 @@ fn stream_to_ffmpeg(
             "-pix_fmt",
             "yuv420p",
             "-crf",
-            // "25",
-            "18",
+            "25",
+            // "18",
             &output_name,
         ])
         .stdin(Stdio::piped())
