@@ -1,4 +1,5 @@
 use crate::core::start_audio_recording;
+use crate::core::start_chunked_audio_recording;
 use crate::core::DatabaseManager;
 use chrono::Utc;
 use cpal::Stream;
@@ -101,8 +102,7 @@ pub fn start_recording(
 
     // Start audio recording
     let audio_handle = thread::spawn(move || {
-        let output_file = format!("{}/audio_output.wav", local_data_dir);
-        match start_audio_recording(&output_file) {
+        match start_chunked_audio_recording(local_data_dir_audio, chrono::Duration::seconds(60)) {
             Ok(audio_handle) => {
                 *audio_stream_clone.lock().unwrap() = Some(audio_handle);
                 // Keep the thread alive
@@ -352,15 +352,5 @@ fn process_remaining_frames(
     if !frames.is_empty() {
         let frames_to_process = frames.drain(..).collect::<Vec<_>>();
         stream_to_ffmpeg(frames_to_process, local_data_dir_clone, db.clone());
-    }
-}
-
-fn process_audio(audio_receiver: mpsc::Receiver<Vec<u8>>, local_data_dir: String) {
-    let output_file = format!("{}/audio_output.raw", local_data_dir);
-    let mut file = std::fs::File::create(output_file).expect("Failed to create audio file");
-
-    while let Ok(audio_data) = audio_receiver.recv() {
-        file.write_all(&audio_data)
-            .expect("Failed to write audio data");
     }
 }

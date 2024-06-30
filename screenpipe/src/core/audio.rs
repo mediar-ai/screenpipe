@@ -1,3 +1,4 @@
+use chrono::{DateTime, Duration, Utc};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Sample;
 use cpal::SampleFormat;
@@ -95,14 +96,6 @@ fn wav_spec_from_config(config: &cpal::SupportedStreamConfig) -> hound::WavSpec 
     }
 }
 
-fn sample_format(format: cpal::SampleFormat) -> hound::SampleFormat {
-    if format.is_float() {
-        hound::SampleFormat::Float
-    } else {
-        hound::SampleFormat::Int
-    }
-}
-
 fn write_input_data<T>(
     input: &[T],
     writer: &Arc<Mutex<Option<hound::WavWriter<BufWriter<File>>>>>,
@@ -143,3 +136,82 @@ impl SampleToI16 for u16 {
         (*self as i32 - i16::MAX as i32) as i16
     }
 }
+
+// ... existing code ...
+
+pub fn start_chunked_audio_recording(
+    local_data_dir: String,
+    chunk_duration: Duration,
+) -> Result<AudioHandle, Box<dyn std::error::Error>> {
+    let host = cpal::default_host();
+    let device = host
+        .default_input_device()
+        .ok_or("No input device available")?;
+    let config = device.default_input_config()?;
+
+    let is_paused = Arc::new(Mutex::new(false));
+    let is_paused_clone = is_paused.clone();
+
+    let (control_sender, control_receiver) = mpsc::channel();
+
+    std::thread::spawn(move || {
+        let mut current_chunk_start = Utc::now();
+        let current_writer = create_wav_writer(&local_data_dir, &current_chunk_start, &config);
+        let writer = Arc::new(Mutex::new(Some(current_writer)));
+        let writer_clone = writer.clone();
+        let config_clone = config.clone();
+        let stream = device
+            .build_input_stream(
+                &config_clone.into(),
+                move |data: &[f32], _: &_| {
+                    if !*is_paused_clone.lock().unwrap() {
+                        let now = Utc::now();
+                        if now - current_chunk_start >= chunk_duration {
+                            if let Ok(mut guard) = writer.lock() {
+                                if let Some(writer) = guard.take() {
+                                    writer.finalize().expect("Failed to finalize WAV file");
+                                }
+                            }
+                            current_chunk_start = now;
+                            let new_writer =
+                                create_wav_writer(&local_data_dir, &current_chunk_start, &config);
+                            *writer.lock().unwrap() = Some(new_writer);
+                        }
+                        write_input_data(data, &writer_clone, &is_paused_clone);
+                    }
+                },
+                |err| eprintln!("An error occurred on the input audio stream: {}", err),
+                None,
+            )
+            .expect("Failed to build input stream");
+
+        stream.play().expect("Failed to play the stream");
+
+        while let Ok(control) = control_receiver.recv() {
+            match control {
+                AudioControl::Stop => break,
+            }
+        }
+    });
+
+    Ok(AudioHandle {
+        is_paused,
+        control_sender,
+    })
+}
+
+fn create_wav_writer(
+    local_data_dir: &str,
+    timestamp: &DateTime<Utc>,
+    config: &cpal::SupportedStreamConfig,
+) -> hound::WavWriter<BufWriter<File>> {
+    let output_name = format!(
+        "{}/audio-{}.wav",
+        local_data_dir,
+        timestamp.format("%Y%m%d-%H%M%S")
+    );
+    let spec = wav_spec_from_config(config);
+    hound::WavWriter::create(output_name, spec).expect("Failed to create WAV writer")
+}
+
+// ... rest of the existing code ...

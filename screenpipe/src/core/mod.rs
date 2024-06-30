@@ -4,7 +4,7 @@ mod db;
 mod embed;
 mod video;
 
-pub use audio::{start_audio_recording, AudioHandle};
+pub use audio::{start_audio_recording, AudioHandle, start_chunked_audio_recording};
 pub use core::start_recording;
 pub use core::CaptureHandles;
 pub use db::DatabaseManager;
