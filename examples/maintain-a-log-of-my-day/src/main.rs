@@ -21,12 +21,9 @@
 use reqwest::blocking::Client;
 use rusqlite::Connection;
 use std::fs;
-use std::fs::File;
 use std::thread;
 use std::time::Duration;
 use serde_json::json;
-use std::io::Write;
-use std::io::Read;
 fn main() {
     let conn = Connection::open("../../screenpipe/data/db.sqlite").unwrap();
     let client = Client::new();
@@ -35,7 +32,7 @@ fn main() {
     loop {
         let query = "
             SELECT COUNT(*), GROUP_CONCAT(at.text)
-            FROM all_text at
+            FROM ocr_text at
             JOIN frames f ON at.frame_id = f.id
             WHERE f.timestamp <= datetime('now', '1 minutes')
             ORDER BY f.timestamp DESC

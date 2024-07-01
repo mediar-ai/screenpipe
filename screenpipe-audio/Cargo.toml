@@ -1,0 +1,44 @@
+[package]
+name = "screenpipe-audio"
+version = "0.0.0"
+edition = "2021"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Cross-platform audio capture
+cpal = "0.15.2"
+
+# Wav encoding
+hound = "3.5"
+
+# Dates
+chrono = { version = "0.4.31", features = ["serde"] }
+
+# Local Embeddings + STT
+# TODO: feature metal, cuda, etc. see https://github.com/huggingface/candle/blob/main/candle-core/Cargo.toml
+candle = { package = "candle-core", version = "0.3.2" } # atm got seg fault w features = ["metal"] ♥️
+candle-nn = "0.3.2"
+candle-transformers = "0.3.2"
+tokenizers = "0.15.0"
+lazy_static = "1.4.0"
+base64 = "0.21.7"
+anyhow = "1.0.86"
+byteorder = "1.5.0"
+hf-hub = "0.3.2"
+symphonia = "0.5.4"
+rand = "0.8.5"
+rubato = "0.15.0"
+
+
+[dev-dependencies]
+tempfile = "3.3.0"
+
+
+[[bin]]
+name = "pipe-audio"
+path = "src/bin/screenpipe-audio.rs"

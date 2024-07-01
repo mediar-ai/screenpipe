@@ -1,4 +1,8 @@
 [workspace]
-members = ["screenpipe", "examples/maintain-a-log-of-my-day"]
+members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio", "examples/maintain-a-log-of-my-day"]
 exclude = []
 resolver = "2"
+
+
+[workspace.dependencies]
+log = "0.4"
