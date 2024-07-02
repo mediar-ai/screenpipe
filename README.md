@@ -74,26 +74,67 @@ To try the current version, which capture your screen and extract the text, do:
 
 ```bash
 git clone https://github.com/louis030195/screen-pipe
-cd screen-pipe/screenpipe
+cd screen-pipe
 ```
 
 3. Run the API (make sure to install [Rust](https://www.rust-lang.org/tools/install)):
 
 ```bash
-cargo run
+cargo build --release
+./target/release/pipe
+
+# or only stream audio + speech to text to stdout
+./target/release/pipe-audio
+
+# or only stream screenshots + ocr to stdout
+./target/release/pipe-vision
+
+# or only record mp4 videos + json containing ocr
+./target/release/pipe-video
 ```
 
-Get today's context (all the text you've seen):
+PS: in dev mode it's like 1000x slower (`cargo run --bin screenpipe-server`)
 
-```bash
-curl "http://localhost:3030/text_by_date?start_date=$(date +%Y-%m-%d%%20%H:%M:%S)&end_date=$(date +%Y-%m-%d%%20%H:%M:%S)"
-```
+<details>
+  <summary>Examples to query the API</summary>
+  
+  ```bash
+# 1. Basic search query
+curl "http://localhost:3030/search?q=test&limit=5&offset=0"
 
-Or search for a specific text:
+# 2. Search with content type filter (OCR)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
 
-```bash
-curl "http://localhost:3030/text?limit=10&offset=0&search='louis'"
-```
+# 3. Search with content type filter (Audio)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
+
+# 4. Search with pagination
+curl "http://localhost:3030/search?q=test&limit=10&offset=20"
+
+# 5. Get recent results without date range
+curl "http://localhost:3030/recent?limit=5&offset=0"
+
+# 6. Get recent results with date range
+curl "http://localhost:3030/recent?limit=5&offset=0&start_date=2024-07-02T14:00:00&end_date=2024-07-02T23:59:59"
+
+# 5 s ago
+start_date=$(date -u -v-5S +'%Y-%m-%dT%H:%M:%S')
+end_date=$(date -u +'%Y-%m-%dT%H:%M:%S')
+curl "http://localhost:3030/recent?limit=5&offset=0&start_date=$start_date&end_date=$end_date"
+
+# 7. Get frame without thumbnail
+curl "http://localhost:3030/frame/123"
+
+# 8. Get frame with thumbnail
+curl "http://localhost:3030/frame/123?thumbnail=true"
+
+# 9. Search with no query (should return all results)
+curl "http://localhost:3030/search?limit=5&offset=0"
+
+# 10. Get recent results with pagination
+curl "http://localhost:3030/recent?limit=20&offset=40"
+  ```
+</details>
 
 Now pipe this into a LLM to build:
 - memory extension apps
@@ -103,9 +144,7 @@ Now pipe this into a LLM to build:
 
 We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
 
-
 https://github.com/louis030195/screen-pipe/assets/25003283/9a26469f-5bd0-4905-ad6a-c52ef912c235
-
 
 ## Why open source?
 
