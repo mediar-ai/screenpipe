@@ -1,6 +1,7 @@
 use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::WavWriter;
+use log::{error, info};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -26,6 +27,7 @@ pub fn continuous_audio_capture(
 
     let sample_rate = config.sample_rate().0;
     let channels = config.channels() as usize;
+    info!("Sample rate: {}, Channels: {}", sample_rate, channels);
 
     let audio_buffer = Arc::new(Mutex::new(Vec::new()));
     let audio_buffer_clone = audio_buffer.clone();
@@ -41,17 +43,21 @@ pub fn continuous_audio_capture(
                 audio_buffer_clone.lock().unwrap().extend_from_slice(data);
             }
         },
-        |err| eprintln!("An error occurred on the input audio stream: {}", err),
+        |err| error!("An error occurred on the input audio stream: {}", err),
         None,
     )?;
 
-    stream.play()?;
+    match stream.play() {
+        Ok(_) => info!("Successfully started audio stream"),
+        Err(e) => error!("Failed to start audio stream: {}", e),
+    }
 
     let is_paused_clone = is_paused.clone();
     let should_stop_clone = should_stop.clone();
 
     let process_audio = move || -> Result<()> {
         loop {
+            info!("Processing audio...");
             // Check for control messages
             if let Ok(message) = control_rx.try_recv() {
                 match message {
@@ -63,15 +69,20 @@ pub fn continuous_audio_capture(
                     }
                 }
             }
+            info!("Processing audio2...");
 
             if *is_paused_clone.lock().unwrap() {
                 thread::sleep(Duration::from_millis(100));
                 continue;
             }
+            info!("Processing audio3...");
 
             thread::sleep(chunk_duration);
+            info!("Processing audio4...");
 
             let mut audio_data = audio_buffer.lock().unwrap();
+            info!("audio_data len: {:?}", audio_data.len());
+
             if !audio_data.is_empty() {
                 let chunk = audio_data.clone();
                 audio_data.clear();
@@ -93,6 +104,9 @@ pub fn continuous_audio_capture(
 
                 let transcription = stt(temp_file.to_str().unwrap())?;
                 std::fs::remove_file(temp_file)?;
+
+                info!("Transcription: {}", transcription);
+                info!("Chunk size: {:?}", chunk.len());
 
                 result_tx.send(CaptureResult {
                     audio: chunk,
@@ -120,15 +134,20 @@ pub enum ControlMessage {
 // a function to save an audio to file
 pub fn save_audio_to_file(audio: &[f32], file_path: &str) -> Result<()> {
     let spec = hound::WavSpec {
-        channels: 1,
+        channels: 1, // TODO
         sample_rate: 44100,
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
-    let mut writer = WavWriter::create(file_path, spec)?;
+    let mut writer = WavWriter::create(file_path, spec)
+        .map_err(|e| anyhow::anyhow!("Failed to create WavWriter: {}", e))?;
     for sample in audio.iter() {
-        writer.write_sample(*sample)?;
+        writer
+            .write_sample(*sample)
+            .map_err(|e| anyhow::anyhow!("Failed to write sample: {}", e))?;
     }
-    writer.finalize()?;
+    writer
+        .finalize()
+        .map_err(|e| anyhow::anyhow!("Failed to finalize WavWriter: {}", e))?;
     Ok(())
 }

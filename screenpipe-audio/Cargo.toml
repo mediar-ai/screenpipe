@@ -24,7 +24,7 @@ chrono = { version = "0.4.31", features = ["serde"] }
 candle = { package = "candle-core", version = "0.3.2" } # atm got seg fault w features = ["metal"] ♥️
 candle-nn = "0.3.2"
 candle-transformers = "0.3.2"
-tokenizers = "0.15.0"
+tokenizers = "0.19.1"
 lazy_static = "1.4.0"
 base64 = "0.21.7"
 anyhow = "1.0.86"
@@ -33,6 +33,10 @@ hf-hub = "0.3.2"
 symphonia = "0.5.4"
 rand = "0.8.5"
 rubato = "0.15.0"
+
+# Log 
+log = { workspace = true }
+env_logger = "0.10"
 
 
 [dev-dependencies]

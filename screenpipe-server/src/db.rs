@@ -227,8 +227,7 @@ impl DatabaseManager {
 
     // Method to insert a frame and return its ID
     pub fn insert_frame(&mut self) -> Result<i64> {
-        // println!("inserting frame... {:?}", Utc::now().naive_utc());
-        let frame_id = self.conn.execute(
+        self.conn.execute(
             "INSERT INTO frames (video_chunk_id, offset_index, timestamp)
              VALUES (?1, ?2, ?3)",
             params![
@@ -239,18 +238,18 @@ impl DatabaseManager {
         )?;
 
         self.current_frame_offset += 1;
-        self.last_frame_id = frame_id as i64;
+        self.last_frame_id = self.conn.last_insert_rowid();
 
         Ok(self.last_frame_id)
     }
 
     // Method to insert text for a frame
-    pub fn insert_text_for_frame(&self, frame_id: i64, text: &str) -> Result<()> {
+    pub fn insert_text_for_frame(&self, frame_id: i64, text: &str) -> Result<i64> {
         self.conn.execute(
             "INSERT INTO ocr_text (frame_id, text) VALUES (?1, ?2)",
             params![frame_id, text],
         )?;
-        Ok(())
+        Ok(self.conn.last_insert_rowid())
     }
 
     // Method to get a frame by index
@@ -607,3 +606,30 @@ mod tests {
         Ok(())
     }
 }
+
+// Debugging:
+// # 1. List all tables
+// sqlite3 data/db.sqlite ".tables"
+
+// # 2. Dump entire database content
+// sqlite3 data/db.sqlite ".dump"
+
+// # 3. Show schema for all tables
+// sqlite3 data/db.sqlite ".schema"
+
+// # 4. Query recent frames with OCR text
+// sqlite3 data/db.sqlite "SELECT f.id, f.timestamp, o.text FROM frames f JOIN ocr_text o ON f.id = o.frame_id ORDER BY f.timestamp DESC LIMIT 10;"
+
+// # 5. Query recent audio transcriptions
+// sqlite3 data/db.sqlite "SELECT at.audio_chunk_id, at.timestamp, at.transcription FROM audio_transcriptions at ORDER BY at.timestamp DESC LIMIT 10;"
+
+// # 6. Just list a table content
+// sqlite3 data/db.sqlite "SELECT * FROM frames"
+
+// sqlite3 data/db.sqlite "SELECT * FROM audio_chunks"
+
+// sqlite3 data/db.sqlite "SELECT * FROM video_chunks"
+
+// sqlite3 data/db.sqlite "SELECT * FROM ocr_text"
+
+// sqlite3 data/db.sqlite "SELECT * FROM audio_transcriptions"

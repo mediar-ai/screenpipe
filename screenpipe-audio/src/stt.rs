@@ -2,6 +2,7 @@ use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::ops::softmax;
 use hf_hub::{api::sync::Api, Repo, RepoType};
+use log::{error, info};
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
 
@@ -11,6 +12,8 @@ use rubato::{
 };
 
 use crate::{multilingual, pcm_decode::pcm_decode};
+
+// TODO: improve model loading strategy
 
 pub enum Model {
     Normal(m::model::Whisper),
@@ -149,7 +152,7 @@ impl Decoder {
         let model = &mut self.model;
         let audio_features = model.encoder_forward(mel, true)?;
         if self.verbose {
-            println!("audio features: {:?}", audio_features.dims());
+            info!("audio features: {:?}", audio_features.dims());
         }
         let sample_len = model.config().max_target_positions / 2;
         let mut sum_logprob = 0f64;
@@ -247,7 +250,7 @@ impl Decoder {
                     }
                 }
                 Err(err) => {
-                    println!("Error running at {t}: {err}")
+                    error!("Error running at {t}: {err}")
                 }
             }
         }
@@ -267,7 +270,7 @@ impl Decoder {
             let dr = self.decode_with_fallback(&mel_segment)?;
             seek += segment_size;
             if dr.no_speech_prob > m::NO_SPEECH_THRESHOLD && dr.avg_logprob < m::LOGPROB_THRESHOLD {
-                println!("no speech detected, skipping {seek} {dr:?}");
+                info!("no speech detected, skipping {seek} {dr:?}");
                 continue;
             }
             let segment = Segment {
@@ -276,7 +279,7 @@ impl Decoder {
                 dr,
             };
             if self.timestamps {
-                println!(
+                info!(
                     "{:.1}s -- {:.1}s",
                     segment.start,
                     segment.start + segment.duration,
@@ -295,7 +298,7 @@ impl Decoder {
                                 .tokenizer
                                 .decode(&tokens_to_decode, true)
                                 .map_err(E::msg)?;
-                            println!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
+                            info!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
                             tokens_to_decode.clear()
                         }
                         prev_timestamp_s = timestamp_s;
@@ -309,12 +312,12 @@ impl Decoder {
                         .decode(&tokens_to_decode, true)
                         .map_err(E::msg)?;
                     if !text.is_empty() {
-                        println!("  {:.1}s-...: {}", prev_timestamp_s, text);
+                        info!("  {:.1}s-...: {}", prev_timestamp_s, text);
                     }
                     tokens_to_decode.clear()
                 }
             } else {
-                println!(
+                info!(
                     "{:.1}s -- {:.1}s: {}",
                     segment.start,
                     segment.start + segment.duration,
@@ -322,7 +325,7 @@ impl Decoder {
                 )
             }
             if self.verbose {
-                println!("{seek}: {segment:?}, in {:?}", start.elapsed());
+                info!("{seek}: {segment:?}, in {:?}", start.elapsed());
             }
             segments.push(segment)
         }
@@ -400,10 +403,10 @@ impl WhichModel {
 }
 
 pub fn stt(input: &str) -> Result<String> {
-    println!("Starting speech to text");
+    info!("Starting speech to text");
     // ! hack assuming device on 0 and that everyone wants to use AI accelerator
     let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
-    println!("device = {:?}", device);
+    info!("device = {:?}", device);
     let (default_model, default_revision) = ("lmz/candle-whisper", "main");
     let default_model = default_model.to_string();
     let default_revision = default_revision.to_string();
@@ -416,7 +419,7 @@ pub fn stt(input: &str) -> Result<String> {
             default_revision,
         ));
         let sample = std::path::PathBuf::from(input);
-        println!("sample = {:?}", sample);
+        info!("sample = {:?}", sample);
         let config = repo.get("config-tiny.json")?;
         let tokenizer = repo.get("tokenizer-tiny.json")?;
         let model = repo.get("model-tiny-q80.gguf")?;
@@ -436,7 +439,7 @@ pub fn stt(input: &str) -> Result<String> {
     let (mut pcm_data, sample_rate) = pcm_decode(input)?;
     // Resample if necessary
     if sample_rate != m::SAMPLE_RATE as u32 {
-        println!(
+        info!(
             "Resampling from {} Hz to {} Hz",
             sample_rate,
             m::SAMPLE_RATE
@@ -444,7 +447,7 @@ pub fn stt(input: &str) -> Result<String> {
         pcm_data = resample(pcm_data, sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
-    println!("pcm data loaded {}", pcm_data.len());
+    info!("pcm data loaded {}", pcm_data.len());
     let mel = audio::pcm_to_mel(&config, &pcm_data, &mel_filters);
     let mel_len = mel.len();
     let mel = Tensor::from_vec(
@@ -452,26 +455,34 @@ pub fn stt(input: &str) -> Result<String> {
         (1, config.num_mel_bins, mel_len / config.num_mel_bins),
         &device,
     )?;
-    println!("loaded mel: {:?}", mel.dims());
+    info!("loaded mel: {:?}", mel.dims());
 
     let vb = candle_transformers::quantized_var_builder::VarBuilder::from_gguf(
         &weights_filename,
         &device,
     )?;
+    info!("loading model");
     let mut model = Model::Quantized(m::quantized_model::Whisper::load(&vb, config)?);
-
-    let language_token = Some(multilingual::detect_language(&mut model, &tokenizer, &mel)?);
+    info!("loaded model");
+    info!("detecting language");
+    // TODO: disabled seems slow as fuck
+    // let language_token = Some(multilingual::detect_language(&mut model, &tokenizer, &mel)?);
+    // info!("detected language: {:?}", language_token);
+    info!("creating decoder");
     let mut dc = Decoder::new(
         model,
         tokenizer,
         42,
         &device,
-        language_token,
+        // language_token,
+        None,
         Some(Task::Transcribe),
         false,
         false,
     )?;
+    info!("Decoding...");
     let segments = dc.run(&mel)?;
+    info!("Decoding done {:?}", segments);
     Ok(segments
         .iter()
         .map(|s| s.dr.text.clone())
@@ -480,6 +491,7 @@ pub fn stt(input: &str) -> Result<String> {
 }
 
 fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
+    info!("Resampling from {} to {}", from_sample_rate, to_sample_rate);
     let params = SincInterpolationParameters {
         sinc_len: 256,
         f_cutoff: 0.95,

@@ -1,3 +1,4 @@
+use log::info;
 use symphonia::core::audio::{AudioBufferRef, Signal};
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::conv::FromSample;
@@ -45,6 +46,7 @@ pub(crate) fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(
         .expect("unsupported codec");
     let track_id = track.id;
     let sample_rate = track.codec_params.sample_rate.unwrap_or(0);
+    info!("Sample rate: {}", sample_rate);
     let mut pcm_data = Vec::new();
     // The decode loop.
     while let Ok(packet) = format.next_packet() {

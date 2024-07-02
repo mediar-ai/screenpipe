@@ -3,7 +3,6 @@ use std::{
     sync::{mpsc::channel, Arc, Mutex},
 };
 
-use chrono::Utc;
 use tokio::sync::oneshot;
 use tokio::time::Duration;
 
@@ -13,7 +12,14 @@ use screenpipe_server::{start_continuous_recording, DatabaseManager, RecorderCon
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
-    env_logger::init();
+    use env_logger::Builder;
+    use log::LevelFilter;
+
+    let _ = Builder::new()
+        .filter(None, LevelFilter::Info)
+        .filter_module("tokenizers", LevelFilter::Error)
+        .filter_module("rusty_tesseract", LevelFilter::Error)
+        .init();
 
     let local_data_dir = ensure_local_data_dir()?;
     let local_data_dir_clone = local_data_dir.clone();

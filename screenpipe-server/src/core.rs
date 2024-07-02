@@ -25,9 +25,7 @@ pub fn start_continuous_recording(
     let db_manager = Arc::new(Mutex::new(DatabaseManager::new(db_path)?));
     let db_manager_clone = db_manager.clone();
 
-    let time = Utc::now();
-    let video_output_path = format!("{}/{}.mp4", output_path, time);
-    let video_capture = VideoCapture::new(&video_output_path, fps);
+    let video_capture = VideoCapture::new(&output_path, fps);
 
     let control_rx = Arc::new(Mutex::new(control_rx));
     let control_rx_video = Arc::clone(&control_rx);
@@ -62,18 +60,19 @@ pub fn start_continuous_recording(
 
             if !is_paused {
                 if let Some(frame) = video_capture.get_latest_frame() {
-                    match db_manager.lock().unwrap().insert_frame() {
+                    let mut db = db_manager.lock().unwrap();
+                    match db.insert_frame() {
                         Ok(frame_id) => {
-                            if let Err(e) = db_manager
-                                .lock()
-                                .unwrap()
-                                .insert_text_for_frame(frame_id, &frame.text)
-                            {
+                            if let Err(e) = db.insert_text_for_frame(frame_id, &frame.text) {
                                 error!("Failed to insert OCR text: {}", e);
+                                return Err(e.into());
                             }
                             debug!("Inserted frame {} with OCR text", frame_id);
                         }
-                        Err(e) => error!("Failed to insert frame: {}", e),
+                        Err(e) => {
+                            error!("Failed to insert frame: {}", e);
+                            return Err(e.into());
+                        }
                     }
                 }
             }
@@ -105,28 +104,40 @@ pub fn start_continuous_recording(
             }
 
             if !is_paused {
-                if let Ok(result) = audio_result_rx.recv() {
-                    // Create an audio file
-                    let time = Utc::now();
-                    let file_path = format!("{}/{}.wav", output_path_clone, time);
-                    save_audio_to_file(&result.audio, &file_path)?;
-
-                    match db_manager_clone
-                        .lock()
-                        .unwrap()
-                        .insert_audio_chunk(&file_path)
-                    {
-                        Ok(audio_chunk_id) => {
-                            if let Err(e) = db_manager_clone
-                                .lock()
-                                .unwrap()
-                                .insert_audio_transcription(audio_chunk_id, &result.text, 0)
-                            {
-                                error!("Failed to insert audio transcription: {}", e);
-                            }
-                            debug!("Inserted audio chunk {} with transcription", audio_chunk_id);
+                match audio_result_rx.recv() {
+                    Ok(result) => {
+                        info!("Received audio chunk, processing...");
+                        info!("Audio chunk size: {}", result.audio.len());
+                        // Create an audio file
+                        let time = Utc::now();
+                        let file_path = format!("{}/{}.wav", output_path_clone, time);
+                        info!("Saving audio chunk to {}", file_path);
+                        match save_audio_to_file(&result.audio, &file_path) {
+                            Ok(_) => info!("Successfully saved audio file"),
+                            Err(e) => error!("Failed to save audio file: {}", e),
                         }
-                        Err(e) => error!("Failed to insert audio chunk: {}", e),
+
+                        let db = db_manager_clone.lock().unwrap();
+                        match db.insert_audio_chunk(&file_path) {
+                            Ok(audio_chunk_id) => {
+                                debug!("Inserted audio chunk with id: {}", audio_chunk_id);
+                                if let Err(e) =
+                                    db.insert_audio_transcription(audio_chunk_id, &result.text, 0)
+                                // TODO offset
+                                {
+                                    error!("Failed to insert audio transcription: {}", e);
+                                } else {
+                                    debug!(
+                                        "Inserted audio transcription for chunk {}",
+                                        audio_chunk_id
+                                    );
+                                }
+                            }
+                            Err(e) => error!("Failed to insert audio chunk: {}", e),
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to receive audio chunk: {}", e);
                     }
                 }
             }

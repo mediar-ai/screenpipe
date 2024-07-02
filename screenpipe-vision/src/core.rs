@@ -19,6 +19,8 @@ pub struct CaptureResult {
     pub text: String,
 }
 
+const MAX_THREADS: usize = 16; // Adjust based on your needs
+
 pub fn continuous_capture(
     control_rx: Receiver<ControlMessage>,
     result_tx: Sender<CaptureResult>,
@@ -27,10 +29,11 @@ pub fn continuous_capture(
     let monitor = Monitor::all().unwrap().first().unwrap().clone();
     let cpu_count = num_cpus::get();
     let pool_size = (cpu_count as f32 * 1.2) as usize;
+    let pool_size = std::cmp::min(pool_size, MAX_THREADS);
+
     let ocr_pool = ThreadPool::new(pool_size);
     let is_paused = Arc::new(Mutex::new(false));
     let should_stop = Arc::new(Mutex::new(false));
-
     loop {
         // Check for control messages
         if let Ok(message) = control_rx.try_recv() {

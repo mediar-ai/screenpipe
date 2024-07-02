@@ -195,3 +195,19 @@ pub async fn start_frame_server(
     // Send signal that the server has started
     let _ = tx.send(());
 }
+
+// # 1. Search for text with pagination
+// curl "http://localhost:3030/text?search=e&limit=10&offset=0"
+
+// # 2. Get recent results without search term
+// curl "http://localhost:3030/text?limit=20&offset=0"
+
+// # 3. Get frame image (non-thumbnail) // ! does not work
+// curl -o frame.png "http://localhost:3030/frames/100"
+
+// # 4. Get frame thumbnail
+// curl -o thumbnail.png "http://localhost:3030/frames/100?thumbnail=true"
+
+// # 5. Get text by date range
+// curl "http://localhost:3030/text_by_date?start_date=2024-07-02T00:00:00&end_date=2024-07-02T23:59:59&limit=15&offset=0"
+

@@ -4,7 +4,7 @@ use ffmpeg_next::sys::AVSEEK_FLAG_FRAME;
 use ffmpeg_next::{format, format::Pixel, media, software::scaling, util::frame::video::Video};
 use image::ImageFormat::{self, Png};
 use image::{DynamicImage, ImageBuffer, Rgb};
-use log::{error, info};
+use log::{debug, error, info, warn};
 use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage};
 use std::collections::{BTreeSet, VecDeque};
 use std::io::BufRead;
@@ -15,6 +15,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use threadpool::ThreadPool;
+
+const MAX_THREADS: usize = 16; // Adjust based on your needs
+const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 
 pub fn extract_frames_from_video(
     video_path: &str,
@@ -253,6 +256,7 @@ fn save_frames_as_video(
     let mut frame_count = 0;
     let cpu_count = num_cpus::get();
     let pool_size = (cpu_count as f32 * 1.2) as usize;
+    let pool_size = std::cmp::min(pool_size, MAX_THREADS);
     let pool = ThreadPool::new(pool_size);
     let (sender, receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
 
@@ -300,7 +304,7 @@ fn save_frames_as_video(
                 let reader = std::io::BufReader::new(stderr);
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        info!("FFmpeg: {}", line);
+                        debug!("FFmpeg: {}", line);
                     }
                 }
             });
@@ -335,7 +339,7 @@ fn save_frames_as_video(
                     break;
                 }
                 frame_count += 1;
-                info!("Wrote frame {} to FFmpeg", frame_count);
+                debug!("Wrote frame {} to FFmpeg", frame_count);
 
                 // Flush every second
                 if frame_count % fps as usize == 0 {
@@ -355,6 +359,13 @@ fn save_frames_as_video(
 }
 
 fn start_ffmpeg_process(output_file: &str, fps: f64) -> std::process::Child {
+    // overrriding fps with max fps if over the max and warning user
+    let mut fps = fps;
+    if fps > MAX_FPS {
+        warn!("Overriding FPS to {}", MAX_FPS);
+        fps = MAX_FPS;
+    }
+
     info!("Starting FFmpeg process for file: {}", output_file);
     Command::new("ffmpeg")
         .args([
