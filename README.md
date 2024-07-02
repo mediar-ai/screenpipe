@@ -56,9 +56,12 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Record your screen 24/7
 - [x] mp4 encoding to disk (30 GB / month)
 - [x] sqlite local db
 - [x] OCR
-- [ ] audio + stt
+- [ ] TS SDK
+- [x] audio + stt
 - [ ] cloud storage options (s3, pqsql, etc.)
-- [ ] cloud computing options  
+- [ ] cloud computing options
+- [ ] fast, optimised
+- [ ] bug-free 
 
 ## Usage
 
