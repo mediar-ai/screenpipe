@@ -80,6 +80,7 @@ cd screen-pipe
 3. Run the API (make sure to install [Rust](https://www.rust-lang.org/tools/install)):
 
 ```bash
+# This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
 cargo build --release
 ./target/release/pipe
 
