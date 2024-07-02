@@ -1,0 +1,66 @@
+[package]
+name = "screenpipe-server"
+version = "0.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+screenpipe-vision = { path = "../screenpipe-vision" }
+screenpipe-audio = { path = "../screenpipe-audio" }
+
+# Image processing
+image = "0.25.0"
+
+# OCR
+rusty-tesseract = "1.1.10"
+
+# threadpool
+threadpool = "1.8.1"
+num_cpus = "1.0"
+
+# Dates
+chrono = { version = "0.4.31", features = ["serde"] }
+
+rusqlite = { version = "0.30.0", features = ["chrono", "bundled", "array"] }
+
+# FFmpeg bindings
+ffmpeg-next = "7.0.2"
+
+# Local Embeddings + STT
+candle = { package = "candle-core", version = "0.3.2" }
+candle-nn = "0.3.2"
+candle-transformers = "0.3.2"
+tokenizers = "0.15.0"
+lazy_static = "1.4.0"
+base64 = "0.21.7"
+anyhow = "1.0.86"
+byteorder = "1.5.0"
+hf-hub = "0.3.2"
+symphonia = "0.5.4"
+rand = "0.8.5"
+rubato = "0.15.0"
+
+# Server
+axum = "0.7.4"
+tokio = { version = "1", features = ["full"] }
+hyper = "1.1"
+tower-http = { version = "0.5.0", features = ["cors"] }
+
+# Log
+log = { workspace = true }
+env_logger = "0.10"
+
+[dev-dependencies]
+tempfile = "3.3.0"
+
+[[bin]]
+name = "pipe"
+path = "src/bin/screenpipe-server.rs"
+
+[[bin]]
+name = "pipe-video"
+path = "src/bin/screenpipe-video.rs"

@@ -83,13 +83,13 @@ cargo run
 Get today's context (all the text you've seen):
 
 ```bash
-curl "http://localhost:3030/texts?date=$(date +%Y-%m-%d%%20%H:%M:%S)"
+curl "http://localhost:3030/text_by_date?start_date=$(date +%Y-%m-%d%%20%H:%M:%S)&end_date=$(date +%Y-%m-%d%%20%H:%M:%S)"
 ```
 
 Or search for a specific text:
 
 ```bash
-curl "http://localhost:3030/frames?limit=10&offset=0&search='louis'"
+curl "http://localhost:3030/text?limit=10&offset=0&search='louis'"
 ```
 
 Now pipe this into a LLM to build:

@@ -14,15 +14,19 @@ ARCH=$(uname -m)
 case $OS in
     Linux*)
         case $ARCH in
-            x86_64) BINARY="screenpipe-x86_64-unknown-linux-gnu";;
-            aarch64) BINARY="screenpipe-aarch64-unknown-linux-gnu";;
+            # x86_64) BINARY="screenpipe-x86_64-unknown-linux-gnu";;
+            # aarch64) BINARY="screenpipe-aarch64-unknown-linux-gnu";;
+            x86_64) BINARY="screenpipe-linux";;
+            # aarch64) BINARY="screenpipe-linux";;
             *) echo "Unsupported architecture: $ARCH"; exit 1;;
         esac
         ;;
     Darwin*)
         case $ARCH in
-            x86_64) BINARY="screenpipe-x86_64-apple-darwin";;
-            arm64) BINARY="screenpipe-aarch64-apple-darwin";;
+            # x86_64) BINARY="screenpipe-x86_64-apple-darwin";;
+            # arm64) BINARY="screenpipe-aarch64-apple-darwin";;
+            # x86_64) BINARY="screenpipe-macos";;
+            arm64) BINARY="screenpipe-macos";;
             *) echo "Unsupported architecture: $ARCH"; exit 1;;
         esac
         ;;
@@ -32,6 +36,8 @@ esac
 
 # Create the local bin directory if it doesn't exist
 mkdir -p $HOME/.local/bin
+
+echo "Downloading $BINARY"
 
 # Download the latest release binary to the local bin directory
 curl -L "https://github.com/$REPO/releases/download/$LATEST_RELEASE/$BINARY" -o $HOME/.local/bin/screenpipe
