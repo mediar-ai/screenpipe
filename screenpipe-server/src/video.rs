@@ -1,8 +1,10 @@
+use chrono::Utc;
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::sys::AVSEEK_FLAG_FRAME;
 use ffmpeg_next::{format, format::Pixel, media, software::scaling, util::frame::video::Video};
 use image::ImageFormat::{self, Png};
 use image::{DynamicImage, ImageBuffer, Rgb};
+use log::{error, info};
 use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage};
 use std::collections::{BTreeSet, VecDeque};
 use std::io::BufRead;
@@ -170,6 +172,7 @@ pub struct VideoCapture {
 
 impl VideoCapture {
     pub fn new(output_path: &str, fps: f64) -> Self {
+        info!("Starting new video capture");
         let (control_tx, control_rx) = channel();
         let frame_queue = Arc::new(Mutex::new(VecDeque::new()));
         let ffmpeg_handle = Arc::new(Mutex::new(None));
@@ -185,6 +188,8 @@ impl VideoCapture {
                 Duration::from_secs_f64(1.0 / fps),
             );
         });
+
+        info!("Started capture thread");
 
         // Spawn another thread to handle receiving and queueing the results
         let queue_thread = thread::spawn(move || {
@@ -237,7 +242,6 @@ impl VideoCapture {
         self.frame_queue.lock().unwrap().pop_front()
     }
 }
-
 fn save_frames_as_video(
     frame_queue: &Arc<Mutex<VecDeque<CaptureResult>>>,
     output_path: &str,
@@ -245,7 +249,114 @@ fn save_frames_as_video(
     is_running: Arc<Mutex<bool>>,
     ffmpeg_handle: Arc<Mutex<Option<std::process::Child>>>,
 ) {
-    let mut child = Command::new("ffmpeg")
+    let frames_per_video = 30; // Adjust this value as needed
+    let mut frame_count = 0;
+    let cpu_count = num_cpus::get();
+    let pool_size = (cpu_count as f32 * 1.2) as usize;
+    let pool = ThreadPool::new(pool_size);
+    let (sender, receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+
+    let mut current_ffmpeg: Option<std::process::Child> = None;
+    let mut current_stdin: Option<std::process::ChildStdin> = None;
+
+    while *is_running.lock().unwrap() {
+        if frame_count % frames_per_video == 0 || current_ffmpeg.is_none() {
+            // Close previous FFmpeg process if exists
+            if let Some(mut child) = current_ffmpeg.take() {
+                drop(current_stdin.take()); // Ensure stdin is closed
+                child.wait().expect("ffmpeg process failed");
+            }
+
+            // Wait for at least one frame before starting a new FFmpeg process
+            let first_frame = loop {
+                if let Some(result) = frame_queue.lock().unwrap().pop_front() {
+                    break result;
+                }
+                thread::sleep(Duration::from_millis(10));
+            };
+
+            // Encode the first frame
+            let mut buffer = Vec::new();
+            first_frame
+                .image
+                .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
+                .expect("Failed to encode first frame");
+
+            let time = Utc::now();
+            // Start new FFmpeg process with a new output file
+            let output_file = format!("{}/{}.mp4", output_path, time);
+            let mut child = start_ffmpeg_process(&output_file, fps);
+            let mut stdin = child.stdin.take().expect("Failed to open stdin");
+            let stderr = child.stderr.take().expect("Failed to open stderr");
+
+            // Write the first frame to FFmpeg
+            stdin
+                .write_all(&buffer)
+                .expect("Failed to write first frame to ffmpeg");
+            frame_count += 1;
+
+            // Spawn a thread to log FFmpeg's stderr
+            thread::spawn(move || {
+                let reader = std::io::BufReader::new(stderr);
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        info!("FFmpeg: {}", line);
+                    }
+                }
+            });
+
+            current_ffmpeg = Some(child);
+            current_stdin = Some(stdin);
+        }
+
+        if let Some(result) = frame_queue.lock().unwrap().pop_front() {
+            let sender = sender.clone();
+            pool.execute(move || {
+                let mut buffer = Vec::new();
+                match result
+                    .image
+                    .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
+                {
+                    Ok(_) => {
+                        sender.send(buffer).expect("Failed to send encoded frame");
+                    }
+                    Err(e) => error!("Failed to encode image as PNG: {}", e),
+                }
+            });
+        } else {
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        // Write encoded frames to FFmpeg
+        for buffer in receiver.try_iter() {
+            if let Some(stdin) = current_stdin.as_mut() {
+                if let Err(e) = stdin.write_all(&buffer) {
+                    error!("Failed to write frame to ffmpeg: {}", e);
+                    break;
+                }
+                frame_count += 1;
+                info!("Wrote frame {} to FFmpeg", frame_count);
+
+                // Flush every second
+                if frame_count % fps as usize == 0 {
+                    if let Err(e) = stdin.flush() {
+                        error!("Failed to flush FFmpeg input: {}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    // Close the final FFmpeg process
+    if let Some(mut child) = current_ffmpeg.take() {
+        drop(current_stdin.take()); // Ensure stdin is closed
+        child.wait().expect("ffmpeg process failed");
+    }
+}
+
+fn start_ffmpeg_process(output_file: &str, fps: f64) -> std::process::Child {
+    info!("Starting FFmpeg process for file: {}", output_file);
+    Command::new("ffmpeg")
         .args([
             "-f",
             "image2pipe",
@@ -263,83 +374,10 @@ fn save_frames_as_video(
             "yuv420p",
             "-crf",
             "25",
-            output_path,
+            output_file,
         ])
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("Failed to spawn ffmpeg process");
-
-    let mut stdin = child.stdin.take().expect("Failed to open stdin");
-    let stderr = child.stderr.take().expect("Failed to open stderr");
-    let mut frame_count = 0;
-    let mut last_flush = std::time::Instant::now();
-
-    ffmpeg_handle.lock().unwrap().replace(child);
-
-    // Spawn a thread to log FFmpeg's stderr
-    thread::spawn(move || {
-        let reader = std::io::BufReader::new(stderr);
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                eprintln!("FFmpeg: {}", line);
-            }
-        }
-    });
-
-    let cpu_count = num_cpus::get();
-    // let pool_size = match task_type {
-    //     TaskType::CPUBound => cpu_count,
-    //     TaskType::IOBound => cpu_count * 2,
-    //     TaskType::Mixed => (cpu_count as f32 * 1.5) as usize,
-    // };
-    // primarily CPU-bound with some I/O components. Here's why:
-    // 1. PNG encoding is computationally expensive.
-    // 2. Writing to FFmpeg's stdin is I/O, but likely not the bottleneck.
-    // 3. The main performance gain comes from parallelizing the encoding.
-    let pool_size = (cpu_count as f32 * 1.2) as usize;
-    let pool = ThreadPool::new(pool_size); // Adjust the number of threads as needed
-    let (sender, receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-
-    while *is_running.lock().unwrap() {
-        if let Some(result) = frame_queue.lock().unwrap().pop_front() {
-            let sender = sender.clone();
-            pool.execute(move || {
-                let mut buffer = Vec::new();
-                match result
-                    .image
-                    .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
-                {
-                    Ok(_) => {
-                        sender.send(buffer).expect("Failed to send encoded frame");
-                    }
-                    Err(e) => eprintln!("Failed to encode image as PNG: {}", e),
-                }
-            });
-        } else {
-            thread::sleep(Duration::from_millis(10));
-        }
-
-        // Write encoded frames to FFmpeg
-        for buffer in receiver.try_iter() {
-            if let Err(e) = stdin.write_all(&buffer) {
-                eprintln!("Failed to write frame to ffmpeg: {}", e);
-                break;
-            }
-            frame_count += 1;
-            println!("Wrote frame {} to FFmpeg", frame_count);
-
-            // Flush every second
-            if last_flush.elapsed() > std::time::Duration::from_secs(1) {
-                if let Err(e) = stdin.flush() {
-                    eprintln!("Failed to flush FFmpeg input: {}", e);
-                }
-                last_flush = std::time::Instant::now();
-            }
-        }
-    }
-    drop(stdin);
-    if let Some(mut child) = ffmpeg_handle.lock().unwrap().take() {
-        child.wait().expect("ffmpeg process failed");
-    }
+        .expect("Failed to spawn ffmpeg process")
 }

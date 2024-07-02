@@ -19,7 +19,7 @@ fn main() {
     loop {
         if let Ok(result) = result_rx.try_recv() {
             println!("Captured image size: {:?}", result.image.dimensions());
-            println!("OCR Text: {}", result.text);
+            println!("OCR Text length: {}", result.text.len());
         }
 
         let elapsed = start_time.elapsed();

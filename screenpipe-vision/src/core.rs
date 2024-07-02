@@ -26,15 +26,6 @@ pub fn continuous_capture(
 ) {
     let monitor = Monitor::all().unwrap().first().unwrap().clone();
     let cpu_count = num_cpus::get();
-    // let pool_size = match task_type {
-    //     TaskType::CPUBound => cpu_count,
-    //     TaskType::IOBound => cpu_count * 2,
-    //     TaskType::Mixed => (cpu_count as f32 * 1.5) as usize,
-    // };
-    // primarily CPU-bound with some I/O components. Here's why:
-    // 1. PNG encoding is computationally expensive.
-    // 2. Writing to FFmpeg's stdin is I/O, but likely not the bottleneck.
-    // 3. The main performance gain comes from parallelizing the encoding.
     let pool_size = (cpu_count as f32 * 1.2) as usize;
     let ocr_pool = ThreadPool::new(pool_size);
     let is_paused = Arc::new(Mutex::new(false));
