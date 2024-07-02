@@ -69,16 +69,13 @@ pub fn continuous_audio_capture(
                     }
                 }
             }
-            info!("Processing audio2...");
 
             if *is_paused_clone.lock().unwrap() {
                 thread::sleep(Duration::from_millis(100));
                 continue;
             }
-            info!("Processing audio3...");
 
             thread::sleep(chunk_duration);
-            info!("Processing audio4...");
 
             let mut audio_data = audio_buffer.lock().unwrap();
             info!("audio_data len: {:?}", audio_data.len());

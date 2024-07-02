@@ -1,7 +1,9 @@
+use std::default;
+
 use chrono::{NaiveDateTime, Utc};
 use rusqlite::OptionalExtension;
 use rusqlite::{params, Connection, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub enum SearchResult {
@@ -16,6 +18,15 @@ pub struct OCRResult {
     pub timestamp: NaiveDateTime,
     pub file_path: String,
     pub offset_index: i64,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Default, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum ContentType {
+    #[default]
+    All,
+    OCR,
+    Audio,
 }
 
 #[derive(Debug, Serialize)]
@@ -216,11 +227,11 @@ impl DatabaseManager {
 
     // Method to start a new video chunk and return its ID
     pub fn start_new_video_chunk(&mut self, file_path: &str) -> Result<i64> {
-        let chunk_id = self.conn.execute(
+        self.conn.execute(
             "INSERT INTO video_chunks (file_path) VALUES (?1)",
             params![file_path],
         )?;
-        self.current_video_chunk_id = chunk_id as i64;
+        self.current_video_chunk_id = self.conn.last_insert_rowid();
         self.current_frame_offset = 0;
         Ok(self.current_video_chunk_id)
     }
@@ -310,59 +321,70 @@ impl DatabaseManager {
     }
 
     // Method to perform a search based on text
-    pub fn search(&self, search_text: &str, limit: i64, offset: i64) -> Result<Vec<SearchResult>> {
+    pub fn search(
+        &self,
+        search_text: Option<&str>,
+        limit: u32,
+        offset: u32,
+        content_type: ContentType,
+    ) -> Result<Vec<SearchResult>> {
         let mut results = Vec::new();
+        let search_pattern = search_text.map(|text| format!("%{}%", text));
 
-        // Search OCR text
-        let ocr_query = "
-            SELECT f.id, o.text, f.timestamp, vc.file_path, f.offset_index
-            FROM frames f
-            JOIN video_chunks vc ON f.video_chunk_id = vc.id
-            JOIN ocr_text o ON f.id = o.frame_id
-            WHERE o.text LIKE ?1
-            ORDER BY f.timestamp DESC
-            LIMIT ?2 OFFSET ?3
-        ";
+        if content_type == ContentType::All || content_type == ContentType::OCR {
+            // Search OCR text
+            let ocr_query = "
+                SELECT f.id, o.text, f.timestamp, vc.file_path, f.offset_index
+                FROM frames f
+                JOIN video_chunks vc ON f.video_chunk_id = vc.id
+                JOIN ocr_text o ON f.id = o.frame_id
+                WHERE o.text LIKE ?1
+                ORDER BY f.timestamp DESC
+                LIMIT ?2 OFFSET ?3
+            ";
 
-        let search_pattern = format!("%{}%", search_text);
-        let mut ocr_stmt = self.conn.prepare(ocr_query)?;
-        let ocr_rows = ocr_stmt.query_map(params![search_pattern, limit, offset], |row| {
-            Ok(SearchResult::OCR(OCRResult {
-                frame_id: row.get(0)?,
-                ocr_text: row.get(1)?,
-                timestamp: row.get(2)?,
-                file_path: row.get(3)?,
-                offset_index: row.get(4)?,
-            }))
-        })?;
+            let mut ocr_stmt = self.conn.prepare(ocr_query)?;
+            let ocr_rows = ocr_stmt.query_map(params![search_pattern, limit, offset], |row| {
+                Ok(SearchResult::OCR(OCRResult {
+                    frame_id: row.get(0)?,
+                    ocr_text: row.get(1)?,
+                    timestamp: row.get(2)?,
+                    file_path: row.get(3)?,
+                    offset_index: row.get(4)?,
+                }))
+            })?;
 
-        for row in ocr_rows {
-            results.push(row?);
+            for row in ocr_rows {
+                results.push(row?);
+            }
         }
 
-        // Search audio transcriptions
-        let audio_query = "
-            SELECT at.audio_chunk_id, at.transcription, at.timestamp, ac.file_path, at.offset_index
-            FROM audio_transcriptions at
-            JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
-            WHERE at.transcription LIKE ?1
-            ORDER BY at.timestamp DESC
-            LIMIT ?2 OFFSET ?3
-        ";
+        if content_type == ContentType::All || content_type == ContentType::Audio {
+            // Search audio transcriptions
+            let audio_query = "
+                SELECT at.audio_chunk_id, at.transcription, at.timestamp, ac.file_path, at.offset_index
+                FROM audio_transcriptions at
+                JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+                WHERE at.transcription LIKE ?1
+                ORDER BY at.timestamp DESC
+                LIMIT ?2 OFFSET ?3
+            ";
 
-        let mut audio_stmt = self.conn.prepare(audio_query)?;
-        let audio_rows = audio_stmt.query_map(params![search_pattern, limit, offset], |row| {
-            Ok(SearchResult::Audio(AudioResult {
-                audio_chunk_id: row.get(0)?,
-                transcription: row.get(1)?,
-                timestamp: row.get(2)?,
-                file_path: row.get(3)?,
-                offset_index: row.get(4)?,
-            }))
-        })?;
+            let mut audio_stmt = self.conn.prepare(audio_query)?;
+            let audio_rows =
+                audio_stmt.query_map(params![search_pattern, limit, offset], |row| {
+                    Ok(SearchResult::Audio(AudioResult {
+                        audio_chunk_id: row.get(0)?,
+                        transcription: row.get(1)?,
+                        timestamp: row.get(2)?,
+                        file_path: row.get(3)?,
+                        offset_index: row.get(4)?,
+                    }))
+                })?;
 
-        for row in audio_rows {
-            results.push(row?);
+            for row in audio_rows {
+                results.push(row?);
+            }
         }
 
         Ok(results)
@@ -370,8 +392,8 @@ impl DatabaseManager {
     // Modify the get_recent_results method
     pub fn get_recent_results(
         &self,
-        limit: i64,
-        offset: i64,
+        limit: u32,
+        offset: u32,
         start_date: Option<NaiveDateTime>,
         end_date: Option<NaiveDateTime>,
     ) -> Result<Vec<SearchResult>> {
@@ -459,6 +481,61 @@ impl DatabaseManager {
 
         Ok(final_results)
     }
+
+    pub fn count_search_results(
+        &self,
+        search_text: Option<&str>,
+        content_type: ContentType,
+    ) -> Result<u64> {
+        let search_pattern = search_text.map(|text| format!("%{}%", text));
+
+        let mut total_count = 0;
+
+        if content_type == ContentType::All || content_type == ContentType::OCR {
+            let ocr_count: u64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM ocr_text WHERE text LIKE COALESCE(?1, '%')",
+                params![search_pattern],
+                |row| row.get(0),
+            )?;
+            total_count += ocr_count;
+        }
+
+        if content_type == ContentType::All || content_type == ContentType::Audio {
+            let audio_count: u64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM audio_transcriptions WHERE transcription LIKE COALESCE(?1, '%')",
+                params![search_pattern],
+                |row| row.get(0),
+            )?;
+            total_count += audio_count;
+        }
+
+        Ok(total_count)
+    }
+
+    pub fn count_recent_results(
+        &self,
+        start_date: Option<NaiveDateTime>,
+        end_date: Option<NaiveDateTime>,
+    ) -> Result<u64> {
+        let ocr_count: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM frames f
+             JOIN ocr_text o ON f.id = o.frame_id
+             WHERE f.timestamp BETWEEN COALESCE(?1, datetime('now', '-100 years')) 
+             AND COALESCE(?2, datetime('now', '+1 day'))",
+            params![start_date, end_date],
+            |row| row.get(0),
+        )?;
+
+        let audio_count: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM audio_transcriptions
+             WHERE timestamp BETWEEN COALESCE(?1, datetime('now', '-100 years')) 
+             AND COALESCE(?2, datetime('now', '+1 day'))",
+            params![start_date, end_date],
+            |row| row.get(0),
+        )?;
+
+        Ok(ocr_count + audio_count)
+    }
 }
 
 // ... existing code ...
@@ -520,7 +597,7 @@ mod tests {
         add_test_data(&mut db)?;
 
         // Test searching for "dog"
-        let results = db.search("dog", 10, 0)?;
+        let results = db.search(Some("dog"), 10, 0, ContentType::All)?;
         println!("results: {:?}", results);
         assert_eq!(results.len(), 2); // Should find both OCR and audio results
 
@@ -546,7 +623,7 @@ mod tests {
         }
 
         // Test searching for "cat"
-        let results = db.search("cat", 10, 0)?;
+        let results = db.search(Some("cat"), 10, 0, ContentType::All)?;
         assert_eq!(results.len(), 1);
         if let SearchResult::OCR(ocr) = &results[0] {
             assert!(ocr.ocr_text.contains("cat"));
@@ -555,7 +632,7 @@ mod tests {
         }
 
         // Test searching for "git"
-        let results = db.search("git", 10, 0)?;
+        let results = db.search(Some("git"), 10, 0, ContentType::All)?;
         assert_eq!(results.len(), 1);
         if let SearchResult::OCR(ocr) = &results[0] {
             assert!(ocr.ocr_text.contains("git"));

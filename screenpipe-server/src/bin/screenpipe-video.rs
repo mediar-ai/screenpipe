@@ -29,7 +29,13 @@ fn main() {
     info!("Created data directory {}", output_path);
     let fps = 10.0;
 
-    let video_capture = VideoCapture::new(&output_path, fps);
+    let new_chunk_callback = {
+        move |file_path: String| {
+            info!("New chunk: {}", file_path);
+        }
+    };
+
+    let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback);
     let (tx, rx): (Sender<()>, Receiver<()>) = channel();
     let rx = Arc::new(Mutex::new(rx));
     let rx_thread = rx.clone();

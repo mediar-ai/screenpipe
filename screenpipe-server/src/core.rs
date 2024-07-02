@@ -25,8 +25,17 @@ pub fn start_continuous_recording(
     let db_manager = Arc::new(Mutex::new(DatabaseManager::new(db_path)?));
     let db_manager_clone = db_manager.clone();
 
-    let video_capture = VideoCapture::new(&output_path, fps);
+    let new_chunk_callback = {
+        let db_manager = db_manager.clone();
+        move |file_path: String| {
+            let mut db = db_manager.lock().unwrap();
+            if let Err(e) = db.start_new_video_chunk(&file_path) {
+                error!("Failed to insert new video chunk: {}", e);
+            }
+        }
+    };
 
+    let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback);
     let control_rx = Arc::new(Mutex::new(control_rx));
     let control_rx_video = Arc::clone(&control_rx);
     let control_rx_audio = Arc::clone(&control_rx);

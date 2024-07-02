@@ -171,15 +171,22 @@ pub struct VideoCapture {
     frame_queue: Arc<Mutex<VecDeque<CaptureResult>>>,
     ffmpeg_handle: Arc<Mutex<Option<std::process::Child>>>,
     is_running: Arc<Mutex<bool>>,
+    new_chunk_callback: Arc<dyn Fn(String) + Send + Sync>,
 }
 
 impl VideoCapture {
-    pub fn new(output_path: &str, fps: f64) -> Self {
+    pub fn new(
+        output_path: &str,
+        fps: f64,
+        new_chunk_callback: impl Fn(String) + Send + Sync + 'static,
+    ) -> Self {
         info!("Starting new video capture");
         let (control_tx, control_rx) = channel();
         let frame_queue = Arc::new(Mutex::new(VecDeque::new()));
         let ffmpeg_handle = Arc::new(Mutex::new(None));
         let is_running = Arc::new(Mutex::new(true));
+        let new_chunk_callback = Arc::new(new_chunk_callback);
+        let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
 
         let capture_frame_queue = frame_queue.clone();
         let capture_thread_is_running = is_running.clone();
@@ -214,6 +221,7 @@ impl VideoCapture {
                 fps,
                 video_thread_is_running,
                 video_thread_ffmpeg_handle,
+                new_chunk_callback_clone.as_ref(),
             );
         });
 
@@ -222,6 +230,7 @@ impl VideoCapture {
             frame_queue,
             ffmpeg_handle,
             is_running,
+            new_chunk_callback,
         }
     }
 
@@ -251,6 +260,7 @@ fn save_frames_as_video(
     fps: f64,
     is_running: Arc<Mutex<bool>>,
     ffmpeg_handle: Arc<Mutex<Option<std::process::Child>>>,
+    new_chunk_callback: &dyn Fn(String),
 ) {
     let frames_per_video = 30; // Adjust this value as needed
     let mut frame_count = 0;
@@ -289,6 +299,9 @@ fn save_frames_as_video(
             let time = Utc::now();
             // Start new FFmpeg process with a new output file
             let output_file = format!("{}/{}.mp4", output_path, time);
+            // Call the callback with the new video chunk file path
+            new_chunk_callback(output_file.clone()); // TODO better error handling
+
             let mut child = start_ffmpeg_process(&output_file, fps);
             let mut stdin = child.stdin.take().expect("Failed to open stdin");
             let stderr = child.stderr.take().expect("Failed to open stderr");

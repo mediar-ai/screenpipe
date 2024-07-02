@@ -447,7 +447,7 @@ pub fn stt(input: &str) -> Result<String> {
         pcm_data = resample(pcm_data, sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
-    info!("pcm data loaded {}", pcm_data.len());
+    // info!("pcm data loaded {}", pcm_data.len());
     let mel = audio::pcm_to_mel(&config, &pcm_data, &mel_filters);
     let mel_len = mel.len();
     let mel = Tensor::from_vec(
@@ -455,20 +455,18 @@ pub fn stt(input: &str) -> Result<String> {
         (1, config.num_mel_bins, mel_len / config.num_mel_bins),
         &device,
     )?;
-    info!("loaded mel: {:?}", mel.dims());
+    // info!("loaded mel: {:?}", mel.dims());
 
     let vb = candle_transformers::quantized_var_builder::VarBuilder::from_gguf(
         &weights_filename,
         &device,
     )?;
-    info!("loading model");
     let mut model = Model::Quantized(m::quantized_model::Whisper::load(&vb, config)?);
-    info!("loaded model");
-    info!("detecting language");
+    // info!("detecting language");
     // TODO: disabled seems slow as fuck
     // let language_token = Some(multilingual::detect_language(&mut model, &tokenizer, &mel)?);
     // info!("detected language: {:?}", language_token);
-    info!("creating decoder");
+    info!("Creating decoder");
     let mut dc = Decoder::new(
         model,
         tokenizer,

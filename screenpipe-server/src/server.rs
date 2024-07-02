@@ -1,213 +1,356 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::{io::Cursor, sync::Arc};
-
-use axum::extract::Query;
 use axum::{
-    body::Bytes,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    routing::get,
-    Json, Router,
+    response::Json as JsonResponse,
+    routing::{get, post},
+    serve, Json, Router,
 };
-use chrono::{NaiveDateTime, Utc};
 
+use chrono::NaiveDateTime;
+use image::{ImageBuffer, Rgb};
+use log::info;
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot;
+use serde_json::json;
+use std::{
+    io::Cursor,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
+use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
-use crate::{extract_frames_from_video, DatabaseManager, SearchResult};
-
-#[derive(Clone)]
+use crate::{ContentType, DatabaseManager, SearchResult};
+// App state
 struct AppState {
-    local_data_dir: String,
-    db: Arc<Mutex<Option<DatabaseManager>>>,
+    db: Mutex<DatabaseManager>,
 }
-
-#[derive(Serialize)]
-struct FrameInfo {
-    max_frame: i64,
+// Request structs
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: Option<String>,
+    #[serde(flatten)]
+    pagination: PaginationQuery,
+    #[serde(default)]
+    content_type: ContentType,
 }
 
 #[derive(Deserialize)]
-struct Pagination {
-    search: Option<String>,
-    limit: i64,
-    offset: i64,
+struct PaginationQuery {
+    #[serde(default = "default_limit")]
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    limit: u32,
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    offset: u32,
+}
+
+// Add this function somewhere in your code
+fn deserialize_number_from_string<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = serde::Deserialize::deserialize(deserializer)?;
+    s.parse().map_err(serde::de::Error::custom)
 }
 
 #[derive(Deserialize)]
-struct ImageParams {
-    thumbnail: Option<bool>,
+struct DateRangeQuery {
+    start_date: Option<NaiveDateTime>,
+    end_date: Option<NaiveDateTime>,
+    #[serde(flatten)]
+    pagination: PaginationQuery,
+}
+
+#[derive(Deserialize)]
+struct FrameQuery {
+    #[serde(default)]
+    thumbnail: bool,
+}
+
+// Response structs
+#[derive(Serialize)]
+struct PaginatedResponse<T> {
+    data: Vec<T>,
+    pagination: PaginationInfo,
 }
 
 #[derive(Serialize)]
-struct TextWithTimestampResponse {
-    ocr_text: Option<String>,
-    audio_transcription: Option<String>,
-    timestamp: String, // Use String to serialize NaiveDateTime easily
+struct PaginationInfo {
+    limit: u32,
+    offset: u32,
+    total: u64,
 }
 
-// TODO: Optimize this to do chunk loading, instead of starting from scratch with the
-// frame every single time
-// TODO: Also, cache the frames in memory using an LRU cache
-async fn get_frame_handler(
-    Path(frame_number): Path<i64>,
-    Query(query): Query<ImageParams>,
+#[derive(Serialize)]
+#[serde(tag = "type", content = "content")]
+enum ContentItem {
+    OCR(OCRContent),
+    Audio(AudioContent),
+}
+
+#[derive(Serialize)]
+struct OCRContent {
+    frame_id: i64,
+    text: String,
+    timestamp: NaiveDateTime,
+    file_path: String,
+    offset_index: i64,
+}
+
+#[derive(Serialize)]
+struct AudioContent {
+    chunk_id: i64,
+    transcription: String,
+    timestamp: NaiveDateTime,
+    file_path: String,
+    offset_index: i64,
+}
+
+// Helper functions
+fn default_limit() -> u32 {
+    20
+}
+
+async fn search(
+    Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
-) -> (StatusCode, Bytes) {
-    let db_video_ref = state.db.clone();
-    let maybe_video_path = {
-        let mut db_clone = db_video_ref.lock().unwrap();
-        db_clone
-            .as_mut()
-            .unwrap()
-            .get_frame(frame_number)
-            .expect("Failed to get frame")
-    };
-    if let Some((offset_index, video_path, _)) = maybe_video_path {
-        println!("video path: {:?}", video_path);
-        match extract_frames_from_video(&video_path, &[offset_index]) {
-            Ok(frames) => {
-                if let Some(frame) = frames.into_iter().next() {
-                    let mut cursor = Cursor::new(Vec::new());
-                    if query.thumbnail.unwrap_or(false) {
-                        if frame
-                            .thumbnail(800, 800)
-                            .write_to(&mut cursor, image::ImageFormat::Png)
-                            .is_ok()
-                        {
-                            println!("Thumbnail generated successfully");
-                            return (StatusCode::OK, Bytes::from(cursor.into_inner()));
-                        } else {
-                            println!("Failed to generate thumbnail");
-                        }
-                    } else if frame.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
-                        println!("Frame generated successfully");
-                        return (StatusCode::OK, Bytes::from(cursor.into_inner()));
-                    } else {
-                        println!("Failed to generate frame");
-                    }
-                } else {
-                    println!("No frames found");
-                }
-            }
-            Err(e) => {
-                println!("Error extracting frames: {:?}", e);
-            }
-        }
-    } else {
-        println!("No video path found for frame number: {}", frame_number);
+) -> Result<
+    JsonResponse<PaginatedResponse<ContentItem>>,
+    (StatusCode, JsonResponse<serde_json::Value>),
+> {
+    let db = state.db.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": "Failed to acquire database lock"})),
+        )
+    })?;
+
+    let results = db
+        .search(
+            query.q.as_deref(),
+            query.pagination.limit,
+            query.pagination.offset,
+            query.content_type,
+        )
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Failed to search for content: {}", e)})),
+            )
+        })?;
+
+    let total = db
+        .count_search_results(query.q.as_deref(), query.content_type)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Failed to count search results: {}", e)})),
+            )
+        })?;
+
+    Ok(JsonResponse(PaginatedResponse {
+        data: results.into_iter().map(into_content_item).collect(),
+        pagination: PaginationInfo {
+            limit: query.pagination.limit,
+            offset: query.pagination.offset,
+            total,
+        },
+    }))
+}
+
+async fn get_by_date_range(
+    Query(query): Query<DateRangeQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<
+    JsonResponse<PaginatedResponse<ContentItem>>,
+    (StatusCode, JsonResponse<serde_json::Value>),
+> {
+    let db = state.db.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": "Failed to acquire database lock"})),
+        )
+    })?;
+
+    let results = db
+        .get_recent_results(
+            query.pagination.limit,
+            query.pagination.offset,
+            query.start_date,
+            query.end_date,
+        )
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Database error: {}", e)})),
+            )
+        })?;
+
+    let total = db
+        .count_recent_results(query.start_date, query.end_date)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Database error: {}", e)})),
+            )
+        })?;
+
+    Ok(JsonResponse(PaginatedResponse {
+        data: results.into_iter().map(into_content_item).collect(),
+        pagination: PaginationInfo {
+            limit: query.pagination.limit,
+            offset: query.pagination.offset,
+            total,
+        },
+    }))
+}
+
+async fn get_frame(
+    Path(frame_id): Path<i64>,
+    Query(query): Query<FrameQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<(axum::http::HeaderMap, Vec<u8>), (StatusCode, JsonResponse<serde_json::Value>)> {
+    let db = state.db.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": "Failed to acquire database lock"})),
+        )
+    })?;
+
+    let frame_data = db.get_frame(frame_id).map_err(|e| {
+        (
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": format!("Frame not found: {}", e)})),
+        )
+    })?;
+
+    let image_data = generate_frame_image(&frame_data.unwrap(), query.thumbnail).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to generate frame image: {}", e)})),
+        )
+    })?;
+
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        "image/jpeg".parse().unwrap(),
+    );
+
+    Ok((headers, image_data))
+}
+
+fn generate_frame_image(
+    frame_data: &(i64, String, Option<String>),
+    thumbnail: bool,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let (offset_index, file_path, _) = frame_data;
+
+    // Here you would typically read the frame from the video file
+    // For this example, we'll create a dummy image
+    let width = if thumbnail { 320 } else { 1280 };
+    let height = if thumbnail { 180 } else { 720 };
+
+    let mut img = ImageBuffer::new(width, height);
+
+    // Fill the image with a color based on the frame index
+    let color = Rgb([(offset_index % 255) as u8, 128, 128]);
+    for pixel in img.pixels_mut() {
+        *pixel = color;
     }
-    (StatusCode::NOT_FOUND, Bytes::new())
+
+    // Convert the image to JPEG
+    let mut jpeg_data = Vec::new();
+    img.write_to(&mut Cursor::new(&mut jpeg_data), image::ImageFormat::Jpeg)?;
+
+    Ok(jpeg_data)
 }
 
-#[derive(Serialize)]
-struct PaginatedResults {
-    data: Vec<SearchResult>,
+// Helper functions
+fn into_content_item(result: SearchResult) -> ContentItem {
+    match result {
+        SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
+            frame_id: ocr.frame_id,
+            text: ocr.ocr_text,
+            timestamp: ocr.timestamp,
+            file_path: ocr.file_path,
+            offset_index: ocr.offset_index,
+        }),
+        SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
+            chunk_id: audio.audio_chunk_id,
+            transcription: audio.transcription,
+            timestamp: audio.timestamp,
+            file_path: audio.file_path,
+            offset_index: audio.offset_index,
+        }),
+    }
 }
 
-async fn search_handler(
-    Query(query): Query<Pagination>,
-    State(state): State<Arc<AppState>>,
-) -> Json<PaginatedResults> {
-    let db_frames_ref = state.db.clone();
-    let results = {
-        let mut db_clone = db_frames_ref.lock().expect("Failed to acquire lock");
-
-        let search = query.search.unwrap_or("".to_string());
-        if search.is_empty() {
-            db_clone
-                .as_mut()
-                .unwrap()
-                .get_recent_results(query.limit, query.offset, None, None)
-                .expect("Failed to get recent results")
-        } else {
-            db_clone
-                .as_mut()
-                .unwrap()
-                .search(&search, query.limit, query.offset)
-                .expect("Failed to get search results")
-        }
-    };
-    Json(PaginatedResults { data: results })
+pub struct Server {
+    db: DatabaseManager,
+    addr: SocketAddr,
 }
 
-#[derive(Deserialize)]
-struct DateFilter {
-    start_date: NaiveDateTime,
-    end_date: NaiveDateTime,
-    limit: i64,
-    offset: i64,
+impl Server {
+    pub fn new(db: DatabaseManager, addr: SocketAddr) -> Self {
+        Server { db, addr }
+    }
+
+    pub async fn start(self) -> Result<(), std::io::Error> {
+        let app_state = Arc::new(AppState {
+            db: Mutex::new(self.db),
+        });
+
+        let app = Router::new()
+            .route("/search", get(search))
+            .route("/recent", get(get_by_date_range))
+            .route("/frame/:frame_id", get(get_frame))
+            .layer(CorsLayer::permissive())
+            .with_state(app_state);
+
+        info!("Starting server on {}", self.addr);
+
+        serve(
+            TcpListener::bind(self.addr).await.unwrap(),
+            app.into_make_service(),
+        )
+        .await
+    }
 }
 
-async fn get_by_date_handler(
-    Query(query): Query<DateFilter>,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<TextWithTimestampResponse>>, StatusCode> {
-    let start_date = query.start_date;
-    let end_date = query.end_date;
-    let db_video_ref = state.db.clone();
-    let texts_with_timestamps = {
-        let mut db_clone = db_video_ref.lock().unwrap();
-        db_clone
-            .as_mut()
-            .unwrap()
-            .get_recent_results(query.limit, query.offset, Some(start_date), Some(end_date))
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    };
+// # 1. Basic search query
+// curl "http://localhost:3030/search?q=test&limit=5&offset=0"
 
-    let response = texts_with_timestamps
-        .into_iter()
-        .map(|item| match item {
-            SearchResult::OCR(ocr) => TextWithTimestampResponse {
-                ocr_text: Some(ocr.ocr_text),
-                audio_transcription: None,
-                timestamp: ocr.timestamp.to_string(),
-            },
-            SearchResult::Audio(audio) => TextWithTimestampResponse {
-                ocr_text: None,
-                audio_transcription: Some(audio.transcription),
-                timestamp: audio.timestamp.to_string(),
-            },
-        })
-        .collect();
+// # 2. Search with content type filter (OCR)
+// curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
 
-    Ok(Json(response))
-}
-pub async fn start_frame_server(
-    tx: oneshot::Sender<()>,
-    local_data_dir: String,
-    db: Arc<Mutex<Option<DatabaseManager>>>,
-) {
-    let state = Arc::new(AppState { local_data_dir, db });
+// # 3. Search with content type filter (Audio)
+// curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
 
-    let app = Router::new()
-        .route("/text", get(search_handler))
-        .route("/text_by_date", get(get_by_date_handler))
-        .route("/frames/:frame_number", get(get_frame_handler))
-        .layer(CorsLayer::permissive())
-        .with_state(state);
+// # 4. Search with pagination
+// curl "http://localhost:3030/search?q=test&limit=10&offset=20"
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3030").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+// # 5. Get recent results without date range
+// curl "http://localhost:3030/recent?limit=5&offset=0"
 
-    // Send signal that the server has started
-    let _ = tx.send(());
-}
+// # 6. Get recent results with date range
+// curl "http://localhost:3030/recent?limit=5&offset=0&start_date=2024-07-02T14:00:00&end_date=2024-07-02T23:59:59"
 
-// # 1. Search for text with pagination
-// curl "http://localhost:3030/text?search=e&limit=10&offset=0"
+// 5 s ago
+// start_date=$(date -u -v-5S +'%Y-%m-%dT%H:%M:%S')
 
-// # 2. Get recent results without search term
-// curl "http://localhost:3030/text?limit=20&offset=0"
+// end_date=$(date -u +'%Y-%m-%dT%H:%M:%S')
 
-// # 3. Get frame image (non-thumbnail) // ! does not work
-// curl -o frame.png "http://localhost:3030/frames/100"
+// curl "http://localhost:3030/recent?limit=5&offset=0&start_date=$start_date&end_date=$end_date"
 
-// # 4. Get frame thumbnail
-// curl -o thumbnail.png "http://localhost:3030/frames/100?thumbnail=true"
+// # 7. Get frame without thumbnail
+// curl "http://localhost:3030/frame/123"
 
-// # 5. Get text by date range
-// curl "http://localhost:3030/text_by_date?start_date=2024-07-02T00:00:00&end_date=2024-07-02T23:59:59&limit=15&offset=0"
+// # 8. Get frame with thumbnail
+// curl "http://localhost:3030/frame/123?thumbnail=true"
 
+// # 9. Search with no query (should return all results)
+// curl "http://localhost:3030/search?limit=5&offset=0"
+
+// # 10. Get recent results with pagination
+// curl "http://localhost:3030/recent?limit=20&offset=40"

@@ -1,13 +1,16 @@
 use std::{
     fs,
-    sync::{mpsc::channel, Arc, Mutex},
+    net::SocketAddr,
+    sync::{
+        mpsc::{channel, Sender},
+        Arc, Mutex,
+    },
 };
 
 use tokio::sync::oneshot;
 use tokio::time::Duration;
 
-use screenpipe_server::start_frame_server;
-use screenpipe_server::{start_continuous_recording, DatabaseManager, RecorderControl};
+use screenpipe_server::{start_continuous_recording, DatabaseManager, RecorderControl, Server};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -23,34 +26,36 @@ async fn main() -> anyhow::Result<()> {
 
     let local_data_dir = ensure_local_data_dir()?;
     let local_data_dir_clone = local_data_dir.clone();
+    let local_data_dir_clone2 = local_data_dir.clone();
     let db = Arc::new(Mutex::new(None));
-    setup_db(local_data_dir.clone(), db.clone());
+    setup_db(local_data_dir_clone, db.clone());
 
     // Channel for controlling the recorder
     let (control_tx, control_rx) = channel();
 
     // Start continuous recording in a separate task
+    let local_data_dir_clone = local_data_dir.clone();
     let recording_task = tokio::spawn(async move {
         let fps = 10.0;
         let audio_chunk_duration = Duration::from_secs(5);
 
         start_continuous_recording(
             &format!("{}/db.sqlite", local_data_dir),
-            &local_data_dir,
+            &local_data_dir_clone,
             fps,
             audio_chunk_duration,
             control_rx,
         )
     });
 
-    // Start the frame server
-    let (tx, rx) = oneshot::channel();
     tokio::spawn(async move {
-        start_frame_server(tx, local_data_dir_clone.to_string(), db.clone()).await;
+        // start_frame_server(tx, local_data_dir_clone.to_string(), db.clone()).await;
+        let db = DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir_clone2)).unwrap();
+        let server = Server::new(db, SocketAddr::from(([0, 0, 0, 0], 3030)));
+        server.start().await.unwrap();
     });
 
     // Wait for the server to start
-    let _ = rx.await;
     println!("Server started on http://localhost:3030");
 
     // Keep the main thread running
