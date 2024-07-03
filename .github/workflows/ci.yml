@@ -15,5 +15,9 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libavcodec-dev libavformat-dev libavutil-dev
       - name: Run tests
         run: cargo test
