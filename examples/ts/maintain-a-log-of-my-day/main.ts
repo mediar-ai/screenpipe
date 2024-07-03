@@ -20,15 +20,19 @@ async function main() {
       }
 
       const json = await response.json();
-      const texts = json.data
-        .filter((item) => item.text)
-        .map((item) => item.text);
-      const concatenatedTexts = texts.join(" ");
 
       // Read current log
       const currentLog = await fs.readFile("log.md", "utf-8");
 
-      console.log(concatenatedTexts);
+      const yourLifeContext = JSON.stringify(json);
+
+      if (yourLifeContext.length < 50) {
+        console.log("Seems like you haven't run screenpipe yet, did you?");
+        return;
+      }
+
+      console.log("Will use your life context to update the log:");
+      console.log(yourLifeContext.substring(0, 1000) + "...");
 
       // Use the LLM to update the log
       const llmResponse = await fetch("http://localhost:11434/api/chat", {
@@ -40,11 +44,11 @@ async function main() {
           max_tokens: 4096,
           messages: [
             {
-              role: "user",
+              role: "user", // ! feel free to improve this shitty prompt :P
               content: `you receive a markdown log of what the user has been doing today, 
                                 that you maintain based on the text extracted from the user's screen. 
                                 You can add new categories or update the existing ones. You can also add a new entry to the log. 
-                                This is what has been shown on the user's screen over the past 5 minutes: ${concatenatedTexts}
+                                This is what has been shown on the user's screen over the past 5 minutes: ${yourLifeContext}
                                 And this is the current log: ${currentLog}
 
                                 Rules:

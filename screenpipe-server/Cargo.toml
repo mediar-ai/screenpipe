@@ -25,7 +25,8 @@ num_cpus = "1.0"
 # Dates
 chrono = { version = "0.4.31", features = ["serde"] }
 
-rusqlite = { version = "0.30.0", features = ["chrono", "bundled", "array"] }
+# Database
+sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chrono"] }
 
 # FFmpeg bindings
 ffmpeg-next = "7.0.2"
@@ -45,14 +46,16 @@ rand = "0.8.5"
 rubato = "0.15.0"
 
 # Server
-axum = "0.7.4"
-tokio = { version = "1", features = ["full"] }
-hyper = "1.1"
-tower-http = { version = "0.5.0", features = ["cors"] }
+axum = "0.7.5"
+tokio = { version = "1.15.0", features = ["full"] }
+hyper = "1.4"
+tower-http = { version = "0.5.2", features = ["cors"] }
 
 # Log
 log = { workspace = true }
 env_logger = "0.10"
+
+
 
 [dev-dependencies]
 tempfile = "3.3.0"

@@ -25,11 +25,12 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let local_data_dir = ensure_local_data_dir()?;
-    let local_data_dir_clone = local_data_dir.clone();
-    let local_data_dir_clone2 = local_data_dir.clone();
-    let db = Arc::new(Mutex::new(None));
-    setup_db(local_data_dir_clone, db.clone());
-
+    let db = Arc::new(
+        DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir))
+            .await
+            .unwrap(),
+    );
+    let db_server = db.clone();
     // Channel for controlling the recorder
     let (control_tx, control_rx) = channel();
 
@@ -40,18 +41,18 @@ async fn main() -> anyhow::Result<()> {
         let audio_chunk_duration = Duration::from_secs(5);
 
         start_continuous_recording(
-            &format!("{}/db.sqlite", local_data_dir),
+            db,
             &local_data_dir_clone,
             fps,
             audio_chunk_duration,
             control_rx,
         )
+        .await
     });
 
     tokio::spawn(async move {
         // start_frame_server(tx, local_data_dir_clone.to_string(), db.clone()).await;
-        let db = DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir_clone2)).unwrap();
-        let server = Server::new(db, SocketAddr::from(([0, 0, 0, 0], 3030)));
+        let server = Server::new(db_server, SocketAddr::from(([0, 0, 0, 0], 3030)));
         server.start().await.unwrap();
     });
 
@@ -78,10 +79,4 @@ fn ensure_local_data_dir() -> anyhow::Result<String> {
     let local_data_dir = "./data".to_string(); // TODO: Use $HOME/.screenpipe/data
     fs::create_dir_all(&local_data_dir)?;
     Ok(local_data_dir)
-}
-
-fn setup_db(local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) {
-    let mut db = db.lock().unwrap();
-    let db_ = DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir)).unwrap();
-    *db = Some(db_);
 }

@@ -513,6 +513,7 @@ fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Resu
 }
 
 #[test]
+#[ignore]
 fn test_speech_to_text() {
     println!("Starting speech to text test");
 

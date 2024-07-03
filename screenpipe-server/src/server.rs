@@ -6,7 +6,7 @@ use axum::{
     serve, Json, Router,
 };
 
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use image::{ImageBuffer, Rgb};
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ use tower_http::cors::CorsLayer;
 use crate::{ContentType, DatabaseManager, SearchResult};
 // App state
 struct AppState {
-    db: Mutex<DatabaseManager>,
+    db: Arc<DatabaseManager>,
 }
 // Request structs
 #[derive(Deserialize)]
@@ -55,8 +55,8 @@ where
 
 #[derive(Deserialize)]
 struct DateRangeQuery {
-    start_date: Option<NaiveDateTime>,
-    end_date: Option<NaiveDateTime>,
+    start_date: Option<DateTime<Utc>>,
+    end_date: Option<DateTime<Utc>>,
     #[serde(flatten)]
     pagination: PaginationQuery,
 }
@@ -78,7 +78,7 @@ struct PaginatedResponse<T> {
 struct PaginationInfo {
     limit: u32,
     offset: u32,
-    total: u64,
+    total: i64,
 }
 
 #[derive(Serialize)]
@@ -92,7 +92,7 @@ enum ContentItem {
 struct OCRContent {
     frame_id: i64,
     text: String,
-    timestamp: NaiveDateTime,
+    timestamp: DateTime<Utc>,
     file_path: String,
     offset_index: i64,
 }
@@ -101,7 +101,7 @@ struct OCRContent {
 struct AudioContent {
     chunk_id: i64,
     transcription: String,
-    timestamp: NaiveDateTime,
+    timestamp: DateTime<Utc>,
     file_path: String,
     offset_index: i64,
 }
@@ -118,20 +118,16 @@ async fn search(
     JsonResponse<PaginatedResponse<ContentItem>>,
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
-    let db = state.db.lock().map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": "Failed to acquire database lock"})),
-        )
-    })?;
-
-    let results = db
+    let query_str = query.q.as_deref().unwrap_or("");
+    let results = state
+        .db
         .search(
-            query.q.as_deref(),
+            query_str,
+            query.content_type,
             query.pagination.limit,
             query.pagination.offset,
-            query.content_type,
         )
+        .await
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -139,8 +135,10 @@ async fn search(
             )
         })?;
 
-    let total = db
-        .count_search_results(query.q.as_deref(), query.content_type)
+    let total = state
+        .db
+        .count_search_results(query_str, query.content_type)
+        .await
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -153,7 +151,7 @@ async fn search(
         pagination: PaginationInfo {
             limit: query.pagination.limit,
             offset: query.pagination.offset,
-            total,
+            total: total as i64,
         },
     }))
 }
@@ -165,20 +163,15 @@ async fn get_by_date_range(
     JsonResponse<PaginatedResponse<ContentItem>>,
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
-    let db = state.db.lock().map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": "Failed to acquire database lock"})),
-        )
-    })?;
-
-    let results = db
+    let results = state
+        .db
         .get_recent_results(
             query.pagination.limit,
             query.pagination.offset,
             query.start_date,
             query.end_date,
         )
+        .await
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -186,8 +179,10 @@ async fn get_by_date_range(
             )
         })?;
 
-    let total = db
+    let total = state
+        .db
         .count_recent_results(query.start_date, query.end_date)
+        .await
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -200,70 +195,9 @@ async fn get_by_date_range(
         pagination: PaginationInfo {
             limit: query.pagination.limit,
             offset: query.pagination.offset,
-            total,
+            total: total as i64,
         },
     }))
-}
-
-async fn get_frame(
-    Path(frame_id): Path<i64>,
-    Query(query): Query<FrameQuery>,
-    State(state): State<Arc<AppState>>,
-) -> Result<(axum::http::HeaderMap, Vec<u8>), (StatusCode, JsonResponse<serde_json::Value>)> {
-    let db = state.db.lock().map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": "Failed to acquire database lock"})),
-        )
-    })?;
-
-    let frame_data = db.get_frame(frame_id).map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            JsonResponse(json!({"error": format!("Frame not found: {}", e)})),
-        )
-    })?;
-
-    let image_data = generate_frame_image(&frame_data.unwrap(), query.thumbnail).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": format!("Failed to generate frame image: {}", e)})),
-        )
-    })?;
-
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(
-        axum::http::header::CONTENT_TYPE,
-        "image/jpeg".parse().unwrap(),
-    );
-
-    Ok((headers, image_data))
-}
-
-fn generate_frame_image(
-    frame_data: &(i64, String, Option<String>),
-    thumbnail: bool,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let (offset_index, file_path, _) = frame_data;
-
-    // Here you would typically read the frame from the video file
-    // For this example, we'll create a dummy image
-    let width = if thumbnail { 320 } else { 1280 };
-    let height = if thumbnail { 180 } else { 720 };
-
-    let mut img = ImageBuffer::new(width, height);
-
-    // Fill the image with a color based on the frame index
-    let color = Rgb([(offset_index % 255) as u8, 128, 128]);
-    for pixel in img.pixels_mut() {
-        *pixel = color;
-    }
-
-    // Convert the image to JPEG
-    let mut jpeg_data = Vec::new();
-    img.write_to(&mut Cursor::new(&mut jpeg_data), image::ImageFormat::Jpeg)?;
-
-    Ok(jpeg_data)
 }
 
 // Helper functions
@@ -287,24 +221,23 @@ fn into_content_item(result: SearchResult) -> ContentItem {
 }
 
 pub struct Server {
-    db: DatabaseManager,
+    db: Arc<DatabaseManager>,
     addr: SocketAddr,
 }
 
 impl Server {
-    pub fn new(db: DatabaseManager, addr: SocketAddr) -> Self {
+    pub fn new(db: Arc<DatabaseManager>, addr: SocketAddr) -> Self {
         Server { db, addr }
     }
 
     pub async fn start(self) -> Result<(), std::io::Error> {
         let app_state = Arc::new(AppState {
-            db: Mutex::new(self.db),
+            db: self.db,
         });
 
         let app = Router::new()
             .route("/search", get(search))
             .route("/recent", get(get_by_date_range))
-            .route("/frame/:frame_id", get(get_frame))
             .layer(CorsLayer::permissive())
             .with_state(app_state);
 
