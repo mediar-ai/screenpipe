@@ -263,12 +263,6 @@ impl Server {
 
 // curl "http://localhost:3030/recent?limit=5&offset=0&start_date=$start_date&end_date=$end_date"
 
-// # 7. Get frame without thumbnail
-// curl "http://localhost:3030/frame/123"
-
-// # 8. Get frame with thumbnail
-// curl "http://localhost:3030/frame/123?thumbnail=true"
-
 // # 9. Search with no query (should return all results)
 // curl "http://localhost:3030/search?limit=5&offset=0"
 
