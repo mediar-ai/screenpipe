@@ -50,7 +50,7 @@ export async function onTick() {
 
 ## Status 
 
-Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Record your screen 24/7 into mp4 and extract the text from every frame.
+Alpha: runs on my computer (`Macbook pro m3 32 GB ram`).
 
 - [x] screenshots
 - [x] mp4 encoding to disk (30 GB / month)
@@ -58,6 +58,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Record your screen 24/7
 - [x] OCR
 - [ ] TS SDK
 - [x] audio + stt
+- [x] api
 - [ ] cloud storage options (s3, pqsql, etc.)
 - [ ] cloud computing options
 - [ ] fast, optimised
