@@ -70,7 +70,16 @@ Keep in mind that it's still experimental.
 
 To try the current version, which capture your screen and extract the text, do:
 
-1. Install [ffmpeg](https://www.ffmpeg.org/download.html).
+1. Install dependencies:
+```bash
+# On Mac
+brew install ffmpeg
+
+# On Linux
+sudo update
+sudo apt install -y ffmpeg libasound2-dev libavcodec-dev libavformat-dev libavutil-dev
+```
+
 2. Clone the repo:
 
 ```bash
