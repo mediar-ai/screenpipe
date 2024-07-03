@@ -463,7 +463,7 @@ impl DatabaseManager {
 
         if content_type == ContentType::All || content_type == ContentType::OCR {
             let ocr_count: (i64,) =
-                sqlx::query_as("SELECT COUNT(*) FROM ocr_text WHERE ocr_text MATCH ?1")
+                sqlx::query_as("SELECT COUNT(*) FROM ocr_text WHERE text LIKE '%' || ?1 || '%'")
                     .bind(query)
                     .fetch_one(&self.pool)
                     .await?;
