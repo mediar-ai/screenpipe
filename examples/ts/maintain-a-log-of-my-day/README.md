@@ -2,6 +2,8 @@
 
 How to use:
 
+First run screenpipe, then:
+
 ```bash
 cd examples/ts/maintain-a-log-of-my-day
 ```
