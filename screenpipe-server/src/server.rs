@@ -1,21 +1,16 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::StatusCode,
     response::Json as JsonResponse,
-    routing::{get, post},
-    serve, Json, Router,
+    routing::get,
+    serve, Router,
 };
 
-use chrono::{DateTime, NaiveDateTime, Utc};
-use image::{ImageBuffer, Rgb};
+use chrono::{DateTime, Utc};
 use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{
-    io::Cursor,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
@@ -59,12 +54,6 @@ struct DateRangeQuery {
     end_date: Option<DateTime<Utc>>,
     #[serde(flatten)]
     pagination: PaginationQuery,
-}
-
-#[derive(Deserialize)]
-struct FrameQuery {
-    #[serde(default)]
-    thumbnail: bool,
 }
 
 // Response structs
@@ -231,9 +220,7 @@ impl Server {
     }
 
     pub async fn start(self) -> Result<(), std::io::Error> {
-        let app_state = Arc::new(AppState {
-            db: self.db,
-        });
+        let app_state = Arc::new(AppState { db: self.db });
 
         let app = Router::new()
             .route("/search", get(search))

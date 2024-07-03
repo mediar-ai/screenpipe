@@ -1,16 +1,12 @@
 use std::{
     fs,
     net::SocketAddr,
-    sync::{
-        mpsc::{channel, Sender},
-        Arc, Mutex,
-    },
+    sync::{mpsc::channel, Arc},
 };
 
-use tokio::sync::oneshot;
 use tokio::time::Duration;
 
-use screenpipe_server::{start_continuous_recording, DatabaseManager, RecorderControl, Server};
+use screenpipe_server::{start_continuous_recording, DatabaseManager, Server};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -18,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
     use env_logger::Builder;
     use log::LevelFilter;
 
-    let _ = Builder::new()
+    Builder::new()
         .filter(None, LevelFilter::Info)
         .filter_module("tokenizers", LevelFilter::Error)
         .filter_module("rusty_tesseract", LevelFilter::Error)
@@ -32,11 +28,11 @@ async fn main() -> anyhow::Result<()> {
     );
     let db_server = db.clone();
     // Channel for controlling the recorder
-    let (control_tx, control_rx) = channel();
+    let (_control_tx, control_rx) = channel();
 
     // Start continuous recording in a separate task
     let local_data_dir_clone = local_data_dir.clone();
-    let recording_task = tokio::spawn(async move {
+    let _recording_task = tokio::spawn(async move {
         let fps = 10.0;
         let audio_chunk_duration = Duration::from_secs(5);
 
@@ -71,8 +67,6 @@ async fn main() -> anyhow::Result<()> {
     // This part will never be reached in the current implementation
     // control_tx.send(RecorderControl::Stop).await?;
     // recording_task.await??;
-
-    Ok(())
 }
 
 fn ensure_local_data_dir() -> anyhow::Result<String> {

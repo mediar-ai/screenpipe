@@ -35,8 +35,8 @@ fn main() {
         }
     };
 
-    let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback);
-    let (tx, rx): (Sender<()>, Receiver<()>) = channel();
+    let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback);
+    let (_tx, rx): (Sender<()>, Receiver<()>) = channel();
     let rx = Arc::new(Mutex::new(rx));
     let rx_thread = rx.clone();
 
@@ -51,7 +51,7 @@ fn main() {
 
     let json_file = OpenOptions::new()
         .create(true)
-        .write(true)
+        
         .append(true)
         .open(&json_output_path)
         .expect("Failed to create JSON file");

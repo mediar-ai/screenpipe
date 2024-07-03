@@ -3,7 +3,6 @@ use anyhow::Result;
 use chrono::Utc;
 use log::{debug, error, info};
 use screenpipe_audio::{continuous_audio_capture, save_audio_to_file, ControlMessage};
-use std::future::IntoFuture;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -37,7 +36,7 @@ pub async fn start_continuous_recording(
             error!("Failed to insert new video chunk: {}", e);
         }
     };
-    let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback);
+    let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback);
     let control_rx = Arc::new(Mutex::new(control_rx));
     let control_rx_video = Arc::clone(&control_rx);
     let control_rx_audio = Arc::clone(&control_rx);
@@ -52,7 +51,7 @@ pub async fn start_continuous_recording(
     // TODO: too muhc nesting 🤦‍♂️
     let video_thread = thread::spawn(move || {
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async {
+        let _ = runtime.block_on(async {
             info!("Starting video capture thread");
             let mut is_paused = false;
             loop {
@@ -102,7 +101,7 @@ pub async fn start_continuous_recording(
 
     let audio_processing_thread = thread::spawn(move || {
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async {
+        let _ = runtime.block_on(async {
             info!("Starting audio processing thread");
             let mut is_paused = false;
             loop {
@@ -170,7 +169,7 @@ pub async fn start_continuous_recording(
     video_thread.join().unwrap();
     audio_processing_thread.join().unwrap();
     audio_control_tx.send(ControlMessage::Stop).unwrap();
-    audio_thread.join().unwrap();
+    let _ = audio_thread.join().unwrap();
 
     info!("Continuous recording stopped");
     Ok(())

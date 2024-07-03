@@ -11,7 +11,7 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
-use crate::{multilingual, pcm_decode::pcm_decode};
+use crate::{pcm_decode::pcm_decode};
 
 // TODO: improve model loading strategy
 
@@ -458,10 +458,10 @@ pub fn stt(input: &str) -> Result<String> {
     // info!("loaded mel: {:?}", mel.dims());
 
     let vb = candle_transformers::quantized_var_builder::VarBuilder::from_gguf(
-        &weights_filename,
+        weights_filename,
         &device,
     )?;
-    let mut model = Model::Quantized(m::quantized_model::Whisper::load(&vb, config)?);
+    let model = Model::Quantized(m::quantized_model::Whisper::load(&vb, config)?);
     // info!("detecting language");
     // TODO: disabled seems slow as fuck
     // let language_token = Some(multilingual::detect_language(&mut model, &tokenizer, &mel)?);

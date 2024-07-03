@@ -2,7 +2,7 @@ use chrono::Utc;
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::sys::AVSEEK_FLAG_FRAME;
 use ffmpeg_next::{format, format::Pixel, media, software::scaling, util::frame::video::Video};
-use image::ImageFormat::{self, Png};
+use image::ImageFormat::{self};
 use image::{DynamicImage, ImageBuffer, Rgb};
 use log::{debug, error, info, warn};
 use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage};
@@ -56,7 +56,7 @@ pub fn extract_frames_from_video(
 
     'frames: while let Some(&target_frame_number) = sorted_frame_numbers.iter().next() {
         // Seek to the nearest keyframe
-        seek_to_frame(&mut ictx, target_frame_number as i64)?;
+        seek_to_frame(&mut ictx, target_frame_number)?;
 
         while frame_index <= target_frame_number {
             for (stream, packet) in ictx.packets() {
@@ -73,7 +73,7 @@ pub fn extract_frames_from_video(
                                 decoder.height() as u32,
                                 frame_data.to_vec(),
                             )
-                            .ok_or_else(|| ffmpeg::Error::InvalidData)?;
+                            .ok_or(ffmpeg::Error::InvalidData)?;
                             images.push(DynamicImage::ImageRgb8(img));
                             sorted_frame_numbers.remove(&target_frame_number);
                             if sorted_frame_numbers.is_empty() {
@@ -88,58 +88,6 @@ pub fn extract_frames_from_video(
     }
 
     println!("Done in {}ms", now.elapsed().as_millis());
-
-    Ok(images)
-}
-
-pub fn extract_all_frames_from_video(video_path: &str) -> Result<Vec<DynamicImage>, ffmpeg::Error> {
-    ffmpeg::init()?;
-
-    let mut images = Vec::new();
-    let mut ictx = format::input(&video_path)?;
-    let input_stream = ictx
-        .streams()
-        .best(media::Type::Video)
-        .ok_or(ffmpeg::Error::StreamNotFound)?;
-    let video_stream_index = input_stream.index();
-
-    let context_decoder =
-        ffmpeg::codec::context::Context::from_parameters(input_stream.parameters())?;
-    let mut decoder = context_decoder.decoder().video()?;
-
-    let mut scaler = scaling::Context::get(
-        decoder.format(),
-        decoder.width(),
-        decoder.height(),
-        Pixel::RGB24,
-        decoder.width(),
-        decoder.height(),
-        scaling::Flags::BILINEAR,
-    )?;
-
-    let now = std::time::Instant::now();
-    println!("All frames: Starting at {}ms", now.elapsed().as_millis());
-
-    for (stream, packet) in ictx.packets() {
-        if stream.index() == video_stream_index {
-            decoder.send_packet(&packet)?;
-            let mut decoded = Video::empty();
-            while decoder.receive_frame(&mut decoded).is_ok() {
-                let mut rgb_frame = Video::empty();
-                scaler.run(&decoded, &mut rgb_frame)?;
-                let frame_data = rgb_frame.data(0);
-                let img = ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(
-                    decoder.width() as u32,
-                    decoder.height() as u32,
-                    frame_data.to_vec(),
-                )
-                .ok_or_else(|| ffmpeg::Error::InvalidData)?;
-                images.push(DynamicImage::ImageRgb8(img));
-            }
-        }
-    }
-
-    println!("All frames: Done in {}ms", now.elapsed().as_millis());
 
     Ok(images)
 }
@@ -171,7 +119,6 @@ pub struct VideoCapture {
     frame_queue: Arc<Mutex<VecDeque<CaptureResult>>>,
     ffmpeg_handle: Arc<Mutex<Option<std::process::Child>>>,
     is_running: Arc<Mutex<bool>>,
-    new_chunk_callback: Arc<dyn Fn(String) + Send + Sync>,
 }
 
 impl VideoCapture {
@@ -191,7 +138,7 @@ impl VideoCapture {
         let capture_frame_queue = frame_queue.clone();
         let capture_thread_is_running = is_running.clone();
         let (result_sender, result_receiver) = channel();
-        let capture_thread = thread::spawn(move || {
+        let _capture_thread = thread::spawn(move || {
             continuous_capture(
                 control_rx,
                 result_sender,
@@ -202,7 +149,7 @@ impl VideoCapture {
         info!("Started capture thread");
 
         // Spawn another thread to handle receiving and queueing the results
-        let queue_thread = thread::spawn(move || {
+        let _queue_thread = thread::spawn(move || {
             while *capture_thread_is_running.lock().unwrap() {
                 if let Ok(result) = result_receiver.recv() {
                     capture_frame_queue.lock().unwrap().push_back(result);
@@ -212,15 +159,13 @@ impl VideoCapture {
 
         let video_frame_queue = frame_queue.clone();
         let video_thread_is_running = is_running.clone();
-        let video_thread_ffmpeg_handle = ffmpeg_handle.clone();
         let output_path = output_path.to_string();
-        let video_thread = thread::spawn(move || {
+        let _video_thread = thread::spawn(move || {
             save_frames_as_video(
                 &video_frame_queue,
                 &output_path,
                 fps,
                 video_thread_is_running,
-                video_thread_ffmpeg_handle,
                 new_chunk_callback_clone.as_ref(),
             );
         });
@@ -230,7 +175,6 @@ impl VideoCapture {
             frame_queue,
             ffmpeg_handle,
             is_running,
-            new_chunk_callback,
         }
     }
 
@@ -259,7 +203,6 @@ fn save_frames_as_video(
     output_path: &str,
     fps: f64,
     is_running: Arc<Mutex<bool>>,
-    ffmpeg_handle: Arc<Mutex<Option<std::process::Child>>>,
     new_chunk_callback: &dyn Fn(String),
 ) {
     let frames_per_video = 30; // Adjust this value as needed
