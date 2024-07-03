@@ -1,4 +1,5 @@
 use image::DynamicImage;
+use log::info;
 use rusty_tesseract::{Args, Image};
 use threadpool::ThreadPool;
 use xcap::Monitor;
@@ -30,6 +31,8 @@ pub fn continuous_capture(
     let cpu_count = num_cpus::get();
     let pool_size = (cpu_count as f32 * 1.2) as usize;
     let pool_size = std::cmp::min(pool_size, MAX_THREADS);
+
+    info!("Will use {} threads for OCR", pool_size);
 
     let ocr_pool = ThreadPool::new(pool_size);
     let is_paused = Arc::new(Mutex::new(false));

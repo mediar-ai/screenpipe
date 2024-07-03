@@ -59,7 +59,8 @@ tower-http = { version = "0.5.2", features = ["cors"] }
 log = { workspace = true }
 env_logger = "0.10"
 
-
+# Cli ! shouldn't be required if using as lib
+clap = { version = "4.3", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3.3.0"

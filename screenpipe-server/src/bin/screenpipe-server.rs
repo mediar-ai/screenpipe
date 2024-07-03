@@ -4,15 +4,37 @@ use std::{
     sync::{mpsc::channel, Arc},
 };
 
+use clap::Parser;
 use tokio::time::Duration;
 
 use screenpipe_server::{start_continuous_recording, DatabaseManager, Server};
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    /// FPS for continuous recording
+    #[arg(short, long, default_value_t = 10.0)]
+    fps: f64,
+
+    /// Audio chunk duration in seconds
+    #[arg(short, long, default_value_t = 5)]
+    audio_chunk_duration: u64,
+
+    /// Port to run the server on
+    #[arg(short, long, default_value_t = 3030)]
+    port: u16,
+
+    /// Disable audio recording
+    #[arg(long, default_value_t = false)]
+    disable_audio: bool,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
     use env_logger::Builder;
     use log::LevelFilter;
+    let cli = Cli::parse();
 
     Builder::new()
         .filter(None, LevelFilter::Info)
@@ -33,27 +55,26 @@ async fn main() -> anyhow::Result<()> {
     // Start continuous recording in a separate task
     let local_data_dir_clone = local_data_dir.clone();
     let _recording_task = tokio::spawn(async move {
-        let fps = 10.0;
-        let audio_chunk_duration = Duration::from_secs(5);
+        let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
 
         start_continuous_recording(
             db,
             &local_data_dir_clone,
-            fps,
+            cli.fps,
             audio_chunk_duration,
             control_rx,
+            !cli.disable_audio,
         )
         .await
     });
 
     tokio::spawn(async move {
-        // start_frame_server(tx, local_data_dir_clone.to_string(), db.clone()).await;
-        let server = Server::new(db_server, SocketAddr::from(([0, 0, 0, 0], 3030)));
+        let server = Server::new(db_server, SocketAddr::from(([0, 0, 0, 0], cli.port)));
         server.start().await.unwrap();
     });
 
     // Wait for the server to start
-    println!("Server started on http://localhost:3030");
+    println!("Server started on http://localhost:{}", cli.port);
 
     // Keep the main thread running
     loop {
