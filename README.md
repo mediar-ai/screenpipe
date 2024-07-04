@@ -63,10 +63,6 @@ Check this example of screenpipe
 
 https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3fe-f34479fdc45e
 
-This is an example of using screenpipe with vercel/ai-chatbot project, make sure to run screenpipe first then check example here 👇
-
-[Check documentation to try it](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
-
 ## Status 
 
 Alpha: runs on my computer (`Macbook pro m3 32 GB ram`).
@@ -169,6 +165,9 @@ Now pipe this into a LLM to build:
 - automatic CRM (fill salesforce while you spam ppl on linkedin)
 
 We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
+
+[Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
+
 
 ## Why open source?
 
