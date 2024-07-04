@@ -15,6 +15,11 @@
 
 Turn your screen into actions (using LLMs). Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Rust + WASM.
 
+screenpipe is a library that allows you to gather all your life context and connect it to LLMs easily for:
+- search (e.g. go beyond your limited human memory)
+- automation (such as making actions on the web while you work)
+- etc.
+
 ## Screen to action using LLMs
 Here's an example of server-side code written in TypeScript that takes the streamed data from ScreenPipe and uses a Large Language Model like OpenAI's to process text and images for analyzing sales conversations:
 
@@ -47,6 +52,14 @@ export async function onTick() {
   // Add to Salesforce API ...
 }
 ```
+
+## Example vercel/ai-chatbot that query screenpipe autonomously
+
+Check this example of screenpipe
+
+https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3fe-f34479fdc45e
+
+[Check documentation to try it](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
 
 ## Status 
 
