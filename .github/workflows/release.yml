@@ -54,53 +54,53 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install dependencies
-        run: brew install ffmpeg
-
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-
-      - name: key
-        env:
-          MACOS_SIGNING_KEY: ${{ secrets.MACOS_SIGNING_KEY }}
-          MACOS_SIGNING_KEY_PASSWORD: ${{ secrets.MACOS_SIGNING_KEY_PASSWORD }}
         run: |
-          echo $MACOS_SIGNING_KEY | base64 --decode > certificate.p12
-          security create-keychain -p password build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p password build.keychain
-          security import certificate.p12 -k build.keychain -P $MACOS_SIGNING_KEY_PASSWORD -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k password build.keychain
-          security set-keychain-settings -lut 3600 build.keychain
+          brew install ffmpeg
+          brew install create-dmg dav1d svt-av1 libarchive
 
-      - name: Build
-        run: cargo build --release
+      - name: Set up environment
+        run: |
+          echo "LIBRARY_PATH=$LIBRARY_PATH:/opt/homebrew/lib" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/ffmpeg/lib/pkgconfig" >> $GITHUB_ENV
 
-      - name: Sign Binary
+      - name: Build with static FFmpeg
+        run: |
+          export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
+          cargo build --release --features static-ffmpeg
+
+      - name: Create app bundle
+        run: |
+          mkdir -p Screenpipe.app/Contents/MacOS
+          mkdir -p Screenpipe.app/Contents/Resources
+          cp target/release/screenpipe Screenpipe.app/Contents/MacOS/
+          cp /usr/local/bin/ffmpeg Screenpipe.app/Contents/Resources/
+          cp /usr/local/bin/ffprobe Screenpipe.app/Contents/Resources/
+          # Create Info.plist file here if needed
+
+      - name: Sign app bundle
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
-          codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" target/release/screenpipe
+          codesign --force --options runtime --deep --timestamp --sign "$MACOS_SIGNING_IDENTITY" Screenpipe.app
 
-      - name: Notarize Binary
+      - name: Create DMG
+        run: create-dmg --volname "Screenpipe" --window-pos 200 120 --window-size 600 300 --icon-size 100 --icon "Screenpipe.app" 175 120 --hide-extension "Screenpipe.app" --app-drop-link 425 120 "Screenpipe.dmg" "Screenpipe.app"
+
+      - name: Notarize DMG
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
-          zip screenpipe.zip target/release/screenpipe
-          xcrun notarytool submit screenpipe.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$TEAM_ID" --wait
-          xcrun stapler staple screenpipe.zip
+          xcrun notarytool submit Screenpipe.dmg --apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$TEAM_ID" --wait
+          xcrun stapler staple Screenpipe.dmg
 
       - name: Upload Artifact
         id: upload
         uses: actions/upload-artifact@v2
         with:
           name: screenpipe-macos
-          path: target/release/screenpipe
+          path: Screenpipe.dmg
 
   release:
     runs-on: ubuntu-latest

@@ -9,11 +9,12 @@ use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage};
 use std::collections::{BTreeSet, VecDeque};
 use std::io::BufRead;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Duration;
+use std::{env, thread};
 use threadpool::ThreadPool;
 
 const MAX_THREADS: usize = 8; // Adjust based on your needs
@@ -314,6 +315,33 @@ fn save_frames_as_video(
     }
 }
 
+fn get_ffmpeg_path() -> PathBuf {
+    if cfg!(target_os = "macos") {
+        // When running on macOS, use the bundled FFmpeg
+        let exe_path = env::current_exe().expect("Failed to get executable path");
+        let resources_path = exe_path
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("Resources");
+        let ffmpeg_path = resources_path.join("ffmpeg");
+        // if not present, add a warning to the user
+        if !ffmpeg_path.exists() {
+            warn!(
+                "FFmpeg not found in resources, defaulting to ffmpeg you probably installed with `brew install ffmpeg`. In production you should use statically linked ffmpeg."
+            );
+            // and just use ffmpeg from path
+            PathBuf::from("ffmpeg")
+        } else {
+            ffmpeg_path
+        }
+    } else {
+        // On other platforms, assume FFmpeg is in PATH
+        PathBuf::from("ffmpeg")
+    }
+}
+
 fn start_ffmpeg_process(output_file: &str, fps: f64) -> std::process::Child {
     // overrriding fps with max fps if over the max and warning user
     let mut fps = fps;
@@ -323,7 +351,7 @@ fn start_ffmpeg_process(output_file: &str, fps: f64) -> std::process::Child {
     }
 
     info!("Starting FFmpeg process for file: {}", output_file);
-    Command::new("ffmpeg")
+    Command::new(get_ffmpeg_path().to_str().unwrap())
         .args([
             "-f",
             "image2pipe",

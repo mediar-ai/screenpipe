@@ -65,6 +65,9 @@ clap = { version = "4.3", features = ["derive"] }
 [dev-dependencies]
 tempfile = "3.3.0"
 
+[features]
+static-ffmpeg = ["ffmpeg-next/static"]
+
 [[bin]]
 name = "pipe"
 path = "src/bin/screenpipe-server.rs"
