@@ -35,6 +35,7 @@ import { saveChat } from '@/app/actions'
 import { SpinnerMessage, UserMessage } from '@/components/stocks/message'
 import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
+import { MemoizedReactMarkdown } from '@/components/markdown'
 
 async function confirmPurchase(symbol: string, price: number, amount: number) {
   'use server'
@@ -479,7 +480,11 @@ async function submitUserMessage(content: string) {
         description:
           'Query the Screenpipe API for OCR that appeared on user s screen and audio transcriptions from his mic',
         parameters: z.object({
-          query: z.string().describe('The search query which match exact keywords. Try to use a single keyword that would match the user intent'),
+          query: z
+            .string()
+            .describe(
+              'The search query which match exact keywords. Try to use a single keyword that would match the user intent'
+            ),
           contentType: z
             .enum(['ocr', 'audio'])
             .describe('The type of content to search for'),
@@ -498,10 +503,10 @@ async function submitUserMessage(content: string) {
           limit = 5,
           offset = 0
         }) {
-          console.log("screenpipe-chatbot will use content type: ", contentType)
-          console.log("screenpipe-chatbot will use query: ", query)
-          console.log("screenpipe-chatbot will use limit: ", limit)
-          console.log("screenpipe-chatbot will use offset: ", offset)
+          console.log('screenpipe-chatbot will use content type: ', contentType)
+          console.log('screenpipe-chatbot will use query: ', query)
+          console.log('screenpipe-chatbot will use limit: ', limit)
+          console.log('screenpipe-chatbot will use offset: ', offset)
           yield (
             <BotCard>
               <div className="inline-flex items-start gap-1 md:items-center">
@@ -518,7 +523,7 @@ async function submitUserMessage(content: string) {
 
             if (!response.ok) {
               throw new Error(
-                `API request failed with status ${response.status}`
+                `API request failed with status ${response.status} and response ${response.statusText}`
               )
             }
 
@@ -526,57 +531,77 @@ async function submitUserMessage(content: string) {
 
             const toolCallId = nanoid()
 
-            aiState.done({
-              ...aiState.get(),
-              messages: [
-                ...aiState.get().messages,
-                {
-                  id: nanoid(),
-                  role: 'assistant',
-                  content: [
-                    {
-                      type: 'tool-call',
-                      toolName: 'queryScreenpipeAPI',
-                      toolCallId,
-                      args: { query, contentType, limit, offset }
-                    }
-                  ]
-                },
-                {
-                  id: nanoid(),
-                  role: 'tool',
-                  content: [
-                    {
-                      type: 'tool-result',
-                      toolName: 'queryScreenpipeAPI',
-                      toolCallId,
-                      result: data
-                    }
-                  ]
+            // Prepare the data for GPT-4
+            const dataForGPT = JSON.stringify(data, null, 2)
+
+            // Create a prompt for GPT-4
+            const prompt = `Based on the following search results, please provide a concise and informative answer to the user's query "${query}":
+
+${dataForGPT}
+
+Please summarize the key points and present the information in a clear, easy-to-read format.`
+
+            let textStream = createStreamableValue('')
+            let textNode = <BotMessage content={textStream.value} />
+            let isStreamingComplete = false
+
+            const gpt4Response = await streamUI({
+              model: openai('gpt-4o'),
+              messages: [{ role: 'user', content: prompt }],
+              text: ({ content, done, delta }) => {
+                if (done) {
+                  textStream.done()
+                  isStreamingComplete = true
+                  aiState.done({
+                    ...aiState.get(),
+                    messages: [
+                      ...aiState.get().messages,
+                      {
+                        id: nanoid(),
+                        role: 'assistant',
+                        content: [
+                          {
+                            type: 'tool-call',
+                            toolName: 'queryScreenpipeAPI',
+                            toolCallId,
+                            args: { query, contentType, limit, offset }
+                          }
+                        ]
+                      },
+                      {
+                        id: nanoid(),
+                        role: 'tool',
+                        content: [
+                          {
+                            type: 'tool-result',
+                            toolName: 'queryScreenpipeAPI',
+                            toolCallId,
+                            result: content
+                          }
+                        ]
+                      }
+                    ]
+                  })
+                } else {
+                  textStream.update(delta)
                 }
-              ]
+
+                return (
+                  <>
+                    {textNode}
+                    {isStreamingComplete && (
+                      <MemoizedReactMarkdown className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 max-w-full max-h-[300px] overflow-auto border border-gray-200 rounded-md mt-4">
+                        {`\`\`\`json
+${dataForGPT}
+\`\`\``}
+                      </MemoizedReactMarkdown>
+                    )}
+                  </>
+                )
+              }
             })
 
-            return (
-              <BotCard>
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">
-                    Search Results ({contentType}):
-                  </h3>
-                  <ul className="list-disc pl-5">
-                    {data.data.map((item: any, index: number) => (
-                      <li key={index} className="mb-2">
-                        <p>
-                          <strong>{item.content.timestamp}</strong>:{' '}
-                          {item.content.text || item.content.transcription}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-2">Total results: {data.pagination.total}</p>
-                </div>
-              </BotCard>
-            )
+            return gpt4Response.value
           } catch (error) {
             console.error('Error querying Screenpipe API:', error)
             return (
