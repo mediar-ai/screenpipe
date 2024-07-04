@@ -162,8 +162,6 @@ Now pipe this into a LLM to build:
 
 We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
 
-https://github.com/louis030195/screen-pipe/assets/25003283/9a26469f-5bd0-4905-ad6a-c52ef912c235
-
 ## Why open source?
 
 Recent breakthroughs in AI have shown that context is the final frontier. AI will soon be able to incorporate the context of an entire human life into its 'prompt', and the technologies that enable this kind of personalisation should be available to all developers to accelerate access to the next stage of our evolution.  
