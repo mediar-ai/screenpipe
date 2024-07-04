@@ -20,6 +20,8 @@ screenpipe is a library that allows you to gather all your life context and conn
 - automation (such as making actions on the web while you work)
 - etc.
 
+<!--
+
 ## Screen to action using LLMs
 Here's an example of server-side code written in TypeScript that takes the streamed data from ScreenPipe and uses a Large Language Model like OpenAI's to process text and images for analyzing sales conversations:
 
@@ -52,6 +54,8 @@ export async function onTick() {
   // Add to Salesforce API ...
 }
 ```
+
+-->
 
 ## Example vercel/ai-chatbot that query screenpipe autonomously
 
