@@ -8,6 +8,8 @@ https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3
 
 this is a copy of https://github.com/vercel/ai-chatbot 
 
+make sure to follow their readme to run this example
+
 i just added in `lib/chat/actions.tsx` a tool to call screenpipe api (in the tools list):
 
 ```ts
