@@ -346,62 +346,6 @@ enum Task {
     Translate,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum WhichModel {
-    Tiny,
-    TinyEn,
-    Base,
-    BaseEn,
-    Small,
-    SmallEn,
-    Medium,
-    MediumEn,
-    Large,
-    LargeV2,
-    LargeV3,
-    DistilMediumEn,
-    DistilLargeV2,
-    DistilLargeV3,
-}
-
-impl WhichModel {
-    fn is_multilingual(&self) -> bool {
-        match self {
-            Self::Tiny
-            | Self::Base
-            | Self::Small
-            | Self::Medium
-            | Self::Large
-            | Self::LargeV2
-            | Self::LargeV3
-            | Self::DistilLargeV2
-            | Self::DistilLargeV3 => true,
-            Self::TinyEn | Self::BaseEn | Self::SmallEn | Self::MediumEn | Self::DistilMediumEn => {
-                false
-            }
-        }
-    }
-
-    fn model_and_revision(&self) -> (&'static str, &'static str) {
-        match self {
-            Self::Tiny => ("openai/whisper-tiny", "main"),
-            Self::TinyEn => ("openai/whisper-tiny.en", "refs/pr/15"),
-            Self::Base => ("openai/whisper-base", "refs/pr/22"),
-            Self::BaseEn => ("openai/whisper-base.en", "refs/pr/13"),
-            Self::Small => ("openai/whisper-small", "main"),
-            Self::SmallEn => ("openai/whisper-small.en", "refs/pr/10"),
-            Self::Medium => ("openai/whisper-medium", "main"),
-            Self::MediumEn => ("openai/whisper-medium.en", "main"),
-            Self::Large => ("openai/whisper-large", "refs/pr/36"),
-            Self::LargeV2 => ("openai/whisper-large-v2", "refs/pr/57"),
-            Self::LargeV3 => ("openai/whisper-large-v3", "main"),
-            Self::DistilMediumEn => ("distil-whisper/distil-medium.en", "main"),
-            Self::DistilLargeV2 => ("distil-whisper/distil-large-v2", "main"),
-            Self::DistilLargeV3 => ("distil-whisper/distil-large-v3", "main"),
-        }
-    }
-}
-
 pub fn stt(input: &str) -> Result<String> {
     info!("Starting speech to text");
     // ! hack assuming device on 0 and that everyone wants to use AI accelerator

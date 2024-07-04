@@ -162,6 +162,8 @@ pub async fn start_continuous_recording(
                             }
                             Err(e) => {
                                 error!("Failed to receive audio chunk: {}", e);
+                                // should terminate the thread
+                                break;
                             }
                         }
                     }

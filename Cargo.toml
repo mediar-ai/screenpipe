@@ -13,3 +13,8 @@ edition = "2021"
 
 [workspace.dependencies]
 log = "0.4"
+candle = { package = "candle-core", version = "0.6.0", features = ["metal"] } # not sure if this cause problem if user uses CPU or CUDA? should it be a feature?
+candle-nn = { package = "candle-nn", version = "0.6.0", features = ["metal"] }
+candle-transformers = { package = "candle-transformers", version = "0.6.0", features = ["metal"] }
+tokenizers = "0.19.1"
+

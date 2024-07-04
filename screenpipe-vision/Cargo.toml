@@ -31,10 +31,10 @@ rusty-tesseract = "1.1.10"
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Local Embeddings
-candle = { package = "candle-core", version = "0.3.2" }
-candle-nn = "0.3.2"
-candle-transformers = "0.3.2"
-tokenizers = "0.15.0"
+candle = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+tokenizers = { workspace = true }
 lazy_static = "1.4.0"
 base64 = "0.21.7"
 anyhow = "1.0.86"

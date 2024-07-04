@@ -188,6 +188,8 @@ Contributions are welcome! If you'd like to contribute, please fork the reposito
 
 Say 👋 in our [public Discord channel](https://discord.gg/dU9EBuw7Uq) . We discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
+Bit more details on the architecture [here](https://link.excalidraw.com/l/5MKXLddifTr/8subenQGvcd).
+
 ## Licensing
 
 The code in this project is licensed under MIT license. See the [LICENSE](LICENSE.md) file for more information.

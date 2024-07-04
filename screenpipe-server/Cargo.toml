@@ -36,10 +36,10 @@ sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chr
 ffmpeg-next = "7.0.2"
 
 # Local Embeddings + STT
-candle = { package = "candle-core", version = "0.3.2" }
-candle-nn = "0.3.2"
-candle-transformers = "0.3.2"
-tokenizers = "0.15.0"
+candle = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+tokenizers = { workspace = true }
 lazy_static = "1.4.0"
 base64 = "0.21.7"
 anyhow = "1.0.86"

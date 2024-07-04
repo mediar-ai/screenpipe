@@ -25,10 +25,10 @@ chrono = { version = "0.4.31", features = ["serde"] }
 
 # Local Embeddings + STT
 # TODO: feature metal, cuda, etc. see https://github.com/huggingface/candle/blob/main/candle-core/Cargo.toml
-candle = { package = "candle-core", version = "0.3.2" } # atm got seg fault w features = ["metal"] ♥️
-candle-nn = "0.3.2"
-candle-transformers = "0.3.2"
-tokenizers = "0.19.1"
+candle = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+tokenizers = { workspace = true }
 lazy_static = "1.4.0"
 base64 = "0.21.7"
 anyhow = "1.0.86"
