@@ -11,7 +11,7 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
-use crate::{pcm_decode::pcm_decode};
+use crate::pcm_decode::pcm_decode;
 
 // TODO: improve model loading strategy
 

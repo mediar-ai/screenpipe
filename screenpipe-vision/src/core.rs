@@ -16,7 +16,7 @@ pub enum ControlMessage {
 }
 
 pub struct CaptureResult {
-    pub image: DynamicImage,
+    pub image: Arc<DynamicImage>,
     pub text: String,
 }
 
@@ -27,7 +27,8 @@ pub fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
 ) {
-    let monitor = Monitor::all().unwrap().first().unwrap().clone();
+    let monitors = Monitor::all().unwrap();
+    let monitor = monitors.first().unwrap();
     let cpu_count = num_cpus::get();
     let pool_size = (cpu_count as f32 * 1.2) as usize;
     let pool_size = std::cmp::min(pool_size, MAX_THREADS);
@@ -61,14 +62,13 @@ pub fn continuous_capture(
 
         // Clone necessary values for the OCR thread
         let result_tx_clone = result_tx.clone();
-        let image_clone = image.clone();
-
+        let image_arc = Arc::new(image);
         // Perform OCR in a separate thread
         ocr_pool.execute(move || {
-            let text = perform_ocr(&image_clone);
+            let text = perform_ocr(&image_arc);
             result_tx_clone
                 .send(CaptureResult {
-                    image: image_clone,
+                    image: image_arc,
                     text,
                 })
                 .unwrap();

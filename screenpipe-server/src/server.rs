@@ -7,7 +7,7 @@ use axum::{
 };
 
 use chrono::{DateTime, Utc};
-use log::info;
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{net::SocketAddr, sync::Arc};
@@ -107,6 +107,14 @@ async fn search(
     JsonResponse<PaginatedResponse<ContentItem>>,
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
+    info!(
+        "Received search request: query='{}', content_type={:?}, limit={}, offset={}",
+        query.q.as_deref().unwrap_or(""),
+        query.content_type,
+        query.pagination.limit,
+        query.pagination.offset
+    );
+
     let query_str = query.q.as_deref().unwrap_or("");
     let results = state
         .db
@@ -118,6 +126,7 @@ async fn search(
         )
         .await
         .map_err(|e| {
+            error!("Failed to search for content: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({"error": format!("Failed to search for content: {}", e)})),
@@ -129,12 +138,14 @@ async fn search(
         .count_search_results(query_str, query.content_type)
         .await
         .map_err(|e| {
+            error!("Failed to count search results: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({"error": format!("Failed to count search results: {}", e)})),
             )
         })?;
 
+    info!("Search completed: found {} results", total);
     Ok(JsonResponse(PaginatedResponse {
         data: results.into_iter().map(into_content_item).collect(),
         pagination: PaginationInfo {
@@ -152,6 +163,11 @@ async fn get_by_date_range(
     JsonResponse<PaginatedResponse<ContentItem>>,
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
+    info!(
+        "Received date range request: start_date={:?}, end_date={:?}, limit={}, offset={}",
+        query.start_date, query.end_date, query.pagination.limit, query.pagination.offset
+    );
+
     let results = state
         .db
         .get_recent_results(
@@ -162,6 +178,7 @@ async fn get_by_date_range(
         )
         .await
         .map_err(|e| {
+            error!("Database error while fetching recent results: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({"error": format!("Database error: {}", e)})),
@@ -173,12 +190,14 @@ async fn get_by_date_range(
         .count_recent_results(query.start_date, query.end_date)
         .await
         .map_err(|e| {
+            error!("Database error while counting recent results: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({"error": format!("Database error: {}", e)})),
             )
         })?;
 
+    info!("Date range query completed: found {} results", total);
     Ok(JsonResponse(PaginatedResponse {
         data: results.into_iter().map(into_content_item).collect(),
         pagination: PaginationInfo {
@@ -230,11 +249,21 @@ impl Server {
 
         info!("Starting server on {}", self.addr);
 
-        serve(
+        match serve(
             TcpListener::bind(self.addr).await.unwrap(),
             app.into_make_service(),
         )
         .await
+        {
+            Ok(_) => {
+                info!("Server stopped gracefully");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Server error: {}", e);
+                Err(e)
+            }
+        }
     }
 }
 
