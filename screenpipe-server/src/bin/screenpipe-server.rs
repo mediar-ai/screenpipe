@@ -5,6 +5,7 @@ use std::{
 };
 
 use clap::Parser;
+use log::info;
 use tokio::time::Duration;
 
 use screenpipe_server::{start_continuous_recording, DatabaseManager, Server};
@@ -74,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // Wait for the server to start
-    println!("Server started on http://localhost:{}", cli.port);
+    info!("Server started on http://localhost:{}", cli.port);
 
     // Keep the main thread running
     loop {
