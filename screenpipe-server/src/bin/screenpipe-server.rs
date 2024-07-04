@@ -17,7 +17,7 @@ struct Cli {
     fps: f64,
 
     /// Audio chunk duration in seconds
-    #[arg(short, long, default_value_t = 5)]
+    #[arg(short, long, default_value_t = 30)]
     audio_chunk_duration: u64,
 
     /// Port to run the server on
