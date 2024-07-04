@@ -1,4 +1,4 @@
-
+This example maintain a log of your day, like "9 am: watching cat video, 10 am: coding in c++, 11 am: watching dog videos etc."
 
 How to use:
 
