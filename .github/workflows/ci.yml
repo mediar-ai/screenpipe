@@ -1,3 +1,10 @@
+
+# testing locally with act cli
+
+# act -W .github/workflows/ci.yml --container-architecture linux/amd64 -env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
+
+
+
 name: Rust CI
 
 on:
@@ -16,8 +23,7 @@ jobs:
           profile: minimal
           toolchain: stable
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libasound2-dev libavcodec-dev libavformat-dev libavutil-dev
+        run: sudo apt-get update && sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg
+
       - name: Run tests
         run: cargo test

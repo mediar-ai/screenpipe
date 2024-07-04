@@ -1,13 +1,13 @@
 # testing locally with act cli
 
 # ubuntu:
-# act --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
+# act -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
 
 # for mac target
-# act --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-macos -P macos-latest=-self-hosted --env-file .env --secret-file .secrets
+# act -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-macos -P macos-latest=-self-hosted --env-file .env --secret-file .secrets
 
 # run the whole thing
-# act --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
+# act -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
 
 name: Release
 
