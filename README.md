@@ -111,6 +111,8 @@ cd screen-pipe
 cargo build --release
 ./target/release/pipe
 
+# if you are on mac, use "cargo build --release --features metal" to leverage M series acceleration
+
 # or only stream audio + speech to text to stdout
 ./target/release/pipe-audio
 

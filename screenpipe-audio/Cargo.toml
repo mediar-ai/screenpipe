@@ -42,10 +42,11 @@ rubato = "0.15.0"
 log = { workspace = true }
 env_logger = "0.10"
 
-
 [dev-dependencies]
 tempfile = "3.3.0"
 
+[features]
+metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 
 [[bin]]
 name = "pipe-audio"
