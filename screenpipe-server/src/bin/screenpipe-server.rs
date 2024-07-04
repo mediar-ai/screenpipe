@@ -13,7 +13,7 @@ use screenpipe_server::{start_continuous_recording, DatabaseManager, Server};
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// FPS for continuous recording
-    #[arg(short, long, default_value_t = 10.0)]
+    #[arg(short, long, default_value_t = 5.0)]
     fps: f64,
 
     /// Audio chunk duration in seconds

@@ -20,7 +20,7 @@ pub struct CaptureResult {
     pub text: String,
 }
 
-const MAX_THREADS: usize = 16; // Adjust based on your needs
+const MAX_THREADS: usize = 8; // Adjust based on your needs
 
 pub fn continuous_capture(
     control_rx: Receiver<ControlMessage>,

@@ -16,7 +16,7 @@ use std::thread;
 use std::time::Duration;
 use threadpool::ThreadPool;
 
-const MAX_THREADS: usize = 16; // Adjust based on your needs
+const MAX_THREADS: usize = 8; // Adjust based on your needs
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 
 pub fn extract_frames_from_video(
