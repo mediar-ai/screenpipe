@@ -14,18 +14,12 @@ ARCH=$(uname -m)
 case $OS in
     Linux*)
         case $ARCH in
-            # x86_64) BINARY="screenpipe-x86_64-unknown-linux-gnu";;
-            # aarch64) BINARY="screenpipe-aarch64-unknown-linux-gnu";;
-            x86_64) BINARY="screenpipe-linux";;
-            # aarch64) BINARY="screenpipe-linux";;
+            x86_64) BINARY="screenpipe-linux.tar.gz";;
             *) echo "Unsupported architecture: $ARCH"; exit 1;;
         esac
         ;;
     Darwin*)
         case $ARCH in
-            # x86_64) BINARY="screenpipe-x86_64-apple-darwin";;
-            # arm64) BINARY="screenpipe-aarch64-apple-darwin";;
-            # x86_64) BINARY="screenpipe-macos";;
             arm64) BINARY="screenpipe-macos";;
             *) echo "Unsupported architecture: $ARCH"; exit 1;;
         esac
@@ -39,11 +33,17 @@ mkdir -p $HOME/.local/bin
 
 echo "Downloading $BINARY"
 
-# Download the latest release binary to the local bin directory
-curl -L "https://github.com/$REPO/releases/download/$LATEST_RELEASE/$BINARY" -o $HOME/.local/bin/screenpipe
-
-# Make the binary executable
-chmod +x $HOME/.local/bin/screenpipe
+if [ "$OS" = "Linux" ]; then
+    # Download and extract the tarball for Linux
+    curl -L "https://github.com/$REPO/releases/download/$LATEST_RELEASE/$BINARY" -o /tmp/screenpipe-linux.tar.gz
+    tar -xzvf /tmp/screenpipe-linux.tar.gz -C $HOME/.local/bin
+    mv $HOME/.local/bin/screenpipe-linux/* $HOME/.local/bin/
+    rm -rf $HOME/.local/bin/screenpipe-linux /tmp/screenpipe-linux.tar.gz
+    chmod +x $HOME/.local/bin/screenpipe
+else
+    # Download the binary for macOS
+    curl -L "https://github.com/$REPO/releases/download/$LATEST_RELEASE/$BINARY" -o $HOME/.local/bin/screenpipe
+    chmod +x $HOME/.local/bin/screenpipe
+fi
 
 echo "screenpipe installed successfully! Please add $HOME/.local/bin to your PATH if it's not already included."
-
