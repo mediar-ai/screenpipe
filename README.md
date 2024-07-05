@@ -80,6 +80,16 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Uses 2x less energy tha
 
 ## Usage
 
+### Linux
+
+```bash
+curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
+```
+
+Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `./local/bin`)
+
+### MacOS
+
 Keep in mind that it's still experimental.
 
 To try the current version, which capture your screen and extract the text, do:
@@ -88,10 +98,6 @@ To try the current version, which capture your screen and extract the text, do:
 ```bash
 # On Mac
 brew install ffmpeg
-
-# On Linux
-sudo update
-sudo apt install -y ffmpeg libasound2-dev libavcodec-dev libavformat-dev libavutil-dev
 ```
 
 Install [Rust](https://www.rust-lang.org/tools/install).
