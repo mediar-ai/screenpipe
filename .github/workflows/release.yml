@@ -1,13 +1,13 @@
 # testing locally with act cli
 
 # ubuntu:
-# act -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
+# act --container-architecture linux/amd64 -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
 
 # for mac target
-# act -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-macos -P macos-latest=-self-hosted --env-file .env --secret-file .secrets
+# act --container-architecture linux/amd64 -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-macos -P macos-latest=-self-hosted --env-file .env --secret-file .secrets
 
 # run the whole thing
-# act -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -j build-ubuntu -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
+# act --container-architecture linux/amd64 -W .github/workflows/release.yml --env ACTIONS_RUNTIME_URL=http://host.docker.internal:8080/ --env ACTIONS_RUNTIME_TOKEN=foo --env ACTIONS_CACHE_URL=http://host.docker.internal:8080/ --artifact-server-path out -P ubuntu-latest=-self-hosted --env-file .env --secret-file .secrets
 
 name: Release
 
@@ -26,7 +26,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -43,7 +45,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: screenpipe-ubuntu
-          path: target/release/screenpipe
+          path: target/release/pipe
 
   build-macos:
     runs-on: macos-latest
@@ -53,38 +55,95 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install dependencies
-        run: |
-          brew install ffmpeg
-          brew install create-dmg dav1d svt-av1 libarchive
-
-      - name: Set up environment
-        run: |
-          echo "LIBRARY_PATH=$LIBRARY_PATH:/opt/homebrew/lib" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/ffmpeg/lib/pkgconfig" >> $GITHUB_ENV
-
-      - name: Build with static FFmpeg
+      - name: Build with dynamic FFmpeg
         run: |
           export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
-          cargo build --release --features static-ffmpeg
+          export LIBRARY_PATH="$LIBRARY_PATH:/opt/homebrew/lib"
+          export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks"
+          cargo build --release
 
       - name: Create app bundle
         run: |
           mkdir -p Screenpipe.app/Contents/MacOS
-          mkdir -p Screenpipe.app/Contents/Resources
-          cp target/release/screenpipe Screenpipe.app/Contents/MacOS/
-          cp /usr/local/bin/ffmpeg Screenpipe.app/Contents/Resources/
-          cp /usr/local/bin/ffprobe Screenpipe.app/Contents/Resources/
-          # Create Info.plist file here if needed
+          mkdir -p Screenpipe.app/Contents/Frameworks
+
+          # find the actual binary name
+          BINARY_NAME=$(find target/release -type f -perm +111 -print | head -n 1)
+          echo "Binary found: $BINARY_NAME"
+
+          # copy the binary
+          cp "$BINARY_NAME" Screenpipe.app/Contents/MacOS/screenpipe
+
+          # copy ffmpeg dylibs
+          cp /opt/homebrew/opt/ffmpeg/lib/libavcodec.dylib Screenpipe.app/Contents/Frameworks/
+          cp /opt/homebrew/opt/ffmpeg/lib/libavformat.dylib Screenpipe.app/Contents/Frameworks/
+          cp /opt/homebrew/opt/ffmpeg/lib/libavutil.dylib Screenpipe.app/Contents/Frameworks/
+          cp /opt/homebrew/opt/ffmpeg/lib/libswresample.dylib Screenpipe.app/Contents/Frameworks/
+          cp /opt/homebrew/opt/ffmpeg/lib/libswscale.dylib Screenpipe.app/Contents/Frameworks/
+
+          # update rpath
+          install_name_tool -change /opt/homebrew/opt/ffmpeg/lib/libavcodec.dylib @executable_path/../Frameworks/libavcodec.dylib Screenpipe.app/Contents/MacOS/screenpipe
+          install_name_tool -change /opt/homebrew/opt/ffmpeg/lib/libavformat.dylib @executable_path/../Frameworks/libavformat.dylib Screenpipe.app/Contents/MacOS/screenpipe
+          install_name_tool -change /opt/homebrew/opt/ffmpeg/lib/libavutil.dylib @executable_path/../Frameworks/libavutil.dylib Screenpipe.app/Contents/MacOS/screenpipe
+          install_name_tool -change /opt/homebrew/opt/ffmpeg/lib/libswresample.dylib @executable_path/../Frameworks/libswresample.dylib Screenpipe.app/Contents/MacOS/screenpipe
+          install_name_tool -change /opt/homebrew/opt/ffmpeg/lib/libswscale.dylib @executable_path/../Frameworks/libswscale.dylib Screenpipe.app/Contents/MacOS/screenpipe
+
+          # list contents for debugging
+          echo "Contents of Screenpipe.app/Contents/MacOS:"
+          ls -l Screenpipe.app/Contents/MacOS
+          echo "Contents of Screenpipe.app/Contents/Frameworks:"
+          ls -l Screenpipe.app/Contents/Frameworks
+
+      - name: Import Code Signing Certificates
+        env:
+          MACOS_SIGNING_KEY: ${{ secrets.MACOS_SIGNING_KEY }}
+          MACOS_SIGNING_KEY_PASSWORD: ${{ secrets.MACOS_SIGNING_KEY_PASSWORD }}
+        run: |
+          # create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # import certificate from secrets
+          echo -n "$MACOS_SIGNING_KEY" | base64 --decode --output $CERTIFICATE_PATH
+
+          echo "Certificate file size: $(wc -c < $CERTIFICATE_PATH)"
+
+          # create temporary keychain
+          security create-keychain -p "temp_password" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "temp_password" $KEYCHAIN_PATH
+
+          # import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$MACOS_SIGNING_KEY_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security import $CERTIFICATE_PATH -P "$MACOS_SIGNING_KEY_PASSWORD" -A -t priv -f pkcs12 -k $KEYCHAIN_PATH
+
+          # add keychain to search list
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # set key partition list
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "temp_password" $KEYCHAIN_PATH
+
+          echo "Keychain contents:"
+          security dump-keychain $KEYCHAIN_PATH
+
+          echo "Codesigning identities:"
+          security find-identity -v -p codesigning $KEYCHAIN_PATH
 
       - name: Sign app bundle
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
-          codesign --force --options runtime --deep --timestamp --sign "$MACOS_SIGNING_IDENTITY" Screenpipe.app
+          echo "Available codesigning identities:"
+          security find-identity -v -p codesigning
+
+          echo "Attempting to sign with identity: $MACOS_SIGNING_IDENTITY"
+          codesign --force --options runtime --deep --verbose --timestamp --sign "$MACOS_SIGNING_IDENTITY" Screenpipe.app
+
+      - name: Copy icon
+        run: cp assets/Assets.xcassets/AppIcon.appiconset/1024-mac.png ./AppIcon.png
 
       - name: Create DMG
-        run: create-dmg --volname "Screenpipe" --window-pos 200 120 --window-size 600 300 --icon-size 100 --icon "Screenpipe.app" 175 120 --hide-extension "Screenpipe.app" --app-drop-link 425 120 "Screenpipe.dmg" "Screenpipe.app"
+        run: create-dmg --volname "Screenpipe" --window-pos 200 120 --window-size 600 300 --icon-size 100 --icon "Screenpipe.app" 175 120 --hide-extension "Screenpipe.app" --app-drop-link 425 120 --volicon "AppIcon.png" "Screenpipe.dmg" "Screenpipe.app"
 
       - name: Notarize DMG
         env:

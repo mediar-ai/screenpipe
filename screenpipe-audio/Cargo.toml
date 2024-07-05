@@ -47,6 +47,8 @@ tempfile = "3.3.0"
 
 [features]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
+cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+
 
 [[bin]]
 name = "pipe-audio"
