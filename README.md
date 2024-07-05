@@ -13,7 +13,7 @@
 > Civilization progresses by the number of operations it can perform without conscious effort.  
 > — **Whitehead**
 
-Record your screen & mic 24/7 and connect it to LLMs. Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Written in Rust.
+Record your screen & mic 24/7 and connect it to LLMs. Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Written in Rust. Free. No lock-in.
 
 screenpipe is a library that allows you to gather all your life context and connect it to LLMs easily for:
 - search (e.g. go beyond your limited human memory)
