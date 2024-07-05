@@ -80,6 +80,8 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Uses 2x less energy tha
 
 ## Usage
 
+Keep in mind that it's still experimental.
+
 ### Linux
 
 ```bash
@@ -90,9 +92,7 @@ Now you should be able to `screenpipe`. (You may need to restart your terminal, 
 
 ### MacOS
 
-Keep in mind that it's still experimental.
-
-To try the current version, which capture your screen and extract the text, do:
+On Mac you need to build the CLI yourself.
 
 1. Install dependencies:
 ```bash
