@@ -13,11 +13,11 @@
 > Civilization progresses by the number of operations it can perform without conscious effort.  
 > — **Whitehead**
 
-Turn your screen into actions (using LLMs). Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Rust + WASM.
+Turn your screen into actions (using LLMs). Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Rust.
 
 screenpipe is a library that allows you to gather all your life context and connect it to LLMs easily for:
 - search (e.g. go beyond your limited human memory)
-- automation (such as making actions on the web while you work)
+- automation (such as making actions on the web while you work, syncing company's knowledge, etc.)
 - etc.
 
 <!--
@@ -59,14 +59,9 @@ export async function onTick() {
 
 ## Example vercel/ai-chatbot that query screenpipe autonomously
 
-Check this example of screenpipe
+Check this example of screenpipe which is a chatbot that make requests to your data to answer your questions
 
 https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3fe-f34479fdc45e
-
-## Data privacy
-
-- 100% of the data stay local in a SQLite database and mp4 files
-- if you use an LLM like OpenAI, part of your data will be sent to Microsoft servers, you can use a local LLM like [Chrome AI](https://sdk.vercel.ai/providers/community-providers/chrome-ai)
 
 ## Status 
 
@@ -76,9 +71,9 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`).
 - [x] mp4 encoding to disk (30 GB / month)
 - [x] sqlite local db
 - [x] OCR
-- [ ] TS SDK
 - [x] audio + stt
 - [x] api
+- [ ] TS SDK
 - [ ] cloud storage options (s3, pqsql, etc.)
 - [ ] cloud computing options
 - [ ] fast, optimised
@@ -100,6 +95,8 @@ sudo update
 sudo apt install -y ffmpeg libasound2-dev libavcodec-dev libavformat-dev libavutil-dev
 ```
 
+Install [Rust](https://www.rust-lang.org/tools/install).
+
 2. Clone the repo:
 
 ```bash
@@ -107,14 +104,14 @@ git clone https://github.com/louis030195/screen-pipe
 cd screen-pipe
 ```
 
-3. Run the API (make sure to install [Rust](https://www.rust-lang.org/tools/install)):
+3. Run the API:
 
 ```bash
 # This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
+# if you are on mac, use "cargo build --release --features metal" to leverage M series acceleration
 cargo build --release
 ./target/release/pipe
 
-# if you are on mac, use "cargo build --release --features metal" to leverage M series acceleration
 
 # or only stream audio + speech to text to stdout
 ./target/release/pipe-audio
@@ -125,8 +122,6 @@ cargo build --release
 # or only record mp4 videos + json containing ocr
 ./target/release/pipe-video
 ```
-
-PS: in dev mode it's like 1000x slower (`cargo run --bin screenpipe-server`)
 
 <details>
   <summary>Examples to query the API</summary>
@@ -214,3 +209,11 @@ This is a very quick & dirty example of the end goal that works in a few lines o
 https://github.com/louis030195/screen-to-crm
 
 Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Although screenpipe is going in a different direction.
+
+## FAQ
+
+Where is the data stored?
+
+- 100% of the data stay local in a SQLite database and mp4 files
+- if you use an LLM like OpenAI, part of your data will be sent to Microsoft servers, you can use a local LLM like [Chrome AI](https://sdk.vercel.ai/providers/community-providers/chrome-ai)
+
