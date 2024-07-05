@@ -86,7 +86,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Uses 2x less energy tha
 curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
 ```
 
-Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `./local/bin`)
+Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `$HOME/.local/bin`)
 
 ### MacOS
 
