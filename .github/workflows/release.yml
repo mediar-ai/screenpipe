@@ -37,9 +37,10 @@ jobs:
           profile: minimal
           override: true
 
-      - name: Build
+      - name: Build with RPATH
         run: |
           export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
+          export RUSTFLAGS="-C link-arg=-Wl,-rpath,\$ORIGIN/lib"
           cargo build --release
 
       - name: Copy FFmpeg libraries
@@ -50,6 +51,10 @@ jobs:
           cp /usr/lib/x86_64-linux-gnu/libavutil.so* target/release/lib/
           cp /usr/lib/x86_64-linux-gnu/libswresample.so* target/release/lib/
           cp /usr/lib/x86_64-linux-gnu/libswscale.so* target/release/lib/
+
+      - name: Verify RPATH
+        run: |
+          chrpath -l target/release/pipe
 
       - name: Set RPATH
         run: |
