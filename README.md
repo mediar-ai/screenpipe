@@ -65,7 +65,7 @@ https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3
 
 ## Status 
 
-Alpha: runs on my computer (`Macbook pro m3 32 GB ram`).
+Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Uses 2x less energy than `Rewind.ai`
 
 - [x] screenshots
 - [x] mp4 encoding to disk (30 GB / month)
