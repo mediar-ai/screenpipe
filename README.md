@@ -63,6 +63,11 @@ Check this example of screenpipe
 
 https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3fe-f34479fdc45e
 
+## Data privacy
+
+- 100% of the data stay local in a SQLite database and mp4 files
+- if you use an LLM like OpenAI, part of your data will be sent to Microsoft servers, you can use a local LLM like [Chrome AI](https://sdk.vercel.ai/providers/community-providers/chrome-ai)
+
 ## Status 
 
 Alpha: runs on my computer (`Macbook pro m3 32 GB ram`).
@@ -163,6 +168,8 @@ Now pipe this into a LLM to build:
 - automatic summaries
 - automatic action triggers (say every time you see a dog, send a tweet)
 - automatic CRM (fill salesforce while you spam ppl on linkedin)
+
+Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
 We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
 
