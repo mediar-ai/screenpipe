@@ -46,4 +46,31 @@ else
     chmod +x $HOME/.local/bin/screenpipe
 fi
 
-echo "screenpipe installed successfully! Please add $HOME/.local/bin to your PATH if it's not already included."
+echo "screenpipe installed successfully!"
+
+# Ask user if they want to add the directory to PATH
+printf "Do you want to add $HOME/.local/bin to your PATH? (y/n): "
+read add_to_path
+
+if [ "$add_to_path" = "y" ] || [ "$add_to_path" = "Y" ]; then
+    # Determine the shell configuration file
+    if [ -n "$BASH_VERSION" ]; then
+        config_file="$HOME/.bashrc"
+    elif [ -n "$ZSH_VERSION" ]; then
+        config_file="$HOME/.zshrc"
+    else
+        echo "Unsupported shell. Please add the following line to your shell configuration file manually:"
+        echo "export PATH=\"\$HOME/.local/bin:\$PATH\""
+        exit 0
+    fi
+
+    # Add the PATH modification to the shell configuration file
+    echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$config_file"
+    echo "Added $HOME/.local/bin to your PATH in $config_file"
+    echo "Please run 'source $config_file' or start a new terminal session for the changes to take effect."
+else
+    echo "If you want to add screenpipe to your PATH later, add the following line to your shell configuration file:"
+    echo "export PATH=\"\$HOME/.local/bin:\$PATH\""
+fi
+
+echo "Installation complete!"
