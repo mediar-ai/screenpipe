@@ -328,9 +328,6 @@ fn get_ffmpeg_path() -> PathBuf {
         let ffmpeg_path = resources_path.join("ffmpeg");
         // if not present, add a warning to the user
         if !ffmpeg_path.exists() {
-            warn!(
-                "FFmpeg not found in resources, defaulting to ffmpeg you probably installed with `brew install ffmpeg`. In production you should use statically linked ffmpeg."
-            );
             // and just use ffmpeg from path
             PathBuf::from("ffmpeg")
         } else {
