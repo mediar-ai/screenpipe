@@ -128,6 +128,12 @@ cargo build --release
 ./target/release/pipe-video
 ```
 
+Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
+
+We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
+
+### What's next?
+
 <details>
   <summary>Examples to query the API</summary>
   
@@ -169,9 +175,6 @@ Now pipe this into a LLM to build:
 - automatic action triggers (say every time you see a dog, send a tweet)
 - automatic CRM (fill salesforce while you spam ppl on linkedin)
 
-Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
-
-We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
 
 [Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
 
