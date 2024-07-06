@@ -58,6 +58,10 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 
 Keep in mind that it's still experimental.
 
+### Windows
+
+TBD. Own a Windows computer? [Please help us test it!](https://github.com/louis030195/screen-pipe/issues/6).
+
 ### Linux
 
 ```bash
