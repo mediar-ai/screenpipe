@@ -22,42 +22,6 @@ screenpipe is a library that allows you to gather all your life context and conn
 - automation (such as making actions on the web while you work, syncing company's knowledge, etc.)
 - etc.
 
-<!--
-
-## Screen to action using LLMs
-Here's an example of server-side code written in TypeScript that takes the streamed data from ScreenPipe and uses a Large Language Model like OpenAI's to process text and images for analyzing sales conversations:
-
-```typescript
-import { ScreenPipe } from "screenpipe";
-import { generateObject } from 'ai';
-import { z } from 'zod';
-
-const screenPipe = new ScreenPipe();
-
-export async function onTick() {
-  const data = await screenPipe.tick([1], {frames: 60}); // or screen [1, 2, 3, ...]
-  // [{frame: [...], text: [...], metadata: [...]}, ...]
-
-  const { object } = await generateObject({
-    model: openai("gpt4-o"),
-    schema: z.object({
-      leads: z.array(z.object({
-        name: z.string(),
-        company: z.string(),
-        role: z.string(),
-        status: z.string(),
-        messages: z.array(z.string()),
-      }),
-    })),
-    prompt: "Fill salesforce CRM based on Bob's sales activity (this is what appeared on his screen): " +
-     data.map((frame) => frame.text).join("\n"),
-  });
-
-  // Add to Salesforce API ...
-}
-```
-
--->
 
 ## Example vercel/ai-chatbot that query screenpipe autonomously
 
@@ -67,19 +31,21 @@ https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3
 
 ## Status 
 
-Alpha: runs on my computer (`Macbook pro m3 32 GB ram`). Uses 2x less energy than `Rewind.ai`
+Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 
 - [x] screenshots
 - [x] mp4 encoding to disk (30 GB / month)
 - [x] sqlite local db
 - [x] OCR
 - [x] audio + stt
-- [x] api
+- [x] local api
 - [ ] TS SDK
-- [ ] cloud storage options (s3, pqsql, etc.)
+- [ ] cloud storage options (s3, pgsql, etc.)
 - [ ] cloud computing options
-- [ ] fast, optimised
-- [ ] bug-free 
+- [ ] bug-free & stable
+- [ ] storage efficient modes: customizable capture settings (fps, resolution)
+- [ ] data encryption options & higher security
+- [ ] fast, optimised, energy-efficient modes
 
 ## Usage
 
@@ -209,8 +175,39 @@ Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Althou
 
 ## FAQ
 
-Where is the data stored?
+<details>
+  <summary>What's the difference with adept.ai and rewind.ai?</summary>
 
-- 100% of the data stay local in a SQLite database and mp4 files
-- if you use an LLM like OpenAI, part of your data will be sent to Microsoft servers, you can use a local LLM like [Chrome AI](https://sdk.vercel.ai/providers/community-providers/chrome-ai)
+  - adept.ai is closed product, focused on automation while we are open and focused on enabling tooling & infra for a wide range of applications like adept 
+  - rewind.ai is closed product, focused on a single use case (they only focus on meetings now), not customisable, your data is owned by them, and not extendable by developers 
 
+</details>
+
+<details>
+  <summary>Where is the data stored?</summary>
+  
+  - 100% of the data stay local in a SQLite database and mp4 files
+  - If you use an LLM like OpenAI, part of your data will be sent to Microsoft servers, you can use a local LLM like [Chrome AI](https://sdk.vercel.ai/providers/community-providers/chrome-ai)
+</details>
+
+<details>
+  <summary>How can I customize capture settings to reduce storage and energy usage?</summary>
+  
+  - You can adjust frame rates and resolution in the configuration. Lower values will reduce storage and energy consumption. We're working on making this more user-friendly in future updates.
+</details>
+
+<details>
+  <summary>Is my data secure?</summary>
+  
+  - Your data is stored locally by default. We're actively working on implementing encryption options for enhanced security.
+</details>
+
+<details>
+  <summary>What are some practical use cases for screenpipe?</summary>
+  
+  - Personal knowledge management
+  - Automated task logging and time tracking
+  - Context-aware AI assistants for improved productivity
+  - Seamless data entry into CRM systems
+  - We're constantly exploring new use cases and welcome community input!
+</details>
