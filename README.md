@@ -94,8 +94,12 @@ cd screen-pipe
 ```bash
 # This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
 cargo build --release --features metal # remove "--features metal" if you do not have M series processor
-./target/release/pipe
 
+# sign the executable to avoid mac killing the process when it's running for too long
+codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime ./target/release/pipe
+
+# then run it
+./target/release/pipe
 
 # or only stream audio + speech to text to stdout
 ./target/release/pipe-audio
