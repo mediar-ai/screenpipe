@@ -134,7 +134,9 @@ Now pipe this into a LLM to build:
 - memory extension apps
 - automatic summaries
 - automatic action triggers (say every time you see a dog, send a tweet)
-- automatic CRM (fill salesforce while you spam ppl on linkedin)
+- automatic CRM (fill salesforce while you do sales on linkedin)
+- sync your local pkm with company's pkm (obsidian to notion for example)
+- maintain cheatsheets of your customers relationships formatted as markdown table in notion
 
 
 [Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
