@@ -62,6 +62,9 @@ env_logger = "0.10"
 # Cli ! shouldn't be required if using as lib
 clap = { version = "4.3", features = ["derive"] }
 
+# Memory watchdog
+sysinfo = "0.29.0"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 

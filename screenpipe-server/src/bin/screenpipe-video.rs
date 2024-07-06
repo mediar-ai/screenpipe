@@ -30,7 +30,7 @@ fn main() {
     let fps = 10.0;
 
     let new_chunk_callback = {
-        move |file_path: String| {
+        move |file_path: &str| {
             info!("New chunk: {}", file_path);
         }
     };

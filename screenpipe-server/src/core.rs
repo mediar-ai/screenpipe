@@ -2,13 +2,15 @@ use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
 use log::{debug, error, info};
-use screenpipe_audio::{continuous_audio_capture, save_audio_to_file, ControlMessage};
+use screenpipe_audio::{
+    continuous_audio_capture, save_audio_to_file, ControlMessage as AudioControlMessage,
+};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::runtime::Runtime;
-
 pub enum RecorderControl {
     Pause,
     Resume,
@@ -17,7 +19,7 @@ pub enum RecorderControl {
 
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
-    output_path: &str,
+    output_path: Arc<String>,
     fps: f64,
     audio_chunk_duration: Duration,
     control_rx: Receiver<RecorderControl>,
@@ -31,159 +33,138 @@ pub async fn start_continuous_recording(
     let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);
 
-    let new_chunk_callback = move |file_path: String| {
-        let db_manager = Arc::clone(&db);
-        let rt = Runtime::new().expect("Failed to create runtime");
-        if let Err(e) = rt.block_on(db_manager.insert_video_chunk(&file_path)) {
-            error!("Failed to insert new video chunk: {}", e);
-        }
-    };
-    let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback);
-    let control_rx = Arc::new(Mutex::new(control_rx));
-    let control_rx_video = Arc::clone(&control_rx);
-    let control_rx_audio = Arc::clone(&control_rx);
+    let is_running = Arc::new(AtomicBool::new(true));
+    let is_running_video = Arc::clone(&is_running);
+    let is_running_audio = Arc::clone(&is_running);
 
-    let video_thread = thread::spawn(move || {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let _ = runtime.block_on(async {
-            info!("Starting video capture thread");
-            let mut is_paused = false;
-            loop {
-                match control_rx_video.lock().unwrap().try_recv() {
-                    Ok(RecorderControl::Pause) => {
-                        info!("Pausing video capture");
-                        is_paused = true;
-                    }
-                    Ok(RecorderControl::Resume) => {
-                        info!("Resuming video capture");
-                        is_paused = false;
-                    }
-                    Ok(RecorderControl::Stop) => {
-                        info!("Stopping video capture");
-                        break;
-                    }
-                    Err(_) => {}
-                }
+    let output_path_video = Arc::clone(&output_path);
+    let output_path_audio = Arc::clone(&output_path);
 
-                if !is_paused {
-                    if let Some(frame) = video_capture.get_latest_frame() {
-                        match db_manager_video.insert_frame().await {
-                            Ok(frame_id) => {
-                                if let Err(e) = db_manager_video
-                                    .insert_ocr_text(frame_id, &frame.text)
-                                    .await
-                                {
-                                    error!("Failed to insert OCR text: {}", e);
-                                    return Err(e.into());
-                                }
-                                debug!("Inserted frame {} with OCR text", frame_id);
-                            }
-                            Err(e) => {
-                                error!("Failed to insert frame: {}", e);
-                                return Err(e.into());
-                            }
-                        }
-                    }
-                }
-                tokio::time::sleep(Duration::from_secs_f64(1.0 / fps)).await;
-            }
-            Ok::<_, anyhow::Error>(())
-        });
+    let video_handle = tokio::spawn(async move {
+        record_video(db_manager_video, output_path_video, fps, is_running_video).await
     });
 
-    if enable_audio {
-        let (audio_control_tx, audio_control_rx) = mpsc::channel();
-        let (audio_result_tx, audio_result_rx) = mpsc::channel();
-
-        let audio_thread = thread::spawn(move || {
-            info!("Starting audio capture thread");
-            continuous_audio_capture(audio_control_rx, audio_result_tx, audio_chunk_duration)
+    let audio_handle = if enable_audio {
+        let handle = tokio::spawn(async move {
+            record_audio(
+                db_manager_audio,
+                output_path_audio,
+                audio_chunk_duration,
+                is_running_audio,
+            )
+            .await
         });
-
-        let output_path_clone = output_path.to_string();
-
-        let audio_processing_thread = thread::spawn(move || {
-            let runtime = tokio::runtime::Runtime::new().unwrap();
-            let _ = runtime.block_on(async {
-                info!("Starting audio processing thread");
-                let mut is_paused = false;
-                loop {
-                    match control_rx_audio.lock().unwrap().try_recv() {
-                        Ok(RecorderControl::Pause) => {
-                            info!("Pausing audio processing");
-                            is_paused = true;
-                        }
-                        Ok(RecorderControl::Resume) => {
-                            info!("Resuming audio processing");
-                            is_paused = false;
-                        }
-                        Ok(RecorderControl::Stop) => {
-                            info!("Stopping audio processing");
-                            break;
-                        }
-                        Err(_) => {}
-                    }
-
-                    if !is_paused {
-                        match audio_result_rx.recv() {
-                            Ok(result) => {
-                                info!("Received audio chunk, processing...");
-                                info!("Audio chunk size: {}", result.audio.len());
-                                let time = Utc::now();
-                                let file_path = format!("{}/{}.wav", output_path_clone, time);
-                                info!("Saving audio chunk to {}", file_path);
-                                match save_audio_to_file(&result.audio, &file_path) {
-                                    Ok(_) => info!("Successfully saved audio file"),
-                                    Err(e) => error!("Failed to save audio file: {}", e),
-                                }
-
-                                match db_manager_audio.insert_audio_chunk(&file_path).await {
-                                    Ok(audio_chunk_id) => {
-                                        debug!("Inserted audio chunk with id: {}", audio_chunk_id);
-                                        if let Err(e) = db_manager_audio
-                                            .insert_audio_transcription(
-                                                audio_chunk_id,
-                                                &result.text,
-                                                0,
-                                            )
-                                            .await
-                                        // TODO offset
-                                        {
-                                            error!("Failed to insert audio transcription: {}", e);
-                                        } else {
-                                            debug!(
-                                                "Inserted audio transcription for chunk {}",
-                                                audio_chunk_id
-                                            );
-                                        }
-                                    }
-                                    Err(e) => error!("Failed to insert audio chunk: {}", e),
-                                }
-                            }
-                            Err(e) => {
-                                error!("Failed to receive audio chunk: {}", e);
-                                // should terminate the thread
-                                break;
-                            }
-                        }
-                    }
-                }
-                Ok::<_, anyhow::Error>(())
-            });
-        });
-
-        // Wait for threads to finish
-        info!("Waiting for threads to finish");
-        video_thread.join().unwrap();
-        audio_processing_thread.join().unwrap();
-        audio_control_tx.send(ControlMessage::Stop).unwrap();
-        let _ = audio_thread.join().unwrap();
+        Some(handle)
     } else {
-        // Only wait for video thread if audio is disabled
-        info!("Waiting for video thread to finish");
-        video_thread.join().unwrap();
+        None
+    };
+
+    // Control loop
+    tokio::spawn(async move {
+        while let Ok(ctrl) = control_rx.recv() {
+            match ctrl {
+                RecorderControl::Stop => {
+                    is_running.store(false, Ordering::SeqCst);
+                    break;
+                }
+                _ => {} // Handle Pause and Resume if needed
+            }
+        }
+    });
+
+    video_handle.await??;
+    if let Some(handle) = audio_handle {
+        handle.await??;
     }
 
     info!("Continuous recording stopped");
+    Ok(())
+}
+
+async fn record_video(
+    db: Arc<DatabaseManager>,
+    output_path: Arc<String>,
+    fps: f64,
+    is_running: Arc<AtomicBool>,
+) -> Result<()> {
+    let db_chunk_callback = Arc::clone(&db);
+    let new_chunk_callback = move |file_path: &str| {
+        let rt = Runtime::new().expect("Failed to create runtime");
+        if let Err(e) = rt.block_on(db_chunk_callback.insert_video_chunk(file_path)) {
+            error!("Failed to insert new video chunk: {}", e);
+        }
+    };
+
+    let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback);
+
+    while is_running.load(Ordering::SeqCst) {
+        if let Some(frame) = video_capture.get_latest_frame() {
+            match db.insert_frame().await {
+                Ok(frame_id) => {
+                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text).await {
+                        error!("Failed to insert OCR text: {}", e);
+                    }
+                    debug!("Inserted frame {} with OCR text", frame_id);
+                }
+                Err(e) => {
+                    error!("Failed to insert frame: {}", e);
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs_f64(1.0 / fps)).await;
+    }
+
+    video_capture.stop();
+    Ok(())
+}
+
+async fn record_audio(
+    db: Arc<DatabaseManager>,
+    output_path: Arc<String>,
+    chunk_duration: Duration,
+    is_running: Arc<AtomicBool>,
+) -> Result<()> {
+    let (audio_control_tx, audio_control_rx) = mpsc::channel();
+    let (audio_result_tx, audio_result_rx) = mpsc::channel();
+
+    let audio_thread = thread::spawn(move || {
+        info!("Starting audio capture thread");
+        continuous_audio_capture(audio_control_rx, audio_result_tx, chunk_duration)
+    });
+
+    while is_running.load(Ordering::SeqCst) {
+        match audio_result_rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(result) => {
+                let time = Utc::now();
+                let file_path = format!("{}/{}.wav", output_path, time);
+                if let Err(e) = save_audio_to_file(&result.audio, &file_path) {
+                    error!("Failed to save audio file: {}", e);
+                    continue;
+                }
+
+                match db.insert_audio_chunk(&file_path).await {
+                    Ok(audio_chunk_id) => {
+                        if let Err(e) = db
+                            .insert_audio_transcription(audio_chunk_id, &result.text, 0)
+                            .await
+                        {
+                            error!("Failed to insert audio transcription: {}", e);
+                        } else {
+                            debug!("Inserted audio transcription for chunk {}", audio_chunk_id);
+                        }
+                    }
+                    Err(e) => error!("Failed to insert audio chunk: {}", e),
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(e) => {
+                error!("Failed to receive audio chunk: {}", e);
+                break;
+            }
+        }
+    }
+
+    audio_control_tx.send(AudioControlMessage::Stop).unwrap();
+    let _ = audio_thread.join().expect("Failed to join audio thread");
     Ok(())
 }

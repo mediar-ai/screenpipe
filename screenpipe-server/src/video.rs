@@ -126,7 +126,7 @@ impl VideoCapture {
     pub fn new(
         output_path: &str,
         fps: f64,
-        new_chunk_callback: impl Fn(String) + Send + Sync + 'static,
+        new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
     ) -> Self {
         info!("Starting new video capture");
         let (control_tx, control_rx) = channel();
@@ -204,7 +204,7 @@ fn save_frames_as_video(
     output_path: &str,
     fps: f64,
     is_running: Arc<Mutex<bool>>,
-    new_chunk_callback: &dyn Fn(String),
+    new_chunk_callback: &dyn Fn(&str),
 ) {
     let frames_per_video = 30; // Adjust this value as needed
     let mut frame_count = 0;
@@ -213,7 +213,7 @@ fn save_frames_as_video(
     let pool_size = std::cmp::min(pool_size, MAX_THREADS);
     let pool = ThreadPool::new(pool_size);
     let (sender, receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-
+    let sender = Arc::new(sender);
     let mut current_ffmpeg: Option<std::process::Child> = None;
     let mut current_stdin: Option<std::process::ChildStdin> = None;
 
@@ -244,7 +244,7 @@ fn save_frames_as_video(
             // Start new FFmpeg process with a new output file
             let output_file = format!("{}/{}.mp4", output_path, time);
             // Call the callback with the new video chunk file path
-            new_chunk_callback(output_file.clone()); // TODO better error handling
+            new_chunk_callback(&output_file); // TODO better error handling
 
             let mut child = start_ffmpeg_process(&output_file, fps);
             let mut stdin = child.stdin.take().expect("Failed to open stdin");
@@ -271,7 +271,7 @@ fn save_frames_as_video(
         }
 
         if let Some(result) = frame_queue.lock().unwrap().pop_front() {
-            let sender = sender.clone();
+            let sender = Arc::clone(&sender);
             pool.execute(move || {
                 let mut buffer = Vec::new();
                 match result
