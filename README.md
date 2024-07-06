@@ -82,8 +82,7 @@ cd screen-pipe
 
 ```bash
 # This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
-# if you are on mac, use "cargo build --release --features metal" to leverage M series acceleration
-cargo build --release
+cargo build --release --features metal # remove "--features metal" if you do not have M series processor
 ./target/release/pipe
 
 
