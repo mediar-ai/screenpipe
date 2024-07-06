@@ -1,15 +1,22 @@
 
 <p align="center">
-    <br>
-       <img src="https://github.com/louis030195/screen-pipe/assets/25003283/289bbee7-79bb-4251-9516-878a1c40dcd0" width="200"/>
-    <br>
-<p>
+    <img src="https://github.com/louis030195/screen-pipe/assets/25003283/289bbee7-79bb-4251-9516-878a1c40dcd0" width="200"/>
+</p>
+
+<p align="center">
+    <a href="https://screenpi.pe" target="_blank">
+        <img src="https://img.shields.io/badge/Join%20Waitlist-Desktop%20App-blue?style=for-the-badge" alt="Join Waitlist for Desktop App">
+    </a>
+</p>
+
 <p align="center">
     <a href="https://www.bensbites.com/">
-      <img src="https://img.shields.io/badge/Featured%20on-Ben's%20Bites-blue" alt="Featured on Ben's Bites">
+        <img src="https://img.shields.io/badge/Featured%20on-Ben's%20Bites-blue?style=flat-square" alt="Featured on Ben's Bites">
     </a>
-    <a href="https://discord.gg/dU9EBuw7Uq"><img alt="Join us on Discord" src="https://img.shields.io/discord/823813159592001537?color=5865F2&logo=discord&logoColor=white"></a>
-    <a href="https://twitter.com/screen_pipe"><img alt="X account" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe"></a>
+    <a href="https://discord.gg/dU9EBuw7Uq">
+        <img src="https://img.shields.io/discord/823813159592001537?color=5865F2&logo=discord&logoColor=white&style=flat-square" alt="Join us on Discord">
+    </a>
+        <a href="https://twitter.com/screen_pipe"><img alt="X account" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe"></a>
 </p>
 
 > Civilization progresses by the number of operations it can perform without conscious effort.  
