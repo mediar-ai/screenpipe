@@ -137,6 +137,7 @@ Now pipe this into a LLM to build:
 - automatic CRM (fill salesforce while you do sales on linkedin)
 - sync your local pkm with company's pkm (obsidian to notion for example)
 - maintain cheatsheets of your customers relationships formatted as markdown table in notion
+- dating app that make AI agents talk with millions of other potential mates acting like you and scheduling you weekly dates
 
 
 [Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
