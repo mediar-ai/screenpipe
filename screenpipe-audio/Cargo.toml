@@ -20,6 +20,9 @@ cpal = "0.15.2"
 # Wav encoding
 hound = "3.5"
 
+# Cli ! shouldn't be required if using as lib
+clap = { version = "4.3", features = ["derive"] }
+
 # Dates
 chrono = { version = "0.4.31", features = ["serde"] }
 

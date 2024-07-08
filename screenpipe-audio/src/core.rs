@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::WavWriter;
-use log::{error, info};
+use log::{debug, error, info};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -15,19 +15,32 @@ pub struct CaptureResult {
 }
 
 pub fn continuous_audio_capture(
+    device_name: Option<String>,
     control_rx: Receiver<ControlMessage>,
     result_tx: Sender<CaptureResult>,
     chunk_duration: Duration,
 ) -> Result<()> {
     let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .expect("No input device available");
+    let device = match device_name {
+        Some(name) => host
+            .devices()?
+            .find(|d| d.name().map(|n| n == name).unwrap_or(false))
+            .ok_or_else(|| anyhow::anyhow!("Specified device '{}' not found", name))?,
+        None => host
+            .default_input_device()
+            .ok_or_else(|| anyhow::anyhow!("No default input device available"))?,
+    };
+
     let config = device.default_input_config()?;
 
     let sample_rate = config.sample_rate().0;
     let channels = config.channels() as usize;
-    info!("Sample rate: {}, Channels: {}", sample_rate, channels);
+    info!(
+        "Sample rate: {}, Channels: {}, Device: {}",
+        sample_rate,
+        channels,
+        device.name().unwrap()
+    );
 
     let audio_buffer = Arc::new(Mutex::new(Vec::new()));
     let audio_buffer_clone = audio_buffer.clone();
@@ -103,7 +116,7 @@ pub fn continuous_audio_capture(
                 std::fs::remove_file(temp_file)?;
 
                 info!("Transcription: {}", transcription);
-                info!("Chunk size: {:?}", chunk.len());
+                debug!("Chunk size: {:?}", chunk.len());
 
                 result_tx.send(CaptureResult {
                     audio: chunk,

@@ -24,6 +24,7 @@ pub async fn start_continuous_recording(
     audio_chunk_duration: Duration,
     control_rx: Receiver<RecorderControl>,
     enable_audio: bool,
+    audio_devices: Vec<Arc<String>>,
 ) -> Result<()> {
     info!("Starting continuous recording");
     if !enable_audio {
@@ -51,6 +52,7 @@ pub async fn start_continuous_recording(
                 output_path_audio,
                 audio_chunk_duration,
                 is_running_audio,
+                audio_devices,
             )
             .await
         });
@@ -123,48 +125,91 @@ async fn record_audio(
     output_path: Arc<String>,
     chunk_duration: Duration,
     is_running: Arc<AtomicBool>,
+    devices: Vec<Arc<String>>,
 ) -> Result<()> {
-    let (audio_control_tx, audio_control_rx) = mpsc::channel();
-    let (audio_result_tx, audio_result_rx) = mpsc::channel();
+    let mut handles = vec![];
 
-    let audio_thread = thread::spawn(move || {
-        info!("Starting audio capture thread");
-        continuous_audio_capture(audio_control_rx, audio_result_tx, chunk_duration)
-    });
+    for device_name in devices {
+        let db_clone = Arc::clone(&db);
+        let output_path_clone = Arc::clone(&output_path);
+        let is_running_clone = Arc::clone(&is_running);
+        let device_name_clone = Arc::clone(&device_name);
+        let handle = tokio::spawn(async move {
+            let (audio_control_tx, audio_control_rx) = mpsc::channel();
+            let (audio_result_tx, audio_result_rx) = mpsc::channel();
 
-    while is_running.load(Ordering::SeqCst) {
-        match audio_result_rx.recv_timeout(Duration::from_secs(1)) {
-            Ok(result) => {
-                let time = Utc::now();
-                let file_path = format!("{}/{}.wav", output_path, time);
-                if let Err(e) = save_audio_to_file(&result.audio, &file_path) {
-                    error!("Failed to save audio file: {}", e);
-                    continue;
+            let audio_thread = thread::spawn(move || {
+                info!("Starting audio capture thread for device: {}", device_name);
+                if let Err(e) = continuous_audio_capture(
+                    Some(device_name.to_string()),
+                    audio_control_rx,
+                    audio_result_tx,
+                    chunk_duration,
+                ) {
+                    error!("Audio capture failed for device {}: {}", device_name, e);
                 }
+            });
 
-                match db.insert_audio_chunk(&file_path).await {
-                    Ok(audio_chunk_id) => {
-                        if let Err(e) = db
-                            .insert_audio_transcription(audio_chunk_id, &result.text, 0)
-                            .await
-                        {
-                            error!("Failed to insert audio transcription: {}", e);
-                        } else {
-                            debug!("Inserted audio transcription for chunk {}", audio_chunk_id);
+            while is_running_clone.load(Ordering::SeqCst) {
+                match audio_result_rx.recv_timeout(Duration::from_secs(1)) {
+                    Ok(result) => {
+                        let time = Utc::now();
+                        let file_path =
+                            format!("{}/{}_{}.wav", output_path_clone, device_name_clone, time);
+                        if let Err(e) = save_audio_to_file(&result.audio, &file_path) {
+                            error!(
+                                "Failed to save audio file for device {}: {}",
+                                device_name_clone, e
+                            );
+                            continue;
+                        }
+
+                        match db_clone.insert_audio_chunk(&file_path).await {
+                            Ok(audio_chunk_id) => {
+                                if let Err(e) = db_clone
+                                    .insert_audio_transcription(audio_chunk_id, &result.text, 0)
+                                    .await
+                                {
+                                    error!(
+                                        "Failed to insert audio transcription for device {}: {}",
+                                        device_name_clone, e
+                                    );
+                                } else {
+                                    debug!(
+                                        "Inserted audio transcription for chunk {} from device {}",
+                                        audio_chunk_id, device_name_clone
+                                    );
+                                }
+                            }
+                            Err(e) => error!(
+                                "Failed to insert audio chunk for device {}: {}",
+                                device_name_clone, e
+                            ),
                         }
                     }
-                    Err(e) => error!("Failed to insert audio chunk: {}", e),
+                    Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                    Err(e) => {
+                        error!(
+                            "Failed to receive audio chunk for device {}: {}",
+                            device_name_clone, e
+                        );
+                        break;
+                    }
                 }
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => continue,
-            Err(e) => {
-                error!("Failed to receive audio chunk: {}", e);
-                break;
-            }
+
+            audio_control_tx.send(AudioControlMessage::Stop).unwrap();
+            let _ = audio_thread.join().expect("Failed to join audio thread");
+        });
+
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        if let Err(e) = handle.await {
+            error!("Error in audio recording task: {}", e);
         }
     }
 
-    audio_control_tx.send(AudioControlMessage::Stop).unwrap();
-    let _ = audio_thread.join().expect("Failed to join audio thread");
     Ok(())
 }

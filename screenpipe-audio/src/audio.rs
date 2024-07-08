@@ -3,6 +3,9 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::sync::{Arc, Mutex};
 
+use anyhow::Result;
+use cpal::traits::{DeviceTrait, HostTrait};
+
 pub fn wav_spec_from_config(config: &cpal::SupportedStreamConfig) -> hound::WavSpec {
     hound::WavSpec {
         channels: config.channels() as _,
@@ -51,4 +54,13 @@ impl SampleToI16 for u16 {
     fn to_i16(&self) -> i16 {
         (*self as i32 - i16::MAX as i32) as i16
     }
+}
+
+pub fn list_audio_devices() -> Result<Vec<String>> {
+    let host = cpal::default_host();
+    let devices = host
+        .input_devices()?
+        .filter_map(|d| d.name().ok())
+        .collect::<Vec<_>>();
+    Ok(devices)
 }
