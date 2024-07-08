@@ -20,6 +20,9 @@ cpal = "0.15.2"
 # Wav encoding
 hound = "3.5"
 
+# Cli ! shouldn't be required if using as lib
+clap = { version = "4.3", features = ["derive"] }
+
 # Dates
 chrono = { version = "0.4.31", features = ["serde"] }
 
@@ -41,6 +44,9 @@ rubato = "0.15.0"
 # Log 
 log = { workspace = true }
 env_logger = "0.10"
+
+# File 
+tempfile = "3"
 
 [dev-dependencies]
 tempfile = "3.3.0"

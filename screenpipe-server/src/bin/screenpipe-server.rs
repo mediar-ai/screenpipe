@@ -7,8 +7,8 @@ use std::{
 
 use clap::Parser;
 use log::{info, LevelFilter};
-
-use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
+use screenpipe_audio::{list_audio_devices, parse_device_spec};
+use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server}; // Import the list_audio_devices function
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -36,6 +36,14 @@ struct Cli {
     /// Runtime threshold for restart (in minutes)
     #[arg(long, default_value_t = 60)]
     runtime_threshold: u64,
+
+    /// Audio devices to use (can be specified multiple times)
+    #[arg(long)]
+    audio_device: Vec<String>,
+
+    /// List available audio devices
+    #[arg(long)]
+    list_audio_devices: bool,
 }
 
 #[tokio::main]
@@ -43,14 +51,56 @@ async fn main() -> anyhow::Result<()> {
     // Initialize logging
     let cli = Cli::parse();
 
-    ResourceMonitor::new(cli.memory_threshold, cli.runtime_threshold)
-        .start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
-
     env_logger::Builder::new()
         .filter(None, LevelFilter::Info)
         .filter_module("tokenizers", LevelFilter::Error)
         .filter_module("rusty_tesseract", LevelFilter::Error)
         .init();
+
+    if cli.list_audio_devices {
+        let devices = list_audio_devices()?;
+        println!("Available audio devices:");
+        for (i, device) in devices.iter().enumerate() {
+            println!("  {}. {}", i + 1, device);
+        }
+        return Ok(());
+    }
+
+    let mut audio_devices = Vec::new();
+
+    if !cli.disable_audio && cli.audio_device.is_empty() {
+        let devices = list_audio_devices()?;
+        eprintln!("No audio devices specified. Available devices are:");
+        for (i, device) in devices.iter().enumerate() {
+            eprintln!("  {}. {}", i + 1, device);
+        }
+        eprintln!("\nPlease specify one or more devices with:");
+        eprintln!(
+            "  {} --audio-device \"Device Name (input)\" [--audio-device \"Another Device (output)\"]",
+            std::env::args().next().unwrap()
+        );
+        return Err(anyhow::anyhow!("No audio devices specified"));
+    } else {
+        // if audio device contains (output) throw error say not implemented yet and link to https://github.com/louis030195/screen-pipe/issues/24
+        cli.audio_device.iter().for_each(|d| {
+            if d.contains("(output)") {
+                eprintln!("Output audio devices are not supported yet.");
+                eprintln!(
+                    "Please help on this issue at https://github.com/louis030195/screen-pipe/issues/24"
+                );
+                std::process::exit(1);
+            }
+        });
+
+        cli.audio_device.iter().for_each(|d| {
+            audio_devices.push(Arc::new(
+                parse_device_spec(d).expect("Failed to parse audio device specification"),
+            ))
+        });
+    }
+
+    ResourceMonitor::new(cli.memory_threshold, cli.runtime_threshold)
+        .start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
 
     let local_data_dir = Arc::new(ensure_local_data_dir()?);
     let local_data_dir_record = local_data_dir.clone();
@@ -77,6 +127,7 @@ async fn main() -> anyhow::Result<()> {
                 audio_chunk_duration,
                 control_rx,
                 !cli.disable_audio,
+                audio_devices,
             )
             .await
         }

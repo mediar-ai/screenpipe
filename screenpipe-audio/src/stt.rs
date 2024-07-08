@@ -1,5 +1,5 @@
 use anyhow::{Error as E, Result};
-use candle::{Device, IndexOp, Tensor};
+use candle::{Device, IndexOp, Tensor, D};
 use candle_nn::ops::softmax;
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{error, info};
@@ -11,16 +11,13 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
-use crate::pcm_decode::pcm_decode;
-
-// TODO: improve model loading strategy
+use crate::{multilingual, pcm_decode::pcm_decode};
 
 pub enum Model {
     Normal(m::model::Whisper),
     Quantized(m::quantized_model::Whisper),
 }
 
-// Maybe we should use some traits rather than doing the dispatch for all these.
 impl Model {
     pub fn config(&self) -> &Config {
         match self {
@@ -56,7 +53,6 @@ impl Model {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct DecodingResult {
     tokens: Vec<u32>,
@@ -67,7 +63,6 @@ struct DecodingResult {
     compression_ratio: f64,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct Segment {
     start: f64,
@@ -105,8 +100,6 @@ impl Decoder {
         verbose: bool,
     ) -> Result<Self> {
         let no_timestamps_token = token_id(&tokenizer, m::NO_TIMESTAMPS_TOKEN)?;
-        // Suppress the notimestamps token when in timestamps mode.
-        // https://github.com/openai/whisper/blob/e8622f9afc4eba139bf796c210f5c01081000472/whisper/decoding.py#L452
         let suppress_tokens: Vec<f32> = (0..model.config().vocab_size as u32)
             .map(|i| {
                 if model.config().suppress_tokens.contains(&i)
@@ -155,7 +148,6 @@ impl Decoder {
             info!("audio features: {:?}", audio_features.dims());
         }
         let sample_len = model.config().max_target_positions / 2;
-        let mut sum_logprob = 0f64;
         let mut no_speech_prob = f64::NAN;
         let mut tokens = vec![self.sot_token];
         if let Some(language_token) = self.language_token {
@@ -168,16 +160,15 @@ impl Decoder {
         if !self.timestamps {
             tokens.push(self.no_timestamps_token);
         }
+
+        let mut sum_logprob = 0f64;
+        let mut last_token_was_timestamp = false;
+
         for i in 0..sample_len {
             let tokens_t = Tensor::new(tokens.as_slice(), mel.device())?;
-
-            // The model expects a batch dim but this inference loop does not handle
-            // it so we add it at this point.
             let tokens_t = tokens_t.unsqueeze(0)?;
             let ys = model.decoder_forward(&tokens_t, &audio_features, i == 0)?;
 
-            // Extract the no speech probability on the first iteration by looking at the first
-            // token logits and the probability for the according token.
             if i == 0 {
                 let logits = model.decoder_final_linear(&ys.i(..1)?)?.i(0)?.i(0)?;
                 no_speech_prob = softmax(&logits, 0)?
@@ -190,14 +181,16 @@ impl Decoder {
                 .decoder_final_linear(&ys.i((..1, seq_len - 1..))?)?
                 .i(0)?
                 .i(0)?;
-            // TODO: Besides suppress tokens, we should apply the heuristics from
-            // ApplyTimestampRules, i.e.:
-            // - Timestamps come in pairs, except before EOT.
-            // - Timestamps should be non-decreasing.
-            // - If the sum of the probabilities of timestamps is higher than any other tokens,
-            //   only consider timestamps when sampling.
-            // https://github.com/openai/whisper/blob/e8622f9afc4eba139bf796c210f5c01081000472/whisper/decoding.py#L439
+
             let logits = logits.broadcast_add(&self.suppress_tokens)?;
+
+            let logits = if last_token_was_timestamp {
+                let mask = Tensor::zeros_like(&logits)?;
+                let eot_mask = mask.get(self.eot_token as usize)?;
+                logits.broadcast_add(&eot_mask)?
+            } else {
+                logits
+            };
             let next_token = if t > 0f64 {
                 let prs = softmax(&(&logits / t)?, 0)?;
                 let logits_v: Vec<f32> = prs.to_vec1()?;
@@ -212,15 +205,21 @@ impl Decoder {
                     .map(|(i, _)| i as u32)
                     .unwrap()
             };
+
             tokens.push(next_token);
             let prob = softmax(&logits, candle::D::Minus1)?
                 .i(next_token as usize)?
                 .to_scalar::<f32>()? as f64;
+
+            sum_logprob += prob.ln();
+
             if next_token == self.eot_token || tokens.len() > model.config().max_target_positions {
                 break;
             }
-            sum_logprob += prob.ln();
+
+            last_token_was_timestamp = next_token > self.no_timestamps_token;
         }
+
         let text = self.tokenizer.decode(&tokens, true).map_err(E::msg)?;
         let avg_logprob = sum_logprob / tokens.len() as f64;
 
@@ -240,7 +239,6 @@ impl Decoder {
             if i == m::TEMPERATURES.len() - 1 {
                 return dr;
             }
-            // On errors, we try again with a different temperature.
             match dr {
                 Ok(dr) => {
                     let needs_fallback = dr.compression_ratio > m::COMPRESSION_RATIO_THRESHOLD
@@ -290,7 +288,6 @@ impl Decoder {
                     if token == self.sot_token || token == self.eot_token {
                         continue;
                     }
-                    // The no_timestamp_token is the last before the timestamp ones.
                     if token > self.no_timestamps_token {
                         let timestamp_s = (token - self.no_timestamps_token + 1) as f32 / 50.;
                         if !tokens_to_decode.is_empty() {
@@ -348,7 +345,6 @@ enum Task {
 
 pub fn stt(input: &str) -> Result<String> {
     info!("Starting speech to text");
-    // ! hack assuming device on 0 and that everyone wants to use AI accelerator
     let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
     info!("device = {:?}", device);
     let (default_model, default_revision) = ("lmz/candle-whisper", "main");
@@ -381,7 +377,6 @@ pub fn stt(input: &str) -> Result<String> {
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
     let (mut pcm_data, sample_rate) = pcm_decode(input)?;
-    // Resample if necessary
     if sample_rate != m::SAMPLE_RATE as u32 {
         info!(
             "Resampling from {} Hz to {} Hz",
@@ -405,26 +400,22 @@ pub fn stt(input: &str) -> Result<String> {
         weights_filename,
         &device,
     )?;
-    let model = Model::Quantized(m::quantized_model::Whisper::load(&vb, config)?);
-    // info!("detecting language");
-    // TODO: disabled seems slow as fuck
-    // let language_token = Some(multilingual::detect_language(&mut model, &tokenizer, &mel)?);
-    // info!("detected language: {:?}", language_token);
-    info!("Creating decoder");
+    let mut model = Model::Quantized(m::quantized_model::Whisper::load(&vb, config)?);
+    let language_token = Some(multilingual::detect_language(&mut model, &tokenizer, &mel)?);
+    // info!("Creating decoder");
     let mut dc = Decoder::new(
         model,
         tokenizer,
         42,
         &device,
-        // language_token,
-        None,
+        language_token,
         Some(Task::Transcribe),
-        false,
+        true,
         false,
     )?;
     info!("Decoding...");
     let segments = dc.run(&mel)?;
-    info!("Decoding done {:?}", segments);
+    // info!("Decoding done {:?}", segments);
     Ok(segments
         .iter()
         .map(|s| s.dr.text.clone())
@@ -433,7 +424,6 @@ pub fn stt(input: &str) -> Result<String> {
 }
 
 fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
-    info!("Resampling from {} to {}", from_sample_rate, to_sample_rate);
     let params = SincInterpolationParameters {
         sinc_len: 256,
         f_cutoff: 0.95,

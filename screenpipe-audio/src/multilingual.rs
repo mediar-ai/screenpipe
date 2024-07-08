@@ -137,5 +137,6 @@ pub fn detect_language(
         info!("{language}: {p}")
     }
     let language = super::stt::token_id(tokenizer, &format!("<|{}|>", probs[0].0 .0))?;
+    info!("detected language: {:?}", probs[0].0);
     Ok(language)
 }
