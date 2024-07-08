@@ -7,7 +7,7 @@ use std::{
 
 use clap::Parser;
 use log::{info, LevelFilter};
-use screenpipe_audio::list_audio_devices;
+use screenpipe_audio::{list_audio_devices, parse_device_spec};
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server}; // Import the list_audio_devices function
 
 #[derive(Parser)]
@@ -66,6 +66,8 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    let mut audio_devices = Vec::new();
+
     if !cli.disable_audio && cli.audio_device.is_empty() {
         let devices = list_audio_devices()?;
         eprintln!("No audio devices specified. Available devices are:");
@@ -74,10 +76,27 @@ async fn main() -> anyhow::Result<()> {
         }
         eprintln!("\nPlease specify one or more devices with:");
         eprintln!(
-            "  {} --audio-device \"Device Name\" [--audio-device \"Another Device\"]",
+            "  {} --audio-device \"Device Name (input)\" [--audio-device \"Another Device (output)\"]",
             std::env::args().next().unwrap()
         );
         return Err(anyhow::anyhow!("No audio devices specified"));
+    } else {
+        // if audio device contains (output) throw error say not implemented yet and link to https://github.com/louis030195/screen-pipe/issues/24
+        cli.audio_device.iter().for_each(|d| {
+            if d.contains("(output)") {
+                eprintln!("Output audio devices are not supported yet.");
+                eprintln!(
+                    "Please help on this issue at https://github.com/louis030195/screen-pipe/issues/24"
+                );
+                std::process::exit(1);
+            }
+        });
+
+        cli.audio_device.iter().for_each(|d| {
+            audio_devices.push(Arc::new(
+                parse_device_spec(d).expect("Failed to parse audio device specification"),
+            ))
+        });
     }
 
     ResourceMonitor::new(cli.memory_threshold, cli.runtime_threshold)
@@ -108,10 +127,7 @@ async fn main() -> anyhow::Result<()> {
                 audio_chunk_duration,
                 control_rx,
                 !cli.disable_audio,
-                cli.audio_device
-                    .iter()
-                    .map(|d| Arc::new(d.to_string()))
-                    .collect(),
+                audio_devices,
             )
             .await
         }

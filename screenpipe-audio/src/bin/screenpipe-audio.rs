@@ -4,6 +4,8 @@ use cpal::traits::{DeviceTrait, HostTrait};
 use log::info;
 use screenpipe_audio::continuous_audio_capture;
 use screenpipe_audio::list_audio_devices;
+use screenpipe_audio::parse_device_spec;
+use screenpipe_audio::AudioDevice;
 use std::thread;
 use std::time::Duration;
 
@@ -17,8 +19,8 @@ struct Args {
     list_devices: bool,
 }
 
-fn print_devices(devices: &[String]) {
-    println!("Available input devices:");
+fn print_devices(devices: &[AudioDevice]) {
+    println!("Available audio devices:");
     for (i, device) in devices.iter().enumerate() {
         println!("  {}. {}", i + 1, device);
     }
@@ -44,16 +46,16 @@ fn main() -> Result<()> {
     }
 
     let device = match args.device {
-        Some(d) => d,
+        Some(d) => parse_device_spec(&d).unwrap(),
         None => {
             if devices.is_empty() {
                 return Err(anyhow!("No audio input devices found"));
             }
             eprintln!("No audio device specified. Available devices are:");
             print_devices(&devices);
-            eprintln!("\nPlease specify a device with:");
+            eprintln!("\nPlease specify one or more devices with:");
             eprintln!(
-                "  {} --device \"Device Name\"",
+                "  {} --audio-device \"Device Name (input)\" [--audio-device \"Another Device (output)\"]",
                 std::env::args().next().unwrap()
             );
             return Err(anyhow!("No device specified"));
@@ -64,7 +66,7 @@ fn main() -> Result<()> {
     let (result_tx, result_rx) = mpsc::channel();
     let chunk_duration = Duration::from_secs(5);
     let _capture_thread = thread::spawn(move || {
-        continuous_audio_capture(Some(device), control_rx, result_tx, chunk_duration)
+        continuous_audio_capture(&device, control_rx, result_tx, chunk_duration)
     });
 
     loop {

@@ -45,6 +45,9 @@ rubato = "0.15.0"
 log = { workspace = true }
 env_logger = "0.10"
 
+# File 
+tempfile = "3"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 

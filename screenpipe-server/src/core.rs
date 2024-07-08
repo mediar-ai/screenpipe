@@ -3,7 +3,7 @@ use anyhow::Result;
 use chrono::Utc;
 use log::{debug, error, info};
 use screenpipe_audio::{
-    continuous_audio_capture, save_audio_to_file, ControlMessage as AudioControlMessage,
+    continuous_audio_capture, save_audio_to_file, ControlMessage as AudioControlMessage, DeviceSpec,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
@@ -24,7 +24,7 @@ pub async fn start_continuous_recording(
     audio_chunk_duration: Duration,
     control_rx: Receiver<RecorderControl>,
     enable_audio: bool,
-    audio_devices: Vec<Arc<String>>,
+    audio_devices: Vec<Arc<DeviceSpec>>,
 ) -> Result<()> {
     info!("Starting continuous recording");
     if !enable_audio {
@@ -125,28 +125,35 @@ async fn record_audio(
     output_path: Arc<String>,
     chunk_duration: Duration,
     is_running: Arc<AtomicBool>,
-    devices: Vec<Arc<String>>,
+    devices: Vec<Arc<DeviceSpec>>,
 ) -> Result<()> {
     let mut handles = vec![];
 
-    for device_name in devices {
+    for device_spec in devices {
         let db_clone = Arc::clone(&db);
         let output_path_clone = Arc::clone(&output_path);
         let is_running_clone = Arc::clone(&is_running);
-        let device_name_clone = Arc::clone(&device_name);
+        let device_spec_clone = Arc::clone(&device_spec);
+
         let handle = tokio::spawn(async move {
             let (audio_control_tx, audio_control_rx) = mpsc::channel();
             let (audio_result_tx, audio_result_rx) = mpsc::channel();
 
             let audio_thread = thread::spawn(move || {
-                info!("Starting audio capture thread for device: {}", device_name);
+                info!(
+                    "Starting audio capture thread for device: {}",
+                    &device_spec_clone
+                );
                 if let Err(e) = continuous_audio_capture(
-                    Some(device_name.to_string()),
+                    device_spec_clone.as_ref(),
                     audio_control_rx,
                     audio_result_tx,
                     chunk_duration,
                 ) {
-                    error!("Audio capture failed for device {}: {}", device_name, e);
+                    error!(
+                        "Audio capture failed for device {}: {}",
+                        device_spec_clone, e
+                    );
                 }
             });
 
@@ -155,11 +162,11 @@ async fn record_audio(
                     Ok(result) => {
                         let time = Utc::now();
                         let file_path =
-                            format!("{}/{}_{}.wav", output_path_clone, device_name_clone, time);
+                            format!("{}/{}_{}.wav", output_path_clone, device_spec.clone(), time);
                         if let Err(e) = save_audio_to_file(&result.audio, &file_path) {
                             error!(
                                 "Failed to save audio file for device {}: {}",
-                                device_name_clone, e
+                                device_spec, e
                             );
                             continue;
                         }
@@ -172,18 +179,18 @@ async fn record_audio(
                                 {
                                     error!(
                                         "Failed to insert audio transcription for device {}: {}",
-                                        device_name_clone, e
+                                        device_spec, e
                                     );
                                 } else {
                                     debug!(
                                         "Inserted audio transcription for chunk {} from device {}",
-                                        audio_chunk_id, device_name_clone
+                                        audio_chunk_id, device_spec
                                     );
                                 }
                             }
                             Err(e) => error!(
                                 "Failed to insert audio chunk for device {}: {}",
-                                device_name_clone, e
+                                device_spec, e
                             ),
                         }
                     }
@@ -191,7 +198,7 @@ async fn record_audio(
                     Err(e) => {
                         error!(
                             "Failed to receive audio chunk for device {}: {}",
-                            device_name_clone, e
+                            device_spec, e
                         );
                         break;
                     }
