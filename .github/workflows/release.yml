@@ -44,7 +44,7 @@ jobs:
       - name: Create deployment package
         run: |
           mkdir -p screenpipe-linux
-          cp target/release/pipe screenpipe-linux/screenpipe
+          cp target/release/screenpipe screenpipe-linux/screenpipe
           cp -r target/release/lib screenpipe-linux/
           chmod +x screenpipe-linux/screenpipe
           tar -czvf screenpipe-linux.tar.gz screenpipe-linux

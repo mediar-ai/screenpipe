@@ -72,9 +72,9 @@ tempfile = "3.3.0"
 static-ffmpeg = ["ffmpeg-next/static"]
 
 [[bin]]
-name = "pipe"
+name = "screenpipe"
 path = "src/bin/screenpipe-server.rs"
 
 [[bin]]
-name = "pipe-video"
+name = "screenpipe-video"
 path = "src/bin/screenpipe-video.rs"

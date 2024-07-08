@@ -61,6 +61,49 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 
 Keep in mind that it's still experimental.
 
+```bash
+screenpipe --list-audio-devices
+# then pick one or multiple audio input
+screenpipe --audio-device "Device Name (input)" [--audio-device "Another Device (input)"]
+```
+
+Audio output not supported yet, see #24.
+
+<details>
+  <summary>Examples to query the API</summary>
+  
+  ```bash
+# 1. Basic search query
+curl "http://localhost:3030/search?q=test&limit=5&offset=0"
+
+# 2. Search with content type filter (OCR)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
+
+# 3. Search with content type filter (Audio)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
+
+# 4. Search with pagination
+curl "http://localhost:3030/search?q=test&limit=10&offset=20"
+
+# 6. Search with no query (should return all results)
+curl "http://localhost:3030/search?limit=5&offset=0"
+  ```
+</details>
+
+Now pipe this into a LLM to build:
+- memory extension apps
+- automatic summaries
+- automatic action triggers (say every time you see a dog, send a tweet)
+- automatic CRM (fill salesforce while you do sales on linkedin)
+- sync your local pkm with company's pkm (obsidian to notion for example)
+- maintain cheatsheets of your customers relationships formatted as markdown table in notion
+- dating app that make AI agents talk with millions of other potential mates acting like you and scheduling you weekly dates
+
+
+[Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
+
+## Installation
+
 ### Windows
 
 TBD. Own a Windows computer? [Please help us test it!](https://github.com/louis030195/screen-pipe/issues/6).
@@ -99,60 +142,15 @@ cd screen-pipe
 cargo build --release --features metal # remove "--features metal" if you do not have M series processor
 
 # sign the executable to avoid mac killing the process when it's running for too long
-codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime ./target/release/pipe
+codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime ./target/release/screenpipe
 
 # then run it
-./target/release/pipe
-
-# or only stream audio + speech to text to stdout
-./target/release/pipe-audio
-
-# or only stream screenshots + ocr to stdout
-./target/release/pipe-vision
-
-# or only record mp4 videos + json containing ocr
-./target/release/pipe-video
+./target/release/screenpipe
 ```
 
 Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
 We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
-
-### What's next?
-
-<details>
-  <summary>Examples to query the API</summary>
-  
-  ```bash
-# 1. Basic search query
-curl "http://localhost:3030/search?q=test&limit=5&offset=0"
-
-# 2. Search with content type filter (OCR)
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
-
-# 3. Search with content type filter (Audio)
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
-
-# 4. Search with pagination
-curl "http://localhost:3030/search?q=test&limit=10&offset=20"
-
-# 6. Search with no query (should return all results)
-curl "http://localhost:3030/search?limit=5&offset=0"
-  ```
-</details>
-
-Now pipe this into a LLM to build:
-- memory extension apps
-- automatic summaries
-- automatic action triggers (say every time you see a dog, send a tweet)
-- automatic CRM (fill salesforce while you do sales on linkedin)
-- sync your local pkm with company's pkm (obsidian to notion for example)
-- maintain cheatsheets of your customers relationships formatted as markdown table in notion
-- dating app that make AI agents talk with millions of other potential mates acting like you and scheduling you weekly dates
-
-
-[Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
-
 
 ## Why open source?
 

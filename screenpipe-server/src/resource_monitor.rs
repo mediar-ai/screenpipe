@@ -35,14 +35,14 @@ impl ResourceMonitor {
             let runtime = self.start_time.elapsed();
 
             info!(
-                "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%, Open files: {}, Active threads: {}",
+                "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%",
                 runtime,
                 memory_usage_percent,
                 memory_usage,
                 total_memory,
                 cpu_usage,
-                self.open_files.load(Ordering::SeqCst),
-                self.active_threads.load(Ordering::SeqCst)
+                // self.open_files.load(Ordering::SeqCst),
+                // self.active_threads.load(Ordering::SeqCst)
             );
 
             // Check for restart conditions

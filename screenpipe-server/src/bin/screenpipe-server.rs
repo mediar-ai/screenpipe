@@ -79,6 +79,7 @@ async fn main() -> anyhow::Result<()> {
             "  {} --audio-device \"Device Name (input)\" [--audio-device \"Another Device (output)\"]",
             std::env::args().next().unwrap()
         );
+        eprintln!("ATM only input devices are supported");
         return Err(anyhow::anyhow!("No audio devices specified"));
     } else {
         // if audio device contains (output) throw error say not implemented yet and link to https://github.com/louis030195/screen-pipe/issues/24
