@@ -114,7 +114,7 @@ We are working toward [making it easier to try](https://github.com/louis030195/s
 ```
 
  Install [Rust](https://www.rust-lang.org/tools/install).
- 
+
   2. Clone the repo:
 
 ```bash
@@ -206,6 +206,8 @@ Contributions are welcome! If you'd like to contribute, please fork the reposito
 Say 👋 in our [public Discord channel](https://discord.gg/dU9EBuw7Uq) . We discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
 Bit more details on the architecture [here](https://link.excalidraw.com/l/5MKXLddifTr/8subenQGvcd).
+
+We recommend using [TablePlus](https://tableplus.com/) to view the SQLite database.
 
 ## Licensing
 
