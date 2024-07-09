@@ -203,11 +203,11 @@ async fn process_audio_result(
     device_spec: &DeviceSpec,
     result: AudioCaptureResult,
 ) {
-    info!("Inserting audio chunk: {}", output_path);
+    info!("Inserting audio chunk: {:?}", result.text);
     match db.insert_audio_chunk(&output_path).await {
         Ok(audio_chunk_id) => {
             if let Err(e) = db
-                .insert_audio_transcription(audio_chunk_id, &result.text, 0)
+                .insert_audio_transcription(audio_chunk_id, &result.text, 0) // TODO index is in the text atm
                 .await
             {
                 error!(

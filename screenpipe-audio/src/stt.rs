@@ -359,7 +359,6 @@ pub fn stt(input: &str) -> Result<String> {
             default_revision,
         ));
         let sample = std::path::PathBuf::from(input);
-        info!("sample = {:?}", sample);
         let config = repo.get("config-tiny.json")?;
         let tokenizer = repo.get("tokenizer-tiny.json")?;
         let model = repo.get("model-tiny-q80.gguf")?;
