@@ -106,8 +106,21 @@ We are working toward [making it easier to try](https://github.com/louis030195/s
 <details>
   <summary>Windows</summary>
   
-  1. Install [ffmpeg](https://www.ffmpeg.org/download.html)
-  2. Install [Rust](https://www.rust-lang.org/tools/install)
+  1. Install dependencies:
+
+```bash
+# Install ffmpeg (you may need to download and add it to your PATH manually)
+# Visit https://www.ffmpeg.org/download.html for installation instructions
+```
+
+ Install [Rust](https://www.rust-lang.org/tools/install).
+  2. Clone the repo:
+
+```bash
+git clone https://github.com/louis030195/screen-pipe
+cd screen-pipe
+```
+
   3. Run the API:
 
 ```bash
