@@ -360,9 +360,9 @@ pub fn stt(input: &str) -> Result<String> {
         ));
         let sample = std::path::PathBuf::from(input);
         info!("sample = {:?}", sample);
-        let config = repo.get("config-large.json")?; // Update to larger model config
-        let tokenizer = repo.get("tokenizer-large.json")?; // Update to larger model tokenizer
-        let model = repo.get("model-large-q80.gguf")?; // Update to larger model weights
+        let config = repo.get("config-large.json")?; // Testing a larger model config
+        let tokenizer = repo.get("tokenizer-large.json")?; // Testing a larger model tokenizer
+        let model = repo.get("model-large-q80.gguf")?; // Testing a larger model weights
         (config, tokenizer, model, sample)
     };
     let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
