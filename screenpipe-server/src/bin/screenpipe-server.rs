@@ -6,7 +6,7 @@ use std::{
 };
 
 use clap::Parser;
-use log::{info, LevelFilter};
+use log::{info, LevelFilter, warn};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_device_spec,
 };
