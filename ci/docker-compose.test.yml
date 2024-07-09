@@ -1,0 +1,14 @@
+# docker-compose -f docker-compose.test.yml up --build
+
+version: '3'
+services:
+  test:
+    build:
+      context: ..
+      dockerfile: ci/Dockerfile.test
+    volumes:
+      - ..:/app
+    environment:
+      - DISPLAY=:99
+    devices:
+      - /dev/snd:/dev/snd
