@@ -318,6 +318,7 @@ pub fn default_output_device() -> Result<DeviceSpec> {
 
     #[cfg(not(target_os = "macos"))]
     {
+        let host = cpal::default_host();
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
