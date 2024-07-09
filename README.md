@@ -44,10 +44,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] mp4 encoding to disk (30 GB / month)
 - [x] sqlite local db
 - [x] OCR
-- [x] audio + stt
-  - [x] multi audio input (e.g. laptop microphone + iphone microphone + whatever)
-  - [ ] multi audio output
-  - [ ] multi audio input + multi audio output
+- [x] audio + stt (works with multi input & output devices)
 - [x] local api
 - [ ] TS SDK
 - [ ] cloud storage options (s3, pgsql, etc.)
