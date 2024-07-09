@@ -10,6 +10,7 @@ use log::{info, LevelFilter};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_device_spec,
 };
+use colored::Colorize;
 
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server}; // Import the list_audio_devices function
 #[derive(Parser)]
