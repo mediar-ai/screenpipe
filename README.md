@@ -60,7 +60,8 @@ Keep in mind that it's still experimental.
 
 ```bash
 screenpipe
-# by default it uses your default input and output audio devices (e.g. speakers/headphones + laptop mic) & your whole screen
+# by default it uses your default input and output audio devices
+# (e.g. speakers/headphones + laptop mic) & your whole screen
 ```
 
 <details>
