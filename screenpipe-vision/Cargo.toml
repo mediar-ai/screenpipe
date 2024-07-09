@@ -50,5 +50,5 @@ tempfile = "3.3.0"
 
 
 [[bin]]
-name = "pipe-vision"
+name = "screenpipe-vision"
 path = "src/bin/screenpipe-vision.rs"

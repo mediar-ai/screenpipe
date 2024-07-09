@@ -2,14 +2,13 @@ use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
 use log::{debug, error, info};
-use screenpipe_audio::{
-    continuous_audio_capture, save_audio_to_file, ControlMessage as AudioControlMessage, DeviceSpec,
-};
+use screenpipe_audio::{record_and_transcribe, AudioCaptureResult, DeviceSpec};
+use screenpipe_vision::CaptureResult;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
+use std::{fs, thread};
 use tokio::runtime::Runtime;
 pub enum RecorderControl {
     Pause,
@@ -136,77 +135,54 @@ async fn record_audio(
         let device_spec_clone = Arc::clone(&device_spec);
 
         let handle = tokio::spawn(async move {
-            let (audio_control_tx, audio_control_rx) = mpsc::channel();
-            let (audio_result_tx, audio_result_rx) = mpsc::channel();
+            let (result_tx, result_rx) = mpsc::channel();
 
-            let audio_thread = thread::spawn(move || {
-                info!(
-                    "Starting audio capture thread for device: {}",
-                    &device_spec_clone
-                );
-                if let Err(e) = continuous_audio_capture(
-                    device_spec_clone.as_ref(),
-                    audio_control_rx,
-                    audio_result_tx,
-                    chunk_duration,
-                ) {
-                    error!(
-                        "Audio capture failed for device {}: {}",
-                        device_spec_clone, e
-                    );
-                }
-            });
+            info!(
+                "Starting audio capture thread for device: {}",
+                &device_spec_clone
+            );
 
             while is_running_clone.load(Ordering::SeqCst) {
-                match audio_result_rx.recv_timeout(Duration::from_secs(1)) {
-                    Ok(result) => {
-                        let time = Utc::now();
-                        let file_path =
-                            format!("{}/{}_{}.wav", output_path_clone, device_spec.clone(), time);
-                        if let Err(e) = save_audio_to_file(&result.audio, &file_path) {
-                            error!(
-                                "Failed to save audio file for device {}: {}",
-                                device_spec, e
-                            );
-                            continue;
-                        }
-
-                        match db_clone.insert_audio_chunk(&file_path).await {
-                            Ok(audio_chunk_id) => {
-                                if let Err(e) = db_clone
-                                    .insert_audio_transcription(audio_chunk_id, &result.text, 0)
-                                    .await
-                                {
-                                    error!(
-                                        "Failed to insert audio transcription for device {}: {}",
-                                        device_spec, e
-                                    );
-                                } else {
-                                    debug!(
-                                        "Inserted audio transcription for chunk {} from device {}",
-                                        audio_chunk_id, device_spec
-                                    );
-                                }
-                            }
-                            Err(e) => error!(
-                                "Failed to insert audio chunk for device {}: {}",
-                                device_spec, e
-                            ),
-                        }
-                    }
-                    Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                    Err(e) => {
-                        error!(
-                            "Failed to receive audio chunk for device {}: {}",
-                            device_spec, e
+                let recording_thread = thread::spawn({
+                    let device_spec_clone = Arc::clone(&device_spec_clone);
+                    let result_tx = result_tx.clone();
+                    let output_path_clone = Arc::clone(&output_path_clone);
+                    move || {
+                        let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+                        let file_path = format!(
+                            "{}/{}_{}.wav",
+                            output_path_clone, device_spec_clone, new_file_name
                         );
-                        break;
+                        record_and_transcribe(
+                            device_spec_clone.as_ref(),
+                            chunk_duration,
+                            result_tx,
+                            file_path.into(),
+                        )
                     }
+                });
+
+                match recording_thread.join() {
+                    Ok(Ok(file_path)) => {
+                        info!(
+                            "Recording complete for device {}: {:?}",
+                            device_spec_clone, file_path
+                        );
+                        // Process the recorded chunk
+                        while let Ok(result) = result_rx.try_recv() {
+                            process_audio_result(
+                                &db_clone,
+                                &file_path.to_str().unwrap(),
+                                &device_spec_clone,
+                                result,
+                            )
+                            .await;
+                        }
+                    }
+                    Ok(Err(e)) => error!("Error in record_and_transcribe: {}", e),
+                    Err(e) => error!("Thread panicked: {:?}", e),
                 }
             }
-
-            audio_control_tx.send(AudioControlMessage::Stop).unwrap();
-            let _ = audio_thread.join().expect("Failed to join audio thread");
         });
 
         handles.push(handle);
@@ -219,4 +195,35 @@ async fn record_audio(
     }
 
     Ok(())
+}
+
+async fn process_audio_result(
+    db: &DatabaseManager,
+    output_path: &str,
+    device_spec: &DeviceSpec,
+    result: AudioCaptureResult,
+) {
+    info!("Inserting audio chunk: {}", output_path);
+    match db.insert_audio_chunk(&output_path).await {
+        Ok(audio_chunk_id) => {
+            if let Err(e) = db
+                .insert_audio_transcription(audio_chunk_id, &result.text, 0)
+                .await
+            {
+                error!(
+                    "Failed to insert audio transcription for device {}: {}",
+                    device_spec, e
+                );
+            } else {
+                debug!(
+                    "Inserted audio transcription for chunk {} from device {}",
+                    audio_chunk_id, device_spec
+                );
+            }
+        }
+        Err(e) => error!(
+            "Failed to insert audio chunk for device {}: {}",
+            device_spec, e
+        ),
+    }
 }

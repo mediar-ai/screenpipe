@@ -65,11 +65,18 @@ clap = { version = "4.3", features = ["derive"] }
 # Memory watchdog
 sysinfo = "0.29.0"
 
+# Color 
+colored = "2.0"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 
 [features]
 static-ffmpeg = ["ffmpeg-next/static"]
+
+metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
+cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+
 
 [[bin]]
 name = "screenpipe"

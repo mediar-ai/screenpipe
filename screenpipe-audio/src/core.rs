@@ -1,19 +1,20 @@
 use anyhow::{anyhow, Result};
-
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use hound::WavWriter;
+use cpal::{FromSample, Sample};
+use hound::WavSpec;
 use log::{error, info};
 use serde::Serialize;
-use std::sync::mpsc::{Receiver, Sender};
+use std::fmt;
+use std::fs::File;
+use std::path::PathBuf;
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use std::{fmt, thread};
-use tempfile::NamedTempFile;
+use std::{io::BufWriter, thread};
 
 use crate::stt::stt;
 
-pub struct CaptureResult {
-    pub audio: Vec<f32>,
+pub struct AudioCaptureResult {
     pub text: String,
 }
 
@@ -49,11 +50,15 @@ impl fmt::Display for DeviceSpec {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DeviceSpec::Input(name) => {
-                write!(f, "Input: {}", name.as_ref().unwrap_or(&"None".to_string()))
+                write!(
+                    f,
+                    "{} (input)",
+                    name.as_ref().unwrap_or(&"None".to_string())
+                )
             }
             DeviceSpec::Output(name) => write!(
                 f,
-                "Output: {}",
+                "{} (output)",
                 name.as_ref().unwrap_or(&"None".to_string())
             ),
         }
@@ -72,232 +77,173 @@ impl Clone for DeviceSpec {
 
 // Helper function to create DeviceSpec from a name or None
 pub fn parse_device_spec(name: &str) -> Result<DeviceSpec> {
-    DeviceSpec::from_name(name)
+    DeviceSpec::from_name(&name)
 }
 
-pub fn continuous_audio_capture(
+pub fn record_and_transcribe(
     device_spec: &DeviceSpec,
-    control_rx: Receiver<ControlMessage>,
-    result_tx: Sender<CaptureResult>,
-    chunk_duration: Duration,
-) -> Result<()> {
-    let host = cpal::default_host();
-
-    let (device, is_input) = match device_spec {
-        DeviceSpec::Input(name) => {
-            let device = match name {
-                Some(name) => host
-                    .devices()?
-                    .find(|d| d.name().map(|n| n == *name).unwrap_or(false))
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("Specified input device '{}' not found", name)
-                    })?,
-                None => host
-                    .default_input_device()
-                    .ok_or_else(|| anyhow::anyhow!("No default input device available"))?,
-            };
-            (device, true)
+    duration: Duration,
+    result_tx: Sender<AudioCaptureResult>,
+    output_path: PathBuf,
+) -> Result<PathBuf> {
+    let host = if cfg!(target_os = "macos") {
+        match device_spec {
+            // https://github.com/RustAudio/cpal/pull/894
+            DeviceSpec::Output(_) => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
+            _ => cpal::default_host(),
         }
-        DeviceSpec::Output(name) => {
-            let device = match name {
-                Some(name) => host
-                    .devices()?
-                    .find(|d| d.name().map(|n| n == *name).unwrap_or(false))
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("Specified output device '{}' not found", name)
-                    })?,
-                None => host
-                    .default_output_device()
-                    .ok_or_else(|| anyhow::anyhow!("No default output device available"))?,
-            };
-            (device, false)
-        }
+    } else {
+        cpal::default_host()
     };
 
-    let config = if is_input {
-        info!("Device is input, using input config");
-        device.default_input_config()?
+    info!("device: {:?}", device_spec.to_string());
+
+    let device = if device_spec.to_string() == "default" {
+        host.default_input_device()
     } else {
-        info!("Device is output, using output config");
-        device.default_output_config()?
-    };
+        host.input_devices()?.find(|x| {
+            x.name()
+                .map(|y| {
+                    y == device_spec
+                        .to_string()
+                        .replace(" (input)", "")
+                        .replace(" (output)", "")
+                })
+                .unwrap_or(false)
+        })
+    }
+    .ok_or_else(|| anyhow!("Device not found"))?;
 
-    let sample_rate = config.sample_rate().0;
-    let channels = config.channels() as usize;
-    info!(
-        "Sample rate: {}, Channels: {}, Device: \"{}\", Config: {:?}, Type: {}",
-        sample_rate,
-        channels,
-        device.name().unwrap(),
-        config,
-        if is_input { "Input" } else { "Output" }
-    );
+    let config = device.default_input_config()?;
+    info!("Recording device: {}, Config: {:?}", device.name()?, config);
 
-    let audio_buffer = Arc::new(Mutex::new(Vec::new()));
-    let audio_buffer_clone = audio_buffer.clone();
+    let spec = wav_spec_from_config(&config);
+    let writer = hound::WavWriter::create(&output_path, spec)?;
+    let writer = Arc::new(Mutex::new(Some(writer)));
+    let writer_2 = writer.clone();
+    let err_fn = |err| error!("An error occurred on the audio stream: {}", err);
 
-    let is_paused = Arc::new(Mutex::new(false));
-    let should_stop = Arc::new(Mutex::new(false));
-
-    let is_paused_clone = is_paused.clone();
-    let stream = if is_input {
-        info!("Building input stream");
-        device.build_input_stream(
+    let stream = match config.sample_format() {
+        cpal::SampleFormat::I8 => device.build_input_stream(
             &config.into(),
-            move |data: &[f32], _: &_| {
-                if !*is_paused_clone.lock().unwrap() {
-                    audio_buffer_clone.lock().unwrap().extend_from_slice(data);
-                }
-            },
-            |err| error!("An error occurred on the input audio stream: {}", err),
-            None,
-        )?
-    } else {
-        info!("Building output stream");
-        let err_fn = |err| error!("An error occurred on the output audio stream: {}", err);
-        device.build_output_stream(
-            &config.into(),
-            move |data: &mut [f32], _: &_| {
-                if !*is_paused_clone.lock().unwrap() {
-                    // For output devices, we need to fill the buffer with silence
-                    // and capture what would have been played
-                    for sample in data.iter_mut() {
-                        *sample = 0.0; // Fill with silence
-                    }
-                    audio_buffer_clone.lock().unwrap().extend_from_slice(data);
-                }
-            },
+            move |data, _: &_| write_input_data::<i8, i8>(data, &writer_2),
             err_fn,
             None,
-        )?
+        )?,
+        cpal::SampleFormat::I16 => device.build_input_stream(
+            &config.into(),
+            move |data, _: &_| write_input_data::<i16, i16>(data, &writer_2),
+            err_fn,
+            None,
+        )?,
+        cpal::SampleFormat::I32 => device.build_input_stream(
+            &config.into(),
+            move |data, _: &_| write_input_data::<i32, i32>(data, &writer_2),
+            err_fn,
+            None,
+        )?,
+        cpal::SampleFormat::F32 => device.build_input_stream(
+            &config.into(),
+            move |data, _: &_| write_input_data::<f32, f32>(data, &writer_2),
+            err_fn,
+            None,
+        )?,
+        sample_format => return Err(anyhow!("Unsupported sample format '{}'", sample_format)),
     };
 
-    match stream.play() {
-        Ok(_) => info!("Successfully started audio stream"),
-        Err(e) => error!("Failed to start audio stream: {}", e),
+    stream.play()?;
+    info!(
+        "Will write an audio file every {} seconds",
+        duration.as_secs()
+    );
+
+    let start_time = Instant::now();
+    let chunk_duration = Duration::from_secs(5); // Adjust as needed
+    let mut next_chunk_time = start_time + chunk_duration;
+
+    while start_time.elapsed() < duration {
+        let now = Instant::now();
+
+        if now >= next_chunk_time {
+            // Stop the stream temporarily
+            stream.pause()?;
+
+            {
+                let mut writer_guard = writer.lock().unwrap();
+                if let Some(writer) = writer_guard.as_mut() {
+                    writer.flush()?;
+
+                    // Transcribe the current audio chunk
+                    match stt(output_path.to_str().unwrap()) {
+                        Ok(transcription) => {
+                            result_tx.send(AudioCaptureResult {
+                                text: transcription,
+                            })?;
+                        }
+                        Err(e) => error!("Transcription failed: {}", e),
+                    }
+                }
+            }
+
+            // Resume the stream
+            stream.play()?;
+            next_chunk_time = now + chunk_duration;
+        }
+
+        thread::sleep(Duration::from_millis(100));
     }
 
-    let is_paused_clone = is_paused.clone();
-    let should_stop_clone = should_stop.clone();
+    // Final flush and transcription
+    {
+        let mut writer_guard = writer.lock().unwrap();
+        if let Some(writer) = writer_guard.as_mut() {
+            writer.flush()?;
 
-    let process_audio = move || -> Result<()> {
-        let mut last_process_time = Instant::now();
-        let mut full_transcription = String::new();
-
-        loop {
-            // Check for control messages
-            if let Ok(message) = control_rx.try_recv() {
-                match message {
-                    ControlMessage::Pause => *is_paused_clone.lock().unwrap() = true,
-                    ControlMessage::Resume => *is_paused_clone.lock().unwrap() = false,
-                    ControlMessage::Stop => {
-                        *should_stop_clone.lock().unwrap() = true;
-                        break;
-                    }
+            match stt(output_path.to_str().unwrap()) {
+                Ok(transcription) => {
+                    result_tx.send(AudioCaptureResult {
+                        text: transcription,
+                    })?;
                 }
-            }
-
-            if *is_paused_clone.lock().unwrap() {
-                thread::sleep(Duration::from_millis(100));
-                continue;
-            }
-
-            let now = Instant::now();
-            if now.duration_since(last_process_time) < chunk_duration {
-                thread::sleep(Duration::from_millis(100));
-                continue;
-            }
-
-            let mut audio_data = audio_buffer.lock().unwrap();
-            let required_samples = sample_rate as usize * (chunk_duration.as_secs() as usize);
-            // sample_rate as usize * channels * (chunk_duration.as_secs() as usize);
-            // TODO: dont think we should multiply by channels here
-            if audio_data.len() >= required_samples {
-                info!("Processing audio... Buffer size: {}", audio_data.len());
-                let chunk = audio_data.drain(..required_samples).collect::<Vec<f32>>();
-                drop(audio_data);
-
-                // Process the audio chunk (save to file and transcribe)
-                let temp_file = NamedTempFile::new()?;
-                let temp_path = temp_file.path().to_str().unwrap();
-
-                let spec = hound::WavSpec {
-                    channels: channels as u16,
-                    sample_rate,
-                    bits_per_sample: 16,
-                    sample_format: hound::SampleFormat::Int,
-                };
-                let mut writer = WavWriter::create(temp_path, spec)?;
-                for sample in chunk.iter() {
-                    writer.write_sample((sample * 32767.0) as i16)?;
-                }
-                writer.finalize()?;
-
-                info!("Starting transcription for file: {}", temp_path);
-                match stt(temp_path) {
-                    Ok(transcription) => {
-                        // info!("Transcription successful: {}", transcription);
-
-                        if !transcription.is_empty() {
-                            if !full_transcription.is_empty() {
-                                full_transcription.push(' ');
-                            }
-                            full_transcription.push_str(&transcription);
-                        }
-
-                        result_tx.send(CaptureResult {
-                            audio: chunk,
-                            text: full_transcription.clone(),
-                        })?;
-                    }
-                    Err(e) => {
-                        error!("Transcription failed: {}", e);
-                        continue;
-                    }
-                }
-                std::fs::remove_file(temp_path)?;
-
-                last_process_time = now;
-            } else {
-                thread::sleep(Duration::from_millis(100));
-            }
-
-            if *should_stop_clone.lock().unwrap() {
-                break;
+                Err(e) => error!("Final transcription failed: {}", e),
             }
         }
-        Ok(())
-    };
-
-    process_audio()?;
-    Ok(())
-}
-
-pub enum ControlMessage {
-    Pause,
-    Resume,
-    Stop,
-}
-
-// a function to save an audio to file
-pub fn save_audio_to_file(audio: &[f32], file_path: &str) -> Result<()> {
-    let spec = hound::WavSpec {
-        channels: 1, // TODO
-        sample_rate: 44100,
-        bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
-    };
-    let mut writer = WavWriter::create(file_path, spec)
-        .map_err(|e| anyhow::anyhow!("Failed to create WavWriter: {}", e))?;
-    for sample in audio.iter() {
-        writer
-            .write_sample(*sample)
-            .map_err(|e| anyhow::anyhow!("Failed to write sample: {}", e))?;
     }
-    writer
-        .finalize()
-        .map_err(|e| anyhow::anyhow!("Failed to finalize WavWriter: {}", e))?;
-    Ok(())
+
+    Ok(output_path)
+}
+
+fn wav_spec_from_config(config: &cpal::SupportedStreamConfig) -> WavSpec {
+    WavSpec {
+        channels: config.channels() as _,
+        sample_rate: config.sample_rate().0 as _,
+        bits_per_sample: (config.sample_format().sample_size() * 8) as _,
+        sample_format: sample_format(config.sample_format()),
+    }
+}
+type WavWriterHandle = Arc<Mutex<Option<hound::WavWriter<BufWriter<File>>>>>;
+
+fn write_input_data<T, U>(input: &[T], writer: &WavWriterHandle)
+where
+    T: Sample,
+    U: Sample + hound::Sample + FromSample<T>,
+{
+    if let Ok(mut guard) = writer.try_lock() {
+        if let Some(writer) = guard.as_mut() {
+            for &sample in input.iter() {
+                let sample: U = U::from_sample(sample);
+                writer.write_sample(sample).ok();
+            }
+        }
+    }
+}
+
+fn sample_format(format: cpal::SampleFormat) -> hound::SampleFormat {
+    if format.is_float() {
+        hound::SampleFormat::Float
+    } else {
+        hound::SampleFormat::Int
+    }
 }
 
 #[derive(Serialize)]
@@ -325,14 +271,53 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
-    for device in host.output_devices()? {
-        if let Ok(name) = device.name() {
-            devices.push(AudioDevice {
-                name,
-                device_type: "output".to_string(),
-            });
+    // on macos only
+    if cfg!(target_os = "macos") {
+        let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
+        for device in host.input_devices()? {
+            if let Ok(name) = device.name() {
+                devices.push(AudioDevice {
+                    name,
+                    device_type: "input".to_string(),
+                });
+            }
+        }
+    } else {
+        for device in host.output_devices()? {
+            if let Ok(name) = device.name() {
+                devices.push(AudioDevice {
+                    name,
+                    device_type: "output".to_string(),
+                });
+            }
         }
     }
 
     Ok(devices)
+}
+
+// function that return default device to record audio
+pub fn default_input_device() -> Result<DeviceSpec> {
+    let host = cpal::default_host();
+    let device = host.default_input_device().unwrap();
+    info!("Using default input device: {}", device.name()?);
+    Ok(DeviceSpec::Input(Some(device.name()?)))
+}
+
+// ! HACK - yes this quite unintuitive ... but it works ...
+
+// function that return default device to record audio
+pub fn default_output_device() -> Result<DeviceSpec> {
+    let host = cpal::default_host();
+    // on mac pick the display capture device
+    if cfg!(target_os = "macos") {
+        let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
+        let device = host.default_input_device().unwrap();
+        info!("Using display capture device: {}", device.name()?);
+        Ok(DeviceSpec::Output(Some(device.name()?)))
+    } else {
+        let device = host.default_output_device().unwrap();
+        info!("Using default output device: {}", device.name()?);
+        Ok(DeviceSpec::Output(Some(device.name()?)))
+    }
 }
