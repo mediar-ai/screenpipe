@@ -44,10 +44,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] mp4 encoding to disk (30 GB / month)
 - [x] sqlite local db
 - [x] OCR
-- [x] audio + stt
-  - [x] multi audio input (e.g. laptop microphone + iphone microphone + whatever)
-  - [ ] multi audio output
-  - [ ] multi audio input + multi audio output
+- [x] audio + stt (works with multi input & output devices)
 - [x] local api
 - [ ] TS SDK
 - [ ] cloud storage options (s3, pgsql, etc.)
@@ -62,12 +59,10 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 Keep in mind that it's still experimental.
 
 ```bash
-screenpipe --list-audio-devices
-# then pick one or multiple audio input
-screenpipe --audio-device "Device Name (input)" [--audio-device "Another Device (input)"]
+screenpipe
+# by default it uses your default input and output audio devices
+# (e.g. speakers/headphones + laptop mic) & your whole screen
 ```
-
-Audio output not supported yet, see #24.
 
 <details>
   <summary>Examples to query the API</summary>
@@ -104,23 +99,58 @@ Now pipe this into a LLM to build:
 
 ## Installation
 
-### Windows
+Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
-TBD. Own a Windows computer? [Please help us test it!](https://github.com/louis030195/screen-pipe/issues/6).
+We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
 
-### Linux
+<details>
+  <summary>Windows</summary>
+  
+  1. Install dependencies:
 
 ```bash
+# Install ffmpeg (you may need to download and add it to your PATH manually)
+# Visit https://www.ffmpeg.org/download.html for installation instructions
+```
+
+ Install [Rust](https://www.rust-lang.org/tools/install).
+
+  2. Clone the repo:
+
+```bash
+git clone https://github.com/louis030195/screen-pipe
+cd screen-pipe
+```
+
+  3. Run the API:
+
+```bash
+# This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
+cargo build --release --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
+
+# then run it
+./target/release/screenpipe
+```
+</details>
+
+<details>
+  <summary>Linux</summary>
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
 curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
 ```
 
-Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `$HOME/.local/bin`)
+  Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `$HOME/.local/bin`)
+</details>
 
-### MacOS
+<details>
+  <summary>MacOS</summary>
+  
+  On Mac you need to build the CLI yourself.
 
-On Mac you need to build the CLI yourself.
-
-1. Install dependencies:
+  1. Install dependencies:
 ```bash
 # On Mac
 brew install ffmpeg
@@ -148,9 +178,8 @@ codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,ru
 ./target/release/screenpipe
 ```
 
-Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
-We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
+</details>
 
 ## Why open source?
 
@@ -174,11 +203,7 @@ Any interfaces are out of scope and should be built outside this repo, for examp
 
 ## Contributing
 
-Contributions are welcome! If you'd like to contribute, please fork the repository and use a feature branch. Pull requests are warmly welcome.
-
-Say 👋 in our [public Discord channel](https://discord.gg/dU9EBuw7Uq) . We discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
-
-Bit more details on the architecture [here](https://link.excalidraw.com/l/5MKXLddifTr/8subenQGvcd).
+Contributions are welcome! If you'd like to contribute, please read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licensing
 
