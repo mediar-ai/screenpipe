@@ -99,23 +99,42 @@ Now pipe this into a LLM to build:
 
 ## Installation
 
-### Windows
+Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
-TBD. Own a Windows computer? [Please help us test it!](https://github.com/louis030195/screen-pipe/issues/6).
+We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
 
-### Linux
+<details>
+  <summary>Windows</summary>
+  
+  1. Install [ffmpeg](https://www.ffmpeg.org/download.html)
+  2. Install [Rust](https://www.rust-lang.org/tools/install)
+  3. Run the API:
+
+```bash
+# This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
+cargo build --release --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
+
+# then run it
+./target/release/screenpipe
+```
+</details>
+
+<details>
+  <summary>Linux</summary>
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
 ```
 
-Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `$HOME/.local/bin`)
+  Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `$HOME/.local/bin`)
+</details>
 
-### MacOS
+<details>
+  <summary>MacOS</summary>
+  
+  On Mac you need to build the CLI yourself.
 
-On Mac you need to build the CLI yourself.
-
-1. Install dependencies:
+  1. Install dependencies:
 ```bash
 # On Mac
 brew install ffmpeg
@@ -143,9 +162,8 @@ codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,ru
 ./target/release/screenpipe
 ```
 
-Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
-We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
+</details>
 
 ## Why open source?
 
