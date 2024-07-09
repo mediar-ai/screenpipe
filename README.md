@@ -62,12 +62,9 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 Keep in mind that it's still experimental.
 
 ```bash
-screenpipe --list-audio-devices
-# then pick one or multiple audio input
-screenpipe --audio-device "Device Name (input)" [--audio-device "Another Device (input)"]
+screenpipe
+# by default it uses your default input and output audio devices (e.g. speakers/headphones + laptop mic) & your whole screen
 ```
-
-Audio output not supported yet, see #24.
 
 <details>
   <summary>Examples to query the API</summary>
