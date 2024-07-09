@@ -89,7 +89,16 @@ pub fn record_and_transcribe(
     let host = if cfg!(target_os = "macos") {
         match device_spec {
             // https://github.com/RustAudio/cpal/pull/894
-            DeviceSpec::Output(_) => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
+            DeviceSpec::Output(_) => {
+                #[cfg(target_os = "macos")]
+                {
+                    cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    return Err(anyhow!("ScreenCaptureKit is only available on macOS"));
+                }
+            }
             _ => cpal::default_host(),
         }
     } else {
@@ -271,8 +280,8 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
-    // on macos only
-    if cfg!(target_os = "macos") {
+    #[cfg(target_os = "macos")]
+    {
         let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
         for device in host.input_devices()? {
             if let Ok(name) = device.name() {
@@ -282,7 +291,10 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
                 });
             }
         }
-    } else {
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
         for device in host.output_devices()? {
             if let Ok(name) = device.name() {
                 devices.push(AudioDevice {
@@ -295,7 +307,6 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
 
     Ok(devices)
 }
-
 // function that return default device to record audio
 pub fn default_input_device() -> Result<DeviceSpec> {
     let host = cpal::default_host();
@@ -308,16 +319,22 @@ pub fn default_input_device() -> Result<DeviceSpec> {
 
 // function that return default device to record audio
 pub fn default_output_device() -> Result<DeviceSpec> {
-    let host = cpal::default_host();
-    // on mac pick the display capture device
-    if cfg!(target_os = "macos") {
+    #[cfg(target_os = "macos")]
+    {
         let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
-        let device = host.default_input_device().unwrap();
+        let device = host
+            .default_input_device()
+            .ok_or_else(|| anyhow!("No default input device found"))?;
         info!("Using display capture device: {}", device.name()?);
-        Ok(DeviceSpec::Output(Some(device.name()?)))
-    } else {
-        let device = host.default_output_device().unwrap();
+        return Ok(DeviceSpec::Output(Some(device.name()?)));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let device = host
+            .default_output_device()
+            .ok_or_else(|| anyhow!("No default output device found"))?;
         info!("Using default output device: {}", device.name()?);
-        Ok(DeviceSpec::Output(Some(device.name()?)))
+        return Ok(DeviceSpec::Output(Some(device.name()?)));
     }
 }

@@ -11,7 +11,6 @@ use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_device_spec,
 };
 
-use colored::*;
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server}; // Import the list_audio_devices function
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -64,7 +63,10 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
         warn!("Screenpipe hasn't been extensively tested on this OS. We'd love your feedback!");
-        println!("{}", "Would love your feedback on the UX, let's a 15 min call soon:".bright_yellow());
+        println!(
+            "{}",
+            "Would love your feedback on the UX, let's a 15 min call soon:".bright_yellow()
+        );
         println!(
             "{}",
             "https://cal.com/louis030195/screenpipe"

@@ -19,7 +19,6 @@ serde_json = "1.0"
 # Temporary hack check https://github.com/RustAudio/cpal/pull/894
 cpal = { git = "https://github.com/Kree0/cpal.git", rev = "dfca186" }
 
-
 # Wav encoding
 hound = "3.5"
 
