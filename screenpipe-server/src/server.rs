@@ -279,21 +279,8 @@ impl Server {
 // # 4. Search with pagination
 // curl "http://localhost:3030/search?q=test&limit=10&offset=20"
 
-// # 5. Get recent results without date range
-// curl "http://localhost:3030/recent?limit=5&offset=0"
-
 // # 6. Get recent results with date range
 // curl "http://localhost:3030/recent?limit=5&offset=0&start_date=2024-07-02T14:00:00&end_date=2024-07-02T23:59:59"
 
-// 5 s ago
-// start_date=$(date -u -v-5S +'%Y-%m-%dT%H:%M:%S')
-
-// end_date=$(date -u +'%Y-%m-%dT%H:%M:%S')
-
-// curl "http://localhost:3030/recent?limit=5&offset=0&start_date=$start_date&end_date=$end_date"
-
 // # 9. Search with no query (should return all results)
 // curl "http://localhost:3030/search?limit=5&offset=0"
-
-// # 10. Get recent results with pagination
-// curl "http://localhost:3030/recent?limit=20&offset=40"

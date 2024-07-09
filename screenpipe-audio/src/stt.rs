@@ -1,5 +1,5 @@
 use anyhow::{Error as E, Result};
-use candle::{Device, IndexOp, Tensor, D};
+use candle::{Device, IndexOp, Tensor};
 use candle_nn::ops::softmax;
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{error, info};
