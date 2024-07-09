@@ -137,6 +137,8 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
   <summary>Linux</summary>
 
 ```bash
+sudo apt update
+sudo apt install -y libasound2-dev
 curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
 ```
 
