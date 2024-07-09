@@ -86,23 +86,10 @@ pub fn record_and_transcribe(
     result_tx: Sender<AudioCaptureResult>,
     output_path: PathBuf,
 ) -> Result<PathBuf> {
-    let host = if cfg!(target_os = "macos") {
-        match device_spec {
-            // https://github.com/RustAudio/cpal/pull/894
-            DeviceSpec::Output(_) => {
-                #[cfg(target_os = "macos")]
-                {
-                    cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    return Err(anyhow!("ScreenCaptureKit is only available on macOS"));
-                }
-            }
-            _ => cpal::default_host(),
-        }
-    } else {
-        cpal::default_host()
+    let host = match device_spec {
+        #[cfg(target_os = "macos")]
+        DeviceSpec::Output(_) => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
+        _ => cpal::default_host(),
     };
 
     info!("device: {:?}", device_spec.to_string());
