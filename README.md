@@ -114,6 +114,7 @@ We are working toward [making it easier to try](https://github.com/louis030195/s
 ```
 
  Install [Rust](https://www.rust-lang.org/tools/install).
+ 
   2. Clone the repo:
 
 ```bash
