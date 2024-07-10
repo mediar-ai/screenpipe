@@ -17,4 +17,4 @@ candle = { package = "candle-core", version = "0.6.0" }
 candle-nn = { package = "candle-nn", version = "0.6.0" }
 candle-transformers = { package = "candle-transformers", version = "0.6.0" }
 tokenizers = "0.19.1"
-
+tracing = "0.1.37"

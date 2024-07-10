@@ -68,6 +68,12 @@ sysinfo = "0.29.0"
 # Color 
 colored = "2.0"
 
+# Tracing
+tracing = { workspace = true }
+
+# Concurrency
+crossbeam = "0.8"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 

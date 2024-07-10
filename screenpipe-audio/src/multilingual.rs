@@ -3,6 +3,8 @@ use candle_transformers::models::whisper::SOT_TOKEN;
 use log::info;
 use tokenizers::Tokenizer;
 
+use crate::stt::Model;
+
 const LANGUAGES: [(&str, &str); 99] = [
     ("en", "english"),
     ("zh", "chinese"),
@@ -107,7 +109,7 @@ const LANGUAGES: [(&str, &str); 99] = [
 
 /// Returns the token id for the selected language.
 pub fn detect_language(
-    model: &mut super::stt::Model,
+    model: &mut Model,
     tokenizer: &Tokenizer,
     mel: &Tensor,
 ) -> Result<u32> {

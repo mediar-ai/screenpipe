@@ -50,6 +50,12 @@ env_logger = "0.10"
 # File 
 tempfile = "3"
 
+# Tracing
+tracing = { workspace = true }
+
+# Concurrency
+crossbeam = "0.8"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 

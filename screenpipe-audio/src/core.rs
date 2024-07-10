@@ -1,18 +1,16 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample};
+use crossbeam::channel::Sender;
 use hound::WavSpec;
 use log::{error, info};
 use serde::Serialize;
 use std::fmt;
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{io::BufWriter, thread};
-
-use crate::stt::stt;
 
 pub struct AudioCaptureResult {
     pub text: String,
@@ -83,8 +81,8 @@ pub fn parse_device_spec(name: &str) -> Result<DeviceSpec> {
 pub fn record_and_transcribe(
     device_spec: &DeviceSpec,
     duration: Duration,
-    result_tx: Sender<AudioCaptureResult>,
     output_path: PathBuf,
+    whisper_sender: Sender<String>,
 ) -> Result<PathBuf> {
     let host = match device_spec {
         #[cfg(target_os = "macos")]
@@ -94,7 +92,7 @@ pub fn record_and_transcribe(
 
     info!("device: {:?}", device_spec.to_string());
 
-    let device = if device_spec.to_string() == "default" {
+    let audio_device = if device_spec.to_string() == "default" {
         host.default_input_device()
     } else {
         host.input_devices()?.find(|x| {
@@ -108,10 +106,14 @@ pub fn record_and_transcribe(
                 .unwrap_or(false)
         })
     }
-    .ok_or_else(|| anyhow!("Device not found"))?;
+    .ok_or_else(|| anyhow!("Audio device not found"))?;
 
-    let config = device.default_input_config()?;
-    info!("Recording device: {}, Config: {:?}", device.name()?, config);
+    let config = audio_device.default_input_config()?;
+    info!(
+        "Recording audio device: {}, Config: {:?}",
+        audio_device.name()?,
+        config
+    );
 
     let spec = wav_spec_from_config(&config);
     let writer = hound::WavWriter::create(&output_path, spec)?;
@@ -120,25 +122,25 @@ pub fn record_and_transcribe(
     let err_fn = |err| error!("An error occurred on the audio stream: {}", err);
 
     let stream = match config.sample_format() {
-        cpal::SampleFormat::I8 => device.build_input_stream(
+        cpal::SampleFormat::I8 => audio_device.build_input_stream(
             &config.into(),
             move |data, _: &_| write_input_data::<i8, i8>(data, &writer_2),
             err_fn,
             None,
         )?,
-        cpal::SampleFormat::I16 => device.build_input_stream(
+        cpal::SampleFormat::I16 => audio_device.build_input_stream(
             &config.into(),
             move |data, _: &_| write_input_data::<i16, i16>(data, &writer_2),
             err_fn,
             None,
         )?,
-        cpal::SampleFormat::I32 => device.build_input_stream(
+        cpal::SampleFormat::I32 => audio_device.build_input_stream(
             &config.into(),
             move |data, _: &_| write_input_data::<i32, i32>(data, &writer_2),
             err_fn,
             None,
         )?,
-        cpal::SampleFormat::F32 => device.build_input_stream(
+        cpal::SampleFormat::F32 => audio_device.build_input_stream(
             &config.into(),
             move |data, _: &_| write_input_data::<f32, f32>(data, &writer_2),
             err_fn,
@@ -169,15 +171,8 @@ pub fn record_and_transcribe(
                 if let Some(writer) = writer_guard.as_mut() {
                     writer.flush()?;
 
-                    // Transcribe the current audio chunk
-                    match stt(output_path.to_str().unwrap()) {
-                        Ok(transcription) => {
-                            result_tx.send(AudioCaptureResult {
-                                text: transcription,
-                            })?;
-                        }
-                        Err(e) => error!("Transcription failed: {}", e),
-                    }
+                    // Send the file path to the whisper channel
+                    whisper_sender.send(output_path.to_str().unwrap().to_string())?;
                 }
             }
 
@@ -195,14 +190,8 @@ pub fn record_and_transcribe(
         if let Some(writer) = writer_guard.as_mut() {
             writer.flush()?;
 
-            match stt(output_path.to_str().unwrap()) {
-                Ok(transcription) => {
-                    result_tx.send(AudioCaptureResult {
-                        text: transcription,
-                    })?;
-                }
-                Err(e) => error!("Final transcription failed: {}", e),
-            }
+            // Send the file path to the whisper channel
+            whisper_sender.send(output_path.to_str().unwrap().to_string())?;
         }
     }
 
