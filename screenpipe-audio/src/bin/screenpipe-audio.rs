@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use log::info;
+use screenpipe_audio::create_whisper_channel;
+use screenpipe_audio::default_input_device;
+use screenpipe_audio::default_output_device;
 use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_device_spec;
 use screenpipe_audio::record_and_transcribe;
@@ -12,8 +15,12 @@ use std::time::Duration;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    #[clap(short, long, help = "Audio device name")]
-    audio_device: Option<String>,
+    #[clap(
+        short,
+        long,
+        help = "Audio device name (can be specified multiple times)"
+    )]
+    audio_device: Vec<String>,
 
     #[clap(long, help = "List available audio devices")]
     list_audio_devices: bool,
@@ -45,51 +52,58 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let device = match args.audio_device {
-        Some(d) => parse_device_spec(&d).unwrap(),
-        None => {
-            if devices.is_empty() {
-                return Err(anyhow!("No audio input devices found"));
-            }
-            eprintln!("No audio device specified. Available devices are:");
-            print_devices(&devices);
-            eprintln!("\nPlease specify one or more devices with:");
-            eprintln!(
-                "  {} --audio-device \"Device Name (input)\" [--audio-device \"Another Device (output)\"]",
-                std::env::args().next().unwrap()
-            );
-            return Err(anyhow!("No device specified"));
-        }
+    let devices = if args.audio_device.is_empty() {
+        vec![default_input_device()?, default_output_device()?]
+    } else {
+        args.audio_device
+            .iter()
+            .map(|d| parse_device_spec(d))
+            .collect::<Result<Vec<_>>>()?
     };
 
-    let (result_tx, result_rx) = mpsc::channel();
+    if devices.is_empty() {
+        return Err(anyhow!("No audio input devices found"));
+    }
+
     let chunk_duration = Duration::from_secs(30);
     let output_path = PathBuf::from("output.wav");
-    // Spawn a thread to handle the recording and transcription
-    let recording_thread = thread::spawn(move || {
-        record_and_transcribe(&device, chunk_duration, result_tx, output_path)
-    });
+    let (whisper_sender, whisper_receiver) = create_whisper_channel()?;
+
+    // Spawn threads for each device
+    let recording_threads: Vec<_> = devices
+        .into_iter()
+        .enumerate()
+        .map(|(i, device)| {
+            let whisper_sender = whisper_sender.clone();
+            let output_path = output_path.with_file_name(format!("output_{}.wav", i));
+            thread::spawn(move || {
+                record_and_transcribe(&device, chunk_duration, output_path, whisper_sender)
+            })
+        })
+        .collect();
 
     // Main loop to receive and print transcriptions
     loop {
-        match result_rx.recv_timeout(Duration::from_secs(5)) {
+        match whisper_receiver.recv_timeout(Duration::from_secs(5)) {
             Ok(result) => {
-                info!("Transcription: {}", result.text);
+                info!("Transcription: {:?}", result);
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
+            Err(crossbeam::channel::RecvTimeoutError::Timeout) => {
                 // No transcription received in 5 seconds, continue waiting
                 continue;
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                // Sender has been dropped, recording is complete
+            Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
+                // All senders have been dropped, recording is complete
                 break;
             }
         }
     }
 
-    // Wait for the recording thread to finish
-    let file_path = recording_thread.join().unwrap()?;
-    println!("Recording complete: {:?}", file_path);
+    // Wait for all recording threads to finish
+    for (i, thread) in recording_threads.into_iter().enumerate() {
+        let file_path = thread.join().unwrap()?;
+        println!("Recording {} complete: {:?}", i, file_path);
+    }
 
     Ok(())
 }

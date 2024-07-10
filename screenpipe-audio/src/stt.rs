@@ -1,18 +1,67 @@
+use std::{
+    thread,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::ops::softmax;
+use crossbeam::channel::{self, Receiver, Sender};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{error, info};
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
 
-use candle_transformers::models::whisper::{self as m, audio, Config};
+use candle_transformers::{
+    models::whisper::{self as m, audio, Config},
+    quantized_var_builder::VarBuilder,
+};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
 use crate::{multilingual, pcm_decode::pcm_decode};
 
+#[derive(Clone)]
+pub struct WhisperModel {
+    pub model: Model,
+    pub tokenizer: Tokenizer,
+    pub device: Device,
+}
+
+impl WhisperModel {
+    pub fn new() -> Result<Self> {
+        let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
+        info!("device = {:?}", device);
+
+        let (config_filename, tokenizer_filename, weights_filename) = {
+            let api = Api::new()?;
+            let repo = api.repo(Repo::with_revision(
+                "lmz/candle-whisper".to_string(),
+                RepoType::Model,
+                "main".to_string(),
+            ));
+            let config = repo.get("config-tiny.json")?;
+            let tokenizer = repo.get("tokenizer-tiny.json")?;
+            let model = repo.get("model-tiny-q80.gguf")?;
+            (config, tokenizer, model)
+        };
+
+        let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
+        let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
+
+        let vb = VarBuilder::from_gguf(weights_filename, &device)?;
+        let model = Model::Quantized(m::quantized_model::Whisper::load(&vb, config)?);
+
+        Ok(Self {
+            model: model,
+            tokenizer,
+            device,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Model {
     Normal(m::model::Whisper),
     Quantized(m::quantized_model::Whisper),
@@ -70,13 +119,13 @@ struct Segment {
     dr: DecodingResult,
 }
 
-struct Decoder {
-    model: Model,
+struct Decoder<'a> {
+    model: &'a mut Model,
     rng: rand::rngs::StdRng,
     task: Option<Task>,
     timestamps: bool,
     verbose: bool,
-    tokenizer: Tokenizer,
+    tokenizer: &'a Tokenizer,
     suppress_tokens: Tensor,
     sot_token: u32,
     transcribe_token: u32,
@@ -87,11 +136,11 @@ struct Decoder {
     language_token: Option<u32>,
 }
 
-impl Decoder {
+impl<'a> Decoder<'a> {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        model: Model,
-        tokenizer: Tokenizer,
+        model: &'a mut Model,
+        tokenizer: &'a Tokenizer,
         seed: u64,
         device: &Device,
         language_token: Option<u32>,
@@ -142,12 +191,11 @@ impl Decoder {
     }
 
     fn decode(&mut self, mel: &Tensor, t: f64) -> Result<DecodingResult> {
-        let model = &mut self.model;
-        let audio_features = model.encoder_forward(mel, true)?;
+        let audio_features = self.model.encoder_forward(mel, true)?;
         if self.verbose {
             info!("audio features: {:?}", audio_features.dims());
         }
-        let sample_len = model.config().max_target_positions / 2;
+        let sample_len = self.model.config().max_target_positions / 2;
         let mut no_speech_prob = f64::NAN;
         let mut tokens = vec![self.sot_token];
         if let Some(language_token) = self.language_token {
@@ -167,17 +215,20 @@ impl Decoder {
         for i in 0..sample_len {
             let tokens_t = Tensor::new(tokens.as_slice(), mel.device())?;
             let tokens_t = tokens_t.unsqueeze(0)?;
-            let ys = model.decoder_forward(&tokens_t, &audio_features, i == 0)?;
+            let ys = self
+                .model
+                .decoder_forward(&tokens_t, &audio_features, i == 0)?;
 
             if i == 0 {
-                let logits = model.decoder_final_linear(&ys.i(..1)?)?.i(0)?.i(0)?;
+                let logits = self.model.decoder_final_linear(&ys.i(..1)?)?.i(0)?.i(0)?;
                 no_speech_prob = softmax(&logits, 0)?
                     .i(self.no_speech_token as usize)?
                     .to_scalar::<f32>()? as f64;
             }
 
             let (_, seq_len, _) = ys.dims3()?;
-            let logits = model
+            let logits = self
+                .model
                 .decoder_final_linear(&ys.i((..1, seq_len - 1..))?)?
                 .i(0)?
                 .i(0)?;
@@ -213,7 +264,9 @@ impl Decoder {
 
             sum_logprob += prob.ln();
 
-            if next_token == self.eot_token || tokens.len() > model.config().max_target_positions {
+            if next_token == self.eot_token
+                || tokens.len() > self.model.config().max_target_positions
+            {
                 break;
             }
 
@@ -343,31 +396,13 @@ enum Task {
     Translate,
 }
 
-pub fn stt(input: &str) -> Result<String> {
+pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
     info!("Starting speech to text");
-    let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
-    info!("device = {:?}", device);
-    let (default_model, default_revision) = ("lmz/candle-whisper", "main");
-    let default_model = default_model.to_string();
-    let default_revision = default_revision.to_string();
+    let mut model = &whisper_model.model;
+    let tokenizer = &whisper_model.tokenizer;
+    let device = &whisper_model.device;
 
-    let (config_filename, tokenizer_filename, weights_filename, input) = {
-        let api = Api::new()?;
-        let repo = api.repo(Repo::with_revision(
-            default_model,
-            RepoType::Model,
-            default_revision,
-        ));
-        let sample = std::path::PathBuf::from(input);
-        let config = repo.get("config-tiny.json")?;
-        let tokenizer = repo.get("tokenizer-tiny.json")?;
-        let model = repo.get("model-tiny-q80.gguf")?;
-        (config, tokenizer, model, sample)
-    };
-    let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
-    let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-
-    let mel_bytes = match config.num_mel_bins {
+    let mel_bytes = match model.config().num_mel_bins {
         80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
         128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
         nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
@@ -375,7 +410,7 @@ pub fn stt(input: &str) -> Result<String> {
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
-    let (mut pcm_data, sample_rate) = pcm_decode(input)?;
+    let (mut pcm_data, sample_rate) = pcm_decode(file_path)?;
     if sample_rate != m::SAMPLE_RATE as u32 {
         info!(
             "Resampling from {} Hz to {} Hz",
@@ -386,24 +421,26 @@ pub fn stt(input: &str) -> Result<String> {
     }
 
     // info!("pcm data loaded {}", pcm_data.len());
-    let mel = audio::pcm_to_mel(&config, &pcm_data, &mel_filters);
+    let mel = audio::pcm_to_mel(&model.config(), &pcm_data, &mel_filters);
     let mel_len = mel.len();
     let mel = Tensor::from_vec(
         mel,
-        (1, config.num_mel_bins, mel_len / config.num_mel_bins),
+        (
+            1,
+            model.config().num_mel_bins,
+            mel_len / model.config().num_mel_bins,
+        ),
         &device,
     )?;
-    // info!("loaded mel: {:?}", mel.dims());
 
-    let vb = candle_transformers::quantized_var_builder::VarBuilder::from_gguf(
-        weights_filename,
-        &device,
-    )?;
-    let mut model = Model::Quantized(m::quantized_model::Whisper::load(&vb, config)?);
-    let language_token = Some(multilingual::detect_language(&mut model, &tokenizer, &mel)?);
-    // info!("Creating decoder");
+    let language_token = Some(multilingual::detect_language(
+        &mut model.clone(),
+        &tokenizer,
+        &mel,
+    )?);
+    let mut model = model.clone();
     let mut dc = Decoder::new(
-        model,
+        &mut model,
         tokenizer,
         42,
         &device,
@@ -445,6 +482,61 @@ fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Resu
     Ok(waves_out.into_iter().next().unwrap())
 }
 
+#[derive(Debug, Clone)]
+pub struct AudioInput {
+    pub path: String,
+    pub device: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TranscriptionResult {
+    pub input: AudioInput,
+    pub transcription: Option<String>,
+    pub timestamp: u64,
+    pub error: Option<String>,
+}
+pub fn create_whisper_channel() -> Result<(Sender<AudioInput>, Receiver<TranscriptionResult>)> {
+    let whisper_model = WhisperModel::new()?;
+    let (input_sender, input_receiver): (Sender<AudioInput>, Receiver<AudioInput>) =
+        channel::unbounded();
+    let (output_sender, output_receiver): (
+        Sender<TranscriptionResult>,
+        Receiver<TranscriptionResult>,
+    ) = channel::unbounded();
+
+    thread::spawn(move || {
+        while let Ok(input) = input_receiver.recv() {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs();
+
+            let result = stt(&input.path, &whisper_model);
+
+            let transcription_result = match result {
+                Ok(transcription) => TranscriptionResult {
+                    input: input.clone(),
+                    transcription: Some(transcription),
+                    timestamp,
+                    error: None,
+                },
+                Err(e) => TranscriptionResult {
+                    input: input.clone(),
+                    transcription: None,
+                    timestamp,
+                    error: Some(e.to_string()),
+                },
+            };
+
+            if output_sender.send(transcription_result).is_err() {
+                break;
+            }
+        }
+    });
+
+    Ok((input_sender, output_receiver))
+}
+
 #[test]
 #[ignore]
 fn test_speech_to_text() {
@@ -452,7 +544,9 @@ fn test_speech_to_text() {
 
     println!("Loading audio file");
     let start = std::time::Instant::now();
-    let text = stt("./test_data/poetic_kapil_gupta.wav").unwrap();
+    let whisper_model = WhisperModel::new().unwrap();
+
+    let text = stt("./test_data/poetic_kapil_gupta.wav", &whisper_model).unwrap();
     let duration = start.elapsed();
 
     println!("Speech to text completed in {:?}", duration);
