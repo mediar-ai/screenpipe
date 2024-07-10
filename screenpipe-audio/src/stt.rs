@@ -1,4 +1,7 @@
-use std::thread;
+use std::{
+    thread,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
@@ -393,7 +396,7 @@ enum Task {
     Translate,
 }
 
-pub fn stt(input: &str, whisper_model: &WhisperModel) -> Result<String> {
+pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
     info!("Starting speech to text");
     let mut model = &whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
@@ -407,7 +410,7 @@ pub fn stt(input: &str, whisper_model: &WhisperModel) -> Result<String> {
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
-    let (mut pcm_data, sample_rate) = pcm_decode(input)?;
+    let (mut pcm_data, sample_rate) = pcm_decode(file_path)?;
     if sample_rate != m::SAMPLE_RATE as u32 {
         info!(
             "Resampling from {} Hz to {} Hz",
@@ -479,24 +482,54 @@ fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Resu
     Ok(waves_out.into_iter().next().unwrap())
 }
 
-pub fn create_whisper_channel() -> Result<(Sender<String>, Receiver<String>)> {
+#[derive(Debug, Clone)]
+pub struct AudioInput {
+    pub path: String,
+    pub device: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TranscriptionResult {
+    pub input: AudioInput,
+    pub transcription: Option<String>,
+    pub timestamp: u64,
+    pub error: Option<String>,
+}
+pub fn create_whisper_channel() -> Result<(Sender<AudioInput>, Receiver<TranscriptionResult>)> {
     let whisper_model = WhisperModel::new()?;
-    let (input_sender, input_receiver): (Sender<String>, Receiver<String>) = channel::unbounded();
-    let (output_sender, output_receiver): (Sender<String>, Receiver<String>) = channel::unbounded();
+    let (input_sender, input_receiver): (Sender<AudioInput>, Receiver<AudioInput>) =
+        channel::unbounded();
+    let (output_sender, output_receiver): (
+        Sender<TranscriptionResult>,
+        Receiver<TranscriptionResult>,
+    ) = channel::unbounded();
 
     thread::spawn(move || {
         while let Ok(input) = input_receiver.recv() {
-            match stt(&input, &whisper_model) {
-                Ok(result) => {
-                    if output_sender.send(result).is_err() {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    if output_sender.send(format!("Error: {}", e)).is_err() {
-                        break;
-                    }
-                }
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs();
+
+            let result = stt(&input.path, &whisper_model);
+
+            let transcription_result = match result {
+                Ok(transcription) => TranscriptionResult {
+                    input: input.clone(),
+                    transcription: Some(transcription),
+                    timestamp,
+                    error: None,
+                },
+                Err(e) => TranscriptionResult {
+                    input: input.clone(),
+                    transcription: None,
+                    timestamp,
+                    error: Some(e.to_string()),
+                },
+            };
+
+            if output_sender.send(transcription_result).is_err() {
+                break;
             }
         }
     });

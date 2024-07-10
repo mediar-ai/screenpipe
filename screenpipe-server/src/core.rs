@@ -4,7 +4,8 @@ use chrono::Utc;
 use crossbeam::channel::{Receiver, Sender};
 use log::{debug, error, info};
 use screenpipe_audio::{
-    create_whisper_channel, record_and_transcribe, AudioCaptureResult, DeviceSpec,
+    create_whisper_channel, record_and_transcribe, AudioCaptureResult, AudioInput, DeviceSpec,
+    TranscriptionResult,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -129,8 +130,8 @@ async fn record_audio(
     chunk_duration: Duration,
     is_running: Arc<AtomicBool>,
     devices: Vec<Arc<DeviceSpec>>,
-    whisper_sender: Sender<String>,
-    whisper_receiver: Receiver<String>,
+    whisper_sender: Sender<AudioInput>,
+    whisper_receiver: Receiver<TranscriptionResult>,
 ) -> Result<()> {
     let mut handles = vec![];
 
@@ -180,16 +181,7 @@ async fn record_audio(
 
                         // Process the recorded chunk
                         if let Ok(transcription) = whisper_receiver.recv() {
-                            let result = AudioCaptureResult {
-                                text: transcription,
-                            };
-                            process_audio_result(
-                                &db_clone,
-                                &file_path.to_str().unwrap(),
-                                &device_spec_clone,
-                                result,
-                            )
-                            .await;
+                            process_audio_result(&db_clone, transcription).await;
                         }
                     }
                     Ok(Err(e)) => error!("Error in record_and_transcribe: {}", e),
@@ -209,33 +201,36 @@ async fn record_audio(
 
     Ok(())
 }
-async fn process_audio_result(
-    db: &DatabaseManager,
-    output_path: &str,
-    device_spec: &DeviceSpec,
-    result: AudioCaptureResult,
-) {
-    info!("Inserting audio chunk: {:?}", result.text);
-    match db.insert_audio_chunk(&output_path).await {
+async fn process_audio_result(db: &DatabaseManager, result: TranscriptionResult) {
+    info!("Inserting audio chunk: {:?}", result.transcription);
+    if result.error.is_some() || result.transcription.is_none() {
+        error!(
+            "Error in audio recording: {}",
+            result.error.unwrap_or_default()
+        );
+        return;
+    }
+    let transcription = result.transcription.unwrap();
+    match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
             if let Err(e) = db
-                .insert_audio_transcription(audio_chunk_id, &result.text, 0) // TODO index is in the text atm
+                .insert_audio_transcription(audio_chunk_id, &transcription, 0) // TODO index is in the text atm
                 .await
             {
                 error!(
                     "Failed to insert audio transcription for device {}: {}",
-                    device_spec, e
+                    result.input.device, e
                 );
             } else {
                 debug!(
                     "Inserted audio transcription for chunk {} from device {}",
-                    audio_chunk_id, device_spec
+                    audio_chunk_id, result.input.device
                 );
             }
         }
         Err(e) => error!(
             "Failed to insert audio chunk for device {}: {}",
-            device_spec, e
+            result.input.device, e
         ),
     }
 }

@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{io::BufWriter, thread};
 
+use crate::AudioInput;
+
 pub struct AudioCaptureResult {
     pub text: String,
 }
@@ -82,7 +84,7 @@ pub fn record_and_transcribe(
     device_spec: &DeviceSpec,
     duration: Duration,
     output_path: PathBuf,
-    whisper_sender: Sender<String>,
+    whisper_sender: Sender<AudioInput>,
 ) -> Result<PathBuf> {
     let host = match device_spec {
         #[cfg(target_os = "macos")]
@@ -172,7 +174,10 @@ pub fn record_and_transcribe(
                     writer.flush()?;
 
                     // Send the file path to the whisper channel
-                    whisper_sender.send(output_path.to_str().unwrap().to_string())?;
+                    whisper_sender.send(AudioInput {
+                        path: output_path.to_str().unwrap().to_string(),
+                        device: device_spec.to_string(),
+                    })?;
                 }
             }
 
@@ -191,7 +196,10 @@ pub fn record_and_transcribe(
             writer.flush()?;
 
             // Send the file path to the whisper channel
-            whisper_sender.send(output_path.to_str().unwrap().to_string())?;
+            whisper_sender.send(AudioInput {
+                path: output_path.to_str().unwrap().to_string(),
+                device: device_spec.to_string(),
+            })?;
         }
     }
 
