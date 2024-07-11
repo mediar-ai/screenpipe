@@ -1,14 +1,11 @@
 use log::{error, info, warn};
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 
 pub struct ResourceMonitor {
-    open_files: AtomicUsize,
-    active_threads: AtomicUsize,
     start_time: Instant,
     memory_threshold: f64,
     runtime_threshold: Duration,
@@ -17,8 +14,6 @@ pub struct ResourceMonitor {
 impl ResourceMonitor {
     pub fn new(memory_threshold: f64, runtime_threshold_minutes: u64) -> Arc<Self> {
         Arc::new(Self {
-            open_files: AtomicUsize::new(0),
-            active_threads: AtomicUsize::new(0),
             start_time: Instant::now(),
             memory_threshold,
             runtime_threshold: Duration::from_secs(runtime_threshold_minutes * 60),
@@ -34,16 +29,26 @@ impl ResourceMonitor {
             let cpu_usage = process.cpu_usage();
             let runtime = self.start_time.elapsed();
 
-            info!(
-                "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%",
-                runtime,
-                memory_usage_percent,
-                memory_usage,
-                total_memory,
-                cpu_usage,
-                // self.open_files.load(Ordering::SeqCst),
-                // self.active_threads.load(Ordering::SeqCst)
-            );
+            let log_message = if cfg!(target_os = "macos") {
+                if let Some(npu_usage) = self.get_npu_usage() {
+                    format!(
+                        "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%, NPU: {:.2}%",
+                        runtime, memory_usage_percent, memory_usage, total_memory, cpu_usage, npu_usage
+                    )
+                } else {
+                    format!(
+                        "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%, NPU: N/A",
+                        runtime, memory_usage_percent, memory_usage, total_memory, cpu_usage
+                    )
+                }
+            } else {
+                format!(
+                    "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%",
+                    runtime, memory_usage_percent, memory_usage, total_memory, cpu_usage
+                )
+            };
+
+            info!("{}", log_message);
 
             // Check for restart conditions
             if memory_usage_percent > self.memory_threshold || runtime > self.runtime_threshold {
@@ -96,5 +101,69 @@ impl ResourceMonitor {
                 thread::sleep(interval);
             }
         });
+    }
+
+    // TODO- only way would be to use metal crate (overkill for now :))
+    #[cfg(target_os = "macos")]
+    fn get_npu_usage(&self) -> Option<f32> {
+        let output = Command::new("ioreg")
+            .args(&["-r", "-c", "AppleARMIODevice", "-n", "ane0"])
+            .output()
+            .ok()?;
+
+        let output_str = String::from_utf8_lossy(&output.stdout);
+
+        // Parse the output to find the "ane_power" value
+        for line in output_str.lines() {
+            if line.contains("\"ane_power\"") {
+                if let Some(value) = line.split('=').nth(1) {
+                    if let Ok(power) = value.trim().parse::<f32>() {
+                        // Assuming max ANE power is 8.0W (adjust if needed)
+                        let max_ane_power = 8.0;
+                        let npu_usage_percent = (power / max_ane_power) * 100.0;
+                        return Some(npu_usage_percent);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    // #[cfg(target_os = "macos")]
+    // fn get_npu_usage(&self) -> Option<f32> {
+    //     // ! HACK unfortunately requrie sudo so not usable ...
+    //     let output = Command::new("powermetrics")
+    //         .args(&[
+    //             "-s",
+    //             "cpu_power",
+    //             "-i",
+    //             "100",
+    //             "-n",
+    //             "1",
+    //             "--format",
+    //             "json",
+    //         ])
+    //         .output()
+    //         .ok()?;
+
+    //     println!("Output: {:?}", output);
+
+    //     let json: Value = serde_json::from_slice(&output.stdout).ok()?;
+    //     let ane_power = json["processor"]["ane_energy"].as_f64()?;
+
+    //     // Convert energy to power (W) based on the interval (100ms)
+    //     let ane_power_watts = ane_power / 0.1 / 1000.0;
+
+    //     // Assuming max ANE power is 8.0W (adjust if needed)
+    //     let max_ane_power = 8.0;
+    //     let npu_usage_percent = (ane_power_watts / max_ane_power) * 100.0;
+
+    //     Some(npu_usage_percent as f32)
+    // }
+
+    #[cfg(not(target_os = "macos"))]
+    fn get_npu_usage(&self) -> Option<f32> {
+        None
     }
 }

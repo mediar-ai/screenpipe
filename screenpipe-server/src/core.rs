@@ -4,8 +4,7 @@ use chrono::Utc;
 use crossbeam::channel::{Receiver, Sender};
 use log::{debug, error, info};
 use screenpipe_audio::{
-    create_whisper_channel, record_and_transcribe, AudioCaptureResult, AudioInput, DeviceSpec,
-    TranscriptionResult,
+    create_whisper_channel, record_and_transcribe, AudioInput, DeviceSpec, TranscriptionResult,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

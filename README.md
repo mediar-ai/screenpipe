@@ -62,6 +62,8 @@ Keep in mind that it's still experimental.
 screenpipe
 # by default it uses your default input and output audio devices
 # (e.g. speakers/headphones + laptop mic) & your whole screen
+# we recommend that you customise screenpipe to your laptop 
+# computing capacity to avoid issues
 ```
 
 <details>

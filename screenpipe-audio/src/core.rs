@@ -271,7 +271,7 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
             if let Ok(name) = device.name() {
                 devices.push(AudioDevice {
                     name,
-                    device_type: "input".to_string(),
+                    device_type: "output".to_string(),
                 });
             }
         }

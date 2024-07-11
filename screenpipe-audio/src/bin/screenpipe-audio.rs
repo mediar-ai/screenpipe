@@ -36,7 +36,6 @@ fn print_devices(devices: &[AudioDevice]) {
 fn main() -> Result<()> {
     use env_logger::Builder;
     use log::LevelFilter;
-    use std::sync::mpsc;
 
     Builder::new()
         .filter(None, LevelFilter::Info)
@@ -81,15 +80,22 @@ fn main() -> Result<()> {
             })
         })
         .collect();
+    let mut consecutive_timeouts = 0;
+    let max_consecutive_timeouts = 3; // Adjust this value as needed
 
     // Main loop to receive and print transcriptions
     loop {
         match whisper_receiver.recv_timeout(Duration::from_secs(5)) {
             Ok(result) => {
                 info!("Transcription: {:?}", result);
+                consecutive_timeouts = 0; // Reset the counter on successful receive
             }
             Err(crossbeam::channel::RecvTimeoutError::Timeout) => {
-                // No transcription received in 5 seconds, continue waiting
+                consecutive_timeouts += 1;
+                if consecutive_timeouts >= max_consecutive_timeouts {
+                    info!("No transcriptions received for a while, stopping...");
+                    break;
+                }
                 continue;
             }
             Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
