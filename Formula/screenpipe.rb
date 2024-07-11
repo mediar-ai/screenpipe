@@ -22,4 +22,5 @@ class Screenpipe < Formula
 # gh release upload v0.1.34 screenpipe-0.1.34-x86_64-apple-darwin.tar.gz
 # rm screenpipe-0.1.34-x86_64-apple-darwin.tar.gz
 
-
+# brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
+# brew install screenpipe
