@@ -28,14 +28,7 @@ mod tests {
         let start = std::time::Instant::now();
         let whisper_model = WhisperModel::new().unwrap();
 
-        let text = stt(
-            &[AudioInput {
-                path: "./test_data/poetic_kapil_gupta.wav".to_string(),
-                device: "the sun".to_string(),
-            }],
-            &whisper_model,
-        )
-        .unwrap();
+        let text = stt("./test_data/poetic_kapil_gupta.wav", &whisper_model).unwrap();
         let duration = start.elapsed();
 
         println!("Speech to text completed in {:?}", duration);
