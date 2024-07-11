@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::time::{Duration, Instant};
 
 #[tokio::test]
+#[ignore] // only run locally atm
 async fn test_screen_capture_to_api_delay() {
     // rm the data directory
     std::fs::remove_dir_all("../data-test").unwrap_or_default();
