@@ -157,7 +157,7 @@ async fn record_audio(
                     move || {
                         let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
                         let file_path = format!(
-                            "{}/{}_{}.wav",
+                            "{}/{}_{}.mp3",
                             output_path_clone, device_spec_clone, new_file_name
                         );
                         record_and_transcribe(

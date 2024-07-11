@@ -65,7 +65,7 @@ fn main() -> Result<()> {
     }
 
     let chunk_duration = Duration::from_secs(30);
-    let output_path = PathBuf::from("output.wav");
+    let output_path = PathBuf::from("output.mp3");
     let (whisper_sender, whisper_receiver) = create_whisper_channel()?;
 
     // Spawn threads for each device
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
         .enumerate()
         .map(|(i, device)| {
             let whisper_sender = whisper_sender.clone();
-            let output_path = output_path.with_file_name(format!("output_{}.wav", i));
+            let output_path = output_path.with_file_name(format!("output_{}.mp3", i));
             thread::spawn(move || {
                 record_and_transcribe(&device, chunk_duration, output_path, whisper_sender)
             })

@@ -39,7 +39,7 @@ base64 = "0.21.7"
 anyhow = "1.0.86"
 byteorder = "1.5.0"
 hf-hub = "0.3.2"
-symphonia = "0.5.4"
+symphonia = { version = "0.5.4", features = ["mp3"] }
 rand = "0.8.5"
 rubato = "0.15.0"
 
@@ -56,8 +56,12 @@ tracing = { workspace = true }
 # Concurrency
 crossbeam = "0.8"
 
+# Bytes
+bytemuck = "1.16.1"
+
 [dev-dependencies]
 tempfile = "3.3.0"
+infer = "0.15"
 
 [features]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]

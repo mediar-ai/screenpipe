@@ -562,7 +562,7 @@ mod tests {
     #[tokio::test]
     async fn test_insert_and_search_audio() {
         let db = setup_test_db().await;
-        let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();
+        let audio_chunk_id = db.insert_audio_chunk("test_audio.mp3").await.unwrap();
         db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0)
             .await
             .unwrap();
@@ -574,7 +574,7 @@ mod tests {
         assert_eq!(results.len(), 1);
         if let SearchResult::Audio(audio_result) = &results[0] {
             assert_eq!(audio_result.transcription, "Hello from audio");
-            assert_eq!(audio_result.file_path, "test_audio.wav");
+            assert_eq!(audio_result.file_path, "test_audio.mp3");
         } else {
             panic!("Expected Audio result");
         }
@@ -592,7 +592,7 @@ mod tests {
             .unwrap();
 
         // Insert Audio data
-        let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();
+        let audio_chunk_id = db.insert_audio_chunk("test_audio.mp3").await.unwrap();
         db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0)
             .await
             .unwrap();

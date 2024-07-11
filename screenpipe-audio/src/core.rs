@@ -1,15 +1,15 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample};
-use crossbeam::channel::Sender;
+use crossbeam::channel::{Receiver, Sender};
 use hound::WavSpec;
-use log::{error, info};
+use log::{debug, error, info};
 use serde::Serialize;
 use std::fmt;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::{io::BufWriter, thread};
 
 use crate::AudioInput;
@@ -80,6 +80,9 @@ pub fn parse_device_spec(name: &str) -> Result<DeviceSpec> {
     DeviceSpec::from_name(&name)
 }
 
+use std::io::Write;
+use std::process::{Command, Stdio};
+
 pub fn record_and_transcribe(
     device_spec: &DeviceSpec,
     duration: Duration,
@@ -117,34 +120,72 @@ pub fn record_and_transcribe(
         config
     );
 
-    let spec = wav_spec_from_config(&config);
-    let writer = hound::WavWriter::create(&output_path, spec)?;
-    let writer = Arc::new(Mutex::new(Some(writer)));
-    let writer_2 = writer.clone();
+    let sample_rate = config.sample_rate().0;
+    let channels = config.channels() as u16;
+
+    let (audio_sender, audio_receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) =
+        crossbeam::channel::unbounded();
+    let is_running = Arc::new(Mutex::new(true));
+    let is_running_clone = is_running.clone();
+
+    let output_path_clone = output_path.clone();
+    // Spawn FFmpeg process in a separate thread
+    let ffmpeg_handle = thread::spawn(move || {
+        let mut ffmpeg = Command::new("ffmpeg")
+            .args(&[
+                "-f",
+                "f32le",
+                "-ar",
+                &sample_rate.to_string(),
+                "-ac",
+                &channels.to_string(),
+                "-i",
+                "pipe:0",
+                "-c:a",
+                "libmp3lame",
+                "-b:a",
+                "128k",
+                "-f",
+                "mp3",
+                output_path_clone.to_str().unwrap(),
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to spawn ffmpeg process");
+
+        let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
+
+        while *is_running_clone.lock().unwrap() {
+            if let Ok(data) = audio_receiver.recv_timeout(Duration::from_millis(100)) {
+                if let Err(e) = stdin.write_all(&data) {
+                    error!("Failed to write audio data to FFmpeg: {}", e);
+                    break;
+                }
+            }
+        }
+
+        // Close stdin to signal EOF to FFmpeg
+        drop(stdin);
+
+        // Wait for FFmpeg to finish
+        match ffmpeg.wait() {
+            Ok(status) => debug!("FFmpeg process exited with status: {}", status),
+            Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
+        }
+    });
+
     let err_fn = |err| error!("An error occurred on the audio stream: {}", err);
 
     let stream = match config.sample_format() {
-        cpal::SampleFormat::I8 => audio_device.build_input_stream(
-            &config.into(),
-            move |data, _: &_| write_input_data::<i8, i8>(data, &writer_2),
-            err_fn,
-            None,
-        )?,
-        cpal::SampleFormat::I16 => audio_device.build_input_stream(
-            &config.into(),
-            move |data, _: &_| write_input_data::<i16, i16>(data, &writer_2),
-            err_fn,
-            None,
-        )?,
-        cpal::SampleFormat::I32 => audio_device.build_input_stream(
-            &config.into(),
-            move |data, _: &_| write_input_data::<i32, i32>(data, &writer_2),
-            err_fn,
-            None,
-        )?,
         cpal::SampleFormat::F32 => audio_device.build_input_stream(
             &config.into(),
-            move |data, _: &_| write_input_data::<f32, f32>(data, &writer_2),
+            move |data: &[f32], _: &_| {
+                if let Err(e) = audio_sender.send(bytemuck::cast_slice(data).to_vec()) {
+                    error!("Failed to send audio data: {}", e);
+                }
+            },
             err_fn,
             None,
         )?,
@@ -152,60 +193,24 @@ pub fn record_and_transcribe(
     };
 
     stream.play()?;
-    info!(
-        "Will write an audio file every {} seconds",
-        duration.as_secs()
-    );
+    info!("Recording for {} seconds", duration.as_secs());
 
-    let start_time = Instant::now();
-    let chunk_duration = Duration::from_secs(5); // Adjust as needed
-    let mut next_chunk_time = start_time + chunk_duration;
+    thread::sleep(duration);
 
-    while start_time.elapsed() < duration {
-        let now = Instant::now();
+    // Stop the stream and signal the recording to stop
+    stream.pause()?;
+    *is_running.lock().unwrap() = false;
 
-        if now >= next_chunk_time {
-            // Stop the stream temporarily
-            stream.pause()?;
+    // Wait for the FFmpeg thread to finish
+    ffmpeg_handle.join().expect("Failed to join FFmpeg thread");
 
-            {
-                let mut writer_guard = writer.lock().unwrap();
-                if let Some(writer) = writer_guard.as_mut() {
-                    writer.flush()?;
-
-                    // Send the file path to the whisper channel
-                    whisper_sender.send(AudioInput {
-                        path: output_path.to_str().unwrap().to_string(),
-                        device: device_spec.to_string(),
-                    })?;
-                }
-            }
-
-            // Resume the stream
-            stream.play()?;
-            next_chunk_time = now + chunk_duration;
-        }
-
-        thread::sleep(Duration::from_millis(100));
-    }
-
-    // Final flush and transcription
-    {
-        let mut writer_guard = writer.lock().unwrap();
-        if let Some(writer) = writer_guard.as_mut() {
-            writer.flush()?;
-
-            // Send the file path to the whisper channel
-            whisper_sender.send(AudioInput {
-                path: output_path.to_str().unwrap().to_string(),
-                device: device_spec.to_string(),
-            })?;
-        }
-    }
+    whisper_sender.send(AudioInput {
+        path: output_path.to_str().unwrap().to_string(),
+        device: device_spec.to_string(),
+    })?;
 
     Ok(output_path)
 }
-
 fn wav_spec_from_config(config: &cpal::SupportedStreamConfig) -> WavSpec {
     WavSpec {
         channels: config.channels() as _,

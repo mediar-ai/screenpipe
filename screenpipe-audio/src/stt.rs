@@ -534,20 +534,4 @@ pub fn create_whisper_channel() -> Result<(Sender<AudioInput>, Receiver<Transcri
     Ok((input_sender, output_receiver))
 }
 
-#[test]
-#[ignore]
-fn test_speech_to_text() {
-    println!("Starting speech to text test");
 
-    println!("Loading audio file");
-    let start = std::time::Instant::now();
-    let whisper_model = WhisperModel::new().unwrap();
-
-    let text = stt("./test_data/poetic_kapil_gupta.wav", &whisper_model).unwrap();
-    let duration = start.elapsed();
-
-    println!("Speech to text completed in {:?}", duration);
-    println!("Transcribed text: {}", text);
-
-    assert!(text.contains("The fire"));
-}
