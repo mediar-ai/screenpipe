@@ -148,37 +148,11 @@ curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install
 
 <details>
   <summary>MacOS</summary>
-  
-  On Mac you need to build the CLI yourself.
-
-  1. Install dependencies:
-```bash
-# On Mac
-brew install ffmpeg
-```
-
-Install [Rust](https://www.rust-lang.org/tools/install).
-
-2. Clone the repo:
 
 ```bash
-git clone https://github.com/louis030195/screen-pipe
-cd screen-pipe
+brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
+brew install screenpipe
 ```
-
-3. Run the API:
-
-```bash
-# This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
-cargo build --release --features metal # remove "--features metal" if you do not have M series processor
-
-# sign the executable to avoid mac killing the process when it's running for too long
-codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime ./target/release/screenpipe
-
-# then run it
-./target/release/screenpipe
-```
-
 
 </details>
 
