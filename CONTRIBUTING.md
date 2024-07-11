@@ -49,6 +49,8 @@ This section guides you through submitting an enhancement suggestion for Screen 
 
 All Rust code must adhere to [Rust Style Guide](https://github.com/rust-lang/style-team/blob/master/guide/guide.md).
 
+We follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) folder structure.
+
 ## Additional Notes
 
 ### Issue and Pull Request Labels
