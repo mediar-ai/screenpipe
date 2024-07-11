@@ -94,6 +94,8 @@ Now pipe this into a LLM to build:
 
 [Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
 
+[Other examples](https://github.com/louis030195/screen-pipe/tree/main/examples/ts).
+
 ## Installation
 
 Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
