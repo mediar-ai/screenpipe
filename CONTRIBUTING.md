@@ -60,6 +60,12 @@ This section lists the labels we use to help us track and manage issues and pull
 * `documentation` - Issues or pull requests related to documentation.
 * `good first issue` - Good for newcomers.
 
+## Building
+
+```bash
+cargo build --release --features metal # or cuda, depending on your computer's NPU
+```
+
 ## Running Tests
 
 Before submitting a pull request, run all the tests to ensure nothing has broken:
