@@ -41,16 +41,17 @@ https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3
 Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 
 - [x] screenshots
-- [x] mp4 encoding to disk (30 GB / month)
+- [x] optimised screen & audio recording (mp4 & mp3 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
 - [x] OCR
 - [x] audio + stt (works with multi input & output devices)
 - [x] local api
 - [ ] TS SDK
+- [ ] multimodal embeddings
 - [ ] cloud storage options (s3, pgsql, etc.)
 - [ ] cloud computing options
 - [ ] bug-free & stable
-- [ ] storage efficient modes: customizable capture settings (fps, resolution)
+- [ ] custom storage settings: customizable capture settings (fps, resolution)
 - [ ] data encryption options & higher security
 - [ ] fast, optimised, energy-efficient modes
 
@@ -62,8 +63,6 @@ Keep in mind that it's still experimental.
 screenpipe
 # by default it uses your default input and output audio devices
 # (e.g. speakers/headphones + laptop mic) & your whole screen
-# we recommend that you customise screenpipe to your laptop 
-# computing capacity to avoid issues
 ```
 
 <details>
