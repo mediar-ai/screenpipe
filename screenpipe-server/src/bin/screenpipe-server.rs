@@ -6,11 +6,11 @@ use std::{
 };
 
 use clap::Parser;
-use log::{info, LevelFilter, warn};
+use colored::Colorize;
+use log::{info, warn, LevelFilter};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_device_spec,
 };
-use colored::Colorize;
 
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server}; // Import the list_audio_devices function
 #[derive(Parser)]
@@ -47,6 +47,10 @@ struct Cli {
     /// List available audio devices
     #[arg(long)]
     list_audio_devices: bool,
+
+    /// Data directory
+    #[arg(long, default_value_t = String::from("./data"))]
+    data_dir: String,
 }
 
 #[tokio::main]
@@ -119,7 +123,9 @@ async fn main() -> anyhow::Result<()> {
     ResourceMonitor::new(cli.memory_threshold, cli.runtime_threshold)
         .start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
 
-    let local_data_dir = Arc::new(ensure_local_data_dir()?);
+    let local_data_dir = cli.data_dir; // TODO: Use $HOME/.screenpipe/data
+    fs::create_dir_all(&local_data_dir)?;
+    let local_data_dir = Arc::new(local_data_dir);
     let local_data_dir_record = local_data_dir.clone();
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir))
@@ -162,10 +168,4 @@ async fn main() -> anyhow::Result<()> {
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
-}
-
-fn ensure_local_data_dir() -> anyhow::Result<String> {
-    let local_data_dir = "./data".to_string(); // TODO: Use $HOME/.screenpipe/data
-    fs::create_dir_all(&local_data_dir)?;
-    Ok(local_data_dir)
 }
