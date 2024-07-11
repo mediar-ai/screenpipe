@@ -22,13 +22,13 @@
 > Civilization progresses by the number of operations it can perform without conscious effort.  
 > — **Whitehead**
 
-Record your screen & mic 24/7 and connect it to LLMs. Inspired by `adept.ai`, `rewind.ai`, `Apple Shortcut`. Written in Rust. Free. You own your data.
+Chat with an AI that knows everything about you. Record your screens & mics 24/7. You own your data. Rust. Library for devs to build AI apps on top of all your life data.
 
-screenpipe is a library that allows you to gather all your life context and connect it to LLMs easily for:
-- search (e.g. go beyond your limited human memory)
-- automation (such as making actions on the web while you work, syncing company's knowledge, etc.)
+Use cases:
+- RAG & question answering
+- Automation (write code somewhere else while watching you coding, write docs, fill your CRM, sync company's knowledge, etc.)
+- Analytics (track human performance, education, become aware of how you can improve, etc.)
 - etc.
-
 
 ## Example vercel/ai-chatbot that query screenpipe autonomously
 
@@ -87,14 +87,10 @@ curl "http://localhost:3030/search?limit=5&offset=0"
 </details>
 
 Now pipe this into a LLM to build:
-- memory extension apps
-- automatic summaries
-- automatic action triggers (say every time you see a dog, send a tweet)
-- automatic CRM (fill salesforce while you do sales on linkedin)
-- sync your local pkm with company's pkm (obsidian to notion for example)
-- maintain cheatsheets of your customers relationships formatted as markdown table in notion
-- dating app that make AI agents talk with millions of other potential mates acting like you and scheduling you weekly dates
-
+- RAG & question answering
+- Automation (write code somewhere else while watching you coding, write docs, fill your CRM, sync company's knowledge, etc.)
+- Analytics (track human performance, education, become aware of how you can improve, etc.)
+- etc.
 
 [Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
 
@@ -168,7 +164,7 @@ This is a library intended to stick to simple use case:
 Think of this as an API that let's you do this:
 
 ```bash
-screenpipe | ocr | llm "turn what i see into my CRM" | api "send data to salesforce api"
+screenpipe | ocr | llm "send what i see to my CRM" | api "send data to salesforce api"
 ```
 
 Any interfaces are out of scope and should be built outside this repo, for example:
@@ -196,16 +192,15 @@ Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Althou
 <details>
   <summary>What's the difference with adept.ai and rewind.ai?</summary>
 
-  - adept.ai is closed product, focused on automation while we are open and focused on enabling tooling & infra for a wide range of applications like adept 
-  - rewind.ai is closed product, focused on a single use case (they only focus on meetings now), not customisable, your data is owned by them, and not extendable by developers 
+  - adept.ai is a closed product, focused on automation while we are open and focused on enabling tooling & infra for a wide range of applications like adept 
+  - rewind.ai is a closed product, focused on a single use case (they only focus on meetings now), not customisable, your data is owned by them, and not extendable by developers 
 
 </details>
 
 <details>
   <summary>Where is the data stored?</summary>
   
-  - 100% of the data stay local in a SQLite database and mp4 files
-  - If you use an LLM like OpenAI, part of your data will be sent to Microsoft servers, you can use a local LLM like [Chrome AI](https://sdk.vercel.ai/providers/community-providers/chrome-ai)
+  - 100% of the data stay local in a SQLite database and mp4/mp3 files. You own your data
 </details>
 
 <details>
@@ -215,17 +210,11 @@ Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Althou
 </details>
 
 <details>
-  <summary>Is my data secure?</summary>
-  
-  - Your data is stored locally by default. We're actively working on implementing encryption options for enhanced security.
-</details>
-
-<details>
   <summary>What are some practical use cases for screenpipe?</summary>
   
-  - Personal knowledge management
-  - Automated task logging and time tracking
-  - Context-aware AI assistants for improved productivity
-  - Seamless data entry into CRM systems
-  - We're constantly exploring new use cases and welcome community input!
+    - RAG & question answering
+    - Automation (write code somewhere else while watching you coding, write docs, fill your CRM, sync company's knowledge, etc.)
+    - Analytics (track human performance, education, become aware of how you can improve, etc.)
+    - etc.
+    - We're constantly exploring new use cases and welcome community input!
 </details>
