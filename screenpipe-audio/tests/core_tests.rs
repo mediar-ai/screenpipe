@@ -34,7 +34,7 @@ mod tests {
         println!("Speech to text completed in {:?}", duration);
         println!("Transcribed text: {:?}", text);
 
-        assert!(text[0].contains("The fire"));
+        assert!(text.contains("The fire"));
     }
 
     // Add more tests for other functions
