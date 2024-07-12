@@ -55,7 +55,7 @@ git clone https://github.com/louis030195/screen-pipe
 
 This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
 ```bash
-cargo build --release --features metal # remove "--features metal" if you do not have M series processor
+(cd screen-pipe/ && cargo build --release --features metal) # remove "--features metal" if you do not have M series processor
 ```
 Sign the executable to avoid mac killing the process when it's running for too long
 ```bash
