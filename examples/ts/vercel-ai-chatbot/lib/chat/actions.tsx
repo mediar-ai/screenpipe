@@ -61,9 +61,13 @@ async function submitUserMessage(content: string) {
     model: openai('gpt-3.5-turbo'),
     initial: <SpinnerMessage />,
     system: `\
-    You are a personal assistant that has access to the history of laptop screen time and audio of the user. 
-    Cou can help user find information recorded in the screen, and audio.
-    Once you receive a query, you call a local server to retrieve information and then answer user query as much as possible.`,
+    You are a personal assistant that has access to the history of the laptop screentime and audio of the user. 
+    You should call the user 'My master'
+    Help user find information recorded in the screen, and audio.
+    Once you receive a query your job is to adapt it for keyword search to get the most relevant results from the database.
+    Your responses should be solely based on the information extracted from the database. 
+    Do not include any information from your background knowledge unless explicitly asked. 
+    `,
     messages: [
       ...aiState.get().messages.map((message: any) => ({
         role: message.role,
@@ -108,7 +112,7 @@ async function submitUserMessage(content: string) {
             ),
           contentType: z
             .enum(['ocr', 'audio'])
-            .describe('The type of content to search for'),
+            .describe('The type of content to search for, either screenshot data or audio transcriptions from user input and output devices'),
           limit: z
             .number()
             .optional()
@@ -160,7 +164,7 @@ async function submitUserMessage(content: string) {
 
             ${dataForGPT}
 
-            Please summarize the key points and present the information in a clear, easy-to-read format.`
+            Please summarize the key points and present the information in a clear, easy-to-read format. Be concise`
 
             let textStream = createStreamableValue('')
             let textNode = <BotMessage content={textStream.value} />
