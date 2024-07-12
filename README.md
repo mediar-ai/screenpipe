@@ -181,7 +181,7 @@ curl "http://localhost:3030/search?limit=5&offset=0"
 <br><br>
 Keep in mind that it's still experimental.
 <br><br>
-https://github.com/user-attachments/assets/95e343ab-f76a-4f8b-aa01-eca86d255005
+https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 
 ## Use cases:
 
@@ -302,5 +302,3 @@ Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Althou
     - etc.
     - We're constantly exploring new use cases and welcome community input!
 </details>
-
-https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
