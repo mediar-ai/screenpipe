@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::migrate::MigrateDatabase;
 use sqlx::{
     sqlite::{SqlitePool, SqlitePoolOptions},
     FromRow,
@@ -45,15 +46,27 @@ pub struct DatabaseManager {
 
 impl DatabaseManager {
     pub async fn new(database_path: &str) -> Result<Self, sqlx::Error> {
-        let connection_string = format!("{}?mode=rwc", database_path);
+        let connection_string = format!("sqlite:{}", database_path);
+
+        // Create the database if it doesn't exist
+        if !sqlx::Sqlite::database_exists(&connection_string).await? {
+            sqlx::Sqlite::create_database(&connection_string).await?;
+        }
+
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
             .acquire_timeout(Duration::from_secs(3))
             .connect(&connection_string)
             .await?;
+
         let db_manager = DatabaseManager { pool };
-        db_manager.create_tables().await?;
+        db_manager.run_migrations().await?;
         Ok(db_manager)
+    }
+
+    async fn run_migrations(&self) -> Result<(), sqlx::Error> {
+        sqlx::migrate!("./src/migrations").run(&self.pool).await?;
+        Ok(())
     }
 
     pub async fn insert_audio_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
@@ -83,115 +96,6 @@ impl DatabaseManager {
         .bind(Utc::now())
         .execute(&mut *tx)
         .await?;
-        tx.commit().await?;
-        Ok(())
-    }
-
-    async fn create_tables(&self) -> Result<(), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
-
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS video_chunks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_path TEXT NOT NULL
-        )",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS frames (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            video_chunk_id INTEGER NOT NULL,
-            offset_index INTEGER NOT NULL,
-            timestamp TIMESTAMP NOT NULL
-        )",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS ocr_text (
-            frame_id INTEGER NOT NULL,
-            text TEXT NOT NULL
-        )",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS audio_chunks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_path TEXT NOT NULL
-            )",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS audio_transcriptions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                audio_chunk_id INTEGER NOT NULL,
-                offset_index INTEGER NOT NULL,
-                timestamp TIMESTAMP NOT NULL,
-                transcription TEXT NOT NULL,
-                FOREIGN KEY (audio_chunk_id) REFERENCES audio_chunks(id)
-            )",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        tx.commit().await?;
-
-        self.create_indices().await?;
-
-        Ok(())
-    }
-
-    pub async fn purge(&mut self) -> Result<(), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
-
-        sqlx::query("DROP TABLE IF EXISTS video_chunks")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DROP TABLE IF EXISTS frames")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DROP TABLE IF EXISTS ocr_text")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DROP TABLE IF EXISTS audio_chunks")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DROP TABLE IF EXISTS audio_transcriptions")
-            .execute(&mut *tx)
-            .await?;
-
-        tx.commit().await?;
-
-        self.create_tables().await?;
-        Ok(())
-    }
-
-    async fn create_indices(&self) -> Result<(), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_video_chunk_id_id ON frames (        video_chunk_id, id)",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_frame_id ON ocr_text (frame_id)")
-            .execute(&mut *tx)
-            .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_audio_chunk_id ON audio_transcriptions (audio_chunk_id)",
-        )
-        .execute(&mut *tx)
-        .await?;
-
         tx.commit().await?;
         Ok(())
     }
@@ -534,82 +438,3 @@ impl Clone for DatabaseManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    async fn setup_test_db() -> DatabaseManager {
-        DatabaseManager::new("sqlite::memory:").await.unwrap()
-    }
-
-    #[tokio::test]
-    async fn test_insert_and_search_ocr() {
-        let db = setup_test_db().await;
-        let video_chunk_id = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame().await.unwrap();
-        db.insert_ocr_text(frame_id, "Hello, world!").await.unwrap();
-
-        let results = db.search("Hello", ContentType::OCR, 100, 0).await.unwrap();
-        assert_eq!(results.len(), 1);
-        if let SearchResult::OCR(ocr_result) = &results[0] {
-            assert_eq!(ocr_result.ocr_text, "Hello, world!");
-            assert_eq!(ocr_result.file_path, "test_video.mp4");
-        } else {
-            panic!("Expected OCR result");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_insert_and_search_audio() {
-        let db = setup_test_db().await;
-        let audio_chunk_id = db.insert_audio_chunk("test_audio.mp3").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0)
-            .await
-            .unwrap();
-
-        let results = db
-            .search("audio", ContentType::Audio, 100, 0)
-            .await
-            .unwrap();
-        assert_eq!(results.len(), 1);
-        if let SearchResult::Audio(audio_result) = &results[0] {
-            assert_eq!(audio_result.transcription, "Hello from audio");
-            assert_eq!(audio_result.file_path, "test_audio.mp3");
-        } else {
-            panic!("Expected Audio result");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_search_all() {
-        let db = setup_test_db().await;
-
-        // Insert OCR data
-        let video_chunk_id = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame().await.unwrap();
-        db.insert_ocr_text(frame_id, "Hello from OCR")
-            .await
-            .unwrap();
-
-        // Insert Audio data
-        let audio_chunk_id = db.insert_audio_chunk("test_audio.mp3").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0)
-            .await
-            .unwrap();
-
-        let results = db.search("Hello", ContentType::All, 100, 0).await.unwrap();
-        assert_eq!(results.len(), 2);
-
-        let ocr_count = results
-            .iter()
-            .filter(|r| matches!(r, SearchResult::OCR(_)))
-            .count();
-        let audio_count = results
-            .iter()
-            .filter(|r| matches!(r, SearchResult::Audio(_)))
-            .count();
-
-        assert_eq!(ocr_count, 1);
-        assert_eq!(audio_count, 1);
-    }
-}

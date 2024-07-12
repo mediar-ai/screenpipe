@@ -1,4 +1,3 @@
--- Not used yet TODO
 
 -- Create video_chunks table
 CREATE TABLE IF NOT EXISTS video_chunks (
@@ -15,8 +14,8 @@ CREATE TABLE IF NOT EXISTS frames (
     FOREIGN KEY (video_chunk_id) REFERENCES video_chunks(id)
 );
 
--- Create ocr_text virtual table
-CREATE VIRTUAL TABLE IF NOT EXISTS ocr_text USING fts4(
+-- Create ocr_text table
+CREATE TABLE IF NOT EXISTS ocr_text (
     frame_id INTEGER NOT NULL,
     text TEXT NOT NULL
 );
@@ -40,3 +39,5 @@ CREATE TABLE IF NOT EXISTS audio_transcriptions (
 -- Create indices (you may want to add specific indices based on your query patterns)
 CREATE INDEX IF NOT EXISTS idx_frames_video_chunk_id ON frames(video_chunk_id);
 CREATE INDEX IF NOT EXISTS idx_audio_transcriptions_audio_chunk_id ON audio_transcriptions(audio_chunk_id);
+CREATE INDEX IF NOT EXISTS idx_ocr_text_frame_id ON ocr_text(frame_id);
+

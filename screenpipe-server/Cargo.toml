@@ -30,7 +30,7 @@ num_cpus = "1.0"
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Database
-sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chrono"] }
+sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chrono", "migrate"] }
 
 # FFmpeg bindings
 ffmpeg-next = "7.0.2"
