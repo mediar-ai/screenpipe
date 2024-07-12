@@ -72,7 +72,7 @@ Set up you OPENAI API KEY
 ```bash
 mkdir -p screen-pipe/examples/ts/vercel-ai-chatbot && echo "OPENAI_API_KEY=INSERT_YOUR_API_KEY_HERE" > screen-pipe/examples/ts/vercel-ai-chatbot/.env
 ```
-[😭 It didn't work 😭](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=New+dislike)
+[😭 It didn't work 😭](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=vercel+app+didnt+work)
 
 Install dependencies and run local web server
 ```bash
