@@ -36,9 +36,9 @@ export function ChatPanel({
 
   const exampleMessages = [
     {
-      heading: 'What is',
-      subheading: 'Neuralink?',
-      message: `what is Neuralink?`
+      heading: 'What Elon Musk',
+      subheading: 'posted about Neuralink?',
+      message: `Elon Musk`
     },
     {
       heading: 'Did i see',
