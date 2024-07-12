@@ -19,7 +19,7 @@
         <a href="https://twitter.com/screen_pipe"><img alt="X account" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe"></a>
 </p>
 
-![Demo](./demo.gif)
+![Demo](./public/demo.gif)
 
 # Extend your human memory with LLM. Open source, runs locally, developer friendly. 
 
@@ -53,24 +53,34 @@ Install [Rust](https://www.rust-lang.org/tools/install).
 git clone https://github.com/louis030195/screen-pipe
 ```
 
+This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
 ```bash
-# This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
 cargo build --release --features metal # remove "--features metal" if you do not have M series processor
-
-# sign the executable to avoid mac killing the process when it's running for too long
-codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime ./target/release/screenpipe
-
-# then run it
-(cd screen-pipe/ && ./target/release/screenpipe) # add "--disable-audio" if you don't want audio to be recorded
-
-# then run Vercel App
-# set up you OPENAI API KEY
-mkdir -p screen-pipe/examples/ts/vercel-ai-chatbot && echo "OPENAI_API_KEY=INSERT_YOUR_API_KEY_HERE" > screen-pipe/examples/ts/vercel-ai-chatbot/.env
-# install dependencies and run local web server
-(cd screen-pipe/examples/ts/vercel-ai-chatbot/ && npm install && npm run dev)
-
-
 ```
+Sign the executable to avoid mac killing the process when it's running for too long
+```bash
+codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime ./target/release/screenpipe
+```
+
+Then run it
+```bash
+(cd screen-pipe/ && ./target/release/screenpipe) # add "--disable-audio" if you don't want audio to be recorded
+```
+
+Then run Vercel App
+Set up you OPENAI API KEY
+```bash
+mkdir -p screen-pipe/examples/ts/vercel-ai-chatbot && echo "OPENAI_API_KEY=INSERT_YOUR_API_KEY_HERE" > screen-pipe/examples/ts/vercel-ai-chatbot/.env
+```
+Install dependencies and run local web server
+```bash
+(cd screen-pipe/examples/ts/vercel-ai-chatbot/ && npm install && npm run dev)
+```
+![Vercel App](./public/Vercel_app.png)
+<br><br>
+
+![Claude_prompt](./public/Claude_prompt.png)
+<br><br>
 </details>
 
 <details>
@@ -120,6 +130,7 @@ curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install
 <details>
 <summary>
 Check which tables you have in the local database</summary>
+
 ```bash
 sqlite3 screen-pipe/data/db.sqlite ".tables" 
 ```
@@ -127,27 +138,33 @@ sqlite3 screen-pipe/data/db.sqlite ".tables"
 <details>
 <summary>
 Print a sample audio_transcriptions from the database</summary>
+
 ```bash
 sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM audio_transcriptions ORDER BY id DESC LIMIT 1;" | jq .
 ```
+![audio_transcriptions](./public/audio_transcriptions.png)
 </details>
 <details>
 <summary>
 Print a sample frame_OCR_text from the database</summary>
+
 ```bash
 sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM ocr_text ORDER BY frame_id DESC LIMIT 1;" | jq -r '.[0].text'
 ```
+![frame_text](./public/frame_text.png)
 </details>
 <details>
 <summary>
-Print a sample frame_recording from the database</summary>
+Play a sample frame_recording from the database</summary>
+
 ```bash
 ffplay "screen-pipe/data/2024-07-12 01:14:14.078958 UTC.mp4"
 ```
 </details>
 <details>
 <summary>
-Print a sample audio_recording from the database</summary>
+Play a sample audio_recording from the database</summary>
+
 ```bash
 ffplay "screen-pipe/data/Display 1 (output)_2024-07-12_01-14-11.mp3"
 ```
@@ -160,6 +177,8 @@ ffplay "screen-pipe/data/Display 1 (output)_2024-07-12_01-14-11.mp3"
 ```bash
 curl "http://localhost:3030/search?q=Neuralink&limit=5&offset=0&content_type=ocr" | jq
 ```
+"Elon Musk" prompt
+![Elon_Musk_prompt](./public/Elon_Musk_prompt.png)
 </details>
 <details>
   <summary>Other Example to query the API</summary>
