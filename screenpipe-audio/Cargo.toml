@@ -62,6 +62,7 @@ bytemuck = "1.16.1"
 [dev-dependencies]
 tempfile = "3.3.0"
 infer = "0.15"
+tokio = { version = "1.0", features = ["full"] }
 
 [features]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]

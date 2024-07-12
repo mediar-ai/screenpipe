@@ -1,7 +1,8 @@
 use std::{
+    collections::HashMap,
     fs,
     net::SocketAddr,
-    sync::{mpsc::channel, Arc},
+    sync::{atomic::AtomicBool, mpsc::channel, Arc, RwLock},
     time::Duration,
 };
 
@@ -10,6 +11,7 @@ use colored::Colorize;
 use log::{info, warn, LevelFilter};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_device_spec,
+    DeviceControl,
 };
 
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server}; // Import the list_audio_devices function
@@ -135,8 +137,14 @@ async fn main() -> anyhow::Result<()> {
     let db_record = db.clone();
     let db_server = db.clone();
 
-    // Channel for controlling the recorder
+    // Channel for controlling the recorder ! TODO RENAME SHIT
     let (_control_tx, control_rx) = channel();
+    let vision_control = Arc::new(AtomicBool::new(false));
+    let audio_devices_control: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+
+    let vision_control_server_clone = vision_control.clone();
+    let audio_devices_control_server_clone = audio_devices_control.clone();
 
     // Start continuous recording in a separate task
     let _recording_task = tokio::spawn({
@@ -151,13 +159,20 @@ async fn main() -> anyhow::Result<()> {
                 control_rx,
                 !cli.disable_audio,
                 audio_devices,
+                vision_control,
+                audio_devices_control,
             )
             .await
         }
     });
 
     tokio::spawn(async move {
-        let server = Server::new(db_server, SocketAddr::from(([0, 0, 0, 0], cli.port)));
+        let server = Server::new(
+            db_server,
+            SocketAddr::from(([0, 0, 0, 0], cli.port)),
+            vision_control_server_clone,
+            audio_devices_control_server_clone,
+        );
         server.start().await.unwrap();
     });
 

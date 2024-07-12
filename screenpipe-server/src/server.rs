@@ -1,8 +1,8 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Json as JsonResponse,
-    routing::get,
+    routing::{get, post},
     serve, Router,
 };
 
@@ -10,18 +10,30 @@ use chrono::{DateTime, Utc};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
+};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 use crate::{ContentType, DatabaseManager, SearchResult};
+use screenpipe_audio::DeviceControl;
+
 // App state
-struct AppState {
+pub(crate) struct AppState {
     db: Arc<DatabaseManager>,
+    vision_control: Arc<AtomicBool>,
+    audio_devices_control: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
 }
+
 // Request structs
 #[derive(Deserialize)]
-struct SearchQuery {
+pub(crate) struct SearchQuery {
     q: Option<String>,
     #[serde(flatten)]
     pagination: PaginationQuery,
@@ -30,7 +42,7 @@ struct SearchQuery {
 }
 
 #[derive(Deserialize)]
-struct PaginationQuery {
+pub(crate) struct PaginationQuery {
     #[serde(default = "default_limit")]
     #[serde(deserialize_with = "deserialize_number_from_string")]
     limit: u32,
@@ -39,7 +51,6 @@ struct PaginationQuery {
     offset: u32,
 }
 
-// Add this function somewhere in your code
 fn deserialize_number_from_string<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -95,12 +106,23 @@ struct AudioContent {
     offset_index: i64,
 }
 
+#[derive(Serialize)]
+struct DeviceStatus {
+    id: String,
+    is_running: bool,
+}
+
+#[derive(Serialize)]
+struct RecordingStatus {
+    is_running: bool,
+}
+
 // Helper functions
 fn default_limit() -> u32 {
     20
 }
 
-async fn search(
+pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
 ) -> Result<
@@ -155,57 +177,83 @@ async fn search(
         },
     }))
 }
-
-async fn get_by_date_range(
-    Query(query): Query<DateRangeQuery>,
+pub(crate) async fn start_device(
+    Path(device_id): Path<String>,
     State(state): State<Arc<AppState>>,
-) -> Result<
-    JsonResponse<PaginatedResponse<ContentItem>>,
-    (StatusCode, JsonResponse<serde_json::Value>),
-> {
-    info!(
-        "Received date range request: start_date={:?}, end_date={:?}, limit={}, offset={}",
-        query.start_date, query.end_date, query.pagination.limit, query.pagination.offset
-    );
+) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
+    let device_controls = state.audio_devices_control.read().unwrap();
+    if let Some(device_control) = device_controls.get(&device_id) {
+        device_control.is_paused.store(false, Ordering::SeqCst);
+        device_control.is_running.store(true, Ordering::SeqCst);
+        Ok(JsonResponse(DeviceStatus {
+            id: device_id,
+            is_running: true,
+        }))
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": "Device not found"})),
+        ))
+    }
+}
 
-    let results = state
-        .db
-        .get_recent_results(
-            query.pagination.limit,
-            query.pagination.offset,
-            query.start_date,
-            query.end_date,
-        )
-        .await
-        .map_err(|e| {
-            error!("Database error while fetching recent results: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Database error: {}", e)})),
-            )
-        })?;
+pub(crate) async fn stop_device(
+    Path(device_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
+    let device_controls = state.audio_devices_control.read().unwrap();
+    if let Some(device_control) = device_controls.get(&device_id) {
+        device_control.is_running.store(false, Ordering::SeqCst);
+        device_control.is_paused.store(true, Ordering::SeqCst);
+        Ok(JsonResponse(DeviceStatus {
+            id: device_id,
+            is_running: false,
+        }))
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": "Device not found"})),
+        ))
+    }
+}
 
-    let total = state
-        .db
-        .count_recent_results(query.start_date, query.end_date)
-        .await
-        .map_err(|e| {
-            error!("Database error while counting recent results: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Database error: {}", e)})),
-            )
-        })?;
+pub(crate) async fn start_recording(
+    State(state): State<Arc<AppState>>,
+) -> JsonResponse<RecordingStatus> {
+    state.vision_control.store(true, Ordering::SeqCst);
+    JsonResponse(RecordingStatus { is_running: true })
+}
 
-    info!("Date range query completed: found {} results", total);
-    Ok(JsonResponse(PaginatedResponse {
-        data: results.into_iter().map(into_content_item).collect(),
-        pagination: PaginationInfo {
-            limit: query.pagination.limit,
-            offset: query.pagination.offset,
-            total: total as i64,
-        },
-    }))
+pub(crate) async fn stop_recording(
+    State(state): State<Arc<AppState>>,
+) -> JsonResponse<RecordingStatus> {
+    state.vision_control.store(false, Ordering::SeqCst);
+    JsonResponse(RecordingStatus { is_running: false })
+}
+
+pub(crate) async fn get_recording_status(
+    State(state): State<Arc<AppState>>,
+) -> JsonResponse<RecordingStatus> {
+    let is_running = state.vision_control.load(Ordering::SeqCst);
+    JsonResponse(RecordingStatus { is_running })
+}
+
+pub(crate) async fn get_device_status(
+    Path(device_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
+    let device_controls = state.audio_devices_control.read().unwrap();
+    if let Some(device_control) = device_controls.get(&device_id) {
+        Ok(JsonResponse(DeviceStatus {
+            id: device_id,
+            is_running: device_control.is_running.load(Ordering::SeqCst),
+        }))
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": "Device not found"})),
+        ))
+    }
 }
 
 // Helper functions
@@ -231,30 +279,46 @@ fn into_content_item(result: SearchResult) -> ContentItem {
 pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
+    vision_control: Arc<AtomicBool>,
+    audio_devices_control: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
 }
 
 impl Server {
-    pub fn new(db: Arc<DatabaseManager>, addr: SocketAddr) -> Self {
-        Server { db, addr }
+    pub fn new(
+        db: Arc<DatabaseManager>,
+        addr: SocketAddr,
+        vision_control: Arc<AtomicBool>,
+        audio_devices_control: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
+    ) -> Self {
+        Server {
+            db,
+            addr,
+            vision_control,
+            audio_devices_control,
+        }
     }
 
     pub async fn start(self) -> Result<(), std::io::Error> {
-        let app_state = Arc::new(AppState { db: self.db });
+        let app_state = Arc::new(AppState {
+            db: self.db,
+            vision_control: self.vision_control,
+            audio_devices_control: self.audio_devices_control,
+        });
 
         let app = Router::new()
             .route("/search", get(search))
-            .route("/recent", get(get_by_date_range))
+            .route("/device/:id/start", post(start_device))
+            .route("/device/:id/stop", post(stop_device))
+            .route("/device/:id/status", get(get_device_status))
+            .route("/recording/start", post(start_recording))
+            .route("/recording/stop", post(stop_recording))
+            .route("/recording/status", get(get_recording_status))
             .layer(CorsLayer::permissive())
             .with_state(app_state);
 
         info!("Starting server on {}", self.addr);
 
-        match serve(
-            TcpListener::bind(self.addr).await.unwrap(),
-            app.into_make_service(),
-        )
-        .await
-        {
+        match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
             Ok(_) => {
                 info!("Server stopped gracefully");
                 Ok(())
@@ -267,20 +331,39 @@ impl Server {
     }
 }
 
+// Curl commands for reference:
 // # 1. Basic search query
-// curl "http://localhost:3030/search?q=test&limit=5&offset=0"
+// # curl "http://localhost:3030/search?q=test&limit=5&offset=0"
 
 // # 2. Search with content type filter (OCR)
-// curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
+// # curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
 
 // # 3. Search with content type filter (Audio)
-// curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
+// # curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
 
 // # 4. Search with pagination
-// curl "http://localhost:3030/search?q=test&limit=10&offset=20"
+// # curl "http://localhost:3030/search?q=test&limit=10&offset=20"
 
-// # 6. Get recent results with date range
-// curl "http://localhost:3030/recent?limit=5&offset=0&start_date=2024-07-02T14:00:00&end_date=2024-07-02T23:59:59"
+// # 5. Get recent results with date range
+// # curl "http://localhost:3030/recent?limit=5&offset=0&start_date=2024-07-02T14:00:00&end_date=2024-07-02T23:59:59"
 
-// # 9. Search with no query (should return all results)
-// curl "http://localhost:3030/search?limit=5&offset=0"
+// # 6. Search with no query (should return all results)
+// # curl "http://localhost:3030/search?limit=5&offset=0"
+
+// # 7. Start a device
+// # curl -X POST "http://localhost:3030/device/device1/start"
+
+// # 8. Stop a device
+// # curl -X POST "http://localhost:3030/device/device1/stop"
+
+// # 9. Get device status
+// # curl "http://localhost:3030/device/device1/status"
+
+// # 10. Start recording
+// # curl -X POST "http://localhost:3030/recording/start"
+
+// # 11. Stop recording
+// # curl -X POST "http://localhost:3030/recording/stop"
+
+// # 12. Get recording status
+// # curl "http://localhost:3030/recording/status"

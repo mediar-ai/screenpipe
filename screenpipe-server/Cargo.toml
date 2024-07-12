@@ -83,6 +83,8 @@ reqwest = { version = "0.11", features = ["json"] }
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 rand = "0.8"
 
+tower = "0.4"
+
 [[bench]]
 name = "db_benchmarks"
 harness = false

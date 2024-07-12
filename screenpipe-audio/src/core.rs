@@ -1,15 +1,21 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam::channel::{Receiver, Sender};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use serde::Serialize;
 use std::fmt;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use crate::AudioInput;
+
+pub struct DeviceControl {
+    pub is_running: Arc<AtomicBool>,
+    pub is_paused: Arc<AtomicBool>,
+}
 
 pub struct AudioCaptureResult {
     pub text: String,
@@ -80,12 +86,9 @@ pub fn parse_device_spec(name: &str) -> Result<DeviceSpec> {
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-pub fn record_and_transcribe(
+fn get_device_and_config(
     device_spec: &DeviceSpec,
-    duration: Duration,
-    output_path: PathBuf,
-    whisper_sender: Sender<AudioInput>,
-) -> Result<PathBuf> {
+) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = match device_spec {
         #[cfg(target_os = "macos")]
         DeviceSpec::Output(_) => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
@@ -111,6 +114,17 @@ pub fn record_and_transcribe(
     .ok_or_else(|| anyhow!("Audio device not found"))?;
 
     let config = audio_device.default_input_config()?;
+    Ok((audio_device, config))
+}
+
+pub fn record_and_transcribe(
+    device_spec: &DeviceSpec,
+    duration: Duration,
+    output_path: PathBuf,
+    whisper_sender: Sender<AudioInput>,
+    device_control: Arc<DeviceControl>,
+) -> Result<PathBuf> {
+    let (audio_device, config) = get_device_and_config(device_spec)?;
     info!(
         "Recording audio device: {}, Config: {:?}",
         audio_device.name()?,
@@ -122,10 +136,18 @@ pub fn record_and_transcribe(
 
     let (audio_sender, audio_receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) =
         crossbeam::channel::unbounded();
-    let is_running = Arc::new(Mutex::new(true));
-    let is_running_clone = is_running.clone();
+    let audio_sender_clone = audio_sender.clone();
+    let is_running_clone = Arc::clone(&device_control.is_running);
+    let is_running_clone_4 = Arc::clone(&device_control.is_running);
+    // TODO what the diff between pause/stop ?
+    let _is_paused_clone = Arc::clone(&device_control.is_paused);
 
     let output_path_clone = output_path.clone();
+    let output_path_clone_2 = output_path.clone();
+    let device_spec_clone = device_spec.clone();
+
+    let start_time = std::time::Instant::now();
+
     // Spawn FFmpeg process in a separate thread
     let ffmpeg_handle = thread::spawn(move || {
         let mut ffmpeg = Command::new("ffmpeg")
@@ -154,12 +176,17 @@ pub fn record_and_transcribe(
 
         let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
 
-        while *is_running_clone.lock().unwrap() {
+        debug!("FFmpeg process started");
+
+        while is_running_clone.load(Ordering::Relaxed) {
             if let Ok(data) = audio_receiver.recv_timeout(Duration::from_millis(100)) {
                 if let Err(e) = stdin.write_all(&data) {
                     error!("Failed to write audio data to FFmpeg: {}", e);
                     break;
                 }
+            }
+            if start_time.elapsed() >= duration {
+                break;
             }
         }
 
@@ -179,8 +206,10 @@ pub fn record_and_transcribe(
         cpal::SampleFormat::F32 => audio_device.build_input_stream(
             &config.into(),
             move |data: &[f32], _: &_| {
-                if let Err(e) = audio_sender.send(bytemuck::cast_slice(data).to_vec()) {
-                    error!("Failed to send audio data: {}", e);
+                if is_running_clone_4.load(Ordering::Relaxed) {
+                    if let Err(e) = audio_sender.try_send(bytemuck::cast_slice(data).to_vec()) {
+                        warn!("Failed to send audio data: {}", e);
+                    }
                 }
             },
             err_fn,
@@ -188,25 +217,45 @@ pub fn record_and_transcribe(
         )?,
         sample_format => return Err(anyhow!("Unsupported sample format '{}'", sample_format)),
     };
+    debug!("audio stream created");
 
     stream.play()?;
     info!("Recording for {} seconds", duration.as_secs());
 
-    thread::sleep(duration);
+    while device_control.is_running.load(Ordering::Relaxed) {
+        if start_time.elapsed() >= duration {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    info!(
+        "Recording stopped, wrote to {}. Now triggering transcription",
+        output_path_clone_2.to_str().unwrap()
+    );
 
     // Stop the stream and signal the recording to stop
     stream.pause()?;
-    *is_running.lock().unwrap() = false;
+
+    // Wait for a short time to ensure all data is processed
+    // thread::sleep(Duration::from_millis(100));
+
+    // Close the sender to signal the FFmpeg thread to finish
+    // drop(audio_sender_clone);
 
     // Wait for the FFmpeg thread to finish
     ffmpeg_handle.join().expect("Failed to join FFmpeg thread");
+    debug!("FFmpeg thread finished");
 
-    whisper_sender.send(AudioInput {
-        path: output_path.to_str().unwrap().to_string(),
-        device: device_spec.to_string(),
-    })?;
+    if let Err(e) = whisper_sender.send(AudioInput {
+        path: output_path_clone_2.to_str().unwrap().to_string(),
+        device: device_spec_clone.to_string(),
+    }) {
+        error!("Failed to send audio to whisper: {}", e);
+    }
+    debug!("Sent audio to whisper");
 
-    Ok(output_path)
+    Ok(output_path_clone_2)
 }
 
 #[derive(Serialize)]
