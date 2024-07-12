@@ -1,16 +1,13 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample};
 use crossbeam::channel::{Receiver, Sender};
-use hound::WavSpec;
 use log::{debug, error, info};
 use serde::Serialize;
 use std::fmt;
-use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
-use std::{io::BufWriter, thread};
 
 use crate::AudioInput;
 
@@ -210,38 +207,6 @@ pub fn record_and_transcribe(
     })?;
 
     Ok(output_path)
-}
-fn wav_spec_from_config(config: &cpal::SupportedStreamConfig) -> WavSpec {
-    WavSpec {
-        channels: config.channels() as _,
-        sample_rate: config.sample_rate().0 as _,
-        bits_per_sample: (config.sample_format().sample_size() * 8) as _,
-        sample_format: sample_format(config.sample_format()),
-    }
-}
-type WavWriterHandle = Arc<Mutex<Option<hound::WavWriter<BufWriter<File>>>>>;
-
-fn write_input_data<T, U>(input: &[T], writer: &WavWriterHandle)
-where
-    T: Sample,
-    U: Sample + hound::Sample + FromSample<T>,
-{
-    if let Ok(mut guard) = writer.try_lock() {
-        if let Some(writer) = guard.as_mut() {
-            for &sample in input.iter() {
-                let sample: U = U::from_sample(sample);
-                writer.write_sample(sample).ok();
-            }
-        }
-    }
-}
-
-fn sample_format(format: cpal::SampleFormat) -> hound::SampleFormat {
-    if format.is_float() {
-        hound::SampleFormat::Float
-    } else {
-        hound::SampleFormat::Int
-    }
 }
 
 #[derive(Serialize)]
