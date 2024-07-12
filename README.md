@@ -181,6 +181,7 @@ curl "http://localhost:3030/search?limit=5&offset=0"
 <br><br>
 Keep in mind that it's still experimental.
 <br><br>
+
 https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 
 ## Use cases:
