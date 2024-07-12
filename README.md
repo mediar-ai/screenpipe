@@ -19,88 +19,59 @@
         <a href="https://twitter.com/screen_pipe"><img alt="X account" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe"></a>
 </p>
 
+![Demo](./demo.gif)
+
+# Extend your human memory with LLM. Open source, runs locally, developer friendly. 
+
 > Civilization progresses by the number of operations it can perform without conscious effort.  
 > — **Whitehead**
 
-Chat with an AI that knows everything about you. Record your screens & mics 24/7. You own your data. Rust. Library for devs to build AI apps on top of all your life data.
+Library for devs to build AI apps on top of all your life data.
+We are actuvely working  [to make it better](https://github.com/louis030195/screen-pipe/issues/6), make suggestions, post bugs, give feedback!
 
-Use cases:
-- RAG & question answering
-- Automation (write code somewhere else while watching you coding, write docs, fill your CRM, sync company's knowledge, etc.)
-- Analytics (track human performance, education, become aware of how you can improve, etc.)
-- etc.
+Chat with an AI that knows everything about you. Record your screens & audio 24/7. You own your data. Rust. 
 
-## Example vercel/ai-chatbot that query screenpipe autonomously
-
-Check this example of screenpipe which is a chatbot that make requests to your data to answer your questions
-
-https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3fe-f34479fdc45e
-
-## Status 
-
-Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
-
-- [x] screenshots
-- [x] optimised screen & audio recording (mp4 & mp3 encoding, estimating 30 gb/m with default settings)
-- [x] sqlite local db
-- [x] OCR
-- [x] audio + stt (works with multi input & output devices)
-- [x] local api
-- [ ] TS SDK
-- [ ] multimodal embeddings
-- [ ] cloud storage options (s3, pgsql, etc.)
-- [ ] cloud computing options
-- [ ] bug-free & stable
-- [ ] custom storage settings: customizable capture settings (fps, resolution)
-- [ ] data encryption options & higher security
-- [ ] fast, optimised, energy-efficient modes
-
-## Usage
-
-Keep in mind that it's still experimental.
-
-```bash
-screenpipe
-# by default it uses your default input and output audio devices
-# (e.g. speakers/headphones + laptop mic) & your whole screen
-```
-
-<details>
-  <summary>Examples to query the API</summary>
-  
-  ```bash
-# 1. Basic search query
-curl "http://localhost:3030/search?q=test&limit=5&offset=0"
-
-# 2. Search with content type filter (OCR)
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
-
-# 3. Search with content type filter (Audio)
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
-
-# 4. Search with pagination
-curl "http://localhost:3030/search?q=test&limit=10&offset=20"
-
-# 6. Search with no query (should return all results)
-curl "http://localhost:3030/search?limit=5&offset=0"
-  ```
-</details>
-
-Now pipe this into a LLM to build:
-- RAG & question answering
-- Automation (write code somewhere else while watching you coding, write docs, fill your CRM, sync company's knowledge, etc.)
-- Analytics (track human performance, education, become aware of how you can improve, etc.)
-- etc.
-
-[Check example with vercel/ai-chatbot project (nextjs)](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
-
-[Other examples](https://github.com/louis030195/screen-pipe/tree/main/examples/ts).
-
-## Installation
+## Getting started
 
 Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
-We are working toward [making it easier to try](https://github.com/louis030195/screen-pipe/issues/6), feel free to help!
+<details>
+  <summary>MacOS</summary>
+
+1. Install dependencies:
+```bash
+# On Mac
+brew install ffmpeg
+brew install jq
+```
+
+Install [Rust](https://www.rust-lang.org/tools/install).
+
+2. Clone the repo:
+
+```bash
+git clone https://github.com/louis030195/screen-pipe
+```
+
+```bash
+# This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
+cargo build --release --features metal # remove "--features metal" if you do not have M series processor
+
+# sign the executable to avoid mac killing the process when it's running for too long
+codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime ./target/release/screenpipe
+
+# then run it
+(cd screen-pipe/ && ./target/release/screenpipe) # add "--disable-audio" if you don't want audio to be recorded
+
+# then run Vercel App
+# set up you OPENAI API KEY
+mkdir -p screen-pipe/examples/ts/vercel-ai-chatbot && echo "OPENAI_API_KEY=INSERT_YOUR_API_KEY_HERE" > screen-pipe/examples/ts/vercel-ai-chatbot/.env
+# install dependencies and run local web server
+(cd screen-pipe/examples/ts/vercel-ai-chatbot/ && npm install && npm run dev)
+
+
+```
+</details>
 
 <details>
   <summary>Windows</summary>
@@ -144,15 +115,126 @@ curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install
   Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `$HOME/.local/bin`)
 </details>
 
+
+## Usage
 <details>
-  <summary>MacOS</summary>
-
+<summary>
+Check which tables you have in the local database</summary>
 ```bash
-brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
-brew install screenpipe
+sqlite3 screen-pipe/data/db.sqlite ".tables" 
 ```
-
 </details>
+<details>
+<summary>
+Print a sample audio_transcriptions from the database</summary>
+```bash
+sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM audio_transcriptions ORDER BY id DESC LIMIT 1;" | jq .
+```
+</details>
+<details>
+<summary>
+Print a sample frame_OCR_text from the database</summary>
+```bash
+sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM ocr_text ORDER BY frame_id DESC LIMIT 1;" | jq -r '.[0].text'
+```
+</details>
+<details>
+<summary>
+Print a sample frame_recording from the database</summary>
+```bash
+ffplay "screen-pipe/data/2024-07-12 01:14:14.078958 UTC.mp4"
+```
+</details>
+<details>
+<summary>
+Print a sample audio_recording from the database</summary>
+```bash
+ffplay "screen-pipe/data/Display 1 (output)_2024-07-12_01-14-11.mp3"
+```
+</details>
+
+<details>
+  <summary>Example to query the API</summary>
+  
+1. Basic search query
+```bash
+curl "http://localhost:3030/search?q=Neuralink&limit=5&offset=0&content_type=ocr" | jq
+```
+</details>
+<details>
+  <summary>Other Example to query the API</summary>
+
+  ```bash
+# 2. Search with content type filter (OCR)
+curl "http://localhost:3030/search?q=QUERY_HERE&limit=5&offset=0&content_type=ocr"
+
+# 3. Search with content type filter (Audio)
+curl "http://localhost:3030/search?q=QUERY_HERE&limit=5&offset=0&content_type=audio"
+
+# 4. Search with pagination
+curl "http://localhost:3030/search?q=QUERY_HERE&limit=10&offset=20"
+
+# 6. Search with no query (should return all results)
+curl "http://localhost:3030/search?limit=5&offset=0"
+  ```
+</details>
+<br><br>
+Keep in mind that it's still experimental.
+<br><br>
+https://github.com/user-attachments/assets/95e343ab-f76a-4f8b-aa01-eca86d255005
+
+## Use cases:
+
+- RAG & question answering: Quickly find information you've forgotten or misplaced
+- Automation: 
+  - Automatically generate documentation
+  - Populate CRM systems with relevant data
+  - Synchronize company knowledge across platforms
+  - Automate repetitive tasks based on screen content
+- Analytics:
+  - Track personal productivity metrics
+  - Organize and analyze educational materials
+  - Gain insights into areas for personal improvement
+  - Analyze work patterns and optimize workflows
+- Personal assistant:
+  - Summarize lengthy documents or videos
+  - Provide context-aware reminders and suggestions
+  - Assist with research by aggregating relevant information
+- Collaboration:
+  - Share and annotate screen captures with team members
+  - Create searchable archives of meetings and presentations
+- Compliance and security:
+  - Track what your employees are really up to
+  - Monitor and log system activities for audit purposes
+  - Detect potential security threats based on screen content
+
+## Example vercel/ai-chatbot that query screenpipe autonomously
+
+Check this example of screenpipe which is a chatbot that make requests to your data to answer your questions
+
+https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3fe-f34479fdc45e
+
+## Status 
+
+Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
+
+- [x] screenshots
+- [x] optimised screen & audio recording (mp4 & mp3 encoding, estimating 30 gb/m with default settings)
+- [x] sqlite local db
+- [x] OCR
+- [x] audio + stt (works with multi input & output devices)
+- [x] local api
+- [ ] TS SDK
+- [ ] multimodal embeddings
+- [ ] cloud storage options (s3, pgsql, etc.)
+- [ ] cloud computing options
+- [ ] bug-free & stable
+- [ ] custom storage settings: customizable capture settings (fps, resolution)
+- [ ] data encryption options & higher security
+- [ ] fast, optimised, energy-efficient modes
+
+
+[Example with vercel/ai-chatbot project here inside the repo here:](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
 
 ## Why open source?
 
@@ -220,3 +302,5 @@ Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Althou
     - etc.
     - We're constantly exploring new use cases and welcome community input!
 </details>
+
+https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
