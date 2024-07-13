@@ -4,8 +4,8 @@ use chrono::Utc;
 use crossbeam::channel::{Receiver, Sender};
 use log::{debug, error, info};
 use screenpipe_audio::{
-    create_whisper_channel, record_and_transcribe, AudioInput, DeviceControl, DeviceSpec,
-    TranscriptionResult,
+    create_whisper_channel, parse_audio_device, record_and_transcribe, AudioDevice, AudioInput,
+    DeviceControl, TranscriptionResult,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,13 +24,12 @@ pub async fn start_continuous_recording(
     output_path: Arc<String>,
     fps: f64,
     audio_chunk_duration: Duration,
-    control_rx: std::sync::mpsc::Receiver<RecorderControl>,
+    full_control: std::sync::mpsc::Receiver<RecorderControl>,
     enable_audio: bool,
-    audio_devices: Vec<Arc<DeviceSpec>>,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
+    audio_devices_control: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
 ) -> Result<()> {
-    info!("Starting continuous recording");
+    info!("Recording now");
     if !enable_audio {
         info!("Audio recording disabled");
     }
@@ -58,7 +57,6 @@ pub async fn start_continuous_recording(
                 output_path_audio,
                 audio_chunk_duration,
                 is_running_audio,
-                audio_devices,
                 whisper_sender,
                 whisper_receiver,
                 Arc::clone(&audio_devices_control),
@@ -72,12 +70,11 @@ pub async fn start_continuous_recording(
 
     // Control loop
     tokio::spawn(async move {
-        while let Ok(ctrl) = control_rx.recv() {
+        while let Ok(ctrl) = full_control.recv() {
             match ctrl {
                 RecorderControl::Stop => {
                     vision_control.store(false, Ordering::SeqCst);
                     control_all_devices(&device_controls_clone, RecorderControl::Stop);
-                    break;
                 }
                 RecorderControl::Pause => {
                     control_all_devices(&device_controls_clone, RecorderControl::Pause)
@@ -94,7 +91,7 @@ pub async fn start_continuous_recording(
         handle.await??;
     }
 
-    info!("Continuous recording stopped");
+    info!("Stopped recording");
     Ok(())
 }
 
@@ -139,47 +136,39 @@ async fn record_audio(
     output_path: Arc<String>,
     chunk_duration: Duration,
     is_running: Arc<AtomicBool>,
-    devices: Vec<Arc<DeviceSpec>>,
     whisper_sender: Sender<AudioInput>,
     whisper_receiver: Receiver<TranscriptionResult>,
-    device_controls: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
+    device_controls: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
 ) -> Result<()> {
     let mut handles = vec![];
 
-    for device_spec in devices {
+    let device_specs: Vec<AudioDevice> = device_controls.read().unwrap().keys().cloned().collect();
+    for device_spec in device_specs {
         let db_clone = Arc::clone(&db);
         let output_path_clone = Arc::clone(&output_path);
         let is_running_clone = Arc::clone(&is_running);
-        let device_spec_clone = Arc::clone(&device_spec);
+        // let device_spec_clone = Arc::clone(&device_spec);
         let whisper_sender_clone = whisper_sender.clone();
         let whisper_receiver_clone = whisper_receiver.clone();
 
-        let device_control = Arc::new(DeviceControl {
-            is_running: Arc::new(AtomicBool::new(true)),
-            is_paused: Arc::new(AtomicBool::new(false)),
-        });
+        let device_control = Arc::clone(&device_controls.read().unwrap()[&device_spec]);
 
-        device_controls
-            .write()
-            .unwrap()
-            .insert(device_spec.to_string(), Arc::clone(&device_control));
-
+        if !device_control.is_running.load(Ordering::SeqCst) {
+            continue;
+        }
         let handle = tokio::spawn(async move {
-            info!(
-                "Starting audio capture thread for device: {}",
-                &device_spec_clone
-            );
+            info!("Starting audio capture thread for device: {}", &device_spec);
 
             let mut iteration = 0;
             while is_running_clone.load(Ordering::SeqCst) {
                 iteration += 1;
                 info!(
                     "Starting iteration {} for device {}",
-                    iteration, &device_spec_clone
+                    iteration, device_spec
                 );
 
                 let recording_thread = thread::spawn({
-                    let device_spec_clone = Arc::clone(&device_spec_clone);
+                    let device_spec = device_spec.clone();
                     let output_path_clone = Arc::clone(&output_path_clone);
                     let whisper_sender = whisper_sender_clone.clone();
                     let device_control_clone = Arc::clone(&device_control);
@@ -188,14 +177,14 @@ async fn record_audio(
                         let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
                         let file_path = format!(
                             "{}/{}_{}.mp3",
-                            output_path_clone, device_spec_clone, new_file_name
+                            output_path_clone, device_spec, new_file_name
                         );
                         info!(
                             "Starting record_and_transcribe for device {} (iteration {})",
-                            device_spec_clone, iteration
+                            device_spec, iteration
                         );
                         let result = record_and_transcribe(
-                            device_spec_clone.as_ref(),
+                            &device_spec,
                             chunk_duration,
                             file_path.into(),
                             whisper_sender,
@@ -203,7 +192,7 @@ async fn record_audio(
                         );
                         info!(
                             "Finished record_and_transcribe for device {} (iteration {})",
-                            device_spec_clone, iteration
+                            device_spec, iteration
                         );
                         result
                     }
@@ -214,7 +203,7 @@ async fn record_audio(
                     Ok(Ok(file_path)) => {
                         info!(
                             "Recording complete for device {} (iteration {}): {:?}",
-                            device_spec_clone, iteration, file_path
+                            device_spec, iteration, file_path
                         );
                         let whisper_receiver = whisper_receiver_clone.clone();
 
@@ -223,44 +212,41 @@ async fn record_audio(
                             Ok(transcription) => {
                                 info!(
                                     "Received transcription for device {} (iteration {})",
-                                    device_spec_clone, iteration
+                                    device_spec, iteration
                                 );
                                 process_audio_result(&db_clone, transcription).await;
                             }
                             Err(e) => error!(
                                 "Failed to receive transcription for device {} (iteration {}): {}",
-                                device_spec_clone, iteration, e
+                                device_spec, iteration, e
                             ),
                         }
                     }
                     Ok(Err(e)) => error!(
                         "Error in record_and_transcribe for device {} (iteration {}): {}",
-                        device_spec_clone, iteration, e
+                        device_spec, iteration, e
                     ),
                     Err(e) => error!(
                         "Thread panicked for device {} (iteration {}): {:?}",
-                        device_spec_clone, iteration, e
+                        device_spec, iteration, e
                     ),
                 }
 
                 if !device_control.is_running.load(Ordering::SeqCst) {
                     info!(
                         "Device control signaled stop for device {} after iteration {}",
-                        device_spec_clone, iteration
+                        device_spec, iteration
                     );
                     break;
                 }
 
                 info!(
                     "Finished iteration {} for device {}",
-                    iteration, &device_spec_clone
+                    iteration, &device_spec
                 );
             }
 
-            info!(
-                "Exiting audio capture thread for device: {}",
-                &device_spec_clone
-            );
+            info!("Exiting audio capture thread for device: {}", &device_spec);
         });
 
         handles.push(handle);
@@ -309,7 +295,7 @@ async fn process_audio_result(db: &DatabaseManager, result: TranscriptionResult)
 }
 
 pub fn control_all_devices(
-    device_controls: &Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
+    device_controls: &Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
     command: RecorderControl,
 ) {
     let controls = device_controls.read();

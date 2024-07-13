@@ -5,7 +5,7 @@ use screenpipe_audio::create_whisper_channel;
 use screenpipe_audio::default_input_device;
 use screenpipe_audio::default_output_device;
 use screenpipe_audio::list_audio_devices;
-use screenpipe_audio::parse_device_spec;
+use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::DeviceControl;
@@ -38,6 +38,8 @@ fn print_devices(devices: &[AudioDevice]) {
     }
 }
 
+// TODO - kinda bad cli here
+
 fn main() -> Result<()> {
     use env_logger::Builder;
     use log::LevelFilter;
@@ -61,7 +63,7 @@ fn main() -> Result<()> {
     } else {
         args.audio_device
             .iter()
-            .map(|d| parse_device_spec(d))
+            .map(|d| parse_audio_device(d))
             .collect::<Result<Vec<_>>>()?
     };
 

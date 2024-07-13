@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Json as JsonExt, Path, Query, State},
     http::StatusCode,
     response::Json as JsonResponse,
     routing::{get, post},
@@ -22,13 +22,18 @@ use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 use crate::{ContentType, DatabaseManager, SearchResult};
-use screenpipe_audio::DeviceControl;
+use screenpipe_audio::{AudioDevice, DeviceControl};
 
 // App state
 pub(crate) struct AppState {
     db: Arc<DatabaseManager>,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
+    audio_devices_control: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
+}
+
+#[derive(Deserialize)]
+struct DeviceRequest {
+    device_id: String,
 }
 
 // Request structs
@@ -178,15 +183,27 @@ pub(crate) async fn search(
     }))
 }
 pub(crate) async fn start_device(
-    Path(device_id): Path<String>,
     State(state): State<Arc<AppState>>,
+    JsonExt(payload): JsonExt<DeviceRequest>,
 ) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
     let device_controls = state.audio_devices_control.read().unwrap();
-    if let Some(device_control) = device_controls.get(&device_id) {
+
+    // Create an AudioDevice from the device_id string
+    let audio_device = match AudioDevice::from_name(&payload.device_id) {
+        Ok(device) => device,
+        Err(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({"error": "Invalid device ID"})),
+            ))
+        }
+    };
+
+    if let Some(device_control) = device_controls.get(&audio_device) {
         device_control.is_paused.store(false, Ordering::SeqCst);
         device_control.is_running.store(true, Ordering::SeqCst);
         Ok(JsonResponse(DeviceStatus {
-            id: device_id,
+            id: payload.device_id,
             is_running: true,
         }))
     } else {
@@ -198,15 +215,25 @@ pub(crate) async fn start_device(
 }
 
 pub(crate) async fn stop_device(
-    Path(device_id): Path<String>,
     State(state): State<Arc<AppState>>,
+    JsonExt(payload): JsonExt<DeviceRequest>,
 ) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
     let device_controls = state.audio_devices_control.read().unwrap();
-    if let Some(device_control) = device_controls.get(&device_id) {
+    // Create an AudioDevice from the device_id string
+    let audio_device = match AudioDevice::from_name(&payload.device_id) {
+        Ok(device) => device,
+        Err(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({"error": "Invalid device ID"})),
+            ))
+        }
+    };
+    if let Some(device_control) = device_controls.get(&audio_device) {
         device_control.is_running.store(false, Ordering::SeqCst);
         device_control.is_paused.store(true, Ordering::SeqCst);
         Ok(JsonResponse(DeviceStatus {
-            id: device_id,
+            id: payload.device_id,
             is_running: false,
         }))
     } else {
@@ -239,13 +266,23 @@ pub(crate) async fn get_recording_status(
 }
 
 pub(crate) async fn get_device_status(
-    Path(device_id): Path<String>,
     State(state): State<Arc<AppState>>,
+    JsonExt(payload): JsonExt<DeviceRequest>,
 ) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
     let device_controls = state.audio_devices_control.read().unwrap();
-    if let Some(device_control) = device_controls.get(&device_id) {
+    // Create an AudioDevice from the device_id string
+    let audio_device = match AudioDevice::from_name(&payload.device_id) {
+        Ok(device) => device,
+        Err(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({"error": "Invalid device ID"})),
+            ))
+        }
+    };
+    if let Some(device_control) = device_controls.get(&audio_device) {
         Ok(JsonResponse(DeviceStatus {
-            id: device_id,
+            id: payload.device_id,
             is_running: device_control.is_running.load(Ordering::SeqCst),
         }))
     } else {
@@ -254,6 +291,20 @@ pub(crate) async fn get_device_status(
             JsonResponse(json!({"error": "Device not found"})),
         ))
     }
+}
+
+pub(crate) async fn get_devices(
+    State(state): State<Arc<AppState>>,
+) -> JsonResponse<Vec<DeviceStatus>> {
+    let device_controls = state.audio_devices_control.read().unwrap();
+    let devices = device_controls
+        .iter()
+        .map(|(id, _)| DeviceStatus {
+            id: id.to_string(),
+            is_running: false,
+        })
+        .collect();
+    JsonResponse(devices)
 }
 
 // Helper functions
@@ -280,7 +331,7 @@ pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
+    audio_devices_control: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
 }
 
 impl Server {
@@ -288,7 +339,7 @@ impl Server {
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
         vision_control: Arc<AtomicBool>,
-        audio_devices_control: Arc<RwLock<HashMap<String, Arc<DeviceControl>>>>,
+        audio_devices_control: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
     ) -> Self {
         Server {
             db,
@@ -307,9 +358,10 @@ impl Server {
 
         let app = Router::new()
             .route("/search", get(search))
-            .route("/device/:id/start", post(start_device))
-            .route("/device/:id/stop", post(stop_device))
-            .route("/device/:id/status", get(get_device_status))
+            .route("/device/start", post(start_device))
+            .route("/device/stop", post(stop_device))
+            .route("/device/status", post(get_device_status))
+            .route("/device/list", get(get_devices))
             .route("/recording/start", post(start_recording))
             .route("/recording/stop", post(stop_recording))
             .route("/recording/status", get(get_recording_status))
@@ -351,13 +403,16 @@ impl Server {
 // # curl "http://localhost:3030/search?limit=5&offset=0"
 
 // # 7. Start a device
-// # curl -X POST "http://localhost:3030/device/device1/start"
+// # curl -X POST "http://localhost:3030/device/start" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
 
 // # 8. Stop a device
-// # curl -X POST "http://localhost:3030/device/device1/stop"
+// # curl -X POST "http://localhost:3030/device/stop" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
 
 // # 9. Get device status
-// # curl "http://localhost:3030/device/device1/status"
+// # curl "http://localhost:3030/device/status" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
+
+// list devices
+// # curl "http://localhost:3030/device/list"
 
 // # 10. Start recording
 // # curl -X POST "http://localhost:3030/recording/start"
