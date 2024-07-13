@@ -30,7 +30,7 @@ num_cpus = "1.0"
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Database
-sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chrono"] }
+sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chrono", "migrate"] }
 
 # FFmpeg bindings
 ffmpeg-next = "7.0.2"
@@ -78,6 +78,14 @@ crossbeam = "0.8"
 tempfile = "3.3.0"
 
 reqwest = { version = "0.11", features = ["json"] }
+
+# Benches
+criterion = { version = "0.5.1", features = ["async_tokio"] }
+rand = "0.8"
+
+[[bench]]
+name = "db_benchmarks"
+harness = false
 
 [features]
 static-ffmpeg = ["ffmpeg-next/static"]
