@@ -158,7 +158,7 @@ sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FR
 Play a sample frame_recording from the database</summary>
 
 ```bash
-ffplay "screen-pipe/data/2024-07-12 01:14:14.078958 UTC.mp4"
+ffplay "screen-pipe/data/2024-07-12_01-14-14.mp4"
 ```
 </details>
 <details>

@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::Local;
 use env_logger::Env;
 use image::GenericImageView;
 use log::info;
@@ -21,9 +21,11 @@ fn write_json_frame(writer: &mut BufWriter<File>, frame_data: &Value) -> std::io
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let time = Utc::now();
+    let time = Local::now();
+    let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
     let output_path = "data";
-    let json_output_path = format!("data/{}.json", time);
+    let json_output_path = format!("data/{}.json", formatted_time);
+
     // create dir if not exists
     std::fs::create_dir_all("data").unwrap_or_default();
     info!("Created data directory {}", output_path);
