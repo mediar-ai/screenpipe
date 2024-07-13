@@ -36,11 +36,45 @@ Chat with an AI that knows everything about you. Record your screens & audio 24/
 Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
 <details>
+  <summary>BACKEND</summary>
+
+
+<details>
   <summary>MacOS</summary>
+
+<details>
+  <summary>Option I: Library</summary>
+
+1. Navigate to the folder where you want the data to be stored
+
+2. Install dependencies:
+```bash
+brew install pkg-config
+brew install ffmpeg
+brew install jq
+```
+3. Install library
+```bash
+brew install louis030195/screen-pipe/screenpipe
+```
+4. Run it:
+```bash
+screenpipe 
+```
+or if you don't want audio to be recorded
+```bash
+screenpipe --disable-audio
+```
+[Didn't work?](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=brew+install+screenpipe+didnt+work)
+
+</details>
+
+<details>
+  <summary>Option II: Install from the source</summary>
 
 1. Install dependencies:
 ```bash
-# On Mac
+brew install pkg-config
 brew install ffmpeg
 brew install jq
 ```
@@ -55,8 +89,13 @@ git clone https://github.com/louis030195/screen-pipe
 
 This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
 ```bash
-(cd screen-pipe/ && cargo build --release --features metal) # remove "--features metal" if you do not have M series processor
+cd screen-pipe # enter cloned repo
 ```
+
+```bash
+cargo build --release --features metal # remove "--features metal" if you do not have M series processor
+```
+
 Sign the executable to avoid mac killing the process when it's running for too long
 ```bash
 codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,runtime ./target/release/screenpipe
@@ -64,22 +103,11 @@ codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,ru
 
 Then run it
 ```bash
-(cd screen-pipe/ && ./target/release/screenpipe) # add "--disable-audio" if you don't want audio to be recorded
+./target/release/screenpipe # add "--disable-audio" if you don't want audio to be recorded
 ```
+[Didn't work?](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=cloning+screenpipe+didnt+work)
+</details>
 
-Then run Vercel App
-Set up you OPENAI API KEY
-```bash
-mkdir -p screen-pipe/examples/ts/vercel-ai-chatbot && echo "OPENAI_API_KEY=INSERT_YOUR_API_KEY_HERE" > screen-pipe/examples/ts/vercel-ai-chatbot/.env
-```
-Install dependencies and run local web server
-```bash
-(cd screen-pipe/examples/ts/vercel-ai-chatbot/ && npm install && npm run dev)
-```
-![Vercel App](./public/Vercel_app.png)
-<br><br>
-
-![Claude_prompt](./public/Claude_prompt.png)
 <br><br>
 </details>
 
@@ -124,6 +152,39 @@ curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install
 
   Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `$HOME/.local/bin`)
 </details>
+<br><br>
+</details>
+
+<details>
+  <summary>FRONTEND</summary>
+
+```bash
+git clone https://github.com/louis030195/screen-pipe
+```
+
+Navigate to app directory
+```bash
+cd screen-pipe/examples/ts/vercel-ai-chatbot 
+```
+Set up you OPENAI API KEY in .env
+```bash
+echo "OPENAI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" > .env
+```
+[Didn't work?](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=vercel+app+didnt+work)
+
+Install dependencies and run local web server
+```bash
+npm install 
+```
+```bash
+npm run dev
+```
+![Vercel App](./public/Vercel_app.png)
+<br><br>
+
+![Claude_prompt](./public/Claude_prompt.png)
+<br><br>
+</details>
 
 
 ## Usage
@@ -140,7 +201,7 @@ sqlite3 screen-pipe/data/db.sqlite ".tables"
 Print a sample audio_transcriptions from the database</summary>
 
 ```bash
-sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM audio_transcriptions ORDER BY id DESC LIMIT 1;" | jq .
+sqlite3 data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM audio_transcriptions ORDER BY id DESC LIMIT 1;" | jq .
 ```
 ![audio_transcriptions](./public/audio_transcriptions.png)
 </details>
@@ -149,7 +210,7 @@ sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FR
 Print a sample frame_OCR_text from the database</summary>
 
 ```bash
-sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM ocr_text ORDER BY frame_id DESC LIMIT 1;" | jq -r '.[0].text'
+sqlite3 data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM ocr_text ORDER BY frame_id DESC LIMIT 1;" | jq -r '.[0].text'
 ```
 ![frame_text](./public/frame_text.png)
 </details>
@@ -158,7 +219,7 @@ sqlite3 screen-pipe/data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FR
 Play a sample frame_recording from the database</summary>
 
 ```bash
-ffplay "screen-pipe/data/2024-07-12 01:14:14.078958 UTC.mp4"
+ffplay "data/2024-07-12 01:14:14.078958 UTC.mp4"
 ```
 </details>
 <details>
@@ -166,7 +227,7 @@ ffplay "screen-pipe/data/2024-07-12 01:14:14.078958 UTC.mp4"
 Play a sample audio_recording from the database</summary>
 
 ```bash
-ffplay "screen-pipe/data/Display 1 (output)_2024-07-12_01-14-11.mp3"
+ffplay "data/Display 1 (output)_2024-07-12_01-14-11.mp3"
 ```
 </details>
 
