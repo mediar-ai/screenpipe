@@ -2,8 +2,8 @@ use std::{
     collections::HashMap,
     fs,
     net::SocketAddr,
-    sync::{atomic::AtomicBool, mpsc::channel, Arc, RwLock},
-    time::Duration,
+    sync::{atomic::AtomicBool, mpsc::channel, Arc},
+    time::{Duration, Instant},
 };
 
 use clap::Parser;
@@ -12,7 +12,7 @@ use colored::Colorize;
 use log::{debug, info, LevelFilter};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice, DeviceControl,
+    DeviceControl,
 };
 
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
@@ -24,7 +24,7 @@ const DISPLAY: &str = r"
   / ___/ ___/ ___/ _ \/ _ \/ __ \   / __ \/ / __ \/ _ \
  (__  / /__/ /  /  __/  __/ / / /  / /_/ / / /_/ /  __/
 /____/\___/_/   \___/\___/_/ /_/  / .___/_/ .___/\___/ 
-                              /_/     /_/           
+                                 /_/     /_/           
 
 ";
 
@@ -88,6 +88,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     builder.init();
+    // tokio-console
+    // console_subscriber::init();
+
     // Add warning for Linux and Windows users
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
@@ -104,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     let all_audio_devices = list_audio_devices()?;
-
+    let mut devices_status = HashMap::new();
     if cli.list_audio_devices {
         println!("Available audio devices:");
         for (i, device) in all_audio_devices.iter().enumerate() {
@@ -114,19 +117,25 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let mut audio_devices = Vec::new();
-    let audio_devices_control: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>> =
-        Arc::new(RwLock::new(HashMap::new()));
 
+    let (audio_devices_control_sender, audio_devices_control_receiver) =
+        crossbeam::channel::unbounded();
+
+    let audio_devices_control_sender_server = audio_devices_control_sender.clone();
+
+    info!("Available audio devices:");
     // Add all available audio devices to the controls
     for device in &all_audio_devices {
         let device_control = DeviceControl {
-            is_running: Arc::new(AtomicBool::new(false)),
-            is_paused: Arc::new(AtomicBool::new(false)),
+            is_running: false,
+            is_paused: false,
         };
-        audio_devices_control
-            .write()
-            .unwrap()
-            .insert(device.clone(), Arc::new(device_control));
+        let _ = audio_devices_control_sender.send_deadline(
+            (device.clone(), device_control.clone()),
+            Instant::now() + Duration::from_secs(10),
+        );
+        devices_status.insert(device.clone(), device_control);
+        info!("  {}", device);
     }
 
     if !cli.disable_audio {
@@ -135,39 +144,42 @@ async fn main() -> anyhow::Result<()> {
             // Use default devices
             if let Ok(input_device) = default_input_device() {
                 audio_devices.push(Arc::new(input_device.clone()));
-                if let Some(control) = audio_devices_control
-                    .write()
-                    .unwrap()
-                    .get_mut(&input_device)
-                {
-                    control
-                        .is_running
-                        .store(true, std::sync::atomic::Ordering::SeqCst);
-                }
+                let device_control = DeviceControl {
+                    is_running: true,
+                    is_paused: false,
+                };
+                let _ = audio_devices_control_sender.send_deadline(
+                    (input_device.clone(), device_control.clone()),
+                    Instant::now() + Duration::from_secs(15),
+                );
+                devices_status.insert(input_device, device_control);
             }
             if let Ok(output_device) = default_output_device() {
                 audio_devices.push(Arc::new(output_device.clone()));
-                if let Some(control) = audio_devices_control
-                    .write()
-                    .unwrap()
-                    .get_mut(&output_device)
-                {
-                    control
-                        .is_running
-                        .store(true, std::sync::atomic::Ordering::SeqCst);
-                }
+                let device_control = DeviceControl {
+                    is_running: true,
+                    is_paused: false,
+                };
+                let _ = audio_devices_control_sender.send_deadline(
+                    (output_device.clone(), device_control.clone()),
+                    Instant::now() + Duration::from_secs(15),
+                );
+                devices_status.insert(output_device, device_control);
             }
         } else {
             // Use specified devices
             for d in &cli.audio_device {
                 let device = parse_audio_device(d).expect("Failed to parse audio device");
                 audio_devices.push(Arc::new(device.clone()));
-                if let Some(control) = audio_devices_control.write().unwrap().get_mut(&device) {
-                    control
-                        .is_running
-                        .store(true, std::sync::atomic::Ordering::SeqCst);
-                    debug!("running audio device: {}", device.to_string());
-                }
+                let device_control = DeviceControl {
+                    is_running: true,
+                    is_paused: false,
+                };
+                let _ = audio_devices_control_sender.send_deadline(
+                    (device.clone(), device_control.clone()),
+                    Instant::now() + Duration::from_secs(15),
+                );
+                devices_status.insert(device, device_control);
             }
         }
 
@@ -181,8 +193,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    ResourceMonitor::new(cli.memory_threshold, cli.runtime_threshold)
-        .start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
+    let resource_monitor = ResourceMonitor::new(cli.memory_threshold, cli.runtime_threshold);
+    resource_monitor.start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
 
     let local_data_dir = cli.data_dir; // TODO: Use $HOME/.screenpipe/data
     fs::create_dir_all(&local_data_dir)?;
@@ -193,6 +205,10 @@ async fn main() -> anyhow::Result<()> {
             .await
             .unwrap(),
     );
+    info!(
+        "Database initialized, will store files in {}",
+        local_data_dir
+    );
     let db_record = db.clone();
     let db_server = db.clone();
 
@@ -201,7 +217,6 @@ async fn main() -> anyhow::Result<()> {
     let vision_control = Arc::new(AtomicBool::new(true));
 
     let vision_control_server_clone = vision_control.clone();
-    let audio_devices_control_server_clone = audio_devices_control.clone();
 
     // Start continuous recording in a separate task
     let _recording_task = tokio::spawn({
@@ -214,9 +229,8 @@ async fn main() -> anyhow::Result<()> {
                 cli.fps,
                 audio_chunk_duration,
                 control_rx,
-                !cli.disable_audio,
                 vision_control,
-                audio_devices_control,
+                audio_devices_control_receiver,
             )
             .await
         }
@@ -227,9 +241,9 @@ async fn main() -> anyhow::Result<()> {
             db_server,
             SocketAddr::from(([0, 0, 0, 0], cli.port)),
             vision_control_server_clone,
-            audio_devices_control_server_clone,
+            audio_devices_control_sender_server,
         );
-        server.start().await.unwrap();
+        server.start(devices_status).await.unwrap();
     });
 
     // Wait for the server to start

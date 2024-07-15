@@ -51,9 +51,11 @@ rubato = "0.15.0"
 
 # Server
 axum = "0.7.5"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.15", features = ["full", "tracing"] }
 hyper = "1.4"
-tower-http = { version = "0.5.2", features = ["cors"] }
+tower-http = { version = "0.5.2", features = ["cors", "trace"] }
+tracing-subscriber = "0.3.18"
+console-subscriber = "0.3.0"
 
 # Log
 log = { workspace = true }

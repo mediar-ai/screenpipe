@@ -21,6 +21,9 @@ xcap = "0.0.10"
 threadpool = "1.8.1"
 num_cpus = "1.0"
 
+# async
+tokio = { workspace = true }
+
 # Image processing
 image = "0.25.0"
 

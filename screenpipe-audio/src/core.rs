@@ -7,16 +7,17 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 
 use crate::AudioInput;
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
+use tokio::process::Command;
 
+#[derive(Clone)]
 pub struct DeviceControl {
-    pub is_running: Arc<AtomicBool>,
-    pub is_paused: Arc<AtomicBool>,
+    pub is_running: bool,
+    pub is_paused: bool,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Serialize)]
@@ -111,12 +112,12 @@ fn get_device_and_config(
     Ok((audio_device, config))
 }
 
-pub fn record_and_transcribe(
+pub async fn record_and_transcribe(
     audio_device: &AudioDevice,
     duration: Duration,
     output_path: PathBuf,
     whisper_sender: Sender<AudioInput>,
-    device_control: Arc<DeviceControl>,
+    is_running: Arc<AtomicBool>,
 ) -> Result<PathBuf> {
     let (cpal_audio_device, config) = get_device_and_config(audio_device)?;
     info!(
@@ -130,19 +131,15 @@ pub fn record_and_transcribe(
 
     let (audio_sender, audio_receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) =
         crossbeam::channel::unbounded();
-    let audio_sender_clone = audio_sender.clone();
-    let is_running_clone = Arc::clone(&device_control.is_running);
-    let is_running_clone_4 = Arc::clone(&device_control.is_running);
-    // TODO what the diff between pause/stop ?
-    let _is_paused_clone = Arc::clone(&device_control.is_paused);
-
+    let is_running_clone = Arc::clone(&is_running);
+    let is_running_clone_2 = Arc::clone(&is_running);
     let output_path_clone = output_path.clone();
     let output_path_clone_2 = output_path.clone();
 
     let start_time = std::time::Instant::now();
 
     // Spawn FFmpeg process in a separate thread
-    let ffmpeg_handle = thread::spawn(move || {
+    let ffmpeg_handle = tokio::spawn(async move {
         let mut ffmpeg = Command::new("ffmpeg")
             .args(&[
                 "-f",
@@ -173,7 +170,7 @@ pub fn record_and_transcribe(
 
         while is_running_clone.load(Ordering::Relaxed) {
             if let Ok(data) = audio_receiver.recv_timeout(Duration::from_millis(100)) {
-                if let Err(e) = stdin.write_all(&data) {
+                if let Err(e) = stdin.write_all(&data).await {
                     error!("Failed to write audio data to FFmpeg: {}", e);
                     break;
                 }
@@ -181,13 +178,15 @@ pub fn record_and_transcribe(
             if start_time.elapsed() >= duration {
                 break;
             }
+            // sleep for 100ms
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         // Close stdin to signal EOF to FFmpeg
         drop(stdin);
 
         // Wait for FFmpeg to finish
-        match ffmpeg.wait() {
+        match ffmpeg.wait().await {
             Ok(status) => debug!("FFmpeg process exited with status: {}", status),
             Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
         }
@@ -199,7 +198,7 @@ pub fn record_and_transcribe(
         cpal::SampleFormat::F32 => cpal_audio_device.build_input_stream(
             &config.into(),
             move |data: &[f32], _: &_| {
-                if is_running_clone_4.load(Ordering::Relaxed) {
+                if is_running.load(Ordering::Relaxed) {
                     if let Err(e) = audio_sender.try_send(bytemuck::cast_slice(data).to_vec()) {
                         warn!("Failed to send audio data: {}", e);
                     }
@@ -215,11 +214,11 @@ pub fn record_and_transcribe(
     stream.play()?;
     info!("Recording for {} seconds", duration.as_secs());
 
-    while device_control.is_running.load(Ordering::Relaxed) {
+    while is_running_clone_2.load(Ordering::Relaxed) {
         if start_time.elapsed() >= duration {
             break;
         }
-        thread::sleep(Duration::from_millis(100));
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     info!(
@@ -230,14 +229,8 @@ pub fn record_and_transcribe(
     // Stop the stream and signal the recording to stop
     stream.pause()?;
 
-    // Wait for a short time to ensure all data is processed
-    // thread::sleep(Duration::from_millis(100));
-
-    // Close the sender to signal the FFmpeg thread to finish
-    // drop(audio_sender_clone);
-
     // Wait for the FFmpeg thread to finish
-    ffmpeg_handle.join().expect("Failed to join FFmpeg thread");
+    ffmpeg_handle.await.expect("Failed to join FFmpeg thread");
     debug!("FFmpeg thread finished");
 
     if let Err(e) = whisper_sender.send(AudioInput {

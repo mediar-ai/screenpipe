@@ -1,13 +1,17 @@
 use axum::{
-    extract::{Json as JsonExt, Path, Query, State},
+    extract::{Json as JsonExt, Query, State},
     http::StatusCode,
     response::Json as JsonResponse,
     routing::{get, post},
     serve, Router,
 };
+use tracing::Level;
 
+use crate::{ContentType, DatabaseManager, SearchResult};
 use chrono::{DateTime, Utc};
+use crossbeam::channel::Sender;
 use log::{error, info};
+use screenpipe_audio::{AudioDevice, DeviceControl};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
@@ -15,24 +19,27 @@ use std::{
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, RwLock,
+        Arc,
     },
 };
 use tokio::net::TcpListener;
-use tower_http::cors::CorsLayer;
-
-use crate::{ContentType, DatabaseManager, SearchResult};
-use screenpipe_audio::{AudioDevice, DeviceControl};
+use tower_http::trace::TraceLayer;
+use tower_http::{
+    cors::CorsLayer,
+    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse},
+    LatencyUnit,
+};
 
 // App state
 pub(crate) struct AppState {
     db: Arc<DatabaseManager>,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
+    audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
+    devices_status: HashMap<AudioDevice, DeviceControl>,
 }
 
 #[derive(Deserialize)]
-struct DeviceRequest {
+pub(crate) struct DeviceRequest {
     device_id: String,
 }
 
@@ -66,9 +73,12 @@ where
 
 #[derive(Deserialize)]
 struct DateRangeQuery {
+    #[allow(dead_code)] // TODO
     start_date: Option<DateTime<Utc>>,
+    #[allow(dead_code)]
     end_date: Option<DateTime<Utc>>,
     #[serde(flatten)]
+    #[allow(dead_code)]
     pagination: PaginationQuery,
 }
 
@@ -112,7 +122,7 @@ struct AudioContent {
 }
 
 #[derive(Serialize)]
-struct DeviceStatus {
+pub(crate) struct DeviceStatus {
     id: String,
     is_running: bool,
 }
@@ -186,8 +196,6 @@ pub(crate) async fn start_device(
     State(state): State<Arc<AppState>>,
     JsonExt(payload): JsonExt<DeviceRequest>,
 ) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
-    let device_controls = state.audio_devices_control.read().unwrap();
-
     // Create an AudioDevice from the device_id string
     let audio_device = match AudioDevice::from_name(&payload.device_id) {
         Ok(device) => device,
@@ -199,18 +207,25 @@ pub(crate) async fn start_device(
         }
     };
 
-    if let Some(device_control) = device_controls.get(&audio_device) {
-        device_control.is_paused.store(false, Ordering::SeqCst);
-        device_control.is_running.store(true, Ordering::SeqCst);
-        Ok(JsonResponse(DeviceStatus {
-            id: payload.device_id,
-            is_running: true,
-        }))
-    } else {
+    let device_control = DeviceControl {
+        is_running: true,
+        is_paused: false,
+    };
+
+    if let Err(e) = state
+        .audio_devices_control_sender
+        .send((audio_device, device_control))
+    {
+        error!("failed to start audio device: {}", e);
         Err((
             StatusCode::NOT_FOUND,
             JsonResponse(json!({"error": "Device not found"})),
         ))
+    } else {
+        Ok(JsonResponse(DeviceStatus {
+            id: payload.device_id,
+            is_running: true,
+        }))
     }
 }
 
@@ -218,7 +233,6 @@ pub(crate) async fn stop_device(
     State(state): State<Arc<AppState>>,
     JsonExt(payload): JsonExt<DeviceRequest>,
 ) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
-    let device_controls = state.audio_devices_control.read().unwrap();
     // Create an AudioDevice from the device_id string
     let audio_device = match AudioDevice::from_name(&payload.device_id) {
         Ok(device) => device,
@@ -229,18 +243,25 @@ pub(crate) async fn stop_device(
             ))
         }
     };
-    if let Some(device_control) = device_controls.get(&audio_device) {
-        device_control.is_running.store(false, Ordering::SeqCst);
-        device_control.is_paused.store(true, Ordering::SeqCst);
-        Ok(JsonResponse(DeviceStatus {
-            id: payload.device_id,
-            is_running: false,
-        }))
-    } else {
+    let device_control = DeviceControl {
+        is_running: false,
+        is_paused: false,
+    };
+
+    if let Err(e) = state
+        .audio_devices_control_sender
+        .send((audio_device, device_control))
+    {
+        error!("failed to stop audio device: {}", e);
         Err((
             StatusCode::NOT_FOUND,
             JsonResponse(json!({"error": "Device not found"})),
         ))
+    } else {
+        Ok(JsonResponse(DeviceStatus {
+            id: payload.device_id,
+            is_running: false,
+        }))
     }
 }
 
@@ -269,7 +290,6 @@ pub(crate) async fn get_device_status(
     State(state): State<Arc<AppState>>,
     JsonExt(payload): JsonExt<DeviceRequest>,
 ) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
-    let device_controls = state.audio_devices_control.read().unwrap();
     // Create an AudioDevice from the device_id string
     let audio_device = match AudioDevice::from_name(&payload.device_id) {
         Ok(device) => device,
@@ -280,10 +300,10 @@ pub(crate) async fn get_device_status(
             ))
         }
     };
-    if let Some(device_control) = device_controls.get(&audio_device) {
+    if let Some(device_control) = state.devices_status.get(&audio_device) {
         Ok(JsonResponse(DeviceStatus {
             id: payload.device_id,
-            is_running: device_control.is_running.load(Ordering::SeqCst),
+            is_running: device_control.is_running,
         }))
     } else {
         Err((
@@ -296,12 +316,12 @@ pub(crate) async fn get_device_status(
 pub(crate) async fn get_devices(
     State(state): State<Arc<AppState>>,
 ) -> JsonResponse<Vec<DeviceStatus>> {
-    let device_controls = state.audio_devices_control.read().unwrap();
-    let devices = device_controls
+    let devices = state
+        .devices_status
         .iter()
-        .map(|(id, _)| DeviceStatus {
-            id: id.to_string(),
-            is_running: false,
+        .map(|(audio_device, device_control)| DeviceStatus {
+            id: audio_device.to_string(),
+            is_running: device_control.is_running,
         })
         .collect();
     JsonResponse(devices)
@@ -331,7 +351,7 @@ pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
+    audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
 }
 
 impl Server {
@@ -339,36 +359,57 @@ impl Server {
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
         vision_control: Arc<AtomicBool>,
-        audio_devices_control: Arc<RwLock<HashMap<AudioDevice, Arc<DeviceControl>>>>,
+        audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
     ) -> Self {
         Server {
             db,
             addr,
             vision_control,
-            audio_devices_control,
+            audio_devices_control_sender,
         }
     }
 
-    pub async fn start(self) -> Result<(), std::io::Error> {
+    pub async fn start(
+        self,
+        device_status: HashMap<AudioDevice, DeviceControl>,
+    ) -> Result<(), std::io::Error> {
+        // TODO could init w audio devices
         let app_state = Arc::new(AppState {
             db: self.db,
             vision_control: self.vision_control,
-            audio_devices_control: self.audio_devices_control,
+            audio_devices_control_sender: self.audio_devices_control_sender,
+            devices_status: device_status.clone(),
         });
 
+        // https://github.com/tokio-rs/console
         let app = Router::new()
             .route("/search", get(search))
-            .route("/device/start", post(start_device))
-            .route("/device/stop", post(stop_device))
-            .route("/device/status", post(get_device_status))
-            .route("/device/list", get(get_devices))
-            .route("/recording/start", post(start_recording))
-            .route("/recording/stop", post(stop_recording))
-            .route("/recording/status", get(get_recording_status))
+            .route("/audio/start", post(start_device))
+            .route("/audio/stop", post(stop_device))
+            .route("/audio/status", post(get_device_status))
+            .route("/audio/list", get(get_devices))
+            .route("/vision/start", post(start_recording))
+            .route("/vision/stop", post(stop_recording))
+            .route("/vision/status", get(get_recording_status))
             .layer(CorsLayer::permissive())
+            .layer(
+                // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs
+                TraceLayer::new_for_http()
+                    .make_span_with(DefaultMakeSpan::new().include_headers(true))
+                    .on_request(DefaultOnRequest::new().level(Level::INFO))
+                    .on_response(
+                        DefaultOnResponse::new()
+                            .level(Level::INFO)
+                            .latency_unit(LatencyUnit::Micros),
+                    ),
+            )
             .with_state(app_state);
 
         info!("Starting server on {}", self.addr);
+        info!("Audio devices:");
+        for (device, control) in device_status.iter() {
+            info!("{}: {}", device, control.is_running);
+        }
 
         match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
             Ok(_) => {
@@ -403,22 +444,29 @@ impl Server {
 // # curl "http://localhost:3030/search?limit=5&offset=0"
 
 // # 7. Start a device
-// # curl -X POST "http://localhost:3030/device/start" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
+// # curl -X POST "http://localhost:3030/audio/start" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
 
 // # 8. Stop a device
-// # curl -X POST "http://localhost:3030/device/stop" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
+// # curl -X POST "http://localhost:3030/audio/stop" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
 
 // # 9. Get device status
-// # curl "http://localhost:3030/device/status" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
+// # curl "http://localhost:3030/audio/status" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
 
 // list devices
-// # curl "http://localhost:3030/device/list"
+// # curl "http://localhost:3030/audio/list" | jq
+
+// start the first device in the list that has "Microphone (input)"" in the id
+// 1. list
+// 2. start the first device in the list that has "Microphone (input)"" in the id
+// DEVICE=$(curl "http://localhost:3030/audio/list" | grep "Microphone (input)" | jq -r '.[0].id')
+// curl -X POST "http://localhost:3030/audio/start" -H "Content-Type: application/json" -d '{"device_id": "$DEVICE"}' | jq
+// curl -X POST "http://localhost:3030/audio/stop" -H "Content-Type: application/json" -d '{"device_id": "$DEVICE"}' | jq
 
 // # 10. Start recording
-// # curl -X POST "http://localhost:3030/recording/start"
+// # curl -X POST "http://localhost:3030/vision/start"
 
 // # 11. Stop recording
-// # curl -X POST "http://localhost:3030/recording/stop"
+// # curl -X POST "http://localhost:3030/vision/stop"
 
 // # 12. Get recording status
-// # curl "http://localhost:3030/recording/status"
+// # curl "http://localhost:3030/vision/status"

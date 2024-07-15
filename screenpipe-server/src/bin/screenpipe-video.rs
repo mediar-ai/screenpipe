@@ -18,7 +18,8 @@ fn write_json_frame(writer: &mut BufWriter<File>, frame_data: &Value) -> std::io
     writer.flush()
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let time = Utc::now();
@@ -53,7 +54,6 @@ fn main() {
 
     let json_file = OpenOptions::new()
         .create(true)
-        
         .append(true)
         .open(&json_output_path)
         .expect("Failed to create JSON file");
@@ -62,7 +62,7 @@ fn main() {
     let mut frame_count = 0;
 
     loop {
-        if let Some(frame) = video_capture.get_latest_frame() {
+        if let Some(frame) = video_capture.get_latest_frame().await {
             info!("Captured frame size: {:?}", frame.image.dimensions());
             info!("OCR Text len: {}", frame.text.len());
 
@@ -86,7 +86,7 @@ fn main() {
         }
     }
 
-    video_capture.stop();
+    video_capture.stop().await;
     println!("Video capture completed. Output saved to: {}", output_path);
     println!("JSON data saved to: {}", json_output_path);
 }

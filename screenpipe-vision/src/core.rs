@@ -1,17 +1,18 @@
 use image::DynamicImage;
-use log::info;
+use log::{debug, error, info, warn};
 use rusty_tesseract::{Args, Image};
-use threadpool::ThreadPool;
+use tokio::sync::broadcast;
+use tokio::sync::broadcast::error::RecvError;
 use xcap::Monitor;
 
 use std::collections::HashMap;
-use std::hash::DefaultHasher;
-use std::hash::Hash;
-use std::hash::Hasher;
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::Mutex;
+use tokio::task;
+
 pub enum ControlMessage {
     Pause,
     Resume,
@@ -21,12 +22,16 @@ pub enum ControlMessage {
 pub struct CaptureResult {
     pub image: Arc<DynamicImage>,
     pub text: String,
+    pub frame_number: u64,
+    pub timestamp: Instant,
 }
 
-const MAX_THREADS: usize = 8; // Adjust based on your needs
+const MAX_THREADS: usize = 4; // Adjust based on your needs
+const MAX_QUEUE_SIZE: usize = 6; // Maximum number of frames to keep in the queue. 64/8 ocr task = 8
+// seems kinda counter intuitive but less threads for OCR = more CPU usage = less frame dropping
 
-pub fn continuous_capture(
-    control_rx: Receiver<ControlMessage>,
+pub async fn continuous_capture(
+    control_rx: &mut Receiver<ControlMessage>,
     result_tx: Sender<CaptureResult>,
     interval: Duration,
 ) {
@@ -36,71 +41,160 @@ pub fn continuous_capture(
     let pool_size = (cpu_count as f32 * 1.2) as usize;
     let pool_size = std::cmp::min(pool_size, MAX_THREADS);
 
-    info!("Will use {} threads for OCR", pool_size);
-
-    let ocr_pool = ThreadPool::new(pool_size);
+    info!("Will use {} tasks for OCR", pool_size);
     let is_paused = Arc::new(Mutex::new(false));
     let should_stop = Arc::new(Mutex::new(false));
     let cache = Arc::new(Mutex::new(HashMap::<u64, String>::new()));
-    loop {
+
+    let (ocr_tx, _) =
+        broadcast::channel::<(Arc<DynamicImage>, u64, u64, Instant, Sender<CaptureResult>)>(64);
+    let ocr_tx = Arc::new(ocr_tx);
+
+    // Spawn OCR tasks
+    let ocr_handles: Vec<_> = (0..pool_size)
+        .map(|id| {
+            let mut ocr_rx = ocr_tx.subscribe();
+            let cache = Arc::clone(&cache);
+            let should_stop = Arc::clone(&should_stop);
+            task::spawn(async move {
+                while !*should_stop.lock().await {
+                    match ocr_rx.recv().await {
+                        Ok((image_arc, image_hash, frame_number, timestamp, result_tx)) => {
+                            // Only process if the frame number modulo pool_size equals this task's id
+                            if frame_number % pool_size as u64 == id as u64 {
+                                let start_time = Instant::now();
+                                let mut cache = cache.lock().await;
+                                let text = if let Some(cached_text) = cache.get(&image_hash) {
+                                    cached_text.clone()
+                                } else {
+                                    let new_text = perform_ocr(&image_arc);
+                                    cache.insert(image_hash, new_text.clone());
+                                    new_text
+                                };
+
+                                if let Err(e) = result_tx
+                                    .send(CaptureResult {
+                                        image: image_arc.into(),
+                                        text,
+                                        frame_number,
+                                        timestamp,
+                                    })
+                                    .await
+                                {
+                                    error!("Failed to send OCR result: {}", e);
+                                }
+                                let duration = start_time.elapsed();
+                                debug!(
+                                    "OCR task {} processed frame {} in {:?}",
+                                    id, frame_number, duration
+                                );
+                            }
+                        }
+                        Err(e) => match e {
+                            RecvError::Lagged(_) => {
+                                debug!("OCR task {} lagged behind: {}", id, e);
+                            }
+                            _ => {
+                                error!("OCR channel error for task {}: {}", id, e);
+                                break;
+                            }
+                        },
+                    }
+                }
+            })
+        })
+        .collect();
+
+    let mut frame_counter: u64 = 0;
+    let start_time = Instant::now();
+    let mut last_processed_frame = 0;
+
+    while !*should_stop.lock().await {
         // Check for control messages
         if let Ok(message) = control_rx.try_recv() {
             match message {
-                ControlMessage::Pause => *is_paused.lock().unwrap() = true,
-                ControlMessage::Resume => *is_paused.lock().unwrap() = false,
+                ControlMessage::Pause => *is_paused.lock().await = true,
+                ControlMessage::Resume => *is_paused.lock().await = false,
                 ControlMessage::Stop => {
-                    *should_stop.lock().unwrap() = true;
+                    *should_stop.lock().await = true;
                     break;
                 }
             }
         }
 
-        if *is_paused.lock().unwrap() {
-            thread::sleep(Duration::from_millis(100));
+        if *is_paused.lock().await {
+            tokio::time::sleep(Duration::from_millis(100)).await;
             continue;
         }
 
         // Capture screenshot
+        let capture_start = Instant::now();
         let buffer = monitor.capture_image().unwrap();
         let image = DynamicImage::ImageRgba8(buffer);
+        let capture_duration = capture_start.elapsed();
 
         // Generate hash for the image
         let image_hash = calculate_hash(&image);
 
-        // Clone necessary values for the OCR thread
+        // Clone necessary values for the OCR task
         let result_tx_clone = result_tx.clone();
         let image_arc = Arc::new(image);
-        let cache_clone = Arc::clone(&cache);
 
-        // Perform OCR in a separate thread
-        ocr_pool.execute(move || {
-            let mut cache = cache_clone.lock().unwrap();
-            let text = if let Some(cached_text) = cache.get(&image_hash) {
-                cached_text.clone()
-            } else {
-                let new_text = perform_ocr(&image_arc);
-                cache.insert(image_hash, new_text.clone());
-                new_text
-            };
-
-            result_tx_clone
-                .send(CaptureResult {
-                    image: image_arc,
-                    text,
-                })
-                .unwrap();
-        });
-
-        thread::sleep(interval);
-
-        if *should_stop.lock().unwrap() {
-            break;
+        // Check if we need to drop this frame
+        let queue_size = ocr_tx.receiver_count() as u64;
+        // debug!("OCR queue size: {}", queue_size);
+        if queue_size >= MAX_QUEUE_SIZE as u64 {
+            let frames_to_skip = queue_size - MAX_QUEUE_SIZE as u64 + 1;
+            if frame_counter - last_processed_frame <= frames_to_skip {
+                debug!("Dropping frame {} due to OCR backlog", frame_counter);
+                frame_counter += 1;
+                continue;
+            }
         }
+
+        // Send image for OCR processing
+        let send_start = Instant::now();
+        if let Err(e) = ocr_tx.send((
+            image_arc,
+            image_hash,
+            frame_counter,
+            capture_start,
+            result_tx_clone,
+        )) {
+            error!("Failed to send image for OCR processing: {}", e);
+        } else {
+            last_processed_frame = frame_counter;
+        }
+        let send_duration = send_start.elapsed();
+
+        frame_counter += 1;
+        debug!(
+            "Frame {}: Capture time: {:?}, Send time: {:?}, Receiver count: {}",
+            frame_counter,
+            capture_duration,
+            send_duration,
+            ocr_tx.receiver_count()
+        );
+
+        tokio::time::sleep(interval).await;
     }
 
-    ocr_pool.join();
-}
+    // Signal OCR tasks to stop
+    *should_stop.lock().await = true;
 
+    // Wait for all OCR tasks to complete
+    for handle in ocr_handles {
+        handle.await.unwrap();
+    }
+
+    let total_duration = start_time.elapsed();
+    info!(
+        "Capture completed. Total frames: {}, Total time: {:?}, Avg FPS: {:.2}",
+        frame_counter,
+        total_duration,
+        frame_counter as f64 / total_duration.as_secs_f64()
+    );
+}
 fn calculate_hash(image: &DynamicImage) -> u64 {
     let mut hasher = DefaultHasher::new();
     image.as_bytes().hash(&mut hasher);
