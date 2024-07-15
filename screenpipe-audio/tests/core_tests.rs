@@ -1,13 +1,10 @@
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use cpal::traits::StreamTrait;
     use crossbeam::channel;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::record_and_transcribe;
-    use screenpipe_audio::{
-        default_output_device, list_audio_devices, parse_device_spec, stt, WhisperModel,
-    };
+    use screenpipe_audio::{default_output_device, list_audio_devices, stt, WhisperModel};
+    use screenpipe_audio::{parse_audio_device, record_and_transcribe};
     use std::path::PathBuf;
     use std::process::Command;
     use std::str::FromStr;
@@ -37,8 +34,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_device_spec() {
-        let spec = parse_device_spec("Test Device (input)").unwrap();
+    fn test_parse_audio_device() {
+        let spec = parse_audio_device("Test Device (input)").unwrap();
         assert_eq!(spec.to_string(), "Test Device (input)");
     }
 

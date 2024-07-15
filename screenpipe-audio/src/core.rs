@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::StreamError;
 use crossbeam::channel::{Receiver, Sender};
-use crossbeam::epoch::Atomic;
 use log::{debug, error, info, warn};
 use serde::Serialize;
 use std::fmt;
@@ -134,6 +134,7 @@ pub fn record_and_transcribe(
         crossbeam::channel::unbounded();
     let is_running_clone = Arc::clone(&is_running);
     let is_running_clone_2 = Arc::clone(&is_running);
+    let is_running_clone_3 = Arc::clone(&is_running);
     let output_path_clone = output_path.clone();
     let output_path_clone_2 = output_path.clone();
 
@@ -193,7 +194,13 @@ pub fn record_and_transcribe(
         }
     });
 
-    let err_fn = |err| error!("An error occurred on the audio stream: {}", err);
+    let err_fn = move |err: StreamError| {
+        error!("An error occurred on the audio stream: {}", err);
+        if err.to_string().contains("device is no longer valid") {
+            warn!("Audio device disconnected. Stopping recording.");
+            is_running_clone_3.store(false, Ordering::Relaxed);
+        }
+    };
 
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => cpal_audio_device.build_input_stream(
