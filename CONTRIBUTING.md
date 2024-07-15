@@ -77,7 +77,22 @@ cargo test
 ```
 
 
-## Optimization
+## Other hacks
+
+### Benchmarks
+
+```
+cargo bench
+```
+
+### Creating new migrations
+
+```bash
+cargo install sqlx-cli
+sqlx migrate add <migration_name>
+```
+
+### Optimization
 
 For performance optimization, you can use the following command:
 
@@ -86,6 +101,8 @@ cargo install cargo-instruments
 # tracking leaks over 60 minutes time limit
 cargo instruments -t Leaks --bin screenpipe --features metal --time-limit 600000 --open
 ```
+
+Then open the file in `target/release/instruments` using Xcode -> Open Developer Tool -> Instruments.
 
 
 ## Join the Community

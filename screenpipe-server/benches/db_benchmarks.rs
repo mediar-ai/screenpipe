@@ -1,5 +1,4 @@
-
-// cargo bench 
+// cargo bench --bench db_benchmarks
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
@@ -18,7 +17,9 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
 
         let audio_id = db.insert_audio_chunk("test_audio.mp3").await.unwrap();
         let audio_text = format!("Audio transcription {}", rng.gen::<u32>());
-        db.insert_audio_transcription(audio_id, &audio_text, 0).await.unwrap();
+        db.insert_audio_transcription(audio_id, &audio_text, 0)
+            .await
+            .unwrap();
     }
 
     db
@@ -27,19 +28,31 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
 fn bench_search(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
-    let db_sizes = [100, 1000, 10000];
+    let db_sizes = [10000, 100000];
     let content_types = [ContentType::OCR, ContentType::Audio, ContentType::All];
+    let search_queries = ["random", "specific"];
+
+    let mut group = c.benchmark_group("search_benchmarks");
+    group.sample_size(5);
+    group.measurement_time(std::time::Duration::from_secs(30));
 
     for &size in &db_sizes {
         for &content_type in &content_types {
-            c.bench_function(&format!("search_{:?}_db_size_{}", content_type, size), |b| {
-                b.to_async(&rt).iter(|| async {
-                    let db = setup_large_db(size).await;
-                    db.search("text", content_type, 100, 0).await.unwrap()
-                });
-            });
+            for &query in &search_queries {
+                group.bench_function(
+                    format!("{:?}_db_size_{}_query_{}", content_type, size, query),
+                    |b| {
+                        b.to_async(&rt).iter(|| async {
+                            let db = setup_large_db(size).await;
+                            db.search(query, content_type, 100, 0).await.unwrap()
+                        });
+                    },
+                );
+            }
         }
     }
+
+    group.finish();
 }
 
 criterion_group!(benches, bench_search);

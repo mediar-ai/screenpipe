@@ -50,7 +50,7 @@ log = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.3.0"
-
+criterion = { workspace = true }
 
 [[bin]]
 name = "screenpipe-vision"

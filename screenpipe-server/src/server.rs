@@ -84,7 +84,7 @@ struct DateRangeQuery {
 
 // Response structs
 #[derive(Serialize)]
-struct PaginatedResponse<T> {
+pub(crate) struct PaginatedResponse<T> {
     data: Vec<T>,
     pagination: PaginationInfo,
 }
@@ -98,13 +98,13 @@ struct PaginationInfo {
 
 #[derive(Serialize)]
 #[serde(tag = "type", content = "content")]
-enum ContentItem {
+pub(crate) enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
 }
 
 #[derive(Serialize)]
-struct OCRContent {
+pub(crate) struct OCRContent {
     frame_id: i64,
     text: String,
     timestamp: DateTime<Utc>,
@@ -113,7 +113,7 @@ struct OCRContent {
 }
 
 #[derive(Serialize)]
-struct AudioContent {
+pub(crate) struct AudioContent {
     chunk_id: i64,
     transcription: String,
     timestamp: DateTime<Utc>,
@@ -128,7 +128,7 @@ pub(crate) struct DeviceStatus {
 }
 
 #[derive(Serialize)]
-struct RecordingStatus {
+pub(crate) struct RecordingStatus {
     is_running: bool,
 }
 
@@ -436,9 +436,6 @@ impl Server {
 
 // # 4. Search with pagination
 // # curl "http://localhost:3030/search?q=test&limit=10&offset=20"
-
-// # 5. Get recent results with date range
-// # curl "http://localhost:3030/recent?limit=5&offset=0&start_date=2024-07-02T14:00:00&end_date=2024-07-02T23:59:59"
 
 // # 6. Search with no query (should return all results)
 // # curl "http://localhost:3030/search?limit=5&offset=0"

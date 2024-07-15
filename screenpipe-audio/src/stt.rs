@@ -105,6 +105,7 @@ struct DecodingResult {
     text: String,
     avg_logprob: f64,
     no_speech_prob: f64,
+    #[allow(dead_code)]
     temperature: f64,
     compression_ratio: f64,
 }
@@ -390,12 +391,13 @@ pub fn token_id(tokenizer: &Tokenizer, token: &str) -> candle::Result<u32> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Task {
     Transcribe,
+    #[allow(dead_code)]
     Translate,
 }
 
 pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
     info!("Starting speech to text");
-    let mut model = &whisper_model.model;
+    let model = &whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
     let device = &whisper_model.device;
 

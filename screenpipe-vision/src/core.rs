@@ -1,5 +1,5 @@
 use image::DynamicImage;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use rusty_tesseract::{Args, Image};
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
@@ -28,7 +28,7 @@ pub struct CaptureResult {
 
 const MAX_THREADS: usize = 4; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 6; // Maximum number of frames to keep in the queue. 64/8 ocr task = 8
-// seems kinda counter intuitive but less threads for OCR = more CPU usage = less frame dropping
+                                 // seems kinda counter intuitive but less threads for OCR = more CPU usage = less frame dropping
 
 pub async fn continuous_capture(
     control_rx: &mut Receiver<ControlMessage>,

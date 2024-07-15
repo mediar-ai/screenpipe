@@ -82,7 +82,7 @@ tempfile = "3.3.0"
 reqwest = { version = "0.11", features = ["json"] }
 
 # Benches
-criterion = { version = "0.5.1", features = ["async_tokio"] }
+criterion = { workspace = true }
 rand = "0.8"
 
 tower = "0.4"
