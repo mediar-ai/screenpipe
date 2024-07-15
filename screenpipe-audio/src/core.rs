@@ -1,18 +1,19 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam::channel::{Receiver, Sender};
+use crossbeam::epoch::Atomic;
 use log::{debug, error, info, warn};
 use serde::Serialize;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
-use tokio::io::AsyncWriteExt;
 
 use crate::AudioInput;
-use std::process::Stdio;
-use tokio::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 #[derive(Clone)]
 pub struct DeviceControl {
@@ -112,7 +113,7 @@ fn get_device_and_config(
     Ok((audio_device, config))
 }
 
-pub async fn record_and_transcribe(
+pub fn record_and_transcribe(
     audio_device: &AudioDevice,
     duration: Duration,
     output_path: PathBuf,
@@ -139,7 +140,7 @@ pub async fn record_and_transcribe(
     let start_time = std::time::Instant::now();
 
     // Spawn FFmpeg process in a separate thread
-    let ffmpeg_handle = tokio::spawn(async move {
+    let ffmpeg_handle = thread::spawn(move || {
         let mut ffmpeg = Command::new("ffmpeg")
             .args(&[
                 "-f",
@@ -170,7 +171,7 @@ pub async fn record_and_transcribe(
 
         while is_running_clone.load(Ordering::Relaxed) {
             if let Ok(data) = audio_receiver.recv_timeout(Duration::from_millis(100)) {
-                if let Err(e) = stdin.write_all(&data).await {
+                if let Err(e) = stdin.write_all(&data) {
                     error!("Failed to write audio data to FFmpeg: {}", e);
                     break;
                 }
@@ -179,14 +180,14 @@ pub async fn record_and_transcribe(
                 break;
             }
             // sleep for 100ms
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            thread::sleep(Duration::from_millis(100));
         }
 
         // Close stdin to signal EOF to FFmpeg
         drop(stdin);
 
         // Wait for FFmpeg to finish
-        match ffmpeg.wait().await {
+        match ffmpeg.wait() {
             Ok(status) => debug!("FFmpeg process exited with status: {}", status),
             Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
         }
@@ -218,7 +219,7 @@ pub async fn record_and_transcribe(
         if start_time.elapsed() >= duration {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        thread::sleep(Duration::from_millis(100));
     }
 
     info!(
@@ -229,8 +230,14 @@ pub async fn record_and_transcribe(
     // Stop the stream and signal the recording to stop
     stream.pause()?;
 
+    // Wait for a short time to ensure all data is processed
+    // thread::sleep(Duration::from_millis(100));
+
+    // Close the sender to signal the FFmpeg thread to finish
+    // drop(audio_sender_clone);
+
     // Wait for the FFmpeg thread to finish
-    ffmpeg_handle.await.expect("Failed to join FFmpeg thread");
+    ffmpeg_handle.join().expect("Failed to join FFmpeg thread");
     debug!("FFmpeg thread finished");
 
     if let Err(e) = whisper_sender.send(AudioInput {

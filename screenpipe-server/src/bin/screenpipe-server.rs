@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs,
     net::SocketAddr,
+    ops::Deref,
     sync::{atomic::AtomicBool, mpsc::channel, Arc},
     time::{Duration, Instant},
 };
@@ -81,7 +82,8 @@ async fn main() -> anyhow::Result<()> {
     builder
         .filter(None, LevelFilter::Info)
         .filter_module("tokenizers", LevelFilter::Error)
-        .filter_module("rusty_tesseract", LevelFilter::Error);
+        .filter_module("rusty_tesseract", LevelFilter::Error)
+        .filter_module("symphonia", LevelFilter::Error);
 
     if cli.debug {
         builder.filter_module("screenpipe", LevelFilter::Debug);
@@ -130,10 +132,10 @@ async fn main() -> anyhow::Result<()> {
             is_running: false,
             is_paused: false,
         };
-        let _ = audio_devices_control_sender.send_deadline(
-            (device.clone(), device_control.clone()),
-            Instant::now() + Duration::from_secs(10),
-        );
+        // let _ = audio_devices_control_sender.send_deadline(
+        //     (device.clone(), device_control.clone()),
+        //     Instant::now() + Duration::from_secs(10),
+        // );
         devices_status.insert(device.clone(), device_control);
         info!("  {}", device);
     }
@@ -148,10 +150,10 @@ async fn main() -> anyhow::Result<()> {
                     is_running: true,
                     is_paused: false,
                 };
-                let _ = audio_devices_control_sender.send_deadline(
-                    (input_device.clone(), device_control.clone()),
-                    Instant::now() + Duration::from_secs(15),
-                );
+                // let _ = audio_devices_control_sender.send_deadline(
+                //     (input_device.clone(), device_control.clone()),
+                //     Instant::now() + Duration::from_secs(15),
+                // );
                 devices_status.insert(input_device, device_control);
             }
             if let Ok(output_device) = default_output_device() {
@@ -160,10 +162,10 @@ async fn main() -> anyhow::Result<()> {
                     is_running: true,
                     is_paused: false,
                 };
-                let _ = audio_devices_control_sender.send_deadline(
-                    (output_device.clone(), device_control.clone()),
-                    Instant::now() + Duration::from_secs(15),
-                );
+                // let _ = audio_devices_control_sender.send_deadline(
+                //     (output_device.clone(), device_control.clone()),
+                //     Instant::now() + Duration::from_secs(15),
+                // );
                 devices_status.insert(output_device, device_control);
             }
         } else {
@@ -175,10 +177,10 @@ async fn main() -> anyhow::Result<()> {
                     is_running: true,
                     is_paused: false,
                 };
-                let _ = audio_devices_control_sender.send_deadline(
-                    (device.clone(), device_control.clone()),
-                    Instant::now() + Duration::from_secs(15),
-                );
+                // let _ = audio_devices_control_sender.send_deadline(
+                //     (device.clone(), device_control.clone()),
+                //     Instant::now() + Duration::from_secs(15),
+                // );
                 devices_status.insert(device, device_control);
             }
         }
@@ -189,6 +191,15 @@ async fn main() -> anyhow::Result<()> {
             info!("Using audio devices:");
             for device in &audio_devices {
                 info!("  {}", device);
+
+                let device_control = DeviceControl {
+                    is_running: true,
+                    is_paused: false,
+                };
+                let _ = audio_devices_control_sender.send_deadline(
+                    (device.deref().clone(), device_control),
+                    Instant::now() + Duration::from_secs(15),
+                );
             }
         }
     }
@@ -243,6 +254,8 @@ async fn main() -> anyhow::Result<()> {
             vision_control_server_clone,
             audio_devices_control_sender_server,
         );
+        // TODO
+        // server.start(HashMap::new()).await.unwrap();
         server.start(devices_status).await.unwrap();
     });
 

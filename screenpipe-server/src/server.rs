@@ -378,7 +378,7 @@ impl Server {
             db: self.db,
             vision_control: self.vision_control,
             audio_devices_control_sender: self.audio_devices_control_sender,
-            devices_status: device_status.clone(),
+            devices_status: device_status,
         });
 
         // https://github.com/tokio-rs/console
@@ -406,10 +406,10 @@ impl Server {
             .with_state(app_state);
 
         info!("Starting server on {}", self.addr);
-        info!("Audio devices:");
-        for (device, control) in device_status.iter() {
-            info!("{}: {}", device, control.is_running);
-        }
+        // info!("Audio devices:");
+        // for (device, control) in device_status.iter() {
+        //     info!("{}: {}", device, control.is_running);
+        // }
 
         match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
             Ok(_) => {

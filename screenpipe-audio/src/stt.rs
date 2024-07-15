@@ -1,8 +1,12 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    thread,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::{ops::softmax, VarBuilder};
+use crossbeam::channel::{self, Receiver, Sender};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{error, info};
 use rand::{distributions::Distribution, SeedableRng};
@@ -12,7 +16,6 @@ use candle_transformers::models::whisper::{self as m, audio, Config};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
-use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{multilingual, pcm_decode::pcm_decode};
 
@@ -489,8 +492,7 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
-pub async fn create_whisper_channel() -> Result<(Sender<AudioInput>, Receiver<TranscriptionResult>)>
-{
+pub fn create_whisper_channel() -> Result<(Sender<AudioInput>, Receiver<TranscriptionResult>)> {
     let whisper_model = WhisperModel::new()?;
     let (input_sender, input_receiver): (Sender<AudioInput>, Receiver<AudioInput>) =
         channel::unbounded();
@@ -499,8 +501,8 @@ pub async fn create_whisper_channel() -> Result<(Sender<AudioInput>, Receiver<Tr
         Receiver<TranscriptionResult>,
     ) = channel::unbounded();
 
-    tokio::spawn(async move {
-        while let Ok(input) = input_receiver.recv().await {
+    thread::spawn(move || {
+        while let Ok(input) = input_receiver.recv() {
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards")
@@ -531,3 +533,5 @@ pub async fn create_whisper_channel() -> Result<(Sender<AudioInput>, Receiver<Tr
 
     Ok((input_sender, output_receiver))
 }
+
+
