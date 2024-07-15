@@ -5,10 +5,12 @@ use screenpipe_audio::create_whisper_channel;
 use screenpipe_audio::default_input_device;
 use screenpipe_audio::default_output_device;
 use screenpipe_audio::list_audio_devices;
-use screenpipe_audio::parse_device_spec;
+use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::AudioDevice;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -33,6 +35,8 @@ fn print_devices(devices: &[AudioDevice]) {
     }
 }
 
+// TODO - kinda bad cli here
+
 fn main() -> Result<()> {
     use env_logger::Builder;
     use log::LevelFilter;
@@ -56,7 +60,7 @@ fn main() -> Result<()> {
     } else {
         args.audio_device
             .iter()
-            .map(|d| parse_device_spec(d))
+            .map(|d| parse_audio_device(d))
             .collect::<Result<Vec<_>>>()?
     };
 
@@ -64,10 +68,13 @@ fn main() -> Result<()> {
         return Err(anyhow!("No audio input devices found"));
     }
 
-    let chunk_duration = Duration::from_secs(30);
+    // delete .mp3 files (output*.mp3)
+    std::fs::remove_file("output_0.mp3").unwrap_or_default();
+    std::fs::remove_file("output_1.mp3").unwrap_or_default();
+
+    let chunk_duration = Duration::from_secs(5);
     let output_path = PathBuf::from("output.mp3");
     let (whisper_sender, whisper_receiver) = create_whisper_channel()?;
-
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()
@@ -75,8 +82,19 @@ fn main() -> Result<()> {
         .map(|(i, device)| {
             let whisper_sender = whisper_sender.clone();
             let output_path = output_path.with_file_name(format!("output_{}.mp3", i));
+            let device_control = Arc::new(AtomicBool::new(true));
+            let device_clone = device.clone();
+
             thread::spawn(move || {
-                record_and_transcribe(&device, chunk_duration, output_path, whisper_sender)
+                let device_control_clone = Arc::clone(&device_control);
+
+                record_and_transcribe(
+                    &device_clone,
+                    chunk_duration,
+                    output_path,
+                    whisper_sender,
+                    device_control_clone,
+                )
             })
         })
         .collect();

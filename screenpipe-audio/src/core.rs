@@ -1,106 +1,105 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::StreamError;
 use crossbeam::channel::{Receiver, Sender};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use serde::Serialize;
 use std::fmt;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use crate::AudioInput;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
-pub struct AudioCaptureResult {
-    pub text: String,
+#[derive(Clone)]
+pub struct DeviceControl {
+    pub is_running: bool,
+    pub is_paused: bool,
 }
 
-pub enum DeviceSpec {
-    Input(Option<String>),
-    Output(Option<String>),
+#[derive(Clone, Eq, PartialEq, Hash, Serialize)]
+pub enum DeviceType {
+    Input,
+    Output,
 }
 
-impl DeviceSpec {
+#[derive(Clone, Eq, PartialEq, Hash, Serialize)]
+pub struct AudioDevice {
+    name: String,
+    device_type: DeviceType,
+}
+
+impl AudioDevice {
+    pub fn new(name: String, device_type: DeviceType) -> Self {
+        AudioDevice { name, device_type }
+    }
+
     pub fn from_name(name: &str) -> Result<Self> {
         if name.trim().is_empty() {
             return Err(anyhow!("Device name cannot be empty"));
         }
 
-        if name.to_lowercase().ends_with("(input)") {
-            Ok(DeviceSpec::Input(Some(
+        let (name, device_type) = if name.to_lowercase().ends_with("(input)") {
+            (
                 name.trim_end_matches("(input)").trim().to_string(),
-            )))
+                DeviceType::Input,
+            )
         } else if name.to_lowercase().ends_with("(output)") {
-            Ok(DeviceSpec::Output(Some(
+            (
                 name.trim_end_matches("(output)").trim().to_string(),
-            )))
+                DeviceType::Output,
+            )
         } else {
-            Err(anyhow!(
+            return Err(anyhow!(
                 "Device type (input/output) not specified in the name"
-            ))
-        }
+            ));
+        };
+
+        Ok(AudioDevice::new(name, device_type))
     }
 }
 
-// impl display for DeviceSpec
-impl fmt::Display for DeviceSpec {
+impl fmt::Display for AudioDevice {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            DeviceSpec::Input(name) => {
-                write!(
-                    f,
-                    "{} (input)",
-                    name.as_ref().unwrap_or(&"None".to_string())
-                )
+        write!(
+            f,
+            "{} ({})",
+            self.name,
+            match self.device_type {
+                DeviceType::Input => "input",
+                DeviceType::Output => "output",
             }
-            DeviceSpec::Output(name) => write!(
-                f,
-                "{} (output)",
-                name.as_ref().unwrap_or(&"None".to_string())
-            ),
-        }
+        )
     }
 }
 
-// impl copy for DeviceSpec
-impl Clone for DeviceSpec {
-    fn clone(&self) -> Self {
-        match self {
-            DeviceSpec::Input(name) => DeviceSpec::Input(name.clone()),
-            DeviceSpec::Output(name) => DeviceSpec::Output(name.clone()),
-        }
-    }
+// Helper function to create AudioDevice from a name
+pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
+    AudioDevice::from_name(name)
 }
 
-// Helper function to create DeviceSpec from a name or None
-pub fn parse_device_spec(name: &str) -> Result<DeviceSpec> {
-    DeviceSpec::from_name(&name)
-}
-
-use std::io::Write;
-use std::process::{Command, Stdio};
-
-pub fn record_and_transcribe(
-    device_spec: &DeviceSpec,
-    duration: Duration,
-    output_path: PathBuf,
-    whisper_sender: Sender<AudioInput>,
-) -> Result<PathBuf> {
-    let host = match device_spec {
+fn get_device_and_config(
+    audio_device: &AudioDevice,
+) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
+    let host = match audio_device.device_type {
         #[cfg(target_os = "macos")]
-        DeviceSpec::Output(_) => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
+        DeviceType::Output => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
         _ => cpal::default_host(),
     };
 
-    info!("device: {:?}", device_spec.to_string());
+    info!("device: {:?}", audio_device.to_string());
 
-    let audio_device = if device_spec.to_string() == "default" {
+    let audio_device = if audio_device.to_string() == "default" {
         host.default_input_device()
     } else {
         host.input_devices()?.find(|x| {
             x.name()
                 .map(|y| {
-                    y == device_spec
+                    y == audio_device
                         .to_string()
                         .replace(" (input)", "")
                         .replace(" (output)", "")
@@ -111,9 +110,20 @@ pub fn record_and_transcribe(
     .ok_or_else(|| anyhow!("Audio device not found"))?;
 
     let config = audio_device.default_input_config()?;
+    Ok((audio_device, config))
+}
+
+pub fn record_and_transcribe(
+    audio_device: &AudioDevice,
+    duration: Duration,
+    output_path: PathBuf,
+    whisper_sender: Sender<AudioInput>,
+    is_running: Arc<AtomicBool>,
+) -> Result<PathBuf> {
+    let (cpal_audio_device, config) = get_device_and_config(audio_device)?;
     info!(
         "Recording audio device: {}, Config: {:?}",
-        audio_device.name()?,
+        cpal_audio_device.name()?,
         config
     );
 
@@ -122,10 +132,14 @@ pub fn record_and_transcribe(
 
     let (audio_sender, audio_receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) =
         crossbeam::channel::unbounded();
-    let is_running = Arc::new(Mutex::new(true));
-    let is_running_clone = is_running.clone();
-
+    let is_running_clone = Arc::clone(&is_running);
+    let is_running_clone_2 = Arc::clone(&is_running);
+    let is_running_clone_3 = Arc::clone(&is_running);
     let output_path_clone = output_path.clone();
+    let output_path_clone_2 = output_path.clone();
+
+    let start_time = std::time::Instant::now();
+
     // Spawn FFmpeg process in a separate thread
     let ffmpeg_handle = thread::spawn(move || {
         let mut ffmpeg = Command::new("ffmpeg")
@@ -154,13 +168,20 @@ pub fn record_and_transcribe(
 
         let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
 
-        while *is_running_clone.lock().unwrap() {
+        debug!("FFmpeg process started");
+
+        while is_running_clone.load(Ordering::Relaxed) {
             if let Ok(data) = audio_receiver.recv_timeout(Duration::from_millis(100)) {
                 if let Err(e) = stdin.write_all(&data) {
                     error!("Failed to write audio data to FFmpeg: {}", e);
                     break;
                 }
             }
+            if start_time.elapsed() >= duration {
+                break;
+            }
+            // sleep for 100ms
+            thread::sleep(Duration::from_millis(100));
         }
 
         // Close stdin to signal EOF to FFmpeg
@@ -173,14 +194,22 @@ pub fn record_and_transcribe(
         }
     });
 
-    let err_fn = |err| error!("An error occurred on the audio stream: {}", err);
+    let err_fn = move |err: StreamError| {
+        error!("An error occurred on the audio stream: {}", err);
+        if err.to_string().contains("device is no longer valid") {
+            warn!("Audio device disconnected. Stopping recording.");
+            is_running_clone_3.store(false, Ordering::Relaxed);
+        }
+    };
 
     let stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => audio_device.build_input_stream(
+        cpal::SampleFormat::F32 => cpal_audio_device.build_input_stream(
             &config.into(),
             move |data: &[f32], _: &_| {
-                if let Err(e) = audio_sender.send(bytemuck::cast_slice(data).to_vec()) {
-                    error!("Failed to send audio data: {}", e);
+                if is_running.load(Ordering::Relaxed) {
+                    if let Err(e) = audio_sender.try_send(bytemuck::cast_slice(data).to_vec()) {
+                        warn!("Failed to send audio data: {}", e);
+                    }
                 }
             },
             err_fn,
@@ -188,37 +217,45 @@ pub fn record_and_transcribe(
         )?,
         sample_format => return Err(anyhow!("Unsupported sample format '{}'", sample_format)),
     };
+    debug!("audio stream created");
 
     stream.play()?;
     info!("Recording for {} seconds", duration.as_secs());
 
-    thread::sleep(duration);
+    while is_running_clone_2.load(Ordering::Relaxed) {
+        if start_time.elapsed() >= duration {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    info!(
+        "Recording stopped, wrote to {}. Now triggering transcription",
+        output_path_clone_2.to_str().unwrap()
+    );
 
     // Stop the stream and signal the recording to stop
     stream.pause()?;
-    *is_running.lock().unwrap() = false;
+
+    // Wait for a short time to ensure all data is processed
+    // thread::sleep(Duration::from_millis(100));
+
+    // Close the sender to signal the FFmpeg thread to finish
+    // drop(audio_sender_clone);
 
     // Wait for the FFmpeg thread to finish
     ffmpeg_handle.join().expect("Failed to join FFmpeg thread");
+    debug!("FFmpeg thread finished");
 
-    whisper_sender.send(AudioInput {
-        path: output_path.to_str().unwrap().to_string(),
-        device: device_spec.to_string(),
-    })?;
-
-    Ok(output_path)
-}
-
-#[derive(Serialize)]
-pub struct AudioDevice {
-    name: String,
-    device_type: String,
-}
-
-impl fmt::Display for AudioDevice {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.name, self.device_type)
+    if let Err(e) = whisper_sender.send(AudioInput {
+        path: output_path_clone_2.to_str().unwrap().to_string(),
+        device: audio_device.to_string(),
+    }) {
+        error!("Failed to send audio to whisper: {}", e);
     }
+    debug!("Sent audio to whisper");
+
+    Ok(output_path_clone_2)
 }
 
 pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
@@ -227,10 +264,7 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
 
     for device in host.input_devices()? {
         if let Ok(name) = device.name() {
-            devices.push(AudioDevice {
-                name,
-                device_type: "input".to_string(),
-            });
+            devices.push(AudioDevice::new(name, DeviceType::Input));
         }
     }
 
@@ -239,10 +273,7 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
         for device in host.input_devices()? {
             if let Ok(name) = device.name() {
-                devices.push(AudioDevice {
-                    name,
-                    device_type: "output".to_string(),
-                });
+                devices.push(AudioDevice::new(name, DeviceType::Output));
             }
         }
     }
@@ -251,28 +282,26 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     {
         for device in host.output_devices()? {
             if let Ok(name) = device.name() {
-                devices.push(AudioDevice {
-                    name,
-                    device_type: "output".to_string(),
-                });
+                devices.push(AudioDevice::new(name, DeviceType::Output));
             }
         }
     }
 
     Ok(devices)
 }
+
 // function that return default device to record audio
-pub fn default_input_device() -> Result<DeviceSpec> {
+pub fn default_input_device() -> Result<AudioDevice> {
     let host = cpal::default_host();
     let device = host.default_input_device().unwrap();
     info!("Using default input device: {}", device.name()?);
-    Ok(DeviceSpec::Input(Some(device.name()?)))
+    Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
 
 // ! HACK - yes this quite unintuitive ... but it works ...
 
 // function that return default device to record audio
-pub fn default_output_device() -> Result<DeviceSpec> {
+pub fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
         let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
@@ -280,7 +309,7 @@ pub fn default_output_device() -> Result<DeviceSpec> {
             .default_input_device()
             .ok_or_else(|| anyhow!("No default input device found"))?;
         info!("Using display capture device: {}", device.name()?);
-        return Ok(DeviceSpec::Output(Some(device.name()?)));
+        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -290,6 +319,6 @@ pub fn default_output_device() -> Result<DeviceSpec> {
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
         info!("Using default output device: {}", device.name()?);
-        return Ok(DeviceSpec::Output(Some(device.name()?)));
+        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
 }
