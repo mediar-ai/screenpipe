@@ -55,3 +55,8 @@ criterion = { workspace = true }
 [[bin]]
 name = "screenpipe-vision"
 path = "src/bin/screenpipe-vision.rs"
+
+[[bench]]
+name = "vision_benchmark"
+harness = false
+

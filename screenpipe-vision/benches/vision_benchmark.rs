@@ -1,65 +1,58 @@
 // cargo bench --bench vision_benchmark -- benchmark_continuous_capture
 // or
 // cargo bench --bench vision_benchmark
+// ! not very useful bench
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use screenpipe_vision::{continuous_capture, ControlMessage};
 use tokio::sync::mpsc;
-use tokio::time::{Duration, Instant};
+use tokio::time::Duration;
 
-fn benchmark_continuous_capture(c: &mut Criterion) {
-    let mut group = c.benchmark_group("continuous_capture");
+async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
+    let (control_tx, mut control_rx) = mpsc::channel(1);
+    let (result_tx, mut result_rx) = mpsc::channel(100);
 
-    for &threads in &[1, 2, 4, 8] {
-        for &interval_ms in &[50, 100, 200] {
-            group.bench_with_input(
-                BenchmarkId::new("threads_interval", format!("{}_{}", threads, interval_ms)),
-                &(threads, interval_ms),
-                |b, &(threads, interval_ms)| {
-                    b.iter(|| {
-                        let rt = tokio::runtime::Builder::new_multi_thread()
-                            .worker_threads(threads)
-                            .build()
-                            .unwrap();
+    let capture_handle = tokio::spawn(async move {
+        continuous_capture(&mut control_rx, result_tx, Duration::from_millis(100)).await;
+    });
 
-                        rt.block_on(async {
-                            let (control_tx, mut control_rx) = mpsc::channel(10);
-                            let (result_tx, mut result_rx) = mpsc::channel(100);
-                            let interval = Duration::from_millis(interval_ms);
+    // Run for specified duration
+    tokio::time::sleep(Duration::from_secs(duration_secs)).await;
 
-                            let capture_handle = tokio::spawn(async move {
-                                continuous_capture(&mut control_rx, result_tx, interval).await;
-                            });
+    // Stop the capture
+    control_tx.send(ControlMessage::Stop).await.unwrap();
 
-                            let start = Instant::now();
-                            let duration = Duration::from_secs(5);
-                            let mut frame_count = 0;
+    // Wait for the capture to finish
+    capture_handle.await.unwrap();
 
-                            while start.elapsed() < duration {
-                                if result_rx.try_recv().is_ok() {
-                                    frame_count += 1;
-                                }
-                                tokio::time::sleep(Duration::from_millis(1)).await;
-                            }
-
-                            control_tx.send(ControlMessage::Stop).await.unwrap();
-                            capture_handle.await.unwrap();
-
-                            println!(
-                                "Threads: {}, Interval: {}ms, Frames: {}, FPS: {:.2}",
-                                threads,
-                                interval_ms,
-                                frame_count,
-                                frame_count as f64 / duration.as_secs_f64()
-                            );
-                        });
-                    })
-                },
-            );
-        }
+    // Count received frames
+    let mut frame_count = 0;
+    while result_rx.try_recv().is_ok() {
+        frame_count += 1;
     }
 
+    frame_count as f64 / duration_secs as f64
+}
+
+fn criterion_benchmark(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    let mut group = c.benchmark_group("continuous_capture");
+    group.sample_size(10); // Reduce sample size
+    group.measurement_time(Duration::from_secs(10)); // Reduce measurement time
+
+    for duration in [1, 2, 5].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(duration),
+            duration,
+            |b, &duration| {
+                b.to_async(&rt)
+                    .iter(|| benchmark_continuous_capture(duration))
+            },
+        );
+    }
     group.finish();
 }
 
-criterion_group!(benches, benchmark_continuous_capture);
+criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);
