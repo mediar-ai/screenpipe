@@ -219,7 +219,7 @@ sqlite3 data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM ocr_text 
 Play a sample frame_recording from the database</summary>
 
 ```bash
-ffplay "data/2024-07-12 01:14:14.078958 UTC.mp4"
+ffplay "data/2024-07-12_01-14-14.mp4"
 ```
 </details>
 <details>

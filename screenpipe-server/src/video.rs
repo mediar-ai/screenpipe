@@ -241,8 +241,10 @@ fn save_frames_as_video(
                 .expect("Failed to encode first frame");
 
             let time = Utc::now();
+            let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
             // Start new FFmpeg process with a new output file
-            let output_file = format!("{}/{}.mp4", output_path, time);
+            let output_file = format!("{}/{}.mp4", output_path, formatted_time);
+
             // Call the callback with the new video chunk file path
             new_chunk_callback(&output_file); // TODO better error handling
 
