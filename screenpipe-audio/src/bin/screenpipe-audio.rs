@@ -8,7 +8,6 @@ use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::AudioDevice;
-use screenpipe_audio::DeviceControl;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
