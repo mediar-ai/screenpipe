@@ -96,6 +96,7 @@ async fn main() -> anyhow::Result<()> {
     // Add warning for Linux and Windows users
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
+        use log::warn;
         warn!("Screenpipe hasn't been extensively tested on this OS. We'd love your feedback!");
         println!(
             "{}",
