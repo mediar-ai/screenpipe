@@ -1,8 +1,0 @@
-{
-	"dependencies": {
-		"cross-fetch": "^4.0.0"
-	},
-	"devDependencies": {
-		"@types/node": "^20.14.9"
-	}
-}
