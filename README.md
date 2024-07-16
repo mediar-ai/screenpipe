@@ -23,7 +23,7 @@
 
 # Extend your human memory with LLM. Open source, runs locally, developer friendly. 
 
-Library for devs to build AI apps on top of all your life data. Alternative to Rewind.ai
+Library for devs to build AI apps on top of all your life data. Alternative to Rewind.ai  
 We are shipping daily, make suggestions, post bugs, [give feedback](https://cal.com/louis030195/screenpipe)!
 
 Chat with an AI that knows everything about you. Record your screens & audio 24/7. You own your data. Rust. 
