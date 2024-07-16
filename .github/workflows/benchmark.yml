@@ -20,9 +20,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
 
-      - name: Run benchmark
+      - name: Run benchmarks
         run: |
-          cargo bench --bench pcm_decode_benchmark stt_benchmark -- --output-format bencher | tee output.txt
+          cargo bench --bench pcm_decode_benchmark -- --output-format bencher | tee output.txt
           echo "Benchmark output:"
           cat output.txt
 

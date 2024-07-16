@@ -16,6 +16,12 @@ class Screenpipe < Formula
     end
   end
 
+# push stuff
+# git tag v0.1.34
+# git push origin v0.1.34
+# wait linux release
+# then
+
 # cargo build --release --features metal
 # tar -czf screenpipe-0.1.34-x86_64-apple-darwin.tar.gz -C target/release screenpipe
 # shasum -a 256 screenpipe-0.1.34-x86_64-apple-darwin.tar.gz
@@ -24,3 +30,6 @@ class Screenpipe < Formula
 
 # brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
 # brew install screenpipe
+
+# todo automate this in the future, not urgent for now ..
+
