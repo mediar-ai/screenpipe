@@ -3,8 +3,8 @@ use std::{
     fs,
     net::SocketAddr,
     ops::Deref,
-    sync::{atomic::AtomicBool, mpsc::channel, Arc},
-    time::{Duration, Instant},
+    sync::{atomic::AtomicBool, Arc},
+    time::Duration,
 };
 
 use clap::Parser;
@@ -17,6 +17,7 @@ use screenpipe_audio::{
 };
 
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
+use tokio::sync::mpsc::channel;
 
 // keep in mind this is the most important feature ever // TODO: add a pipe and a ⭐️ e.g screen | ⭐️ somehow in ascii ♥️🤓
 const DISPLAY: &str = r"
@@ -55,6 +56,13 @@ struct Cli {
     /// Runtime threshold for restart (in minutes)
     #[arg(long, default_value_t = 60)]
     runtime_threshold: u64,
+
+    /// Enable automatic restart when resource thresholds are exceeded.
+    /// This feature will automatically restart the application if the memory usage
+    /// or runtime exceeds the specified thresholds, helping to ensure stability
+    /// and prevent potential crashes or performance degradation.
+    #[arg(long, default_value_t = false)]
+    restart_enabled: bool,
 
     /// Audio devices to use (can be specified multiple times)
     #[arg(long)]
@@ -121,8 +129,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut audio_devices = Vec::new();
 
-    let (audio_devices_control_sender, audio_devices_control_receiver) =
-        crossbeam::channel::unbounded();
+    let (audio_devices_control_sender, audio_devices_control_receiver) = channel(64);
 
     let audio_devices_control_sender_server = audio_devices_control_sender.clone();
 
@@ -197,15 +204,22 @@ async fn main() -> anyhow::Result<()> {
                     is_running: true,
                     is_paused: false,
                 };
-                let _ = audio_devices_control_sender.send_deadline(
-                    (device.deref().clone(), device_control),
-                    Instant::now() + Duration::from_secs(15),
-                );
+                let device_clone = device.deref().clone();
+                let sender_clone = audio_devices_control_sender.clone();
+                // send signal after everything started
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(15)).await;
+                    let _ = sender_clone.send((device_clone, device_control)).await;
+                });
             }
         }
     }
 
-    let resource_monitor = ResourceMonitor::new(cli.memory_threshold, cli.runtime_threshold);
+    let resource_monitor = ResourceMonitor::new(
+        cli.memory_threshold,
+        cli.runtime_threshold,
+        cli.restart_enabled,
+    );
     resource_monitor.start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
 
     let local_data_dir = cli.data_dir; // TODO: Use $HOME/.screenpipe/data
@@ -225,7 +239,7 @@ async fn main() -> anyhow::Result<()> {
     let db_server = db.clone();
 
     // Channel for controlling the recorder ! TODO RENAME SHIT
-    let (_control_tx, control_rx) = channel();
+    let (_control_tx, control_rx) = channel(64);
     let vision_control = Arc::new(AtomicBool::new(true));
 
     let vision_control_server_clone = vision_control.clone();

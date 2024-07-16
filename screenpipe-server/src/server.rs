@@ -9,7 +9,6 @@ use tracing::Level;
 
 use crate::{ContentType, DatabaseManager, SearchResult};
 use chrono::{DateTime, Utc};
-use crossbeam::channel::Sender;
 use log::{error, info};
 use screenpipe_audio::{AudioDevice, DeviceControl};
 use serde::{Deserialize, Serialize};
@@ -22,7 +21,7 @@ use std::{
         Arc,
     },
 };
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::mpsc::Sender};
 use tower_http::trace::TraceLayer;
 use tower_http::{
     cors::CorsLayer,
@@ -215,6 +214,7 @@ pub(crate) async fn start_device(
     if let Err(e) = state
         .audio_devices_control_sender
         .send((audio_device, device_control))
+        .await
     {
         error!("failed to start audio device: {}", e);
         Err((
@@ -251,6 +251,7 @@ pub(crate) async fn stop_device(
     if let Err(e) = state
         .audio_devices_control_sender
         .send((audio_device, device_control))
+        .await
     {
         error!("failed to stop audio device: {}", e);
         Err((

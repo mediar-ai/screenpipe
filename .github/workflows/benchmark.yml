@@ -1,0 +1,47 @@
+# act -W .github/workflows/benchmark.yml --container-architecture linux/amd64 -j benchmark -P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+name: Rust Benchmark
+
+on: [push]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Run Rust benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
+
+      - name: Run benchmark
+        run: |
+          cargo bench --bench pcm_decode_benchmark stt_benchmark -- --output-format bencher | tee output.txt
+          echo "Benchmark output:"
+          cat output.txt
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Rust Benchmark
+          tool: "cargo"
+          output-file-path: output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false # TODO: https://github.com/benchmark-action/github-action-benchmark/tree/master?tab=readme-ov-file#charts-on-github-pages-1
+          # Show alert with commit comment on detecting possible performance regression
+          alert-threshold: "200%"
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-comment-cc-users: "@louis030195"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: output.txt

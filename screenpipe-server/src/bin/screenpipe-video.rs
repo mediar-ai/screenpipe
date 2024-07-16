@@ -4,10 +4,9 @@ use image::GenericImageView;
 use log::info;
 use screenpipe_server::VideoCapture;
 use serde_json::{json, Value};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
-use std::sync::mpsc::channel;
-use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -17,6 +16,8 @@ fn write_json_frame(writer: &mut BufWriter<File>, frame_data: &Value) -> std::io
     writeln!(writer)?;
     writer.flush()
 }
+
+// ! not well maintained code
 
 #[tokio::main]
 async fn main() {
@@ -39,7 +40,7 @@ async fn main() {
     };
 
     let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback);
-    let (_tx, rx): (Sender<()>, Receiver<()>) = channel();
+    let (_tx, rx): (Sender<()>, Receiver<()>) = channel(32);
     let rx = Arc::new(Mutex::new(rx));
     let rx_thread = rx.clone();
 
