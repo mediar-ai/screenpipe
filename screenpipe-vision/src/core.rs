@@ -209,7 +209,7 @@ fn calculate_hash(image: &DynamicImage) -> u64 {
 
 pub fn perform_ocr(image: &DynamicImage) -> (String, String) {
     let args = Args {
-        lang: "etsvng".to_string(),
+        lang: "eng".to_string(),
         config_variables: HashMap::from([
             ("tessedit_create_tsv".into(), "1".into()),
             ("tessedit_create_txt".into(), "1".into()),
@@ -239,11 +239,16 @@ mod tests {
         let image = image::open(path).expect("Failed to open image");
         let (text, tsv_output) = perform_ocr(&image);
 
+        // Generate text_json
+        let text_json: Vec<String> = text.lines().map(String::from).collect();
+
         // Print the results
         println!("OCR Text: {}", text);
         println!("TSV Output: {}", tsv_output);
+        println!("Text JSON: {:?}", text_json);
 
         assert!(!text.is_empty(), "OCR text should not be empty");
         assert!(!tsv_output.is_empty(), "TSV output should not be empty");
+        assert!(!text_json.is_empty(), "Text JSON should not be empty");
     }
 }
