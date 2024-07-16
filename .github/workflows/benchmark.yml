@@ -31,7 +31,7 @@ jobs:
         with:
           name: Rust Benchmark
           tool: "cargo"
-          external-data-json-path: ./cache/benchmark-data.json
+          # external-data-json-path: ./cache/benchmark-data.json
           fail-on-alert: true
           # GitHub API token to make a commit comment
           github-token: ${{ secrets.GITHUB_TOKEN }}
