@@ -59,7 +59,7 @@ pub async fn continuous_capture(
             let cache = Arc::clone(&cache);
             let should_stop = Arc::clone(&should_stop);
             task::spawn(async move {
-                info!("OCR task {} started", id);
+                // info!("OCR task {} started", id);
                 while !*should_stop.lock().await {
                     match ocr_rx.recv().await {
                         Ok((image_arc, image_hash, frame_number, timestamp, result_tx)) => {
@@ -89,10 +89,10 @@ pub async fn continuous_capture(
                                     error!("Failed to send OCR result: {}", e);
                                 }
                                 let duration = start_time.elapsed();
-                                debug!(
-                                    "OCR task {} processed frame {} in {:?}",
-                                    id, frame_number, duration
-                                );
+                                // debug!(
+                                //     "OCR task {} processed frame {} in {:?}",
+                                //     id, frame_number, duration
+                                // );
                             }
                         }
                         Err(e) => match e {
@@ -106,7 +106,7 @@ pub async fn continuous_capture(
                         },
                     }
                 }
-                info!("OCR task {} stopped", id);
+                // info!("OCR task {} stopped", id);
             })
         })
         .collect();
@@ -209,7 +209,7 @@ fn calculate_hash(image: &DynamicImage) -> u64 {
 
 pub fn perform_ocr(image: &DynamicImage) -> (String, String) {
     let args = Args {
-        lang: "eng".to_string(),
+        lang: "etsvng".to_string(),
         config_variables: HashMap::from([
             ("tessedit_create_tsv".into(), "1".into()),
             ("tessedit_create_txt".into(), "1".into()),
