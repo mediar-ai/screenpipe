@@ -31,13 +31,14 @@ jobs:
         with:
           name: Rust Benchmark
           tool: "cargo"
-          output-file-path: output.txt
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false # TODO: https://github.com/benchmark-action/github-action-benchmark/tree/master?tab=readme-ov-file#charts-on-github-pages-1
-          # Show alert with commit comment on detecting possible performance regression
-          alert-threshold: "200%"
-          comment-on-alert: true
+          external-data-json-path: ./cache/benchmark-data.json
           fail-on-alert: true
+          # GitHub API token to make a commit comment
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Enable alert commit comment
+          comment-on-alert: true
+          # Enable Job Summary for PRs
+          summary-always: true
           alert-comment-cc-users: "@louis030195"
 
       - name: Upload benchmark results
