@@ -17,16 +17,21 @@ class Screenpipe < Formula
   end
 
 # push stuff
-# git tag v0.1.34
-# git push origin v0.1.34
+# VERSION=0.1.35
+# git tag v$VERSION
+# git push origin v$VERSION
 # wait linux release
 # then
 
 # cargo build --release --features metal
-# tar -czf screenpipe-0.1.34-x86_64-apple-darwin.tar.gz -C target/release screenpipe
-# shasum -a 256 screenpipe-0.1.34-x86_64-apple-darwin.tar.gz
-# gh release upload v0.1.34 screenpipe-0.1.34-x86_64-apple-darwin.tar.gz
-# rm screenpipe-0.1.34-x86_64-apple-darwin.tar.gz
+# tar -czf screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz -C target/release screenpipe
+# shasum -a 256 screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
+# gh release upload v${VERSION} screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
+# rm screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
+# update the sha in the ruby code above
+# git add Formula/screenpipe.rb
+# git commit -m "chore: update brew to version ${VERSION}"
+# git push
 
 # brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
 # brew install screenpipe
