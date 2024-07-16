@@ -53,9 +53,6 @@ tempfile = "3"
 # Tracing
 tracing = { workspace = true }
 
-# Concurrency
-crossbeam = "0.8"
-
 # Bytes
 bytemuck = "1.16.1"
 
@@ -65,7 +62,7 @@ tokio = { workspace = true }
 [dev-dependencies]
 tempfile = "3.3.0"
 infer = "0.15"
-tokio = { version = "1.0", features = ["full"] }
+criterion = { workspace = true }
 
 [features]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
@@ -75,3 +72,16 @@ cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 [[bin]]
 name = "screenpipe-audio"
 path = "src/bin/screenpipe-audio.rs"
+
+[[bench]]
+name = "audio_benchmark"
+harness = false
+
+[[bench]]
+name = "pcm_decode_benchmark"
+harness = false
+
+[[bench]]
+name = "stt_benchmark"
+harness = false
+

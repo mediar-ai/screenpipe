@@ -79,6 +79,25 @@ cargo test
 
 ## Other hacks
 
+### Debugging memory errors
+
+```bash
+RUSTFLAGS="-Z sanitizer=address" cargo run --bin screenpipe
+# or
+RUSTFLAGS="-Z sanitizer=leak" cargo run --bin screenpipe
+```
+
+For performance monitoring, you can use the following command:
+
+```bash
+cargo install cargo-instruments
+# tracking leaks over 60 minutes time limit
+cargo instruments -t Leaks --bin screenpipe --features metal --time-limit 600000 --open
+```
+
+Then open the file in `target/release/instruments` using Xcode -> Open Developer Tool -> Instruments.
+
+
 ### Benchmarks
 
 ```
@@ -92,17 +111,7 @@ cargo install sqlx-cli
 sqlx migrate add <migration_name>
 ```
 
-### Optimization
 
-For performance optimization, you can use the following command:
-
-```bash
-cargo install cargo-instruments
-# tracking leaks over 60 minutes time limit
-cargo instruments -t Leaks --bin screenpipe --features metal --time-limit 600000 --open
-```
-
-Then open the file in `target/release/instruments` using Xcode -> Open Developer Tool -> Instruments.
 
 
 ## Join the Community

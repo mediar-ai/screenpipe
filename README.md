@@ -23,10 +23,7 @@
 
 # Extend your human memory with LLM. Open source, runs locally, developer friendly. 
 
-> Civilization progresses by the number of operations it can perform without conscious effort.  
-> — **Whitehead**
-
-Library for devs to build AI apps on top of all your life data.
+Library for devs to build AI apps on top of all your life data. Alternative to Rewind.ai  
 We are shipping daily, make suggestions, post bugs, [give feedback](https://cal.com/louis030195/screenpipe)!
 
 Chat with an AI that knows everything about you. Record your screens & audio 24/7. You own your data. Rust. 
@@ -55,7 +52,8 @@ brew install jq
 ```
 3. Install library
 ```bash
-brew install louis030195/screen-pipe/screenpipe
+brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe
+brew install screenpipe
 ```
 4. Run it:
 ```bash

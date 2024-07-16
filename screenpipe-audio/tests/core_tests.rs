@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use crossbeam::channel;
     use log::{debug, LevelFilter};
     use screenpipe_audio::{default_output_device, list_audio_devices, stt, WhisperModel};
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
@@ -10,8 +9,8 @@ mod tests {
     use std::str::FromStr;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
-    use std::thread;
     use std::time::{Duration, Instant};
+    use tokio::sync::mpsc::unbounded_channel;
 
     fn setup() {
         // Initialize the logger with an info level filter
@@ -58,29 +57,30 @@ mod tests {
         assert!(text.contains("love"));
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore] // Add this if you want to skip this test in regular test runs
-    fn test_record_and_transcribe() {
+    async fn test_record_and_transcribe() {
         setup();
 
         // Setup
-        let device_spec = default_output_device().unwrap();
+        let device_spec = Arc::new(default_output_device().unwrap());
         let duration = Duration::from_secs(30); // Record for 3 seconds
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_{}.mp3", time));
-        let (sender, receiver) = channel::unbounded();
+        let (sender, mut receiver) = unbounded_channel();
         let is_running = Arc::new(AtomicBool::new(true));
 
         // Act
         let start_time = Instant::now();
         println!("Starting record_and_transcribe");
         let result = record_and_transcribe(
-            &device_spec,
+            device_spec,
             duration,
             output_path.clone(),
             sender,
             is_running,
-        );
+        )
+        .await;
         println!("record_and_transcribe completed");
         let elapsed_time = start_time.elapsed();
 
@@ -97,7 +97,7 @@ mod tests {
         assert!(output_path.exists(), "Output file should exist");
 
         // Check if we received the correct AudioInput
-        let audio_input = receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+        let audio_input = receiver.try_recv().unwrap();
         assert_eq!(audio_input.path, output_path.to_str().unwrap());
         println!("Audio input: {:?}", audio_input);
 
@@ -113,23 +113,23 @@ mod tests {
         std::fs::remove_file(output_path).unwrap();
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore]
-    fn test_record_and_transcribe_interrupt_before_end() {
+    async fn test_record_and_transcribe_interrupt_before_end() {
         setup();
 
         // Setup
-        let device_spec = default_output_device().unwrap();
+        let device_spec = Arc::new(default_output_device().unwrap());
         let duration = Duration::from_secs(30);
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_interrupt_{}.mp3", time));
-        let (sender, receiver) = channel::unbounded();
+        let (sender, mut receiver) = unbounded_channel();
         let is_running = Arc::new(AtomicBool::new(true));
         let is_running_clone = Arc::clone(&is_running);
 
         // interrupt in 10 seconds
-        thread::spawn(move || {
-            thread::sleep(Duration::from_secs(10));
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(10)).await;
             is_running_clone.store(false, Ordering::Relaxed);
         });
 
@@ -137,12 +137,13 @@ mod tests {
         let start_time = Instant::now();
 
         record_and_transcribe(
-            &device_spec,
+            device_spec,
             duration,
             output_path.clone(),
             sender,
             is_running,
         )
+        .await
         .unwrap();
 
         let elapsed_time = start_time.elapsed();
@@ -162,7 +163,7 @@ mod tests {
         assert!(output_path.exists(), "Output file should exist");
 
         // Check if we received the correct AudioInput
-        let audio_input = receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+        let audio_input = receiver.try_recv().unwrap();
         assert_eq!(audio_input.path, output_path.to_str().unwrap());
 
         // Verify file format
@@ -222,19 +223,20 @@ mod tests {
         let output_path =
             PathBuf::from(format!("test_output_{}.mp3", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let (whisper_sender, whisper_receiver) = create_whisper_channel().unwrap();
+        let (whisper_sender, mut whisper_receiver) = create_whisper_channel().await.unwrap();
         let is_running = Arc::new(AtomicBool::new(true));
         // Start recording in a separate thread
-        let recording_thread = std::thread::spawn(move || {
+        let recording_thread = tokio::spawn(async move {
             let device_spec = Arc::clone(&device_spec);
             let whisper_sender = whisper_sender.clone();
             record_and_transcribe(
-                device_spec.as_ref(),
+                device_spec,
                 Duration::from_secs(15),
                 output_path.clone(),
                 whisper_sender,
                 is_running,
             )
+            .await
             .unwrap();
         });
 
@@ -242,7 +244,7 @@ mod tests {
         let timeout_duration = Duration::from_secs(10); // Adjust as needed
         let result = timeout(timeout_duration, async {
             // Wait for the transcription result
-            let transcription_result = whisper_receiver.recv().unwrap();
+            let transcription_result = whisper_receiver.try_recv().unwrap();
             debug!("Received transcription: {:?}", transcription_result);
             // Check if we received a valid transcription
             assert!(
@@ -280,7 +282,7 @@ mod tests {
         }
 
         // Clean up
-        let _ = recording_thread.join();
+        let _ = recording_thread.abort();
         std::fs::remove_file(output_path_2).unwrap_or_default();
     }
 }

@@ -11,7 +11,6 @@ use screenpipe_audio::AudioDevice;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
 #[derive(Parser, Debug)]
@@ -37,7 +36,8 @@ fn print_devices(devices: &[AudioDevice]) {
 
 // TODO - kinda bad cli here
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     use env_logger::Builder;
     use log::LevelFilter;
 
@@ -74,22 +74,24 @@ fn main() -> Result<()> {
 
     let chunk_duration = Duration::from_secs(5);
     let output_path = PathBuf::from("output.mp3");
-    let (whisper_sender, whisper_receiver) = create_whisper_channel()?;
+    let (whisper_sender, mut whisper_receiver) = create_whisper_channel().await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()
         .enumerate()
         .map(|(i, device)| {
+            let device = Arc::new(device);
             let whisper_sender = whisper_sender.clone();
             let output_path = output_path.with_file_name(format!("output_{}.mp3", i));
             let device_control = Arc::new(AtomicBool::new(true));
-            let device_clone = device.clone();
+            let device_clone = Arc::clone(&device);
 
-            thread::spawn(move || {
+            tokio::spawn(async move {
                 let device_control_clone = Arc::clone(&device_control);
+                let device_clone_2 = Arc::clone(&device_clone);
 
                 record_and_transcribe(
-                    &device_clone,
+                    device_clone_2,
                     chunk_duration,
                     output_path,
                     whisper_sender,
@@ -103,12 +105,12 @@ fn main() -> Result<()> {
 
     // Main loop to receive and print transcriptions
     loop {
-        match whisper_receiver.recv_timeout(Duration::from_secs(5)) {
+        match whisper_receiver.try_recv() {
             Ok(result) => {
                 info!("Transcription: {:?}", result);
                 consecutive_timeouts = 0; // Reset the counter on successful receive
             }
-            Err(crossbeam::channel::RecvTimeoutError::Timeout) => {
+            Err(_) => {
                 consecutive_timeouts += 1;
                 if consecutive_timeouts >= max_consecutive_timeouts {
                     info!("No transcriptions received for a while, stopping...");
@@ -116,16 +118,12 @@ fn main() -> Result<()> {
                 }
                 continue;
             }
-            Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
-                // All senders have been dropped, recording is complete
-                break;
-            }
         }
     }
 
     // Wait for all recording threads to finish
     for (i, thread) in recording_threads.into_iter().enumerate() {
-        let file_path = thread.join().unwrap()?;
+        let file_path = thread.await.unwrap().await;
         println!("Recording {} complete: {:?}", i, file_path);
     }
 

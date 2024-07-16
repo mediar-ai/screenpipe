@@ -1,16 +1,13 @@
-use std::{
-    thread,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::{ops::softmax, VarBuilder};
-use crossbeam::channel::{self, Receiver, Sender};
 use hf_hub::{api::sync::Api, Repo, RepoType};
-use log::{error, info};
+use log::{debug, error, info};
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use candle_transformers::models::whisper::{self as m, audio, Config};
 use rubato::{
@@ -28,9 +25,11 @@ pub struct WhisperModel {
 
 impl WhisperModel {
     pub fn new() -> Result<Self> {
+        debug!("Initializing WhisperModel");
         let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
         info!("device = {:?}", device);
 
+        debug!("Fetching model files");
         let (config_filename, tokenizer_filename, weights_filename) = {
             let api = Api::new()?;
             let repo = api.repo(Repo::with_revision(
@@ -44,12 +43,15 @@ impl WhisperModel {
             (config, tokenizer, model)
         };
 
+        debug!("Parsing config and tokenizer");
         let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
 
+        debug!("Loading model weights");
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], m::DTYPE, &device)? };
         let model = Model::Normal(m::model::Whisper::load(&vb, config.clone())?);
+        debug!("WhisperModel initialization complete");
         Ok(Self {
             model,
             tokenizer,
@@ -396,11 +398,12 @@ enum Task {
 }
 
 pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
-    info!("Starting speech to text");
+    debug!("Starting speech to text for file: {}", file_path);
     let model = &whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
     let device = &whisper_model.device;
 
+    debug!("Loading mel filters");
     let mel_bytes = match model.config().num_mel_bins {
         80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
         128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
@@ -409,6 +412,7 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
+    debug!("Decoding PCM data");
     let (mut pcm_data, sample_rate) = pcm_decode(file_path)?;
     if sample_rate != m::SAMPLE_RATE as u32 {
         info!(
@@ -419,9 +423,10 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
         pcm_data = resample(pcm_data, sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
-    // info!("pcm data loaded {}", pcm_data.len());
+    debug!("Converting PCM to mel spectrogram");
     let mel = audio::pcm_to_mel(&model.config(), &pcm_data, &mel_filters);
     let mel_len = mel.len();
+    debug!("Creating tensor from mel spectrogram");
     let mel = Tensor::from_vec(
         mel,
         (
@@ -432,12 +437,14 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
         &device,
     )?;
 
+    debug!("Detecting language");
     let language_token = Some(multilingual::detect_language(
         &mut model.clone(),
         &tokenizer,
         &mel,
     )?);
     let mut model = model.clone();
+    debug!("Initializing decoder");
     let mut dc = Decoder::new(
         &mut model,
         tokenizer,
@@ -448,9 +455,9 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
         true,
         false,
     )?;
-    info!("Decoding...");
+    debug!("Starting decoding process");
     let segments = dc.run(&mel)?;
-    // info!("Decoding done {:?}", segments);
+    debug!("Decoding complete");
     Ok(segments
         .iter()
         .map(|s| s.dr.text.clone())
@@ -459,6 +466,7 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
 }
 
 fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
+    debug!("Resampling audio");
     let params = SincInterpolationParameters {
         sinc_len: 256,
         f_cutoff: 0.95,
@@ -476,8 +484,9 @@ fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Resu
     )?;
 
     let waves_in = vec![input];
+    debug!("Performing resampling");
     let waves_out = resampler.process(&waves_in, None)?;
-
+    debug!("Resampling complete");
     Ok(waves_out.into_iter().next().unwrap())
 }
 
@@ -494,46 +503,54 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
-pub fn create_whisper_channel() -> Result<(Sender<AudioInput>, Receiver<TranscriptionResult>)> {
+pub async fn create_whisper_channel() -> Result<(
+    UnboundedSender<AudioInput>,
+    UnboundedReceiver<TranscriptionResult>,
+)> {
     let whisper_model = WhisperModel::new()?;
-    let (input_sender, input_receiver): (Sender<AudioInput>, Receiver<AudioInput>) =
-        channel::unbounded();
+    let (input_sender, mut input_receiver): (
+        UnboundedSender<AudioInput>,
+        UnboundedReceiver<AudioInput>,
+    ) = unbounded_channel();
     let (output_sender, output_receiver): (
-        Sender<TranscriptionResult>,
-        Receiver<TranscriptionResult>,
-    ) = channel::unbounded();
+        UnboundedSender<TranscriptionResult>,
+        UnboundedReceiver<TranscriptionResult>,
+    ) = unbounded_channel();
 
-    thread::spawn(move || {
-        while let Ok(input) = input_receiver.recv() {
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs();
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                Some(input) = input_receiver.recv() => {
+                    let timestamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("Time went backwards")
+                        .as_secs();
 
-            let result = stt(&input.path, &whisper_model);
+                    let result = stt(&input.path, &whisper_model);
 
-            let transcription_result = match result {
-                Ok(transcription) => TranscriptionResult {
-                    input: input.clone(),
-                    transcription: Some(transcription),
-                    timestamp,
-                    error: None,
-                },
-                Err(e) => TranscriptionResult {
-                    input: input.clone(),
-                    transcription: None,
-                    timestamp,
-                    error: Some(e.to_string()),
-                },
-            };
+                    let transcription_result = match result {
+                        Ok(transcription) => TranscriptionResult {
+                            input: input.clone(),
+                            transcription: Some(transcription),
+                            timestamp,
+                            error: None,
+                        },
+                        Err(e) => TranscriptionResult {
+                            input: input.clone(),
+                            transcription: None,
+                            timestamp,
+                            error: Some(e.to_string()),
+                        },
+                    };
 
-            if output_sender.send(transcription_result).is_err() {
-                break;
+                    if output_sender.send(transcription_result).is_err() {
+                        break;
+                    }
+                }
+                else => break,
             }
         }
     });
 
     Ok((input_sender, output_receiver))
 }
-
-

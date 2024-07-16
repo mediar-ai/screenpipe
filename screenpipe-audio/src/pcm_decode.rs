@@ -1,4 +1,4 @@
-use log::info;
+use log::debug;
 use symphonia::core::audio::{AudioBufferRef, Signal};
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::conv::FromSample;
@@ -11,7 +11,8 @@ where
     samples.extend(data.chan(0).iter().map(|v| f32::from_sample(*v)))
 }
 
-pub(crate) fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(Vec<f32>, u32)> {
+pub fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(Vec<f32>, u32)> {
+    debug!("Starting PCM decoding for {:?}", path.as_ref());
     // Open the media source.
     let src = std::fs::File::open(path)?;
 
@@ -46,8 +47,8 @@ pub(crate) fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(
         .expect("unsupported codec");
     let track_id = track.id;
     let sample_rate = track.codec_params.sample_rate.unwrap_or(0);
-    info!("Sample rate: {}", sample_rate);
     let mut pcm_data = Vec::new();
+    debug!("Starting decode loop");
     // The decode loop.
     while let Ok(packet) = format.next_packet() {
         // Consume any new metadata that has been read since the last packet.

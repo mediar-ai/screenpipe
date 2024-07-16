@@ -1,0 +1,48 @@
+# act -W .github/workflows/benchmark.yml --container-architecture linux/amd64 -j benchmark -P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+name: Rust Benchmark
+
+on: [push]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Run Rust benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --bench pcm_decode_benchmark -- --output-format bencher | tee output.txt
+          echo "Benchmark output:"
+          cat output.txt
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Rust Benchmark
+          tool: "cargo"
+          # external-data-json-path: ./cache/benchmark-data.json
+          fail-on-alert: true
+          # GitHub API token to make a commit comment
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Enable alert commit comment
+          comment-on-alert: true
+          # Enable Job Summary for PRs
+          summary-always: true
+          alert-comment-cc-users: "@louis030195"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: output.txt

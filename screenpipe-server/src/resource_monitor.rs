@@ -9,59 +9,100 @@ pub struct ResourceMonitor {
     start_time: Instant,
     memory_threshold: f64,
     runtime_threshold: Duration,
+    restart_enabled: bool,
 }
 
 impl ResourceMonitor {
-    pub fn new(memory_threshold: f64, runtime_threshold_minutes: u64) -> Arc<Self> {
+    pub fn new(
+        memory_threshold: f64,
+        runtime_threshold_minutes: u64,
+        restart_enabled: bool,
+    ) -> Arc<Self> {
         Arc::new(Self {
             start_time: Instant::now(),
             memory_threshold,
             runtime_threshold: Duration::from_secs(runtime_threshold_minutes * 60),
+            restart_enabled,
         })
     }
 
     fn log_status(&self, sys: &System) {
         let pid = std::process::id();
-        if let Some(process) = sys.process(sysinfo::Pid::from_u32(pid)) {
-            let memory_usage = process.memory() as f64 / 1024.0; // Convert to KB
-            let total_memory = sys.total_memory() as f64 / 1024.0; // Convert to KB
-            let memory_usage_percent = (memory_usage / total_memory) * 100.0;
-            let cpu_usage = process.cpu_usage();
+        let main_process = sys.process(sysinfo::Pid::from_u32(pid));
+
+        let mut total_memory = 0.0;
+        let mut total_cpu = 0.0;
+
+        if let Some(process) = main_process {
+            total_memory += process.memory() as f64;
+            total_cpu += process.cpu_usage();
+
+            // Iterate through all processes to find children
+            for (_child_pid, child_process) in sys.processes() {
+                if child_process.parent() == Some(sysinfo::Pid::from_u32(pid)) {
+                    total_memory += child_process.memory() as f64;
+                    total_cpu += child_process.cpu_usage();
+                }
+            }
+
+            let total_memory_kb = total_memory / 1024.0;
+            let system_total_memory = sys.total_memory() as f64 / 1024.0;
+            let memory_usage_percent = (total_memory_kb / system_total_memory) * 100.0;
             let runtime = self.start_time.elapsed();
 
             let log_message = if cfg!(target_os = "macos") {
                 if let Some(npu_usage) = self.get_npu_usage() {
                     format!(
-                        "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%, NPU: {:.2}%",
-                        runtime, memory_usage_percent, memory_usage, total_memory, cpu_usage, npu_usage
+                        "Runtime: {:?}, Total Memory: {:.2}% ({:.2} KB / {:.2} KB), Total CPU: {:.2}%, NPU: {:.2}%",
+                        runtime, memory_usage_percent * 100.0, total_memory_kb, system_total_memory, total_cpu, npu_usage
                     )
                 } else {
                     format!(
-                        "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%, NPU: N/A",
-                        runtime, memory_usage_percent, memory_usage, total_memory, cpu_usage
+                        "Runtime: {:?}, Total Memory: {:.2}% ({:.2} KB / {:.2} KB), Total CPU: {:.2}%, NPU: N/A",
+                        runtime, memory_usage_percent * 100.0, total_memory_kb, system_total_memory, total_cpu
                     )
                 }
             } else {
                 format!(
-                    "Runtime: {:?}, Memory: {:.2}% ({:.2} KB / {:.2} KB), CPU: {:.2}%",
-                    runtime, memory_usage_percent, memory_usage, total_memory, cpu_usage
+                    "Runtime: {:?}, Total Memory: {:.2}% ({:.2} KB / {:.2} KB), Total CPU: {:.2}%",
+                    runtime,
+                    memory_usage_percent * 100.0,
+                    total_memory_kb,
+                    system_total_memory,
+                    total_cpu
                 )
             };
 
             info!("{}", log_message);
 
-            // Check for restart conditions
-            if memory_usage_percent > self.memory_threshold || runtime > self.runtime_threshold {
+            // Check for restart conditions only if restart is enabled
+            if self.restart_enabled
+                && (memory_usage_percent > self.memory_threshold
+                    || runtime > self.runtime_threshold)
+            {
                 warn!(
                     "Restarting due to: Memory usage: {:.2}%, Runtime: {:?}",
-                    memory_usage_percent, runtime
+                    memory_usage_percent * 100.0,
+                    runtime
                 );
                 self.restart();
+            } else if memory_usage_percent > self.memory_threshold
+                || runtime > self.runtime_threshold
+            {
+                warn!(
+                    "Resource threshold exceeded: Memory usage: {:.2}%, Runtime: {:?}",
+                    memory_usage_percent * 100.0,
+                    runtime
+                );
             }
         }
     }
 
     fn restart(&self) {
+        if !self.restart_enabled {
+            warn!("Restart requested but restart feature is disabled.");
+            return;
+        }
         warn!("Initiating restart due to resource thresholds...");
 
         let args: Vec<String> = std::env::args().collect();
@@ -91,9 +132,9 @@ impl ResourceMonitor {
             }
         }
     }
+
     pub fn start_monitoring(self: &Arc<Self>, interval: Duration) {
         let monitor = Arc::clone(self);
-        // TODO tokio
         thread::spawn(move || {
             let mut sys = System::new_all();
             loop {
@@ -104,7 +145,6 @@ impl ResourceMonitor {
         });
     }
 
-    // TODO- only way would be to use metal crate (overkill for now :))
     #[cfg(target_os = "macos")]
     fn get_npu_usage(&self) -> Option<f32> {
         let output = Command::new("ioreg")
@@ -130,38 +170,6 @@ impl ResourceMonitor {
 
         None
     }
-
-    // #[cfg(target_os = "macos")]
-    // fn get_npu_usage(&self) -> Option<f32> {
-    //     // ! HACK unfortunately requrie sudo so not usable ...
-    //     let output = Command::new("powermetrics")
-    //         .args(&[
-    //             "-s",
-    //             "cpu_power",
-    //             "-i",
-    //             "100",
-    //             "-n",
-    //             "1",
-    //             "--format",
-    //             "json",
-    //         ])
-    //         .output()
-    //         .ok()?;
-
-    //     println!("Output: {:?}", output);
-
-    //     let json: Value = serde_json::from_slice(&output.stdout).ok()?;
-    //     let ane_power = json["processor"]["ane_energy"].as_f64()?;
-
-    //     // Convert energy to power (W) based on the interval (100ms)
-    //     let ane_power_watts = ane_power / 0.1 / 1000.0;
-
-    //     // Assuming max ANE power is 8.0W (adjust if needed)
-    //     let max_ane_power = 8.0;
-    //     let npu_usage_percent = (ane_power_watts / max_ane_power) * 100.0;
-
-    //     Some(npu_usage_percent as f32)
-    // }
 
     #[cfg(not(target_os = "macos"))]
     fn get_npu_usage(&self) -> Option<f32> {
