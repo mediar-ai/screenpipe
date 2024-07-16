@@ -3,7 +3,7 @@ class Screenpipe < Formula
     homepage "https://github.com/louis030195/screen-pipe"
     url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.34/screenpipe-0.1.34-x86_64-apple-darwin.tar.gz"
     sha256 "f74b35531c648db63d9fe1f52720d5b406168f6aa5ef695c2b5eff99105d260d"
-    version "0.1.34"
+    version "0.1.35"
     
     depends_on "ffmpeg"
   
