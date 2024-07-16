@@ -52,7 +52,8 @@ brew install jq
 ```
 3. Install library
 ```bash
-brew install louis030195/screen-pipe/screenpipe
+brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe
+brew install screenpipe
 ```
 4. Run it:
 ```bash
