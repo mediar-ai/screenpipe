@@ -1,16 +1,26 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value as JsonValue};
 use sqlx::migrate::MigrateDatabase;
+use sqlx::Sqlite;
 use sqlx::{
     sqlite::{SqlitePool, SqlitePoolOptions},
     FromRow,
 };
+
 use std::time::Duration;
 
 #[derive(Debug, Serialize)]
 pub enum SearchResult {
     OCR(OCRResult),
     Audio(AudioResult),
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum TagContentType {
+    Vision,
+    Audio,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -20,15 +30,10 @@ pub struct OCRResult {
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Default, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
-pub enum ContentType {
-    #[default]
-    All,
-    OCR,
-    Audio,
+    #[sqlx(rename = "tags_json")]
+    pub tags_json: Option<String>,
+    #[serde(skip)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -38,6 +43,24 @@ pub struct AudioResult {
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
+    pub tags: StringVec,
+}
+pub struct StringVec(pub Vec<String>);
+
+impl<'r> sqlx::decode::Decode<'r, sqlx::Sqlite> for StringVec {
+    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::Error> {
+        let value = value.as_str()?;
+        let tags: Vec<String> = serde_json::from_str(value)?;
+        Ok(StringVec(tags))
+    }
+}
+#[derive(Debug, Deserialize, PartialEq, Default, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum ContentType {
+    #[default]
+    All,
+    OCR,
+    Audio,
 }
 
 pub struct DatabaseManager {
@@ -85,9 +108,9 @@ impl DatabaseManager {
         audio_chunk_id: i64,
         transcription: &str,
         offset_index: i64,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        sqlx::query(
+        let id = sqlx::query(
             "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp) VALUES (?1, ?2, ?3, ?4)",
         )
         .bind(audio_chunk_id)
@@ -95,9 +118,10 @@ impl DatabaseManager {
         .bind(offset_index)
         .bind(Utc::now())
         .execute(&mut *tx)
-        .await?;
+        .await?
+        .last_insert_rowid();
         tx.commit().await?;
-        Ok(())
+        Ok(id)
     }
 
     pub async fn insert_video_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
@@ -190,14 +214,15 @@ impl DatabaseManager {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
-        sqlx::query_as::<_, OCRResult>(
+        let mut results = sqlx::query_as::<_, OCRResult>(
             r#"
             SELECT 
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
                 frames.timestamp,
                 video_chunks.file_path,
-                frames.offset_index
+                frames.offset_index,
+                COALESCE(json_extract(frames.metadata, '$.tags'), '[]') as tags_json
             FROM 
                 ocr_text
             JOIN 
@@ -215,7 +240,15 @@ impl DatabaseManager {
         .bind(limit)
         .bind(offset)
         .fetch_all(&self.pool)
-        .await
+        .await?;
+
+        for result in &mut results {
+            result.tags =
+                serde_json::from_str(&result.tags_json.unwrap_or_else(|| "[]".to_string()))
+                    .unwrap_or_default();
+        }
+
+        Ok(results)
     }
 
     async fn search_audio(
@@ -231,7 +264,8 @@ impl DatabaseManager {
                 audio_transcriptions.transcription,
                 audio_transcriptions.timestamp,
                 audio_chunks.file_path,
-                audio_transcriptions.offset_index
+                audio_transcriptions.offset_index,
+                COALESCE(json_extract(audio_transcriptions.metadata, '$.tags'), '[]') as tags
             FROM 
                 audio_transcriptions
             JOIN 
@@ -428,6 +462,152 @@ impl DatabaseManager {
 
         Ok(total_count)
     }
+
+    pub async fn add_tags(
+        &self,
+        id: i64,
+        content_type: TagContentType,
+        tags: Vec<String>,
+    ) -> Result<(), sqlx::Error> {
+        match content_type {
+            TagContentType::Vision => self.add_tags_to_frame(id, tags).await,
+            TagContentType::Audio => self.add_tags_to_audio(id, tags).await,
+        }
+    }
+
+    pub async fn add_tags_to_frame(
+        &self,
+        frame_id: i64,
+        tags: Vec<String>,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let current_metadata: Option<String> =
+            sqlx::query_scalar("SELECT metadata FROM frames WHERE id = ?")
+                .bind(frame_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        if current_metadata.is_none() {
+            return Err(sqlx::Error::RowNotFound);
+        }
+
+        let mut metadata: JsonValue = current_metadata
+            .and_then(|m| serde_json::from_str(&m).ok())
+            .unwrap_or_else(|| json!({}));
+
+        let current_tags: Vec<String> = metadata["tags"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let mut new_tags = current_tags;
+        new_tags.extend(tags);
+        new_tags.sort();
+        new_tags.dedup();
+
+        metadata["tags"] = json!(new_tags);
+
+        sqlx::query("UPDATE frames SET metadata = ? WHERE id = ?")
+            .bind(serde_json::to_string(&metadata).unwrap())
+            .bind(frame_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn add_tags_to_audio(
+        &self,
+        audio_id: i64,
+        tags: Vec<String>,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let current_metadata: Option<String> =
+            sqlx::query_scalar("SELECT metadata FROM audio_transcriptions WHERE id = ?")
+                .bind(audio_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        let mut metadata: JsonValue = current_metadata
+            .and_then(|m| serde_json::from_str(&m).ok())
+            .unwrap_or_else(|| json!({}));
+
+        let current_tags: Vec<String> = metadata["tags"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let mut new_tags = current_tags;
+        new_tags.extend(tags);
+        new_tags.sort();
+        new_tags.dedup();
+
+        metadata["tags"] = json!(new_tags);
+
+        sqlx::query("UPDATE audio_transcriptions SET metadata = ? WHERE id = ?")
+            .bind(serde_json::to_string(&metadata).unwrap())
+            .bind(audio_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    // You might want to add methods to retrieve tags as well:
+    pub async fn get_tags(
+        &self,
+        id: i64,
+        content_type: TagContentType,
+    ) -> Result<Vec<String>, sqlx::Error> {
+        match content_type {
+            TagContentType::Vision => self.get_frame_tags(id).await,
+            TagContentType::Audio => self.get_audio_tags(id).await,
+        }
+    }
+
+    async fn get_frame_tags(&self, frame_id: i64) -> Result<Vec<String>, sqlx::Error> {
+        let metadata: Option<String> =
+            sqlx::query_scalar("SELECT metadata FROM frames WHERE id = ?")
+                .bind(frame_id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        Ok(self.extract_tags_from_metadata(metadata))
+    }
+
+    async fn get_audio_tags(&self, audio_id: i64) -> Result<Vec<String>, sqlx::Error> {
+        let metadata: Option<String> =
+            sqlx::query_scalar("SELECT metadata FROM audio_transcriptions WHERE id = ?")
+                .bind(audio_id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        Ok(self.extract_tags_from_metadata(metadata))
+    }
+
+    fn extract_tags_from_metadata(&self, metadata: Option<String>) -> Vec<String> {
+        metadata
+            .and_then(|m| serde_json::from_str::<JsonValue>(&m).ok())
+            .and_then(|json| json["tags"].as_array().cloned())
+            .map(|arr| {
+                arr.into_iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 impl Clone for DatabaseManager {
@@ -437,4 +617,3 @@ impl Clone for DatabaseManager {
         }
     }
 }
-

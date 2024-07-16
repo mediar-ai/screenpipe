@@ -83,6 +83,7 @@ criterion = { workspace = true }
 rand = "0.8"
 
 tower = "0.4"
+axum-test = "15.3.0"
 
 [[bench]]
 name = "db_benchmarks"

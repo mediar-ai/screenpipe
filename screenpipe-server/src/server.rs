@@ -7,7 +7,7 @@ use axum::{
 };
 use tracing::Level;
 
-use crate::{ContentType, DatabaseManager, SearchResult};
+use crate::{ContentType, DatabaseManager, SearchResult, TagContentType};
 use chrono::{DateTime, Utc};
 use log::{error, info};
 use screenpipe_audio::{AudioDevice, DeviceControl};
@@ -30,11 +30,27 @@ use tower_http::{
 };
 
 // App state
-pub(crate) struct AppState {
-    db: Arc<DatabaseManager>,
-    vision_control: Arc<AtomicBool>,
-    audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
-    devices_status: HashMap<AudioDevice, DeviceControl>,
+pub struct AppState {
+    pub db: Arc<DatabaseManager>,
+    pub vision_control: Arc<AtomicBool>,
+    pub audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
+    pub devices_status: HashMap<AudioDevice, DeviceControl>,
+}
+
+impl AppState {
+    pub fn new(
+        db: Arc<DatabaseManager>,
+        vision_control: Arc<AtomicBool>,
+        audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
+        devices_status: HashMap<AudioDevice, DeviceControl>,
+    ) -> Self {
+        AppState {
+            db,
+            vision_control,
+            audio_devices_control_sender,
+            devices_status,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -98,7 +114,7 @@ struct PaginationInfo {
 #[derive(Serialize)]
 #[serde(tag = "type", content = "content")]
 pub(crate) enum ContentItem {
-    OCR(OCRContent),
+    OCR(OCRContent), // TODO: "vision" instead
     Audio(AudioContent),
 }
 
@@ -129,6 +145,14 @@ pub(crate) struct DeviceStatus {
 #[derive(Serialize)]
 pub(crate) struct RecordingStatus {
     is_running: bool,
+}
+
+#[derive(Deserialize)]
+pub struct TagRequest {
+    id: i64,
+    tags: Vec<String>,
+    #[serde(rename = "type")]
+    content_type: TagContentType,
 }
 
 // Helper functions
@@ -328,6 +352,27 @@ pub(crate) async fn get_devices(
     JsonResponse(devices)
 }
 
+pub async fn add_tags(
+    State(state): State<Arc<AppState>>,
+    JsonExt(payload): JsonExt<TagRequest>,
+) -> Result<StatusCode, (StatusCode, JsonResponse<serde_json::Value>)> {
+    let result = match payload.content_type {
+        TagContentType::Vision => state.db.add_tags_to_frame(payload.id, payload.tags).await,
+        TagContentType::Audio => state.db.add_tags_to_audio(payload.id, payload.tags).await,
+    };
+
+    match result {
+        Ok(()) => Ok(StatusCode::OK),
+        Err(sqlx::Error::RowNotFound) => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": "Content not found"})),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to add tags: {}", e)})),
+        )),
+    }
+}
 // Helper functions
 fn into_content_item(result: SearchResult) -> ContentItem {
     match result {
@@ -385,6 +430,7 @@ impl Server {
         // https://github.com/tokio-rs/console
         let app = Router::new()
             .route("/search", get(search))
+            .route("/tag", post(add_tags))
             .route("/audio/start", post(start_device))
             .route("/audio/stop", post(stop_device))
             .route("/audio/status", post(get_device_status))
@@ -468,3 +514,9 @@ impl Server {
 
 // # 12. Get recording status
 // # curl "http://localhost:3030/vision/status"
+
+// # Add tags to a frame
+// curl -X POST "http://localhost:3030/tag" -H "Content-Type: application/json" -d '{"id": 1, "type": "vision", "tags": ["important", "meeting"]}'
+
+// # Add tags to an audio recording
+// curl -X POST "http://localhost:3030/tag" -H "Content-Type: application/json" -d '{"id": 1, "type": "audio", "tags": ["interview", "client"]}'
