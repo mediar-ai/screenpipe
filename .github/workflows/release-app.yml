@@ -1,0 +1,60 @@
+# # Run for macOS
+# act -W .github/workflows/release-app.yml -j "Release app" --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest --eventpath <(echo '{"ref":"refs/tags/v1.0.0","ref_name":"v1.0.0"}') --matrix platform:macos-latest
+
+# # Run for Ubuntu
+# act -W .github/workflows/release-app.yml -j "Release app" --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest --eventpath <(echo '{"ref":"refs/tags/v1.0.0","ref_name":"v1.0.0"}') --matrix platform:ubuntu-22.04
+
+# # Run for Windows
+# act -W .github/workflows/release-app.yml -j "Release app" --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest --eventpath <(echo '{"ref":"refs/tags/v1.0.0","ref_name":"v1.0.0"}') --matrix platform:windows-latest
+
+# # Run for all platforms
+# act -W .github/workflows/release-app.yml -j "Release app" --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest --eventpath <(echo '{"ref":"refs/tags/v1.0.0","ref_name":"v1.0.0"}')
+
+
+name: 'Release app'
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: setup rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install frontend dependencies
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'App v__VERSION__'
+          releaseBody: 'See the assets to download and install this version.'
+          releaseDraft: true
+          prerelease: false

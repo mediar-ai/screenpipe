@@ -1,0 +1,107 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeBuildCommand": "pnpm run build",
+    "beforeDevCommand": "pnpm run dev",
+    "devPath": "http://localhost:3000",
+    "distDir": "../out"
+  },
+  "package": {
+    "productName": "screenpipe",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "systemTray": {
+      "iconPath": "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
+      "iconAsTemplate": true
+    },
+    "allowlist": {
+      "all": false
+    },
+    "bundle": {
+      "active": true,
+      "category": "DeveloperTool",
+      "copyright": "",
+      "deb": {
+        "depends": []
+      },
+      "externalBin": [],
+      "icon": [
+        "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",
+        "icons/generated/Assets.xcassets/AppIcon.appiconset/128.png",
+        "icons/generated/Assets.xcassets/AppIcon.appiconset/256.png",
+        "icons/generated/Assets.xcassets/AppIcon.appiconset/512.png",
+        "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
+        "icons/generated/icon.icns",
+        "icons/generated/icon.ico"
+      ],
+      "identifier": "com.screenpi.pe",
+      "longDescription": "",
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null
+      },
+      "resources": [],
+      "shortDescription": "",
+      "targets": "all",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "updater": {
+      "active": false
+    },
+    "cli": {
+      "description": "Screen Pipe App CLI",
+      "longDescription": "Command-line interface for Screen Pipe App",
+      "args": [
+        {
+          "name": "data-dir",
+          "takesValue": true,
+          "description": "Custom data directory path"
+        },
+        {
+          "name": "fps",
+          "takesValue": true,
+          "description": "FPS for continuous recording (default: 1.0)"
+        },
+        {
+          "name": "audio-chunk-duration",
+          "takesValue": true,
+          "description": "Audio chunk duration in seconds (default: 30)"
+        },
+        {
+          "name": "port",
+          "takesValue": true,
+          "description": "Port to run the server on (default: 3035)"
+        },
+        {
+          "name": "disable-audio",
+          "description": "Disable audio recording"
+        },
+        {
+          "name": "memory-threshold",
+          "takesValue": true,
+          "description": "Memory usage threshold for restart in percentage (default: 80.0)"
+        },
+        {
+          "name": "runtime-threshold",
+          "takesValue": true,
+          "description": "Runtime threshold for restart in minutes (default: 60)"
+        },
+        {
+          "name": "debug",
+          "description": "Enable debug mode"
+        }
+      ]
+    }
+  }
+}
