@@ -73,6 +73,10 @@ colored = "2.0"
 # Tracing
 tracing = { workspace = true }
 
+# Plugins
+tower = "0.4"
+futures = "0.3.17"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 
@@ -82,7 +86,6 @@ reqwest = { version = "0.11", features = ["json"] }
 criterion = { workspace = true }
 rand = "0.8"
 
-tower = "0.4"
 
 [[bench]]
 name = "db_benchmarks"

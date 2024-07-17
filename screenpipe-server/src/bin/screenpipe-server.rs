@@ -34,7 +34,11 @@ const DISPLAY: &str = r"
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// FPS for continuous recording
-    #[arg(short, long, default_value_t = 5.0)]
+    /// 1 FPS = 30 GB / month
+    /// 5 FPS = 150 GB / month
+    /// Optimise based on your needs.
+    /// You rarely change change more than 1 times within a second, right?
+    #[arg(short, long, default_value_t = 1.0)]
     fps: f64,
 
     /// Audio chunk duration in seconds
@@ -73,7 +77,7 @@ struct Cli {
     list_audio_devices: bool,
 
     /// Data directory
-    #[arg(long, default_value_t = String::from("./data"))]
+    #[arg(long, default_value_t = String::from("./data"))] // TODO $HOME/.screenpipe
     data_dir: String,
 
     /// Enable debug logging for screenpipe modules
@@ -266,15 +270,21 @@ async fn main() -> anyhow::Result<()> {
     });
 
     tokio::spawn(async move {
+        let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
+            // Custom plugin logic here
+            // For example, using PostHog for tracking:
+            if req.uri().path() == "/search" {
+                // Track search requests
+                // posthog.capture("search_request", {...})
+            }
+        };
         let server = Server::new(
             db_server,
             SocketAddr::from(([0, 0, 0, 0], cli.port)),
             vision_control_server_clone,
             audio_devices_control_sender_server,
         );
-        // TODO
-        // server.start(HashMap::new()).await.unwrap();
-        server.start(devices_status).await.unwrap();
+        server.start(devices_status, api_plugin).await.unwrap();
     });
 
     // Wait for the server to start

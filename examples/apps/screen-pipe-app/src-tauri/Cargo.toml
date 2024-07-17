@@ -1,0 +1,64 @@
+[package]
+name = "app"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+license = ""
+repository = ""
+default-run = "app"
+edition = "2021"
+rust-version = "1.60"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "1.5.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "^1.7.0", features = [ "system-tray", "cli", "shell-open-api"] }
+# tauri = { version = "2.0.0-beta", features = [ "cli", "unstable", "devtools"] }
+
+# https://github.com/louis030195/screen-pipe
+screenpipe-server = { git = "https://github.com/louis030195/screen-pipe", branch = "main" }
+screenpipe-audio = { git = "https://github.com/louis030195/screen-pipe", branch = "main" }
+screenpipe-vision = { git = "https://github.com/louis030195/screen-pipe", branch = "main" }
+axum = "0.7.5"
+
+# Logging
+log = "0.4.17"
+env_logger = "0.11.3"
+
+# Tokio
+tokio = { version = "1.36.0", features = ["full"] }
+
+# Directory management
+dirs = "5.0"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Uuid
+uuid = { version = "1.10.0", features = ["v4"] }
+
+# Sentry 
+sentry = "0.34.0"
+
+# Autostart
+tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v1" }
+
+# Chrono
+chrono = "0.4.3"
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
+# If you use cargo directly instead of tauri's cli you can use this feature flag to switch between tauri's `dev` and `build` modes.
+# DO NOT REMOVE!!
+custom-protocol = [ "tauri/custom-protocol" ]
+
+# M series MacOS
+metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
+# Nvidia
+cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
+

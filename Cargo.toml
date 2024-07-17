@@ -1,12 +1,12 @@
 [workspace]
-members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio"]
+members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio", "examples/apps/screen-pipe-app/src-tauri"]
 exclude = []
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 authors = ["louis030195 <hi@louis030195.com>"]
-description = "Trigger actions based on your screen"
+description = ""
 repository = "https://github.com/louis030195/screen-pipe"
 license = "MIT OR Apache-2.0"
 edition = "2021"

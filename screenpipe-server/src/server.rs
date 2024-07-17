@@ -29,6 +29,8 @@ use tower_http::{
     LatencyUnit,
 };
 
+use crate::plugin::ApiPluginLayer;
+
 // App state
 pub(crate) struct AppState {
     db: Arc<DatabaseManager>,
@@ -370,10 +372,14 @@ impl Server {
         }
     }
 
-    pub async fn start(
+    pub async fn start<F>(
         self,
         device_status: HashMap<AudioDevice, DeviceControl>,
-    ) -> Result<(), std::io::Error> {
+        api_plugin: F,
+    ) -> Result<(), std::io::Error>
+    where
+        F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
+    {
         // TODO could init w audio devices
         let app_state = Arc::new(AppState {
             db: self.db,
@@ -392,6 +398,7 @@ impl Server {
             .route("/vision/start", post(start_recording))
             .route("/vision/stop", post(stop_recording))
             .route("/vision/status", get(get_recording_status))
+            .layer(ApiPluginLayer::new(api_plugin))
             .layer(CorsLayer::permissive())
             .layer(
                 // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs
@@ -468,3 +475,45 @@ impl Server {
 
 // # 12. Get recording status
 // # curl "http://localhost:3030/vision/status"
+
+/*
+
+echo "Listing audio devices:"
+curl "http://localhost:3030/audio/list" | jq
+
+echo "Starting vision recording:"
+curl -X POST "http://localhost:3030/vision/start" | jq
+
+echo "Stopping all audio devices:"
+DEVICES=$(curl "http://localhost:3030/audio/list" | jq -r '.[].id')
+echo "$DEVICES" | while IFS= read -r DEVICE; do
+    echo "Stopping device: $DEVICE"
+    curl -X POST "http://localhost:3030/audio/stop" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
+done
+
+echo "Checking statuses:"
+curl "http://localhost:3030/vision/status" | jq
+echo "$DEVICES" | while IFS= read -r DEVICE; do
+    echo "Checking status of device: $DEVICE"
+    curl -X POST "http://localhost:3030/audio/status" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
+done
+
+echo "Stopping vision recording:"
+curl -X POST "http://localhost:3030/vision/stop" | jq
+
+echo "Checking statuses again:"
+curl "http://localhost:3030/vision/status" | jq
+curl -X POST "http://localhost:3030/audio/status" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
+
+echo "Stopping audio device:"
+curl -X POST "http://localhost:3030/audio/stop" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
+
+echo "Final status check:"
+curl "http://localhost:3030/vision/status" | jq
+curl -X POST "http://localhost:3030/audio/status" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
+
+echo "Searching for content:"
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all" | jq
+
+
+*/

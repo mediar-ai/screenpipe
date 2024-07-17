@@ -8,7 +8,7 @@ Usage: screenpipe [OPTIONS]
 
 Options:
   -f, --fps <FPS>
-          FPS for continuous recording [default: 5]
+          FPS for continuous recording [default: 1]
   -a, --audio-chunk-duration <AUDIO_CHUNK_DURATION>
           Audio chunk duration in seconds [default: 30]
   -p, --port <PORT>

@@ -23,15 +23,20 @@ jobs:
       - name: Run benchmarks
         run: |
           cargo bench --bench pcm_decode_benchmark -- --output-format bencher | tee output.txt
-          echo "Benchmark output:"
-          cat output.txt
+
+      - name: Download previous benchmark data
+        uses: actions/cache@v4
+        with:
+          path: ./cache
+          key: ${{ runner.os }}-benchmark
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Rust Benchmark
           tool: "cargo"
-          # external-data-json-path: ./cache/benchmark-data.json
+          output-file-path: output.txt
+          external-data-json-path: ./cache/benchmark-data.json
           fail-on-alert: true
           # GitHub API token to make a commit comment
           github-token: ${{ secrets.GITHUB_TOKEN }}
