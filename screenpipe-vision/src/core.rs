@@ -69,19 +69,19 @@ pub async fn continuous_capture(
                             if frame_number % pool_size as u64 == id as u64 {
                                 let start_time = Instant::now();
                                 let mut cache = cache.lock().await;
-                                let (text, tsv_output) = if let Some(cached_text) = cache.get(&image_hash) {
-                                    (cached_text.clone(), String::new())
+                                let (text, tsv_output, json_output) = if let Some(cached_text) = cache.get(&image_hash) {
+                                    (cached_text.clone(), String::new(), String::new())
                                 } else {
-                                    let (new_text, new_tsv_output) = perform_ocr(&image_arc);
+                                    let (new_text, new_tsv_output, new_json_output) = perform_ocr(&image_arc);
                                     cache.insert(image_hash, new_text.clone());
-                                    (new_text, new_tsv_output)
+                                    (new_text, new_tsv_output, new_json_output)
                                 };
 
                                 if let Err(e) = result_tx
                                     .send(CaptureResult {
                                         image: image_arc.into(),
                                         text: text.clone(),
-                                        text_json: text.lines().map(String::from).collect(),
+                                        text_json: serde_json::from_str(&json_output).unwrap(),
                                         frame_number,
                                         timestamp,
                                         tsv_output,
@@ -209,7 +209,7 @@ fn calculate_hash(image: &DynamicImage) -> u64 {
     hasher.finish()
 }
 
-pub fn perform_ocr(image: &DynamicImage) -> (String, String) {
+pub fn perform_ocr(image: &DynamicImage) -> (String, String, String) {
     let args = Args {
         lang: "eng".to_string(),
         config_variables: HashMap::from([
@@ -271,9 +271,8 @@ pub fn perform_ocr(image: &DynamicImage) -> (String, String) {
     }
 
     let json_output = serde_json::to_string_pretty(&lines).unwrap();
-    println!("{}", json_output);
 
-    (text, tsv_output)
+    (text, tsv_output, json_output)
 }
 
 #[cfg(test)]
@@ -288,7 +287,7 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("tests/testing_OCR.png");
         let image = image::open(path).expect("Failed to open image");
-        let (text, tsv_output) = perform_ocr(&image);
+        let (text, tsv_output, json_output) = perform_ocr(&image);
 
         // Generate text_json
         // let text_json: Vec<String> = text.lines().map(String::from).collect();
@@ -296,7 +295,7 @@ mod tests {
         // Print the results
         // println!("OCR Text: {}", text);
         // println!("TSV Output: {}", tsv_output);
-        // println!("Text JSON: {:?}", text_json);
+        // println!("Text JSON: {:?}", json_output);
 
         assert!(!text.is_empty(), "OCR text should not be empty");
         assert!(!tsv_output.is_empty(), "TSV output should not be empty");
