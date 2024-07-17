@@ -13,10 +13,10 @@ fn test_ocr_output() -> Result<(), Box<dyn std::error::Error>> {
     println!("Path to testing_OCR.png: {:?}", path);
 
     let image = image::open(&path).expect("Failed to open image");
-    let (text, tsv_output) = perform_ocr(&image);
+    let (text, tsv_output, json_output) = perform_ocr(&image);
 
-    println!("OCR Text: {}", text);
-    println!("TSV Output: {}", tsv_output);
+    // println!("OCR Text: {}", text);
+    println!("json_output: {}", json_output);
 
     assert!(!text.is_empty(), "OCR text should not be empty");
     assert!(!tsv_output.is_empty(), "TSV output should not be empty");
