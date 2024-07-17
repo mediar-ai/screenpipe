@@ -36,7 +36,7 @@ struct Cli {
     /// FPS for continuous recording
     /// 1 FPS = 30 GB / month
     /// 5 FPS = 150 GB / month
-    /// Optimise based on your needs. 
+    /// Optimise based on your needs.
     /// You rarely change change more than 1 times within a second, right?
     #[arg(short, long, default_value_t = 1.0)]
     fps: f64,
@@ -267,15 +267,21 @@ async fn main() -> anyhow::Result<()> {
     });
 
     tokio::spawn(async move {
+        let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
+            // Custom plugin logic here
+            // For example, using PostHog for tracking:
+            if req.uri().path() == "/search" {
+                // Track search requests
+                // posthog.capture("search_request", {...})
+            }
+        };
         let server = Server::new(
             db_server,
             SocketAddr::from(([0, 0, 0, 0], cli.port)),
             vision_control_server_clone,
             audio_devices_control_sender_server,
         );
-        // TODO
-        // server.start(HashMap::new()).await.unwrap();
-        server.start(devices_status).await.unwrap();
+        server.start(devices_status, api_plugin).await.unwrap();
     });
 
     // Wait for the server to start

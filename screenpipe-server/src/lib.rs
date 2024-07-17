@@ -1,5 +1,6 @@
 mod core;
 mod db;
+mod plugin;
 mod resource_monitor;
 mod server;
 mod video;
