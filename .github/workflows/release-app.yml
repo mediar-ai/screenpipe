@@ -1,22 +1,12 @@
 # # Run for macOS
-# act -W .github/workflows/release-app.yml -j "Release app" --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest --eventpath <(echo '{"ref":"refs/tags/v1.0.0","ref_name":"v1.0.0"}') --matrix platform:macos-latest
+# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j release -P macos-latest=-self-hosted
 
-# # Run for Ubuntu
-# act -W .github/workflows/release-app.yml -j "Release app" --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest --eventpath <(echo '{"ref":"refs/tags/v1.0.0","ref_name":"v1.0.0"}') --matrix platform:ubuntu-22.04
-
-# # Run for Windows
-# act -W .github/workflows/release-app.yml -j "Release app" --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest --eventpath <(echo '{"ref":"refs/tags/v1.0.0","ref_name":"v1.0.0"}') --matrix platform:windows-latest
-
-# # Run for all platforms
-# act -W .github/workflows/release-app.yml -j "Release app" --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest --eventpath <(echo '{"ref":"refs/tags/v1.0.0","ref_name":"v1.0.0"}')
-
-
-name: 'Release app'
+name: "Release app"
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   release:
@@ -40,21 +30,24 @@ jobs:
       - name: setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
-          cache: 'npm'
+          node-version: "lts/*"
 
       - name: setup rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: install frontend dependencies
-        run: npm ci
+        working-directory: examples/apps/screen-pipe-app/
+        run: pnpm i
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: examples/apps/screen-pipe-app/
           tagName: ${{ github.ref_name }}
-          releaseName: 'App v__VERSION__'
-          releaseBody: 'See the assets to download and install this version.'
+          releaseName: "App v__VERSION__"
+          releaseBody: "See the assets to download and install this version."
           releaseDraft: true
           prerelease: false
+          distPath: "../examples/apps/screen-pipe-app/dist"
+          appVersion: ${{ github.ref_name }}
