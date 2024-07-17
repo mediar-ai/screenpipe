@@ -6,12 +6,14 @@ use tokio::sync::broadcast::error::RecvError;
 use xcap::Monitor;
 
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::task;
+use serde_json;
 
 pub enum ControlMessage {
     Pause,
@@ -88,7 +90,7 @@ pub async fn continuous_capture(
                                 {
                                     error!("Failed to send OCR result: {}", e);
                                 }
-                                let duration = start_time.elapsed();
+                                let _duration = start_time.elapsed();
                                 // debug!(
                                 //     "OCR task {} processed frame {} in {:?}",
                                 //     id, frame_number, duration
@@ -212,16 +214,65 @@ pub fn perform_ocr(image: &DynamicImage) -> (String, String) {
         lang: "eng".to_string(),
         config_variables: HashMap::from([
             ("tessedit_create_tsv".into(), "1".into()),
-            ("tessedit_create_txt".into(), "1".into()),
         ]),
-        ..Args::default()
+        dpi: Some(150),
+        psm: Some(3),
+        oem: Some(3),
     };
     let ocr_image = Image::from_dynamic_image(image).unwrap();
-    let text = rusty_tesseract::image_to_string(&ocr_image, &args)
-        .unwrap_or_else(|_| String::from("OCR failed"));
-    let tsv_output = rusty_tesseract::image_to_data(&ocr_image, &args)
-        .map(|data_output| data_output.output)
-        .unwrap_or_else(|_| String::from("TSV output failed"));
+    
+    let tsv_output = match rusty_tesseract::image_to_string(&ocr_image, &args) {
+        Ok(result) => {result},
+        Err(e) => {
+            eprintln!("Error during image_to_string: {}", e);
+            String::from("OCR_TSV failed")
+        }
+    };
+
+    // Extract text from TSV output
+    let text = tsv_output.lines()
+        .skip(1) // Skip the header line
+        .filter_map(|line| line.rsplit_once('\t').map(|(_, text)| text)) // Get the text after the last tab
+        .collect::<Vec<&str>>()
+        .join(" "); // Join all text parts with a space
+
+    // Define my_args for image_to_boxes
+    let my_args = Args {
+        lang: "eng".to_string(),
+        config_variables: HashMap::new(),
+        dpi: Some(150),
+        psm: Some(3),
+        oem: Some(3),
+    };
+
+    let data_output = rusty_tesseract::image_to_data(&ocr_image, &my_args).unwrap();
+    let mut lines: Vec<String> = Vec::new();
+    let mut current_line = String::new();
+    let mut last_word_num = 0;
+
+    for record in &data_output.data {
+        if record.word_num == 0 {
+            if !current_line.is_empty() {
+                lines.push(current_line.clone());
+                current_line.clear();
+            }
+        }
+        if record.word_num > last_word_num {
+            if !current_line.is_empty() {
+                current_line.push(' ');
+            }
+            current_line.push_str(&record.text);
+        }
+        last_word_num = record.word_num;
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    let json_output = serde_json::to_string_pretty(&lines).unwrap();
+    println!("{}", json_output);
+
     (text, tsv_output)
 }
 
@@ -240,12 +291,12 @@ mod tests {
         let (text, tsv_output) = perform_ocr(&image);
 
         // Generate text_json
-        let text_json: Vec<String> = text.lines().map(String::from).collect();
+        // let text_json: Vec<String> = text.lines().map(String::from).collect();
 
         // Print the results
-        println!("OCR Text: {}", text);
-        println!("TSV Output: {}", tsv_output);
-        println!("Text JSON: {:?}", text_json);
+        // println!("OCR Text: {}", text);
+        // println!("TSV Output: {}", tsv_output);
+        // println!("Text JSON: {:?}", text_json);
 
         assert!(!text.is_empty(), "OCR text should not be empty");
         assert!(!tsv_output.is_empty(), "TSV output should not be empty");
