@@ -34,7 +34,7 @@ const DISPLAY: &str = r"
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// FPS for continuous recording
-    #[arg(short, long, default_value_t = 5.0)]
+    #[arg(short, long, default_value_t = 1.0)]
     fps: f64,
 
     /// Audio chunk duration in seconds
@@ -73,7 +73,7 @@ struct Cli {
     list_audio_devices: bool,
 
     /// Data directory
-    #[arg(long, default_value_t = String::from("./data"))]
+    #[arg(long, default_value_t = String::from("./data"))] // TODO $HOME/.screenpipe
     data_dir: String,
 
     /// Enable debug logging for screenpipe modules
