@@ -34,6 +34,10 @@ const DISPLAY: &str = r"
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// FPS for continuous recording
+    /// 1 FPS = 30 GB / month
+    /// 5 FPS = 150 GB / month
+    /// Optimise based on your needs. 
+    /// You rarely change change more than 1 times within a second, right?
     #[arg(short, long, default_value_t = 1.0)]
     fps: f64,
 
