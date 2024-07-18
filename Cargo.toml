@@ -1,7 +1,8 @@
 [workspace]
-members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio", "examples/apps/screen-pipe-app/src-tauri"]
+members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio", "examples/apps/screen-pipe-app/src-tauri", "examples/apps/screenpipe-app-dioxus"]
 exclude = []
 resolver = "2"
+
 
 [workspace.package]
 version = "0.1.0"
@@ -22,3 +23,7 @@ tokio = { version = "1.15", features = ["full", "tracing"] }
 
 # dev
 criterion = { version = "0.5.1", features = ["async_tokio"] }
+
+
+
+

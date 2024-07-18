@@ -21,12 +21,13 @@
 
 ![Demo](./public/demo.gif)
 
-# Extend your human memory with LLM. Open source, runs locally, developer friendly. 
+# Build AI apps that have the full context
 
-Library for devs to build AI apps on top of all your life data. Alternative to Rewind.ai  
+Library for devs to build AI apps on top of all your life data. Alternative to Rewind.ai. Record your screens & audio 24/7. You own your data. Rust.   
 We are shipping daily, make suggestions, post bugs, [give feedback](https://cal.com/louis030195/screenpipe)!
 
-Chat with an AI that knows everything about you. Record your screens & audio 24/7. You own your data. Rust. 
+![image](https://github.com/user-attachments/assets/b89a867f-aa09-4aa0-bf58-d808df688c16)
+
 
 ## Getting started
 
