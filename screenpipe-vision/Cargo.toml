@@ -49,6 +49,7 @@ rand = "0.8.5"
 log = { workspace = true }
 
 wait-timeout = "0.2" 
+image-compare = "0.4.1"
 
 [dev-dependencies]
 tempfile = "3.3.0"
