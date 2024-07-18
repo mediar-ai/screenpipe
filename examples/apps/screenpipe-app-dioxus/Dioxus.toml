@@ -1,7 +1,7 @@
 [application]
 
 # App (Project) Name
-name = "screenpipe-app"
+name = "screenpipe"
 
 # Dioxus App Default Platform
 # desktop, web
@@ -13,10 +13,17 @@ out_dir = "dist"
 # assets file folder
 asset_dir = "assets"
 
+# [bundle]
+icon = [
+    # "assets/icon.icns",                                        # for macOS
+    "assets/icon.ico",                                         # for Windows
+    # "assets/1024.png"                                          # for Linux and as a fallback
+]
+
 [web.app]
 
 # HTML title tag content
-title = "screenpipe-app"
+title = "screenpipe"
 
 [web.watcher]
 

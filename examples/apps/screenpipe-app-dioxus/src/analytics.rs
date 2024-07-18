@@ -77,7 +77,7 @@ impl AnalyticsManager {
         }
     }
 
-    pub fn toggle_analytics(&self) -> bool {
+    pub fn _toggle_analytics(&self) -> bool {
         let mut enabled = self.enabled.lock().unwrap();
         *enabled = !*enabled;
         *enabled
