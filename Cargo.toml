@@ -1,5 +1,5 @@
 [workspace]
-members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio", "examples/apps/screen-pipe-app/src-tauri"]
+members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio", "examples/apps/screen-pipe-app/src-tauri", "examples/apps/screenpipe-app-dioxus"]
 exclude = []
 resolver = "2"
 

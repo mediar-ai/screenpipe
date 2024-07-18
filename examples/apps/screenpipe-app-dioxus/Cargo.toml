@@ -1,0 +1,66 @@
+[package]
+name = "screenpipe-app"
+version = "0.1.0"
+authors = ["Louis Beaumont <louis.beaumont@gmail.com>"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+dioxus = { version = "0.5.1", features = ["desktop", "router"] }
+
+# Debug
+tracing = "0.1.40"
+dioxus-logger = "0.5.0"
+
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+screenpipe-vision = { path = "../../../screenpipe-vision" }
+
+axum = "0.7.5"
+
+# Logging
+log = "0.4.17"
+env_logger = "0.11.3"
+
+# Tokio
+tokio = { version = "1.36.0", features = ["full"] }
+
+# Directory management
+dirs = "5.0"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Uuid
+uuid = { version = "1.10.0", features = ["v4"] }
+
+# Sentry 
+sentry = "0.34.0"
+
+# Chrono
+chrono = "0.4.3"
+
+anyhow = "1.0"
+
+# M series MacOS
+[target.'cfg(target_os = "macos")'.dependencies]
+screenpipe-server = { path = "../../../screenpipe-server", features = ["metal"] }
+screenpipe-audio = { path = "../../../screenpipe-audio", features = ["metal"] }
+
+# Linux
+[target.'cfg(target_os = "linux")'.dependencies]
+screenpipe-server = { path = "../../../screenpipe-server", features = [] }
+screenpipe-audio = { path = "../../../screenpipe-audio", features = [] }
+
+# Windows
+[target.'cfg(target_os = "windows")'.dependencies]
+screenpipe-server = { path = "../../../screenpipe-server", features = [] }
+screenpipe-audio = { path = "../../../screenpipe-audio", features = [] }
+
+[features]
+cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
+metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
+bundle = []
