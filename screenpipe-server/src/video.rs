@@ -190,7 +190,7 @@ async fn save_frames_as_video(
         }
 
         if let Some(result) = frame_queue.lock().await.pop_front() {
-            debug!("Processing frame {}", frame_count + 1);
+            debug!("Processing frame in video.rs"); // {}", frame_count + 1
             let sender = Arc::clone(&sender);
 
             tokio::spawn(async move {
