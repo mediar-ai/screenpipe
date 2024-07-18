@@ -9,13 +9,16 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@tauri-apps/plugin-cli": "2.0.0-beta.7",
+    "@tauri-apps/plugin-shell": "2.0.0-beta.8",
+    "@tauri-apps/plugin-store": "2.0.0-beta.7",
+    "@tauri-apps/plugin-updater": "2.0.0-beta.7",
     "next": "14.2.4",
     "react": "^18",
-    "react-dom": "^18",
-    "tauri-plugin-autostart-api": "github:tauri-apps/tauri-plugin-autostart#v1"
+    "react-dom": "^18"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.6.0",
+    "@tauri-apps/cli": "2.0.0-beta.22",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

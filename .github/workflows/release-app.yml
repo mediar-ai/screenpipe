@@ -1,5 +1,11 @@
 # # Run for macOS
-# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j release -P macos-latest=-self-hosted
+
+# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j release -P macos-latest=-self-hosted 
+
+# # Run for Linux
+# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j release -P ubuntu-22.04=-self-hosted 
+
+
 
 name: "Release app"
 
@@ -37,7 +43,7 @@ jobs:
 
       - name: install frontend dependencies
         working-directory: examples/apps/screen-pipe-app/
-        run: pnpm i
+        run: npm i
 
       - uses: tauri-apps/tauri-action@v0
         env:

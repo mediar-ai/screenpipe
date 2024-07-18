@@ -3,62 +3,50 @@
   "build": {
     "beforeBuildCommand": "pnpm run build",
     "beforeDevCommand": "pnpm run dev",
-    "devPath": "http://localhost:3000",
-    "distDir": "../out"
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000"
   },
-  "package": {
-    "productName": "screenpipe",
-    "version": "0.1.0"
-  },
-  "tauri": {
-    "systemTray": {
-      "iconPath": "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
-      "iconAsTemplate": true
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "copyright": "",
+    "targets": "all",
+    "externalBin": [],
+    "icon": [
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/128.png",
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/256.png",
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/512.png",
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
+      "icons/generated/icon.icns",
+      "icons/generated/icon.ico"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
     },
-    "allowlist": {
-      "all": false
+    "longDescription": "",
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null
     },
-    "bundle": {
-      "active": true,
-      "category": "DeveloperTool",
-      "copyright": "",
+    "resources": [],
+    "shortDescription": "",
+    "linux": {
       "deb": {
         "depends": []
-      },
-      "externalBin": [],
-      "icon": [
-        "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",
-        "icons/generated/Assets.xcassets/AppIcon.appiconset/128.png",
-        "icons/generated/Assets.xcassets/AppIcon.appiconset/256.png",
-        "icons/generated/Assets.xcassets/AppIcon.appiconset/512.png",
-        "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
-        "icons/generated/icon.icns",
-        "icons/generated/icon.ico"
-      ],
-      "identifier": "com.screenpi.pe",
-      "longDescription": "",
-      "macOS": {
-        "entitlements": null,
-        "exceptionDomain": "",
-        "frameworks": [],
-        "providerShortName": null,
-        "signingIdentity": null
-      },
-      "resources": [],
-      "shortDescription": "",
-      "targets": "all",
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
       }
     },
-    "security": {
-      "csp": null
-    },
-    "updater": {
-      "active": false
-    },
+    "createUpdaterArtifacts": true
+  },
+  "productName": "screenpipe",
+  "version": "0.1.0",
+  "identifier": "com.screenpi.pe",
+  "plugins": {
     "cli": {
       "description": "Screen Pipe App CLI",
       "longDescription": "Command-line interface for Screen Pipe App",
@@ -102,6 +90,21 @@
           "description": "Enable debug mode"
         }
       ]
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyQjQ2RkQzMUNBOUFDMTcKUldRWHJLa2MwMiswSWl3RlBGUW5zYUE0Zm0vNFFRRTltNUZZTUVxR2FxUDNtSWdUSHgyL3JNcmcK",
+      "endpoints": [
+        "https://github.com/louis030195/screenpipe/releases/latest/download/latest.json"
+      ]
+    }
+  },
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "trayIcon": {
+      "iconPath": "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
+      "iconAsTemplate": true
     }
   }
 }

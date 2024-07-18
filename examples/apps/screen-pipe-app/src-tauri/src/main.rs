@@ -3,11 +3,18 @@
 
 use dirs::home_dir;
 use log::{error, info, LevelFilter};
-use reqwest::Client;
-use screenpipe_audio::{default_input_device, default_output_device, DeviceControl};
+use logs::MultiWriter;
+use screenpipe_audio::{
+    default_input_device, default_output_device, list_audio_devices, DeviceControl,
+};
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
 use serde::{Deserialize, Serialize};
+
 use serde_json::Value;
+use tauri::{State, Wry};
+use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::{with_store, StoreCollection};
+
 use std::fs::File;
 use std::io::Write;
 use std::ops::Deref;
@@ -19,89 +26,18 @@ use std::{
     time::Duration,
 };
 use tauri::{
-    CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::TrayIconBuilder,
+    Manager,
 };
+use tauri_plugin_cli::CliExt;
+
 use tauri_plugin_autostart::MacosLauncher;
 mod analytics;
-use analytics::{start_analytics, AnalyticsManager};
+use analytics::AnalyticsManager;
+
+use crate::analytics::start_analytics;
 mod logs;
-use logs::MultiWriter;
-
-async fn toggle_recording(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new();
-    let port = app.state::<u16>();
-    let base_url = format!("http://localhost:{}", *port);
-
-    info!("Toggling recording. Base URL: {}", base_url);
-
-    // Toggle vision recording
-    let vision_status: Value = client
-        .get(format!("{}/vision/status", base_url))
-        .send()
-        .await?
-        .json()
-        .await?;
-    let is_vision_running = vision_status["is_running"].as_bool().unwrap_or(false);
-    info!("Current vision status: {}", is_vision_running);
-
-    if is_vision_running {
-        info!("Stopping vision recording");
-        client
-            .post(format!("{}/vision/stop", base_url))
-            .send()
-            .await?;
-    } else {
-        info!("Starting vision recording");
-        client
-            .post(format!("{}/vision/start", base_url))
-            .send()
-            .await?;
-    }
-
-    // Toggle audio devices
-    info!("Fetching audio devices");
-    let devices: Vec<Value> = client
-        .get(format!("{}/audio/list", base_url))
-        .send()
-        .await?
-        .json()
-        .await?;
-
-    for device in devices {
-        let device_id = device["id"].as_str().unwrap();
-        let is_running = device["is_running"].as_bool().unwrap_or(false);
-        info!("Audio device {}: current status {}", device_id, is_running);
-
-        if is_running {
-            info!("Stopping audio device {}", device_id);
-            client
-                .post(format!("{}/audio/stop", base_url))
-                .json(&serde_json::json!({"device_id": device_id}))
-                .send()
-                .await?;
-        } else {
-            info!("Starting audio device {}", device_id);
-            client
-                .post(format!("{}/audio/start", base_url))
-                .json(&serde_json::json!({"device_id": device_id}))
-                .send()
-                .await?;
-        }
-    }
-
-    // Update tray menu item
-    let item_handle = app.tray_handle().get_item("toggle_recording");
-    if is_vision_running {
-        info!("Updating tray menu item to 'Start Recording'");
-        item_handle.set_title("Start Recording")?;
-    } else {
-        info!("Updating tray menu item to 'Stop Recording'");
-        item_handle.set_title("Stop Recording")?;
-    }
-
-    info!("Toggle recording completed successfully");
-    Ok(())
-}
 
 fn ensure_local_data_dir(
     custom_path: Option<String>,
@@ -125,49 +61,26 @@ async fn initialize_database(local_data_dir: Arc<String>) -> Arc<DatabaseManager
     )
 }
 
-fn make_tray() -> SystemTray {
-    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-    let send_feedback = CustomMenuItem::new("send_feedback".to_string(), "Send Feedback");
-    let toggle_analytics = CustomMenuItem::new("toggle_analytics".to_string(), "Disable Analytics");
-    let toggle_autostart = CustomMenuItem::new("toggle_autostart".to_string(), "Disable Autostart");
-
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(send_feedback)
-        .add_item(toggle_analytics)
-        .add_item(toggle_autostart)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(quit);
-
-    SystemTray::new().with_menu(tray_menu)
+#[derive(Default)]
+struct TrayState {
+    menu: Option<tauri::menu::Menu<tauri::Wry>>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize)]
 struct Preferences {
     autostart_enabled: bool,
 }
 
-fn get_preferences_path() -> PathBuf {
-    home_dir()
-        .unwrap()
-        .join(".screenpipe")
-        .join("preferences.json")
-}
-
-fn load_preferences() -> Preferences {
-    let path = get_preferences_path();
-    fs::read_to_string(&path)
-        .map(|contents| serde_json::from_str(&contents).unwrap_or_default())
-        .unwrap_or_default()
-}
-
-fn save_preferences(prefs: &Preferences) {
-    let path = get_preferences_path();
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, serde_json::to_string_pretty(prefs).unwrap()).unwrap();
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            autostart_enabled: true, // Set to true by default
+        }
+    }
 }
 
 async fn setup_server_and_recording(
-    app: &tauri::App,
+    app: tauri::AppHandle,
     db: Arc<DatabaseManager>,
     local_data_dir: Arc<String>,
     port: u16,
@@ -188,18 +101,21 @@ async fn setup_server_and_recording(
 
     if !disable_audio {
         info!("Initializing audio devices...");
+        let all_audio_devices = list_audio_devices().unwrap_or_default();
+
+        for device in all_audio_devices {
+            let device_control = DeviceControl {
+                is_running: false,
+                is_paused: false,
+            };
+            info!("Audio device: {:?}", device.to_string());
+            devices_status.insert(device, device_control);
+        }
+
         if let Ok(input_device) = default_input_device() {
             info!("Default input device found: {:?}", input_device.to_string());
             audio_devices.push(Arc::new(input_device.clone()));
-            devices_status.insert(
-                input_device,
-                DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                },
-            );
-        } else {
-            info!("No default input device found");
+            devices_status.get_mut(&input_device).unwrap().is_running = true;
         }
         if let Ok(output_device) = default_output_device() {
             info!(
@@ -207,15 +123,7 @@ async fn setup_server_and_recording(
                 output_device.to_string()
             );
             audio_devices.push(Arc::new(output_device.clone()));
-            devices_status.insert(
-                output_device,
-                DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                },
-            );
-        } else {
-            info!("No default output device found");
+            devices_status.get_mut(&output_device).unwrap().is_running = true;
         }
 
         if audio_devices.is_empty() {
@@ -224,17 +132,19 @@ async fn setup_server_and_recording(
             info!("Using audio devices:");
             for device in &audio_devices {
                 info!("  {}", device);
-
-                let device_control = DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                };
                 let device_clone = device.deref().clone();
                 let sender_clone = audio_devices_control_sender.clone();
-                // send signal after everything started
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(15)).await;
-                    let _ = sender_clone.send((device_clone, device_control)).await;
+                    let _ = sender_clone
+                        .send((
+                            device_clone,
+                            DeviceControl {
+                                is_running: true,
+                                is_paused: false,
+                            },
+                        ))
+                        .await;
                 });
             }
         }
@@ -309,53 +219,67 @@ async fn main() {
         release: sentry::release_name!(),
         ..Default::default()
       }));
-    let prefs = load_preferences();
-    let autostart_enabled = if prefs.autostart_enabled {
-        "true"
-    } else {
-        "false"
-    };
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
-            Some(vec![autostart_enabled]),
+            None,
         ))
+        .manage(TrayState::default())
         .setup(move |app| {
-            let matches = app.get_cli_matches().unwrap();
+            let cli = app.cli().matches().expect("Failed to get CLI matches");
 
-            let custom_data_dir = matches
-                .args
-                .get("data-dir")
-                .and_then(|v| v.value.as_str().map(String::from));
+            let local_data_dir = Arc::new(
+                ensure_local_data_dir(
+                    cli.args
+                        .get("data-dir")
+                        .and_then(|v| Some(v.value.to_string())),
+                )
+                .expect("Failed to ensure local data directory"),
+            );
 
-            let fps = matches
-                .args
-                .get("fps")
-                .and_then(|v| v.value.as_f64())
-                .unwrap_or(1.0);
-            let audio_chunk_duration = matches
-                .args
-                .get("audio-chunk-duration")
-                .and_then(|v| v.value.as_u64())
-                .unwrap_or(30);
-            let port = matches
+            let port = cli
                 .args
                 .get("port")
                 .and_then(|v| v.value.as_u64())
-                .unwrap_or(3035) as u16;
-            let disable_audio = matches.args.get("disable-audio").is_none();
-            let memory_threshold = matches
+                .unwrap_or(3000) as u16;
+            let fps = cli
+                .args
+                .get("fps")
+                .and_then(|v| v.value.as_f64())
+                .unwrap_or(30.0);
+            let audio_chunk_duration = cli
+                .args
+                .get("audio-chunk-duration")
+                .and_then(|v| v.value.as_u64())
+                .unwrap_or(5);
+            let disable_audio = cli
+                .args
+                .get("disable-audio")
+                .and_then(|v| v.value.as_bool())
+                .unwrap_or(false);
+            let memory_threshold = cli
                 .args
                 .get("memory-threshold")
                 .and_then(|v| v.value.as_f64())
                 .unwrap_or(80.0);
-            let runtime_threshold = matches
+            let runtime_threshold = cli
                 .args
                 .get("runtime-threshold")
                 .and_then(|v| v.value.as_u64())
-                .unwrap_or(60);
-            let debug = matches.args.get("debug").is_some();
+                .unwrap_or(3600);
+
+            app.manage(port);
+
+            let debug = cli
+                .args
+                .get("debug")
+                .and_then(|v| v.value.as_bool())
+                .unwrap_or(false);
 
             let mut builder = env_logger::Builder::new();
             builder
@@ -368,7 +292,6 @@ async fn main() {
                 builder.filter_module("screenpipe", LevelFilter::Debug);
             }
 
-            let local_data_dir = Arc::new(ensure_local_data_dir(custom_data_dir).unwrap());
             // Add file logging
             let log_dir = home_dir()
                 .ok_or("Failed to get home directory")?
@@ -388,114 +311,135 @@ async fn main() {
             let app_name = "screenpipe";
             let interval_hours = 1; // Send event every 1 hour
 
-            match start_analytics(posthog_api_key, app_name, interval_hours) {
-                Ok(analytics_manager) => {
-                    app.manage(analytics_manager);
-                }
-                Err(e) => {
-                    error!("Failed to start analytics: {}", e);
-                }
+            let path = log_dir.join("store.bin");
+
+            // create file if not exists
+            if !path.exists() {
+                let _ = File::create(path.clone()).unwrap();
             }
 
-            let tray_handle = app.tray_handle();
-            let autostart_item = tray_handle.get_item("toggle_autostart");
-            if prefs.autostart_enabled {
-                autostart_item.set_title("Disable Autostart").unwrap();
-            } else {
-                autostart_item.set_title("Enable Autostart").unwrap();
-            }
+            let stores = app.app_handle().state::<StoreCollection<Wry>>();
 
-            app.manage(prefs);
+            let _ = with_store(app.app_handle().clone(), stores, path, |store| {
+                // Note that values must be serde_json::Value instances,
+                // otherwise, they will not be compatible with the JavaScript bindings.
+                // store.insert("some-key".to_string(), json!({ "value": 5 }))?;
 
-            // Store configuration in app state
-            app.manage(Arc::clone(&local_data_dir));
-            app.manage(port);
-            app.manage(fps);
-            app.manage(audio_chunk_duration);
-            app.manage(disable_audio);
-            app.manage(memory_threshold);
-            app.manage(runtime_threshold);
+                // Get a value from the store.
+                // let value = store
+                //     .get("some-key")
+                //     .expect("Failed to get value from store");
+                // println!("{}", value); // {"value":5}
+
+                // You can manually save the store after making changes.
+                // Otherwise, it will save upon graceful exit as described above.
+                store.save()?;
+
+                let is_analytics_enabled = store
+                    .get("analytics_enabled")
+                    .unwrap_or(&Value::Bool(true))
+                    .as_bool()
+                    .unwrap_or(true);
+
+                if is_analytics_enabled {
+                    match start_analytics(posthog_api_key, app_name, interval_hours) {
+                        Ok(analytics_manager) => {
+                            app.manage(analytics_manager);
+                        }
+                        Err(e) => {
+                            error!("Failed to start analytics: {}", e);
+                        }
+                    }
+                }
+
+                Ok(())
+            });
+
+            let handle = app.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let db = initialize_database(local_data_dir.clone()).await;
+                handle.manage(db.clone());
+
+                setup_server_and_recording(
+                    handle,
+                    db,
+                    local_data_dir,
+                    port,
+                    fps,
+                    audio_chunk_duration,
+                    disable_audio,
+                    memory_threshold,
+                    runtime_threshold,
+                )
+                .await;
+            });
+
+            let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+            let send_feedback_item =
+                MenuItemBuilder::with_id("send_feedback", "Send Feedback").build(app)?;
+            let toggle_analytics_item =
+                MenuItemBuilder::with_id("toggle_analytics", "Disable Analytics").build(app)?;
+            let toggle_autostart_item =
+                MenuItemBuilder::with_id("toggle_autostart", "Disable Autostart").build(app)?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&send_feedback_item)
+                .item(&toggle_analytics_item)
+                .item(&toggle_autostart_item)
+                .separator()
+                .item(&quit_item)
+                .build()?;
+
+            app.manage(TrayState {
+                menu: Some(menu.clone()),
+            });
+
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .on_menu_event(move |app, event| {
+                    let tray_state: State<TrayState> = app.state();
+                    let menu = tray_state.menu.as_ref().unwrap();
+
+                    match event.id().as_ref() {
+                        "quit" => {
+                            std::process::exit(0);
+                        }
+                        "send_feedback" => {
+                            let email = "louis@screenpi.pe";
+                            let subject = "Screenpipe Feedback";
+                            let body = r#"Please enter your feedback here...
+                            
+    ... or let's chat?
+    https://cal.com/louis030195/screenpipe
+                            "#;
+                            let url = format!("mailto:{}?subject={}&body={}", email, subject, body);
+                            let app_handle = app.app_handle();
+                            if let Err(e) = app_handle.shell().open(url, None) {
+                                error!("Failed to open URL: {}", e);
+                            }
+                        }
+                        "toggle_analytics" => {
+                            let analytics_manager = app.state::<Arc<AnalyticsManager>>();
+                            let is_enabled = analytics_manager.toggle_analytics();
+                            if let Some(item) = menu.get("toggle_analytics") {
+                                if is_enabled {
+                                    let _ =
+                                        item.as_menuitem().unwrap().set_text("Enable Analytics");
+                                } else {
+                                    let _ =
+                                        item.as_menuitem().unwrap().set_text("Disable Analytics");
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .build(app)?;
 
             Ok(())
         })
-        .system_tray(make_tray())
-        .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::MenuItemClick { id, .. } => {
-                match id.as_str() {
-                    "send_feedback" => {
-                        // Implement send_feedback logic
-                        // open email to louis@screenpi.pe
-                        let email = "louis@screenpi.pe";
-                        let subject = "Screenpipe Feedback";
-                        let body = r#"Please enter your feedback here...
-                        
-... or let's chat?
-https://cal.com/louis030195/screenpipe
-                        "#;
-                        let url = format!("mailto:{}?subject={}&body={}", email, subject, body);
-                        let app_handle = app.app_handle();
-                        tauri::async_runtime::spawn(async move {
-                            if let Err(e) =
-                                tauri::api::shell::open(&app_handle.shell_scope(), url, None)
-                            {
-                                error!("Failed to open URL: {}", e);
-                            }
-                        });
-                    }
-                    "toggle_analytics" => {
-                        let analytics_manager = app.state::<Arc<AnalyticsManager>>();
-                        let is_enabled = analytics_manager.toggle_analytics();
-                        let item_handle = app.tray_handle().get_item("toggle_analytics");
-                        if is_enabled {
-                            item_handle.set_title("Disable Analytics").unwrap();
-                        } else {
-                            item_handle.set_title("Enable Analytics").unwrap();
-                        }
-                    }
-                    "quit" => {
-                        std::process::exit(0);
-                    }
-                    "toggle_recording" => {
-                        let app_handle = app.app_handle();
-                        tauri::async_runtime::spawn(async move {
-                            if let Err(e) = toggle_recording(&app_handle).await {
-                                error!("Error toggling recording: {}", e);
-                            }
-                        });
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
-
-    // Initialize the database after the app is built
-    let local_data_dir = app.state::<Arc<String>>();
-    let db = initialize_database(Arc::clone(&local_data_dir)).await;
-    app.manage(db.clone());
-
-    // Setup server and recording after database initialization
-    let port = *app.state::<u16>();
-    let fps = *app.state::<f64>();
-    let audio_chunk_duration = *app.state::<u64>();
-    let disable_audio = *app.state::<bool>();
-    let memory_threshold = *app.state::<f64>();
-    let runtime_threshold = *app.state::<u64>();
-
-    setup_server_and_recording(
-        &app,
-        db,
-        local_data_dir.inner().clone(),
-        port,
-        fps,
-        audio_chunk_duration,
-        disable_audio,
-        memory_threshold,
-        runtime_threshold,
-    )
-    .await;
 
     // Run the app
     app.run(|_, _| {});
