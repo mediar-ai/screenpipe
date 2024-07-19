@@ -368,6 +368,12 @@ Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Althou
 </details>
 
 <details>
+  <summary>Do you encrypt the data?</summary>
+  
+  - Not yet but we're working on it. We want to provide you the highest level of security.
+</details>
+
+<details>
   <summary>How can I customize capture settings to reduce storage and energy usage?</summary>
   
   - You can adjust frame rates and resolution in the configuration. Lower values will reduce storage and energy consumption. We're working on making this more user-friendly in future updates.
