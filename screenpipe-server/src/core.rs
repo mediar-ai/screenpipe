@@ -261,14 +261,14 @@ async fn record_audio(
 }
 
 async fn process_audio_result(db: &DatabaseManager, result: TranscriptionResult) {
-    info!("Inserting audio chunk: {:?}", result.transcription);
     if result.error.is_some() || result.transcription.is_none() {
         error!(
-            "Error in audio recording: {}",
+            "Error in audio recording: {}. Not inserting audio result",
             result.error.unwrap_or_default()
         );
         return;
     }
+    info!("Inserting audio chunk: {:?}", result.transcription);
     let transcription = result.transcription.unwrap();
     match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
