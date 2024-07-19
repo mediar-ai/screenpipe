@@ -240,6 +240,12 @@ async fn start_screenpipe() -> anyhow::Result<(
         .filter_module("rusty_tesseract", LevelFilter::Error)
         .filter_module("symphonia", LevelFilter::Error);
 
+    let debug = true;
+
+    if debug {
+        builder.filter(Some("screenpipe"), LevelFilter::Debug);
+    }
+
     let base_dir = get_local_dir(None)?;
     fs::create_dir_all(&base_dir)?;
 

@@ -1,0 +1,7 @@
+{
+    "bundle": {
+        "resources": {
+            "ffmpeg\\bin\\x64\\*": "./"
+        }
+    }
+}

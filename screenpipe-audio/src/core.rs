@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use log::{debug, error, info, warn};
+use screenpipe_core::find_ffmpeg_path;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -121,7 +122,7 @@ async fn run_ffmpeg(
     duration: Duration,
 ) -> Result<()> {
     debug!("Starting FFmpeg process");
-    let mut ffmpeg = Command::new("ffmpeg")
+    let mut ffmpeg = Command::new(find_ffmpeg_path().unwrap())
         .args(&[
             "-f",
             "f32le",

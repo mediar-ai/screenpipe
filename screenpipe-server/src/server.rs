@@ -514,6 +514,9 @@ curl -X POST "http://localhost:3030/audio/status" -H "Content-Type: application/
 
 echo "Searching for content:"
 curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all" | jq
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr" | jq
+
+
 
 
 */

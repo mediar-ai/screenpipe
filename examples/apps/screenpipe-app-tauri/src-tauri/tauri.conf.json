@@ -1,0 +1,75 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:1420"
+  },
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "copyright": "",
+    "targets": "all",
+    "externalBin": [],
+    "icon": [
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/128.png",
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/256.png",
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/512.png",
+      "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
+      "icons/generated/icon.icns",
+      "icons/generated/icon.ico"
+    ],
+    "longDescription": "",
+    "resources": [],
+    "shortDescription": "",
+    "fileAssociations": [
+      {
+        "description": "Video files",
+        "ext": [
+          "mp4",
+          "mkv",
+          "avi",
+          "mov",
+          "wmv",
+          "webm"
+        ]
+      },
+      {
+        "description": "Audio files",
+        "ext": [
+          "mp3",
+          "wav",
+          "aac",
+          "flac",
+          "oga",
+          "ogg",
+          "opic",
+          "opus"
+        ]
+      }
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "productName": "screenpipe",
+  "version": "0.1.0",
+  "identifier": "com.screenpi.pe",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyQjQ2RkQzMUNBOUFDMTcKUldRWHJLa2MwMiswSWl3RlBGUW5zYUE0Zm0vNFFRRTltNUZZTUVxR2FxUDNtSWdUSHgyL3JNcmcK",
+      "endpoints": [
+        "https://github.com/louis030195/screenpipe/releases/latest/download/latest.json"
+      ]
+    }
+  },
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "trayIcon": {
+      "iconPath": "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
+      "iconAsTemplate": true
+    }
+  }
+}

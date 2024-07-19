@@ -1,0 +1,12 @@
+{
+    "bundle": {
+        "linux": {
+            "deb": {
+                "depends": [
+                    "ffmpeg",
+                    "libopenblas-dev"
+                ]
+            }
+        }
+    }
+}
