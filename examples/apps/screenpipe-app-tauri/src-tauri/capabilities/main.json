@@ -18,6 +18,45 @@
     "store:allow-set",
     "store:allow-save",
     "store:allow-load",
+    "fs:default",
+		"fs:allow-remove",
+		"fs:allow-read-dir",
+		"fs:allow-read-text-file",
+		"fs:allow-app-write",
+		"fs:allow-exists",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$HOME/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPCONFIG/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPDATA/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPLOCALDATA/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$CONFIG/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$DATA/**",
+          "requireLiteralLeadingDot": false
+        }
+      ]
+    },
     {
       "identifier": "shell:allow-execute",
       "allow": [
