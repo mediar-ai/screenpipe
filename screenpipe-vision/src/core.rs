@@ -14,6 +14,12 @@ use tokio::sync::Mutex;
 use tokio::task;
 use serde_json;
 use image_compare::{Algorithm, Metric, Similarity}; // Added import for Similarity
+use strsim::levenshtein; // Added import for strsim
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::Path;
+
+use crate::utils::{calculate_hash, save_json_to_file, compare_images_histogram, compare_images_ssim, perform_ocr}; // Import the functions
 
 pub enum ControlMessage {
     Pause,
@@ -24,10 +30,10 @@ pub enum ControlMessage {
 pub struct CaptureResult {
     pub image: Arc<DynamicImage>,
     pub text: String,
-    pub text_json: Vec<String>,
+    pub text_json: Vec<HashMap<String, String>>,
     pub frame_number: u64,
     pub timestamp: Instant,
-    pub data_output: DataOutput, // Corrected this line
+    pub data_output: DataOutput,
 }
 
 const MAX_THREADS: usize = 1; // Adjust based on your needs
@@ -51,7 +57,7 @@ pub async fn continuous_capture(
     let cache = Arc::new(Mutex::new(HashMap::<u64, String>::new()));
 
     let (ocr_tx, _) =
-        broadcast::channel::<(Arc<DynamicImage>, u64, u64, Instant, Sender<CaptureResult>)>(2);
+        broadcast::channel::<(Arc<DynamicImage>, u64, u64, Instant, Sender<CaptureResult>)>(3);
     let ocr_tx = Arc::new(ocr_tx);
 
     let previous_text_json = Arc::new(Mutex::new(None));
@@ -77,11 +83,13 @@ pub async fn continuous_capture(
                             let start_time = Instant::now();
                             let mut cache = cache.lock().await;
                             let (text, data_output, json_output) = if let Some(cached_text) = cache.get(&image_hash) {
+                                debug!("Using cached text for frame {}", frame_number);
                                 (cached_text.clone(), DataOutput { output: String::new(), data: vec![] }, String::new())
                             } else {
                                 // Set is_active to true before performing OCR
                                 *is_active.lock().await = true;
 
+                                debug!("Performing OCR for frame {}", frame_number);
                                 let (new_text, data_output, new_json_output) = perform_ocr(&image_arc);
                                 cache.insert(image_hash, new_text.clone());
 
@@ -91,14 +99,77 @@ pub async fn continuous_capture(
                                 (new_text, data_output, new_json_output)
                             };
 
-                            let current_text_json: Vec<String> = serde_json::from_str(&json_output).unwrap();
+                            let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output).unwrap();
                             let mut previous_text_json = previous_text_json.lock().await;
 
                             // Debug logging for current and previous text_json
                             let current_text_json_len: usize = current_text_json.iter().map(|s| s.len()).sum();
-                            let previous_text_json_len: usize = previous_text_json.as_ref().map_or(0, |v: &Vec<String>| v.iter().map(|s| s.len()).sum());
+                            let previous_text_json_len: usize = previous_text_json.as_ref().map_or(0, |v: &Vec<HashMap<String, String>>| v.iter().map(|s| s.len()).sum());
 
                             debug!("JSON length Current: {} Previous: {}", current_text_json_len, previous_text_json_len);
+
+                            // Compare current and previous text_json to create new_text_json
+                            let mut new_text_json = Vec::new();
+                            if let Some(prev_json) = &*previous_text_json {
+                                for current_record in &current_text_json {
+                                    let confidence: f64 = current_record["confidence"].parse().unwrap_or(0.0);
+                                    if confidence > 60.0 {
+                                        let is_new = prev_json.iter().all(|prev_record| {
+                                            let distance = levenshtein(&current_record["text"], &prev_record["text"]);
+                                            let threshold = (prev_record["text"].len() as f64 * 0.1).ceil() as usize;
+                                            distance > threshold
+                                        });
+                                        if is_new {
+                                            new_text_json.push(current_record.clone());
+                                        }
+                                    }
+                                }
+                            } else {
+                                new_text_json = current_text_json.iter()
+                                    .filter(|record| record["confidence"].parse::<f64>().unwrap_or(0.0) > 60.0)
+                                    .cloned()
+                                    .collect();
+                            }
+
+                            // Save text files
+                            let id = frame_number; // Use frame_number as the incremental ID
+                            debug!("Saving text files for frame {}", frame_number);
+
+                            // Extract raw text lines from new_text_json
+                            let new_text_lines: Vec<String> = new_text_json.iter().map(|record| {
+                                record.get("text").cloned().unwrap_or_default()
+                            }).collect();
+
+                            // Extract raw text lines from current_text_json
+                            let current_text_lines: Vec<String> = current_text_json.iter().map(|record| {
+                                record.get("text").cloned().unwrap_or_default()
+                            }).collect();
+
+                            // Save new text lines to file
+                            let new_text_file_path = format!("text_json/new_text_{}.txt", id);
+                            let mut new_text_file = File::create(&new_text_file_path).unwrap();
+                            for line in new_text_lines {
+                                writeln!(new_text_file, "{}", line).unwrap();
+                            }
+
+                            // Save current text lines to file
+                            let current_text_file_path = format!("text_json/current_text_{}.txt", id);
+                            let mut current_text_file = File::create(&current_text_file_path).unwrap();
+                            for line in current_text_lines {
+                                writeln!(current_text_file, "{}", line).unwrap();
+                            }
+
+                            // Save previous text lines to file if available
+                            if let Some(prev_json) = &*previous_text_json {
+                                let prev_text_lines: Vec<String> = prev_json.iter().map(|record| {
+                                    record.get("text").cloned().unwrap_or_default()
+                                }).collect();
+                                let prev_text_file_path = format!("text_json/previous_text_{}.txt", id);
+                                let mut prev_text_file = File::create(&prev_text_file_path).unwrap();
+                                for line in prev_text_lines {
+                                    writeln!(prev_text_file, "{}", line).unwrap();
+                                }
+                            }
 
                             *previous_text_json = Some(current_text_json.clone());
 
@@ -144,11 +215,6 @@ pub async fn continuous_capture(
 
     let mut previous_image: Option<Arc<DynamicImage>> = None;
 
-    // Function to calculate the 50:50 weighted average of Histogram and SSIM
-    fn calculate_weighted_average(histogram: f64, ssim: f64) -> f64 {
-        (histogram + ssim) / 2.0
-    }
-
     // Struct to hold the max average frame data
     struct MaxAverageFrame {
         image: Arc<DynamicImage>,
@@ -160,6 +226,9 @@ pub async fn continuous_capture(
     }
 
     let mut max_average: Option<MaxAverageFrame> = None;
+    let mut max_avg_frame: Option<MaxAverageFrame> = None;
+
+    let mut max_avg_value = 0.0;
 
     while !*should_stop.lock().await {
         // Check for control messages
@@ -194,25 +263,26 @@ pub async fn continuous_capture(
             let histogram_diff = compare_images_histogram(prev_image, &image);
             let ssim_diff = 1.0 - compare_images_ssim(prev_image, &image);
             current_average = (histogram_diff + ssim_diff) / 2.0;
-            debug!("Frame {}: Histogram diff: {:.3}, SSIM diff: {:.3}, Average: {:.3}", frame_counter, histogram_diff, ssim_diff, current_average);
-
-            if let Some(max_avg_frame) = &max_average {
-                if current_average < max_avg_frame.average {
-                    debug!("Dropping frame {} due to lower average", frame_counter);
-                    frame_counter += 1;
-                    tokio::time::sleep(interval).await;
-                    continue;
-                } else {
-                    debug!("Storing frame {} as max_average {}", frame_counter, current_average);
-                    max_average = Some(MaxAverageFrame {
-                        image: Arc::new(image.clone()),
-                        image_hash,
-                        frame_number: frame_counter,
-                        timestamp: capture_start,
-                        result_tx: result_tx.clone(),
-                        average: current_average,
-                    });
-                }
+            max_avg_value = max_average.as_ref().map_or(0.0, |frame| frame.average);
+            debug!(
+                "Frame {}: Histogram diff: {:.3}, SSIM diff: {:.3}, Current Average: {:.3}, Max Average: {:.3}",
+                frame_counter, histogram_diff, ssim_diff, current_average, max_avg_value
+            );
+            if current_average < max_avg_value {
+                // debug!("Dropping frame {} due to lower average", frame_counter);
+                frame_counter += 1;
+                tokio::time::sleep(interval).await;
+                continue;
+            } else {
+                debug!("Storing frame {} as max_average {}", frame_counter, current_average);
+                max_average = Some(MaxAverageFrame {
+                    image: Arc::new(image.clone()),
+                    image_hash,
+                    frame_number: frame_counter, 
+                    timestamp: capture_start,
+                    result_tx: result_tx.clone(),
+                    average: current_average,
+                });
             }
         } else {
             debug!("No previous image to compare for frame {}", frame_counter);
@@ -234,7 +304,6 @@ pub async fn continuous_capture(
         previous_image = Some(Arc::new(image.clone()));
 
 
-        // Check if we need to store this frame as max_average based on queue size
         // let queue_size = ocr_tx.receiver_count() as u64;
         // debug!("OCR queue size: {}", queue_size);
         // if queue_size >= MAX_QUEUE_SIZE as u64 {
@@ -252,7 +321,6 @@ pub async fn continuous_capture(
             let is_active = *is_active.lock().await;
             if !is_active {
                 let send_start = Instant::now();
-                // queue_size.fetch_add(1, Ordering::SeqCst); // Increment the counter
                 if let Err(e) = ocr_tx.send((
                     max_avg_frame.image.clone(),
                     max_avg_frame.image_hash,
@@ -261,13 +329,16 @@ pub async fn continuous_capture(
                     result_tx_clone,
                 )) {
                     error!("Failed to send image for OCR processing: {}", e);
-                    // queue_size.fetch_sub(1, Ordering::SeqCst); // Decrement the counter on error
+                    // Handle channel closure gracefully
+                    *should_stop.lock().await = true;
+                    break;
                 } else {
                     last_processed_frame = frame_counter;
                     max_average = None; // Reset max_average after sending
+                    max_avg_value = 0.0; // Reset max_avg_value after sending
                 }
                 let send_duration = send_start.elapsed();
-    
+
                 frame_counter += 1;
                 debug!(
                     "Frame {}: Capture time: {:?}, Send time: {:?}, Receiver count: {}",
@@ -297,87 +368,4 @@ pub async fn continuous_capture(
         total_duration,
         frame_counter as f64 / total_duration.as_secs_f64()
     );
-}
-fn calculate_hash(image: &DynamicImage) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    image.as_bytes().hash(&mut hasher);
-    hasher.finish()
-}
-
-pub fn perform_ocr(image: &DynamicImage) -> (String, DataOutput, String) {
-    let args = Args {
-        lang: "eng".to_string(),
-        config_variables: HashMap::from([
-            ("tessedit_create_tsv".into(), "1".into()),
-        ]),
-        dpi: Some(600), // 150 is a balanced option, 600 seems faster surprisingly, the more the more granualar
-        psm: Some(1), // PSM 1: Automatic page segmentation with OSD. PSM 3: Automatic page segmentation with OSD
-        oem: Some(1), //1: Neural nets LSTM engine only,    3: Default, based on what is available. (Default)
-    };
-
-    let ocr_image = Image::from_dynamic_image(image).unwrap();
-
-    // Extract data output
-    let data_output = rusty_tesseract::image_to_data(&ocr_image, &args).unwrap();
-    // let tsv_output = data_output_to_tsv(&data_output);
-
-    // Extract text from data output
-    let text = data_output_to_text(&data_output);
-
-    // Extract JSON output
-    let mut lines: Vec<String> = Vec::new();
-    let mut current_line = String::new();
-    let mut last_word_num = 0;
-
-    for record in &data_output.data {
-        if record.word_num == 0 {
-            if !current_line.is_empty() {
-                lines.push(current_line.clone());
-                current_line.clear();
-            }
-        }
-        if record.word_num > last_word_num {
-            if !current_line.is_empty() {
-                current_line.push(' ');
-            }
-            current_line.push_str(&record.text);
-        }
-        last_word_num = record.word_num;
-    }
-    if !current_line.is_empty() {
-        lines.push(current_line);
-    }
-
-    let json_output = serde_json::to_string_pretty(&lines).unwrap();
-
-    (text, data_output, json_output)
-}
-
-fn data_output_to_text(data_output: &DataOutput) -> String {
-    let mut text = String::new();
-    for record in &data_output.data {
-        if !record.text.is_empty() {
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            text.push_str(&record.text);
-        }
-    }
-    text
-}
-
-fn compare_images_histogram(image1: &DynamicImage, image2: &DynamicImage) -> f64 {
-    let image_one = image1.to_luma8();
-    let image_two = image2.to_luma8();
-    let result = image_compare::gray_similarity_histogram(Metric::Hellinger, &image_one, &image_two)
-        .expect("Images had different dimensions");
-    result
-}
-
-fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 {
-    let image_one = image1.to_luma8();
-    let image_two = image2.to_luma8();
-    let result: Similarity = image_compare::gray_similarity_structure(&Algorithm::MSSIMSimple, &image_one, &image_two)
-        .expect("Images had different dimensions");
-    result.score
 }
