@@ -9,7 +9,8 @@
                 "ffmpeg/lib/libavutil.59.dylib",
                 "ffmpeg/lib/libffmpeg.7.dylib",
                 "ffmpeg/lib/libswresample.5.dylib",
-                "ffmpeg/lib/libswscale.8.dylib"
+                "ffmpeg/lib/libswscale.8.dylib",
+                "ffmpeg/lib/libmp3lame.0.dylib"
             ],
             "signingIdentity": "-",
             "hardenedRuntime": false,
@@ -23,7 +24,8 @@
             }
         },
         "resources": {
-            "ffmpeg/bin/*": "./"
+            "ffmpeg/bin/*": "./",
+            "ffmpeg/lib/*": "./"
         }
     }
 }

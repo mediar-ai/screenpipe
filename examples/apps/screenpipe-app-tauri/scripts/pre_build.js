@@ -77,6 +77,7 @@ if (platform == 'linux') {
 	if (hasFeature('opencl')) {
 		config.linux.aptPackages.push('libclblast-dev')
 	}
+	config.linux.aptPackages.push('libmp3lame0')  // Add MP3 support
 	for (const name of config.linux.aptPackages) {
 		await $`sudo apt-get install -y ${name}`
 	}
@@ -91,6 +92,11 @@ if (platform == 'windows') {
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
+
+		// Ensure libmp3lame is present
+		if (!(await fs.exists(`${config.ffmpegRealname}/bin/x64/libmp3lame.dll`))) {
+			console.error("libmp3lame.dll is missing from the FFmpeg package. Please use a FFmpeg build that includes MP3 support.");
+		}
 	}
 
 	// Setup OpenBlas
@@ -125,6 +131,11 @@ if (platform == 'macos') {
 		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.tar.xz`
+
+		// Ensure libmp3lame is present
+		if (!(await fs.exists(`${config.ffmpegRealname}/lib/libmp3lame.0.dylib`))) {
+			console.error("libmp3lame.0.dylib is missing from the FFmpeg package. Please use a FFmpeg build that includes MP3 support.");
+		}
 	}
 }
 

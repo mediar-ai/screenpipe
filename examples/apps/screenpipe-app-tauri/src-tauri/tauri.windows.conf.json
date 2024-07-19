@@ -1,7 +1,9 @@
 {
     "bundle": {
         "resources": {
-            "ffmpeg\\bin\\x64\\*": "./"
+            "ffmpeg\\bin\\x64\\*": "./",
+            "ffmpeg\\lib\\*": "./",
+            "ffmpeg\\bin\\x64\\libmp3lame.dll": "./"
         }
     }
 }

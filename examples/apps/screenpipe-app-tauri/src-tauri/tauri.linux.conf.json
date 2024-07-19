@@ -4,9 +4,13 @@
             "deb": {
                 "depends": [
                     "ffmpeg",
-                    "libopenblas-dev"
+                    "libopenblas-dev",
+                    "libmp3lame0"
                 ]
             }
+        },
+        "resources": {
+            "ffmpeg/lib/*": "./"
         }
     }
 }
