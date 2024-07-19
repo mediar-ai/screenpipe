@@ -26,4 +26,4 @@ jobs:
           sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --workspace --exclude 'example/*'
