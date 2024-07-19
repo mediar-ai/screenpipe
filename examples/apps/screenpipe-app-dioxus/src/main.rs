@@ -43,7 +43,7 @@ fn setup_auto_launch() -> anyhow::Result<()> {
 async fn initialize_audio(
     disable_audio: bool,
     custom_devices: &[String],
-    audio_devices_control_sender: Arc<Sender<(AudioDevice, DeviceControl)>>,
+    _audio_devices_control_sender: Arc<Sender<(AudioDevice, DeviceControl)>>,
 ) -> (Vec<Arc<AudioDevice>>, HashMap<AudioDevice, DeviceControl>) {
     let mut audio_devices = Vec::new();
     let mut devices_status = HashMap::new();
@@ -300,7 +300,7 @@ fn main() {
 }
 
 fn app() -> Element {
-    let mut recording = use_signal(|| false);
+    let recording = use_signal(|| false);
     let mut audio_sender = use_signal(|| None::<Arc<Sender<(AudioDevice, DeviceControl)>>>);
     let mut audio_devices = use_signal(|| Vec::new());
 
