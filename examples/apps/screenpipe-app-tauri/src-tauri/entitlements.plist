@@ -12,5 +12,9 @@
     <true/>
     <key>com.apple.security.screen-capture</key>
     <true/>
+    <key>com.apple.developer.persistent-content-capture</key>
+    <true/>
+    <key>com.apple.developer.sustained-execution</key>
+    <true/>
 </dict>
 </plist>
