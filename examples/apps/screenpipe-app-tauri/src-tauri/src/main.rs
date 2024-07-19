@@ -2,19 +2,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use dirs::home_dir;
-use log::{error, info, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 use logs::MultiWriter;
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, DeviceControl,
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
+    AudioDevice, DeviceControl,
 };
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
-use serde::{Deserialize, Serialize};
 
 use serde_json::Value;
-use tauri::{State, Wry};
-use tauri_plugin_shell::ShellExt;
-use tauri_plugin_store::{with_store, StoreCollection};
-
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::ops::Deref;
@@ -30,7 +27,11 @@ use tauri::{
     tray::TrayIconBuilder,
     Manager,
 };
+use tauri::{State, Wry};
 use tauri_plugin_cli::CliExt;
+use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::{with_store, StoreCollection};
+use tokio::sync::mpsc;
 
 use tauri_plugin_autostart::MacosLauncher;
 mod analytics;
@@ -39,26 +40,16 @@ use analytics::AnalyticsManager;
 use crate::analytics::start_analytics;
 mod logs;
 
-fn ensure_local_data_dir(
-    custom_path: Option<String>,
-) -> Result<String, Box<dyn std::error::Error>> {
+fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = home_dir()
-        .ok_or("Failed to get home directory")?
-        .join(".screenpipe")
-        .join("data");
+        .ok_or("Failed to get home directory")
+        .unwrap()
+        .join(".screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
 
-    fs::create_dir_all(&local_data_dir)?;
-    Ok(local_data_dir.to_string_lossy().into_owned())
-}
-
-async fn initialize_database(local_data_dir: Arc<String>) -> Arc<DatabaseManager> {
-    Arc::new(
-        DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir))
-            .await
-            .unwrap(),
-    )
+    fs::create_dir_all(&local_data_dir.join("data"))?;
+    Ok(local_data_dir)
 }
 
 #[derive(Default)]
@@ -66,17 +57,81 @@ struct TrayState {
     menu: Option<tauri::menu::Menu<tauri::Wry>>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct Preferences {
-    autostart_enabled: bool,
-}
+async fn initialize_audio(
+    disable_audio: bool,
+    custom_devices: &[String],
+    audio_devices_control_sender: Arc<tokio::sync::mpsc::Sender<(AudioDevice, DeviceControl)>>,
+) -> (Vec<Arc<AudioDevice>>, HashMap<AudioDevice, DeviceControl>) {
+    debug!(
+        "Entering initialize_audio function, disable_audio={}",
+        disable_audio
+    );
+    let mut audio_devices = Vec::new();
+    let mut devices_status = HashMap::new();
 
-impl Default for Preferences {
-    fn default() -> Self {
-        Self {
-            autostart_enabled: true, // Set to true by default
+    if disable_audio {
+        info!("Audio recording is disabled");
+        return (audio_devices, devices_status);
+    }
+
+    info!("Initializing audio devices...");
+    let all_audio_devices = list_audio_devices().unwrap_or_default();
+
+    for device in all_audio_devices {
+        let device_control = DeviceControl {
+            is_running: false,
+            is_paused: false,
+        };
+        info!("Audio device: {:?}", device.to_string());
+        devices_status.insert(device, device_control);
+    }
+
+    if custom_devices.is_empty() {
+        if let Ok(input_device) = default_input_device() {
+            info!("Default input device found: {:?}", input_device.to_string());
+            audio_devices.push(Arc::new(input_device));
+        }
+        if let Ok(output_device) = default_output_device() {
+            info!(
+                "Default output device found: {:?}",
+                output_device.to_string()
+            );
+            audio_devices.push(Arc::new(output_device));
+        }
+    } else {
+        for device_str in custom_devices {
+            if let Ok(device) = parse_audio_device(device_str) {
+                info!("Custom device added: {:?}", device.to_string());
+                audio_devices.push(Arc::new(device));
+            } else {
+                error!("Failed to parse audio device: {}", device_str);
+            }
         }
     }
+
+    if audio_devices.is_empty() {
+        error!("No audio devices available. Audio recording will be disabled.");
+    } else {
+        info!("Using audio devices:");
+        for device in &audio_devices {
+            info!("  {}", device);
+
+            let device_control = DeviceControl {
+                is_running: true,
+                is_paused: false,
+            };
+            let device_clone = device.deref().clone();
+            let sender_clone = audio_devices_control_sender.clone();
+            // send signal after everything started
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(15)).await;
+                let _ = sender_clone.send((device_clone, device_control)).await;
+            });
+        }
+    }
+
+    debug!("Exiting initialize_audio function");
+    (audio_devices, devices_status)
 }
 
 async fn setup_server_and_recording(
@@ -89,68 +144,27 @@ async fn setup_server_and_recording(
     disable_audio: bool,
     memory_threshold: f64,
     runtime_threshold: u64,
+) -> (
+    Vec<Arc<AudioDevice>>,
+    Arc<tokio::sync::mpsc::Sender<(AudioDevice, DeviceControl)>>,
 ) {
+    debug!("Entering setup_server_and_recording function");
     info!("Setting up server and recording...");
     info!("Configuration: port={}, fps={}, audio_chunk_duration={}s, disable_audio={}, memory_threshold={}%, runtime_threshold={}s",
         port, fps, audio_chunk_duration, disable_audio, memory_threshold, runtime_threshold);
 
-    let (audio_devices_control_sender, audio_devices_control_receiver) =
-        tokio::sync::mpsc::channel(64);
-    let mut audio_devices = Vec::new();
-    let mut devices_status = std::collections::HashMap::new();
+    let (audio_devices_control_sender, audio_devices_control_receiver) = mpsc::channel(64);
+    let audio_devices_control_sender = Arc::new(audio_devices_control_sender);
+    let audio_sender_for_server = audio_devices_control_sender.clone();
+    let audio_sender_for_return = audio_devices_control_sender.clone();
 
-    if !disable_audio {
-        info!("Initializing audio devices...");
-        let all_audio_devices = list_audio_devices().unwrap_or_default();
-
-        for device in all_audio_devices {
-            let device_control = DeviceControl {
-                is_running: false,
-                is_paused: false,
-            };
-            info!("Audio device: {:?}", device.to_string());
-            devices_status.insert(device, device_control);
-        }
-
-        if let Ok(input_device) = default_input_device() {
-            info!("Default input device found: {:?}", input_device.to_string());
-            audio_devices.push(Arc::new(input_device.clone()));
-            devices_status.get_mut(&input_device).unwrap().is_running = true;
-        }
-        if let Ok(output_device) = default_output_device() {
-            info!(
-                "Default output device found: {:?}",
-                output_device.to_string()
-            );
-            audio_devices.push(Arc::new(output_device.clone()));
-            devices_status.get_mut(&output_device).unwrap().is_running = true;
-        }
-
-        if audio_devices.is_empty() {
-            error!("No audio devices available. Audio recording will be disabled.");
-        } else {
-            info!("Using audio devices:");
-            for device in &audio_devices {
-                info!("  {}", device);
-                let device_clone = device.deref().clone();
-                let sender_clone = audio_devices_control_sender.clone();
-                tokio::spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(15)).await;
-                    let _ = sender_clone
-                        .send((
-                            device_clone,
-                            DeviceControl {
-                                is_running: true,
-                                is_paused: false,
-                            },
-                        ))
-                        .await;
-                });
-            }
-        }
-    } else {
-        info!("Audio recording is disabled");
-    }
+    debug!("Initializing audio devices");
+    let (audio_devices, devices_status) = initialize_audio(
+        disable_audio,
+        &[], // No custom devices for the app version
+        audio_devices_control_sender,
+    )
+    .await;
 
     info!("Starting resource monitoring...");
     ResourceMonitor::new(memory_threshold, runtime_threshold, false)
@@ -201,7 +215,7 @@ async fn setup_server_and_recording(
             db_server,
             SocketAddr::from(([0, 0, 0, 0], port)),
             vision_control_server_clone,
-            audio_devices_control_sender,
+            audio_sender_for_server.deref().clone(),
         );
         info!("Starting server...");
 
@@ -211,6 +225,8 @@ async fn setup_server_and_recording(
     });
 
     info!("Server started on http://localhost:{}", port);
+
+    (audio_devices, audio_sender_for_return)
 }
 
 #[tokio::main]
@@ -224,62 +240,21 @@ async fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_cli::init())
+        // .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
         ))
         .manage(TrayState::default())
         .setup(move |app| {
-            let cli = app.cli().matches().expect("Failed to get CLI matches");
+            // let cli = app.cli().matches().expect("Failed to get CLI matches");
 
-            let local_data_dir = Arc::new(
-                ensure_local_data_dir(
-                    cli.args
-                        .get("data-dir")
-                        .and_then(|v| Some(v.value.to_string())),
-                )
-                .expect("Failed to ensure local data directory"),
-            );
-
-            let port = cli
-                .args
-                .get("port")
-                .and_then(|v| v.value.as_u64())
-                .unwrap_or(3000) as u16;
-            let fps = cli
-                .args
-                .get("fps")
-                .and_then(|v| v.value.as_f64())
-                .unwrap_or(30.0);
-            let audio_chunk_duration = cli
-                .args
-                .get("audio-chunk-duration")
-                .and_then(|v| v.value.as_u64())
-                .unwrap_or(5);
-            let disable_audio = cli
-                .args
-                .get("disable-audio")
-                .and_then(|v| v.value.as_bool())
-                .unwrap_or(false);
-            let memory_threshold = cli
-                .args
-                .get("memory-threshold")
-                .and_then(|v| v.value.as_f64())
-                .unwrap_or(80.0);
-            let runtime_threshold = cli
-                .args
-                .get("runtime-threshold")
-                .and_then(|v| v.value.as_u64())
-                .unwrap_or(3600);
+            let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
+            let port = 3030;
 
             app.manage(port);
 
-            let debug = cli
-                .args
-                .get("debug")
-                .and_then(|v| v.value.as_bool())
-                .unwrap_or(false);
+            let debug = true;
 
             let mut builder = env_logger::Builder::new();
             builder
@@ -292,14 +267,10 @@ async fn main() {
                 builder.filter_module("screenpipe", LevelFilter::Debug);
             }
 
-            // Add file logging
-            let log_dir = home_dir()
-                .ok_or("Failed to get home directory")?
-                .join(".screenpipe");
+            // debug!("all param: {:?}", cli.args);
 
             let log_file =
-                File::create(format!("{}/screenpipe.log", log_dir.to_string_lossy())).unwrap();
-            // Create a multi-writer that writes to both file and stdout
+                File::create(format!("{}/screenpipe.log", base_dir.to_string_lossy())).unwrap();
             let multi_writer = MultiWriter::new(vec![
                 Box::new(log_file) as Box<dyn Write + Send>,
                 Box::new(std::io::stdout()) as Box<dyn Write + Send>,
@@ -307,13 +278,15 @@ async fn main() {
 
             builder.target(env_logger::Target::Pipe(Box::new(multi_writer)));
             builder.format_timestamp_secs().init();
+
+            info!("Local data directory: {}", base_dir.display());
+
             let posthog_api_key = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce".to_string();
             let app_name = "screenpipe";
-            let interval_hours = 1; // Send event every 1 hour
+            let interval_hours = 1;
 
-            let path = log_dir.join("store.bin");
+            let path = base_dir.join("store.bin");
 
-            // create file if not exists
             if !path.exists() {
                 let _ = File::create(path.clone()).unwrap();
             }
@@ -321,18 +294,6 @@ async fn main() {
             let stores = app.app_handle().state::<StoreCollection<Wry>>();
 
             let _ = with_store(app.app_handle().clone(), stores, path, |store| {
-                // Note that values must be serde_json::Value instances,
-                // otherwise, they will not be compatible with the JavaScript bindings.
-                // store.insert("some-key".to_string(), json!({ "value": 5 }))?;
-
-                // Get a value from the store.
-                // let value = store
-                //     .get("some-key")
-                //     .expect("Failed to get value from store");
-                // println!("{}", value); // {"value":5}
-
-                // You can manually save the store after making changes.
-                // Otherwise, it will save upon graceful exit as described above.
                 store.save()?;
 
                 let is_analytics_enabled = store
@@ -355,25 +316,7 @@ async fn main() {
                 Ok(())
             });
 
-            let handle = app.app_handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let db = initialize_database(local_data_dir.clone()).await;
-                handle.manage(db.clone());
-
-                setup_server_and_recording(
-                    handle,
-                    db,
-                    local_data_dir,
-                    port,
-                    fps,
-                    audio_chunk_duration,
-                    disable_audio,
-                    memory_threshold,
-                    runtime_threshold,
-                )
-                .await;
-            });
-
+            // Tray setup
             let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let send_feedback_item =
                 MenuItemBuilder::with_id("send_feedback", "Send Feedback").build(app)?;
@@ -409,8 +352,8 @@ async fn main() {
                             let subject = "Screenpipe Feedback";
                             let body = r#"Please enter your feedback here...
                             
-    ... or let's chat?
-    https://cal.com/louis030195/screenpipe
+        ... or let's chat?
+        https://cal.com/louis030195/screenpipe
                             "#;
                             let url = format!("mailto:{}?subject={}&body={}", email, subject, body);
                             let app_handle = app.app_handle();
@@ -442,5 +385,47 @@ async fn main() {
         .expect("error while building tauri application");
 
     // Run the app
-    app.run(|_, _| {});
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::Ready { .. } => {
+            let app_handle = app_handle.clone();
+            start_server(app_handle);
+        }
+        _ => {}
+    });
+}
+
+fn start_server(app_handle: tauri::AppHandle) {
+    tokio::spawn(async move {
+        let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
+        let port = 3030;
+        let fps = 1.0;
+        let audio_chunk_duration = 30;
+        let disable_audio = false;
+        let memory_threshold = 80.0;
+        let runtime_threshold = 3600;
+
+        let db_dir = base_dir.join("data");
+
+        let db = Arc::new(
+            DatabaseManager::new(&format!("{}/db.sqlite", db_dir.to_string_lossy()))
+                .await
+                .unwrap(),
+        );
+        app_handle.manage(db.clone());
+
+        let path = Arc::new(db_dir.to_string_lossy().into_owned());
+
+        setup_server_and_recording(
+            app_handle,
+            db,
+            path,
+            port,
+            fps,
+            audio_chunk_duration,
+            disable_audio,
+            memory_threshold,
+            runtime_threshold,
+        )
+        .await;
+    });
 }

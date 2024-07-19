@@ -1,19 +1,17 @@
 use chrono::Utc;
 use image::ImageFormat::{self};
 use log::{debug, error, info, warn};
+use screenpipe_core::find_ffmpeg_path;
 use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage};
 use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
-
-use std::sync::Arc;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 
-use std::env;
 use std::time::Duration;
 
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
@@ -246,30 +244,6 @@ async fn save_frames_as_video(
     }
 }
 
-fn get_ffmpeg_path() -> PathBuf {
-    if cfg!(target_os = "macos") {
-        // When running on macOS, use the bundled FFmpeg
-        let exe_path = env::current_exe().expect("Failed to get executable path");
-        let resources_path = exe_path
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("Resources");
-        let ffmpeg_path = resources_path.join("ffmpeg");
-        // if not present, add a warning to the user
-        if !ffmpeg_path.exists() {
-            // and just use ffmpeg from path
-            PathBuf::from("ffmpeg")
-        } else {
-            ffmpeg_path
-        }
-    } else {
-        // On other platforms, assume FFmpeg is in PATH
-        PathBuf::from("ffmpeg")
-    }
-}
-
 // TODO: use tokio::process::Command instead
 fn start_ffmpeg_process(output_file: &str, fps: f64) -> Child {
     // overrriding fps with max fps if over the max and warning user
@@ -280,7 +254,7 @@ fn start_ffmpeg_process(output_file: &str, fps: f64) -> Child {
     }
 
     info!("Starting FFmpeg process for file: {}", output_file);
-    Command::new(get_ffmpeg_path().to_str().unwrap())
+    Command::new(find_ffmpeg_path().unwrap())
         .args([
             "-f",
             "image2pipe",

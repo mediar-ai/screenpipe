@@ -1,12 +1,13 @@
 {
-  "name": "screen-pipe-app",
+  "name": "screenpipe-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "build": "next build",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/plugin-cli": "2.0.0-beta.7",

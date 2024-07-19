@@ -16,6 +16,7 @@ use screenpipe_audio::{
     DeviceControl,
 };
 
+use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
 use tokio::sync::mpsc::channel;
 
@@ -87,6 +88,11 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    if find_ffmpeg_path().is_none() {
+        eprintln!("ffmpeg not found. Please install ffmpeg and ensure it is in your PATH.");
+        std::process::exit(1);
+    }
+
     // Initialize logging
     let cli = Cli::parse();
 
@@ -300,7 +306,9 @@ async fn main() -> anyhow::Result<()> {
     );
     println!(
         "\n{}",
-        "Extend your human memory with LLM".bright_yellow().italic()
+        "Build AI apps that have the full context"
+            .bright_yellow()
+            .italic()
     );
     println!(
         "{}\n\n",

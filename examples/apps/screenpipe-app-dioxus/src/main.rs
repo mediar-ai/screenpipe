@@ -43,7 +43,7 @@ fn setup_auto_launch() -> anyhow::Result<()> {
 async fn initialize_audio(
     disable_audio: bool,
     custom_devices: &[String],
-    audio_devices_control_sender: Arc<Sender<(AudioDevice, DeviceControl)>>,
+    _audio_devices_control_sender: Arc<Sender<(AudioDevice, DeviceControl)>>,
 ) -> (Vec<Arc<AudioDevice>>, HashMap<AudioDevice, DeviceControl>) {
     let mut audio_devices = Vec::new();
     let mut devices_status = HashMap::new();
@@ -240,6 +240,12 @@ async fn start_screenpipe() -> anyhow::Result<(
         .filter_module("rusty_tesseract", LevelFilter::Error)
         .filter_module("symphonia", LevelFilter::Error);
 
+    let debug = true;
+
+    if debug {
+        builder.filter(Some("screenpipe"), LevelFilter::Debug);
+    }
+
     let base_dir = get_local_dir(None)?;
     fs::create_dir_all(&base_dir)?;
 
@@ -294,7 +300,7 @@ fn main() {
 }
 
 fn app() -> Element {
-    let mut recording = use_signal(|| false);
+    let recording = use_signal(|| false);
     let mut audio_sender = use_signal(|| None::<Arc<Sender<(AudioDevice, DeviceControl)>>>);
     let mut audio_devices = use_signal(|| Vec::new());
 

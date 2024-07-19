@@ -51,6 +51,8 @@ tauri-plugin-shell = "2.0.0-alpha.2"
 tauri-plugin-store = "2.0.0-beta"
 
 
+anyhow = "1.0.71"
+
 # M series MacOS
 [target.'cfg(target_os = "macos")'.dependencies]
 screenpipe-server = { path = "../../../../screenpipe-server", features = ["metal"] }
@@ -73,6 +75,14 @@ tauri-plugin-updater = "2.0.0-alpha.2"
 [features]
 cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
 metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
+
+default = ["custom-protocol"]
+
+# TODOS one day
+coreml = []
+openblas = []
+opencl = []
+rocm = []
 
 # DO NOT REMOVE!!
 custom-protocol = [ "tauri/custom-protocol" ]

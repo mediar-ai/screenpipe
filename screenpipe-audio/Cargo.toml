@@ -59,6 +59,8 @@ bytemuck = "1.16.1"
 # Async
 tokio = { workspace = true }
 
+screenpipe-core = { path = "../screenpipe-core" }
+
 [dev-dependencies]
 tempfile = "3.3.0"
 infer = "0.15"

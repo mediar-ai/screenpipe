@@ -1,59 +1,88 @@
 # # Run for macOS
 
-# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j release -P macos-latest=-self-hosted 
+# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P macos-latest=-self-hosted
 
 # # Run for Linux
-# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j release -P ubuntu-22.04=-self-hosted 
+# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P ubuntu-24.04
 
-
-
-name: "Release app"
+name: Release
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
-  release:
+  publish-tauri:
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-22.04, windows-latest]
-    runs-on: ${{ matrix.platform }}
+        include:
+          - platform: "macos-latest" # for Arm based macs (M1 and above).
+            args: "--target aarch64-apple-darwin"
+          - platform: "macos-latest" # for Intel based macs.
+            args: "--target x86_64-apple-darwin"
+          - platform: "ubuntu-24.04" # Ubuntu x86_64
+            args: ""
+          - platform: "windows-latest" # Windows x86_64
+            args: '--target x86_64-pc-windows-msvc --features "openblas"'
+            pre-build-args: "--openblas"
 
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install frontend dependencies
+        run: bun install
+        working-directory: ./examples/apps/screenpipe-app-tauri
+
+      - name: Cache Pre Build
+        id: cache-pre-build
+        uses: actions/cache@v4
+        with:
+          path: |
+            examples/apps/screenpipe-app-tauri/src-tauri/openblas
+            examples/apps/screenpipe-app-tauri/src-tauri/clblast
+            examples/apps/screenpipe-app-tauri/src-tauri/ffmpeg
+          key: ${{ matrix.platform }}-${{ matrix.args }}-pre-build
+
+      # Run pre build
+      - name: Run pre_build.js on ${{ matrix.platform }}
+        run: bun ./examples/apps/screenpipe-app-tauri/scripts/pre_build.js ${{ matrix.pre-build-args }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libappindicator3-1 libappindicator3-dev
 
-      - name: setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-
-      - name: setup rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: install frontend dependencies
-        working-directory: examples/apps/screen-pipe-app/
-        run: npm i
-
-      - uses: tauri-apps/tauri-action@v0
+      - name: Build
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
-          projectPath: examples/apps/screen-pipe-app/
-          tagName: ${{ github.ref_name }}
-          releaseName: "App v__VERSION__"
-          releaseBody: "See the assets to download and install this version."
+          tagName: v__VERSION__ # the action automatically replaces __VERSION__ with the app version.
+          releaseName: "v__VERSION__"
+          releaseBody: "What's new? 🎉📣"
           releaseDraft: true
-          prerelease: false
-          distPath: "../examples/apps/screen-pipe-app/dist"
-          appVersion: ${{ github.ref_name }}
+          prerelease: true
+          args: ${{ matrix.args }}
+          projectPath: "./examples/apps/screenpipe-app-tauri"
+          tauriScript: bunx tauri -v

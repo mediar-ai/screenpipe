@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use log::{debug, error, info, warn};
+use screenpipe_core::find_ffmpeg_path;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -121,7 +122,7 @@ async fn run_ffmpeg(
     duration: Duration,
 ) -> Result<()> {
     debug!("Starting FFmpeg process");
-    let mut ffmpeg = Command::new("ffmpeg")
+    let mut ffmpeg = Command::new(find_ffmpeg_path().unwrap())
         .args(&[
             "-f",
             "f32le",
@@ -140,8 +141,8 @@ async fn run_ffmpeg(
             output_path.to_str().unwrap(),
         ])
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()?;
     debug!("FFmpeg process spawned");
     let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
@@ -171,8 +172,20 @@ async fn run_ffmpeg(
     debug!("Dropping stdin");
     drop(stdin);
     debug!("Waiting for FFmpeg process to exit");
-    let status = ffmpeg.wait().await?;
+    let output = ffmpeg.wait_with_output().await?;
+    let status = output.status;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
     debug!("FFmpeg process exited with status: {}", status);
+    debug!("FFmpeg stdout: {}", stdout);
+    debug!("FFmpeg stderr: {}", stderr);
+
+    if !status.success() {
+        error!("FFmpeg process failed with status: {}", status);
+        error!("FFmpeg stderr: {}", stderr);
+        return Err(anyhow!("FFmpeg process failed"));
+    }
 
     Ok(())
 }

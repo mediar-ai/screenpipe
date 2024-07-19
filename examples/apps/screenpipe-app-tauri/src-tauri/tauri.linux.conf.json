@@ -1,0 +1,13 @@
+{
+    "bundle": {
+        "linux": {
+            "deb": {
+                "depends": [
+                    "ffmpeg",
+                    "libopenblas-dev",
+                    "libmp3lame0"
+                ]
+            }
+        }
+    }
+}

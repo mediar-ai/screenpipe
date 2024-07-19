@@ -1,0 +1,28 @@
+{
+    "bundle": {
+        "macOS": {
+            "frameworks": [
+                "ffmpeg/lib/libavcodec.61.dylib",
+                "ffmpeg/lib/libavdevice.61.dylib",
+                "ffmpeg/lib/libavfilter.10.dylib",
+                "ffmpeg/lib/libavformat.61.dylib",
+                "ffmpeg/lib/libavutil.59.dylib",
+                "ffmpeg/lib/libffmpeg.7.dylib",
+                "ffmpeg/lib/libswresample.5.dylib",
+                "ffmpeg/lib/libswscale.8.dylib",
+                "ffmpeg/lib/libmp3lame.0.dylib"
+            ],
+            "entitlements": "entitlements.plist",
+            "signingIdentity": "-",
+            "hardenedRuntime": false,
+            "exceptionDomain": "com.screenpi.pe",
+            "dmg": {
+                "background": "./icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
+                "windowSize": {
+                    "height": 400,
+                    "width": 660
+                }
+            }
+        }
+    }
+}
