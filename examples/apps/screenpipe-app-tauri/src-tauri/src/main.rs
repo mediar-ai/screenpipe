@@ -48,7 +48,7 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
 
-    fs::create_dir_all(&local_data_dir)?;
+    fs::create_dir_all(&local_data_dir.join("data"))?;
     Ok(local_data_dir)
 }
 
@@ -404,17 +404,16 @@ fn start_server(app_handle: tauri::AppHandle) {
         let memory_threshold = 80.0;
         let runtime_threshold = 3600;
 
+        let db_dir = base_dir.join("data");
+
         let db = Arc::new(
-            DatabaseManager::new(&format!(
-                "{}/db.sqlite",
-                base_dir.join("data").to_string_lossy()
-            ))
-            .await
-            .unwrap(),
+            DatabaseManager::new(&format!("{}/db.sqlite", db_dir.to_string_lossy()))
+                .await
+                .unwrap(),
         );
         app_handle.manage(db.clone());
 
-        let path = Arc::new(base_dir.join("data").to_string_lossy().into_owned());
+        let path = Arc::new(db_dir.to_string_lossy().into_owned());
 
         setup_server_and_recording(
             app_handle,
