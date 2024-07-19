@@ -23,7 +23,7 @@ const config = {
 	ffmpegRealname: 'ffmpeg',
 	openblasRealname: 'openblas',
 	clblastRealname: 'clblast',
-	windows: {
+	windows: { // TODO probably windows lack mp3
 		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
 		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 
@@ -53,6 +53,7 @@ const config = {
 			'libasound2-dev', // cpal
 			'libomp-dev', // OpenMP in ggml.ai
 			'libstdc++-12-dev', //ROCm
+			'libmp3lame-dev', // MP3 support
 		],
 	},
 	macos: {
@@ -125,6 +126,11 @@ if (platform == 'windows') {
 
 /* ########## macOS ########## */
 if (platform == 'macos') {
+	// Install lame using Homebrew
+	await $`brew install lame`
+	// Copy lame to ffmpeg
+	await $`cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
+
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`wget -nc --show-progress ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
