@@ -1,6 +1,6 @@
 [workspace]
-members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio", "examples/apps/screenpipe-app-tauri/src-tauri", "examples/apps/screenpipe-app-dioxus", "screenpipe-core"]
-exclude = []
+members = ["screenpipe-server", "screenpipe-vision", "screenpipe-audio", "screenpipe-core"]
+exclude = ["examples/*"]
 resolver = "2"
 
 

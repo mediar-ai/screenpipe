@@ -76,5 +76,13 @@ tauri-plugin-updater = "2.0.0-alpha.2"
 cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
 metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
 
+default = ["custom-protocol"]
+
+# TODOS one day
+coreml = []
+openblas = []
+opencl = []
+rocm = []
+
 # DO NOT REMOVE!!
 custom-protocol = [ "tauri/custom-protocol" ]
