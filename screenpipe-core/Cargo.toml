@@ -9,5 +9,5 @@ edition = { workspace = true }
 
 [dependencies]
 which = "6.0.1"
-
+log = "0.4.17"
 
