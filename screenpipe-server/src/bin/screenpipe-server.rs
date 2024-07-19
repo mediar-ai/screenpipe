@@ -297,7 +297,9 @@ async fn main() -> anyhow::Result<()> {
     );
     println!(
         "\n{}",
-        "Build AI apps that have the full context".bright_yellow().italic()
+        "Build AI apps that have the full context"
+            .bright_yellow()
+            .italic()
     );
     println!(
         "{}\n\n",

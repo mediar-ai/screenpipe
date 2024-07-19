@@ -8,9 +8,6 @@
                     "libmp3lame0"
                 ]
             }
-        },
-        "resources": {
-            "ffmpeg/lib/*": "./"
         }
     }
 }

@@ -65,7 +65,7 @@
   },
   "app": {
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; media-src 'self' mediadevices:"
     },
     "trayIcon": {
       "iconPath": "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",

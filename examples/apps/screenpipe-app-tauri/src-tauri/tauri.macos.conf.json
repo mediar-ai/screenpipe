@@ -12,6 +12,7 @@
                 "ffmpeg/lib/libswscale.8.dylib",
                 "ffmpeg/lib/libmp3lame.0.dylib"
             ],
+            "entitlements": "entitlements.plist",
             "signingIdentity": "-",
             "hardenedRuntime": false,
             "exceptionDomain": "com.screenpi.pe",
