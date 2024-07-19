@@ -240,14 +240,14 @@ async fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_cli::init())
+        // .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
         ))
         .manage(TrayState::default())
         .setup(move |app| {
-            let cli = app.cli().matches().expect("Failed to get CLI matches");
+            // let cli = app.cli().matches().expect("Failed to get CLI matches");
 
             let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
             let port = 3030;
@@ -267,7 +267,7 @@ async fn main() {
                 builder.filter_module("screenpipe", LevelFilter::Debug);
             }
 
-            debug!("all param: {:?}", cli.args);
+            // debug!("all param: {:?}", cli.args);
 
             let log_file =
                 File::create(format!("{}/screenpipe.log", base_dir.to_string_lossy())).unwrap();
