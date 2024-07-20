@@ -168,18 +168,36 @@ impl DatabaseManager {
         content_type: ContentType,
         limit: u32,
         offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
         if content_type == ContentType::All || content_type == ContentType::OCR {
-            let ocr_results = self.search_ocr(query, limit, offset).await?;
+            let ocr_results = self.search_ocr(query, limit, offset, start_time, end_time).await?;
             results.extend(ocr_results.into_iter().map(SearchResult::OCR));
         }
 
         if content_type == ContentType::All || content_type == ContentType::Audio {
-            let audio_results = self.search_audio(query, limit, offset).await?;
+            let audio_results = self.search_audio(query, limit, offset, start_time, end_time).await?;
             results.extend(audio_results.into_iter().map(SearchResult::Audio));
         }
+
+        // Sort results by timestamp in descending order
+        results.sort_by(|a, b| {
+            let timestamp_a = match a {
+                SearchResult::OCR(ocr) => ocr.timestamp,
+                SearchResult::Audio(audio) => audio.timestamp,
+            };
+            let timestamp_b = match b {
+                SearchResult::OCR(ocr) => ocr.timestamp,
+                SearchResult::Audio(audio) => audio.timestamp,
+            };
+            timestamp_b.cmp(&timestamp_a)
+        });
+
+        // Apply limit after combining and sorting
+        results.truncate(limit as usize);
 
         Ok(results)
     }
@@ -189,6 +207,8 @@ impl DatabaseManager {
         query: &str,
         limit: u32,
         offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         sqlx::query_as::<_, OCRResult>(
             r#"
@@ -206,12 +226,16 @@ impl DatabaseManager {
                 video_chunks ON frames.video_chunk_id = video_chunks.id
             WHERE 
                 ocr_text.text LIKE '%' || ?1 || '%'
+                AND (?2 IS NULL OR frames.timestamp >= ?2)
+                AND (?3 IS NULL OR frames.timestamp <= ?3)
             ORDER BY 
                 frames.timestamp DESC
-            LIMIT ?2 OFFSET ?3
+            LIMIT ?4 OFFSET ?5
             "#,
         )
         .bind(query)
+        .bind(start_time)
+        .bind(end_time)
         .bind(limit)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -223,6 +247,8 @@ impl DatabaseManager {
         query: &str,
         limit: u32,
         offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
         sqlx::query_as::<_, AudioResult>(
             r#"
@@ -238,12 +264,16 @@ impl DatabaseManager {
                 audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
             WHERE 
                 audio_transcriptions.transcription LIKE '%' || ?1 || '%'
+                AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
+                AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
             ORDER BY 
                 audio_transcriptions.timestamp DESC
-            LIMIT ?2 OFFSET ?3
+            LIMIT ?4 OFFSET ?5
             "#,
         )
         .bind(query)
+        .bind(start_time)
+        .bind(end_time)
         .bind(limit)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -362,23 +392,43 @@ impl DatabaseManager {
         &self,
         query: &str,
         content_type: ContentType,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
     ) -> Result<usize, sqlx::Error> {
         let mut total_count = 0;
 
         if content_type == ContentType::All || content_type == ContentType::OCR {
-            let ocr_count: (i64,) =
-                sqlx::query_as("SELECT COUNT(*) FROM ocr_text WHERE text LIKE '%' || ?1 || '%'")
-                    .bind(query)
-                    .fetch_one(&self.pool)
-                    .await?;
+            let ocr_count: (i64,) = sqlx::query_as(
+                r#"
+                SELECT COUNT(*)
+                FROM ocr_text
+                JOIN frames ON ocr_text.frame_id = frames.id
+                WHERE text LIKE '%' || ?1 || '%'
+                    AND (?2 IS NULL OR frames.timestamp >= ?2)
+                    AND (?3 IS NULL OR frames.timestamp <= ?3)
+                "#,
+            )
+            .bind(query)
+            .bind(start_time)
+            .bind(end_time)
+            .fetch_one(&self.pool)
+            .await?;
             total_count += ocr_count.0 as usize;
         }
 
         if content_type == ContentType::All || content_type == ContentType::Audio {
             let audio_count: (i64,) = sqlx::query_as(
-                "SELECT COUNT(*) FROM audio_transcriptions WHERE transcription LIKE '%' || ?1 || '%'"
+                r#"
+                SELECT COUNT(*)
+                FROM audio_transcriptions
+                WHERE transcription LIKE '%' || ?1 || '%'
+                    AND (?2 IS NULL OR timestamp >= ?2)
+                    AND (?3 IS NULL OR timestamp <= ?3)
+                "#,
             )
             .bind(query)
+            .bind(start_time)
+            .bind(end_time)
             .fetch_one(&self.pool)
             .await?;
             total_count += audio_count.0 as usize;
@@ -437,4 +487,3 @@ impl Clone for DatabaseManager {
         }
     }
 }
-

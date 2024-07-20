@@ -53,6 +53,14 @@ We follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) fold
 
 ## Additional Notes
 
+### Principles 
+
+- **User fanatic: focus on building what people want and making users happy.**
+- Concurrency: channels > mutexes/locks
+- Simplicity: avoid premature optimization.
+- Use numbers: if you can't measure it, you can't improve it.
+- Avoid OOP: prefer functional programming.
+
 ### Issue and Pull Request Labels
 
 This section lists the labels we use to help us track and manage issues and pull requests.

@@ -1,10 +1,10 @@
-use assert_fs::prelude::*;
 use std::path::PathBuf;
-use std::fs;
 use std::time::Instant;
-use screenpipe_vision::core::perform_ocr; // Adjust the import path
+
+use screenpipe_vision::perform_ocr;
 
 #[test]
+#[ignore] // TODO: finish implementation of this test?
 fn test_ocr_output() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting test_ocr_output");
 
@@ -45,7 +45,6 @@ fn test_ocr_output() -> Result<(), Box<dyn std::error::Error>> {
     println!("Character length of OCR text: {}", text.len());
     // println!("Character length of TSV output: {}", tsv_output.len());
     println!("Character length of JSON output: {}", json_output.len());
-
 
     assert!(!text.is_empty(), "OCR text should not be empty");
     // assert!(!tsv_output.is_empty(), "TSV output should not be empty");

@@ -52,6 +52,10 @@ pub(crate) struct SearchQuery {
     pagination: PaginationQuery,
     #[serde(default)]
     content_type: ContentType,
+    #[serde(default)]
+    start_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    end_time: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
@@ -146,11 +150,13 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "Received search request: query='{}', content_type={:?}, limit={}, offset={}",
+        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
-        query.pagination.offset
+        query.pagination.offset,
+        query.start_time,
+        query.end_time
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -161,6 +167,8 @@ pub(crate) async fn search(
             query.content_type,
             query.pagination.limit,
             query.pagination.offset,
+            query.start_time,
+            query.end_time,
         )
         .await
         .map_err(|e| {
@@ -173,7 +181,12 @@ pub(crate) async fn search(
 
     let total = state
         .db
-        .count_search_results(query_str, query.content_type)
+        .count_search_results(
+            query_str,
+            query.content_type,
+            query.start_time,
+            query.end_time,
+        )
         .await
         .map_err(|e| {
             error!("Failed to count search results: {}", e);
@@ -518,6 +531,21 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr" | jq
 
 curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=all" | jq
 
+
+# Search for content from the last 30 minutes
+curl "http://localhost:3035/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search for content up to 1 hour ago
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search for content between 2 hours ago and 1 hour ago
+curl "http://localhost:3035/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search for OCR content from yesterday
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search for audio content with a keyword from the beginning of the current month
+curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
 
 
 */
