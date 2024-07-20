@@ -7,6 +7,13 @@ use std::path::Path;
 use serde_json;
 use image_compare::{Algorithm, Metric, Similarity}; // Added import for Similarity
 use rusty_tesseract::{Args, Image, DataOutput}; // Added import for Args, Image, DataOutput
+use log::{debug, error};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+use tokio::sync::mpsc::Receiver;
+use crate::core::{ControlMessage, MaxAverageFrame}; // Assuming core.rs is in the same crate under the `core` module
+use xcap::Monitor;
 
 pub fn calculate_hash(image: &DynamicImage) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -43,6 +50,7 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
 }
 
 pub fn perform_ocr(image: &DynamicImage) -> (String, DataOutput, String) {
+    // debug!("inside perform_ocr");
     let args = Args {
         lang: "eng".to_string(),
         config_variables: HashMap::from([
@@ -69,6 +77,7 @@ pub fn perform_ocr(image: &DynamicImage) -> (String, DataOutput, String) {
     let mut word_count = 0;
     let mut last_word_num = 0;
 
+    // debug!("inside data_output inside perform_ocr");
     for record in &data_output.data {
         if record.word_num == 0 {
             if !current_line.is_empty() {
@@ -125,4 +134,114 @@ fn data_output_to_text(data_output: &DataOutput) -> String {
         }
     }
     text
+}
+
+
+pub async fn handle_control_messages(
+    control_rx: &mut Receiver<ControlMessage>,
+    is_paused: &Arc<Mutex<bool>>,
+    should_stop: &Arc<Mutex<bool>>,
+) {
+    if let Ok(message) = control_rx.try_recv() {
+        match message {
+            ControlMessage::Pause => *is_paused.lock().await = true,
+            ControlMessage::Resume => *is_paused.lock().await = false,
+            ControlMessage::Stop => {
+                *should_stop.lock().await = true;
+            }
+        }
+    }
+}
+
+pub async fn capture_screenshot(monitor: &Monitor) -> (DynamicImage, u64, Duration) {
+    let capture_start = Instant::now();
+    let buffer = monitor.capture_image().unwrap();
+    let image = DynamicImage::ImageRgba8(buffer);
+    let image_hash = calculate_hash(&image);
+    let capture_duration = capture_start.elapsed();
+    (image, image_hash, capture_duration)
+}
+
+pub async fn compare_with_previous_image(
+    previous_image: &Option<Arc<DynamicImage>>,
+    current_image: &DynamicImage,
+    _max_average: &mut Option<MaxAverageFrame>, // Prefix with underscore if not used
+    frame_number: u64,
+    max_avg_value: &mut f64,
+) -> f64 {
+    let mut current_average = 0.0;
+    if let Some(prev_image) = previous_image {
+        let histogram_diff = compare_images_histogram(prev_image, &current_image);
+        let ssim_diff = 1.0 - compare_images_ssim(prev_image, &current_image);
+        current_average = (histogram_diff + ssim_diff) / 2.0;
+        debug!(
+            "Frame {}: Histogram diff: {:.3}, SSIM diff: {:.3}, Current Average: {:.3}, Max Average: {:.3}",
+            frame_number, histogram_diff, ssim_diff, current_average, *max_avg_value
+        );
+    } else {
+        debug!("No previous image to compare for frame {}", frame_number);
+    }
+    current_average
+}
+
+pub async fn save_text_files(
+    frame_number: u64,
+    new_text_json: &Vec<HashMap<String, String>>,
+    current_text_json: &Vec<HashMap<String, String>>,
+    previous_text_json: &Option<Vec<HashMap<String, String>>>,
+) {
+    let id = frame_number;
+    debug!("Saving text files for frame {}", frame_number);
+
+    let new_text_lines: Vec<String> = new_text_json.iter().map(|record| {
+        record.get("text").cloned().unwrap_or_default()
+    }).collect();
+
+    let current_text_lines: Vec<String> = current_text_json.iter().map(|record| {
+        record.get("text").cloned().unwrap_or_default()
+    }).collect();
+
+    let new_text_file_path = format!("text_json/new_text_{}.txt", id);
+    let mut new_text_file = match File::create(&new_text_file_path) {
+        Ok(file) => file,
+        Err(e) => {
+            error!("Failed to create new text file: {}", e);
+            return;
+        }
+    };
+    for line in new_text_lines {
+        writeln!(new_text_file, "{}", line).unwrap();
+    }
+
+    let current_text_file_path = format!("text_json/current_text_{}.txt", id);
+    let mut current_text_file = match File::create(&current_text_file_path) {
+        Ok(file) => file,
+        Err(e) => {
+            error!("Failed to create current text file: {}", e);
+            return;
+        }
+    };
+    for line in current_text_lines {
+        writeln!(current_text_file, "{}", line).unwrap();
+    }
+
+    if let Some(prev_json) = previous_text_json {
+        let prev_text_lines: Vec<String> = prev_json.iter().map(|record| {
+            record.get("text").cloned().unwrap_or_default()
+        }).collect();
+        let prev_text_file_path = format!("text_json/previous_text_{}.txt", id);
+        let mut prev_text_file = match File::create(&prev_text_file_path) {
+            Ok(file) => file,
+            Err(e) => {
+                error!("Failed to create previous text file: {}", e);
+                return;
+            }
+        };
+        for line in prev_text_lines {
+            if let Err(e) = writeln!(prev_text_file, "{}", line) {
+                error!("Failed to write to previous text file: {}", e);
+                return;
+            }
+        }
+    }
 }
