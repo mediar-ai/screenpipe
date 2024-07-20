@@ -27,8 +27,7 @@ Library for devs to build AI apps on top of all your life data. Alternative to R
 We are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
 
 
-![image](https://github.com/user-attachments/assets/b89a867f-aa09-4aa0-bf58-d808df688c16)
-
+![image](https://github.com/user-attachments/assets/827c2557-bde2-4cf1-b9f4-424ce6c74c9c)
 
 ## Getting started
 
