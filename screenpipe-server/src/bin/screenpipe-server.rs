@@ -84,6 +84,10 @@ struct Cli {
     /// Enable debug logging for screenpipe modules
     #[arg(long)]
     debug: bool,
+
+    /// Save text files
+    #[arg(long, default_value_t = false)]
+    save_text_files: bool,
 }
 
 #[tokio::main]
@@ -105,6 +109,10 @@ async fn main() -> anyhow::Result<()> {
 
     if cli.debug {
         builder.filter_module("screenpipe", LevelFilter::Debug);
+    }
+    // Example usage of the new flag
+    if cli.save_text_files {
+        println!("Text files will be saved.");
     }
 
     builder.init();
@@ -270,6 +278,7 @@ async fn main() -> anyhow::Result<()> {
                 control_rx,
                 vision_control,
                 audio_devices_control_receiver,
+                cli.save_text_files, 
             )
             .await
         }

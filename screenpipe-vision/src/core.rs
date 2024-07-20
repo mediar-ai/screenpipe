@@ -38,6 +38,7 @@ pub async fn continuous_capture(
     _control_rx: &mut Receiver<ControlMessage>,
     result_tx: Sender<CaptureResult>,
     interval: Duration,
+    save_text_files_flag: bool, 
 ) {
     let monitor = Monitor::all().unwrap().first().unwrap().clone(); // Simplified monitor retrieval
     let cache = Arc::new(Mutex::new(HashMap::<u64, String>::new()));
@@ -91,6 +92,7 @@ pub async fn continuous_capture(
                         ocr_task_data.result_tx,
                         &cache_clone,
                         &previous_text_json_clone,
+                        save_text_files_flag, // Pass the flag here
                     ).await {
                         error!("Error processing OCR task: {}", e);
                     }
@@ -135,15 +137,12 @@ async fn process_ocr_task(
     result_tx: Sender<CaptureResult>,
     cache: &Arc<Mutex<HashMap<u64, String>>>,
     previous_text_json: &Arc<Mutex<Option<Vec<HashMap<String, String>>>>>,
-) -> Result<(), std::io::Error> { // Changed SomeErrorType to std::io::Error
+    save_text_files_flag: bool, // Add this parameter
+) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
 
     debug!("Performing OCR for frame {}", frame_number);
     let (text, data_output, json_output) = perform_ocr(&image_arc);
-
-    // // Acquire a lock on the mutex to access the HashMap
-    // let mut cache_guard = cache.lock().await;
-    // cache_guard.insert(frame_number, text.clone());
 
     let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output).unwrap_or_else(|e| {
         error!("Failed to parse JSON output: {}", e);
@@ -176,7 +175,9 @@ async fn process_ocr_task(
     let mut seen_texts = HashSet::new();
     new_text_json.retain(|record| seen_texts.insert(record["text"].clone()));
 
-    save_text_files(frame_number, &new_text_json, &current_text_json, &previous_text_json).await;
+    if save_text_files_flag {
+        save_text_files(frame_number, &new_text_json, &current_text_json, &previous_text_json).await;
+    }
 
     *previous_text_json = Some(current_text_json.clone());
 
@@ -192,7 +193,7 @@ async fn process_ocr_task(
         .await
     {
         error!("Failed to send OCR result: {}", e);
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send OCR result")); // Changed SomeErrorType to std::io::Error
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send OCR result"));
     }
     let _duration = start_time.elapsed();
     debug!(

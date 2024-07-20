@@ -165,7 +165,7 @@ pub async fn capture_screenshot(monitor: &Monitor) -> (DynamicImage, u64, Durati
 pub async fn compare_with_previous_image(
     previous_image: &Option<Arc<DynamicImage>>,
     current_image: &DynamicImage,
-    _max_average: &mut Option<MaxAverageFrame>, // Prefix with underscore if not used
+    max_average: &mut Option<MaxAverageFrame>, // Prefix with underscore if not used
     frame_number: u64,
     max_avg_value: &mut f64,
 ) -> f64 {
@@ -174,9 +174,10 @@ pub async fn compare_with_previous_image(
         let histogram_diff = compare_images_histogram(prev_image, &current_image);
         let ssim_diff = 1.0 - compare_images_ssim(prev_image, &current_image);
         current_average = (histogram_diff + ssim_diff) / 2.0;
+        let max_avg_frame_number = max_average.as_ref().map_or(0, |frame| frame.frame_number);
         debug!(
-            "Frame {}: Histogram diff: {:.3}, SSIM diff: {:.3}, Current Average: {:.3}, Max Average: {:.3}",
-            frame_number, histogram_diff, ssim_diff, current_average, *max_avg_value
+            "Frame {}: Histogram diff: {:.3}, SSIM diff: {:.3}, Current Average: {:.3}, Max_avr: {:.3} Fr: {}",
+            frame_number, histogram_diff, ssim_diff, current_average, *max_avg_value, max_avg_frame_number
         );
     } else {
         debug!("No previous image to compare for frame {}", frame_number);

@@ -50,6 +50,8 @@ log = { workspace = true }
 
 image-compare = "0.4.1"
 strsim = "0.10.0"
+clap = { version = "4.0", features = ["derive"] }
+# tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
 tempfile = "3.3.0"
