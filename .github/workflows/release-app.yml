@@ -5,7 +5,7 @@
 # # Run for Linux
 # act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P ubuntu-24.04
 
-name: Release
+name: Release App
 
 on:
   push:

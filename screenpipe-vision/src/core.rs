@@ -1,14 +1,21 @@
 use image::DynamicImage;
-use log::{debug, error, info};
+use log::{debug, error};
 use rusty_tesseract::DataOutput;
-use tokio::sync::{mpsc::{Receiver, Sender}, Mutex}; // Corrected import for Mutex
 use serde_json;
-use std::{collections::{HashMap, HashSet}, sync::Arc, time::{Duration, Instant}};
-use xcap::Monitor;
-use strsim::levenshtein;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use strsim::levenshtein;
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    Mutex,
+}; // Corrected import for Mutex
+use xcap::Monitor;
 
-use crate::utils::{perform_ocr, save_text_files, capture_screenshot, compare_with_previous_image};
+use crate::utils::{capture_screenshot, compare_with_previous_image, perform_ocr, save_text_files};
 
 pub enum ControlMessage {
     Pause,
@@ -32,16 +39,13 @@ pub struct OcrTaskData {
     pub result_tx: Sender<CaptureResult>,
 }
 
-const MAX_THREADS: usize = 1;
-
 pub async fn continuous_capture(
     _control_rx: &mut Receiver<ControlMessage>,
     result_tx: Sender<CaptureResult>,
     interval: Duration,
-    save_text_files_flag: bool, 
+    save_text_files_flag: bool,
 ) {
     let monitor = Monitor::all().unwrap().first().unwrap().clone(); // Simplified monitor retrieval
-    let cache = Arc::new(Mutex::new(HashMap::<u64, String>::new()));
     let previous_text_json = Arc::new(Mutex::new(None));
     let ocr_task_running = Arc::new(AtomicBool::new(false));
     let mut frame_counter: u64 = 0;
@@ -52,7 +56,14 @@ pub async fn continuous_capture(
 
     loop {
         let (image, image_hash, _capture_duration) = capture_screenshot(&monitor).await;
-        let current_average = compare_with_previous_image(&previous_image, &image, &mut max_average, frame_counter, &mut max_avg_value).await;
+        let current_average = compare_with_previous_image(
+            &previous_image,
+            &image,
+            &mut max_average,
+            frame_counter,
+            &mut max_avg_value,
+        )
+        .await;
         if current_average > max_avg_value {
             max_average = Some(MaxAverageFrame {
                 image: Arc::new(image.clone()),
@@ -70,7 +81,8 @@ pub async fn continuous_capture(
 
         if !ocr_task_running.load(Ordering::SeqCst) {
             // debug!("max_avg_frame {} before if let Some(", max_avg_value);
-            if let Some(max_avg_frame) = max_average.take() { // Use take() to move out the value
+            if let Some(max_avg_frame) = max_average.take() {
+                // Use take() to move out the value
                 let ocr_task_data = OcrTaskData {
                     image: max_avg_frame.image.clone(),
                     frame_number: max_avg_frame.frame_number,
@@ -78,7 +90,6 @@ pub async fn continuous_capture(
                     result_tx: result_tx.clone(),
                 };
 
-                let cache_clone = cache.clone();
                 let previous_text_json_clone = previous_text_json.clone();
                 let ocr_task_running_clone = ocr_task_running.clone();
 
@@ -90,10 +101,11 @@ pub async fn continuous_capture(
                         ocr_task_data.frame_number,
                         ocr_task_data.timestamp,
                         ocr_task_data.result_tx,
-                        &cache_clone,
                         &previous_text_json_clone,
                         save_text_files_flag, // Pass the flag here
-                    ).await {
+                    )
+                    .await
+                    {
                         error!("Error processing OCR task: {}", e);
                     }
                     ocr_task_running_clone.store(false, Ordering::SeqCst);
@@ -103,7 +115,6 @@ pub async fn continuous_capture(
                 // Reset max_average and max_avg_value after spawning the OCR task
                 max_avg_value = 0.0;
                 // debug!("max_avg_value {}", max_avg_value);
-
             }
         }
 
@@ -135,7 +146,6 @@ async fn process_ocr_task(
     frame_number: u64,
     timestamp: Instant,
     result_tx: Sender<CaptureResult>,
-    cache: &Arc<Mutex<HashMap<u64, String>>>,
     previous_text_json: &Arc<Mutex<Option<Vec<HashMap<String, String>>>>>,
     save_text_files_flag: bool, // Add this parameter
 ) -> Result<(), std::io::Error> {
@@ -144,10 +154,11 @@ async fn process_ocr_task(
     debug!("Performing OCR for frame {}", frame_number);
     let (text, data_output, json_output) = perform_ocr(&image_arc);
 
-    let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output).unwrap_or_else(|e| {
-        error!("Failed to parse JSON output: {}", e);
-        Vec::new()
-    });
+    let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output)
+        .unwrap_or_else(|e| {
+            error!("Failed to parse JSON output: {}", e);
+            Vec::new()
+        });
 
     let mut previous_text_json = previous_text_json.lock().await;
     let mut new_text_json = Vec::new();
@@ -166,7 +177,8 @@ async fn process_ocr_task(
             }
         }
     } else {
-        new_text_json = current_text_json.iter()
+        new_text_json = current_text_json
+            .iter()
             .filter(|record| record["confidence"].parse::<f64>().unwrap_or(0.0) > 60.0)
             .cloned()
             .collect();
@@ -176,7 +188,13 @@ async fn process_ocr_task(
     new_text_json.retain(|record| seen_texts.insert(record["text"].clone()));
 
     if save_text_files_flag {
-        save_text_files(frame_number, &new_text_json, &current_text_json, &previous_text_json).await;
+        save_text_files(
+            frame_number,
+            &new_text_json,
+            &current_text_json,
+            &previous_text_json,
+        )
+        .await;
     }
 
     *previous_text_json = Some(current_text_json.clone());
@@ -193,7 +211,10 @@ async fn process_ocr_task(
         .await
     {
         error!("Failed to send OCR result: {}", e);
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send OCR result"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Failed to send OCR result",
+        ));
     }
     let _duration = start_time.elapsed();
     debug!(
