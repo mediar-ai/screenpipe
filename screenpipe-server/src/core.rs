@@ -26,6 +26,7 @@ pub async fn start_continuous_recording(
     mut full_control: Receiver<RecorderControl>,
     vision_control: Arc<AtomicBool>,
     audio_devices_control_receiver: Receiver<(AudioDevice, DeviceControl)>,
+    save_text_files: bool, // Added this parameter
 ) -> Result<()> {
     info!("Recording now");
 
@@ -40,7 +41,7 @@ pub async fn start_continuous_recording(
     let output_path_audio = Arc::clone(&output_path);
 
     let video_handle = tokio::spawn(async move {
-        record_video(db_manager_video, output_path_video, fps, is_running_video).await
+        record_video(db_manager_video, output_path_video, fps, is_running_video, save_text_files).await
     });
 
     let audio_handle = tokio::spawn(async move {
@@ -97,6 +98,7 @@ async fn record_video(
     output_path: Arc<String>,
     fps: f64,
     is_running: Arc<AtomicBool>,
+    save_text_files: bool, // Added this parameter
 ) -> Result<()> {
     let db_chunk_callback = Arc::clone(&db);
     let rt = tokio::runtime::Handle::current();
@@ -109,8 +111,8 @@ async fn record_video(
             }
         });
     };
-    let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback);
-
+    let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback, save_text_files);
+    
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.get_latest_frame().await {
             match db.insert_frame().await {
