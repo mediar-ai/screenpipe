@@ -45,29 +45,29 @@ impl ResourceMonitor {
                 }
             }
 
-            let total_memory_kb = total_memory / 1024.0;
-            let system_total_memory = sys.total_memory() as f64 / 1024.0;
-            let memory_usage_percent = (total_memory_kb / system_total_memory) * 100.0;
+            let total_memory_gb = total_memory / 1048576000.0;
+            let system_total_memory = sys.total_memory() as f64 / 1048576000.0;
+            let memory_usage_percent = (total_memory_gb / system_total_memory) * 100.0;
             let runtime = self.start_time.elapsed();
 
             let log_message = if cfg!(target_os = "macos") {
                 if let Some(npu_usage) = self.get_npu_usage() {
                     format!(
-                        "Runtime: {:?}, Total Memory: {:.2}% ({:.2} KB / {:.2} KB), Total CPU: {:.2}%, NPU: {:.2}%",
-                        runtime, memory_usage_percent * 100.0, total_memory_kb, system_total_memory, total_cpu, npu_usage
+                        "Runtime: {}s, Total Memory: {:.0}% ({:.0} GB / {:.0} GB), Total CPU: {:.0}%, NPU: {:.0}%",
+                        runtime.as_secs(), memory_usage_percent, total_memory_gb, system_total_memory, total_cpu, npu_usage
                     )
                 } else {
                     format!(
-                        "Runtime: {:?}, Total Memory: {:.2}% ({:.2} KB / {:.2} KB), Total CPU: {:.2}%, NPU: N/A",
-                        runtime, memory_usage_percent * 100.0, total_memory_kb, system_total_memory, total_cpu
+                        "Runtime: {}s, Total Memory: {:.0}% ({:.0} GB / {:.0} GB), Total CPU: {:.0}%, NPU: N/A",
+                        runtime.as_secs(), memory_usage_percent, total_memory_gb, system_total_memory, total_cpu
                     )
                 }
             } else {
                 format!(
-                    "Runtime: {:?}, Total Memory: {:.2}% ({:.2} KB / {:.2} KB), Total CPU: {:.2}%",
-                    runtime,
-                    memory_usage_percent * 100.0,
-                    total_memory_kb,
+                    "Runtime: {}s, Total Memory: {:.0}% ({:.2} GB / {:.2} GB), Total CPU: {:.0}%",
+                    runtime.as_secs(),
+                    memory_usage_percent,
+                    total_memory_gb,
                     system_total_memory,
                     total_cpu
                 )
@@ -81,18 +81,18 @@ impl ResourceMonitor {
                     || runtime > self.runtime_threshold)
             {
                 warn!(
-                    "Restarting due to: Memory usage: {:.2}%, Runtime: {:?}",
+                    "Restarting due to: Memory usage: {:.0}%, Runtime: {}s",
                     memory_usage_percent * 100.0,
-                    runtime
+                    runtime.as_secs()
                 );
                 self.restart();
             } else if memory_usage_percent > self.memory_threshold
                 || runtime > self.runtime_threshold
             {
                 warn!(
-                    "Resource threshold exceeded: Memory usage: {:.2}%, Runtime: {:?}",
+                    "Resource threshold exceeded: Memory usage: {:.0}%, Runtime: {}s",
                     memory_usage_percent * 100.0,
-                    runtime
+                    runtime.as_secs()
                 );
             }
         }
