@@ -28,6 +28,7 @@ impl VideoCapture {
         output_path: &str,
         fps: f64,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
+        save_text_files: bool, // Add this parameter
     ) -> Self {
         info!("Starting new video capture");
         let (control_tx, mut control_rx) = channel(512);
@@ -45,6 +46,7 @@ impl VideoCapture {
                 &mut control_rx,
                 result_sender,
                 Duration::from_secs_f64(1.0 / fps),
+                save_text_files, // Pass the flag here
             )
             .await;
         });
