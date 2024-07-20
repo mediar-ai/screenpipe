@@ -1,9 +1,9 @@
 class Screenpipe < Formula
     desc "Chat with an AI that knows everything about you."
     homepage "https://github.com/louis030195/screen-pipe"
-    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.37/screenpipe-0.1.37-x86_64-apple-darwin.tar.gz"
-    sha256 "7d0545a9217792bccd3ce585ea96c34e464112a1af85f308b272b70b870da406"
-    version "0.1.37"
+    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.38/screenpipe-0.1.38-x86_64-apple-darwin.tar.gz"
+    sha256 "15f5dc0e296e774e55e029ad7944c93064658890c933b4db42434575a975c733"
+    version "0.1.38"
     
     depends_on "ffmpeg"
   
