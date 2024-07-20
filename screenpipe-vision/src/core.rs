@@ -1,17 +1,14 @@
 use image::DynamicImage;
 use log::{debug, error, info};
-use rusty_tesseract::{Args, Image};
-use tokio::sync::broadcast;
-use tokio::sync::broadcast::error::RecvError;
+use rusty_tesseract::DataOutput;
+use tokio::sync::{mpsc::{Receiver, Sender}, Mutex}; // Corrected import for Mutex
+use serde_json;
+use std::{collections::{HashMap, HashSet}, sync::Arc, time::{Duration, Instant}};
 use xcap::Monitor;
+use strsim::levenshtein;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::Mutex;
-use tokio::task;
+use crate::utils::{perform_ocr, save_text_files, capture_screenshot, compare_with_previous_image};
 
 pub enum ControlMessage {
     Pause,
@@ -22,188 +19,185 @@ pub enum ControlMessage {
 pub struct CaptureResult {
     pub image: Arc<DynamicImage>,
     pub text: String,
+    pub text_json: Vec<HashMap<String, String>>,
     pub frame_number: u64,
     pub timestamp: Instant,
+    pub data_output: DataOutput,
 }
 
-const MAX_THREADS: usize = 4; // Adjust based on your needs
-const MAX_QUEUE_SIZE: usize = 6; // Maximum number of frames to keep in the queue. 64/8 ocr task = 8
-                                 // seems kinda counter intuitive but less threads for OCR = more CPU usage = less frame dropping
+pub struct OcrTaskData {
+    pub image: Arc<DynamicImage>,
+    pub frame_number: u64,
+    pub timestamp: Instant,
+    pub result_tx: Sender<CaptureResult>,
+}
+
+const MAX_THREADS: usize = 1;
 
 pub async fn continuous_capture(
-    control_rx: &mut Receiver<ControlMessage>,
+    _control_rx: &mut Receiver<ControlMessage>,
     result_tx: Sender<CaptureResult>,
     interval: Duration,
 ) {
-    let monitors = Monitor::all().unwrap();
-    let monitor = monitors.first().unwrap();
-    let cpu_count = num_cpus::get();
-    let pool_size = (cpu_count as f32 * 1.2) as usize;
-    let pool_size = std::cmp::min(pool_size, MAX_THREADS);
-
-    info!("Will use {} tasks for OCR", pool_size);
-    let is_paused = Arc::new(Mutex::new(false));
-    let should_stop = Arc::new(Mutex::new(false));
+    let monitor = Monitor::all().unwrap().first().unwrap().clone(); // Simplified monitor retrieval
     let cache = Arc::new(Mutex::new(HashMap::<u64, String>::new()));
-
-    let (ocr_tx, _) =
-        broadcast::channel::<(Arc<DynamicImage>, u64, u64, Instant, Sender<CaptureResult>)>(64);
-    let ocr_tx = Arc::new(ocr_tx);
-
-    // Spawn OCR tasks
-    let ocr_handles: Vec<_> = (0..pool_size)
-        .map(|id| {
-            let mut ocr_rx = ocr_tx.subscribe();
-            let cache = Arc::clone(&cache);
-            let should_stop = Arc::clone(&should_stop);
-            task::spawn(async move {
-                while !*should_stop.lock().await {
-                    match ocr_rx.recv().await {
-                        Ok((image_arc, image_hash, frame_number, timestamp, result_tx)) => {
-                            // Only process if the frame number modulo pool_size equals this task's id
-                            if frame_number % pool_size as u64 == id as u64 {
-                                let start_time = Instant::now();
-                                let mut cache = cache.lock().await;
-                                let text = if let Some(cached_text) = cache.get(&image_hash) {
-                                    cached_text.clone()
-                                } else {
-                                    let new_text = perform_ocr(&image_arc);
-                                    cache.insert(image_hash, new_text.clone());
-                                    new_text
-                                };
-
-                                if let Err(e) = result_tx
-                                    .send(CaptureResult {
-                                        image: image_arc.into(),
-                                        text,
-                                        frame_number,
-                                        timestamp,
-                                    })
-                                    .await
-                                {
-                                    error!("Failed to send OCR result: {}", e);
-                                }
-                                let duration = start_time.elapsed();
-                                debug!(
-                                    "OCR task {} processed frame {} in {:?}",
-                                    id, frame_number, duration
-                                );
-                            }
-                        }
-                        Err(e) => match e {
-                            RecvError::Lagged(_) => {
-                                debug!("OCR task {} lagged behind: {}", id, e);
-                            }
-                            _ => {
-                                error!("OCR channel error for task {}: {}", id, e);
-                                break;
-                            }
-                        },
-                    }
-                }
-            })
-        })
-        .collect();
-
+    let previous_text_json = Arc::new(Mutex::new(None));
+    let ocr_task_running = Arc::new(AtomicBool::new(false));
     let mut frame_counter: u64 = 0;
-    let start_time = Instant::now();
-    let mut last_processed_frame = 0;
+    // let start_time = Instant::now();
+    let mut previous_image: Option<Arc<DynamicImage>> = None;
+    let mut max_average: Option<MaxAverageFrame> = None;
+    let mut max_avg_value = 0.0;
 
-    while !*should_stop.lock().await {
-        // Check for control messages
-        if let Ok(message) = control_rx.try_recv() {
-            match message {
-                ControlMessage::Pause => *is_paused.lock().await = true,
-                ControlMessage::Resume => *is_paused.lock().await = false,
-                ControlMessage::Stop => {
-                    *should_stop.lock().await = true;
-                    break;
-                }
+    loop {
+        let (image, image_hash, _capture_duration) = capture_screenshot(&monitor).await;
+        let current_average = compare_with_previous_image(&previous_image, &image, &mut max_average, frame_counter, &mut max_avg_value).await;
+        if current_average > max_avg_value {
+            max_average = Some(MaxAverageFrame {
+                image: Arc::new(image.clone()),
+                image_hash,
+                frame_number: frame_counter,
+                timestamp: Instant::now(),
+                result_tx: result_tx.clone(),
+                average: current_average,
+            });
+            max_avg_value = current_average;
+        }
+
+        previous_image = Some(Arc::new(image.clone()));
+        // debug!("ocr_task_running {} BEFORE if if !ocr_task_running.load(Ordering::SeqCst)", ocr_task_running.load(Ordering::SeqCst));
+
+        if !ocr_task_running.load(Ordering::SeqCst) {
+            // debug!("max_avg_frame {} before if let Some(", max_avg_value);
+            if let Some(max_avg_frame) = max_average.take() { // Use take() to move out the value
+                let ocr_task_data = OcrTaskData {
+                    image: max_avg_frame.image.clone(),
+                    frame_number: max_avg_frame.frame_number,
+                    timestamp: max_avg_frame.timestamp,
+                    result_tx: result_tx.clone(),
+                };
+
+                let cache_clone = cache.clone();
+                let previous_text_json_clone = previous_text_json.clone();
+                let ocr_task_running_clone = ocr_task_running.clone();
+
+                ocr_task_running.store(true, Ordering::SeqCst);
+                // debug!("ocr_task_running {}", ocr_task_running.load(Ordering::SeqCst));
+                tokio::spawn(async move {
+                    if let Err(e) = process_ocr_task(
+                        ocr_task_data.image,
+                        ocr_task_data.frame_number,
+                        ocr_task_data.timestamp,
+                        ocr_task_data.result_tx,
+                        &cache_clone,
+                        &previous_text_json_clone,
+                    ).await {
+                        error!("Error processing OCR task: {}", e);
+                    }
+                    ocr_task_running_clone.store(false, Ordering::SeqCst);
+                    // debug!("ocr_task_running_clone {}", ocr_task_running_clone.load(Ordering::SeqCst));
+                });
+
+                // Reset max_average and max_avg_value after spawning the OCR task
+                max_avg_value = 0.0;
+                // debug!("max_avg_value {}", max_avg_value);
+
             }
         }
-
-        if *is_paused.lock().await {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            continue;
-        }
-
-        // Capture screenshot
-        let capture_start = Instant::now();
-        let buffer = monitor.capture_image().unwrap();
-        let image = DynamicImage::ImageRgba8(buffer);
-        let capture_duration = capture_start.elapsed();
-
-        // Generate hash for the image
-        let image_hash = calculate_hash(&image);
-
-        // Clone necessary values for the OCR task
-        let result_tx_clone = result_tx.clone();
-        let image_arc = Arc::new(image);
-
-        // Check if we need to drop this frame
-        let queue_size = ocr_tx.receiver_count() as u64;
-        // debug!("OCR queue size: {}", queue_size);
-        if queue_size >= MAX_QUEUE_SIZE as u64 {
-            let frames_to_skip = queue_size - MAX_QUEUE_SIZE as u64 + 1;
-            if frame_counter - last_processed_frame <= frames_to_skip {
-                debug!("Dropping frame {} due to OCR backlog", frame_counter);
-                frame_counter += 1;
-                continue;
-            }
-        }
-
-        // Send image for OCR processing
-        let send_start = Instant::now();
-        if let Err(e) = ocr_tx.send((
-            image_arc,
-            image_hash,
-            frame_counter,
-            capture_start,
-            result_tx_clone,
-        )) {
-            error!("Failed to send image for OCR processing: {}", e);
-        } else {
-            last_processed_frame = frame_counter;
-        }
-        let send_duration = send_start.elapsed();
 
         frame_counter += 1;
-        debug!(
-            "Frame {}: Capture time: {:?}, Send time: {:?}, Receiver count: {}",
-            frame_counter,
-            capture_duration,
-            send_duration,
-            ocr_tx.receiver_count()
-        );
-
+        // debug!("frame_counter triggered to {}, interval is {:?}", frame_counter, interval);
+        // let total_duration = start_time.elapsed();
+        // info!(
+        //     "Capture completed. Total frames: {}, Total time: {:.1?}, Avg FPS: {:.2}",
+        //     frame_counter,
+        //     total_duration,
+        //     frame_counter as f64 / total_duration.as_secs_f64()
+        // );
         tokio::time::sleep(interval).await;
+        // debug!("paseed tokio::time::sleep");
+    }
+}
+
+pub struct MaxAverageFrame {
+    pub image: Arc<DynamicImage>,
+    pub image_hash: u64,
+    pub frame_number: u64,
+    pub timestamp: Instant,
+    pub result_tx: Sender<CaptureResult>,
+    pub average: f64,
+}
+
+async fn process_ocr_task(
+    image_arc: Arc<DynamicImage>,
+    frame_number: u64,
+    timestamp: Instant,
+    result_tx: Sender<CaptureResult>,
+    cache: &Arc<Mutex<HashMap<u64, String>>>,
+    previous_text_json: &Arc<Mutex<Option<Vec<HashMap<String, String>>>>>,
+) -> Result<(), std::io::Error> { // Changed SomeErrorType to std::io::Error
+    let start_time = Instant::now();
+
+    debug!("Performing OCR for frame {}", frame_number);
+    let (text, data_output, json_output) = perform_ocr(&image_arc);
+
+    // // Acquire a lock on the mutex to access the HashMap
+    // let mut cache_guard = cache.lock().await;
+    // cache_guard.insert(frame_number, text.clone());
+
+    let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output).unwrap_or_else(|e| {
+        error!("Failed to parse JSON output: {}", e);
+        Vec::new()
+    });
+
+    let mut previous_text_json = previous_text_json.lock().await;
+    let mut new_text_json = Vec::new();
+    if let Some(prev_json) = &*previous_text_json {
+        for current_record in &current_text_json {
+            let confidence: f64 = current_record["confidence"].parse().unwrap_or(0.0);
+            if confidence > 60.0 {
+                let is_new = prev_json.iter().all(|prev_record| {
+                    let distance = levenshtein(&current_record["text"], &prev_record["text"]);
+                    let threshold = (prev_record["text"].len() as f64 * 0.1).ceil() as usize;
+                    distance > threshold
+                });
+                if is_new {
+                    new_text_json.push(current_record.clone());
+                }
+            }
+        }
+    } else {
+        new_text_json = current_text_json.iter()
+            .filter(|record| record["confidence"].parse::<f64>().unwrap_or(0.0) > 60.0)
+            .cloned()
+            .collect();
     }
 
-    // Signal OCR tasks to stop
-    *should_stop.lock().await = true;
+    let mut seen_texts = HashSet::new();
+    new_text_json.retain(|record| seen_texts.insert(record["text"].clone()));
 
-    // Wait for all OCR tasks to complete
-    for handle in ocr_handles {
-        handle.await.unwrap();
+    save_text_files(frame_number, &new_text_json, &current_text_json, &previous_text_json).await;
+
+    *previous_text_json = Some(current_text_json.clone());
+
+    if let Err(e) = result_tx
+        .send(CaptureResult {
+            image: image_arc.into(),
+            text: text.clone(),
+            text_json: current_text_json,
+            frame_number,
+            timestamp,
+            data_output,
+        })
+        .await
+    {
+        error!("Failed to send OCR result: {}", e);
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send OCR result")); // Changed SomeErrorType to std::io::Error
     }
-
-    let total_duration = start_time.elapsed();
-    info!(
-        "Capture completed. Total frames: {}, Total time: {:?}, Avg FPS: {:.2}",
-        frame_counter,
-        total_duration,
-        frame_counter as f64 / total_duration.as_secs_f64()
+    let _duration = start_time.elapsed();
+    debug!(
+        "OCR task processed frame {} in {:?}",
+        frame_number, _duration
     );
-}
-fn calculate_hash(image: &DynamicImage) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    image.as_bytes().hash(&mut hasher);
-    hasher.finish()
-}
-
-fn perform_ocr(image: &DynamicImage) -> String {
-    let args = Args::default();
-    let ocr_image = Image::from_dynamic_image(image).unwrap();
-    rusty_tesseract::image_to_string(&ocr_image, &args)
-        .unwrap_or_else(|_| String::from("OCR failed"))
+    Ok(())
 }

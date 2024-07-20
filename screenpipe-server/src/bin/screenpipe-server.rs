@@ -239,7 +239,10 @@ async fn main() -> anyhow::Result<()> {
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir))
             .await
-            .unwrap(),
+            .map_err(|e| {
+                eprintln!("Failed to initialize database: {:?}", e);
+                e
+            })?
     );
     info!(
         "Database initialized, will store files in {}",

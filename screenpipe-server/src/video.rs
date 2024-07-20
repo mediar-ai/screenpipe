@@ -55,14 +55,14 @@ impl VideoCapture {
         let _queue_thread = tokio::spawn(async move {
             while *capture_thread_is_running.lock().await {
                 if let Some(result) = result_receiver.recv().await {
-                    debug!(
-                        "Received result from capture thread: frame_number: {:?}",
-                        result.frame_number
-                    );
-                    debug!(
-                        "Received result from capture thread: timestamp: {:?}",
-                        result.timestamp
-                    );
+                    // debug!(
+                    //     "Received result from capture thread: frame_number: {:?}",
+                    //     result.frame_number
+                    // );
+                    // debug!(
+                    //     "Received result from capture thread: timestamp: {:?}",
+                    //     result.timestamp
+                    // );
                     // debug!("Received result from capture thread: text: {:?}", result.text);
                     capture_frame_queue.lock().await.push_back(result);
                 }
@@ -188,7 +188,7 @@ async fn save_frames_as_video(
         }
 
         if let Some(result) = frame_queue.lock().await.pop_front() {
-            debug!("Processing frame {}", frame_count + 1);
+            debug!("Processing frame in video.rs"); // {}", frame_count + 1
             let sender = Arc::clone(&sender);
 
             tokio::spawn(async move {

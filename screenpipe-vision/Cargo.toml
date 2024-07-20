@@ -48,9 +48,15 @@ rand = "0.8.5"
 # Log
 log = { workspace = true }
 
+image-compare = "0.4.1"
+strsim = "0.10.0"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 criterion = { workspace = true }
+assert_cmd = "2.0.14"
+predicates = "3.1.0"
+assert_fs = "1.1.1"
 
 [[bin]]
 name = "screenpipe-vision"
@@ -59,4 +65,3 @@ path = "src/bin/screenpipe-vision.rs"
 [[bench]]
 name = "vision_benchmark"
 harness = false
-

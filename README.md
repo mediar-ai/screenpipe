@@ -192,7 +192,7 @@ npm run dev
 Check which tables you have in the local database</summary>
 
 ```bash
-sqlite3 screen-pipe/data/db.sqlite ".tables" 
+sqlite3 data/db.sqlite ".tables" 
 ```
 </details>
 <details>
