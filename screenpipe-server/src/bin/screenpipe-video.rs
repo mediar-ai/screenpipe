@@ -10,6 +10,15 @@ use std::io::{BufWriter, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    /// Save text files
+    #[arg(long, default_value_t = false)]
+    save_text_files: bool,
+}
 
 fn write_json_frame(writer: &mut BufWriter<File>, frame_data: &Value) -> std::io::Result<()> {
     serde_json::to_writer(writer.by_ref(), frame_data)?;
@@ -22,6 +31,9 @@ fn write_json_frame(writer: &mut BufWriter<File>, frame_data: &Value) -> std::io
 #[tokio::main]
 async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
+    let cli = Cli::parse();
+    let save_text_files = cli.save_text_files;
 
     let time = Utc::now();
     let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
@@ -39,7 +51,7 @@ async fn main() {
         }
     };
 
-    let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback);
+    let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback, save_text_files);
     let (_tx, rx): (Sender<()>, Receiver<()>) = channel(32);
     let rx = Arc::new(Mutex::new(rx));
     let rx_thread = rx.clone();
