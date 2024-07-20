@@ -7,6 +7,59 @@ on:
   workflow_dispatch:
 
 jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Install dependencies
+        run: |
+          brew install ffmpeg
+
+      - name: Build with Metal feature
+        run: |
+          cargo build --release --features metal
+
+      - name: Create deployment package
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          tar -czf screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz -C target/release screenpipe
+
+      - name: Calculate SHA256
+        run: |
+          echo "MAC_SHA256=$(shasum -a 256 screenpipe-*.tar.gz | cut -d ' ' -f 1)" >> $GITHUB_ENV
+
+      - name: Update Homebrew Formula
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          sed -i '' "s/version \".*\"/version \"$VERSION\"/" Formula/screenpipe.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${{ env.MAC_SHA256 }}\"/" Formula/screenpipe.rb
+          sed -i '' "s/v[0-9.]*\/screenpipe-[0-9.]*-x86_64-apple-darwin/v$VERSION\/screenpipe-$VERSION-x86_64-apple-darwin/" Formula/screenpipe.rb
+
+      - name: Commit and push Homebrew Formula changes
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add Formula/screenpipe.rb
+          git commit -m "chore: update brew to version ${GITHUB_REF#refs/tags/v}"
+          git push
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: screenpipe-macos
+          path: screenpipe-*.tar.gz
+
   build-ubuntu:
     runs-on: ubuntu-latest
     steps:
@@ -68,6 +121,11 @@ jobs:
         with:
           name: screenpipe-linux
 
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: screenpipe-macos
+
       - name: Set Version
         shell: bash
         run: |
@@ -80,3 +138,4 @@ jobs:
         run: |
           gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} --generate-notes
           gh release upload ${{ env.RELEASE_VERSION }} screenpipe-linux.tar.gz
+          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-macos.tar.gz
