@@ -1,9 +1,9 @@
 class Screenpipe < Formula
     desc "Chat with an AI that knows everything about you."
     homepage "https://github.com/louis030195/screen-pipe"
-    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.35/screenpipe-0.1.35-x86_64-apple-darwin.tar.gz"
-    sha256 "f74b35531c648db63d9fe1f52720d5b406168f6aa5ef695c2b5eff99105d260d"
-    version "0.1.35"
+    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.37/screenpipe-0.1.37-x86_64-apple-darwin.tar.gz"
+    sha256 "7d0545a9217792bccd3ce585ea96c34e464112a1af85f308b272b70b870da406"
+    version "0.1.37"
     
     depends_on "ffmpeg"
   
@@ -28,7 +28,7 @@ class Screenpipe < Formula
 # shasum -a 256 screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
 # gh release upload v${VERSION} screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
 # rm screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
-# update the sha in the ruby code above
+# update the ruby code above (version and sha256)
 # git add Formula/screenpipe.rb
 # git commit -m "chore: update brew to version ${VERSION}"
 # git push
