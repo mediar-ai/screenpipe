@@ -42,6 +42,8 @@ Struggle to get it running? [I'll install it with you in a 15 min call.](https:/
 <details>
   <summary>Option I: Library</summary>
 
+⚠️ You need to build from source if you have an Intel mac
+
 1. Navigate to the folder where you want the data to be stored
 
 2. Install dependencies:
@@ -91,7 +93,7 @@ cd screen-pipe # enter cloned repo
 ```
 
 ```bash
-cargo build --release --features metal # remove "--features metal" if you do not have M series processor
+cargo build --release --features metal
 ```
 
 Sign the executable to avoid mac killing the process when it's running for too long
