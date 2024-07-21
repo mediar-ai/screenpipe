@@ -27,7 +27,7 @@ const screenpipe = async (conf) => {
         {
           'role': 'user',
           'content': `Based on this user selection: "${msg}", generate parameters as JSON for 3 different queries to screenpipe. 
-            Each query should have "q", "offset", and "limit" fields. 
+            Each query should have "q", "offset", "limit", and start_date, end_date fields. 
             Rules:
             - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
             Return a list of objects with the key "queries"
@@ -40,18 +40,18 @@ const screenpipe = async (conf) => {
             Example answers from you:
             "{
               "queries": [
-                {"q": "goal", "offset": 0, "limit": 10},
-                {"q": "stripe", "offset": 0, "limit": 50},
-                {"q": "customer", "offset": 0, "limit": 20}
+                {"q": "goal", "offset": 0, "limit": 10, "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
+                {"q": "stripe", "offset": 0, "limit": 50, "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
+                {"q": "customer", "offset": 0, "limit": 20, "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
               ]
             }"
 
             or 
             "{
               "queries": [
-                {"q": "sales", "offset": 0, "limit": 10},
-                {"q": "customer", "offset": 0, "limit": 20},
-                {"q": "goal", "offset": 0, "limit": 10}
+                {"q": "sales", "offset": 0, "limit": 10, "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
+                {"q": "customer", "offset": 0, "limit": 20, "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
+                {"q": "goal", "offset": 0, "limit": 10, "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
               ]
             }"
 
