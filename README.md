@@ -119,6 +119,10 @@ Then run it
 ```bash
 # Install ffmpeg (you may need to download and add it to your PATH manually)
 # Visit https://www.ffmpeg.org/download.html for installation instructions
+
+# Install Chocolatey from https://chocolatey.org/install
+# Then install pkg config
+choco install pkgconfiglite
 ```
 
  Install [Rust](https://www.rust-lang.org/tools/install).
