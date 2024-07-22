@@ -26,7 +26,7 @@ pub async fn start_continuous_recording(
     mut full_control: Receiver<RecorderControl>,
     vision_control: Arc<AtomicBool>,
     audio_devices_control_receiver: Receiver<(AudioDevice, DeviceControl)>,
-    save_text_files: bool, // Added this parameter
+    save_text_files: bool,
 ) -> Result<()> {
     info!("Recording now");
 
@@ -98,7 +98,7 @@ async fn record_video(
     output_path: Arc<String>,
     fps: f64,
     is_running: Arc<AtomicBool>,
-    save_text_files: bool, // Added this parameter
+    save_text_files: bool,
 ) -> Result<()> {
     let db_chunk_callback = Arc::clone(&db);
     let rt = tokio::runtime::Handle::current();
@@ -117,7 +117,11 @@ async fn record_video(
         if let Some(frame) = video_capture.get_latest_frame().await {
             match db.insert_frame().await {
                 Ok(frame_id) => {
-                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text).await {
+                    let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
+                    let new_text_json = serde_json::to_string(&frame.new_text_json).unwrap_or_default();
+                    let data_output = serde_json::to_string(&frame.data_output).unwrap_or_default();
+
+                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json, &data_output).await {
                         error!("Failed to insert OCR text: {}", e);
                     }
                     debug!("Inserted frame {} with OCR text", frame_id);
@@ -275,7 +279,7 @@ async fn process_audio_result(db: &DatabaseManager, result: TranscriptionResult)
     match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
             if let Err(e) = db
-                .insert_audio_transcription(audio_chunk_id, &transcription, 0) // TODO index is in the text atm
+                .insert_audio_transcription(audio_chunk_id, &transcription, 0)
                 .await
             {
                 error!(
