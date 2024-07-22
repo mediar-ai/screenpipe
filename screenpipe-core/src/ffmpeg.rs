@@ -71,6 +71,19 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        let lib_folder = exe_folder.join("lib");
+        debug!("Lib folder: {:?}", lib_folder);
+        let ffmpeg_in_lib = lib_folder.join(EXECUTABLE_NAME);
+        if ffmpeg_in_lib.exists() {
+            debug!("Found ffmpeg in lib folder: {:?}", ffmpeg_in_lib);
+            return Some(ffmpeg_in_lib);
+        } else {
+            debug!("ffmpeg not found in lib folder");
+        }
+    }
+
     error!("ffmpeg not found");
     // crash
     panic!("ffmpeg not found");

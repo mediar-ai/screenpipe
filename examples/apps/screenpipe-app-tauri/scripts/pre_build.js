@@ -129,7 +129,11 @@ if (platform == 'macos') {
 	// Install lame using Homebrew
 	await $`brew install lame`
 	// Copy lame to ffmpeg ! NEED SUDO
-	await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
+	if (await fs.exists(`${config.ffmpegRealname}/lib/`)) {
+		await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
+	} else { // ci
+		await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ./src-tauri/${config.ffmpegRealname}/lib/`
+	}
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {

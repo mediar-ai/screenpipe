@@ -109,9 +109,48 @@ jobs:
           name: screenpipe-linux
           path: screenpipe-linux.tar.gz
 
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Install FFmpeg
+        run: |
+          choco install ffmpeg
+
+      - name: Build release
+        run: |
+          cargo build --release
+
+      - name: Download FFmpeg
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg"
+          Move-Item -Path "ffmpeg\ffmpeg-master-latest-win64-gpl\bin\*" -Destination "target\release\"
+
+      - name: Create deployment package
+        run: |
+          $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
+          Compress-Archive -Path target\release\screenpipe.exe, target\release\ffmpeg.exe, target\release\ffprobe.exe -DestinationPath screenpipe-$VERSION-x86_64-pc-windows-msvc.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: screenpipe-windows
+          path: screenpipe-*.zip
+
   release:
     runs-on: ubuntu-latest
-    needs: [build-ubuntu]
+    needs: [build-ubuntu, build-macos, build-windows]
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -126,6 +165,11 @@ jobs:
         with:
           name: screenpipe-macos
 
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: screenpipe-windows
+
       - name: Set Version
         shell: bash
         run: |
@@ -139,3 +183,4 @@ jobs:
           gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} --generate-notes
           gh release upload ${{ env.RELEASE_VERSION }} screenpipe-linux.tar.gz
           gh release upload ${{ env.RELEASE_VERSION }} screenpipe-macos.tar.gz
+          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-windows.zip

@@ -63,7 +63,8 @@ jobs:
 
       # Run pre build
       - name: Run pre_build.js on ${{ matrix.platform }}
-        run: bun ./examples/apps/screenpipe-app-tauri/scripts/pre_build.js ${{ matrix.pre-build-args }}
+        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        working-directory: ./examples/apps/screenpipe-app-tauri
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-24.04'
