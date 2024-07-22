@@ -128,8 +128,8 @@ if (platform == 'windows') {
 if (platform == 'macos') {
 	// Install lame using Homebrew
 	await $`brew install lame`
-	// Copy lame to ffmpeg
-	await $`cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
+	// Copy lame to ffmpeg ! NEED SUDO
+	await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {

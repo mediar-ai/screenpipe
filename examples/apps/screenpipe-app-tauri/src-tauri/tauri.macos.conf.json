@@ -23,6 +23,9 @@
                     "width": 660
                 }
             }
+        },
+        "resources": {
+            "ffmpeg/bin/*": "./"
         }
     }
 }

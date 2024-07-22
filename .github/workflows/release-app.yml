@@ -22,13 +22,13 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
-            args: "--target aarch64-apple-darwin"
+            args: "--target aarch64-apple-darwin --features metal"
           - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin"
+            args: "--target x86_64-apple-darwin --features metal"
           - platform: "ubuntu-24.04" # Ubuntu x86_64
-            args: ""
+            args: "" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64
-            args: '--target x86_64-pc-windows-msvc --features "openblas"'
+            args: '--target x86_64-pc-windows-msvc --features "openblas"' # TODO CUDA?
             pre-build-args: "--openblas"
 
     runs-on: ${{ matrix.platform }}
