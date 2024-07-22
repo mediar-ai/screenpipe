@@ -122,7 +122,8 @@ async fn run_ffmpeg(
     duration: Duration,
 ) -> Result<()> {
     debug!("Starting FFmpeg process");
-    let mut ffmpeg = Command::new(find_ffmpeg_path().unwrap())
+    let mut command = Command::new(find_ffmpeg_path().unwrap());
+    command
         .args(&[
             "-f",
             "f32le",
@@ -142,8 +143,7 @@ async fn run_ffmpeg(
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .stderr(Stdio::piped());
 
     // Explicitly set the library paths for the FFmpeg command
     if let Ok(ld_library_path) = std::env::var("LD_LIBRARY_PATH") {
@@ -153,6 +153,8 @@ async fn run_ffmpeg(
     if let Ok(dyld_library_path) = std::env::var("DYLD_LIBRARY_PATH") {
         command.env("DYLD_LIBRARY_PATH", dyld_library_path);
     }
+
+    debug!("FFmpeg command: {:?}", command);
 
     debug!("FFmpeg command: {:?}", command);
 
