@@ -156,8 +156,7 @@ async fn run_ffmpeg(
 
     debug!("FFmpeg command: {:?}", command);
 
-    debug!("FFmpeg command: {:?}", command);
-
+    let mut ffmpeg: tokio::process::Child = command.spawn().expect("Failed to spawn FFmpeg process");
     debug!("FFmpeg process spawned");
     let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
     let start_time = std::time::Instant::now();
