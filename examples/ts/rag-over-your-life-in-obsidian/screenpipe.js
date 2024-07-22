@@ -36,6 +36,7 @@ const screenpipe = async (conf) => {
             - If you return something else than JSON the universe will come to an end
             - DO NOT add \`\`\`json at the beginning or end of your response
             - Do not use '"' around your response
+            - Date & time now is ${new Date().toISOString()}
             
             Example answers from you:
             "{
