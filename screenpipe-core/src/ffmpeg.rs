@@ -16,11 +16,12 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub fn find_ffmpeg_path() -> Option<PathBuf> {
     debug!("Starting search for ffmpeg executable");
+    let mut ffmpeg_path = None;
 
     // Check if `ffmpeg` is in the PATH environment variable using the `which` crate
     if let Ok(path) = which(EXECUTABLE_NAME) {
         debug!("Found ffmpeg in PATH: {:?}", path);
-        return Some(path);
+        ffmpeg_path = Some(path);
     } else {
         debug!("ffmpeg not found in PATH");
     }
@@ -34,7 +35,7 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
             "Found ffmpeg in current working directory: {:?}",
             ffmpeg_in_cwd
         );
-        return Some(ffmpeg_in_cwd);
+        ffmpeg_path = Some(ffmpeg_in_cwd);
     } else {
         debug!("ffmpeg not found in current working directory");
     }
@@ -49,7 +50,7 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
                 "Found ffmpeg in executable folder: {:?}",
                 ffmpeg_in_exe_folder
             );
-            return Some(ffmpeg_in_exe_folder);
+            ffmpeg_path = Some(ffmpeg_in_exe_folder);
         } else {
             debug!("ffmpeg not found in executable folder");
         }
@@ -64,7 +65,7 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
                     "Found ffmpeg in Resources folder: {:?}",
                     ffmpeg_in_resources
                 );
-                return Some(ffmpeg_in_resources);
+                ffmpeg_path = Some(ffmpeg_in_resources);
             } else {
                 debug!("ffmpeg not found in Resources folder");
             }
@@ -76,13 +77,35 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
             let ffmpeg_in_lib = lib_folder.join(EXECUTABLE_NAME);
             if ffmpeg_in_lib.exists() {
                 debug!("Found ffmpeg in lib folder: {:?}", ffmpeg_in_lib);
-                return Some(ffmpeg_in_lib);
+                ffmpeg_path = Some(ffmpeg_in_lib);
             } else {
                 debug!("ffmpeg not found in lib folder");
             }
         }
     }
 
+    if let Some(path) = ffmpeg_path {
+        let current_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+
+        // if already contains ffmpeg lib path, don't add it again
+        if current_path.contains(path.join("lib").to_str().unwrap()) {
+            return Some(path);
+        }
+
+        if let Some(lib_path) = path
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("lib"))
+        {
+            let new_path = format!("{}:{}", lib_path.to_str().unwrap(), current_path);
+            std::env::set_var("LD_LIBRARY_PATH", new_path.clone());
+            debug!(
+                "Set LD_LIBRARY_PATH to include FFmpeg libraries: {}",
+                new_path
+            );
+        }
+        return Some(path);
+    }
     error!("ffmpeg not found");
     // crash
     panic!("ffmpeg not found");
