@@ -102,69 +102,98 @@ async function submitUserMessage(content: string) {
     },
     tools: {
       queryScreenpipeAPI: {
-        description:
-          'Query the Screenpipe API for OCR that appeared on user s screen and audio transcriptions from his mic',
+        description: `Query the Screenpipe API for OCR that appeared on user's screen and audio transcriptions from their mic. 
+        Rules:
+        - Use the date & time args smartly to get the most relevant results. Current user date & time is ${new Date().toISOString()}
+        - Generate 3-5 queries to get the most relevant results. Use a single keyword that would match the user intent per query
+        - Use only one word per query (in the q field)
+        `,
         parameters: z.object({
-          query: z
-            .string()
-            .describe(
-              'The search query which match exact keywords. Try to use a single keyword that would match the user intent'
-            ),
-          contentType: z
-            .enum(['ocr', 'audio'])
-            .describe('The type of content to search for, either screenshot data or audio transcriptions from user input and output devices'),
-          limit: z
-            .number()
-            .optional()
-            .describe('The number of results to return (default: 5)'),
-          offset: z
-            .number()
-            .optional()
-            .describe('The offset for pagination (default: 0)')
+          queries: z
+            .array(
+              z.object({
+                query: z
+                  .string()
+                  .describe(
+                    'The search query matching exact keywords. Use a single keyword that best matches the user intent'
+                  ),
+                contentType: z
+                  .enum(['ocr', 'audio'])
+                  .describe(
+                    'The type of content to search for: screenshot data or audio transcriptions'
+                  ),
+                limit: z
+                  .number()
+                  .optional()
+                  .describe(
+                    "Number of results to return (default: 5). Don't return more than 50 results as it will be fed to an LLM"
+                  ),
+                offset: z
+                  .number()
+                  .optional()
+                  .describe('Offset for pagination (default: 0)'),
+                startTime: z
+                  .string()
+                  .optional()
+                  .describe('Start time for search range in ISO 8601 format'),
+                endTime: z
+                  .string()
+                  .optional()
+                  .describe('End time for search range in ISO 8601 format')
+              })
+            )
         }),
-        generate: async function* ({
-          query,
-          contentType,
-          limit = 5,
-          offset = 0
-        }) {
-          console.log('screenpipe-chatbot will use content type: ', contentType)
-          console.log('screenpipe-chatbot will use query: ', query)
-          console.log('screenpipe-chatbot will use limit: ', limit)
-          console.log('screenpipe-chatbot will use offset: ', offset)
+        generate: async function* ({ queries }) {
+          console.log('screenpipe-chatbot will use queries: ', queries)
           yield (
             <BotCard>
               <div className="inline-flex items-start gap-1 md:items-center">
                 {spinner}
-                <p className="mb-2">Searching for {contentType} content...</p>
+                <p className="mb-2">Reading your screen and audio data...</p>
               </div>
             </BotCard>
           )
 
           try {
-            const response = await fetch(
-              `http://127.0.0.1:3030/search?q=${encodeURIComponent(query)}&content_type=${contentType}&limit=${limit}&offset=${offset}`
+            const results = await Promise.all(
+              queries.map(async query => {
+                const {
+                  query: q,
+                  contentType,
+                  limit = 5,
+                  offset = 0,
+                  startTime,
+                  endTime
+                } = query
+                const url = new URL('http://127.0.0.1:3030/search')
+                url.searchParams.append('q', q)
+                url.searchParams.append('content_type', contentType)
+                url.searchParams.append('limit', limit.toString())
+                url.searchParams.append('offset', offset.toString())
+                if (startTime) url.searchParams.append('start_time', startTime)
+                if (endTime) url.searchParams.append('end_time', endTime)
+
+                const response = await fetch(url.toString())
+                if (!response.ok) {
+                  throw new Error(
+                    `API request failed: ${response.status} ${response.statusText}`
+                  )
+                }
+                return response.json()
+              })
             )
 
-            if (!response.ok) {
-              throw new Error(
-                `API request failed with status ${response.status} and response ${response.statusText}`
-              )
-            }
-
-            const data = await response.json()
-
             const toolCallId = nanoid()
-
-            // Prepare the data for GPT-4
-            const dataForGPT = JSON.stringify(data, null, 2)
+            const dataForGPT = JSON.stringify(results, null, 2)
 
             // Create a prompt for GPT-4
-            const prompt = `Based on the following search results, please provide a concise and informative answer to the user's query "${query}":
+            const prompt = `Based on the following search results, please provide a concise and informative answer to the user's query "${content}":
 
             ${dataForGPT}
 
             Please summarize the key points and present the information in a clear, easy-to-read format. Be concise`
+
+            console.log('screenpipe-chatbot will use prompt: ', prompt)
 
             let textStream = createStreamableValue('')
             let textNode = <BotMessage content={textStream.value} />
@@ -189,7 +218,7 @@ async function submitUserMessage(content: string) {
                             type: 'tool-call',
                             toolName: 'queryScreenpipeAPI',
                             toolCallId,
-                            args: { query, contentType, limit, offset }
+                            args: { queries }
                           }
                         ]
                       },
@@ -229,7 +258,7 @@ async function submitUserMessage(content: string) {
             return gpt4Response.value
           } catch (error) {
             console.error('Error querying Screenpipe API:', error)
-            console.log('REQUEST: ',`http://127.0.0.1:3030/search?q=${encodeURIComponent(query)}&content_type=${contentType}&limit=${limit}&offset=${offset}`)
+
             return (
               <BotCard>
                 <div className="text-red-500">
@@ -261,7 +290,7 @@ export type UIState = {
 
 export const AI = createAI<AIState, UIState>({
   actions: {
-    submitUserMessage,
+    submitUserMessage
   },
   initialUIState: [],
   initialAIState: { chatId: nanoid(), messages: [] },
