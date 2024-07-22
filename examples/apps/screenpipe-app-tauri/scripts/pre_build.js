@@ -93,11 +93,6 @@ if (platform == 'windows') {
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
-
-		// Ensure libmp3lame is present
-		if (!(await fs.exists(`${config.ffmpegRealname}/bin/x64/libmp3lame.dll`))) {
-			console.error("libmp3lame.dll is missing from the FFmpeg package. Please use a FFmpeg build that includes MP3 support.");
-		}
 	}
 
 	// Setup OpenBlas
@@ -125,25 +120,44 @@ if (platform == 'windows') {
 }
 
 /* ########## macOS ########## */
+// if (platform == 'macos') {
+// 	// Install lame using Homebrew
+// 	await $`brew install lame`
+
+// 	// Setup FFMPEG
+// 	if (!(await fs.exists(config.ffmpegRealname))) {
+// 		await $`wget -nc --show-progress ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+// 		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
+// 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
+// 		await $`rm ${config.macos.ffmpegName}.tar.xz`
+// 	}
+
+// 	// Copy lame to ffmpeg ! NEED SUDO
+// 	await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
+
+// 	// Set the DYLD_LIBRARY_PATH to include the FFmpeg lib directory
+// 	await fs.appendFile(process.env.DYLD_LIBRARY_PATH, path.join(cwd, config.ffmpegRealname, 'lib'))
+// }
 if (platform == 'macos') {
-	// Install lame using Homebrew
-	await $`brew install lame`
+	// Install FFmpeg and lame using Homebrew
+	await $`brew install ffmpeg lame`
 
-	// Setup FFMPEG
-	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`wget -nc --show-progress ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
-		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
-		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-		await $`rm ${config.macos.ffmpegName}.tar.xz`
+	// Set FFmpeg path to Homebrew's installation
+	config.ffmpegRealname = '/opt/homebrew/opt/ffmpeg'
 
-		// Ensure libmp3lame is present
-		if (!(await fs.exists(`${config.ffmpegRealname}/lib/libmp3lame.0.dylib`))) {
-			console.error("libmp3lame.0.dylib is missing from the FFmpeg package. Please use a FFmpeg build that includes MP3 support.");
-		}
+	// Create a symlink if it doesn't exist
+	if (!(await fs.exists(path.join(cwd, 'ffmpeg')))) {
+		await $`ln -s ${config.ffmpegRealname} ${path.join(cwd, 'ffmpeg')}`
 	}
 
-	// Copy lame to ffmpeg ! NEED SUDO
-	await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
+	// Update the exports object
+	exports.ffmpeg = path.join(cwd, 'ffmpeg')
+
+	// Ensure DYLD_LIBRARY_PATH includes FFmpeg lib directory
+	const ffmpegLibPath = path.join(config.ffmpegRealname, 'lib')
+	process.env.DYLD_LIBRARY_PATH = `${process.env.DYLD_LIBRARY_PATH || ''}:${ffmpegLibPath}`
+
+	console.log(`FFmpeg installed and linked. Path: ${exports.ffmpeg}`)
 }
 
 // Nvidia

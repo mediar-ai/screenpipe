@@ -1,5 +1,4 @@
 # # Run for macOS
-
 # act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P macos-latest=-self-hosted
 
 # # Run for Linux

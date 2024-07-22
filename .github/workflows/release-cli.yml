@@ -1,3 +1,9 @@
+# # Run for macOS
+# act -W .github/workflows/release-cli.yml --container-architecture linux/amd64 -j build-macos -P macos-latest=-self-hosted
+
+# # Run for Linux
+# act -W .github/workflows/release-cli.yml --container-architecture linux/amd64 -j build-ubuntu -P ubuntu-24.04
+
 name: Release CLI
 
 on:
@@ -27,6 +33,18 @@ jobs:
       - name: Install dependencies
         run: |
           brew install ffmpeg
+
+      - name: Set up pkg-config for cross-compilation
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
+            export PKG_CONFIG_SYSROOT_DIR=/opt/homebrew
+            export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig
+          else
+            export PKG_CONFIG_SYSROOT_DIR=/usr/local
+            export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+          fi
+          echo "PKG_CONFIG_SYSROOT_DIR=$PKG_CONFIG_SYSROOT_DIR" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
       - name: Build with Metal feature
         run: |
@@ -177,10 +195,15 @@ jobs:
         with:
           name: screenpipe-linux
 
-      - name: Download macOS Artifact
+      - name: Download macOS Artifact Intel
         uses: actions/download-artifact@v2
         with:
-          name: screenpipe-macos
+          name: screenpipe-macos-x86_64-apple-darwin
+
+      - name: Download macOS Artifact ARM
+        uses: actions/download-artifact@v2
+        with:
+          name: screenpipe-macos-aarch64-apple-darwin
 
       - name: Download Windows Artifact
         uses: actions/download-artifact@v2
@@ -199,5 +222,6 @@ jobs:
         run: |
           gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} --generate-notes
           gh release upload ${{ env.RELEASE_VERSION }} screenpipe-linux.tar.gz
-          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-macos.tar.gz
+          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-macos-x86_64-apple-darwin
+          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-macos-aarch64-apple-darwin
           gh release upload ${{ env.RELEASE_VERSION }} screenpipe-windows.zip
