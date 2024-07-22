@@ -17,6 +17,9 @@ pub enum SearchResult {
 pub struct OCRResult {
     pub frame_id: i64,
     pub ocr_text: String,
+    pub text_json: String, // Store as JSON string
+    pub new_text_json: String, // Store as JSON string
+    pub data_output: String, // Store as JSON string
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
@@ -151,11 +154,14 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_ocr_text(&self, frame_id: i64, text: &str) -> Result<(), sqlx::Error> {
+    pub async fn insert_ocr_text(&self, frame_id: i64, text: &str, text_json: &str, new_text_json: &str, data_output: &str) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text) VALUES (?1, ?2)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, new_text_json, data_output) VALUES (?1, ?2, ?3, ?4, ?5)")
             .bind(frame_id)
             .bind(text)
+            .bind(text_json)
+            .bind(new_text_json)
+            .bind(data_output)
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
@@ -215,6 +221,9 @@ impl DatabaseManager {
             SELECT 
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
+                ocr_text.text_json,
+                ocr_text.new_text_json,
+                ocr_text.data_output,
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index
@@ -312,6 +321,9 @@ impl DatabaseManager {
             SELECT 
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
+                ocr_text.text_json,
+                ocr_text.new_text_json,
+                ocr_text.data_output,
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index
