@@ -1,5 +1,5 @@
 use log::{debug, error};
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 use which::which;
 
 #[cfg(windows)]
@@ -85,25 +85,49 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
     }
 
     if let Some(path) = ffmpeg_path {
-        let current_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+        let current_ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+        let current_dyld_path = std::env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
 
-        // if already contains ffmpeg lib path, don't add it again
-        if current_path.contains(path.join("lib").to_str().unwrap()) {
-            return Some(path);
-        }
+        let mut new_paths = HashSet::new();
 
+        // Add the lib path relative to the ffmpeg executable
         if let Some(lib_path) = path
             .parent()
             .and_then(|p| p.parent())
             .map(|p| p.join("lib"))
         {
-            let new_path = format!("{}:{}", lib_path.to_str().unwrap(), current_path);
-            std::env::set_var("LD_LIBRARY_PATH", new_path.clone());
-            debug!(
-                "Set LD_LIBRARY_PATH to include FFmpeg libraries: {}",
-                new_path
-            );
+            new_paths.insert(lib_path.to_string_lossy().to_string());
         }
+
+        // Add Homebrew lib paths
+        #[cfg(target_os = "macos")]
+        {
+            new_paths.insert("/opt/homebrew/opt/ffmpeg/lib".to_string());
+            new_paths.insert("/opt/homebrew/opt/lame/lib".to_string());
+        }
+
+        // Add Screenpipe app Frameworks path
+        #[cfg(target_os = "macos")]
+        {
+            new_paths.insert("/Applications/screenpipe.app/Contents/Frameworks".to_string());
+        }
+
+        // Function to update environment variable
+        fn update_env_var(name: &str, current: &str, new_paths: &HashSet<String>) {
+            let current_set: HashSet<_> = current.split(':').map(String::from).collect();
+            let combined: HashSet<_> = current_set.union(new_paths).cloned().collect();
+            let updated = combined.into_iter().collect::<Vec<_>>().join(":");
+            std::env::set_var(name, &updated);
+            debug!("Updated {}: {}", name, updated);
+        }
+
+        // Update LD_LIBRARY_PATH
+        update_env_var("LD_LIBRARY_PATH", &current_ld_path, &new_paths);
+
+        // Update DYLD_LIBRARY_PATH for macOS
+        #[cfg(target_os = "macos")]
+        update_env_var("DYLD_LIBRARY_PATH", &current_dyld_path, &new_paths);
+
         return Some(path);
     }
     error!("ffmpeg not found");
