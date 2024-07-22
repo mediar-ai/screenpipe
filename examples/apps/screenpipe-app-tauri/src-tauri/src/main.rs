@@ -22,13 +22,15 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
+use tauri::image::Image;
+use tauri::menu::{CheckMenuItem, IconMenuItem, Menu, MenuItem, SubmenuBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
     Manager,
 };
 use tauri::{State, Wry};
-use tauri_plugin_cli::CliExt;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
 use tokio::sync::mpsc;
@@ -192,6 +194,7 @@ async fn setup_server_and_recording(
                 control_rx,
                 vision_control,
                 audio_devices_control_receiver,
+                false,
             )
             .await
         }
@@ -316,68 +319,151 @@ async fn main() {
                 Ok(())
             });
 
+            // let handle = app.handle();
+            // let menu = MenuBuilder::new(handle)
+            //     .item(&MenuItem::new(handle, "MenuItem 1", true, None::<&str>)?)
+            //     .items(&[
+            //         &CheckMenuItem::new(handle, "CheckMenuItem 1", true, true, None::<&str>)?,
+            //         &IconMenuItem::new(
+            //             handle,
+            //             "IconMenuItem 1",
+            //             true,
+            //             Some(tauri::image::Image::from_bytes(include_bytes!(
+            //                 "../icons/32x32.png"
+            //             ))?),
+            //             None::<&str>,
+            //         )?,
+            //     ])
+            //     .text("item2", "MenuItem 2")
+            //     .check("checkitem2", "CheckMenuItem 2")
+            //     .icon(
+            //         "iconitem2",
+            //         "IconMenuItem 2",
+            //         app.default_window_icon().cloned().unwrap(),
+            //     )
+            //     .build()?;
+
+            // let _tray = tauri::tray::TrayIconBuilder::with_id("main")
+            //     .menu(&menu)
+            //     .on_menu_event(|app, event| match event.id().as_ref() {
+            //         "show" => {
+            //             info!("show");
+            //         }
+            //         "quit" => {
+            //             app.exit(0);
+            //         }
+            //         _ => {
+            //             info!("other: {:?}", event.id());
+            //         }
+            //     })
+            //     .build(app)?;
+
+            // _tray.set_show_menu_on_left_click(true);
+
+            // let _menu = app.set_menu(menu).unwrap().unwrap();
+            // app.on_tray_icon_event(|app, event| {
+            //     info!("tray icon event: {:?}", event);
+            //     if let tauri::tray::TrayIconEvent::Click {
+            //         button,
+            //         button_state,
+            //         ..
+            //     } = event
+            //     {
+            //         // if let Some(tray_handle) = app.tray_by_id("main") {
+            //         //     let _ = tray_handle.set_visible(true);
+            //         //     let menu = app.menu().unwrap();
+            //         //     let items = menu.items();
+            //         //     // print!(
+            //         //     //     "hhh {:?}",
+            //         //     //     items.map(|item| item).into_iter().collect::<Vec<_>>()
+            //         //     // );
+
+            //         //     if let Some(item) = menu.get("MenuItem 1") {
+            //         //         let _ = item.as_menuitem().unwrap().set_text("Enable Analytics");
+            //         //     }
+            //         // }
+            //     }
+            // });
+            // info!("Menu set: {:?}", menu);
             // Tray setup
-            let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-            let send_feedback_item =
-                MenuItemBuilder::with_id("send_feedback", "Send Feedback").build(app)?;
-            let toggle_analytics_item =
-                MenuItemBuilder::with_id("toggle_analytics", "Disable Analytics").build(app)?;
-            let toggle_autostart_item =
-                MenuItemBuilder::with_id("toggle_autostart", "Disable Autostart").build(app)?;
+            // let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+            // let send_feedback_item =
+            //     MenuItemBuilder::with_id("send_feedback", "Send Feedback").build(app)?;
+            // let toggle_analytics_item =
+            //     MenuItemBuilder::with_id("toggle_analytics", "Disable Analytics").build(app)?;
+            // let toggle_autostart_item =
+            //     MenuItemBuilder::with_id("toggle_autostart", "Disable Autostart").build(app)?;
 
-            let menu = MenuBuilder::new(app)
-                .item(&send_feedback_item)
-                .item(&toggle_analytics_item)
-                .item(&toggle_autostart_item)
-                .separator()
-                .item(&quit_item)
-                .build()?;
+            // let menu = MenuBuilder::new(app)
+            //     .item(&send_feedback_item)
+            //     .item(&toggle_analytics_item)
+            //     .item(&toggle_autostart_item)
+            //     .separator()
+            //     .item(&quit_item)
+            //     .build()?;
 
-            app.manage(TrayState {
-                menu: Some(menu.clone()),
-            });
+            // app.manage(TrayState {
+            //     menu: Some(menu.clone()),
+            // });
 
-            let _tray = TrayIconBuilder::new()
-                .menu(&menu)
-                .on_menu_event(move |app, event| {
-                    let tray_state: State<TrayState> = app.state();
-                    let menu = tray_state.menu.as_ref().unwrap();
+            //             let _tray = TrayIconBuilder::new()
+            //                 .title("Screenpipe")
+            //                 // .icon(tauri::Icon::Raw(
+            //                 //     include_bytes!("../icons/icon.png").to_vec(),
+            //                 // ))
+            //                 .menu(&menu)
+            //                 .on_menu_event(move |app, event| {
+            //                     let tray_state: State<TrayState> = app.app_handle().state();
+            //                     let menu = tray_state.menu.as_ref().unwrap();
 
-                    match event.id().as_ref() {
-                        "quit" => {
-                            std::process::exit(0);
-                        }
-                        "send_feedback" => {
-                            let email = "louis@screenpi.pe";
-                            let subject = "Screenpipe Feedback";
-                            let body = r#"Please enter your feedback here...
-                            
-        ... or let's chat?
-        https://cal.com/louis030195/screenpipe
-                            "#;
-                            let url = format!("mailto:{}?subject={}&body={}", email, subject, body);
-                            let app_handle = app.app_handle();
-                            if let Err(e) = app_handle.shell().open(url, None) {
-                                error!("Failed to open URL: {}", e);
-                            }
-                        }
-                        "toggle_analytics" => {
-                            let analytics_manager = app.state::<Arc<AnalyticsManager>>();
-                            let is_enabled = analytics_manager.toggle_analytics();
-                            if let Some(item) = menu.get("toggle_analytics") {
-                                if is_enabled {
-                                    let _ =
-                                        item.as_menuitem().unwrap().set_text("Enable Analytics");
-                                } else {
-                                    let _ =
-                                        item.as_menuitem().unwrap().set_text("Disable Analytics");
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                })
-                .build(app)?;
+            //                     match event.id().as_ref() {
+            //                         "quit" => {
+            //                             std::process::exit(0);
+            //                         }
+            //                         "send_feedback" => {
+            //                             let email = "louis@screenpi.pe";
+            //                             let subject = "Screenpipe Feedback";
+            //                             let body = r#"Please enter your feedback here...
+
+            // ... or let's chat?
+            // https://cal.com/louis030195/screenpipe
+            //                 "#;
+            //                             let url = format!("mailto:{}?subject={}&body={}", email, subject, body);
+            //                             let app_handle = app.app_handle();
+            //                             if let Err(e) = app_handle.shell().open(url, None) {
+            //                                 error!("Failed to open URL: {}", e);
+            //                             }
+            //                         }
+            //                         "toggle_analytics" => {
+            //                             let analytics_manager = app.state::<Arc<AnalyticsManager>>();
+            //                             let is_enabled = analytics_manager.toggle_analytics();
+            //                             if let Some(item) = menu.get("toggle_analytics") {
+            //                                 if is_enabled {
+            //                                     let _ =
+            //                                         item.as_menuitem().unwrap().set_text("Enable Analytics");
+            //                                 } else {
+            //                                     let _ =
+            //                                         item.as_menuitem().unwrap().set_text("Disable Analytics");
+            //                                 }
+            //                             }
+            //                         }
+            //                         _ => {}
+            //                     }
+            //                 })
+            //                 .on_tray_icon_event(|_tray, event| {
+            //                     if let TrayIconEvent::Click {
+            //                         button,
+            //                         button_state,
+            //                         ..
+            //                     } = event
+            //                     {
+            //                         if button_state == MouseButtonState::Up && button == MouseButton::Left {
+            //                             // Handle left-click event
+            //                         }
+            //                     }
+            //                 })
+            //                 .build(app)
+            //                 .expect("Failed to build tray");
 
             Ok(())
         })
@@ -387,9 +473,10 @@ async fn main() {
     // Run the app
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
-            let app_handle = app_handle.clone();
-            start_server(app_handle);
+            let app_handle_clone = app_handle.clone();
+            start_server(app_handle_clone);
         }
+
         _ => {}
     });
 }

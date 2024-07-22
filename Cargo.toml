@@ -4,8 +4,8 @@ members = [
     "screenpipe-vision",
     "screenpipe-audio",
     "screenpipe-server",
-    # "examples/apps/screenpipe-app-tauri/src-tauri",  # Commented out to exclude
-    # "examples/apps/screenpipe-app-dioxus",          # Commented out to exclude
+    "examples/apps/screenpipe-app-tauri/src-tauri",
+    "examples/apps/screenpipe-app-dioxus", 
 ]
 exclude = []
 resolver = "2"

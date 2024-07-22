@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.0.0-beta.9",
     "@tauri-apps/plugin-cli": "2.0.0-beta.7",
     "@tauri-apps/plugin-shell": "2.0.0-beta.8",
     "@tauri-apps/plugin-store": "2.0.0-beta.7",

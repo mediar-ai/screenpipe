@@ -10,13 +10,7 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": [
-			"nsis",
-			"deb",
-			"rpm",
-			"dmg",
-			"app"
-		],
+    "targets": "all",
     "externalBin": [],
     "icon": [
       "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",
@@ -67,15 +61,35 @@
       "endpoints": [
         "https://github.com/louis030195/screenpipe/releases/latest/download/latest.json"
       ]
+    },
+    "fs": {
+      "readFile": true,
+      "writeFile": true,
+      "readDir": true,
+      "copyFile": true,
+      "createDir": true,
+      "removeDir": true,
+      "removeFile": true,
+      "renameFile": true,
+      "exists": true,
+      "scope": [
+        "$APPDATA/*",
+        "$APPCONFIG/*",
+        "$RESOURCE/*",
+        "$HOME/*"
+      ]
     }
   },
   "app": {
+    "windows": [
+      {
+        "title": "screen | ⭐️",
+        "width": 800,
+        "height": 600
+      }
+    ],
     "security": {
       "csp": "default-src 'self'; media-src 'self' mediadevices:"
-    },
-    "trayIcon": {
-      "iconPath": "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
-      "iconAsTemplate": true
     }
   }
 }

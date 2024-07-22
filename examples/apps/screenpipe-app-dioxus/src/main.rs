@@ -164,6 +164,7 @@ async fn setup_server_and_recording(
             control_rx,
             vision_control,
             audio_devices_control_receiver,
+            false
         )
         .await
         {

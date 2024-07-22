@@ -6,5 +6,7 @@
     <string>This app requires microphone access to record audio.</string>
     <key>NSScreenCaptureUsageDescription</key>
     <string>This app requires screen capture access to record the screen.</string>
+    <!-- <key>NSSystemExtensionUsageDescription</key>
+    <string>This app requires system extension access to capture audio output.</string> -->
 </dict>
 </plist>

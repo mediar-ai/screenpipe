@@ -45,6 +45,8 @@ pub async fn continuous_capture(
     interval: Duration,
     save_text_files_flag: bool,
 ) {
+    let zz = Monitor::all().unwrap();
+    println!("MONITORSSS: {:?}", zz);
     let monitor = Monitor::all().unwrap().first().unwrap().clone(); // Simplified monitor retrieval
     let previous_text_json = Arc::new(Mutex::new(None));
     let ocr_task_running = Arc::new(AtomicBool::new(false));
