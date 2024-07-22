@@ -87,6 +87,9 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
     if let Some(path) = ffmpeg_path {
         return Some(path);
     }
+
+
+    // if let Some(path) = ffmpeg_path {
     //     let current_ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
     //     let current_dyld_path = std::env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
 

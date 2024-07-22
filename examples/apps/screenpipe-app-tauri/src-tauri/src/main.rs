@@ -487,7 +487,7 @@ fn start_server(app_handle: tauri::AppHandle) {
         let port = 3030;
         let fps = 1.0;
         let audio_chunk_duration = 30;
-        let disable_audio = false;
+        let disable_audio = true; // TODO until manage to package libmp3 lame
         let memory_threshold = 80.0;
         let runtime_threshold = 3600;
 
