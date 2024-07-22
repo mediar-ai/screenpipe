@@ -21,12 +21,12 @@
 
 ![Demo](./public/demo.gif)
 
-# Build AI apps that have the full context
+# 24/7 Screen & Audio Capture Layer
 
 Library to build personalized AI powered by what you've seen, said, or heard. Works with Ollama. Alternative to Rewind.ai. Open. Secure. You own your data. Rust.  
 We are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
 
-![image](https://github.com/user-attachments/assets/be7fd7e7-704c-414f-9d54-e53c81f37b01)
+![Digram](./public/diagram.png)
 
 ## Getting started
 
