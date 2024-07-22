@@ -17,7 +17,7 @@ serde_json = "1.0"
 # Cross-platform audio capture
 # cpal = "0.15.2"
 # Temporary hack check https://github.com/RustAudio/cpal/pull/894
-cpal = { git = "https://github.com/Kree0/cpal.git", rev = "dfca186" }
+cpal = { git = "https://github.com/louis030195/cpal-d.git", rev = "6751589" }
 
 # Wav encoding
 hound = "3.5"
