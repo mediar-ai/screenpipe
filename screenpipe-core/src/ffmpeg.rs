@@ -85,48 +85,50 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
     }
 
     if let Some(path) = ffmpeg_path {
-        let current_ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
-        let current_dyld_path = std::env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
-
-        let mut new_paths = HashSet::new();
-
-        // Add Homebrew lib paths
-        #[cfg(target_os = "macos")]
-        {
-            new_paths.insert("/opt/homebrew/opt/ffmpeg/lib".to_string());
-            new_paths.insert("/opt/homebrew/opt/lame/lib".to_string());
-            new_paths.insert("/Applications/screenpipe.app/Contents/Frameworks".to_string());
-        }
-
-        // Function to update environment variable
-        fn update_env_var(name: &str, current: &str, new_paths: &HashSet<String>) {
-            let current_set: HashSet<_> = current.split(':').map(String::from).collect();
-            let combined: HashSet<_> = current_set.union(new_paths).cloned().collect();
-            let updated = combined.into_iter().collect::<Vec<_>>().join(":");
-            std::env::set_var(name, &updated);
-            debug!("Updated {}: {}", name, updated);
-        }
-
-        // Update LD_LIBRARY_PATH
-        update_env_var("LD_LIBRARY_PATH", &current_ld_path, &new_paths);
-
-        // Update DYLD_LIBRARY_PATH for macOS
-        #[cfg(target_os = "macos")]
-        update_env_var("DYLD_LIBRARY_PATH", &current_dyld_path, &new_paths);
-
-        // Print out the updated environment variables
-        debug!(
-            "Updated LD_LIBRARY_PATH: {:?}",
-            std::env::var("LD_LIBRARY_PATH")
-        );
-        #[cfg(target_os = "macos")]
-        debug!(
-            "Updated DYLD_LIBRARY_PATH: {:?}",
-            std::env::var("DYLD_LIBRARY_PATH")
-        );
-
         return Some(path);
     }
+    //     let current_ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+    //     let current_dyld_path = std::env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
+
+    //     let mut new_paths = HashSet::new();
+
+    //     // Add Homebrew lib paths
+    //     #[cfg(target_os = "macos")]
+    //     {
+    //         new_paths.insert("/opt/homebrew/opt/ffmpeg/lib".to_string());
+    //         new_paths.insert("/opt/homebrew/opt/lame/lib".to_string());
+    //         new_paths.insert("/Applications/screenpipe.app/Contents/Frameworks".to_string());
+    //     }
+
+    //     // Function to update environment variable
+    //     fn update_env_var(name: &str, current: &str, new_paths: &HashSet<String>) {
+    //         let current_set: HashSet<_> = current.split(':').map(String::from).collect();
+    //         let combined: HashSet<_> = current_set.union(new_paths).cloned().collect();
+    //         let updated = combined.into_iter().collect::<Vec<_>>().join(":");
+    //         std::env::set_var(name, &updated);
+    //         debug!("Updated {}: {}", name, updated);
+    //     }
+
+    //     // Update LD_LIBRARY_PATH
+    //     update_env_var("LD_LIBRARY_PATH", &current_ld_path, &new_paths);
+
+    //     // Update DYLD_LIBRARY_PATH for macOS
+    //     #[cfg(target_os = "macos")]
+    //     update_env_var("DYLD_LIBRARY_PATH", &current_dyld_path, &new_paths);
+
+    //     // Print out the updated environment variables
+    //     debug!(
+    //         "Updated LD_LIBRARY_PATH: {:?}",
+    //         std::env::var("LD_LIBRARY_PATH")
+    //     );
+    //     #[cfg(target_os = "macos")]
+    //     debug!(
+    //         "Updated DYLD_LIBRARY_PATH: {:?}",
+    //         std::env::var("DYLD_LIBRARY_PATH")
+    //     );
+
+    //     return Some(path);
+    // }
     error!("ffmpeg not found");
     // crash
     panic!("ffmpeg not found");
