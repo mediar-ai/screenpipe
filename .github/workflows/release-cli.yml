@@ -9,6 +9,9 @@ on:
 jobs:
   build-macos:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -19,6 +22,7 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
+          target: ${{ matrix.target }}
 
       - name: Install dependencies
         run: |
@@ -26,23 +30,27 @@ jobs:
 
       - name: Build with Metal feature
         run: |
-          cargo build --release --features metal
+          cargo build --release --features metal --target ${{ matrix.target }}
 
       - name: Create deployment package
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          tar -czf screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz -C target/release screenpipe
+          tar -czf screenpipe-${VERSION}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release screenpipe
 
       - name: Calculate SHA256
         run: |
-          echo "MAC_SHA256=$(shasum -a 256 screenpipe-*.tar.gz | cut -d ' ' -f 1)" >> $GITHUB_ENV
+          echo "MAC_SHA256_${{ matrix.target }}=$(shasum -a 256 screenpipe-*.tar.gz | cut -d ' ' -f 1)" >> $GITHUB_ENV
 
       - name: Update Homebrew Formula
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          sed -i '' "s/version \".*\"/version \"$VERSION\"/" Formula/screenpipe.rb
-          sed -i '' "s/sha256 \".*\"/sha256 \"${{ env.MAC_SHA256 }}\"/" Formula/screenpipe.rb
-          sed -i '' "s/v[0-9.]*\/screenpipe-[0-9.]*-x86_64-apple-darwin/v$VERSION\/screenpipe-$VERSION-x86_64-apple-darwin/" Formula/screenpipe.rb
+          sed 's/version ".*"/version "'$VERSION'"/' Formula/screenpipe.rb > Formula/screenpipe.tmp && mv Formula/screenpipe.tmp Formula/screenpipe.rb
+          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+            sed 's/sha256 ".*" # x86_64/sha256 "'${{ env.MAC_SHA256_x86_64-apple-darwin }}'" # x86_64/' Formula/screenpipe.rb > Formula/screenpipe.tmp && mv Formula/screenpipe.tmp Formula/screenpipe.rb
+          else
+            sed 's/sha256 ".*" # arm64/sha256 "'${{ env.MAC_SHA256_aarch64-apple-darwin }}'" # arm64/' Formula/screenpipe.rb > Formula/screenpipe.tmp && mv Formula/screenpipe.tmp Formula/screenpipe.rb
+          fi
+          sed 's|v[0-9.]*\/screenpipe-[0-9.]*-${{ matrix.target }}|v'$VERSION'\/screenpipe-'$VERSION'-${{ matrix.target }}|' Formula/screenpipe.rb > Formula/screenpipe.tmp && mv Formula/screenpipe.tmp Formula/screenpipe.rb
 
       - name: Commit and push Homebrew Formula changes
         env:
@@ -51,13 +59,13 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add Formula/screenpipe.rb
-          git commit -m "chore: update brew to version ${GITHUB_REF#refs/tags/v}"
+          git commit -m "chore: update brew to version ${GITHUB_REF#refs/tags/v} for ${{ matrix.target }}"
           git push
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: screenpipe-macos
+          name: screenpipe-macos-${{ matrix.target }}
           path: screenpipe-*.tar.gz
 
   build-ubuntu:
@@ -69,7 +77,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev libgdk3-dev
+          sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -126,9 +134,18 @@ jobs:
         run: |
           choco install ffmpeg
 
+      - name: Install pkg-config
+        run: |
+          choco install pkgconfiglite
+
+      - name: Set up pkg-config
+        run: |
+          echo "PKG_CONFIG_PATH=C:\ProgramData\chocolatey\lib\pkgconfiglite\tools\pkg-config\lib\pkgconfig" >> $GITHUB_ENV
+          echo "C:\ProgramData\chocolatey\lib\pkgconfiglite\tools" >> $GITHUB_PATH
+
       - name: Build release
         run: |
-          cargo build --release
+          cargo build --release --verbose
 
       - name: Download FFmpeg
         run: |

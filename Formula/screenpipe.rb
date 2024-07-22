@@ -1,9 +1,18 @@
 class Screenpipe < Formula
-    desc "Chat with an AI that knows everything about you."
+    desc "Library to build personalized AI powered by what you've seen, said, or heard."
     homepage "https://github.com/louis030195/screen-pipe"
-    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.38/screenpipe-0.1.38-x86_64-apple-darwin.tar.gz"
-    sha256 "15f5dc0e296e774e55e029ad7944c93064658890c933b4db42434575a975c733"
+    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.38/screenpipe-0.1.38-aarch64-apple-darwin.tar.gz"
     version "0.1.38"
+
+    on_macos do
+      if Hardware::CPU.arm?
+        url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
+        sha256 "15f5dc0e296e774e55e029ad7944c93064658890c933b4db42434575a975c733" # arm64
+      else
+        url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
+        sha256 "todo" # x86_64
+      end
+    end
     
     depends_on "ffmpeg"
   
@@ -23,11 +32,11 @@ class Screenpipe < Formula
 # wait linux release
 # then
 
-# cargo build --release --features metal
-# tar -czf screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz -C target/release screenpipe
-# shasum -a 256 screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
-# gh release upload v${VERSION} screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
-# rm screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
+# cargo build --release --features metal --target aarch64-apple-darwin
+# tar -czf screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz -C target/release screenpipe
+# shasum -a 256 screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
+# gh release upload v${VERSION} screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
+# rm screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
 # update the ruby code above (version and sha256)
 # git add Formula/screenpipe.rb
 # git commit -m "chore: update brew to version ${VERSION}"

@@ -128,12 +128,6 @@ if (platform == 'windows') {
 if (platform == 'macos') {
 	// Install lame using Homebrew
 	await $`brew install lame`
-	// Copy lame to ffmpeg ! NEED SUDO
-	if (await fs.exists(`${config.ffmpegRealname}/lib/`)) {
-		await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
-	} else { // ci
-		await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ./src-tauri/${config.ffmpegRealname}/lib/`
-	}
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
@@ -147,6 +141,9 @@ if (platform == 'macos') {
 			console.error("libmp3lame.0.dylib is missing from the FFmpeg package. Please use a FFmpeg build that includes MP3 support.");
 		}
 	}
+
+	// Copy lame to ffmpeg ! NEED SUDO
+	await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
 }
 
 // Nvidia
