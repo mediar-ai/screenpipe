@@ -21,9 +21,9 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
-            args: "--target aarch64-apple-darwin --features metal"
+            args: "--target aarch64-apple-darwin --features metal -v"
           - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin --features metal"
+            args: "--target x86_64-apple-darwin --features metal -v"
           - platform: "ubuntu-24.04" # Ubuntu x86_64
             args: "" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64
@@ -85,4 +85,4 @@ jobs:
           prerelease: true
           args: ${{ matrix.args }}
           projectPath: "./examples/apps/screenpipe-app-tauri"
-          tauriScript: bunx tauri -v
+          tauriScript: bunx tauri

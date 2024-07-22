@@ -90,25 +90,11 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
 
         let mut new_paths = HashSet::new();
 
-        // Add the lib path relative to the ffmpeg executable
-        if let Some(lib_path) = path
-            .parent()
-            .and_then(|p| p.parent())
-            .map(|p| p.join("lib"))
-        {
-            new_paths.insert(lib_path.to_string_lossy().to_string());
-        }
-
         // Add Homebrew lib paths
         #[cfg(target_os = "macos")]
         {
             new_paths.insert("/opt/homebrew/opt/ffmpeg/lib".to_string());
             new_paths.insert("/opt/homebrew/opt/lame/lib".to_string());
-        }
-
-        // Add Screenpipe app Frameworks path
-        #[cfg(target_os = "macos")]
-        {
             new_paths.insert("/Applications/screenpipe.app/Contents/Frameworks".to_string());
         }
 
@@ -127,6 +113,17 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
         // Update DYLD_LIBRARY_PATH for macOS
         #[cfg(target_os = "macos")]
         update_env_var("DYLD_LIBRARY_PATH", &current_dyld_path, &new_paths);
+
+        // Print out the updated environment variables
+        debug!(
+            "Updated LD_LIBRARY_PATH: {:?}",
+            std::env::var("LD_LIBRARY_PATH")
+        );
+        #[cfg(target_os = "macos")]
+        debug!(
+            "Updated DYLD_LIBRARY_PATH: {:?}",
+            std::env::var("DYLD_LIBRARY_PATH")
+        );
 
         return Some(path);
     }
