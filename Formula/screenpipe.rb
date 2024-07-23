@@ -1,16 +1,16 @@
 class Screenpipe < Formula
     desc "Library to build personalized AI powered by what you've seen, said, or heard."
     homepage "https://github.com/louis030195/screen-pipe"
-    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.38/screenpipe-0.1.38-aarch64-apple-darwin.tar.gz"
-    version "0.1.38"
+    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.40/screenpipe-0.1.40-aarch64-apple-darwin.tar.gz"
+    version "0.1.40"
 
     on_macos do
       if Hardware::CPU.arm?
         url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
-        sha256 "15f5dc0e296e774e55e029ad7944c93064658890c933b4db42434575a975c733" # arm64
+        sha256 "7dc4100a0d75c72ed20a6326fb22397cc71c1c3f36a2eb7adc0a7ae2dc9d69ef" # arm64
       else
         url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
-        sha256 "todo" # x86_64
+        sha256 "aae3a4acf6fd780e0715db20b6b7ed621680db0261da3ade7f8d6b6eb979578a" # x86_64
       end
     end
     
@@ -31,6 +31,8 @@ class Screenpipe < Formula
 # git tag v$VERSION
 # git push origin v$VERSION
 # wait linux release
+# or create release
+# gh release create v$VERSION --generate-notes
 # then
 
 # aarch64-apple-darwin
