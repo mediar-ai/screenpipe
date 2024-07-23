@@ -32,18 +32,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install ffmpeg
-
-      - name: Set up cross-compilation environment
-        run: |
-          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-            echo "SDKROOT=$(xcrun -sdk macosx --show-sdk-path)" >> $GITHUB_ENV
-            echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
-          fi
+          brew install ffmpeg pkg-config
 
       - name: Build with Metal feature
         run: |
-          export PKG_CONFIG_ALLOW_CROSS=1
           cargo build --release --features metal --target ${{ matrix.target }}
 
       - name: Create deployment package
