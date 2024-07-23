@@ -7,7 +7,6 @@ use sqlx::{
 };
 use std::time::Duration;
 use log::{debug, error, info}; // Ensure you have the log crate imported
-use env_logger::Env;
 
 #[derive(Debug, Serialize)]
 pub enum SearchResult {
