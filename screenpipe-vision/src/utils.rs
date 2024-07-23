@@ -5,7 +5,7 @@ use log::{debug, error};
 use rusty_tesseract::{Args, DataOutput, Image}; // Added import for Args, Image, DataOutput
 use serde_json;
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::sync::Arc;
@@ -165,6 +165,12 @@ pub async fn save_text_files(
 ) {
     let id = frame_number;
     debug!("Saving text files for frame {}", frame_number);
+
+    // Ensure the text_json directory exists
+    if let Err(e) = fs::create_dir_all("text_json") {
+        error!("Failed to create text_json directory: {}", e);
+        return;
+    }
 
     let new_text_lines: Vec<String> = new_text_json
         .iter()
