@@ -6,6 +6,8 @@ use sqlx::{
     FromRow,
 };
 use std::time::Duration;
+use log::{debug, error, info}; // Ensure you have the log crate imported
+use env_logger::Env;
 
 #[derive(Debug, Serialize)]
 pub enum SearchResult {
@@ -17,6 +19,9 @@ pub enum SearchResult {
 pub struct OCRResult {
     pub frame_id: i64,
     pub ocr_text: String,
+    pub text_json: String, // Store as JSON string
+    pub new_text_json: String, // Store as JSON string
+    pub data_output: String, // Store as JSON string
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
@@ -46,6 +51,11 @@ pub struct DatabaseManager {
 
 impl DatabaseManager {
     pub async fn new(database_path: &str) -> Result<Self, sqlx::Error> {
+
+        // if std::env::var("RUST_LOG").is_err() {
+        //     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+        // }
+        debug!("db.rs initialized successfully.");
         let connection_string = format!("sqlite:{}", database_path);
 
         // Create the database if it doesn't exist
@@ -60,12 +70,19 @@ impl DatabaseManager {
             .await?;
 
         let db_manager = DatabaseManager { pool };
-        db_manager.run_migrations().await?;
+
+        // Run migrations after establishing the connection
+        if let Err(e) = Self::run_migrations(&db_manager.pool).await {
+            error!("Failed to run migrations: {}", e);
+            return Err(e);
+        }
+
+        info!("Migrations executed successfully.");
         Ok(db_manager)
     }
 
-    async fn run_migrations(&self) -> Result<(), sqlx::Error> {
-        sqlx::migrate!("./src/migrations").run(&self.pool).await?;
+    async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+        sqlx::migrate!("./src/migrations").run(pool).await?;
         Ok(())
     }
 
@@ -151,13 +168,45 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_ocr_text(&self, frame_id: i64, text: &str) -> Result<(), sqlx::Error> {
+    pub async fn insert_ocr_text(
+        &self,
+        frame_id: i64,
+        text: &str,
+        text_json: &str,
+        new_text_json_vs_previous_frame: &str,
+        raw_data_output_from_OCR: &str,
+    ) -> Result<(), sqlx::Error> {
+        // Function to limit string length
+        fn limit_string(s: &str) -> String {
+            if s.len() > 5 {
+                format!("{}...", &s[..5])
+            } else {
+                s.to_string()
+            }
+        }
+    
+        // Log the input parameters with limited length
+        debug!("Inserting OCR text with frame_id: {}, text: {}, text_json: {}, new_text_json_vs_previous_frame: {}, raw_data_output_from_OCR: {}", 
+            frame_id, 
+            limit_string(text), 
+            limit_string(text_json), 
+            limit_string(new_text_json_vs_previous_frame), 
+            limit_string(raw_data_output_from_OCR)
+        );
+    
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text) VALUES (?1, ?2)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, new_text_json_vs_previous_frame, raw_data_output_from_OCR) VALUES (?1, ?2, ?3, ?4, ?5)")
             .bind(frame_id)
             .bind(text)
+            .bind(text_json)
+            .bind(new_text_json_vs_previous_frame)
+            .bind(raw_data_output_from_OCR)
             .execute(&mut *tx)
             .await?;
+    
+        // Log successful insertion
+        debug!("Successfully inserted OCR text for frame_id: {}", frame_id);
+    
         tx.commit().await?;
         Ok(())
     }
@@ -215,6 +264,9 @@ impl DatabaseManager {
             SELECT 
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
+                ocr_text.text_json,
+                ocr_text.new_text_json,
+                ocr_text.data_output,
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index
@@ -312,6 +364,9 @@ impl DatabaseManager {
             SELECT 
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
+                ocr_text.text_json,
+                ocr_text.new_text_json,
+                ocr_text.data_output,
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index
@@ -487,3 +542,4 @@ impl Clone for DatabaseManager {
         }
     }
 }
+

@@ -18,6 +18,28 @@ pub enum RecorderControl {
     Stop,
 }
 
+// Wrapper struct for DataOutput
+pub struct DataOutputWrapper {
+    pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,
+}
+
+impl DataOutputWrapper {
+    pub fn to_json(&self) -> String {
+        let data_json: Vec<String> = self.data_output.data.iter().map(|d| {
+            format!(
+                r#"{{"level": {}, "page_num": {}, "block_num": {}, "par_num": {}, "line_num": {}, "word_num": {}, "left": {}, "top": {}, "width": {}, "height": {}, "conf": {}, "text": "{}"}}"#,
+                d.level, d.page_num, d.block_num, d.par_num, d.line_num, d.word_num, d.left, d.top, d.width, d.height, d.conf, d.text
+            )
+        }).collect();
+        format!(
+            r#"{{"output": "{}", "data": [{}]}}"#,
+            self.data_output.output,
+            data_json.join(", ")
+        )
+    }
+}
+
+
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
@@ -26,7 +48,7 @@ pub async fn start_continuous_recording(
     mut full_control: Receiver<RecorderControl>,
     vision_control: Arc<AtomicBool>,
     audio_devices_control_receiver: Receiver<(AudioDevice, DeviceControl)>,
-    save_text_files: bool, // Added this parameter
+    save_text_files: bool,
 ) -> Result<()> {
     info!("Recording now");
 
@@ -98,7 +120,7 @@ async fn record_video(
     output_path: Arc<String>,
     fps: f64,
     is_running: Arc<AtomicBool>,
-    save_text_files: bool, // Added this parameter
+    save_text_files: bool,
 ) -> Result<()> {
     let db_chunk_callback = Arc::clone(&db);
     let rt = tokio::runtime::Handle::current();
@@ -117,7 +139,11 @@ async fn record_video(
         if let Some(frame) = video_capture.get_latest_frame().await {
             match db.insert_frame().await {
                 Ok(frame_id) => {
-                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text).await {
+                    let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
+                    let new_text_json_vs_previous_frame = serde_json::to_string(&frame.new_text_json).unwrap_or_default();
+                    let raw_data_output_from_OCR = DataOutputWrapper { data_output: frame.data_output }.to_json();
+
+                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json_vs_previous_frame, &raw_data_output_from_OCR).await {
                         error!("Failed to insert OCR text: {}", e);
                     }
                     debug!("Inserted frame {} with OCR text", frame_id);
@@ -275,7 +301,7 @@ async fn process_audio_result(db: &DatabaseManager, result: TranscriptionResult)
     match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
             if let Err(e) = db
-                .insert_audio_transcription(audio_chunk_id, &transcription, 0) // TODO index is in the text atm
+                .insert_audio_transcription(audio_chunk_id, &transcription, 0)
                 .await
             {
                 error!(

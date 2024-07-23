@@ -1,4 +1,4 @@
-mod core;
+pub mod core;
 mod db;
 mod plugin;
 mod resource_monitor;
