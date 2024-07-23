@@ -39,7 +39,8 @@ base64 = "0.21.7"
 anyhow = "1.0.86"
 byteorder = "1.5.0"
 hf-hub = "0.3.2"
-symphonia = { version = "0.5.4", features = ["mp3"] }
+# https://github.com/pdeljanov/Symphonia/tree/master?tab=readme-ov-file#optimizations 
+symphonia = { version = "0.5.4", features = ["aac", "isomp4", "opt-simd"] }
 rand = "0.8.5"
 rubato = "0.15.0"
 

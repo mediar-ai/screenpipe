@@ -7,9 +7,9 @@
 name: Release CLI
 
 on:
-  push:
-    tags:
-      - "v*"
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
         target: [x86_64-apple-darwin, aarch64-apple-darwin]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -30,30 +30,49 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
+      - name: Cache Homebrew packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Cellar/ffmpeg
+            /usr/local/Cellar/pkg-config
+          key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/release-cli.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-brew-
+
       - name: Install dependencies
         run: |
-          brew install ffmpeg
+          brew install ffmpeg pkg-config
 
-      - name: Set up pkg-config for cross-compilation
-        run: |
-          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-            export PKG_CONFIG_SYSROOT_DIR=/opt/homebrew
-            export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig
-          else
-            export PKG_CONFIG_SYSROOT_DIR=/usr/local
-            export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
-          fi
-          echo "PKG_CONFIG_SYSROOT_DIR=$PKG_CONFIG_SYSROOT_DIR" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
+      - uses: actions/cache@v3
+        with:
+          path: | 
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build with Metal feature
         run: |
+          export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
+          export PKG_CONFIG_ALLOW_CROSS=1
           cargo build --release --features metal --target ${{ matrix.target }}
+
+      - name: Set version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if [[ $VERSION != v* ]]; then
+            VERSION=$(git describe --tags --abbrev=0)
+          fi
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Create deployment package
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          tar -czf screenpipe-${VERSION}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release screenpipe
+          # ls -R target/release
+          tar -czf screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz -C target/release screenpipe
 
       - name: Calculate SHA256
         run: |
@@ -61,7 +80,7 @@ jobs:
 
       - name: Update Homebrew Formula
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          export VERSION=${{ env.VERSION }}
           sed 's/version ".*"/version "'$VERSION'"/' Formula/screenpipe.rb > Formula/screenpipe.tmp && mv Formula/screenpipe.tmp Formula/screenpipe.rb
           if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
             sed 's/sha256 ".*" # x86_64/sha256 "'${{ env.MAC_SHA256_x86_64-apple-darwin }}'" # x86_64/' Formula/screenpipe.rb > Formula/screenpipe.tmp && mv Formula/screenpipe.tmp Formula/screenpipe.rb
@@ -77,7 +96,7 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add Formula/screenpipe.rb
-          git commit -m "chore: update brew to version ${GITHUB_REF#refs/tags/v} for ${{ matrix.target }}"
+          git commit -m "chore: update brew to version ${{ env.VERSION }} for ${{ matrix.target }}"
           git push
 
       - name: Upload Artifact
@@ -135,57 +154,53 @@ jobs:
           name: screenpipe-linux
           path: screenpipe-linux.tar.gz
 
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+  # build-windows:
+  #   runs-on: windows-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v2
 
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+  #     - name: Set up Rust
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: stable
+  #         profile: minimal
+  #         override: true
 
-      - name: Install FFmpeg
-        run: |
-          choco install ffmpeg
+  #     - name: Download FFmpeg
+  #       run: |
+  #         $ProgressPreference = 'SilentlyContinue'
+  #         Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip" -OutFile "ffmpeg.zip"
+  #         Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg"
+  #         Move-Item -Path "ffmpeg\ffmpeg-master-latest-win64-gpl-shared" -Destination "C:\ffmpeg"
 
-      - name: Install pkg-config
-        run: |
-          choco install pkgconfiglite
+  #     - name: Set up environment
+  #       run: |
+  #         echo "C:\ffmpeg\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+  #         echo "FFMPEG_DIR=C:\ffmpeg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+  #         echo "PKG_CONFIG_PATH=C:\ffmpeg\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Set up pkg-config
-        run: |
-          echo "PKG_CONFIG_PATH=C:\ProgramData\chocolatey\lib\pkgconfiglite\tools\pkg-config\lib\pkgconfig" >> $GITHUB_ENV
-          echo "C:\ProgramData\chocolatey\lib\pkgconfiglite\tools" >> $GITHUB_PATH
+  #     - name: Build release
+  #       run: |
+  #         cargo build --release --verbose
 
-      - name: Build release
-        run: |
-          cargo build --release --verbose
+  #     - name: Create deployment package
+  #       run: |
+  #         $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
+  #         New-Item -ItemType Directory -Path "screenpipe-win64"
+  #         Copy-Item "target\release\screenpipe.exe" -Destination "screenpipe-win64"
+  #         Copy-Item "C:\ffmpeg\bin\*.dll" -Destination "screenpipe-win64"
+  #         Compress-Archive -Path "screenpipe-win64" -DestinationPath "screenpipe-$VERSION-x86_64-pc-windows-msvc.zip"
 
-      - name: Download FFmpeg
-        run: |
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "ffmpeg.zip"
-          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg"
-          Move-Item -Path "ffmpeg\ffmpeg-master-latest-win64-gpl\bin\*" -Destination "target\release\"
-
-      - name: Create deployment package
-        run: |
-          $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
-          Compress-Archive -Path target\release\screenpipe.exe, target\release\ffmpeg.exe, target\release\ffprobe.exe -DestinationPath screenpipe-$VERSION-x86_64-pc-windows-msvc.zip
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: screenpipe-windows
-          path: screenpipe-*.zip
+  #     - name: Upload Artifact
+  #       uses: actions/upload-artifact@v2
+  #       with:
+  #         name: screenpipe-windows
+  #         path: screenpipe-*.zip
 
   release:
     runs-on: ubuntu-latest
-    needs: [build-ubuntu, build-macos, build-windows]
+    needs: [build-ubuntu, build-macos] # build-windows windows not supported atm, build from source bro
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -213,8 +228,12 @@ jobs:
       - name: Set Version
         shell: bash
         run: |
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
-          echo "RELEASE_VERSION=$(echo ${GITHUB_REF_NAME} | cut -f1 -d-)" >> $GITHUB_ENV
+          if [[ $GITHUB_REF_NAME != v* ]]; then
+            VERSION=$(git describe --tags --abbrev=0)
+          fi
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "RELEASE_VERSION=$(echo ${VERSION} | cut -f1 -d-)" >> $GITHUB_ENV
 
       - name: Create or update Release
         env:

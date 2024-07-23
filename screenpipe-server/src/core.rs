@@ -141,9 +141,9 @@ async fn record_video(
                 Ok(frame_id) => {
                     let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
                     let new_text_json_vs_previous_frame = serde_json::to_string(&frame.new_text_json).unwrap_or_default();
-                    let raw_data_output_from_OCR = DataOutputWrapper { data_output: frame.data_output }.to_json();
+                    let raw_data_output_from_ocr = DataOutputWrapper { data_output: frame.data_output }.to_json();
 
-                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json_vs_previous_frame, &raw_data_output_from_OCR).await {
+                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json_vs_previous_frame, &raw_data_output_from_ocr).await {
                         error!("Failed to insert OCR text: {}", e);
                     }
                     debug!("Inserted frame {} with OCR text", frame_id);
@@ -218,7 +218,7 @@ async fn record_audio(
 
                     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
                     let file_path = format!(
-                        "{}/{}_{}.mp3",
+                        "{}/{}_{}.mp4",
                         output_path_clone, audio_device_clone, new_file_name
                     );
                     info!(

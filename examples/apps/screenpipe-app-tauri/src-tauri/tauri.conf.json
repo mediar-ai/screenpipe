@@ -10,7 +10,7 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": "all",
+    "targets": "dmg",
     "externalBin": [],
     "icon": [
       "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",

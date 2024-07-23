@@ -19,8 +19,8 @@ pub struct OCRResult {
     pub frame_id: i64,
     pub ocr_text: String,
     pub text_json: String, // Store as JSON string
-    pub new_text_json: String, // Store as JSON string
-    pub data_output: String, // Store as JSON string
+    pub new_text_json_vs_previous_frame: String, // Store as JSON string
+    pub raw_data_output_from_ocr: String, // Store as JSON string
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
@@ -51,9 +51,6 @@ pub struct DatabaseManager {
 impl DatabaseManager {
     pub async fn new(database_path: &str) -> Result<Self, sqlx::Error> {
 
-        // if std::env::var("RUST_LOG").is_err() {
-        //     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-        // }
         debug!("db.rs initialized successfully.");
         let connection_string = format!("sqlite:{}", database_path);
 
@@ -173,7 +170,7 @@ impl DatabaseManager {
         text: &str,
         text_json: &str,
         new_text_json_vs_previous_frame: &str,
-        raw_data_output_from_OCR: &str,
+        raw_data_output_from_ocr: &str,
     ) -> Result<(), sqlx::Error> {
         // Function to limit string length
         fn limit_string(s: &str) -> String {
@@ -190,7 +187,7 @@ impl DatabaseManager {
             limit_string(text), 
             limit_string(text_json), 
             limit_string(new_text_json_vs_previous_frame), 
-            limit_string(raw_data_output_from_OCR)
+            limit_string(raw_data_output_from_ocr)
         );
     
         let mut tx = self.pool.begin().await?;
@@ -199,7 +196,7 @@ impl DatabaseManager {
             .bind(text)
             .bind(text_json)
             .bind(new_text_json_vs_previous_frame)
-            .bind(raw_data_output_from_OCR)
+            .bind(raw_data_output_from_ocr)
             .execute(&mut *tx)
             .await?;
     
@@ -264,8 +261,8 @@ impl DatabaseManager {
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
                 ocr_text.text_json,
-                ocr_text.new_text_json,
-                ocr_text.data_output,
+                ocr_text.new_text_json_vs_previous_frame,
+                ocr_text.raw_data_output_from_OCR,
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index
@@ -364,8 +361,8 @@ impl DatabaseManager {
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
                 ocr_text.text_json,
-                ocr_text.new_text_json,
-                ocr_text.data_output,
+                ocr_text.new_text_json_vs_previous_frame,
+                ocr_text.raw_data_output_from_OCR,
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index

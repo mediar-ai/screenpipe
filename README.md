@@ -60,7 +60,7 @@ brew install jq
 ```
 3. Install library
 ```bash
-brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe
+brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
 brew install screenpipe
 ```
 4. Run it:
@@ -251,7 +251,7 @@ ffplay "data/2024-07-12_01-14-14.mp4"
 Play a sample audio_recording from the database</summary>
 
 ```bash
-ffplay "data/Display 1 (output)_2024-07-12_01-14-11.mp3"
+ffplay "data/Display 1 (output)_2024-07-12_01-14-11.mp4"
 ```
 </details>
 

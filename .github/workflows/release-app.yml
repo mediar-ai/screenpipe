@@ -7,9 +7,9 @@
 name: Release App
 
 on:
-  push:
-    tags:
-      - "v*"
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
 
 jobs:
@@ -21,14 +21,16 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
-            args: "--target aarch64-apple-darwin --features metal -v"
+            args: "--target aarch64-apple-darwin --features metal"
+            target: aarch64-apple-darwin
           - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin --features metal -v"
-          - platform: "ubuntu-24.04" # Ubuntu x86_64
-            args: "" # TODO CUDA
-          - platform: "windows-latest" # Windows x86_64
-            args: '--target x86_64-pc-windows-msvc --features "openblas"' # TODO CUDA?
-            pre-build-args: "--openblas"
+            args: "--target x86_64-apple-darwin --features metal"
+            target: x86_64-apple-darwin
+          # - platform: "ubuntu-24.04" # Ubuntu x86_64 # TODO focus on mac atm
+          #   args: "" # TODO CUDA
+          # - platform: "windows-latest" # Windows x86_64
+          #   args: '--target x86_64-pc-windows-msvc --features "openblas"' # TODO CUDA?
+          #   pre-build-args: "--openblas"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -37,39 +39,64 @@ jobs:
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      # - name: Rust cache
+      #   uses: swatinem/rust-cache@v2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
         with:
-          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: ${{ matrix.target }}
 
       - name: Install frontend dependencies
         run: bun install
         working-directory: ./examples/apps/screenpipe-app-tauri
 
-      - name: Cache Pre Build
-        id: cache-pre-build
-        uses: actions/cache@v4
-        with:
-          path: |
-            examples/apps/screenpipe-app-tauri/src-tauri/openblas
-            examples/apps/screenpipe-app-tauri/src-tauri/clblast
-            examples/apps/screenpipe-app-tauri/src-tauri/ffmpeg
-          key: ${{ matrix.platform }}-${{ matrix.args }}-pre-build
+      # - name: Cache Pre Build
+      #   id: cache-pre-build
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       examples/apps/screenpipe-app-tauri/src-tauri/openblas
+      #       examples/apps/screenpipe-app-tauri/src-tauri/clblast
+      #       examples/apps/screenpipe-app-tauri/src-tauri/ffmpeg
+      #     key: ${{ matrix.platform }}-${{ matrix.args }}-pre-build
 
-      # Run pre build
-      - name: Run pre_build.js on ${{ matrix.platform }}
-        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./examples/apps/screenpipe-app-tauri
+      # - uses: actions/cache@v3
+      #   with:
+      #     path: |
+      #       ~/.cargo/bin/
+      #       ~/.cargo/registry/index/
+      #       ~/.cargo/registry/cache/
+      #       ~/.cargo/git/db/
+      #       target/
+      #     key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libappindicator3-1 libappindicator3-dev
+
+      - name: Install dependencies
+        if: matrix.platform == 'macos-latest'
+        run: |
+          brew install ffmpeg pkg-config
+
+      - name: Build CLI
+        run: |
+          if [ "${{ matrix.platform }}" = "macos-latest" ]; then
+            export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
+            export PKG_CONFIG_ALLOW_CROSS=1
+          fi
+          cargo build --release ${{ matrix.args }}
+
+      # Run pre build
+      - name: Run pre_build.js on ${{ matrix.platform }}
+        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        working-directory: ./examples/apps/screenpipe-app-tauri
 
       - name: Build
         uses: tauri-apps/tauri-action@v0

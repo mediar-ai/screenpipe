@@ -21,7 +21,8 @@ screenpipe-core = { path = "../screenpipe-core" }
 image = "0.25.0"
 
 # OCR
-rusty-tesseract = "1.1.10"
+# rusty-tesseract = "1.1.10"
+rusty-tesseract = { git = "https://github.com/louis030195/rusty-tesseract.git", branch = "main" }
 
 # threadpool
 threadpool = "1.8.1"
@@ -77,6 +78,9 @@ tracing = { workspace = true }
 # Plugins
 tower = "0.4"
 futures = "0.3.17"
+
+# Directory management
+dirs = "5.0"
 
 [dev-dependencies]
 tempfile = "3.3.0"

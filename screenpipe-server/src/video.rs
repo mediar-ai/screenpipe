@@ -57,15 +57,6 @@ impl VideoCapture {
         let _queue_thread = tokio::spawn(async move {
             while *capture_thread_is_running.lock().await {
                 if let Some(result) = result_receiver.recv().await {
-                    // debug!(
-                    //     "Received result from capture thread: frame_number: {:?}",
-                    //     result.frame_number
-                    // );
-                    // debug!(
-                    //     "Received result from capture thread: timestamp: {:?}",
-                    //     result.timestamp
-                    // );
-                    // debug!("Received result from capture thread: text: {:?}", result.text);
                     capture_frame_queue.lock().await.push_back(result);
                 }
             }
@@ -135,9 +126,16 @@ async fn save_frames_as_video(
         if frame_count % frames_per_video == 0 || current_ffmpeg.is_none() {
             debug!("Starting new FFmpeg process");
             // Close previous FFmpeg process if exists
-            if let Some(mut child) = current_ffmpeg.take() {
+            if let Some(child) = current_ffmpeg.take() {
                 drop(current_stdin.take()); // Ensure stdin is closed
-                child.wait().await.expect("ffmpeg process failed");
+                let output = child
+                    .wait_with_output()
+                    .await
+                    .expect("ffmpeg process failed");
+                debug!("FFmpeg process exited with status: {}", output.status);
+                if !output.status.success() {
+                    error!("FFmpeg stderr: {}", String::from_utf8_lossy(&output.stderr));
+                }
             }
 
             // Wait for at least one frame before starting a new FFmpeg process
@@ -164,29 +162,46 @@ async fn save_frames_as_video(
             // Call the callback with the new video chunk file path
             new_chunk_callback(&output_file);
 
-            let mut child = start_ffmpeg_process(&output_file, fps);
-            let mut stdin = child.stdin.take().expect("Failed to open stdin");
-            let stderr = child.stderr.take().expect("Failed to open stderr");
+            match start_ffmpeg_process(&output_file, fps).await {
+                Ok(mut child) => {
+                    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+                    let stderr = child.stderr.take().expect("Failed to open stderr");
+                    let stdout = child.stdout.take().expect("Failed to open stdout");
 
-            // Write the first frame to FFmpeg
-            stdin
-                .write_all(&buffer)
-                .await
-                .expect("Failed to write first frame to ffmpeg");
-            frame_count += 1;
+                    // Write the first frame to FFmpeg
+                    stdin
+                        .write_all(&buffer)
+                        .await
+                        .expect("Failed to write first frame to ffmpeg");
+                    frame_count += 1;
 
-            // Spawn a task to log FFmpeg's stderr
-            tokio::spawn(async move {
-                let reader = BufReader::new(stderr);
-                let mut lines = reader.lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    debug!("FFmpeg: {}", line);
+                    // Spawn a task to log FFmpeg's stderr
+                    tokio::spawn(async move {
+                        let reader = BufReader::new(stderr);
+                        let mut lines = reader.lines();
+                        while let Ok(Some(line)) = lines.next_line().await {
+                            debug!("FFmpeg: {}", line);
+                        }
+                    });
+
+                    // Log FFmpeg's stdout
+                    tokio::spawn(async move {
+                        let reader = BufReader::new(stdout);
+                        let mut lines = reader.lines();
+                        while let Ok(Some(line)) = lines.next_line().await {
+                            debug!("FFmpeg: {}", line);
+                        }
+                    });
+
+                    current_ffmpeg = Some(child);
+                    current_stdin = Some(stdin);
+                    debug!("New FFmpeg process started for file: {}", output_file);
                 }
-            });
-
-            current_ffmpeg = Some(child);
-            current_stdin = Some(stdin);
-            debug!("New FFmpeg process started for file: {}", output_file);
+                Err(e) => {
+                    error!("Failed to start FFmpeg process: {}", e);
+                    // Handle the error appropriately, maybe try to restart or exit
+                }
+            }
         }
 
         if let Some(result) = frame_queue.lock().await.pop_front() {
@@ -246,18 +261,19 @@ async fn save_frames_as_video(
     }
 }
 
-// TODO: use tokio::process::Command instead
-fn start_ffmpeg_process(output_file: &str, fps: f64) -> Child {
-    // overrriding fps with max fps if over the max and warning user
-    let mut fps = fps;
-    if fps > MAX_FPS {
-        warn!("Overriding FPS to {}", MAX_FPS);
-        fps = MAX_FPS;
-    }
+async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
+    // Overriding fps with max fps if over the max and warning user
+    let fps = if fps > MAX_FPS {
+        warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
+        MAX_FPS
+    } else {
+        fps
+    };
 
     info!("Starting FFmpeg process for file: {}", output_file);
-    Command::new(find_ffmpeg_path().unwrap())
-        .args([
+    let mut command = Command::new(find_ffmpeg_path().unwrap());
+    command
+        .args(&[
             "-f",
             "image2pipe",
             "-vcodec",
@@ -277,7 +293,13 @@ fn start_ffmpeg_process(output_file: &str, fps: f64) -> Child {
             output_file,
         ])
         .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn ffmpeg process")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    debug!("FFmpeg command: {:?}", command);
+
+    let child = command.spawn()?;
+    debug!("FFmpeg process spawned");
+
+    Ok(child)
 }

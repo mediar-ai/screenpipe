@@ -28,7 +28,9 @@ tokio = { workspace = true }
 image = "0.25.0"
 
 # OCR
-rusty-tesseract = "1.1.10"
+# rusty-tesseract = "1.1.10"
+rusty-tesseract = { git = "https://github.com/louis030195/rusty-tesseract.git", branch = "main" }
+
 
 # Dates
 chrono = { version = "0.4.31", features = ["serde"] }
