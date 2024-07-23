@@ -133,20 +133,23 @@ async fn record_video(
             }
         });
     };
+    // debug!("record_video: video_capture");
     let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback, save_text_files);
     
     while is_running.load(Ordering::SeqCst) {
-        if let Some(frame) = video_capture.get_latest_frame().await {
+        // let queue_length = video_capture.ocr_frame_queue.lock().await.len();
+        // debug!("record_video: Checking for latest frame. Number of frames in OCR queue: {}", queue_length);
+        if let Some(frame) = video_capture.ocr_frame_queue.lock().await.pop_front() {
             match db.insert_frame().await {
                 Ok(frame_id) => {
                     let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
                     let new_text_json_vs_previous_frame = serde_json::to_string(&frame.new_text_json).unwrap_or_default();
                     let raw_data_output_from_ocr = DataOutputWrapper { data_output: frame.data_output }.to_json();
 
+                    // debug!("insert_ocr_text called for frame {}", frame_id);
                     if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json_vs_previous_frame, &raw_data_output_from_ocr).await {
                         error!("Failed to insert OCR text: {}", e);
                     }
-                    debug!("Inserted frame {} with OCR text", frame_id);
                 }
                 Err(e) => {
                     warn!("Failed to insert frame: {}", e);
