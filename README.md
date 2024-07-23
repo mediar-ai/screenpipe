@@ -71,6 +71,17 @@ or if you don't want audio to be recorded
 ```bash
 screenpipe --disable-audio
 ```
+if you want to save OCR data to text file in text_json folder in the root of your project (good for testing):
+```bash
+screenpipe --save-text-files
+```
+if you want to run screenpipe in debug mode to show more logs in terminal:
+```bash
+screenpipe --debug
+```
+
+you can combine multiple flags if needed
+
 [Didn't work?](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=brew+install+screenpipe+didnt+work)
 
 </details>
@@ -110,7 +121,10 @@ codesign --sign - --force --preserve-metadata=entitlements,requirements,flags,ru
 Then run it
 ```bash
 ./target/release/screenpipe # add "--disable-audio" if you don't want audio to be recorded
+# "--save-text-files" if you want to save OCR data to text file in text_json folder in the root of your project (good for testing)
+# "--debug" if you want to run screenpipe in debug mode to show more logs in terminal
 ```
+
 [Didn't work?](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=cloning+screenpipe+didnt+work)
 </details>
 
