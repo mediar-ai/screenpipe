@@ -34,18 +34,16 @@ jobs:
         run: |
           brew install ffmpeg
 
-      - name: Set up pkg-config for cross-compilation
+      - name: Set up cross-compilation environment
         run: |
           if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-            echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig" >> $GITHUB_ENV
-            echo "PKG_CONFIG_LIBDIR=/opt/homebrew/lib/pkgconfig" >> $GITHUB_ENV
-          else
-            echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" >> $GITHUB_ENV
-            echo "PKG_CONFIG_LIBDIR=/usr/local/lib/pkgconfig" >> $GITHUB_ENV
+            echo "SDKROOT=$(xcrun -sdk macosx --show-sdk-path)" >> $GITHUB_ENV
+            echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
           fi
 
       - name: Build with Metal feature
         run: |
+          export PKG_CONFIG_ALLOW_CROSS=1
           cargo build --release --features metal --target ${{ matrix.target }}
 
       - name: Create deployment package
