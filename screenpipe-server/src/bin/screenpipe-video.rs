@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use clap::Parser;
+use screenpipe_server::core::DataOutputWrapper; // Correct import
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -85,7 +86,7 @@ async fn main() {
                 "ocr_text": frame.text,
                 "text_json": frame.text_json,
                 "new_text_json": frame.new_text_json,
-                "data_output": frame.data_output,
+                "data_output": DataOutputWrapper { data_output: frame.data_output }.to_json(),
             });
 
             write_json_frame(&mut json_writer, &frame_data).expect("Failed to write JSON frame");
