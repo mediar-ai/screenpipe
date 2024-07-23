@@ -185,7 +185,7 @@ impl DatabaseManager {
         }
     
         // Log the input parameters with limited length
-        debug!("Inserting OCR text with frame_id: {}, text: {}, text_json: {}, new_text_json_vs_previous_frame: {}, raw_data_output_from_OCR: {}", 
+        debug!(target: "db::ocr", "Inserting OCR text with frame_id: {}, text: {}, text_json: {}, new_text_json_vs_previous_frame: {}, raw_data_output_from_OCR: {}", 
             frame_id, 
             limit_string(text), 
             limit_string(text_json), 
@@ -204,7 +204,7 @@ impl DatabaseManager {
             .await?;
     
         // Log successful insertion
-        debug!("Successfully inserted OCR text for frame_id: {}", frame_id);
+        debug!(target: "db::ocr", "Successfully inserted OCR text for frame_id: {}", frame_id);
     
         tx.commit().await?;
         Ok(())
