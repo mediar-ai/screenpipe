@@ -33,11 +33,23 @@ class Screenpipe < Formula
 # wait linux release
 # then
 
+# aarch64-apple-darwin
 # cargo build --release --features metal --target aarch64-apple-darwin
 # tar -czf screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz -C target/release screenpipe
 # shasum -a 256 screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
 # gh release upload v${VERSION} screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
 # rm screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
+
+# x86_64-apple-darwin
+# export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
+# export PKG_CONFIG_ALLOW_CROSS=1
+# cargo build --release --features metal --target x86_64-apple-darwin
+# tar -czf screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz -C target/release screenpipe
+# shasum -a 256 screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
+# gh release upload v${VERSION} screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
+# rm screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
+
+
 # update the ruby code above (version and sha256)
 # git add Formula/screenpipe.rb
 # git commit -m "chore: update brew to version ${VERSION}"

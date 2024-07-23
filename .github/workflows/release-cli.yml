@@ -30,9 +30,29 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
+      - name: Cache Homebrew packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Cellar/ffmpeg
+            /usr/local/Cellar/pkg-config
+          key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/release-cli.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-brew-
+
       - name: Install dependencies
         run: |
           brew install ffmpeg pkg-config
+
+      - uses: actions/cache@v3
+        with:
+          path: | 
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build with Metal feature
         run: |
@@ -40,10 +60,19 @@ jobs:
           export PKG_CONFIG_ALLOW_CROSS=1
           cargo build --release --features metal --target ${{ matrix.target }}
 
+      - name: Set version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if [[ $VERSION != v* ]]; then
+            VERSION=$(git describe --tags --abbrev=0)
+          fi
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Create deployment package
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          tar -czf screenpipe-${VERSION}-${{ matrix.target }}.tar.gz -C target/release screenpipe
+          # ls -R target/release
+          tar -czf screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz -C target/release screenpipe
 
       - name: Calculate SHA256
         run: |
@@ -51,7 +80,7 @@ jobs:
 
       - name: Update Homebrew Formula
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          export VERSION=${{ env.VERSION }}
           sed 's/version ".*"/version "'$VERSION'"/' Formula/screenpipe.rb > Formula/screenpipe.tmp && mv Formula/screenpipe.tmp Formula/screenpipe.rb
           if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
             sed 's/sha256 ".*" # x86_64/sha256 "'${{ env.MAC_SHA256_x86_64-apple-darwin }}'" # x86_64/' Formula/screenpipe.rb > Formula/screenpipe.tmp && mv Formula/screenpipe.tmp Formula/screenpipe.rb
@@ -67,7 +96,7 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add Formula/screenpipe.rb
-          git commit -m "chore: update brew to version ${GITHUB_REF#refs/tags/v} for ${{ matrix.target }}"
+          git commit -m "chore: update brew to version ${{ env.VERSION }} for ${{ matrix.target }}"
           git push
 
       - name: Upload Artifact
@@ -199,8 +228,12 @@ jobs:
       - name: Set Version
         shell: bash
         run: |
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
-          echo "RELEASE_VERSION=$(echo ${GITHUB_REF_NAME} | cut -f1 -d-)" >> $GITHUB_ENV
+          if [[ $GITHUB_REF_NAME != v* ]]; then
+            VERSION=$(git describe --tags --abbrev=0)
+          fi
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "RELEASE_VERSION=$(echo ${VERSION} | cut -f1 -d-)" >> $GITHUB_ENV
 
       - name: Create or update Release
         env:

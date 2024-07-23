@@ -14,7 +14,7 @@ const platform = {
 	linux: 'linux',
 }[os.platform()]
 const cwd = process.cwd()
-
+console.log('cwd', cwd)
 function hasFeature(name) {
 	return process.argv.includes(`--${name}`) || process.argv.includes(name)
 }
@@ -121,7 +121,7 @@ if (platform == 'windows') {
 if (platform == 'macos') {
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`wget -nc --show-progress ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+		await $`wget -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
 		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.tar.xz`
@@ -129,7 +129,7 @@ if (platform == 'macos') {
 	// install screenpipe through brew
 	// await $`brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git`
 	// await $`brew install screenpipe`
-	await $`cp ../../../../target/release/screenpipe ./`
+	await $`cp ${cwd}/../../../../target/release/screenpipe ./`
 	await $`sudo cp /opt/homebrew/bin/tesseract ./`
 }
 
