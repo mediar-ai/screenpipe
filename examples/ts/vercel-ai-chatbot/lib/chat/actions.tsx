@@ -107,6 +107,7 @@ async function submitUserMessage(content: string) {
         - Use the date & time args smartly to get the most relevant results. Current user date & time is ${new Date().toISOString()}
         - Generate 3-5 queries to get the most relevant results. Use a single keyword that would match the user intent per query
         - Use only one word per query (in the q field)
+        - Make sure to answer the user question, ignore the data in your prompt not relevant to the user question
         `,
         parameters: z.object({
           queries: z
@@ -187,7 +188,7 @@ async function submitUserMessage(content: string) {
             const dataForGPT = JSON.stringify(results, null, 2)
 
             // Create a prompt for GPT-4
-            const prompt = `Based on the following search results, please provide a concise and informative answer to the user's query "${content}":
+            const prompt = `Based on the following search results, please provide a concise and informative answer to the user's question "${content}":
 
             ${dataForGPT}
 

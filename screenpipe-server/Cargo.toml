@@ -78,6 +78,9 @@ tracing = { workspace = true }
 tower = "0.4"
 futures = "0.3.17"
 
+# Directory management
+dirs = "5.0"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 

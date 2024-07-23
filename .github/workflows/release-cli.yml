@@ -37,14 +37,12 @@ jobs:
       - name: Set up pkg-config for cross-compilation
         run: |
           if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-            export PKG_CONFIG_SYSROOT_DIR=/opt/homebrew
-            export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig
+            echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig" >> $GITHUB_ENV
+            echo "PKG_CONFIG_LIBDIR=/opt/homebrew/lib/pkgconfig" >> $GITHUB_ENV
           else
-            export PKG_CONFIG_SYSROOT_DIR=/usr/local
-            export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+            echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" >> $GITHUB_ENV
+            echo "PKG_CONFIG_LIBDIR=/usr/local/lib/pkgconfig" >> $GITHUB_ENV
           fi
-          echo "PKG_CONFIG_SYSROOT_DIR=$PKG_CONFIG_SYSROOT_DIR" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
       - name: Build with Metal feature
         run: |
@@ -148,34 +146,30 @@ jobs:
           profile: minimal
           override: true
 
-      - name: Install FFmpeg
+      - name: Download FFmpeg
         run: |
-          choco install ffmpeg
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg"
+          Move-Item -Path "ffmpeg\ffmpeg-master-latest-win64-gpl-shared" -Destination "C:\ffmpeg"
 
-      - name: Install pkg-config
+      - name: Set up environment
         run: |
-          choco install pkgconfiglite
-
-      - name: Set up pkg-config
-        run: |
-          echo "PKG_CONFIG_PATH=C:\ProgramData\chocolatey\lib\pkgconfiglite\tools\pkg-config\lib\pkgconfig" >> $GITHUB_ENV
-          echo "C:\ProgramData\chocolatey\lib\pkgconfiglite\tools" >> $GITHUB_PATH
+          echo "C:\ffmpeg\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "FFMPEG_DIR=C:\ffmpeg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "PKG_CONFIG_PATH=C:\ffmpeg\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build release
         run: |
           cargo build --release --verbose
 
-      - name: Download FFmpeg
-        run: |
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "ffmpeg.zip"
-          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg"
-          Move-Item -Path "ffmpeg\ffmpeg-master-latest-win64-gpl\bin\*" -Destination "target\release\"
-
       - name: Create deployment package
         run: |
           $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
-          Compress-Archive -Path target\release\screenpipe.exe, target\release\ffmpeg.exe, target\release\ffprobe.exe -DestinationPath screenpipe-$VERSION-x86_64-pc-windows-msvc.zip
+          New-Item -ItemType Directory -Path "screenpipe-win64"
+          Copy-Item "target\release\screenpipe.exe" -Destination "screenpipe-win64"
+          Copy-Item "C:\ffmpeg\bin\*.dll" -Destination "screenpipe-win64"
+          Compress-Archive -Path "screenpipe-win64" -DestinationPath "screenpipe-$VERSION-x86_64-pc-windows-msvc.zip"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2

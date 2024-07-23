@@ -57,15 +57,6 @@ impl VideoCapture {
         let _queue_thread = tokio::spawn(async move {
             while *capture_thread_is_running.lock().await {
                 if let Some(result) = result_receiver.recv().await {
-                    // debug!(
-                    //     "Received result from capture thread: frame_number: {:?}",
-                    //     result.frame_number
-                    // );
-                    // debug!(
-                    //     "Received result from capture thread: timestamp: {:?}",
-                    //     result.timestamp
-                    // );
-                    // debug!("Received result from capture thread: text: {:?}", result.text);
                     capture_frame_queue.lock().await.push_back(result);
                 }
             }

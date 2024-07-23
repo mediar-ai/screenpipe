@@ -7,7 +7,7 @@ use std::path::PathBuf;
 fn benchmark_stt(c: &mut Criterion) {
     let test_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("test_data")
-        .join("selah.mp3");
+        .join("selah.mp4");
 
     // Initialize WhisperModel outside the benchmark loop
     let whisper_model = WhisperModel::new().expect("Failed to initialize WhisperModel");

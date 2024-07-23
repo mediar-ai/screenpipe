@@ -7,7 +7,7 @@ fn benchmark_pcm_decode(c: &mut Criterion) {
     // Assuming you have a sample audio file in your project for testing
     let test_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("test_data")
-        .join("selah.mp3");
+        .join("selah.mp4");
 
     c.bench_function("pcm_decode", |b| {
         b.iter(|| {

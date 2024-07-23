@@ -53,7 +53,6 @@ const config = {
 			'libasound2-dev', // cpal
 			'libomp-dev', // OpenMP in ggml.ai
 			'libstdc++-12-dev', //ROCm
-			'libmp3lame-dev', // MP3 support
 		],
 	},
 	macos: {
@@ -78,7 +77,6 @@ if (platform == 'linux') {
 	if (hasFeature('opencl')) {
 		config.linux.aptPackages.push('libclblast-dev')
 	}
-	config.linux.aptPackages.push('libmp3lame0')  // Add MP3 support
 	for (const name of config.linux.aptPackages) {
 		await $`sudo apt-get install -y ${name}`
 	}
@@ -120,44 +118,14 @@ if (platform == 'windows') {
 }
 
 /* ########## macOS ########## */
-// if (platform == 'macos') {
-// 	// Install lame using Homebrew
-// 	await $`brew install lame`
-
-// 	// Setup FFMPEG
-// 	if (!(await fs.exists(config.ffmpegRealname))) {
-// 		await $`wget -nc --show-progress ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
-// 		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
-// 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-// 		await $`rm ${config.macos.ffmpegName}.tar.xz`
-// 	}
-
-// 	// Copy lame to ffmpeg ! NEED SUDO
-// 	await $`sudo cp -r /opt/homebrew/opt/lame/lib/* ${config.ffmpegRealname}/lib/`
-
-// 	// Set the DYLD_LIBRARY_PATH to include the FFmpeg lib directory
-// 	await fs.appendFile(process.env.DYLD_LIBRARY_PATH, path.join(cwd, config.ffmpegRealname, 'lib'))
-// }
 if (platform == 'macos') {
-	// Install FFmpeg and lame using Homebrew
-	await $`brew install ffmpeg lame`
-
-	// Set FFmpeg path to Homebrew's installation
-	config.ffmpegRealname = '/opt/homebrew/opt/ffmpeg'
-
-	// Create a symlink if it doesn't exist
-	if (!(await fs.exists(path.join(cwd, 'ffmpeg')))) {
-		await $`ln -s ${config.ffmpegRealname} ${path.join(cwd, 'ffmpeg')}`
+	// Setup FFMPEG
+	if (!(await fs.exists(config.ffmpegRealname))) {
+		await $`wget -nc --show-progress ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
+		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
+		await $`rm ${config.macos.ffmpegName}.tar.xz`
 	}
-
-	// Update the exports object
-	exports.ffmpeg = path.join(cwd, 'ffmpeg')
-
-	// Ensure DYLD_LIBRARY_PATH includes FFmpeg lib directory
-	const ffmpegLibPath = path.join(config.ffmpegRealname, 'lib')
-	process.env.DYLD_LIBRARY_PATH = `${process.env.DYLD_LIBRARY_PATH || ''}:${ffmpegLibPath}`
-
-	console.log(`FFmpeg installed and linked. Path: ${exports.ffmpeg}`)
 }
 
 // Nvidia

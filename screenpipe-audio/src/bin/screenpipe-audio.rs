@@ -68,12 +68,12 @@ async fn main() -> Result<()> {
         return Err(anyhow!("No audio input devices found"));
     }
 
-    // delete .mp3 files (output*.mp3)
-    std::fs::remove_file("output_0.mp3").unwrap_or_default();
-    std::fs::remove_file("output_1.mp3").unwrap_or_default();
+    // delete .mp4 files (output*.mp4)
+    std::fs::remove_file("output_0.mp4").unwrap_or_default();
+    std::fs::remove_file("output_1.mp4").unwrap_or_default();
 
     let chunk_duration = Duration::from_secs(5);
-    let output_path = PathBuf::from("output.mp3");
+    let output_path = PathBuf::from("output.mp4");
     let (whisper_sender, mut whisper_receiver) = create_whisper_channel().await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
         .map(|(i, device)| {
             let device = Arc::new(device);
             let whisper_sender = whisper_sender.clone();
-            let output_path = output_path.with_file_name(format!("output_{}.mp3", i));
+            let output_path = output_path.with_file_name(format!("output_{}.mp4", i));
             let device_control = Arc::new(AtomicBool::new(true));
             let device_clone = Arc::clone(&device);
 

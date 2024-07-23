@@ -251,7 +251,7 @@ ffplay "data/2024-07-12_01-14-14.mp4"
 Play a sample audio_recording from the database</summary>
 
 ```bash
-ffplay "data/Display 1 (output)_2024-07-12_01-14-11.mp3"
+ffplay "data/Display 1 (output)_2024-07-12_01-14-11.mp4"
 ```
 </details>
 

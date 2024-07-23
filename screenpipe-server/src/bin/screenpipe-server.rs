@@ -3,6 +3,7 @@ use std::{
     fs,
     net::SocketAddr,
     ops::Deref,
+    path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
@@ -10,6 +11,7 @@ use std::{
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
+use dirs::home_dir;
 use log::{debug, info, LevelFilter};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
@@ -78,8 +80,8 @@ struct Cli {
     list_audio_devices: bool,
 
     /// Data directory
-    #[arg(long, default_value_t = String::from("./data"))] // TODO $HOME/.screenpipe
-    data_dir: String,
+    #[arg(long)]
+    data_dir: Option<String>,
 
     /// Enable debug logging for screenpipe modules
     #[arg(long)]
@@ -88,6 +90,18 @@ struct Cli {
     /// Save text files
     #[arg(long, default_value_t = false)]
     save_text_files: bool,
+}
+
+fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
+    let default_path = home_dir()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get home directory"))?
+        .join(".screenpipe");
+
+    let base_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
+    let data_dir = base_dir.join("data");
+
+    fs::create_dir_all(&data_dir)?;
+    Ok(data_dir)
 }
 
 #[tokio::main]
@@ -112,7 +126,7 @@ async fn main() -> anyhow::Result<()> {
     }
     // Example usage of the new flag
     if cli.save_text_files {
-        println!("Text files will be saved.");
+        debug!("Text files will be saved.");
     }
 
     builder.init();
@@ -158,10 +172,6 @@ async fn main() -> anyhow::Result<()> {
             is_running: false,
             is_paused: false,
         };
-        // let _ = audio_devices_control_sender.send_deadline(
-        //     (device.clone(), device_control.clone()),
-        //     Instant::now() + Duration::from_secs(10),
-        // );
         devices_status.insert(device.clone(), device_control);
         info!("  {}", device);
     }
@@ -176,10 +186,6 @@ async fn main() -> anyhow::Result<()> {
                     is_running: true,
                     is_paused: false,
                 };
-                // let _ = audio_devices_control_sender.send_deadline(
-                //     (input_device.clone(), device_control.clone()),
-                //     Instant::now() + Duration::from_secs(15),
-                // );
                 devices_status.insert(input_device, device_control);
             }
             if let Ok(output_device) = default_output_device() {
@@ -188,10 +194,6 @@ async fn main() -> anyhow::Result<()> {
                     is_running: true,
                     is_paused: false,
                 };
-                // let _ = audio_devices_control_sender.send_deadline(
-                //     (output_device.clone(), device_control.clone()),
-                //     Instant::now() + Duration::from_secs(15),
-                // );
                 devices_status.insert(output_device, device_control);
             }
         } else {
@@ -203,10 +205,6 @@ async fn main() -> anyhow::Result<()> {
                     is_running: true,
                     is_paused: false,
                 };
-                // let _ = audio_devices_control_sender.send_deadline(
-                //     (device.clone(), device_control.clone()),
-                //     Instant::now() + Duration::from_secs(15),
-                // );
                 devices_status.insert(device, device_control);
             }
         }
@@ -240,9 +238,8 @@ async fn main() -> anyhow::Result<()> {
     );
     resource_monitor.start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
 
-    let local_data_dir = cli.data_dir; // TODO: Use $HOME/.screenpipe/data
-    fs::create_dir_all(&local_data_dir)?;
-    let local_data_dir = Arc::new(local_data_dir);
+    let local_data_dir = get_base_dir(cli.data_dir)?;
+    let local_data_dir = Arc::new(local_data_dir.to_string_lossy().into_owned());
     let local_data_dir_record = local_data_dir.clone();
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir))
@@ -250,7 +247,7 @@ async fn main() -> anyhow::Result<()> {
             .map_err(|e| {
                 eprintln!("Failed to initialize database: {:?}", e);
                 e
-            })?
+            })?,
     );
     info!(
         "Database initialized, will store files in {}",
@@ -278,7 +275,7 @@ async fn main() -> anyhow::Result<()> {
                 control_rx,
                 vision_control,
                 audio_devices_control_receiver,
-                cli.save_text_files, 
+                cli.save_text_files,
             )
             .await
         }
@@ -306,13 +303,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Server started on http://localhost:{}", cli.port);
 
     // print screenpipe in gradient
-    println!(
-        "\n\n{}",
-        DISPLAY
-            .truecolor(147, 112, 219)
-            .on_truecolor(255, 255, 255)
-            .bold()
-    );
+    println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
     println!(
         "\n{}",
         "Build AI apps that have the full context"

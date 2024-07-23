@@ -48,7 +48,7 @@ mod tests {
         let start = std::time::Instant::now();
         let whisper_model = WhisperModel::new().unwrap();
 
-        let text = stt("./test_data/selah.mp3", &whisper_model).unwrap();
+        let text = stt("./test_data/selah.mp4", &whisper_model).unwrap();
         let duration = start.elapsed();
 
         println!("Speech to text completed in {:?}", duration);
@@ -66,7 +66,7 @@ mod tests {
         let device_spec = Arc::new(default_output_device().unwrap());
         let duration = Duration::from_secs(30); // Record for 3 seconds
         let time = Utc::now().timestamp_millis();
-        let output_path = PathBuf::from(format!("test_output_{}.mp3", time));
+        let output_path = PathBuf::from(format!("test_output_{}.mp4", time));
         let (sender, mut receiver) = unbounded_channel();
         let is_running = Arc::new(AtomicBool::new(true));
 
@@ -122,7 +122,7 @@ mod tests {
         let device_spec = Arc::new(default_output_device().unwrap());
         let duration = Duration::from_secs(30);
         let time = Utc::now().timestamp_millis();
-        let output_path = PathBuf::from(format!("test_output_interrupt_{}.mp3", time));
+        let output_path = PathBuf::from(format!("test_output_interrupt_{}.mp4", time));
         let (sender, mut receiver) = unbounded_channel();
         let is_running = Arc::new(AtomicBool::new(true));
         let is_running_clone = Arc::clone(&is_running);
@@ -221,7 +221,7 @@ mod tests {
         // Setup
         let device_spec = Arc::new(default_output_device().unwrap());
         let output_path =
-            PathBuf::from(format!("test_output_{}.mp3", Utc::now().timestamp_millis()));
+            PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
         let (whisper_sender, mut whisper_receiver) = create_whisper_channel().await.unwrap();
         let is_running = Arc::new(AtomicBool::new(true));

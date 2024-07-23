@@ -134,29 +134,31 @@ async fn run_ffmpeg(
             "-i",
             "pipe:0",
             "-c:a",
-            "libmp3lame",
+            "aac",
             "-b:a",
             "128k",
             "-f",
-            "mp3",
+            "mp4",
             output_path.to_str().unwrap(),
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
+    // ! tmp hack shouldnt be needed
     // Explicitly set the library paths for the FFmpeg command
-    if let Ok(ld_library_path) = std::env::var("LD_LIBRARY_PATH") {
-        command.env("LD_LIBRARY_PATH", ld_library_path);
-    }
-    #[cfg(target_os = "macos")]
-    if let Ok(dyld_library_path) = std::env::var("DYLD_LIBRARY_PATH") {
-        command.env("DYLD_LIBRARY_PATH", dyld_library_path);
-    }
+    // if let Ok(ld_library_path) = std::env::var("LD_LIBRARY_PATH") {
+    //     command.env("LD_LIBRARY_PATH", ld_library_path);
+    // }
+    // #[cfg(target_os = "macos")]
+    // if let Ok(dyld_library_path) = std::env::var("DYLD_LIBRARY_PATH") {
+    //     command.env("DYLD_LIBRARY_PATH", dyld_library_path);
+    // }
 
     debug!("FFmpeg command: {:?}", command);
 
-    let mut ffmpeg: tokio::process::Child = command.spawn().expect("Failed to spawn FFmpeg process");
+    let mut ffmpeg: tokio::process::Child =
+        command.spawn().expect("Failed to spawn FFmpeg process");
     debug!("FFmpeg process spawned");
     let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
     let start_time = std::time::Instant::now();
