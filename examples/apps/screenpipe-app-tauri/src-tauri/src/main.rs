@@ -4,42 +4,24 @@
 use dirs::home_dir;
 use log::{debug, error, info, LevelFilter};
 use logs::MultiWriter;
-use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice, DeviceControl,
-};
-use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
 
 use serde_json::Value;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
-use std::ops::Deref;
+use tokio::sync::mpsc::unbounded_channel;
+
+use std::fs;
 use std::path::PathBuf;
-use std::{
-    fs,
-    net::SocketAddr,
-    sync::{atomic::AtomicBool, Arc},
-    time::Duration,
-};
-use tauri::image::Image;
-use tauri::menu::{CheckMenuItem, IconMenuItem, Menu, MenuItem, SubmenuBuilder};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
-use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
-    tray::TrayIconBuilder,
-    Manager,
-};
-use tauri::{State, Wry};
-use tauri_plugin_shell::ShellExt;
+
+use tauri::Manager;
+use tauri::Wry;
 use tauri_plugin_store::{with_store, StoreCollection};
-use tokio::sync::mpsc;
 
 use tauri_plugin_autostart::MacosLauncher;
 mod analytics;
-use analytics::AnalyticsManager;
 
 use crate::analytics::start_analytics;
+mod find_screenpipe;
 mod logs;
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
@@ -57,179 +39,6 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 #[derive(Default)]
 struct TrayState {
     menu: Option<tauri::menu::Menu<tauri::Wry>>,
-}
-
-async fn initialize_audio(
-    disable_audio: bool,
-    custom_devices: &[String],
-    audio_devices_control_sender: Arc<tokio::sync::mpsc::Sender<(AudioDevice, DeviceControl)>>,
-) -> (Vec<Arc<AudioDevice>>, HashMap<AudioDevice, DeviceControl>) {
-    debug!(
-        "Entering initialize_audio function, disable_audio={}",
-        disable_audio
-    );
-    let mut audio_devices = Vec::new();
-    let mut devices_status = HashMap::new();
-
-    if disable_audio {
-        info!("Audio recording is disabled");
-        return (audio_devices, devices_status);
-    }
-
-    info!("Initializing audio devices...");
-    let all_audio_devices = list_audio_devices().unwrap_or_default();
-
-    for device in all_audio_devices {
-        let device_control = DeviceControl {
-            is_running: false,
-            is_paused: false,
-        };
-        info!("Audio device: {:?}", device.to_string());
-        devices_status.insert(device, device_control);
-    }
-
-    if custom_devices.is_empty() {
-        if let Ok(input_device) = default_input_device() {
-            info!("Default input device found: {:?}", input_device.to_string());
-            audio_devices.push(Arc::new(input_device));
-        }
-        if let Ok(output_device) = default_output_device() {
-            info!(
-                "Default output device found: {:?}",
-                output_device.to_string()
-            );
-            audio_devices.push(Arc::new(output_device));
-        }
-    } else {
-        for device_str in custom_devices {
-            if let Ok(device) = parse_audio_device(device_str) {
-                info!("Custom device added: {:?}", device.to_string());
-                audio_devices.push(Arc::new(device));
-            } else {
-                error!("Failed to parse audio device: {}", device_str);
-            }
-        }
-    }
-
-    if audio_devices.is_empty() {
-        error!("No audio devices available. Audio recording will be disabled.");
-    } else {
-        info!("Using audio devices:");
-        for device in &audio_devices {
-            info!("  {}", device);
-
-            let device_control = DeviceControl {
-                is_running: true,
-                is_paused: false,
-            };
-            let device_clone = device.deref().clone();
-            let sender_clone = audio_devices_control_sender.clone();
-            // send signal after everything started
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(15)).await;
-                let _ = sender_clone.send((device_clone, device_control)).await;
-            });
-        }
-    }
-
-    debug!("Exiting initialize_audio function");
-    (audio_devices, devices_status)
-}
-
-async fn setup_server_and_recording(
-    app: tauri::AppHandle,
-    db: Arc<DatabaseManager>,
-    local_data_dir: Arc<String>,
-    port: u16,
-    fps: f64,
-    audio_chunk_duration: u64,
-    disable_audio: bool,
-    memory_threshold: f64,
-    runtime_threshold: u64,
-) -> (
-    Vec<Arc<AudioDevice>>,
-    Arc<tokio::sync::mpsc::Sender<(AudioDevice, DeviceControl)>>,
-) {
-    debug!("Entering setup_server_and_recording function");
-    info!("Setting up server and recording...");
-    info!("Configuration: port={}, fps={}, audio_chunk_duration={}s, disable_audio={}, memory_threshold={}%, runtime_threshold={}s",
-        port, fps, audio_chunk_duration, disable_audio, memory_threshold, runtime_threshold);
-
-    let (audio_devices_control_sender, audio_devices_control_receiver) = mpsc::channel(64);
-    let audio_devices_control_sender = Arc::new(audio_devices_control_sender);
-    let audio_sender_for_server = audio_devices_control_sender.clone();
-    let audio_sender_for_return = audio_devices_control_sender.clone();
-
-    debug!("Initializing audio devices");
-    let (audio_devices, devices_status) = initialize_audio(
-        disable_audio,
-        &[], // No custom devices for the app version
-        audio_devices_control_sender,
-    )
-    .await;
-
-    info!("Starting resource monitoring...");
-    ResourceMonitor::new(memory_threshold, runtime_threshold, false)
-        .start_monitoring(Duration::from_secs(10));
-
-    let db_record = db.clone();
-    let db_server = db.clone();
-
-    let (_control_tx, control_rx) = tokio::sync::mpsc::channel(64);
-    let vision_control = Arc::new(AtomicBool::new(true));
-    let vision_control_server_clone = vision_control.clone();
-
-    info!("Spawning continuous recording task...");
-    let _recording_task = tokio::spawn({
-        let local_data_dir = local_data_dir.clone();
-        async move {
-            let audio_chunk_duration = Duration::from_secs(audio_chunk_duration);
-
-            info!("Starting continuous recording...");
-            start_continuous_recording(
-                db_record,
-                local_data_dir,
-                fps,
-                audio_chunk_duration,
-                control_rx,
-                vision_control,
-                audio_devices_control_receiver,
-                false,
-            )
-            .await
-        }
-    });
-    let _app_handle = app.app_handle();
-
-    let analytics_manager = app.state::<Arc<AnalyticsManager>>().inner().clone();
-    let api_plugin = move |req: &axum::http::Request<axum::body::Body>| {
-        if req.uri().path() == "/search" {
-            let analytics_manager = analytics_manager.clone();
-            tokio::spawn(async move {
-                if let Err(e) = analytics_manager.track_search().await {
-                    error!("Failed to track search request: {}", e);
-                }
-            });
-        }
-    };
-    info!("Spawning server task...");
-    tokio::spawn(async move {
-        let server = Server::new(
-            db_server,
-            SocketAddr::from(([0, 0, 0, 0], port)),
-            vision_control_server_clone,
-            audio_sender_for_server.deref().clone(),
-        );
-        info!("Starting server...");
-
-        if let Err(e) = server.start(devices_status, api_plugin).await {
-            error!("Failed to start server: {}", e);
-        }
-    });
-
-    info!("Server started on http://localhost:{}", port);
-
-    (audio_devices, audio_sender_for_return)
 }
 
 #[tokio::main]
@@ -263,17 +72,18 @@ async fn main() {
             builder
                 .filter(None, LevelFilter::Info)
                 .filter_module("tokenizers", LevelFilter::Error)
-                .filter_module("rusty_tesseract", LevelFilter::Error)
+                // .filter_module("rusty_tesseract", LevelFilter::Error)
                 .filter_module("symphonia", LevelFilter::Error);
 
             if debug {
                 builder.filter_module("screenpipe", LevelFilter::Debug);
+                builder.filter_module("app", LevelFilter::Debug);
             }
 
             // debug!("all param: {:?}", cli.args);
 
             let log_file =
-                File::create(format!("{}/screenpipe.log", base_dir.to_string_lossy())).unwrap();
+                File::create(format!("{}/screenpipe-app.log", base_dir.to_string_lossy())).unwrap();
             let multi_writer = MultiWriter::new(vec![
                 Box::new(log_file) as Box<dyn Write + Send>,
                 Box::new(std::io::stdout()) as Box<dyn Write + Send>,
@@ -319,200 +129,141 @@ async fn main() {
                 Ok(())
             });
 
-            // let handle = app.handle();
-            // let menu = MenuBuilder::new(handle)
-            //     .item(&MenuItem::new(handle, "MenuItem 1", true, None::<&str>)?)
-            //     .items(&[
-            //         &CheckMenuItem::new(handle, "CheckMenuItem 1", true, true, None::<&str>)?,
-            //         &IconMenuItem::new(
-            //             handle,
-            //             "IconMenuItem 1",
-            //             true,
-            //             Some(tauri::image::Image::from_bytes(include_bytes!(
-            //                 "../icons/32x32.png"
-            //             ))?),
-            //             None::<&str>,
-            //         )?,
-            //     ])
-            //     .text("item2", "MenuItem 2")
-            //     .check("checkitem2", "CheckMenuItem 2")
-            //     .icon(
-            //         "iconitem2",
-            //         "IconMenuItem 2",
-            //         app.default_window_icon().cloned().unwrap(),
-            //     )
-            //     .build()?;
-
-            // let _tray = tauri::tray::TrayIconBuilder::with_id("main")
-            //     .menu(&menu)
-            //     .on_menu_event(|app, event| match event.id().as_ref() {
-            //         "show" => {
-            //             info!("show");
-            //         }
-            //         "quit" => {
-            //             app.exit(0);
-            //         }
-            //         _ => {
-            //             info!("other: {:?}", event.id());
-            //         }
-            //     })
-            //     .build(app)?;
-
-            // _tray.set_show_menu_on_left_click(true);
-
-            // let _menu = app.set_menu(menu).unwrap().unwrap();
-            // app.on_tray_icon_event(|app, event| {
-            //     info!("tray icon event: {:?}", event);
-            //     if let tauri::tray::TrayIconEvent::Click {
-            //         button,
-            //         button_state,
-            //         ..
-            //     } = event
-            //     {
-            //         // if let Some(tray_handle) = app.tray_by_id("main") {
-            //         //     let _ = tray_handle.set_visible(true);
-            //         //     let menu = app.menu().unwrap();
-            //         //     let items = menu.items();
-            //         //     // print!(
-            //         //     //     "hhh {:?}",
-            //         //     //     items.map(|item| item).into_iter().collect::<Vec<_>>()
-            //         //     // );
-
-            //         //     if let Some(item) = menu.get("MenuItem 1") {
-            //         //         let _ = item.as_menuitem().unwrap().set_text("Enable Analytics");
-            //         //     }
-            //         // }
-            //     }
-            // });
-            // info!("Menu set: {:?}", menu);
-            // Tray setup
-            // let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-            // let send_feedback_item =
-            //     MenuItemBuilder::with_id("send_feedback", "Send Feedback").build(app)?;
-            // let toggle_analytics_item =
-            //     MenuItemBuilder::with_id("toggle_analytics", "Disable Analytics").build(app)?;
-            // let toggle_autostart_item =
-            //     MenuItemBuilder::with_id("toggle_autostart", "Disable Autostart").build(app)?;
-
-            // let menu = MenuBuilder::new(app)
-            //     .item(&send_feedback_item)
-            //     .item(&toggle_analytics_item)
-            //     .item(&toggle_autostart_item)
-            //     .separator()
-            //     .item(&quit_item)
-            //     .build()?;
-
-            // app.manage(TrayState {
-            //     menu: Some(menu.clone()),
-            // });
-
-            //             let _tray = TrayIconBuilder::new()
-            //                 .title("Screenpipe")
-            //                 // .icon(tauri::Icon::Raw(
-            //                 //     include_bytes!("../icons/icon.png").to_vec(),
-            //                 // ))
-            //                 .menu(&menu)
-            //                 .on_menu_event(move |app, event| {
-            //                     let tray_state: State<TrayState> = app.app_handle().state();
-            //                     let menu = tray_state.menu.as_ref().unwrap();
-
-            //                     match event.id().as_ref() {
-            //                         "quit" => {
-            //                             std::process::exit(0);
-            //                         }
-            //                         "send_feedback" => {
-            //                             let email = "louis@screenpi.pe";
-            //                             let subject = "Screenpipe Feedback";
-            //                             let body = r#"Please enter your feedback here...
-
-            // ... or let's chat?
-            // https://cal.com/louis030195/screenpipe
-            //                 "#;
-            //                             let url = format!("mailto:{}?subject={}&body={}", email, subject, body);
-            //                             let app_handle = app.app_handle();
-            //                             if let Err(e) = app_handle.shell().open(url, None) {
-            //                                 error!("Failed to open URL: {}", e);
-            //                             }
-            //                         }
-            //                         "toggle_analytics" => {
-            //                             let analytics_manager = app.state::<Arc<AnalyticsManager>>();
-            //                             let is_enabled = analytics_manager.toggle_analytics();
-            //                             if let Some(item) = menu.get("toggle_analytics") {
-            //                                 if is_enabled {
-            //                                     let _ =
-            //                                         item.as_menuitem().unwrap().set_text("Enable Analytics");
-            //                                 } else {
-            //                                     let _ =
-            //                                         item.as_menuitem().unwrap().set_text("Disable Analytics");
-            //                                 }
-            //                             }
-            //                         }
-            //                         _ => {}
-            //                     }
-            //                 })
-            //                 .on_tray_icon_event(|_tray, event| {
-            //                     if let TrayIconEvent::Click {
-            //                         button,
-            //                         button_state,
-            //                         ..
-            //                     } = event
-            //                     {
-            //                         if button_state == MouseButtonState::Up && button == MouseButton::Left {
-            //                             // Handle left-click event
-            //                         }
-            //                     }
-            //                 })
-            //                 .build(app)
-            //                 .expect("Failed to build tray");
-
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
     // Run the app
-    app.run(|app_handle, event| match event {
+    app.run(|_app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
-            let app_handle_clone = app_handle.clone();
-            start_server(app_handle_clone);
+            debug!("Ready event");
+            tauri::async_runtime::spawn(async move {
+                let _ = start_server().await;
+            });
         }
-
+        tauri::RunEvent::ExitRequested { .. } => {
+            debug!("ExitRequested event");
+            // tauri::async_runtime::spawn(async move {
+            //     tx.send(()).unwrap();
+            // });
+        }
         _ => {}
     });
 }
 
-fn start_server(app_handle: tauri::AppHandle) {
-    tokio::spawn(async move {
+use tokio::io::{AsyncBufReadExt, BufReader};
+
+async fn start_server() -> anyhow::Result<()> {
+    let _t = tokio::spawn(async move {
+        debug!("Starting server");
+
+        // kill any all process on port 3030
+        let _ = tokio::process::Command::new("pkill")
+            .arg("-f")
+            .arg("screenpipe")
+            .output()
+            .await;
+
+        // // print path
+        // debug!("Path: {:?}", std::env::var("PATH").unwrap());
+
+        // // set PATH to all stuf in ./*
+        // std::env::set_var(
+        //     "PATH",
+        //     format!("{:?}:{:?}", std::env::var("PATH").unwrap(), "."),
+        // );
+
+        // // also add /Applications/screenpipe.app/Contents/Resources
+        // std::env::set_var(
+        //     "PATH",
+        //     format!(
+        //         "{:?}:{:?}",
+        //         std::env::var("PATH").unwrap(),
+        //         "/Applications/screenpipe.app/Contents/Resources/tesseract"
+        //     ),
+        // );
+        // std::env::set_var(
+        //     "PATH",
+        //     format!(
+        //         "{:?}:{:?}",
+        //         std::env::var("PATH").unwrap(),
+        //         "/Applications/screenpipe.app/Contents/Resources"
+        //     ),
+        // );
+
+        // debug!("Path: {:?}", std::env::var("PATH").unwrap());
+
+        // list files ./
+        // debug!(
+        //     "Files: {:?}",
+        //     std::fs::read_dir(".").unwrap().collect::<Vec<_>>()
+        // );
+
+        let mut cmd =
+            tokio::process::Command::new(find_screenpipe::find_screenpipe_path().unwrap());
+        cmd.arg("--port").arg("3030");
+        cmd.arg("--debug");
         let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
-        let port = 3030;
-        let fps = 1.0;
-        let audio_chunk_duration = 30;
-        let disable_audio = true; // TODO until manage to package libmp3 lame
-        let memory_threshold = 80.0;
-        let runtime_threshold = 3600;
-
-        let db_dir = base_dir.join("data");
-
-        let db = Arc::new(
-            DatabaseManager::new(&format!("{}/db.sqlite", db_dir.to_string_lossy()))
-                .await
-                .unwrap(),
+        // cmd.arg("--data-dir").arg(base_dir);
+        // add tesseract to path from ./tesseract
+        // cmd.env(
+        //     "PATH",
+        //     format!(
+        //         "{:?}:{:?}",
+        //         std::env::var("PATH").unwrap(),
+        //         "/Applications/screenpipe.app/Contents/Resources/tesseract"
+        //     ),
+        // );
+        cmd.env(
+            "PATH",
+            format!(
+                "{:?}:{:?}",
+                std::env::var("PATH").unwrap(),
+                "/Applications/screenpipe.app/Contents/Resources"
+            ),
         );
-        app_handle.manage(db.clone());
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
 
-        let path = Arc::new(db_dir.to_string_lossy().into_owned());
+        let mut child = cmd.spawn().expect("Failed to spawn command");
 
-        setup_server_and_recording(
-            app_handle,
-            db,
-            path,
-            port,
-            fps,
-            audio_chunk_duration,
-            disable_audio,
-            memory_threshold,
-            runtime_threshold,
-        )
-        .await;
+        let stdout = child.stdout.take().expect("Failed to capture stdout");
+        let stderr = child.stderr.take().expect("Failed to capture stderr");
+
+        let mut stdout_reader = BufReader::new(stdout).lines();
+        let mut stderr_reader = BufReader::new(stderr).lines();
+
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = stdout_reader.next_line().await {
+                debug!("{}", line);
+            }
+        });
+
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = stderr_reader.next_line().await {
+                debug!("{}", line);
+            }
+        });
+
+        let output = child
+            .wait_with_output()
+            .await
+            .expect("Failed to wait for child process");
+        debug!("Child process exited with output: {:?}", output);
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "Child process exited with output: {:?}",
+                output
+            ))
+        }
     });
+
+    // stop when rx is received
+    // let _ = rx.recv().await;
+    // t.abort();
+
+    Ok(())
 }

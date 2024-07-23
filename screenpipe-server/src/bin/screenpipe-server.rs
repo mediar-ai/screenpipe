@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs,
+    fs::{self, File},
     net::SocketAddr,
     ops::Deref,
     path::PathBuf,
@@ -17,8 +17,10 @@ use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     DeviceControl,
 };
+use std::io::Write;
 
 use screenpipe_core::find_ffmpeg_path;
+use screenpipe_server::logs::MultiWriter;
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
 use tokio::sync::mpsc::channel;
 
@@ -101,7 +103,7 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let data_dir = base_dir.join("data");
 
     fs::create_dir_all(&data_dir)?;
-    Ok(data_dir)
+    Ok(base_dir)
 }
 
 #[tokio::main]
@@ -118,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
     builder
         .filter(None, LevelFilter::Info)
         .filter_module("tokenizers", LevelFilter::Error)
-        .filter_module("rusty_tesseract", LevelFilter::Error)
+        // .filter_module("rusty_tesseract", LevelFilter::Error)
         .filter_module("symphonia", LevelFilter::Error);
 
     if cli.debug {
@@ -129,9 +131,23 @@ async fn main() -> anyhow::Result<()> {
         debug!("Text files will be saved.");
     }
 
-    builder.init();
+    // builder.init();
     // tokio-console
     // console_subscriber::init();
+    let local_data_dir = get_base_dir(cli.data_dir)?;
+
+    let log_file = File::create(format!(
+        "{}/screenpipe.log",
+        local_data_dir.to_string_lossy()
+    ))
+    .unwrap();
+    let multi_writer = MultiWriter::new(vec![
+        Box::new(log_file) as Box<dyn Write + Send>,
+        Box::new(std::io::stdout()) as Box<dyn Write + Send>,
+    ]);
+
+    builder.target(env_logger::Target::Pipe(Box::new(multi_writer)));
+    builder.format_timestamp_secs().init();
 
     // Add warning for Linux and Windows users
     #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -238,11 +254,8 @@ async fn main() -> anyhow::Result<()> {
     );
     resource_monitor.start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
 
-    let local_data_dir = get_base_dir(cli.data_dir)?;
-    let local_data_dir = Arc::new(local_data_dir.to_string_lossy().into_owned());
-    let local_data_dir_record = local_data_dir.clone();
     let db = Arc::new(
-        DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir))
+        DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))
             .await
             .map_err(|e| {
                 eprintln!("Failed to initialize database: {:?}", e);
@@ -251,7 +264,7 @@ async fn main() -> anyhow::Result<()> {
     );
     info!(
         "Database initialized, will store files in {}",
-        local_data_dir
+        local_data_dir.to_string_lossy()
     );
     let db_record = db.clone();
     let db_server = db.clone();
@@ -269,7 +282,7 @@ async fn main() -> anyhow::Result<()> {
 
             start_continuous_recording(
                 db_record,
-                local_data_dir_record,
+                Arc::new(local_data_dir.join("data").to_string_lossy().into_owned()),
                 cli.fps,
                 audio_chunk_duration,
                 control_rx,

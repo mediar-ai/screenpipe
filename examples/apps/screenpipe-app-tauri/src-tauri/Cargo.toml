@@ -52,6 +52,8 @@ tauri-plugin-store = "2.0.0-beta"
 
 
 anyhow = "1.0.71"
+which = "6.0.1"
+
 
 # M series MacOS
 [target.'cfg(target_os = "macos")'.dependencies]

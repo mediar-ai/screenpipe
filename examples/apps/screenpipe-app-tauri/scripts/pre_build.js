@@ -126,6 +126,11 @@ if (platform == 'macos') {
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.tar.xz`
 	}
+	// install screenpipe through brew
+	// await $`brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git`
+	// await $`brew install screenpipe`
+	await $`cp ../../../../target/release/screenpipe ./`
+	await $`sudo cp /opt/homebrew/bin/tesseract ./`
 }
 
 // Nvidia

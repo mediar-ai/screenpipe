@@ -24,7 +24,9 @@
             }
         },
         "resources": {
-            "ffmpeg/bin/*": "./"
+            "ffmpeg/bin/*": "./",
+            "screenpipe": "./",
+            "tesseract": "./"
         }
     }
 }

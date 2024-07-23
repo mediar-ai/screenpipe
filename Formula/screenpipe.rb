@@ -15,6 +15,7 @@ class Screenpipe < Formula
     end
     
     depends_on "ffmpeg"
+    depends_on "tesseract"
   
     def install
         bin.install "screenpipe"
