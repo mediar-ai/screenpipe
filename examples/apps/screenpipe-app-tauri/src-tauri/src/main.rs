@@ -8,7 +8,6 @@ use logs::MultiWriter;
 use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
-use tokio::sync::mpsc::unbounded_channel;
 
 use std::fs;
 use std::path::PathBuf;
@@ -36,10 +35,7 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     Ok(local_data_dir)
 }
 
-#[derive(Default)]
-struct TrayState {
-    menu: Option<tauri::menu::Menu<tauri::Wry>>,
-}
+
 
 #[tokio::main]
 async fn main() {
@@ -57,7 +53,6 @@ async fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
-        .manage(TrayState::default())
         .setup(move |app| {
             // let cli = app.cli().matches().expect("Failed to get CLI matches");
 
@@ -147,6 +142,14 @@ async fn main() {
             // tauri::async_runtime::spawn(async move {
             //     tx.send(()).unwrap();
             // });
+            // TODO less dirty stop :D
+            tauri::async_runtime::spawn(async move {
+                let _ = tokio::process::Command::new("pkill")
+                    .arg("-f")
+                    .arg("screenpipe")
+                    .output()
+                        .await;
+            });
         }
         _ => {}
     });
@@ -204,7 +207,7 @@ async fn start_server() -> anyhow::Result<()> {
             tokio::process::Command::new(find_screenpipe::find_screenpipe_path().unwrap());
         cmd.arg("--port").arg("3030");
         cmd.arg("--debug");
-        let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
+        // let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
         // cmd.arg("--data-dir").arg(base_dir);
         // add tesseract to path from ./tesseract
         // cmd.env(
@@ -215,14 +218,14 @@ async fn start_server() -> anyhow::Result<()> {
         //         "/Applications/screenpipe.app/Contents/Resources/tesseract"
         //     ),
         // );
-        cmd.env(
-            "PATH",
-            format!(
-                "{:?}:{:?}",
-                std::env::var("PATH").unwrap(),
-                "/Applications/screenpipe.app/Contents/Resources"
-            ),
-        );
+        // cmd.env(
+        //     "PATH",
+        //     format!(
+        //         "{:?}:{:?}",
+        //         std::env::var("PATH").unwrap(),
+        //         "/Applications/screenpipe.app/Contents/Resources"
+        //     ),
+        // );
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 

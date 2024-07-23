@@ -20,7 +20,7 @@ jobs:
         target: [x86_64-apple-darwin, aarch64-apple-darwin]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -41,7 +41,7 @@ jobs:
       - name: Create deployment package
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          tar -czf screenpipe-${VERSION}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release screenpipe
+          tar -czf screenpipe-${VERSION}-${{ matrix.target }}.tar.gz -C target/release screenpipe
 
       - name: Calculate SHA256
         run: |

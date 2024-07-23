@@ -77,19 +77,7 @@ impl AnalyticsManager {
         }
     }
 
-    pub fn toggle_analytics(&self) -> bool {
-        let mut enabled = self.enabled.lock().unwrap();
-        *enabled = !*enabled;
-        *enabled
-    }
 
-    pub async fn track_search(&self) -> Result<(), Box<dyn std::error::Error>> {
-        if !*self.enabled.lock().unwrap() {
-            return Ok(());
-        }
-
-        self.send_event("search_request", None).await
-    }
 }
 
 pub fn get_or_create_unique_id(app_name: &str) -> Result<String, Box<dyn std::error::Error>> {
