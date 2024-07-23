@@ -8,10 +8,10 @@ CREATE INDEX IF NOT EXISTS idx_ocr_text_text_json ON ocr_text(text_json);
 CREATE INDEX IF NOT EXISTS idx_ocr_text_new_text_json_vs_previous_frame ON ocr_text(new_text_json_vs_previous_frame);
 CREATE INDEX IF NOT EXISTS idx_ocr_text_raw_data_output_from_OCR ON ocr_text(raw_data_output_from_OCR);
 
+-- Drop indices for the old columns
+DROP INDEX IF EXISTS idx_ocr_text_Tesseract_TSV_object;
+DROP INDEX IF EXISTS idx_ocr_text_diff_vs_previous_frame_by_line;
+
 -- Delete old columns
 ALTER TABLE ocr_text DROP COLUMN Tesseract_TSV_object;
 ALTER TABLE ocr_text DROP COLUMN diff_vs_previous_frame_by_line;
-
--- Rename existing columns
-ALTER TABLE ocr_text RENAME COLUMN new_text_json TO new_text_json_vs_previous_frame;
-ALTER TABLE ocr_text RENAME COLUMN data_output TO raw_data_output_from_OCR;
