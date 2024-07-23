@@ -18,6 +18,28 @@ pub enum RecorderControl {
     Stop,
 }
 
+// Wrapper struct for DataOutput
+pub struct DataOutputWrapper {
+    pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,
+}
+
+impl DataOutputWrapper {
+    pub fn to_json(&self) -> String {
+        let data_json: Vec<String> = self.data_output.data.iter().map(|d| {
+            format!(
+                r#"{{"level": {}, "page_num": {}, "block_num": {}, "par_num": {}, "line_num": {}, "word_num": {}, "left": {}, "top": {}, "width": {}, "height": {}, "conf": {}, "text": "{}"}}"#,
+                d.level, d.page_num, d.block_num, d.par_num, d.line_num, d.word_num, d.left, d.top, d.width, d.height, d.conf, d.text
+            )
+        }).collect();
+        format!(
+            r#"{{"output": "{}", "data": [{}]}}"#,
+            self.data_output.output,
+            data_json.join(", ")
+        )
+    }
+}
+
+
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
@@ -118,10 +140,10 @@ async fn record_video(
             match db.insert_frame().await {
                 Ok(frame_id) => {
                     let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
-                    let new_text_json = serde_json::to_string(&frame.new_text_json).unwrap_or_default();
-                    let data_output = serde_json::to_string(&frame.data_output).unwrap_or_default();
+                    let new_text_json_vs_previous_frame = serde_json::to_string(&frame.new_text_json).unwrap_or_default();
+                    let raw_data_output_from_OCR = DataOutputWrapper { data_output: frame.data_output }.to_json();
 
-                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json, &data_output).await {
+                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json_vs_previous_frame, &raw_data_output_from_OCR).await {
                         error!("Failed to insert OCR text: {}", e);
                     }
                     debug!("Inserted frame {} with OCR text", frame_id);
