@@ -6,7 +6,8 @@ use sqlx::{
     FromRow,
 };
 use std::time::Duration;
-use log::{debug, error, info}; // Ensure you have the log crate imported
+use log::{debug, error, info, warn};
+use tokio::time::{timeout, Duration as TokioDuration};
 
 #[derive(Debug, Serialize)]
 pub enum SearchResult {
@@ -60,8 +61,8 @@ impl DatabaseManager {
         }
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .acquire_timeout(Duration::from_secs(3))
+            .max_connections(10)
+            .acquire_timeout(Duration::from_secs(10))
             .connect(&connection_string)
             .await?;
 
@@ -125,31 +126,38 @@ impl DatabaseManager {
     }
 
     pub async fn insert_frame(&self) -> Result<i64, sqlx::Error> {
+        // debug!("Starting insert_frame");
+
         let mut tx = self.pool.begin().await?;
+        // debug!("insert_frame Transaction started");
 
         // Get the most recent video_chunk_id
         let video_chunk_id: Option<i64> =
             sqlx::query_scalar("SELECT id FROM video_chunks ORDER BY id DESC LIMIT 1")
                 .fetch_optional(&mut *tx)
                 .await?;
+        debug!("Fetched most recent video_chunk_id: {:?}", video_chunk_id);
 
         // If no video chunk is found, return 0
         let video_chunk_id = match video_chunk_id {
             Some(id) => id,
             None => {
+                debug!("No video chunk found, rolling back transaction");
                 tx.rollback().await?;
                 return Ok(0);
             }
         };
 
-        // ... rest of the function remains the same
+        // Calculate the offset_index
         let offset_index: i64 = sqlx::query_scalar(
             "SELECT COALESCE(MAX(offset_index), -1) + 1 FROM frames WHERE video_chunk_id = ?1",
         )
         .bind(video_chunk_id)
         .fetch_one(&mut *tx)
         .await?;
+        // debug!("insert_frame Calculated offset_index: {}", offset_index);
 
+        // Insert the new frame
         let id = sqlx::query(
             "INSERT INTO frames (video_chunk_id, offset_index, timestamp) VALUES (?1, ?2, ?3)",
         )
@@ -159,8 +167,12 @@ impl DatabaseManager {
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
+        // debug!("insert_frame Inserted new frame with id: {}", id);
 
+        // Commit the transaction
         tx.commit().await?;
+        // debug!("insert_frame Transaction committed");
+
         Ok(id)
     }
 
@@ -172,6 +184,53 @@ impl DatabaseManager {
         new_text_json_vs_previous_frame: &str,
         raw_data_output_from_ocr: &str,
     ) -> Result<(), sqlx::Error> {
+        const MAX_RETRIES: u32 = 3;
+        const TIMEOUT_DURATION: TokioDuration = TokioDuration::from_secs(10);
+
+        // debug!("Starting insert_ocr_text for frame_id: {}", frame_id);
+
+        for attempt in 1..=MAX_RETRIES {
+            // debug!("Attempt {} for frame_id: {}", attempt, frame_id);
+            match timeout(TIMEOUT_DURATION, self.insert_ocr_text_old(
+                frame_id,
+                text,
+                text_json,
+                new_text_json_vs_previous_frame,
+                raw_data_output_from_ocr,
+            )).await {
+                Ok(Ok(())) => {
+                    // Log successful insertion
+                    debug!("Successfully inserted OCR text for frame_id: {} on attempt {}", frame_id, attempt);
+                    return Ok(());
+                }
+                Ok(Err(e)) => {
+                    error!("Failed to insert OCR text on attempt {}: {}", attempt, e);
+                }
+                Err(_) => {
+                    warn!("Timeout occurred on attempt {} while inserting OCR text for frame_id: {}", attempt, frame_id);
+                }
+            }
+
+            if attempt < MAX_RETRIES {
+                warn!("Retrying to insert OCR text for frame_id: {} (attempt {}/{})", frame_id, attempt + 1, MAX_RETRIES);
+            } else {
+                error!("Failed to insert OCR text for frame_id: {} after {} attempts", frame_id, MAX_RETRIES);
+            }
+        }
+
+        debug!("Exiting insert_ocr_text for frame_id: {} with PoolTimedOut error", frame_id);
+        Err(sqlx::Error::PoolTimedOut)
+    }
+
+    async fn insert_ocr_text_old(
+        &self,
+        frame_id: i64,
+        text: &str,
+        text_json: &str,
+        new_text_json_vs_previous_frame: &str,
+        raw_data_output_from_ocr: &str,
+    ) -> Result<(), sqlx::Error> {
+        // debug!("Starting insert_ocr_text_old for frame_id: {}", frame_id);
         // Function to limit string length
         fn limit_string(s: &str) -> String {
             if s.len() > 5 {
@@ -182,7 +241,7 @@ impl DatabaseManager {
         }
     
         // Log the input parameters with limited length
-        debug!(target: "db::ocr", "Inserting OCR text with frame_id: {}, text: {}, text_json: {}, new_text_json_vs_previous_frame: {}, raw_data_output_from_OCR: {}", 
+        debug!("Inserting OCR text with frame_id: {}, text: {}, text_json: {}, new_text_json_vs_previous_frame: {}, raw_data_output_from_OCR: {}", 
             frame_id, 
             limit_string(text), 
             limit_string(text_json), 
@@ -201,9 +260,10 @@ impl DatabaseManager {
             .await?;
     
         // Log successful insertion
-        debug!(target: "db::ocr", "Successfully inserted OCR text for frame_id: {}", frame_id);
+        // debug!("Successfully inserted OCR text for frame_id: {}", frame_id);
     
         tx.commit().await?;
+        // debug!("Transaction committed for frame_id: {}", frame_id);
         Ok(())
     }
 
