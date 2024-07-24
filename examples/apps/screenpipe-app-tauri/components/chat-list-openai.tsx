@@ -1,3 +1,6 @@
+// ignore all file ts errors
+// @ts-nocheck
+
 import { useState } from "react";
 import OpenAI from "openai";
 import { z } from "zod";

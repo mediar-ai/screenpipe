@@ -58,7 +58,8 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-8">
       <Header /> {/* Use Header component */}
-      <RagExample />
+      {/* TODO for some reason code block style broken when built */}
+      {/* <RagExample /> */}
     </main>
   );
 }
