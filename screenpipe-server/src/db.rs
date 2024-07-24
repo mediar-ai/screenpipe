@@ -215,6 +215,7 @@ impl DatabaseManager {
                 warn!("Retrying to insert OCR text for frame_id: {} (attempt {}/{})", frame_id, attempt + 1, MAX_RETRIES);
             } else {
                 error!("Failed to insert OCR text for frame_id: {} after {} attempts", frame_id, MAX_RETRIES);
+                return Err(sqlx::Error::PoolTimedOut); // Return error after max retries
             }
         }
 
