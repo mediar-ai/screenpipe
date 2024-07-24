@@ -148,7 +148,8 @@ async fn record_video(
 
                     // debug!("insert_ocr_text called for frame {}", frame_id);
                     if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json_vs_previous_frame, &raw_data_output_from_ocr).await {
-                        error!("Failed to insert OCR text: {}", e);
+                        error!("Failed to insert OCR text: {}, skipping frame {}", e, frame_id);
+                        continue; // Skip to the next iteration
                     }
                 }
                 Err(e) => {
