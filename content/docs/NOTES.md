@@ -37,15 +37,17 @@
 <details>
   <summary>Audio does not work</summary>
   
-  Make sure to enable permissions. 
+  Make sure to enable permissions in settings. 
   <img width="827" alt="Screenshot 2024-07-24 at 16 08 51" src="https://github.com/user-attachments/assets/799c0834-8d35-476b-80f8-67f94342b891">
 
 </details>
 
 <details>
   <summary>Screen capture does not work</summary>
-    Make sure to enable permissions. 
-    Screenshot HERE
+  
+   Make sure to enable permissions in settings. 
+  <img width="827" alt="Screenshot 2024-07-24 at 16 08 51" src="https://github.com/user-attachments/assets/799c0834-8d35-476b-80f8-67f94342b891">
+
 </details>
 
 <details>
