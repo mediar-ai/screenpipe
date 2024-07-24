@@ -2,13 +2,23 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleName</key>
+    <string>ScreenPipe</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.screenpi.pe</string>
+    <key>CFBundleVersion</key>
+    <string>0.1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>This app requires microphone access to record audio.</string>
     <key>NSScreenCaptureUsageDescription</key>
     <string>This app requires screen capture access to record the screen.</string>
     <key>CGRequestScreenCaptureAccess</key>
     <string>This app requires screen capture access to record the screen.</string>
-    <!-- <key>NSSystemExtensionUsageDescription</key>
-    <string>This app requires system extension access to capture audio output.</string> -->
+    <key>NSCameraUsageDescription</key>
+    <string>This app requires camera access to capture video.</string>
+    <key>NSSystemExtensionUsageDescription</key>
+    <string>This app requires system extension access to capture audio output.</string>
 </dict>
 </plist>

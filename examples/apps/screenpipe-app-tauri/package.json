@@ -7,17 +7,27 @@
     "start": "next start",
     "lint": "next lint",
     "build": "next build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "clean": "rm -rf out && cargo clean"
   },
   "dependencies": {
+    "@radix-ui/react-avatar": "^1.1.0",
+    "@radix-ui/react-dropdown-menu": "^2.1.1",
+    "@radix-ui/react-icons": "^1.3.0",
+    "@radix-ui/react-slot": "^1.1.0",
     "@tauri-apps/api": "^2.0.0-beta.9",
     "@tauri-apps/plugin-cli": "2.0.0-beta.7",
     "@tauri-apps/plugin-shell": "2.0.0-beta.8",
     "@tauri-apps/plugin-store": "2.0.0-beta.7",
     "@tauri-apps/plugin-updater": "2.0.0-beta.7",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.414.0",
     "next": "14.2.4",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "tailwind-merge": "^2.4.0",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.0.0-beta.22",
