@@ -57,7 +57,8 @@ We follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) fold
 
 - **User fanatic: focus on building what people want and making users happy.**
 - Concurrency: channels > mutexes/locks
-- Simplicity: avoid premature optimization.
+- Simplicity: avoid premature optimization. less is more. optimise for less code, less files, less dependencies, less complexity.
+- Focus: avoid feature creep. focus on the core functionality and build upon it. focus on the user and their needs.
 - Use numbers: if you can't measure it, you can't improve it.
 - Avoid OOP: prefer functional programming.
 
