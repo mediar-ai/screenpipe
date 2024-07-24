@@ -33,7 +33,7 @@ impl AnalyticsManager {
         event: &str,
         properties: Option<serde_json::Value>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        if !*self.enabled.lock().unwrap() {
+        if !*self.enabled.lock().await {
             return Ok(());
         }
 
@@ -69,7 +69,7 @@ impl AnalyticsManager {
 
         loop {
             interval.tick().await;
-            if *self.enabled.lock().unwrap() {
+            if *self.enabled.lock().await {
                 if let Err(e) = self.send_event("app_still_running", None).await {
                     error!("Failed to send periodic PostHog event: {}", e);
                 }

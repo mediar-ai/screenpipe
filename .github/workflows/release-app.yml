@@ -10,8 +10,8 @@
 # git tag $VERSION
 # git push origin $VERSION
 # gh release create $VERSION --generate-notes
-# TAURI_SIGNING_PRIVATE_KEY="..."
-# TAURI_SIGNING_PRIVATE_KEY_PASSWORD="..."
+# export TAURI_SIGNING_PRIVATE_KEY="..."
+# export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="..."
 # export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
 # export PKG_CONFIG_ALLOW_CROSS=1
 # For M1 (aarch64-apple-darwin):

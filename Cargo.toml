@@ -4,7 +4,6 @@ members = [
     "screenpipe-vision",
     "screenpipe-audio",
     "screenpipe-server",
-
 ]
 exclude = [
     "examples/apps/screenpipe-app-tauri/src-tauri",
