@@ -72,6 +72,11 @@ impl VideoCapture {
                     video_queue.push_back(result.clone());
                     ocr_queue.push_back(result);
                     debug!("Frame {} pushed to queues. Queue length: {}, Video queue length: {}, OCR queue length: {}", frame_number, queue.len(), video_queue.len(), ocr_queue.len());
+
+                    // Clear the old queue after processing
+                    if queue.len() > 1 {
+                        queue.pop_front();
+                    }
                 }
             }
         });
@@ -124,6 +129,10 @@ impl VideoCapture {
         let queue_length = queue.len();
         debug!("Number of frames in queue before popping: {}", queue_length);
         queue.pop_front()
+    }
+
+    pub fn get_video_frame_queue(&self) -> Arc<Mutex<VecDeque<CaptureResult>>> {
+        Arc::clone(&self.video_frame_queue)
     }
 }
 async fn save_frames_as_video(
