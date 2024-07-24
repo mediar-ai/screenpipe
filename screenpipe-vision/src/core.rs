@@ -1,6 +1,5 @@
 use image::DynamicImage;
 use log::{debug, error};
-use rusty_tesseract::DataOutput;
 use serde_json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
@@ -16,11 +15,32 @@ use tokio::sync::{
 use xcap::Monitor;
 
 use crate::utils::{capture_screenshot, compare_with_previous_image, perform_ocr, save_text_files};
+use rusty_tesseract::{DataOutput, Data}; // Add this import
 
 pub enum ControlMessage {
     Pause,
     Resume,
     Stop,
+}
+
+pub struct DataOutputWrapper {
+    pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,
+}
+
+impl DataOutputWrapper {
+    pub fn to_json(&self) -> String {
+        let data_json: Vec<String> = self.data_output.data.iter().map(|d| {
+            format!(
+                r#"{{"level": {}, "page_num": {}, "block_num": {}, "par_num": {}, "line_num": {}, "word_num": {}, "left": {}, "top": {}, "width": {}, "height": {}, "conf": {}, "text": "{}"}}"#,
+                d.level, d.page_num, d.block_num, d.par_num, d.line_num, d.word_num, d.left, d.top, d.width, d.height, d.conf, d.text
+            )
+        }).collect();
+        format!(
+            r#"{{"output": "{}", "data": [{}]}}"#,
+            self.data_output.output,
+            data_json.join(", ")
+        )
+    }
 }
 
 pub struct CaptureResult {
@@ -31,6 +51,36 @@ pub struct CaptureResult {
     pub frame_number: u64,
     pub timestamp: Instant,
     pub data_output: DataOutput,
+}
+
+impl Clone for CaptureResult {
+    fn clone(&self) -> Self {
+        CaptureResult {
+            image: Arc::clone(&self.image),
+            text: self.text.clone(),
+            text_json: self.text_json.clone(),
+            new_text_json: self.new_text_json.clone(),
+            frame_number: self.frame_number,
+            timestamp: self.timestamp,
+            data_output: DataOutput {
+                output: self.data_output.output.clone(),
+                data: self.data_output.data.iter().map(|d| Data {
+                    level: d.level,
+                    page_num: d.page_num,
+                    block_num: d.block_num,
+                    par_num: d.par_num,
+                    line_num: d.line_num,
+                    word_num: d.word_num,
+                    left: d.left,
+                    top: d.top,
+                    width: d.width,
+                    height: d.height,
+                    conf: d.conf,
+                    text: d.text.clone(),
+                }).collect(),
+            },
+        }
+    }
 }
 
 pub struct OcrTaskData {
