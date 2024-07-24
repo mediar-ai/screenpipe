@@ -8,7 +8,7 @@
     "lint": "next lint",
     "build": "next build",
     "tauri": "tauri",
-    "clean": "rm -rf out && cargo clean"
+    "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe,tesseract,ffmpeg}"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.51",

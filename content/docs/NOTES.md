@@ -35,5 +35,11 @@
     By default files are in your home directory under `.screenpipe`.
 </details>
 
+<details>
+  <summary>How can I interpret my data more intuitively?</summary>
+
+  We recommend using [TablePlus](https://tableplus.com/) to open the SQLite database.
+  You can find it in the `.screenpipe` directory with name `db.sqlite`.
+</details>
 
 

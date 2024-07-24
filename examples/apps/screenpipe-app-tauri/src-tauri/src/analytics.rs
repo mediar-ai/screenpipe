@@ -2,11 +2,11 @@ use log::{error, info};
 use reqwest::Client;
 use serde_json::json;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tokio::time::interval;
 use uuid::Uuid;
-
 pub struct AnalyticsManager {
     client: Client,
     posthog_api_key: String,
@@ -76,8 +76,6 @@ impl AnalyticsManager {
             }
         }
     }
-
-
 }
 
 pub fn get_or_create_unique_id(app_name: &str) -> Result<String, Box<dyn std::error::Error>> {

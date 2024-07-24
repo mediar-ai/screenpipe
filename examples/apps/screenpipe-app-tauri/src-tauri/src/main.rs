@@ -35,8 +35,6 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     Ok(local_data_dir)
 }
 
-
-
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
@@ -149,50 +147,61 @@ async fn main() {
                     .arg("-f")
                     .arg("screenpipe")
                     .output()
-                        .await;
+                    .await;
             });
         }
         _ => {}
     });
 }
 
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::time::{interval, Duration};
 
 async fn start_server() -> anyhow::Result<()> {
-    let _t = tokio::spawn(async move {
-        debug!("Starting server");
+    let restart_interval = Duration::from_secs(1 * 60); // Restart every 20 minutes
+    let server_handle: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>> =
+        Arc::new(tokio::sync::Mutex::new(None));
+    let server_handle_clone = Arc::clone(&server_handle);
 
-        // kill any all process on port 3030
+    tokio::spawn(async move {
+        let mut interval = interval(restart_interval);
+
+        loop {
+            interval.tick().await;
+            debug!("Restarting screenpipe sidecar...");
+
+            // Stop the current server
+            if let Some(handle) = server_handle_clone.lock().await.take() {
+                handle.abort();
+            }
+
+            // Start a new server
+            *server_handle_clone.lock().await = Some(start_screenpipe_server());
+        }
+    });
+
+    // Initial server start
+    *server_handle.lock().await = Some(start_screenpipe_server());
+
+    Ok(())
+}
+
+fn start_screenpipe_server() -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        debug!("Starting screenpipe server");
+
+        // Kill any existing process on port 3030
         let _ = tokio::process::Command::new("pkill")
             .arg("-f")
             .arg("screenpipe")
             .output()
             .await;
 
-
         let mut cmd =
             tokio::process::Command::new(find_screenpipe::find_screenpipe_path().unwrap());
         cmd.arg("--port").arg("3030");
         cmd.arg("--debug");
-        // let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
-        // cmd.arg("--data-dir").arg(base_dir);
-        // add tesseract to path from ./tesseract
-        // cmd.env(
-        //     "PATH",
-        //     format!(
-        //         "{:?}:{:?}",
-        //         std::env::var("PATH").unwrap(),
-        //         "/Applications/screenpipe.app/Contents/Resources/tesseract"
-        //     ),
-        // );
-        // cmd.env(
-        //     "PATH",
-        //     format!(
-        //         "{:?}:{:?}",
-        //         std::env::var("PATH").unwrap(),
-        //         "/Applications/screenpipe.app/Contents/Resources"
-        //     ),
-        // );
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
@@ -221,19 +230,5 @@ async fn start_server() -> anyhow::Result<()> {
             .await
             .expect("Failed to wait for child process");
         debug!("Child process exited with output: {:?}", output);
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!(
-                "Child process exited with output: {:?}",
-                output
-            ))
-        }
-    });
-
-    // stop when rx is received
-    // let _ = rx.recv().await;
-    // t.abort();
-
-    Ok(())
+    })
 }
