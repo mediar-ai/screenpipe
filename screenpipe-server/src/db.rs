@@ -52,7 +52,7 @@ pub struct DatabaseManager {
 impl DatabaseManager {
     pub async fn new(database_path: &str) -> Result<Self, sqlx::Error> {
 
-        debug!("db.rs initialized successfully.");
+        debug!("Initializing DatabaseManager with database path: {}", database_path);
         let connection_string = format!("sqlite:{}", database_path);
 
         // Create the database if it doesn't exist
@@ -62,6 +62,7 @@ impl DatabaseManager {
 
         let pool = SqlitePoolOptions::new()
             .max_connections(10)
+            .min_connections(3)  // Minimum number of idle connections
             .acquire_timeout(Duration::from_secs(10))
             .connect(&connection_string)
             .await?;
@@ -129,7 +130,7 @@ impl DatabaseManager {
         // debug!("Starting insert_frame");
 
         let mut tx = self.pool.begin().await?;
-        // debug!("insert_frame Transaction started");
+        debug!("insert_frame Transaction started");
 
         // Get the most recent video_chunk_id
         let video_chunk_id: Option<i64> =
@@ -155,7 +156,7 @@ impl DatabaseManager {
         .bind(video_chunk_id)
         .fetch_one(&mut *tx)
         .await?;
-        // debug!("insert_frame Calculated offset_index: {}", offset_index);
+        debug!("insert_frame Calculated offset_index: {}", offset_index);
 
         // Insert the new frame
         let id = sqlx::query(
@@ -167,7 +168,7 @@ impl DatabaseManager {
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
-        // debug!("insert_frame Inserted new frame with id: {}", id);
+        debug!("insert_frame Inserted new frame with id: {}", id);
 
         // Commit the transaction
         tx.commit().await?;
@@ -234,13 +235,9 @@ impl DatabaseManager {
         // debug!("Starting insert_ocr_text_old for frame_id: {}", frame_id);
         // Function to limit string length
         fn limit_string(s: &str) -> String {
-            if s.len() > 5 {
-                format!("{}...", &s[..5])
-            } else {
-                s.to_string()
-            }
+            s.chars().take(5).collect::<String>() + "..."
         }
-    
+
         // Log the input parameters with limited length
         debug!("Inserting OCR text with frame_id: {}, text: {}, text_json: {}, new_text_json_vs_previous_frame: {}, raw_data_output_from_OCR: {}", 
             frame_id, 
@@ -249,7 +246,7 @@ impl DatabaseManager {
             limit_string(new_text_json_vs_previous_frame), 
             limit_string(raw_data_output_from_ocr)
         );
-    
+
         let mut tx = self.pool.begin().await?;
         sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, new_text_json_vs_previous_frame, raw_data_output_from_OCR) VALUES (?1, ?2, ?3, ?4, ?5)")
             .bind(frame_id)
