@@ -55,6 +55,10 @@ anyhow = "1.0.71"
 which = "6.0.1"
 
 
+# hakc 
+fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
+
+
 # M series MacOS
 [target.'cfg(target_os = "macos")'.dependencies]
 screenpipe-server = { path = "../../../../screenpipe-server", features = ["metal"] }

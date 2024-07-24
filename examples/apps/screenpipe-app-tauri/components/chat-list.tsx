@@ -9,8 +9,226 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
+import { useState, useEffect, useCallback } from "react";
+import {
+  CreateMLCEngine,
+  MLCEngineInterface,
+  prebuiltAppConfig,
+} from "@mlc-ai/web-llm";
+
+// Add this new function to handle screenpipe requests
+async function queryScreenpipe(params: {
+  q: string;
+  offset: number;
+  limit: number;
+  start_date: string;
+  end_date: string;
+}) {
+  try {
+    const queryParams = new URLSearchParams({
+      q: params.q,
+      offset: params.offset.toString(),
+      limit: params.limit.toString(),
+      start_date: params.start_date,
+      end_date: params.end_date,
+    });
+    const response = await fetch(`http://localhost:3030/search?${queryParams}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error querying screenpipe:", error);
+    return null;
+  }
+}
+
+function useWebLLM(modelName: string = "Llama-3.1-8B-Instruct-q4f32_1-MLC") {
+  const [engine, setEngine] = useState<MLCEngineInterface | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function initEngine() {
+      try {
+        const appConfig = prebuiltAppConfig;
+        appConfig.useIndexedDBCache = true;
+        console.log(appConfig.model_list);
+        const newEngine = await CreateMLCEngine(modelName, {
+          appConfig,
+          initProgressCallback: (progress) => {
+            console.log("Loading progress:", progress);
+          },
+        });
+
+        setEngine(newEngine);
+        setIsLoading(false);
+      } catch (err) {
+        setError("Failed to initialize the engine: " + (err as Error).message);
+        setIsLoading(false);
+      }
+    }
+    console.log("initEngine");
+    initEngine();
+  }, [modelName]);
+
+  const streamChat = useCallback(
+    async (
+      messages: Array<{ role: string; content: string }>,
+      onChunk: (chunk: string) => void
+    ) => {
+      if (!engine) return;
+
+      const chunks = await engine.chat.completions.create({
+        messages,
+        temperature: 0.7,
+        stream: true,
+        functions: [
+          {
+            name: "query_screenpipe",
+            description: `Query the local screenpipe instance for relevant information
+            
+Screenpipe is a product running on the user computer which records his screens and microphones \
+24/7 and can be used to answer any questions about the user's activity.
+Use this function to answer any questions about the user's activity.
+            `,
+            parameters: {
+              type: "object",
+              properties: {
+                q: {
+                  type: "string",
+                  description: "The query to send to screenpipe",
+                },
+                offset: {
+                  type: "number",
+                  description: "The offset for pagination",
+                },
+                limit: {
+                  type: "number",
+                  description: "The limit for pagination",
+                },
+                start_date: {
+                  type: "string",
+                  description: "The start date for the query in ISO format",
+                },
+                end_date: {
+                  type: "string",
+                  description: "The end date for the query in ISO format",
+                },
+              },
+              required: ["q", "offset", "limit", "start_date", "end_date"],
+            },
+          },
+        ],
+        function_call: "auto",
+      });
+
+      for await (const chunk of chunks) {
+        const content = JSON.stringify(chunk.choices[0]?.delta) || "";
+        onChunk(content);
+      }
+    },
+    [engine]
+  );
+  const askQuestion = useCallback(
+    async (question: string) => {
+      if (!engine) return;
+
+      const response = await engine.chat.completions.create({
+        messages: [{ role: "user", content: question }],
+        temperature: 0.7,
+      });
+
+      return response.choices[0]?.message.content;
+    },
+    [engine]
+  );
+
+  return { engine, isLoading, error, streamChat, askQuestion };
+}
 
 export function ChatList() {
+  const { isLoading, error, streamChat, askQuestion } = useWebLLM();
+  const [messages, setMessages] = useState<
+    Array<{ role: string; content: string }>
+  >([]);
+  const [inputMessage, setInputMessage] = useState("");
+
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim()) return;
+
+    const newMessages = [...messages, { role: "user", content: inputMessage }];
+    setMessages(newMessages);
+    setInputMessage("");
+
+    let aiResponse = "";
+    await streamChat(newMessages, async (chunk) => {
+      try {
+        const parsedChunk = JSON.parse(chunk);
+        if (parsedChunk.choices && parsedChunk.choices[0]?.delta?.content) {
+          // Regular content
+          aiResponse += parsedChunk.choices[0].delta.content;
+          setMessages([
+            ...newMessages,
+            { role: "assistant", content: aiResponse },
+          ]);
+        } else if (
+          parsedChunk.choices &&
+          parsedChunk.choices[0]?.delta?.function_call
+        ) {
+          // Function call
+          const functionCall = parsedChunk.choices[0].delta.function_call;
+          if (functionCall.name === "query_screenpipe") {
+            const args = JSON.parse(functionCall.arguments);
+            const screenpipeResult = await queryScreenpipe(args);
+
+            // Send the screenpipe result back to the AI
+            const functionResponse = `Screenpipe query result: ${JSON.stringify(
+              screenpipeResult
+            )}`;
+            aiResponse += "Querying Screenpipe... ";
+            setMessages([
+              ...newMessages,
+              { role: "assistant", content: aiResponse },
+            ]);
+
+            // Continue the conversation with the AI
+            await streamChat(
+              [...newMessages, { role: "function", content: functionResponse }],
+              (newChunk) => {
+                try {
+                  const parsedNewChunk = JSON.parse(newChunk);
+                  if (
+                    parsedNewChunk.choices &&
+                    parsedNewChunk.choices[0]?.delta?.content
+                  ) {
+                    aiResponse += parsedNewChunk.choices[0].delta.content;
+                    setMessages([
+                      ...newMessages,
+                      { role: "assistant", content: aiResponse },
+                    ]);
+                  }
+                } catch (error) {
+                  console.error(
+                    "Error processing function response chunk:",
+                    error
+                  );
+                }
+              }
+            );
+          }
+        }
+      } catch (error) {
+        // If parsing fails, it's likely not JSON, so just append the chunk
+        console.error("Error processing chunk:", error);
+        aiResponse += chunk;
+        setMessages([
+          ...newMessages,
+          { role: "assistant", content: aiResponse },
+        ]);
+      }
+    });
+  };
   return (
     <div className="grid md:grid-cols-[520] min-h-screen w-full">
       <div className="flex flex-col">
@@ -21,7 +239,7 @@ export function ChatList() {
                 variant="ghost"
                 className="gap-1 rounded-xl px-3 h-10 data-[state=open]:bg-muted text-lg"
               >
-                ChatGPT <span className="text-muted-foreground">3.5</span>
+                llama <span className="text-muted-foreground">3.1-8B</span>
                 <ChevronDownIcon className="w-4 h-4 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
@@ -50,101 +268,64 @@ export function ChatList() {
           </DropdownMenu>
         </div>
         <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
-          <div className="flex items-start gap-4">
-            <Avatar className="w-6 h-6 border">
-              <AvatarImage src="/placeholder-user.jpg" />
-              <AvatarFallback>YO</AvatarFallback>
-            </Avatar>
-            <div className="grid gap-1">
-              <div className="font-bold">You</div>
-              <div className="prose text-muted-foreground">
-                <p>
-                  Can you explain airplane turbulence to someone who has never
-                  flown before? Make it conversational and concise.
-                </p>
+          {isLoading && <p>Loading WebLLM engine...</p>}
+          {error && <p className="text-red-500">{error}</p>}
+          {messages.map((msg, index) => (
+            <div key={index} className="flex items-start gap-4">
+              <Avatar className="w-6 h-6 border">
+                <AvatarImage
+                  src={
+                    msg.role === "user"
+                      ? "/placeholder-user.jpg"
+                      : "/placeholder-ai.jpg"
+                  }
+                />
+                <AvatarFallback>
+                  {msg.role === "user" ? "YO" : "📺"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="grid gap-1">
+                <div className="font-bold">
+                  {msg.role === "user" ? "You" : "screen | ⭐️"}
+                </div>
+                <div className="prose text-muted-foreground">
+                  <p>{msg.content}</p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex items-start gap-4">
-            <Avatar className="w-6 h-6 border">
-              <AvatarImage src="/placeholder-user.jpg" />
-              <AvatarFallback>OA</AvatarFallback>
-            </Avatar>
-            <div className="grid gap-1">
-              <div className="font-bold">ChatGPT</div>
-              <div className="prose text-muted-foreground">
-                <p>
-                  Of course! Imagine you&apos;re in a car driving down a bumpy
-                  road, and the ride isn&apos;t perfectly smooth. Sometimes, you
-                  hit small potholes or bumps, right? Well, when you&apos;re in
-                  an airplane, it&apos;s kind of like that, but in the sky.
-                </p>
-                <p>
-                  Airplane turbulence happens when the plane encounters pockets
-                  of air that are moving differently. It&apos;s like sailing a
-                  boat on choppy water. These air pockets can make the plane
-                  feel like it&apos;s bouncing or shaking a bit. It&apos;s
-                  completely normal and usually not dangerous at all.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 py-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-4 h-4 hover:bg-transparent text-stone-400 hover:text-stone-900"
-                >
-                  <ClipboardIcon className="w-4 h-4" />
-                  <span className="sr-only">Copy</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-4 h-4 hover:bg-transparent text-stone-400 hover:text-stone-900"
-                >
-                  <ThumbsUpIcon className="w-4 h-4" />
-                  <span className="sr-only">Upvote</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-4 h-4 hover:bg-transparent text-stone-400 hover:text-stone-900"
-                >
-                  <ThumbsDownIcon className="w-4 h-4" />
-                  <span className="sr-only">Downvote</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-4 h-4 hover:bg-transparent text-stone-400 hover:text-stone-900"
-                >
-                  <RefreshCcwIcon className="w-4 h-4" />
-                  <span className="sr-only">Regenerate</span>
-                </Button>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
         <div className="max-w-2xl w-full sticky bottom-0 mx-auto py-2 flex flex-col gap-1.5 px-4 bg-background">
           <div className="relative">
             <Textarea
-              placeholder="Message ChatGPT..."
+              placeholder="Message screenpipe..."
               name="message"
               id="message"
               rows={1}
               className="min-h-[48px] rounded-2xl resize-none p-4 border border-neutral-400 shadow-sm pr-16"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
             />
             <Button
               type="submit"
               size="icon"
               className="absolute w-8 h-8 top-3 right-3"
-              disabled
+              onClick={handleSendMessage}
+              disabled={isLoading || !inputMessage.trim()}
             >
               <ArrowUpIcon className="w-4 h-4" />
               <span className="sr-only">Send</span>
             </Button>
           </div>
           <p className="text-xs font-medium text-center text-neutral-700">
-            ChatGPT can make mistakes. Consider checking important information.
+            screenpipe canNOT make mistakes. Consider checking important
+            information.
           </p>
         </div>
       </div>

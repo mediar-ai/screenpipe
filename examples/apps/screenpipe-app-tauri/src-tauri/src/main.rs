@@ -39,6 +39,7 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 
 #[tokio::main]
 async fn main() {
+    let _ = fix_path_env::fix();
     let _guard = sentry::init(("https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", sentry::ClientOptions {
         release: sentry::release_name!(),
         ..Default::default()
@@ -168,40 +169,6 @@ async fn start_server() -> anyhow::Result<()> {
             .output()
             .await;
 
-        // // print path
-        // debug!("Path: {:?}", std::env::var("PATH").unwrap());
-
-        // // set PATH to all stuf in ./*
-        // std::env::set_var(
-        //     "PATH",
-        //     format!("{:?}:{:?}", std::env::var("PATH").unwrap(), "."),
-        // );
-
-        // // also add /Applications/screenpipe.app/Contents/Resources
-        // std::env::set_var(
-        //     "PATH",
-        //     format!(
-        //         "{:?}:{:?}",
-        //         std::env::var("PATH").unwrap(),
-        //         "/Applications/screenpipe.app/Contents/Resources/tesseract"
-        //     ),
-        // );
-        // std::env::set_var(
-        //     "PATH",
-        //     format!(
-        //         "{:?}:{:?}",
-        //         std::env::var("PATH").unwrap(),
-        //         "/Applications/screenpipe.app/Contents/Resources"
-        //     ),
-        // );
-
-        // debug!("Path: {:?}", std::env::var("PATH").unwrap());
-
-        // list files ./
-        // debug!(
-        //     "Files: {:?}",
-        //     std::fs::read_dir(".").unwrap().collect::<Vec<_>>()
-        // );
 
         let mut cmd =
             tokio::process::Command::new(find_screenpipe::find_screenpipe_path().unwrap());
