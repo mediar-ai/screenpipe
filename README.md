@@ -168,13 +168,31 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 <details>
   <summary>Linux</summary>
 
+  1. Install dependencies:
+
 ```bash
 sudo apt-get update
-sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
-curl -sSL https://raw.githubusercontent.com/louis030195/screen-pipe/main/install.sh | sh
+sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev tesseract-ocr libtesseract-dev
 ```
 
-  Now you should be able to `screenpipe`. (You may need to restart your terminal, or find the CLI in `$HOME/.local/bin`)
+ Install [Rust](https://www.rust-lang.org/tools/install).
+
+  2. Clone the repo:
+
+```bash
+git clone https://github.com/louis030195/screen-pipe
+cd screen-pipe
+```
+
+  3. Run the API:
+
+```bash
+cargo build --release --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
+
+# then run it
+./target/release/screenpipe
+```
+
 </details>
 <br><br>
 </details>
