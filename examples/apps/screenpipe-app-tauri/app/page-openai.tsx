@@ -3,7 +3,6 @@
 import { ChatList } from "@/components/chat-list-openai";
 import Image from "next/image";
 import { Button } from "@/components/ui/button"; // Import Button from shadcn
-import RagExample from "@/components/rag-example";
 
 function Header() {
   return (
@@ -36,7 +35,7 @@ function Header() {
             )
           }
         >
-          <h2 className="mb-3 text-2xl font-semibold">Examples</h2>
+          <h2 className="mb-3 text-2xl font-semibold">Get started</h2>
         </Button>
         <Button
           asChild
@@ -58,7 +57,7 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-8">
       <Header /> {/* Use Header component */}
-      <RagExample />
+      <ChatList />
     </main>
   );
 }
