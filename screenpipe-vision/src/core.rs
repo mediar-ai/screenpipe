@@ -202,7 +202,8 @@ async fn process_ocr_task(
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
 
-    debug!("Performing OCR for frame {}", frame_number);
+    // not to confuse with frame id which is wholly different thing 
+    debug!("Performing OCR for frame number since beginning of program {}", frame_number);
     let (text, data_output, json_output) = perform_ocr(&image_arc);
 
     let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output)
