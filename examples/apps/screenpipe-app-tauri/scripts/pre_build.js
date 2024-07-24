@@ -126,10 +126,24 @@ if (platform == 'macos') {
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.tar.xz`
 	}
-	// install screenpipe through brew
-	// await $`brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git`
-	// await $`brew install screenpipe`
-	await $`cp ${cwd}/../../../../target/release/screenpipe ./`
+	// Try multiple potential paths for the screenpipe binary
+	// ! ugly hack bcs CI acts weird
+	const potentialPaths = [
+		'../../../../target/release/screenpipe',
+		'/Users/runner/work/screen-pipe/screen-pipe/target/release/screenpipe',
+		'../../../target/release/screenpipe',
+		'../../target/release/screenpipe',
+	];
+
+	for (const path of potentialPaths) {
+		try {
+			await $`cp ${path} ./`
+			console.log(`Successfully copied screenpipe from ${path}`);
+			break;
+		} catch (error) {
+			console.log(`Failed to copy from ${path}: ${error.message}`);
+		}
+	}
 	await $`sudo cp /opt/homebrew/bin/tesseract ./`
 }
 

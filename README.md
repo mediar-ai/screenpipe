@@ -19,14 +19,14 @@
         <a href="https://twitter.com/screen_pipe"><img alt="X account" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe"></a>
 </p>
 
-![Demo](./public/demo.gif)
+![Demo](./content/demo.gif)
 
 # 24/7 Screen & Audio Capture
 
 Library to build personalized AI powered by what you've seen, said, or heard. Works with Ollama. Alternative to Rewind.ai. Open. Secure. You own your data. Rust.  
 We are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
 
-![diagram](./public/diagram2.png)
+![diagram](./content/diagram2.png)
 
 # Why?
 
@@ -221,10 +221,10 @@ npm install
 ```bash
 npm run dev
 ```
-![Vercel App](./public/Vercel_app.png)
+![Vercel App](./content/Vercel_app.png)
 <br><br>
 
-![Claude_prompt](./public/Claude_prompt.png)
+![Claude_prompt](./content/Claude_prompt.png)
 <br><br>
 </details>
 
@@ -245,7 +245,7 @@ Print a sample audio_transcriptions from the database</summary>
 ```bash
 sqlite3 data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM audio_transcriptions ORDER BY id DESC LIMIT 1;" | jq .
 ```
-![audio_transcriptions](./public/audio_transcriptions.png)
+![audio_transcriptions](./content/audio_transcriptions.png)
 </details>
 <details>
 <summary>
@@ -254,7 +254,7 @@ Print a sample frame_OCR_text from the database</summary>
 ```bash
 sqlite3 data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM ocr_text ORDER BY frame_id DESC LIMIT 1;" | jq -r '.[0].text'
 ```
-![frame_text](./public/frame_text.png)
+![frame_text](./content/frame_text.png)
 </details>
 <details>
 <summary>
@@ -281,7 +281,7 @@ ffplay "data/Display 1 (output)_2024-07-12_01-14-11.mp4"
 curl "http://localhost:3030/search?q=Neuralink&limit=5&offset=0&content_type=ocr" | jq
 ```
 "Elon Musk" prompt
-![Elon_Musk_prompt](./public/Elon_Musk_prompt.png)
+![Elon_Musk_prompt](./content/Elon_Musk_prompt.png)
 </details>
 <details>
   <summary>Other Example to query the API</summary>
