@@ -1,0 +1,13 @@
+[package]
+name = "screenpipe-core"
+version = { workspace = true }
+authors = { workspace = true }
+description = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+which = "6.0.1"
+log = "0.4.17"
+
