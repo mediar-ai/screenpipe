@@ -18,6 +18,7 @@
     "store:allow-set",
     "store:allow-save",
     "store:allow-load",
+    "shell:allow-open",
     {
       "identifier": "shell:allow-execute",
       "allow": [
@@ -34,6 +35,7 @@
         }
       ]
     },
-    "cli:default"
+    "cli:default",
+    "shell:default"
   ]
 }

@@ -1,11 +1,11 @@
 [package]
-name = "app"
+name = "screenpipe-app"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 license = ""
 repository = ""
-default-run = "app"
+default-run = "screenpipe-app"
 edition = "2021"
 rust-version = "1.60"
 

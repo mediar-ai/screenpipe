@@ -4,7 +4,6 @@ import { ChatList } from "@/components/chat-list-openai-v2";
 import Image from "next/image";
 import { Button } from "@/components/ui/button"; // Import Button from shadcn
 import RagExample from "@/components/rag-example";
-
 function Header() {
   return (
     <div>
@@ -29,11 +28,14 @@ function Header() {
         <Button
           asChild
           className="cursor-pointer"
-          onClick={() =>
-            window.open(
-              "https://github.com/louis030195/screen-pipe/tree/main/examples/ts",
-              "_blank"
-            )
+          onClick={
+            () =>
+              window.open(
+                "https://github.com/louis030195/screen-pipe/tree/main/examples/ts"
+              )
+            // open(
+            //   "https://github.com/louis030195/screen-pipe/tree/main/examples/ts"
+            // )
           }
         >
           <h2 className="mb-3 text-2xl font-semibold">Examples</h2>
@@ -43,8 +45,7 @@ function Header() {
           className="cursor-pointer"
           onClick={() =>
             window.open(
-              "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe",
-              "_blank"
+              "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
             )
           }
         >
@@ -56,42 +57,76 @@ function Header() {
 }
 
 import { useEffect, useState } from "react"; // Import useState
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 function Settings({ onKeyChange }: { onKeyChange: (key: string) => void }) {
   const [apiKey, setApiKey] = useState("");
 
   useEffect(() => {
-    const savedKey = localStorage.getItem("openaiApiKey"); // Load saved key from local storage
+    const savedKey = localStorage.getItem("openaiApiKey");
     if (savedKey) {
       setApiKey(savedKey);
-      onKeyChange(savedKey); // Pass the loaded key to parent
+      onKeyChange(savedKey);
     }
   }, [onKeyChange]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newKey = e.target.value;
     setApiKey(newKey);
-    localStorage.setItem("openaiApiKey", newKey); // Save key to local storage
+    localStorage.setItem("openaiApiKey", newKey);
     onKeyChange(newKey);
   };
 
   return (
-    <div className="settings">
-      <input
-        type="text"
-        value={apiKey}
-        onChange={handleChange}
-        placeholder="Enter OpenAI API Key"
-        className="border p-2"
-      />
-    </div>
+    <Card className="w-full max-w-md">
+      <CardHeader>
+        <CardTitle>OpenAI API Settings</CardTitle>
+        <CardDescription>
+          Enter your OpenAI API key to use the chat functionality.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid w-full items-center gap-4">
+          <div className="flex flex-col space-y-1.5">
+            <Label htmlFor="apiKey">API Key</Label>
+            <Input
+              id="apiKey"
+              type="password"
+              value={apiKey}
+              onChange={handleChange}
+              placeholder="Enter your OpenAI API Key"
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Don&apos;t have an API key? Get one from{" "}
+            <a
+              href="https://platform.openai.com/api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              OpenAI&apos;s website
+            </a>
+            .
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 export default function Home() {
   const [openAiKey, setOpenAiKey] = useState("");
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-8">
+    <main className="flex min-h-screen flex-col items-center p-8">
       <Header /> {/* Use Header component */}
       {/* TODO for some reason code block style broken when built */}
       {/* <RagExample /> */}

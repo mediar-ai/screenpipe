@@ -7,8 +7,8 @@ members = [
 
 ]
 exclude = [
-        "examples/apps/screenpipe-app-tauri/src-tauri",
-    "examples/apps/screenpipe-app-dioxus", 
+         "examples/apps/screenpipe-app-tauri/src-tauri",
+    "examples/apps/screenpipe-app-dioxus",
 ]
 resolver = "2"
 

@@ -1,5 +1,5 @@
 [package]
-name = "screenpipe-app"
+name = "screenpipe-app-dioxus"
 version = "0.1.0"
 authors = ["Louis Beaumont <louis.beaumont@gmail.com>"]
 edition = "2021"

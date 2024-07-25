@@ -235,73 +235,35 @@ export function ChatList({ apiKey }: { apiKey: string }) {
   };
 
   return (
-    <div
-      className="grid md:grid-cols-[520] min-h-screen w-full"
-      ref={scrollRef}
-    >
-      <div className="flex flex-col">
-        <div className="sticky top-0 p-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild disabled>
-              <Button
-                variant="ghost"
-                className="gap-1 rounded-xl px-3 h-10 data-[state=open]:bg-muted text-lg"
-              >
-                llama <span className="text-muted-foreground">3.1-8B</span>
-                <ChevronDownIcon className="w-4 h-4 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="max-w-[300px]">
-              <DropdownMenuItem className="items-start gap-2">
-                <SparkleIcon className="w-4 h-4 mr-2 translate-y-1 shrink-0" />
-                <div>
-                  <div className="font-medium">GPT-4</div>
-                  <div className="text-muted-foreground/80">
-                    With DALL-E, browing and analysis. Limit 40 messages / 3
-                    hours
-                  </div>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="items-start gap-2">
-                <ZapIcon className="w-4 h-4 mr-2 translate-y-1 shrink-0" />
-                <div>
-                  <div className="font-medium">GPT-3</div>
-                  <div className="text-muted-foreground/80">
-                    Great for everyday tasks
-                  </div>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <div
-          className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto"
-          ref={messagesRef}
-        >
-          {messages.map((msg, index) => {
-            if (
-              msg.role === "user" ||
-              (msg.role === "assistant" && typeof msg.content === "string")
-            ) {
-              return <ChatMessage key={index} message={msg} />;
-            } else if (
-              msg.role === "assistant" &&
-              msg.content &&
-              typeof msg.content === "object"
-            ) {
-              return <FunctionCallMessage key={index} message={msg} />;
-            } else if (msg.role === "tool") {
-              return <FunctionCallMessage key={index} message={msg} isResult />;
-            }
-            return null;
-          })}
-          {isLoading && <SpinnerMessage />}
-          {error && <p className="text-red-500">{error}</p>}
-        </div>
+    <div className="flex flex-col">
+      <div
+        className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto"
+        ref={messagesRef}
+      >
+        {messages.map((msg, index) => {
+          if (
+            msg.role === "user" ||
+            (msg.role === "assistant" && typeof msg.content === "string")
+          ) {
+            return <ChatMessage key={index} message={msg} />;
+          } else if (
+            msg.role === "assistant" &&
+            msg.content &&
+            typeof msg.content === "object"
+          ) {
+            return <FunctionCallMessage key={index} message={msg} />;
+          } else if (msg.role === "tool") {
+            return <FunctionCallMessage key={index} message={msg} isResult />;
+          }
+          return null;
+        })}
+        {isLoading && <SpinnerMessage />}
+        {error && <p className="text-red-500">{error}</p>}
+      </div>
 
-        {messages.length === 0 && (
-          <div className="max-w-2xl w-full sticky bottom-0 mx-auto py-2 flex flex-col gap-1.5 px-4 bg-background">
+      {messages.length === 0 && (
+        <div className="sticky bottom-0 bg-background p-4">
+          <div className="max-w-2xl mx-auto">
             <div className="relative">
               <Textarea
                 placeholder="Message screenpipe..."
@@ -329,13 +291,13 @@ export function ChatList({ apiKey }: { apiKey: string }) {
                 <span className="sr-only">Send</span>
               </Button>
             </div>
-            <p className="text-xs font-medium text-center text-neutral-700">
+            <p className="text-xs font-medium text-center text-neutral-700 mt-2">
               screenpipe is in beta, base its answer on your computer activity
               and can make errors.
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

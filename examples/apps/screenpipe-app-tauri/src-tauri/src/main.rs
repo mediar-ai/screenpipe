@@ -17,6 +17,8 @@ use tauri::Wry;
 use tauri_plugin_store::{with_store, StoreCollection};
 
 use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_autostart::ManagerExt;
+
 mod analytics;
 
 use crate::analytics::start_analytics;
@@ -54,6 +56,18 @@ async fn main() {
         ))
         .setup(move |app| {
             // let cli = app.cli().matches().expect("Failed to get CLI matches");
+
+            // Get the autostart manager
+            let autostart_manager = app.autolaunch();
+            // Enable autostart
+            let _ = autostart_manager.enable();
+            // Check enable state
+            debug!(
+                "registered for autostart? {}",
+                autostart_manager.is_enabled().unwrap()
+            );
+            // Disable autostart
+            // let _ = autostart_manager.disable();
 
             let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
             let port = 3030;
@@ -123,18 +137,39 @@ async fn main() {
                 Ok(())
             });
 
+            let sidecar = app.shell().sidecar("screenpipe").unwrap();
+            let (mut rx, _child) = sidecar
+                .args(["--port", "3030", "--debug"]) // "--disable-audio"
+                .spawn()
+                .expect("Failed to spawn sidecar");
+
+            tauri::async_runtime::spawn(async move {
+                while let Some(event) = rx.recv().await {
+                    match event {
+                        tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
+                            debug!("{:?}", line);
+                        }
+                        tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
+                            debug!("{:?}", line);
+                        }
+                        _ => {}
+                    }
+                }
+            });
+
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
     // Run the app
-    app.run(|_app_handle, event| match event {
+    app.run(move |_app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
-            tauri::async_runtime::spawn(async move {
-                let _ = start_server().await;
-            });
+            // tauri::async_runtime::spawn(async move {
+            //     // let _ = start_server().await;
+            //     start_screenpipe_server_new(app.app_handle().clone());
+            // });
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
@@ -164,25 +199,50 @@ async fn start_server() -> anyhow::Result<()> {
         Arc::new(tokio::sync::Mutex::new(None));
     let server_handle_clone = Arc::clone(&server_handle);
 
-    tokio::spawn(async move {
-        let mut interval = interval(restart_interval);
+    // tokio::spawn(async move {
+    //     let mut interval = interval(restart_interval);
 
-        loop {
-            interval.tick().await;
-            debug!("Restarting screenpipe sidecar...");
+    //     loop {
+    //         interval.tick().await;
+    //         debug!("Restarting screenpipe sidecar...");
 
-            // Stop the current server
-            if let Some(handle) = server_handle_clone.lock().await.take() {
-                handle.abort();
-            }
+    //         // Stop the current server
+    //         if let Some(handle) = server_handle_clone.lock().await.take() {
+    //             handle.abort();
+    //         }
 
-            // Start a new server
-            *server_handle_clone.lock().await = Some(start_screenpipe_server());
-        }
-    });
+    //         // Start a new server
+    //         *server_handle_clone.lock().await = Some(start_screenpipe_server());
+    //     }
+    // });
 
     // Initial server start
     *server_handle.lock().await = Some(start_screenpipe_server());
+
+    Ok(())
+}
+use tauri_plugin_shell::ShellExt;
+
+fn start_screenpipe_server_new(app: tauri::AppHandle) -> tauri::Result<()> {
+    let sidecar = app.shell().sidecar("screenpipe").unwrap();
+    let (mut rx, _child) = sidecar
+        .args(["--port", "3030", "--debug"]) // "--disable-audio"
+        .spawn()
+        .expect("Failed to spawn sidecar");
+
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
+                    debug!("{:?}", line);
+                }
+                tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
+                    debug!("{:?}", line);
+                }
+                _ => {}
+            }
+        }
+    });
 
     Ok(())
 }
@@ -202,6 +262,7 @@ fn start_screenpipe_server() -> tokio::task::JoinHandle<()> {
             tokio::process::Command::new(find_screenpipe::find_screenpipe_path().unwrap());
         cmd.arg("--port").arg("3030");
         cmd.arg("--debug");
+        cmd.arg("--disable-audio");
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
