@@ -34,7 +34,6 @@
         }
       ]
     },
-    "cli:default",
-    "updater:default"
+    "cli:default"
   ]
 }

@@ -133,18 +133,28 @@ if (platform == 'macos') {
 		'/Users/runner/work/screen-pipe/screen-pipe/target/release/screenpipe',
 		'../../../target/release/screenpipe',
 		'../../target/release/screenpipe',
+		'../../../../target/aarch64-apple-darwin/release/screenpipe',
+		'../../../../target/x86_64-apple-darwin/release/screenpipe',
 	];
-
-	for (const path of potentialPaths) {
+	let found = false;
+	for (const path of potentialPaths) { // TODO intel mac
 		try {
-			await $`cp ${path} ./`
+			await $`cp ${path} ./screenpipe-aarch64-apple-darwin`
 			console.log(`Successfully copied screenpipe from ${path}`);
+			found = true;
 			break;
 		} catch (error) {
-			console.log(`Failed to copy from ${path}: ${error.message}`);
+			console.warn(`Failed to copy from ${path}: ${error.message}`);
 		}
 	}
-	await $`sudo cp /opt/homebrew/bin/tesseract ./`
+	if (!found) {
+		console.error("Failed to find screenpipe");
+		process.exit(1);
+	}
+	// await $`sudo cp /opt/homebrew/bin/tesseract ./`
+	// await $`sudo chown ${process.env.USER} ./tesseract`
+	await $`cp /opt/homebrew/bin/tesseract /tmp/tesseract`
+	await $`mv /tmp/tesseract ./tesseract-aarch64-apple-darwin` // TODO intel
 }
 
 // Nvidia
@@ -258,10 +268,10 @@ if (!process.env.GITHUB_ENV) {
 	}
 	if (platform == 'macos') {
 		console.log(`export FFMPEG_DIR="${exports.ffmpeg}"`)
-		console.log(`export WHISPER_METAL_EMBED_LIBRARY=ON`)
 	}
 	if (!process.env.GITHUB_ENV) {
-		console.log('bunx tauri build')
+		console.log('bunx tauri build'
+			+ (platform === 'macos' ? ' -- --features metal' : ''))
 	}
 }
 

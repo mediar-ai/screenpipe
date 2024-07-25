@@ -76,7 +76,7 @@ screenpipe-audio = { path = "../../../../screenpipe-audio", features = [] }
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-cli = "2.0.0-alpha.2"
-tauri-plugin-updater = "2.0.0-alpha.2"
+# tauri-plugin-updater = "2.0.0-alpha.2"
 
 [features]
 cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]

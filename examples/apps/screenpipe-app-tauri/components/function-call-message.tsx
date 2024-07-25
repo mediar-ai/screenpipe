@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Message } from "ai";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { IconOpenAI } from "@/components/ui/icons";
+import { IconCode, IconOpenAI } from "@/components/ui/icons";
 import {
   Accordion,
   AccordionContent,
@@ -13,6 +13,15 @@ import { MemoizedReactMarkdown } from "./markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { CodeBlock } from "./ui/codeblock";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "./ui/button";
 
 interface FunctionCallMessageProps {
   message: Message;
@@ -23,6 +32,7 @@ export function FunctionCallMessage({
   message,
   isResult = false,
 }: FunctionCallMessageProps) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   console.log("FunctionCallMessage", message);
   // @ts-ignore TODO
   const toolCalls = message.content.filter((content) => !content.result);
@@ -31,13 +41,14 @@ export function FunctionCallMessage({
 
   console.log("toolCalls", toolCalls);
   console.log("toolResults", toolResults);
+  // message.content.find((content) => content.args.queries
   return (
     <div className="group relative mb-4 flex items-start md:-ml-12">
       <div className="flex size-8 shrink-0 select-none items-center justify-center rounded-md border shadow bg-primary text-primary-foreground">
         <IconOpenAI />
       </div>
       <div className="flex-1 px-1 ml-4 space-y-2 overflow-hidden">
-        <Card className="w-full">
+        <Card className="w-[600px]">
           <CardHeader>
             <CardTitle className="text-sm font-medium">
               {isResult ? "Function Result" : "Function Call"}
@@ -48,11 +59,41 @@ export function FunctionCallMessage({
               <Accordion type="single" collapsible className="w-full">
                 {toolCalls.map((toolCall: any, index: number) => (
                   <AccordionItem key={index} value={`item-${index}`}>
-                    <AccordionTrigger>
-                      <Badge variant="secondary" className="mr-2">
-                        {toolCall.type}
-                      </Badge>
-                      {toolCall.toolName}
+                    <AccordionTrigger className="flex justify-between items-center">
+                      <div className="flex items-center">
+                        <Badge variant="secondary" className="mr-2">
+                          {toolCall.type}
+                        </Badge>
+                      </div>
+                      <span className="flex-grow text-center">
+                        {toolCall.toolName}
+                      </span>
+                      <Dialog
+                        open={isDialogOpen}
+                        onOpenChange={setIsDialogOpen}
+                      >
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="mr-2">
+                            <IconCode />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>View code</DialogTitle>
+                            <DialogDescription>
+                              You can use the following code to start
+                              integrating your current prompt and settings into
+                              your application.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <CodeBlock
+                            language="bash"
+                            value={generateCurlCommand(
+                              toolCall.args.queries[0]
+                            )}
+                          />
+                        </DialogContent>
+                      </Dialog>
                     </AccordionTrigger>
                     <AccordionContent>
                       <MarkdownContent
@@ -71,11 +112,41 @@ export function FunctionCallMessage({
               <Accordion type="single" collapsible className="w-full">
                 {toolResults.map((toolResult: any, index: number) => (
                   <AccordionItem key={index} value={`item-${index}`}>
-                    <AccordionTrigger>
-                      <Badge variant="secondary" className="mr-2">
-                        {toolResult.type}
-                      </Badge>
-                      {toolResult.toolName}
+                    <AccordionTrigger className="flex justify-between items-center">
+                      <div className="flex items-center">
+                        <Badge variant="secondary" className="mr-2">
+                          {toolResult.type}
+                        </Badge>
+                      </div>
+                      <span className="flex-grow text-center">
+                        {toolResult.toolName}
+                      </span>
+                      <Dialog
+                        open={isDialogOpen}
+                        onOpenChange={setIsDialogOpen}
+                      >
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="mr-2">
+                            <IconCode />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>View code</DialogTitle>
+                            <DialogDescription>
+                              You can use the following code to start
+                              integrating your current prompt and settings into
+                              your application.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <CodeBlock
+                            language="bash"
+                            value={generateCurlCommand(
+                              toolResult.args.queries[0]
+                            )}
+                          />
+                        </DialogContent>
+                      </Dialog>
                     </AccordionTrigger>
                     <AccordionContent>
                       <MarkdownContent
@@ -106,7 +177,7 @@ function MarkdownContent({ content }: { content: string }) {
         p({ children }) {
           return <p className="mb-2 last:mb-0">{children}</p>;
         },
-        code({ node, inline, className, children, ...props }) {
+        code({ node, className, children, ...props }) {
           let childrenContent = Array.isArray(children)
             ? children[0]
             : children;
@@ -123,14 +194,6 @@ function MarkdownContent({ content }: { content: string }) {
 
           const match = /language-(\w+)/.exec(className || "");
 
-          if (inline) {
-            return (
-              <code className={className} {...props}>
-                {childrenContent}
-              </code>
-            );
-          }
-
           return (
             <CodeBlock
               key={Math.random()}
@@ -145,4 +208,20 @@ function MarkdownContent({ content }: { content: string }) {
       {content}
     </MemoizedReactMarkdown>
   );
+}
+
+// Add this function at the end of the file
+function generateCurlCommand(query: any): string {
+  const baseUrl = "http://localhost:3030";
+  const queryParams = new URLSearchParams({
+    q: query.q || "",
+    content_type: query.contentType || "all",
+    limit: query.limit?.toString() || "10",
+    offset: query.offset?.toString() || "0",
+    start_time: query.startTime || "",
+    end_time: query.endTime || "",
+  }).toString();
+
+  return `curl "${baseUrl}/search?\\
+${queryParams.replace(/&/g, "\\\n&")}"`;
 }

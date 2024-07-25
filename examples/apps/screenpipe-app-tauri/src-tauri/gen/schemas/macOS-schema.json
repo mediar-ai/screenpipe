@@ -1469,69 +1469,6 @@
           ]
         },
         {
-          "description": "updater:default -> This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n",
-          "type": "string",
-          "enum": [
-            "updater:default"
-          ]
-        },
-        {
-          "description": "updater:allow-check -> Enables the check command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "updater:allow-check"
-          ]
-        },
-        {
-          "description": "updater:allow-download -> Enables the download command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "updater:allow-download"
-          ]
-        },
-        {
-          "description": "updater:allow-download-and-install -> Enables the download_and_install command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "updater:allow-download-and-install"
-          ]
-        },
-        {
-          "description": "updater:allow-install -> Enables the install command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "updater:allow-install"
-          ]
-        },
-        {
-          "description": "updater:deny-check -> Denies the check command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "updater:deny-check"
-          ]
-        },
-        {
-          "description": "updater:deny-download -> Denies the download command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "updater:deny-download"
-          ]
-        },
-        {
-          "description": "updater:deny-download-and-install -> Denies the download_and_install command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "updater:deny-download-and-install"
-          ]
-        },
-        {
-          "description": "updater:deny-install -> Denies the install command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "updater:deny-install"
-          ]
-        },
-        {
           "description": "webview:default -> Default permissions for the plugin.",
           "type": "string",
           "enum": [

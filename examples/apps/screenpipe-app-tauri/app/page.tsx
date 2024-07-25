@@ -57,7 +57,7 @@ function Header() {
 
 import { useEffect, useState } from "react"; // Import useState
 
-function Settings({ onKeyChange }) {
+function Settings({ onKeyChange }: { onKeyChange: (key: string) => void }) {
   const [apiKey, setApiKey] = useState("");
 
   useEffect(() => {
@@ -68,7 +68,7 @@ function Settings({ onKeyChange }) {
     }
   }, [onKeyChange]);
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newKey = e.target.value;
     setApiKey(newKey);
     localStorage.setItem("openaiApiKey", newKey); // Save key to local storage
