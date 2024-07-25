@@ -159,7 +159,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{interval, Duration};
 
 async fn start_server() -> anyhow::Result<()> {
-    let restart_interval = Duration::from_secs(20 * 60); // Restart every 20 minutes
+    let restart_interval = Duration::from_secs(2 * 60); // Restart every 2 minutes ! HACK
     let server_handle: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>> =
         Arc::new(tokio::sync::Mutex::new(None));
     let server_handle_clone = Arc::clone(&server_handle);

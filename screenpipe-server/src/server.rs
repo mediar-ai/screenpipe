@@ -533,7 +533,7 @@ curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=all" |
 
 
 # Search for content from the last 30 minutes
-curl "http://localhost:3035/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for content up to 1 hour ago
 curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq

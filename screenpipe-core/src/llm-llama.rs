@@ -1,9 +1,36 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use candle::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::llama::{Cache, Llama, LlamaConfig};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use tokenizers::Tokenizer;
+
+/// Loads the safetensors files for a model from the hub based on a json index file.
+pub fn hub_load_safetensors(
+    repo: &hf_hub::api::sync::ApiRepo,
+    json_file: &str,
+) -> Result<Vec<std::path::PathBuf>> {
+    let json_file = repo.get(json_file).map_err(candle::Error::wrap)?;
+    let json_file = std::fs::File::open(json_file)?;
+    let json: serde_json::Value =
+        serde_json::from_reader(&json_file).map_err(candle::Error::wrap)?;
+    let weight_map = match json.get("weight_map") {
+        None => anyhow::bail!("no weight map in {json_file:?}"),
+        Some(serde_json::Value::Object(map)) => map,
+        Some(_) => anyhow::bail!("weight map in {json_file:?} is not a map"),
+    };
+    let mut safetensors_files = std::collections::HashSet::new();
+    for value in weight_map.values() {
+        if let Some(file) = value.as_str() {
+            safetensors_files.insert(file.to_string());
+        }
+    }
+    let safetensors_files = safetensors_files
+        .iter()
+        .map(|v| repo.get(v).map_err(anyhow::Error::from))
+        .collect::<Result<Vec<_>, anyhow::Error>>()?;
+    Ok(safetensors_files)
+}
 
 pub fn load_llama_model(device: &Device) -> Result<(Llama, Tokenizer, Cache)> {
     let api = Api::new()?;
@@ -24,30 +51,13 @@ pub fn load_llama_model(device: &Device) -> Result<(Llama, Tokenizer, Cache)> {
     let dtype = DType::BF16; // You can change this to F16 if preferred
     let cache = Cache::new(true, dtype, &config, device)?;
 
-    let filenames = candle_examples::hub_load_safetensors(&api, "model.safetensors.index.json")?;
+    let filenames = hub_load_safetensors(&api, "model.safetensors.index.json")?;
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
 
     let model = Llama::load(vb, &config)?;
     let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(anyhow::Error::msg)?;
 
     Ok((model, tokenizer, cache))
-}
-
-pub fn generate_text(
-    model: &Llama,
-    tokenizer: &Tokenizer,
-    cache: &mut Cache,
-    prompt: &str,
-    max_tokens: usize,
-    temperature: f64,
-    device: &Device,
-) -> Result<String> {
-    // Implement text generation logic here
-    // This would include tokenization, forward passes, and token sampling
-    // You can refer to the main() function in the GitHub example for details
-
-    // Placeholder return
-    Ok("Generated text placeholder".to_string())
 }
 
 pub fn generate_text_streaming<F>(
@@ -58,43 +68,45 @@ pub fn generate_text_streaming<F>(
     max_tokens: usize,
     temperature: f64,
     device: &Device,
-    callback: F,
+    mut callback: F,
 ) -> Result<()>
 where
     F: FnMut(String) -> Result<()>,
 {
-    let mut rng = rand::rngs::StdRng::seed_from_u64(299792458);
     let mut logits_processor =
-        candle_transformers::generation::LogitsProcessor::new(299792458, temperature, None);
+        candle_transformers::generation::LogitsProcessor::new(42, Some(temperature), None);
 
     let mut tokens = tokenizer.encode(prompt, true).map_err(anyhow::Error::msg)?;
     let mut generated_tokens = 0;
-    let mut callback = callback;
 
     let eos_token = tokenizer.token_to_id("</s>");
     let bos_token = tokenizer.token_to_id("<s>");
 
-    if let Some(bos_token) = bos_token {
-        tokens.insert(0, bos_token);
-    }
-
-    let mut all_tokens = tokens.clone();
-
+    let mut all_tokens = if let Some(bos_token) = bos_token {
+        std::iter::once(bos_token)
+            .chain(tokens.get_ids().iter().cloned())
+            .collect::<Vec<_>>()
+    } else {
+        tokens.get_ids().to_vec()
+    };
     for index in 0..max_tokens {
-        let context_size = if index > 0 { 1 } else { tokens.len() };
-        let start_pos = tokens.len().saturating_sub(context_size);
-        let input = Tensor::new(&tokens[start_pos..], device)?;
+        let context_size = if index > 0 { 1 } else { tokens.get_ids().len() };
+        let start_pos = tokens.get_ids().len().saturating_sub(context_size);
+        let input = Tensor::new(&tokens.get_ids()[start_pos..], device)?;
 
         let logits = model.forward(&input, start_pos, cache)?;
         let logits = logits.squeeze(0)?;
         let logits = if temperature == 0. {
             logits
         } else {
-            logits.div(temperature)?
+            let temp_tensor = Tensor::new(&[temperature], device)?;
+            logits.div(&temp_tensor)?
         };
-
         let next_token = logits_processor.sample(&logits)?;
-        tokens.push(next_token);
+        let text = tokenizer
+            .decode(&[next_token], false)
+            .map_err(anyhow::Error::msg)?;
+        tokens = tokenizer.encode(text, true).map_err(anyhow::Error::msg)?;
         all_tokens.push(next_token);
 
         if let Some(eos_token) = eos_token {
@@ -103,39 +115,13 @@ where
             }
         }
 
-        if let Some(text) = tokenizer
+        let text = tokenizer
             .decode(&[next_token], true)
-            .map_err(anyhow::Error::msg)?
-        {
-            callback(text)?;
-        }
+            .map_err(anyhow::Error::msg)?;
+        callback(text)?;
 
         generated_tokens += 1;
     }
 
     Ok(())
-}
-
-fn main() {
-    let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
-    let (model, tokenizer, cache) = load_llama_model(&device).unwrap();
-    let prompt = "Hello, world!";
-    let max_tokens = 10;
-    let temperature = 0.1;
-    let callback = |text| {
-        println!("Generated text: {}", text);
-        Ok(())
-    };
-    // streaming
-    generate_text_streaming(
-        &model,
-        &tokenizer,
-        &mut cache,
-        &prompt,
-        max_tokens,
-        temperature,
-        &device,
-        callback,
-    )
-    .unwrap();
 }

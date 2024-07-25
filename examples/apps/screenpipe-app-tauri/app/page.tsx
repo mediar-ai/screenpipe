@@ -1,6 +1,6 @@
 "use client";
 
-import { ChatList } from "@/components/chat-list-openai";
+import { ChatList } from "@/components/chat-list-openai-v2";
 import Image from "next/image";
 import { Button } from "@/components/ui/button"; // Import Button from shadcn
 import RagExample from "@/components/rag-example";
@@ -54,12 +54,49 @@ function Header() {
     </div>
   );
 }
+
+import { useEffect, useState } from "react"; // Import useState
+
+function Settings({ onKeyChange }) {
+  const [apiKey, setApiKey] = useState("");
+
+  useEffect(() => {
+    const savedKey = localStorage.getItem("openaiApiKey"); // Load saved key from local storage
+    if (savedKey) {
+      setApiKey(savedKey);
+      onKeyChange(savedKey); // Pass the loaded key to parent
+    }
+  }, [onKeyChange]);
+
+  const handleChange = (e) => {
+    const newKey = e.target.value;
+    setApiKey(newKey);
+    localStorage.setItem("openaiApiKey", newKey); // Save key to local storage
+    onKeyChange(newKey);
+  };
+
+  return (
+    <div className="settings">
+      <input
+        type="text"
+        value={apiKey}
+        onChange={handleChange}
+        placeholder="Enter OpenAI API Key"
+        className="border p-2"
+      />
+    </div>
+  );
+}
 export default function Home() {
+  const [openAiKey, setOpenAiKey] = useState("");
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-8">
       <Header /> {/* Use Header component */}
       {/* TODO for some reason code block style broken when built */}
       {/* <RagExample /> */}
+      <Settings onKeyChange={setOpenAiKey} />
+      <ChatList apiKey={openAiKey} />
     </main>
   );
 }

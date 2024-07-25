@@ -19,9 +19,10 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Message } from 'ai'
 
 export interface ChatMessageProps {
-  message: any;
+  message: Message;
 }
 
 function FunctionCall({

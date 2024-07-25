@@ -137,7 +137,7 @@ async fn record_video(
     let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback, save_text_files);
     
     while is_running.load(Ordering::SeqCst) {
-        // let queue_length = video_capture.ocr_frame_queue.lock().await.len();
+        // let queue_lenglth = video_capture.ocr_frame_queue.lock().await.len();
         // debug!("record_video: Checking for latest frame. Number of frames in OCR queue: {}", queue_length);
         if let Some(frame) = video_capture.ocr_frame_queue.lock().await.pop_front() {
             match db.insert_frame().await {
