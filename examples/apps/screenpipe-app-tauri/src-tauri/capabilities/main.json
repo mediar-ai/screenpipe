@@ -19,6 +19,20 @@
     "store:allow-save",
     "store:allow-load",
     "shell:allow-open",
+    "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-watch",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$APPDATA/*"
+        },
+        {
+          "path": "$APPDATA/**"
+        }
+      ]
+    },
     {
       "identifier": "shell:allow-execute",
       "allow": [

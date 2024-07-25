@@ -58,6 +58,8 @@ which = "6.0.1"
 # hakc 
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
+tauri-plugin-fs = "2.0.0-beta"
+
 
 # M series MacOS
 [target.'cfg(target_os = "macos")'.dependencies]

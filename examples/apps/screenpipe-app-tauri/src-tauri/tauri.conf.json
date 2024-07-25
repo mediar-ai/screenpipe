@@ -69,7 +69,8 @@
         "$APPDATA/*",
         "$APPCONFIG/*",
         "$RESOURCE/*",
-        "$HOME/*"
+        "$HOME/*",
+        "$HOME/.screenpipe/*"
       ]
     }
   },
@@ -78,7 +79,8 @@
       {
         "title": "screen | ⭐️",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "resizable": false
       }
     ],
     "security": {

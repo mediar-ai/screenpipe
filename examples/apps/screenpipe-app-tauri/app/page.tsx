@@ -4,6 +4,7 @@ import { ChatList } from "@/components/chat-list-openai-v2";
 import Image from "next/image";
 import { Button } from "@/components/ui/button"; // Import Button from shadcn
 import RagExample from "@/components/rag-example";
+import { Settings } from "@/components/settings";
 
 function IconNewChat() {
   return (
@@ -31,7 +32,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-function Header() {
+function Header({ onKeyChange }: { onKeyChange: (key: string) => void }) {
   return (
     <div>
       <div className="absolute left-8 top-8">
@@ -71,6 +72,8 @@ function Header() {
       <div className="mt-4 flex space-x-4 absolute top-4 right-4">
         {" "}
         {/* Added margin-top for spacing */}
+        <Settings onKeyChange={onKeyChange} />
+        <LogViewer />
         <Button
           asChild
           className="cursor-pointer"
@@ -113,79 +116,30 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { LogViewer } from "@/components/log-viewer";
 
-function Settings({
-  onKeyChange,
-  className,
-}: {
-  onKeyChange: (key: string) => void;
-  className?: string;
-}) {
-  const [apiKey, setApiKey] = useState("");
-
-  useEffect(() => {
-    const savedKey = localStorage.getItem("openaiApiKey");
-    if (savedKey) {
-      setApiKey(savedKey);
-      onKeyChange(savedKey);
-    }
-  }, [onKeyChange]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newKey = e.target.value;
-    setApiKey(newKey);
-    localStorage.setItem("openaiApiKey", newKey);
-    onKeyChange(newKey);
-  };
-
-  return (
-    <Card className={cn("w-full max-w-md", className)}>
-      <CardHeader>
-        <CardTitle>OpenAI API Settings</CardTitle>
-        <CardDescription>
-          Enter your OpenAI API key to use the chat functionality.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid w-full items-center gap-4">
-          <div className="flex flex-col space-y-1.5">
-            <Label htmlFor="apiKey">API Key</Label>
-            <Input
-              id="apiKey"
-              // type="password"
-              value={apiKey}
-              onChange={handleChange}
-              placeholder="Enter your OpenAI API Key"
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Don&apos;t have an API key? Get one from{" "}
-            <a
-              href="https://platform.openai.com/api-keys"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              OpenAI&apos;s website
-            </a>
-            .
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 export default function Home() {
   const [openAiKey, setOpenAiKey] = useState("");
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8">
-      <Header /> {/* Use Header component */}
-      {/* TODO for some reason code block style broken when built */}
-      {/* <RagExample /> */}
-      <Settings onKeyChange={setOpenAiKey} className="absolute top-24 left-4" />
+      <Header onKeyChange={setOpenAiKey} />
       <div className="h-32" />
-      <ChatList apiKey={openAiKey} />
+      {openAiKey ? (
+        <ChatList apiKey={openAiKey} />
+      ) : (
+        <Card className="w-[350px]">
+          <CardHeader>
+            <CardTitle>Welcome to Screenpipe</CardTitle>
+            <CardDescription>
+              Please set your OpenAI API key to get started.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Settings onKeyChange={setOpenAiKey} />
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 }
