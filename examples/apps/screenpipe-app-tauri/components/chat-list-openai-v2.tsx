@@ -262,7 +262,7 @@ export function ChatList({ apiKey }: { apiKey: string }) {
       </div>
 
       {messages.length === 0 && (
-        <div className="sticky bottom-0 bg-background p-4">
+        <div className="absolute bottom-0 left-0 right-0 bg-background p-4">
           <div className="max-w-2xl mx-auto">
             <div className="relative">
               <Textarea
@@ -280,6 +280,7 @@ export function ChatList({ apiKey }: { apiKey: string }) {
                   }
                 }}
               />
+              
               <Button
                 type="submit"
                 size="icon"
