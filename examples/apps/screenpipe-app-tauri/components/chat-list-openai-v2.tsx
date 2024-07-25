@@ -21,20 +21,44 @@ import { createOpenAI, openai } from "@ai-sdk/openai";
 import { IconOpenAI } from "./ui/icons";
 import { spinner } from "./spinner";
 import { useScrollAnchor } from "@/lib/hooks/use-scroll-anchor";
+import { FunctionCallMessage } from "./function-call-message";
 
 const screenpipeQuery = z.object({
-  q: z.string(),
-  offset: z.number(),
-  limit: z.number(),
-  start_date: z.string(),
-  end_date: z.string(),
+  q: z
+    .string()
+    .describe(
+      "The search query matching exact keywords. Use a single keyword that best matches the user intent"
+    ),
+  contentType: z
+    .enum(["ocr", "audio"])
+    .describe(
+      "The type of content to search for: screenshot data or audio transcriptions"
+    ),
+  limit: z
+    .number()
+    .default(5)
+    .describe(
+      "Number of results to return (default: 5). Don't return more than 50 results as it will be fed to an LLM"
+    ),
+  offset: z.number().default(0).describe("Offset for pagination (default: 0)"),
+  startTime: z
+    .string()
+    // 1 hour ago
+    .default(new Date(Date.now() - 3600000).toISOString())
+    .describe("Start time for search range in ISO 8601 format"),
+  endTime: z
+    .string()
+    .default(new Date().toISOString())
+    .describe("End time for search range in ISO 8601 format"),
 });
-const screenpipeMultiQuery = z.array(screenpipeQuery);
+const screenpipeMultiQuery = z.object({
+  queries: z.array(screenpipeQuery),
+});
 
 async function queryScreenpipeNtimes(
   params: z.infer<typeof screenpipeMultiQuery>
 ) {
-  await Promise.all(params.map(queryScreenpipe));
+  return Promise.all(params.queries.map(queryScreenpipe));
 }
 
 // Add this new function to handle screenpipe requests
@@ -44,8 +68,9 @@ async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
       q: params.q,
       offset: params.offset.toString(),
       limit: params.limit.toString(),
-      start_date: params.start_date,
-      end_date: params.end_date,
+      start_date: params.startTime,
+      end_date: params.endTime,
+      content_type: params.contentType,
     });
     console.log("calling screenpipe", JSON.stringify(params));
     const response = await fetch(`http://localhost:3030/search?${queryParams}`);
@@ -89,9 +114,9 @@ export function ChatList({ apiKey }: { apiKey: string }) {
         tools: {
           query_screenpipe: {
             description:
-              "Query the local screenpipe instance for relevant information (UPDATE: just do a SINGLE QUERY ATM)",
-            parameters: screenpipeQuery,
-            execute: queryScreenpipe,
+              "Query the local screenpipe instance for relevant information. You will return multiple queries under the key 'queries'.",
+            parameters: screenpipeMultiQuery,
+            execute: queryScreenpipeNtimes,
           },
         },
         toolChoice: "required",
@@ -103,7 +128,7 @@ export function ChatList({ apiKey }: { apiKey: string }) {
           his screen and mics 24/7. The user ask you questions
           and you use his screenpipe recordings to answer him.
           Based on the user request, use tools to screenpipe to best help the user. 
-          Each query should have "q", "offset", "limit", and start_date, end_date fields. 
+          Each query should have "q", "offset", "limit", "start_date", "end_date", and "content_type" fields. 
           Rules:
           - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
           Return a list of objects with the key "queries"
@@ -113,6 +138,7 @@ export function ChatList({ apiKey }: { apiKey: string }) {
           - DO NOT add \`\`\`json at the beginning or end of your response
           - Do not use '"' around your response
           - Date & time now is ${new Date().toISOString()}
+          - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
           
           Example answers from you:
           "{
@@ -132,40 +158,6 @@ export function ChatList({ apiKey }: { apiKey: string }) {
             ]
           }"
 
-          Bad example
-          "Here's the JSON you wanted:
-          [
-            {
-              "queries": [{"q": "sales", "offset": 0, "limit": 10}]
-            },
-            {
-              "queries": [{"q": "customer", "offset": 0, "limit": 20}]
-            },
-            {
-              "queries": [{"q": "goal", "offset": 0, "limit": 10}]
-            }
-          ]"
-          or
-          "\`\`\`json
-          [
-            {
-              "queries": [
-                {"q": "goals", "offset": 0, "limit": 3}
-              ]
-            },
-            {
-              "queries": [
-                {"q": "life plans", "offset": 0, "limit": 5}
-              ]
-            },
-            {
-              "queries": [
-                {"q": "ambitions", "offset": 0, "limit": 3}
-              ]
-            }
-          ]
-          \`\`\`"
-          JSON?
           `,
           },
           {
@@ -187,12 +179,19 @@ export function ChatList({ apiKey }: { apiKey: string }) {
         { id: nanoid(), role: "tool", content: text.toolResults },
       ]);
 
+      console.log("streaming now");
+
+      console.log("toolCalls", text.toolCalls);
+      console.log("toolResults", text.toolResults);
+
       const { textStream } = await streamText({
         model: provider("gpt-4o"),
         messages: [
           {
             role: "user",
-            content: inputMessage,
+            content:
+              messages.findLast((msg) => msg.role === "user")?.content ||
+              inputMessage,
           },
           {
             role: "assistant",
@@ -205,6 +204,8 @@ export function ChatList({ apiKey }: { apiKey: string }) {
         ],
       });
 
+      console.log("textStream", textStream);
+
       // create new assistant
       const assistantMessageId = nanoid();
       setMessages((prevMessages) => [
@@ -215,6 +216,7 @@ export function ChatList({ apiKey }: { apiKey: string }) {
       let fullResponse = "";
       for await (const chunk of textStream) {
         fullResponse += chunk;
+        console.log("fullResponse", fullResponse);
         setMessages((prevMessages) =>
           prevMessages.map((msg) =>
             msg.id === assistantMessageId
@@ -275,27 +277,25 @@ export function ChatList({ apiKey }: { apiKey: string }) {
           className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto"
           ref={messagesRef}
         >
-          {/* display user message */}
-
-          {messages
-            // only show string messages
-            .filter((msg) => msg.role === "user")
-            .map((msg, index) => (
-              <ChatMessage key={index} message={msg} />
-            ))}
-
+          {messages.map((msg, index) => {
+            if (
+              msg.role === "user" ||
+              (msg.role === "assistant" && typeof msg.content === "string")
+            ) {
+              return <ChatMessage key={index} message={msg} />;
+            } else if (
+              msg.role === "assistant" &&
+              msg.content &&
+              typeof msg.content === "object"
+            ) {
+              return <FunctionCallMessage key={index} message={msg} />;
+            } else if (msg.role === "tool") {
+              return <FunctionCallMessage key={index} message={msg} isResult />;
+            }
+            return null;
+          })}
           {isLoading && <SpinnerMessage />}
-
           {error && <p className="text-red-500">{error}</p>}
-          {messages
-            // only show string messages from assistant
-            .filter(
-              (msg) =>
-                msg.role === "assistant" && typeof msg.content === "string"
-            )
-            .map((msg, index) => (
-              <ChatMessage key={index} message={msg} />
-            ))}
         </div>
 
         {messages.length === 0 && (
@@ -328,8 +328,8 @@ export function ChatList({ apiKey }: { apiKey: string }) {
               </Button>
             </div>
             <p className="text-xs font-medium text-center text-neutral-700">
-              screenpipe canNOT make mistakes. Consider checking important
-              information.
+              screenpipe is in beta, base its answer on your computer activity
+              and can make errors.
             </p>
           </div>
         )}
@@ -350,46 +350,6 @@ export function SpinnerMessage() {
     </div>
   );
 }
-
-// export const getUIStateFromAIState = (aiState: Chat) => {
-//   return aiState.messages
-//     .filter((message) => message.role !== "system")
-//     .map((message, index) => ({
-//       id: `${aiState.chatId}-${index}`,
-//       display:
-//         message.role === "tool" ? (
-//           message.content.map((tool) => {
-//             return tool.toolName === "listStocks" ? (
-//               <BotCard>
-//                 {/* TODO: Infer types based on the tool result*/}
-//                 {/* @ts-expect-error */}
-//                 <Stocks props={tool.result} />
-//               </BotCard>
-//             ) : tool.toolName === "showStockPrice" ? (
-//               <BotCard>
-//                 {/* @ts-expect-error */}
-//                 <Stock props={tool.result} />
-//               </BotCard>
-//             ) : tool.toolName === "showStockPurchase" ? (
-//               <BotCard>
-//                 {/* @ts-expect-error */}
-//                 <Purchase props={tool.result} />
-//               </BotCard>
-//             ) : tool.toolName === "getEvents" ? (
-//               <BotCard>
-//                 {/* @ts-expect-error */}
-//                 <Events props={tool.result} />
-//               </BotCard>
-//             ) : null;
-//           })
-//         ) : message.role === "user" ? (
-//           <UserMessage>{message.content as string}</UserMessage>
-//         ) : message.role === "assistant" &&
-//           typeof message.content === "string" ? (
-//           <BotMessage content={message.content} />
-//         ) : null,
-//     }));
-// };
 
 function ArrowUpIcon(props) {
   return (
