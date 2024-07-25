@@ -24,6 +24,7 @@ import { IconOpenAI } from "./ui/icons";
 import { spinner } from "./spinner";
 import { useScrollAnchor } from "@/lib/hooks/use-scroll-anchor";
 import { FunctionCallMessage } from "./function-call-message";
+import { EmptyScreen } from "./empty-screen";
 
 const screenpipeQuery = z.object({
   q: z
@@ -32,7 +33,7 @@ const screenpipeQuery = z.object({
       "The search query matching exact keywords. Use a single keyword that best matches the user intent"
     ),
   contentType: z
-    .enum(["ocr", "audio"])
+    .enum(["ocr", "audio", "all"])
     .describe(
       "The type of content to search for: screenshot data or audio transcriptions"
     ),
@@ -141,7 +142,10 @@ export function ChatList({ apiKey }: { apiKey: string }) {
           - Do not use '"' around your response
           - Date & time now is ${new Date().toISOString()}
           - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
-          
+          - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
+          - Use between 2-5 queries with very different keywords that could maximally match the user's screen text or audio transcript
+          - Use "all" for querying the same keyword over vision and audio
+
           Example answers from you:
           "{
             "queries": [
@@ -234,32 +238,41 @@ export function ChatList({ apiKey }: { apiKey: string }) {
     }
   };
 
+  const handleSuggestionClick = (suggestion: string) => {
+    setInputMessage(suggestion);
+    handleSendMessage();
+  };
+
   return (
     <div className="flex flex-col">
-      <div
-        className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto"
-        ref={messagesRef}
-      >
-        {messages.map((msg, index) => {
-          if (
-            msg.role === "user" ||
-            (msg.role === "assistant" && typeof msg.content === "string")
-          ) {
-            return <ChatMessage key={index} message={msg} />;
-          } else if (
-            msg.role === "assistant" &&
-            msg.content &&
-            typeof msg.content === "object"
-          ) {
-            return <FunctionCallMessage key={index} message={msg} />;
-          } else if (msg.role === "tool") {
-            return <FunctionCallMessage key={index} message={msg} isResult />;
-          }
-          return null;
-        })}
-        {isLoading && <SpinnerMessage />}
-        {error && <p className="text-red-500">{error}</p>}
-      </div>
+      {messages.length === 0 ? (
+        <EmptyScreen onSuggestionClick={handleSuggestionClick} />
+      ) : (
+        <div
+          className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto"
+          ref={messagesRef}
+        >
+          {messages.map((msg, index) => {
+            if (
+              msg.role === "user" ||
+              (msg.role === "assistant" && typeof msg.content === "string")
+            ) {
+              return <ChatMessage key={index} message={msg} />;
+            } else if (
+              msg.role === "assistant" &&
+              msg.content &&
+              typeof msg.content === "object"
+            ) {
+              return <FunctionCallMessage key={index} message={msg} />;
+            } else if (msg.role === "tool") {
+              return <FunctionCallMessage key={index} message={msg} isResult />;
+            }
+            return null;
+          })}
+          {isLoading && <SpinnerMessage />}
+          {error && <p className="text-red-500">{error}</p>}
+        </div>
+      )}
 
       {messages.length === 0 && (
         <div className="absolute bottom-0 left-0 right-0 bg-background p-4">
@@ -280,7 +293,7 @@ export function ChatList({ apiKey }: { apiKey: string }) {
                   }
                 }}
               />
-              
+
               <Button
                 type="submit"
                 size="icon"

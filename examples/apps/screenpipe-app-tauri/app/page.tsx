@@ -118,14 +118,42 @@ import {
 import { cn } from "@/lib/utils";
 import { LogViewer } from "@/components/log-viewer";
 
+import { Skeleton } from "@/components/ui/skeleton";
+
 export default function Home() {
-  const [openAiKey, setOpenAiKey] = useState("");
+  const [openAiKey, setOpenAiKey] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading settings from disk
+    const loadSettings = async () => {
+      // Replace this with your actual disk loading logic
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const savedKey = ""; // Replace with actual loaded key
+      setOpenAiKey(savedKey);
+      setIsLoading(false);
+    };
+    loadSettings();
+  }, []);
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8">
       <Header onKeyChange={setOpenAiKey} />
-      <div className="h-32" />
-      {openAiKey ? (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center h-full space-y-4">
+          <Skeleton className="w-[200px] h-[24px] rounded-full" />
+          <Skeleton className="w-[300px] h-[20px] rounded-full" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+            {[...Array(5)].map((_, index) => (
+              <Card key={index}>
+                <CardContent className="p-4">
+                  <Skeleton className="w-full h-[40px]" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ) : openAiKey ? (
         <ChatList apiKey={openAiKey} />
       ) : (
         <Card className="w-[350px]">
