@@ -29,6 +29,9 @@ dependencies:
   '@radix-ui/react-label':
     specifier: ^2.1.0
     version: 2.1.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
+  '@radix-ui/react-separator':
+    specifier: ^1.1.0
+    version: 1.1.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
   '@radix-ui/react-slot':
     specifier: ^1.1.0
     version: 1.1.0(@types/react@18.3.3)(react@18.3.1)
@@ -72,8 +75,8 @@ dependencies:
     specifier: 14.2.4
     version: 14.2.4(react-dom@18.3.1)(react@18.3.1)
   ollama-ai-provider:
-    specifier: ^0.10.0
-    version: 0.10.0(zod@3.23.8)
+    specifier: ../../../../ollama-ai-provider/packages/ollama
+    version: link:../../../../ollama-ai-provider/packages/ollama
   openai:
     specifier: ^4.53.0
     version: 4.53.0
@@ -156,22 +159,6 @@ packages:
       zod: 3.23.8
     dev: false
 
-  /@ai-sdk/provider-utils@1.0.0(zod@3.23.8):
-    resolution: {integrity: sha512-Akq7MmGQII8xAuoVjJns/n/2BTUrF6qaXIj/3nEuXk/hPSdETlLWRSrjrTmLpte1VIPE5ecNzTALST+6nz47UQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.0.0
-    peerDependenciesMeta:
-      zod:
-        optional: true
-    dependencies:
-      '@ai-sdk/provider': 0.0.11
-      eventsource-parser: 1.1.2
-      nanoid: 3.3.6
-      secure-json-parse: 2.7.0
-      zod: 3.23.8
-    dev: false
-
   /@ai-sdk/provider-utils@1.0.4(zod@3.23.8):
     resolution: {integrity: sha512-2TldHn54+HrvVHMCos9lrSMcDIp3cgnpphpYT/95RXcIzcGwAFM5MioDWnsrki3noplU5pVld6ylD3Vu/Xt3Vw==}
     engines: {node: '>=18'}
@@ -186,13 +173,6 @@ packages:
       nanoid: 3.3.6
       secure-json-parse: 2.7.0
       zod: 3.23.8
-    dev: false
-
-  /@ai-sdk/provider@0.0.11:
-    resolution: {integrity: sha512-VTipPQ92Moa5Ovg/nZIc8yNoIFfukZjUHZcQMduJbiUh3CLQyrBAKTEV9AwjPy8wgVxj3+GZjon0yyOJKhfp5g==}
-    engines: {node: '>=18'}
-    dependencies:
-      json-schema: 0.4.0
     dev: false
 
   /@ai-sdk/provider@0.0.13:
@@ -1052,6 +1032,26 @@ packages:
       '@radix-ui/react-primitive': 2.0.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
       '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@18.3.3)(react@18.3.1)
       '@radix-ui/react-use-controllable-state': 1.1.0(@types/react@18.3.3)(react@18.3.1)
+      '@types/react': 18.3.3
+      '@types/react-dom': 18.3.0
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+    dev: false
+
+  /@radix-ui/react-separator@1.1.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1):
+    resolution: {integrity: sha512-3uBAs+egzvJBDZAzvb/n4NxxOYpnspmWxO2u5NbZ8Y6FM/NdrGSF9bop3Cf6F6C71z1rTSn8KV0Fo2ZVd79lGA==}
+    peerDependencies:
+      '@types/react': '*'
+      '@types/react-dom': '*'
+      react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+      react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      '@types/react-dom':
+        optional: true
+    dependencies:
+      '@radix-ui/react-primitive': 2.0.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
       '@types/react': 18.3.3
       '@types/react-dom': 18.3.0
       react: 18.3.1
@@ -4264,21 +4264,6 @@ packages:
       es-object-atoms: 1.0.0
     dev: true
 
-  /ollama-ai-provider@0.10.0(zod@3.23.8):
-    resolution: {integrity: sha512-ppzofC1JtB8yQ2TRAGm6I9ppoRSpXZGQV4u5ez2JAQ5hwnkJKULgEg5Hc4rt84ErF3MpEIpG1ZSBV4njlL6LPQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.0.0
-    peerDependenciesMeta:
-      zod:
-        optional: true
-    dependencies:
-      '@ai-sdk/provider': 0.0.11
-      '@ai-sdk/provider-utils': 1.0.0(zod@3.23.8)
-      partial-json: 0.1.7
-      zod: 3.23.8
-    dev: false
-
   /once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
     dependencies:
@@ -4359,10 +4344,6 @@ packages:
       is-alphanumerical: 2.0.1
       is-decimal: 2.0.1
       is-hexadecimal: 2.0.1
-    dev: false
-
-  /partial-json@0.1.7:
-    resolution: {integrity: sha512-Njv/59hHaokb/hRUjce3Hdv12wd60MtM9Z5Olmn+nehe0QDAsRtRbJPvJ0Z91TusF0SuZRIvnM+S4l6EIP8leA==}
     dev: false
 
   /path-exists@4.0.0:

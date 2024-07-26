@@ -4,10 +4,12 @@ export function PrettyLink({
   href,
   children,
   variant = "filled",
+  className,
 }: {
   href: string;
   children: React.ReactNode;
   variant?: "filled" | "outline";
+  className?: string;
 }) {
   return (
     <a
@@ -15,6 +17,7 @@ export function PrettyLink({
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
+        className,
         "inline-flex items-center rounded-md px-4 py-2",
         "text-sm font-medium shadow-sm",
         "focus:outline-none focus:ring-2",

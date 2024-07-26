@@ -136,7 +136,7 @@ export function ChatList({
         }
       }
 
-      console.log("provider", provider);
+      // console.log("provider", provider);
       console.log("model", model);
 
       const text = await generateText({

@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { PrettyLink } from "./pretty-link";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
@@ -48,7 +49,7 @@ export function Settings({ className }: { className?: string }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" className={className}>
+        <Button variant="ghost" className={className}>
           Settings
         </Button>
       </DialogTrigger>

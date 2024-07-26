@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -16,6 +17,8 @@ import { CodeBlock } from "@/components/ui/codeblock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { Skeleton } from "./ui/skeleton";
+import { PrettyLink } from "@/components/pretty-link";
+
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
@@ -24,6 +27,34 @@ const formatDate = (dateString: string) => {
     day: "numeric",
   });
 };
+
+const FeatureRequestLink: React.FC<{ className?: string }> = ({
+  className,
+}) => (
+  <PrettyLink
+    className={className}
+    variant="outline"
+    href="mailto:louis@screenpi.pe?subject=Screenpipe%20Pipe%20Store%20Feature&body=yo%20louis%2C%0A%0Ai'd%20like%20to%20be%20featured%20in%20the%20Pipe%20Store.%20I've%20got%20an%20awesome%20product%20that%20use%20screenpipe%20and%20would%20get%20some%20more%20users%20by%20being%20listed%20here.%0A%0A%3Cmy%20product%20does%20x%2C%20y%2C%20z%3E%0A%3Cthis%20is%20my%20twitter%20tag%20or%20linkedin%3E%20-%3C%20will%20interact%20with%20your%20post%20for%20maximum%20cross%20marketing%0A%0Alet's%20chat%20about%20how%20we%20can%20collaborate%0A%0Alooking%20forward%20to%20connecting!%0A%0A%3Cps%20book%20call%20here%20https%3A%2F%2Fcal.com%2Flouis030195%2Fscreenpipe%3E"
+  >
+    <span className="mr-2">want to be featured here? reach out</span>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  </PrettyLink>
+);
+
 const PipeDialog: React.FC = () => {
   const { pipes, loading, error } = usePipes(
     "https://github.com/different-ai/file-organizer-2000"
@@ -41,11 +72,23 @@ const PipeDialog: React.FC = () => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost">Pipe Store</Button>
+        {/* <Button variant="ghost">pipe store</Button> */}
+        <PrettyLink variant="outline" href="#">
+          Pipe Store
+        </PrettyLink>
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
         <DialogHeader>
-          <DialogTitle>Pipes</DialogTitle>
+          <DialogTitle>Pipe Store</DialogTitle>
+          <DialogDescription>
+            Screenpipe&apos;s store is a collection of app, scripts, prompts
+            that are available to install.
+            <br />
+            It will process, annotate, help you search, or automate in your
+            screenpipe&apos;s data.
+          </DialogDescription>
+
+          {selectedPipe && <FeatureRequestLink className="w-80" />}
         </DialogHeader>
         <div className="flex h-[600px]">
           <div className="w-1/3 pr-4 overflow-y-auto">
@@ -57,7 +100,7 @@ const PipeDialog: React.FC = () => {
                     <Skeleton className="h-24 w-full" />
                   </div>
                 ))}
-            {error && <p>Error: {error}</p>}
+            {error && <p>error: {error}</p>}
             {pipes.map((pipe: any) => (
               <Card
                 key={pipe.name}
@@ -89,21 +132,21 @@ const PipeDialog: React.FC = () => {
                 </div>
                 <p className="text-xs mt-1 line-clamp-2">{pipe.description}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Updated {formatUpdatedTime(pipe.lastUpdate)}
+                  updated {formatUpdatedTime(pipe.lastUpdate)}
                 </p>
               </Card>
             ))}
           </div>
           <div className="w-1/2 pl-4 border-l overflow-y-auto">
-            {selectedPipe && (
+            {selectedPipe ? (
               <>
                 <h2 className="text-2xl font-bold mb-2">{selectedPipe.name}</h2>
                 <div className="flex justify-between items-center mb-4">
                   <div>
-                    <p>Downloads: {selectedPipe.downloads}</p>
-                    <p>Version: {selectedPipe.version}</p>
+                    <p>downloads: {selectedPipe.downloads}</p>
+                    <p>version: {selectedPipe.version}</p>
                     <p>
-                      By:{" "}
+                      by:{" "}
                       <a
                         href={selectedPipe.authorLink}
                         className="text-blue-500 hover:underline"
@@ -112,16 +155,16 @@ const PipeDialog: React.FC = () => {
                       </a>
                     </p>
                     <p>
-                      Repository:{" "}
+                      repository:{" "}
                       <a
                         href={selectedPipe.repository}
                         className="text-blue-500 hover:underline"
                       >
-                        Link
+                        link
                       </a>
                     </p>
                     <p>
-                      Last update:{" "}
+                      last update:{" "}
                       <a
                         href={selectedPipe.repository}
                         className="text-blue-500 hover:underline"
@@ -134,36 +177,34 @@ const PipeDialog: React.FC = () => {
                 <p className="mb-4">{selectedPipe.description}</p>
                 <div className="flex space-x-2 mb-4">
                   <Button disabled variant="outline">
-                    Install
+                    install
                     <Badge variant="secondary" className="ml-2">
-                      Soon
+                      soon
                     </Badge>
                   </Button>
                   <Button disabled variant="outline">
-                    Copy Share Link
+                    copy share link
                     <Badge variant="secondary" className="ml-2">
-                      Soon
+                      soon
                     </Badge>
                   </Button>
                   <Button disabled variant="outline">
-                    Donate
+                    donate
                     <Badge variant="secondary" className="ml-2">
-                      Soon
+                      soon
                     </Badge>
                   </Button>
                 </div>
                 <Separator className="my-4" />
                 <div className="mt-4">
                   <h3 className="text-xl font-semibold mb-2">
-                    About this Pipe
+                    about this pipe
                   </h3>
                   <MemoizedReactMarkdown
                     className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
                     remarkPlugins={[remarkGfm, remarkMath]}
                     components={{
                       p({ children }) {
-                        console.log("YOOOO SOME PP", children);
-
                         return <p className="mb-2 last:mb-0">{children}</p>;
                       },
                       code({ node, className, children, ...props }) {
@@ -191,7 +232,6 @@ const PipeDialog: React.FC = () => {
                         );
                       },
                       img({ src, alt }) {
-                        console.log("YOOOO", src);
                         return (
                           <img
                             src={src}
@@ -211,6 +251,11 @@ const PipeDialog: React.FC = () => {
                   </MemoizedReactMarkdown>
                 </div>
               </>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full">
+                <p className="text-lg mb-4">no pipe selected</p>
+                <FeatureRequestLink />
+              </div>
             )}
           </div>
         </div>
