@@ -22,10 +22,22 @@ import { Badge } from "@/components/ui/badge";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
+  const [localSettings, setLocalSettings] = React.useState(settings);
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    updateSettings({ openaiApiKey: e.target.value });
+    setLocalSettings({ ...localSettings, openaiApiKey: e.target.value });
+    updateSettings({ ...localSettings, openaiApiKey: e.target.value });
   };
+
+  const handleOllamaToggle = (checked: boolean) => {
+    console.log("checked", checked);
+    setLocalSettings({ ...localSettings, useOllama: checked });
+    updateSettings({ ...localSettings, useOllama: checked });
+  };
+
+  React.useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
 
   return (
     <Dialog
@@ -52,23 +64,23 @@ export function Settings({ className }: { className?: string }) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center space-x-4">
-                  <Switch id="use-ollama" checked={false} disabled={true} />
+                  <Switch
+                    id="use-ollama"
+                    checked={localSettings.useOllama}
+                    onCheckedChange={handleOllamaToggle}
+                  />
                   <Label
                     htmlFor="use-ollama"
                     className="flex items-center space-x-2"
                   >
                     Use Ollama
-                    <Badge variant="outline" className="ml-2">
-                      Soon
-                    </Badge>
                   </Label>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
                 <p>
-                  Ollama support is coming soon. It currently doesn&apos;t
-                  support function calling, which is required for this
-                  application.
+                  toggle to use ollama instead of openai api. make sure to have
+                  ollama running locally.
                 </p>
               </TooltipContent>
             </Tooltip>

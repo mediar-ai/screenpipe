@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChatMessage } from "./chat-message-v2";
 import { Message, generateText, nanoid, streamText, tool } from "ai";
 import { createOpenAI, openai } from "@ai-sdk/openai";
-import { createOllama } from "ollama-ai-provider";
+import { ollama } from "ollama-ai-provider";
 
 import { IconOpenAI } from "./ui/icons";
 import { spinner } from "./spinner";
@@ -119,12 +119,12 @@ export function ChatList({
 
     try {
       const provider = useOllama
-        ? createOllama()
+        ? ollama
         : createOpenAI({
             apiKey: apiKey,
           });
 
-      const model = useOllama ? "llama3" : "gpt-4o";
+      const model = useOllama ? "llama3.1" : "gpt-4o";
 
       // Test Ollama connection
       if (useOllama) {
@@ -140,7 +140,7 @@ export function ChatList({
       console.log("model", model);
 
       const text = await generateText({
-        model: provider("gpt-4o"),
+        model: useOllama ? ollama(model) : provider(model),
         tools: {
           query_screenpipe: {
             description:

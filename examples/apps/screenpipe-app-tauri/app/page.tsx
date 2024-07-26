@@ -43,6 +43,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import React from "react";
+import PipeDialog from "@/components/pipe-store";
 
 function Header() {
   return (
@@ -86,8 +87,9 @@ function Header() {
         {/* Added margin-top for spacing */}
         <HealthStatus className="mt-3" />
         <Settings />
+        <PipeDialog />
         {/* <LogViewer /> */}
-        <PrettyLink href="https://github.com/louis030195/screen-pipe/tree/main/examples/ts">
+        {/* <PrettyLink href="https://github.com/louis030195/screen-pipe/tree/main/examples/ts">
           <span className="mr-2">Examples</span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -104,8 +106,11 @@ function Header() {
             <polyline points="15 3 21 3 21 9" />
             <line x1="10" y1="14" x2="21" y2="3" />
           </svg>
-        </PrettyLink>
-        <PrettyLink href="mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe">
+        </PrettyLink> */}
+        <PrettyLink
+          variant="outline"
+          href="mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
+        >
           <span className="mr-2">Send feedback</span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
