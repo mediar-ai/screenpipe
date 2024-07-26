@@ -587,6 +587,25 @@ impl DatabaseManager {
 
         Ok(total_count)
     }
+
+    pub async fn get_latest_timestamps(&self) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>), sqlx::Error> {
+        let latest_frame: Option<(DateTime<Utc>,)> = sqlx::query_as(
+            "SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1"
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let latest_audio: Option<(DateTime<Utc>,)> = sqlx::query_as(
+            "SELECT timestamp FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 1"
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok((
+            latest_frame.map(|f| f.0),
+            latest_audio.map(|a| a.0)
+        ))
+    }
 }
 
 impl Clone for DatabaseManager {

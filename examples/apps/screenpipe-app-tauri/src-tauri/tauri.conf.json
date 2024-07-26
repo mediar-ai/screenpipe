@@ -84,13 +84,15 @@
         "title": "screen | ⭐️",
         "width": 1200,
         "height": 800,
-        "resizable": false
+        "minWidth": 1200,
+        "minHeight": 800,
+        "resizable": true
       }
     ],
     "security": {
       "csp": {
         "default-src": "'self' customprotocol: asset:",
-        "connect-src": "ipc: http://ipc.localhost https://api.openai.com",
+        "connect-src": "ipc: http://ipc.localhost https://api.openai.com http://localhost:3030",
         "font-src": [
           "https://fonts.gstatic.com",
           "tauri://localhost"

@@ -20,6 +20,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
+    time::Duration,
 };
 use tokio::{net::TcpListener, sync::mpsc::Sender};
 use tower_http::trace::TraceLayer;
@@ -31,12 +32,12 @@ use tower_http::{
 
 use crate::plugin::ApiPluginLayer;
 
-// App state
 pub(crate) struct AppState {
     db: Arc<DatabaseManager>,
     vision_control: Arc<AtomicBool>,
     audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
     devices_status: HashMap<AudioDevice, DeviceControl>,
+    app_start_time: DateTime<Utc>,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +141,17 @@ pub(crate) struct RecordingStatus {
 // Helper functions
 fn default_limit() -> u32 {
     20
+}
+
+#[derive(Serialize)]
+pub(crate) struct HealthCheckResponse {
+    status: String,
+    last_frame_timestamp: Option<DateTime<Utc>>,
+    last_audio_timestamp: Option<DateTime<Utc>>,
+    frame_status: String,
+    audio_status: String,
+    message: String,
+    verbose_instructions: Option<String>,
 }
 
 pub(crate) async fn search(
@@ -343,6 +355,88 @@ pub(crate) async fn get_devices(
     JsonResponse(devices)
 }
 
+pub(crate) async fn health_check(
+    State(state): State<Arc<AppState>>,
+) -> JsonResponse<HealthCheckResponse> {
+    let (last_frame, last_audio) = state
+        .db
+        .get_latest_timestamps()
+        .await
+        .unwrap_or((None, None));
+    let now = Utc::now();
+    let threshold = Duration::from_secs(60);
+    let loading_threshold = Duration::from_secs(120);
+
+    let app_start_time = state.app_start_time;
+    let time_since_start = now.signed_duration_since(app_start_time);
+
+    if time_since_start < chrono::Duration::from_std(loading_threshold).unwrap() {
+        return JsonResponse(HealthCheckResponse {
+            status: "Loading".to_string(),
+            last_frame_timestamp: last_frame,
+            last_audio_timestamp: last_audio,
+            frame_status: "Loading".to_string(),
+            audio_status: "Loading".to_string(),
+            message: "The application is still initializing. Please wait...".to_string(),
+            verbose_instructions: None,
+        });
+    }
+
+    let frame_status = match last_frame {
+        Some(timestamp)
+            if now.signed_duration_since(timestamp)
+                < chrono::Duration::from_std(threshold).unwrap() =>
+        {
+            "OK"
+        }
+        Some(_) => "Stale",
+        None => "No data",
+    };
+
+    let audio_status = match last_audio {
+        Some(timestamp)
+            if now.signed_duration_since(timestamp)
+                < chrono::Duration::from_std(threshold).unwrap() =>
+        {
+            "OK"
+        }
+        Some(_) => "Stale",
+        None => "No data",
+    };
+
+    let (overall_status, message, verbose_instructions) = if frame_status == "OK"
+        && audio_status == "OK"
+    {
+        (
+            "Healthy",
+            "All systems are functioning normally.".to_string(),
+            None,
+        )
+    } else {
+        (
+            "Unhealthy",
+            "Some systems are not functioning properly.".to_string(),
+            Some("If you're experiencing issues, please try the following steps:\n\
+                  1. Restart the application.\n\
+                  2. If using a desktop app, reset your Screenpipe OS permissions.\n\
+                  3. Check your system's audio and video input devices.\n\
+                  4. Ensure you have granted necessary permissions to the application.\n\
+                  5. If the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
+                  6. Last, here are some FAQ to help you troubleshoot: https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md".to_string())
+        )
+    };
+
+    JsonResponse(HealthCheckResponse {
+        status: overall_status.to_string(),
+        last_frame_timestamp: last_frame,
+        last_audio_timestamp: last_audio,
+        frame_status: frame_status.to_string(),
+        audio_status: audio_status.to_string(),
+        message,
+        verbose_instructions,
+    })
+}
+
 // Helper functions
 fn into_content_item(result: SearchResult) -> ContentItem {
     match result {
@@ -399,6 +493,7 @@ impl Server {
             vision_control: self.vision_control,
             audio_devices_control_sender: self.audio_devices_control_sender,
             devices_status: device_status,
+            app_start_time: Utc::now(),
         });
 
         // https://github.com/tokio-rs/console
@@ -411,6 +506,7 @@ impl Server {
             .route("/vision/start", post(start_recording))
             .route("/vision/stop", post(stop_recording))
             .route("/vision/status", get(get_recording_status))
+            .route("/health", get(health_check))
             .layer(ApiPluginLayer::new(api_plugin))
             .layer(CorsLayer::permissive())
             .layer(
