@@ -91,7 +91,7 @@ export function FunctionCallMessage({
                           <CodeBlock
                             language="bash"
                             value={generateCurlCommand(
-                              toolCall.args.queries[0]
+                              toolCall.args?.queries?.[0] || {}
                             )}
                           />
                         </DialogContent>
@@ -144,7 +144,7 @@ export function FunctionCallMessage({
                           <CodeBlock
                             language="bash"
                             value={generateCurlCommand(
-                              toolResult.args.queries[0]
+                              toolResult.args?.queries?.[0] || {}
                             )}
                           />
                         </DialogContent>
@@ -216,12 +216,12 @@ function MarkdownContent({ content }: { content: string }) {
 function generateCurlCommand(query: any): string {
   const baseUrl = "http://localhost:3030";
   const queryParams = new URLSearchParams({
-    q: query.q || "",
-    content_type: query.contentType || "all",
-    limit: query.limit?.toString() || "10",
-    offset: query.offset?.toString() || "0",
-    start_time: query.startTime || "",
-    end_time: query.endTime || "",
+    q: query?.q || "",
+    content_type: query?.contentType || "all",
+    limit: query?.limit?.toString() || "10",
+    offset: query?.offset?.toString() || "0",
+    start_time: query?.startTime || "",
+    end_time: query?.endTime || "",
   }).toString();
 
   return `curl "${baseUrl}/search?\\

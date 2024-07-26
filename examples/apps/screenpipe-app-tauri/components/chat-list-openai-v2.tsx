@@ -30,6 +30,14 @@ import { EmptyScreen } from "./empty-screen";
 import { IconOllama } from "./ui/icons";
 import { useSettings } from "@/lib/hooks/use-settings";
 
+const confirmationSchema = z.object({
+  message: z
+    .string()
+    .describe("The message to ask for confirmation or additional information."),
+  options: z
+    .array(z.string())
+    .describe("Possible options for the user to choose from."),
+});
 
 const screenpipeQuery = z.object({
   q: z
@@ -151,6 +159,15 @@ export function ChatList({
             parameters: screenpipeMultiQuery,
             execute: queryScreenpipeNtimes,
           },
+          askForConfirmation: {
+            description:
+              "Ask the user for more specific information to refine the search.",
+            parameters: confirmationSchema,
+            execute: async ({ message, options }) => {
+              // This will be handled on the client side
+              return { message, options };
+            },
+          },
         },
         toolChoice: "required",
         messages: [
@@ -161,7 +178,13 @@ export function ChatList({
           his screen and mics 24/7. The user ask you questions
           and you use his screenpipe recordings to answer him.
           Based on the user request, use tools to screenpipe to best help the user. 
-          Each query should have "q", "offset", "limit", "start_date", "end_date", and "content_type" fields. 
+
+          When the user asks a question, you should first
+          ask for more specific information to refine the search. Use the askForConfirmation tool
+          to prompt the user for details such as time range, content type, or specific keywords.
+          Only after getting these details should you use the query_screenpipe tool.
+
+          Few things about the tool "query_screenpipe": each query should have "q", "offset", "limit", "start_date", "end_date", and "content_type" fields. 
           Rules:
           - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
           Return a list of objects with the key "queries"
@@ -202,7 +225,7 @@ export function ChatList({
             content: inputMessage,
           },
         ],
-        // maxToolRoundtrips: 5, // allow up to 5 tool roundtrips
+        // maxToolRoundtrips: 3, // allow up to 5 tool roundtrips
         // prompt: inputMessage,
       });
 
