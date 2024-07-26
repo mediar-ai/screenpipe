@@ -113,7 +113,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
                 className={`w-4 h-4 rounded-full bg-red-500 animate-pulse-custom shadow-lg flex items-center justify-center text-white font-bold ${className}`}
               />
             </TooltipTrigger>
-            <TooltipContent className="w-128 p-2">
+            <TooltipContent className="w-[200px] p-2">
               <h3 className="font-bold mb-2">Error</h3>
               <p className="text-sm">{health.message}</p>
               {health && health.verbose_instructions && (
