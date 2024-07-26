@@ -366,6 +366,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] custom storage settings: customizable capture settings (fps, resolution)
 - [ ] data encryption options & higher security
 - [ ] fast, optimised, energy-efficient modes
+- [ ] webhooks (for automations)
 
 ## Dev Roadmap / aspirations
 
