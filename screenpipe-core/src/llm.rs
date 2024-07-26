@@ -1,7 +1,6 @@
 use anyhow::Result;
 use candle::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use candle_transformers::models::llama::{Cache, Llama, LlamaConfig};
 use candle_transformers::models::phi3::{Config as Phi3Config, Model as Phi3};
 
 use hf_hub::{api::sync::Api, Repo, RepoType};

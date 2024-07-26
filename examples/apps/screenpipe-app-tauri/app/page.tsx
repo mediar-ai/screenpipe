@@ -73,33 +73,43 @@ function Header({ onKeyChange }: { onKeyChange: (key: string) => void }) {
         {" "}
         {/* Added margin-top for spacing */}
         <Settings onKeyChange={onKeyChange} />
-        <LogViewer />
-        <Button
-          asChild
-          className="cursor-pointer"
-          onClick={
-            () =>
-              window.open(
-                "https://github.com/louis030195/screen-pipe/tree/main/examples/ts"
-              )
-            // open(
-            //   "https://github.com/louis030195/screen-pipe/tree/main/examples/ts"
-            // )
-          }
-        >
-          <h2 className="mb-3 text-2xl font-semibold">Examples</h2>
-        </Button>
-        <Button
-          asChild
-          className="cursor-pointer"
-          onClick={() =>
-            window.open(
-              "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
-            )
-          }
-        >
-          <h2 className="mb-3 text-2xl font-semibold">Send feedback</h2>
-        </Button>
+        {/* <LogViewer /> */}
+        <PrettyLink href="https://github.com/louis030195/screen-pipe/tree/main/examples/ts">
+          <span className="mr-2">Examples</span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </PrettyLink>
+        <PrettyLink href="mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe">
+          <span className="mr-2">Send feedback</span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </PrettyLink>
       </div>
     </div>
   );
@@ -119,6 +129,7 @@ import { cn } from "@/lib/utils";
 import { LogViewer } from "@/components/log-viewer";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { PrettyLink } from "@/components/pretty-link";
 
 export default function Home() {
   const [openAiKey, setOpenAiKey] = useState<string | null>(null);

@@ -65,12 +65,16 @@
       "removeFile": true,
       "renameFile": true,
       "exists": true,
+      "watch": true,
+      "readTextFile": true,
       "scope": [
         "$APPDATA/*",
         "$APPCONFIG/*",
         "$RESOURCE/*",
+        "$RESOURCE/.screenpipe/*",
         "$HOME/*",
-        "$HOME/.screenpipe/*"
+        "$HOME/.screenpipe/*",
+        "$APP/*"
       ]
     }
   },

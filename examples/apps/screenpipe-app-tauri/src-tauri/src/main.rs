@@ -227,7 +227,12 @@ use tauri_plugin_shell::ShellExt;
 fn start_screenpipe_server_new(app: tauri::AppHandle) -> tauri::Result<()> {
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
     let (mut rx, _child) = sidecar
-        .args(["--port", "3030", "--debug"]) // "--disable-audio"
+        .args(vec!["--port", "3030", "--debug"])
+        // .args(if cfg!(target_os = "macos") { // ! hack?
+        //     vec!["--port", "3030", "--debug", "--data-dir", "/Applications/screenpipe.app/Contents/Resources"]
+        // } else {
+        //     vec!["--port", "3030", "--debug"] // "--disable-audio"
+        // })
         .spawn()
         .expect("Failed to spawn sidecar");
 
