@@ -383,31 +383,9 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 
 Recent breakthroughs in AI have shown that context is the final frontier. AI will soon be able to incorporate the context of an entire human life into its 'prompt', and the technologies that enable this kind of personalisation should be available to all developers to accelerate access to the next stage of our evolution.  
 
-## Principles 
-
-This is a library intended to stick to simple use case:
-- record the screen & associated metadata (generated locally or in the cloud) and pipe it somewhere (local, cloud)
-
-Think of this as an API that let's you do this:
-
-```bash
-screenpipe | ocr | llm "send what i see to my CRM" | api "send data to salesforce api"
-```
-
 ## Contributing
 
 Contributions are welcome! If you'd like to contribute, please read [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Licensing
-
-The code in this project is licensed under MIT license. See the [LICENSE](LICENSE.md) file for more information.
-
-## Related projects
-
-This is a very quick & dirty example of the end goal that works in a few lines of python:
-https://github.com/louis030195/screen-to-crm
-
-Very thankful for https://github.com/jasonjmcghee/xrem which was helpful. Although screenpipe is going in a different direction.
 
 ## FAQ
 
