@@ -92,13 +92,13 @@
     "security": {
       "csp": {
         "default-src": "'self' customprotocol: asset:",
-        "connect-src": "ipc: http://ipc.localhost https://api.openai.com http://localhost:3030",
+        "connect-src": "ipc: http://ipc.localhost https://api.openai.com http://localhost:3030 http://127.0.0.1:11434 https://api.github.com https://github.com https://*.githubusercontent.com https://*.github.com",
         "font-src": [
           "https://fonts.gstatic.com",
           "tauri://localhost"
         ],
         "media-src": "'self' mediadevices:",
-        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "img-src": "'self' asset: http://asset.localhost blob: data: https://*.githubusercontent.com https://*.github.com https://github.com https://*.s3.amazonaws.com",
         "style-src": "'unsafe-inline' 'self' https://fonts.googleapis.com"
       }
     }

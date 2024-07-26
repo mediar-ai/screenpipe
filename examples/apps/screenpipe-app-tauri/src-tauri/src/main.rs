@@ -17,13 +17,75 @@ use tauri::Manager;
 use tauri::Wry;
 use tauri_plugin_store::{with_store, StoreCollection};
 
+use std::sync::{Arc, Mutex};
+use tauri::State;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_shell::process::CommandChild;
 
 mod analytics;
 
 use crate::analytics::start_analytics;
 mod logs;
+
+struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
+
+#[tauri::command]
+async fn use_cli(
+    state: State<'_, SidecarState>,
+    app: tauri::AppHandle,
+    use_cli: bool,
+) -> Result<(), String> {
+    if use_cli {
+        // Kill the sidecar if it's running
+        if let Some(child) = state.0.lock().unwrap().take() {
+            child.kill().map_err(|e| e.to_string())?;
+        }
+        // hard kill the sidecar on port 3030
+        let _ = tokio::process::Command::new("pkill")
+            .arg("-f")
+            .arg("screenpipe")
+            .output()
+            .await;
+        debug!("Killed sidecar thru cli");
+    } else {
+        // Check if sidecar is already running
+        let sidecar_running = state.0.lock().unwrap().is_some();
+        if !sidecar_running {
+            // Spawn the sidecar
+            let child = spawn_sidecar(&app)?;
+            // Update the state after spawning
+            state.0.lock().unwrap().replace(child);
+        }
+        debug!("Spawned sidecar thru cli");
+    }
+    Ok(())
+}
+
+fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
+    let sidecar = app.shell().sidecar("screenpipe").unwrap();
+    let (mut rx, child) = sidecar
+        .args(["--port", "3030", "--debug"])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    debug!("Spawned sidecar");
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
+                    debug!("{:?}", line);
+                }
+                tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
+                    debug!("{:?}", line);
+                }
+                _ => {}
+            }
+        }
+    });
+
+    Ok(child)
+}
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = home_dir()
@@ -44,6 +106,7 @@ async fn main() {
         release: sentry::release_name!(),
         ..Default::default()
       }));
+    let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
 
     let app = tauri::Builder::default()
         // .plugin(tauri_plugin_updater::Builder::new().build())
@@ -55,6 +118,8 @@ async fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .manage(sidecar_state)
+        .invoke_handler(tauri::generate_handler![use_cli])
         .setup(move |app| {
             // let cli = app.cli().matches().expect("Failed to get CLI matches");
 
@@ -138,31 +203,12 @@ async fn main() {
                 Ok(())
             });
 
-            let sidecar = app.shell().sidecar("screenpipe").unwrap();
-            let (mut rx, _child) = sidecar
-                .args(["--port", "3030", "--debug"]) // "--disable-audio"
-                .spawn()
-                .expect("Failed to spawn sidecar");
-
-            // .args(if cfg!(target_os = "macos") { // ! hack?
-            //     vec!["--port", "3030", "--debug", "--data-dir", "/Applications/screenpipe.app/Contents/Resources"]
-            // } else {
-            //     vec!["--port", "3030", "--debug"] // "--disable-audio"
-            // })
-
-            tauri::async_runtime::spawn(async move {
-                while let Some(event) = rx.recv().await {
-                    match event {
-                        tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
-                            debug!("{:?}", line);
-                        }
-                        tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
-                            debug!("{:?}", line);
-                        }
-                        _ => {}
-                    }
-                }
-            });
+            // Spawn the sidecar initially
+            let sidecar_state = app.state::<SidecarState>();
+            let app_handle = app.handle().clone();
+            let child = spawn_sidecar(&app_handle).expect("Failed to spawn sidecar");
+            let mut sidecar = sidecar_state.0.lock().unwrap();
+            *sidecar = Some(child);
 
             Ok(())
         })
@@ -170,7 +216,7 @@ async fn main() {
         .expect("error while building tauri application");
 
     // Run the app
-    app.run(move |_app_handle, event| match event {
+    app.run(|_app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
             // tauri::async_runtime::spawn(async move {
@@ -184,13 +230,22 @@ async fn main() {
             //     tx.send(()).unwrap();
             // });
             // TODO less dirty stop :D
-            tauri::async_runtime::spawn(async move {
-                let _ = tokio::process::Command::new("pkill")
-                    .arg("-f")
-                    .arg("screenpipe")
-                    .output()
-                    .await;
-            });
+            // tauri::async_runtime::spawn(async move {
+            //     let _ = tokio::process::Command::new("pkill")
+            //         .arg("-f")
+            //         .arg("screenpipe")
+            //         .output()
+            //         .await;
+            // });
+            // kill sidecar
+            // let sidecar_state = app.app_handle().state::<SidecarState>();
+            // let mut sidecar = sidecar_state.0.lock().unwrap();
+            // sidecar
+            //     .take()
+            //     .unwrap()
+            //     .kill()
+            //     .map_err(|e| e.to_string())
+            //     .unwrap();
         }
         _ => {}
     });

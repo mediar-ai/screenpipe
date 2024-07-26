@@ -221,7 +221,7 @@ export function ChatList({
       // console.log("toolCalls", text.toolCalls);
       // console.log("toolResults", text.toolResults);
 
-      const { textStream } = ollama
+      const { textStream } = useOllama
         ? await streamText({
             model: ollama(model),
             prompt: JSON.stringify([
