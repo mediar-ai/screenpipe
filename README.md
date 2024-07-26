@@ -353,14 +353,15 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] OCR
 - [x] audio + stt (works with multi input & output devices)
 - [x] local api
-- [ ] desktop app for MacOS
+- [x] desktop app for MacOS (launching within days)
 - [ ] desktop app for Windows
+- [ ] desktop app for Linux
 - [ ] TS SDK
 - [ ] multimodal embeddings
 - [ ] cloud storage options (s3, pgsql, etc.)
 - [ ] cloud computing options
 - [ ] bug-free & stable
-- [ ] custom storage settings: customizable capture settings (fps, resolution)
+- [x] custom storage settings: customizable capture settings (fps, resolution)
 - [ ] data encryption options & higher security
 - [ ] fast, optimised, energy-efficient modes
 
