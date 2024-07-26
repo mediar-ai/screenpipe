@@ -87,7 +87,7 @@ fn get_device_and_config(
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = match audio_device.device_type {
         #[cfg(target_os = "macos")]
-        DeviceType::Output => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
+        DeviceType::Output => cpal::default_host(),
         _ => cpal::default_host(),
     };
 
