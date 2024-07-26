@@ -2,9 +2,20 @@
 
 import { ChatList } from "@/components/chat-list-openai-v2";
 import Image from "next/image";
-import { Button } from "@/components/ui/button"; // Import Button from shadcn
+import { Button } from "@/components/ui/button";
 import RagExample from "@/components/rag-example";
 import { Settings } from "@/components/settings";
+import { useSettings } from "@/lib/hooks/use-settings";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PrettyLink } from "@/components/pretty-link";
+import HealthStatus from "@/components/screenpipe-status";
 
 function IconNewChat() {
   return (
@@ -31,8 +42,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import React from "react";
 
-function Header({ onKeyChange }: { onKeyChange: (key: string) => void }) {
+function Header() {
   return (
     <div>
       <div className="absolute left-8 top-8">
@@ -73,7 +85,7 @@ function Header({ onKeyChange }: { onKeyChange: (key: string) => void }) {
         {" "}
         {/* Added margin-top for spacing */}
         <HealthStatus className="mt-3" />
-        <Settings onKeyChange={onKeyChange} />
+        <Settings />
         {/* <LogViewer /> */}
         <PrettyLink href="https://github.com/louis030195/screen-pipe/tree/main/examples/ts">
           <span className="mr-2">Examples</span>
@@ -116,43 +128,13 @@ function Header({ onKeyChange }: { onKeyChange: (key: string) => void }) {
   );
 }
 
-import { useEffect, useState } from "react"; // Import useState
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import { LogViewer } from "@/components/log-viewer";
-
-import { Skeleton } from "@/components/ui/skeleton";
-import { PrettyLink } from "@/components/pretty-link";
-import HealthStatus from "@/components/screenpipe-status";
-
 export default function Home() {
-  const [openAiKey, setOpenAiKey] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Simulate loading settings from disk
-    const loadSettings = async () => {
-      // Replace this with your actual disk loading logic
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      const savedKey = ""; // Replace with actual loaded key
-      setOpenAiKey(savedKey);
-      setIsLoading(false);
-    };
-    loadSettings();
-  }, []);
+  const { settings } = useSettings();
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8">
-      <Header onKeyChange={setOpenAiKey} />
-      {isLoading ? (
+      <Header />
+      {settings.isLoading ? (
         <div className="flex flex-col items-center justify-center h-full space-y-4">
           <Skeleton className="w-[200px] h-[24px] rounded-full" />
           <Skeleton className="w-[300px] h-[20px] rounded-full" />
@@ -166,20 +148,25 @@ export default function Home() {
             ))}
           </div>
         </div>
-      ) : openAiKey ? (
-        <ChatList apiKey={openAiKey} />
+      ) : settings.useOllama || settings.openaiApiKey ? (
+        <ChatList
+          apiKey={settings.openaiApiKey}
+          useOllama={settings.useOllama}
+        />
       ) : (
-        <Card className="w-[350px]">
-          <CardHeader>
-            <CardTitle>Welcome to Screenpipe</CardTitle>
-            <CardDescription>
-              Please set your OpenAI API key to get started.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Settings onKeyChange={setOpenAiKey} />
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center justify-center h-[calc(60vh-200px)]">
+          <Card className="w-[350px]">
+            <CardHeader>
+              <CardTitle>Welcome to Screenpipe</CardTitle>
+              <CardDescription>
+                Please set your AI provider settings to get started.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Settings />
+            </CardContent>
+          </Card>
+        </div>
       )}
     </main>
   );

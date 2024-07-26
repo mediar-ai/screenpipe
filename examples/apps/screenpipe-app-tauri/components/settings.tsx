@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -10,52 +10,106 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { useSettings } from "@/lib/hooks/use-settings";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 
-export function Settings({
-  onKeyChange,
-  className,
-}: {
-  onKeyChange: (key: string) => void;
-  className?: string;
-}) {
-  const [apiKey, setApiKey] = useState("");
+export function Settings({ className }: { className?: string }) {
+  const { settings, updateSettings } = useSettings();
 
-  useEffect(() => {
-    const savedKey = localStorage.getItem("openaiApiKey");
-    if (savedKey) {
-      setApiKey(savedKey);
-      onKeyChange(savedKey);
-    }
-  }, [onKeyChange]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newKey = e.target.value;
-    setApiKey(newKey);
-    localStorage.setItem("openaiApiKey", newKey);
-    onKeyChange(newKey);
+  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateSettings({ openaiApiKey: e.target.value });
   };
 
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) {
+          location.reload(); // ! HACK to properly refresh stuff (tood beter)
+        }
+      }}
+    >
       <DialogTrigger asChild>
-        <Button variant="outline">Settings</Button>
+        <Button variant="outline" className={className}>
+          Settings
+        </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>OpenAI API Settings</DialogTitle>
+          <DialogTitle>AI Settings</DialogTitle>
           <DialogDescription>
-            Enter your OpenAI API key to use the chat functionality.
+            Choose your AI provider and enter necessary credentials.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-6 py-4">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center space-x-4">
+                  <Switch id="use-ollama" checked={false} disabled={true} />
+                  <Label
+                    htmlFor="use-ollama"
+                    className="flex items-center space-x-2"
+                  >
+                    Use Ollama
+                    <Badge variant="outline" className="ml-2">
+                      Soon
+                    </Badge>
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  Ollama support is coming soon. It currently doesn&apos;t
+                  support function calling, which is required for this
+                  application.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center space-x-4">
+                  <Switch
+                    id="use-embedded-llm"
+                    checked={false}
+                    disabled={true}
+                  />
+                  <Label
+                    htmlFor="use-embedded-llm"
+                    className="flex items-center space-x-2"
+                  >
+                    Use Embedded LLM
+                    <Badge variant="outline" className="ml-2">
+                      Soon
+                    </Badge>
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  Embedded LLM support coming soon. Run locally without
+                  installation. No need Ollama.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="apiKey" className="text-right">
-              API Key
+              OpenAI API Key
             </Label>
             <Input
               id="apiKey"
-              value={apiKey}
-              onChange={handleChange}
+              value={settings.openaiApiKey}
+              onChange={handleApiKeyChange}
               className="col-span-3"
               placeholder="Enter your OpenAI API Key"
             />

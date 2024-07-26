@@ -118,7 +118,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
             <div className="flex-grow overflow-auto">
               <CodeBlock language="bash" value={logCommands} />
             </div>
-            <div className="mt-2 text-sm text-gray-500">
+            <div className="mt-4 text-sm text-gray-500">
               <p>Or, for more advanced queries:</p>
               <ol className="list-decimal list-inside mt-2">
                 <li>
@@ -134,8 +134,8 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
                 <li>Copy the entire page (Cmd+A, Cmd+C)</li>
                 <li>Paste into ChatGPT (Cmd+V)</li>
                 <li>
-                  Ask: &quot;give me 10 sqlite query CLI to look up my
-                  data&quot;
+                  Ask: &quot;give me 10 sqlite query CLI to look up my data. My
+                  db is in $HOME/.screenpipe/db.sqlite&quot;
                 </li>
               </ol>
             </div>
@@ -243,7 +243,8 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
               <li>Copy the entire page (Cmd+A, Cmd+C)</li>
               <li>Paste into ChatGPT (Cmd+V)</li>
               <li>
-                Ask: &quot;give me 10 sqlite query CLI to look up my data&quot;
+                Ask: &quot;give me 10 sqlite query CLI to look up my data. My db
+                is in $HOME/.screenpipe/db.sqlite&quot;
               </li>
             </ol>
           </div>

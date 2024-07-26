@@ -20,11 +20,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChatMessage } from "./chat-message-v2";
 import { Message, generateText, nanoid, streamText, tool } from "ai";
 import { createOpenAI, openai } from "@ai-sdk/openai";
+import { createOllama } from "ollama-ai-provider";
+
 import { IconOpenAI } from "./ui/icons";
 import { spinner } from "./spinner";
 import { useScrollAnchor } from "@/lib/hooks/use-scroll-anchor";
 import { FunctionCallMessage } from "./function-call-message";
 import { EmptyScreen } from "./empty-screen";
+import { IconOllama } from "./ui/icons";
 
 const screenpipeQuery = z.object({
   q: z
@@ -90,7 +93,13 @@ async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
   }
 }
 
-export function ChatList({ apiKey }: { apiKey: string }) {
+export function ChatList({
+  apiKey,
+  useOllama,
+}: {
+  apiKey: string;
+  useOllama: boolean;
+}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -109,9 +118,27 @@ export function ChatList({ apiKey }: { apiKey: string }) {
     setInputMessage("");
 
     try {
-      const provider = createOpenAI({
-        apiKey: apiKey,
-      });
+      const provider = useOllama
+        ? createOllama()
+        : createOpenAI({
+            apiKey: apiKey,
+          });
+
+      const model = useOllama ? "llama3" : "gpt-4o";
+
+      // Test Ollama connection
+      if (useOllama) {
+        try {
+          await fetch("http://localhost:11434/api/tags");
+        } catch (error) {
+          console.log("error", error);
+          throw new Error("Cannot reach local Ollama instance");
+        }
+      }
+
+      console.log("provider", provider);
+      console.log("model", model);
+
       const text = await generateText({
         model: provider("gpt-4o"),
         tools: {
@@ -187,8 +214,8 @@ export function ChatList({ apiKey }: { apiKey: string }) {
 
       console.log("streaming now");
 
-      console.log("toolCalls", text.toolCalls);
-      console.log("toolResults", text.toolResults);
+      // console.log("toolCalls", text.toolCalls);
+      // console.log("toolResults", text.toolResults);
 
       const { textStream } = await streamText({
         model: provider("gpt-4o"),
@@ -210,7 +237,7 @@ export function ChatList({ apiKey }: { apiKey: string }) {
         ],
       });
 
-      console.log("textStream", textStream);
+      // console.log("textStream", textStream);
 
       // create new assistant
       const assistantMessageId = nanoid();
@@ -222,7 +249,7 @@ export function ChatList({ apiKey }: { apiKey: string }) {
       let fullResponse = "";
       for await (const chunk of textStream) {
         fullResponse += chunk;
-        console.log("fullResponse", fullResponse);
+        // console.log("fullResponse", fullResponse);
         setMessages((prevMessages) =>
           prevMessages.map((msg) =>
             msg.id === assistantMessageId
@@ -233,6 +260,22 @@ export function ChatList({ apiKey }: { apiKey: string }) {
       }
     } catch (error) {
       console.error(error);
+      const errorMessage =
+        error instanceof Error ? error.message : "An unknown error occurred";
+      const assistantMessageId = nanoid();
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { id: assistantMessageId, role: "assistant", content: errorMessage },
+      ]);
+
+      if (errorMessage === "Cannot reach local Ollama instance") {
+        const ollamaErrorMessage =
+          "I cannot reach your local Ollama instance. Make sure to run it locally. For installation instructions, visit the [Ollama website](https://ollama.ai).";
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          { id: nanoid(), role: "assistant", content: ollamaErrorMessage },
+        ]);
+      }
     } finally {
       setIsLoading(false);
     }
