@@ -4,6 +4,7 @@
 use dirs::home_dir;
 use log::{debug, error, info, LevelFilter};
 use logs::MultiWriter;
+use tauri_plugin_shell::ShellExt;
 
 use serde_json::Value;
 use std::fs::File;
@@ -22,7 +23,6 @@ use tauri_plugin_autostart::ManagerExt;
 mod analytics;
 
 use crate::analytics::start_analytics;
-mod find_screenpipe;
 mod logs;
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
@@ -144,6 +144,12 @@ async fn main() {
                 .spawn()
                 .expect("Failed to spawn sidecar");
 
+            // .args(if cfg!(target_os = "macos") { // ! hack?
+            //     vec!["--port", "3030", "--debug", "--data-dir", "/Applications/screenpipe.app/Contents/Resources"]
+            // } else {
+            //     vec!["--port", "3030", "--debug"] // "--disable-audio"
+            // })
+
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = rx.recv().await {
                     match event {
@@ -188,114 +194,4 @@ async fn main() {
         }
         _ => {}
     });
-}
-
-use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::time::{interval, Duration};
-
-async fn start_server() -> anyhow::Result<()> {
-    let restart_interval = Duration::from_secs(2 * 60); // Restart every 2 minutes ! HACK
-    let server_handle: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>> =
-        Arc::new(tokio::sync::Mutex::new(None));
-    let server_handle_clone = Arc::clone(&server_handle);
-
-    // tokio::spawn(async move {
-    //     let mut interval = interval(restart_interval);
-
-    //     loop {
-    //         interval.tick().await;
-    //         debug!("Restarting screenpipe sidecar...");
-
-    //         // Stop the current server
-    //         if let Some(handle) = server_handle_clone.lock().await.take() {
-    //             handle.abort();
-    //         }
-
-    //         // Start a new server
-    //         *server_handle_clone.lock().await = Some(start_screenpipe_server());
-    //     }
-    // });
-
-    // Initial server start
-    *server_handle.lock().await = Some(start_screenpipe_server());
-
-    Ok(())
-}
-use tauri_plugin_shell::ShellExt;
-
-fn start_screenpipe_server_new(app: tauri::AppHandle) -> tauri::Result<()> {
-    let sidecar = app.shell().sidecar("screenpipe").unwrap();
-    let (mut rx, _child) = sidecar
-        .args(vec!["--port", "3030", "--debug"])
-        // .args(if cfg!(target_os = "macos") { // ! hack?
-        //     vec!["--port", "3030", "--debug", "--data-dir", "/Applications/screenpipe.app/Contents/Resources"]
-        // } else {
-        //     vec!["--port", "3030", "--debug"] // "--disable-audio"
-        // })
-        .spawn()
-        .expect("Failed to spawn sidecar");
-
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
-                    debug!("{:?}", line);
-                }
-                tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
-                    debug!("{:?}", line);
-                }
-                _ => {}
-            }
-        }
-    });
-
-    Ok(())
-}
-
-fn start_screenpipe_server() -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        debug!("Starting screenpipe server");
-
-        // Kill any existing process on port 3030
-        let _ = tokio::process::Command::new("pkill")
-            .arg("-f")
-            .arg("screenpipe")
-            .output()
-            .await;
-
-        let mut cmd =
-            tokio::process::Command::new(find_screenpipe::find_screenpipe_path().unwrap());
-        cmd.arg("--port").arg("3030");
-        cmd.arg("--debug");
-        cmd.arg("--disable-audio");
-        cmd.stdout(std::process::Stdio::piped());
-        cmd.stderr(std::process::Stdio::piped());
-
-        let mut child = cmd.spawn().expect("Failed to spawn command");
-
-        let stdout = child.stdout.take().expect("Failed to capture stdout");
-        let stderr = child.stderr.take().expect("Failed to capture stderr");
-
-        let mut stdout_reader = BufReader::new(stdout).lines();
-        let mut stderr_reader = BufReader::new(stderr).lines();
-
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = stdout_reader.next_line().await {
-                debug!("{}", line);
-            }
-        });
-
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = stderr_reader.next_line().await {
-                debug!("{}", line);
-            }
-        });
-
-        let output = child
-            .wait_with_output()
-            .await
-            .expect("Failed to wait for child process");
-        debug!("Child process exited with output: {:?}", output);
-    })
 }

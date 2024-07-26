@@ -77,7 +77,6 @@ where
         candle_transformers::generation::LogitsProcessor::new(42, Some(temperature), None);
 
     let mut tokens = tokenizer.encode(prompt, true).map_err(anyhow::Error::msg)?;
-    let mut generated_tokens = 0;
 
     let eos_token = tokenizer.token_to_id("</s>");
     let bos_token = tokenizer.token_to_id("<s>");
@@ -120,7 +119,6 @@ where
             .map_err(anyhow::Error::msg)?;
         callback(text)?;
 
-        generated_tokens += 1;
     }
 
     Ok(())
