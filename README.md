@@ -347,12 +347,14 @@ https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3
 
 Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 
-- [x] screenshots
-- [x] optimised screen & audio recording (mp4 & mp3 encoding, estimating 30 gb/m with default settings)
+- [x] screenshots + OCR
+- [x] audio + STT (works with multi input & output devices, like your iPhone + mac mic)
+- [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
-- [x] OCR
-- [x] audio + stt (works with multi input & output devices)
 - [x] local api
+- [x] MacOS CLI (silicon, intel)
+- [x] Windows CLI (nvidia, etc.)
+- [x] Linux CLI (x11, nvidia, etc.)
 - [x] desktop app for MacOS (launching within days)
 - [ ] desktop app for Windows
 - [ ] desktop app for Linux
