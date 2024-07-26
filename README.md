@@ -230,12 +230,15 @@ npm run dev
 
 
 ## Usage
+
+You can use terminal commands to query and view your data as shown below. Also, we recommend Tableplus.com to view the database, it has a free tier.
+
 <details>
 <summary>
 Check which tables you have in the local database</summary>
 
 ```bash
-sqlite3 data/db.sqlite ".tables" 
+sqlite3 ~/.screenpipe/db.sqlite ".tables" 
 ```
 </details>
 <details>
@@ -243,7 +246,7 @@ sqlite3 data/db.sqlite ".tables"
 Print a sample audio_transcriptions from the database</summary>
 
 ```bash
-sqlite3 data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM audio_transcriptions ORDER BY id DESC LIMIT 1;" | jq .
+sqlite3 ~/.screenpipe/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM audio_transcriptions ORDER BY id DESC LIMIT 1;" | jq .
 ```
 ![audio_transcriptions](./content/audio_transcriptions.png)
 </details>
@@ -252,7 +255,7 @@ sqlite3 data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM audio_tra
 Print a sample frame_OCR_text from the database</summary>
 
 ```bash
-sqlite3 data/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM ocr_text ORDER BY frame_id DESC LIMIT 1;" | jq -r '.[0].text'
+sqlite3 ~/.screenpipe/db.sqlite ".mode json" ".once /dev/stdout" "SELECT * FROM ocr_text ORDER BY frame_id DESC LIMIT 1;" | jq -r '.[0].text'
 ```
 ![frame_text](./content/frame_text.png)
 </details>
@@ -308,7 +311,9 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 
 ## Use cases:
 
-- RAG & question answering: Quickly find information you've forgotten or misplaced
+- Search
+  - Semantic and keyword search. Find information you've forgotten or misplaced
+  - Playback history of your desktop when searching for a specific info
 - Automation: 
   - Automatically generate documentation
   - Populate CRM systems with relevant data
@@ -323,6 +328,7 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
   - Summarize lengthy documents or videos
   - Provide context-aware reminders and suggestions
   - Assist with research by aggregating relevant information
+  - Live captions, translation support
 - Collaboration:
   - Share and annotate screen captures with team members
   - Create searchable archives of meetings and presentations
@@ -347,6 +353,8 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] OCR
 - [x] audio + stt (works with multi input & output devices)
 - [x] local api
+- [ ] desktop app for MacOS
+- [ ] desktop app for Windows
 - [ ] TS SDK
 - [ ] multimodal embeddings
 - [ ] cloud storage options (s3, pgsql, etc.)
@@ -355,6 +363,17 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [ ] custom storage settings: customizable capture settings (fps, resolution)
 - [ ] data encryption options & higher security
 - [ ] fast, optimised, energy-efficient modes
+
+## Dev Roadmap / aspirations
+
+- Data post-processing:
+- - Wikipedia style data structuring
+- - Knowledge graph
+- Android integration
+- Integration with wearables (e.g. Friend)
+- Webcamera integration?
+- Keylogger?
+- UI low-code builder
 
 
 [Example with vercel/ai-chatbot project here inside the repo here:](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
@@ -373,11 +392,6 @@ Think of this as an API that let's you do this:
 ```bash
 screenpipe | ocr | llm "send what i see to my CRM" | api "send data to salesforce api"
 ```
-
-Any interfaces are out of scope and should be built outside this repo, for example:
-- UI to search on these files (like rewind)
-- UI to spy on your employees
-- etc.
 
 ## Contributing
 
