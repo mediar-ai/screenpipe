@@ -72,10 +72,10 @@ const PipeDialog: React.FC = () => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        {/* <Button variant="ghost">pipe store</Button> */}
-        <PrettyLink variant="outline" href="#">
+        <Button variant="ghost">Pipe Store</Button>
+        {/* <PrettyLink variant="outline" href="">
           Pipe Store
-        </PrettyLink>
+        </PrettyLink> */}
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
         <DialogHeader>

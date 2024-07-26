@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "./ui/button";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 interface FunctionCallMessageProps {
   message: Message;
@@ -32,6 +33,7 @@ export function FunctionCallMessage({
   message,
   isResult = false,
 }: FunctionCallMessageProps) {
+  const { settings } = useSettings();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   console.log("FunctionCallMessage", message);
   // @ts-ignore TODO
@@ -45,7 +47,7 @@ export function FunctionCallMessage({
   return (
     <div className="group relative mb-4 flex items-start md:-ml-12">
       <div className="flex size-8 shrink-0 select-none items-center justify-center rounded-md border shadow bg-primary text-primary-foreground">
-        <IconOpenAI />
+        {settings.useOllama ? <>🦙</> : <IconOpenAI />}
       </div>
       <div className="flex-1 px-1 ml-4 space-y-2 overflow-hidden">
         <Card className="w-[600px]">

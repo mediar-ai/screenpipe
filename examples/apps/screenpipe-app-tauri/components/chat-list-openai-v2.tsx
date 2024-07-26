@@ -28,6 +28,8 @@ import { useScrollAnchor } from "@/lib/hooks/use-scroll-anchor";
 import { FunctionCallMessage } from "./function-call-message";
 import { EmptyScreen } from "./empty-screen";
 import { IconOllama } from "./ui/icons";
+import { useSettings } from "@/lib/hooks/use-settings";
+
 
 const screenpipeQuery = z.object({
   q: z
@@ -37,6 +39,7 @@ const screenpipeQuery = z.object({
     ),
   contentType: z
     .enum(["ocr", "audio", "all"])
+    .default("all")
     .describe(
       "The type of content to search for: screenshot data or audio transcriptions"
     ),
@@ -172,22 +175,23 @@ export function ChatList({
           - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
           - Use between 2-5 queries with very different keywords that could maximally match the user's screen text or audio transcript
           - Use "all" for querying the same keyword over vision and audio
+          - Keep in mind, use "q", "offset", "limit", "start_date", "end_date", and "content_type" as keys in your JSON object. q is optional.
 
           Example answers from you:
           "{
             "queries": [
-              {"q": "goal", "offset": 0, "limit": 10, "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
-              {"q": "stripe", "offset": 0, "limit": 50, "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
-              {"q": "customer", "offset": 0, "limit": 20, "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
+              {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
+              {"q": "stripe", "offset": 0, "limit": 50, "content_type": "ocr", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
+              {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
             ]
           }"
 
           or 
           "{
             "queries": [
-              {"q": "sales", "offset": 0, "limit": 10, "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
-              {"q": "customer", "offset": 0, "limit": 20, "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
-              {"q": "goal", "offset": 0, "limit": 10, "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
+              {"q": "sales", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
+              {"q": "customer", "offset": 0, "limit": 20, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
+              {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
             ]
           }"
 
@@ -217,25 +221,50 @@ export function ChatList({
       // console.log("toolCalls", text.toolCalls);
       // console.log("toolResults", text.toolResults);
 
-      const { textStream } = await streamText({
-        model: provider("gpt-4o"),
-        messages: [
-          {
-            role: "user",
-            content:
-              messages.findLast((msg) => msg.role === "user")?.content ||
-              inputMessage,
-          },
-          {
-            role: "assistant",
-            content: text.toolCalls,
-          },
-          {
-            role: "tool",
-            content: text.toolResults,
-          },
-        ],
-      });
+      const { textStream } = ollama
+        ? await streamText({
+            model: ollama(model),
+            prompt: JSON.stringify([
+              {
+                role: "user",
+                content:
+                  messages.findLast((msg) => msg.role === "user")?.content ||
+                  inputMessage,
+              },
+              {
+                role: "assistant",
+                content: text.toolCalls,
+              },
+              {
+                role: "tool",
+                content: text.toolResults,
+              },
+              // just a hack because ollama is drunk
+              {
+                role: "user",
+                content: "MAKE SURE TO ANSWER THE USER QUESTION ROLE 'USER'",
+              },
+            ]),
+          })
+        : await streamText({
+            model: provider(model),
+            messages: [
+              {
+                role: "user",
+                content:
+                  messages.findLast((msg) => msg.role === "user")?.content ||
+                  inputMessage,
+              },
+              {
+                role: "assistant",
+                content: text.toolCalls,
+              },
+              {
+                role: "tool",
+                content: text.toolResults,
+              },
+            ],
+          });
 
       // console.log("textStream", textStream);
 
@@ -360,10 +389,11 @@ export function ChatList({
 }
 
 export function SpinnerMessage() {
+  const { settings } = useSettings();
   return (
     <div className="group relative flex items-start md:-ml-12">
       <div className="flex size-[24px] shrink-0 select-none items-center justify-center rounded-md border bg-primary text-primary-foreground shadow-sm">
-        <IconOpenAI />
+        {settings.useOllama ? <>🦙</> : <IconOpenAI />}
       </div>
       <div className="ml-4 h-[24px] flex flex-row items-center flex-1 space-y-2 overflow-hidden px-1">
         {spinner}
