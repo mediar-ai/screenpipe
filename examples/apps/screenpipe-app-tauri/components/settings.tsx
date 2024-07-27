@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,6 +38,8 @@ export function Settings({ className }: { className?: string }) {
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [isTogglingCli, setIsTogglingCli] = React.useState(false);
   const [isTogglingCliError, setIsTogglingCliError] = React.useState("");
+  const [isStopping, setIsStopping] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   console.log("localSettings", localSettings);
   console.log("settings", settings);
@@ -64,6 +66,31 @@ export function Settings({ className }: { className?: string }) {
       setIsTogglingCliError("Failed to toggle sidecar: " + error);
     } finally {
       setIsTogglingCli(false);
+    }
+  };
+
+  const handleStop = async () => {
+    setIsStopping(true);
+    try {
+      await invoke("use_cli", { useCli: true });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    } catch (error) {
+      console.error("Failed to stop:", error);
+      // Handle error
+    } finally {
+      setIsStopping(false);
+    }
+  };
+  const handleStart = async () => {
+    setIsStarting(true);
+    try {
+      await invoke("use_cli", { useCli: false });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    } catch (error) {
+      console.error("Failed to start:", error);
+      // Handle error
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -240,12 +267,12 @@ export function Settings({ className }: { className?: string }) {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-center space-x-4">
-                <Switch
+                {/* <Switch
                   id="use-cli"
                   checked={localSettings.useCli}
                   onCheckedChange={handleCliToggle}
                   disabled={isTogglingCli}
-                />
+                /> */}
                 <Label
                   htmlFor="use-cli"
                   className="flex items-center space-x-2"
@@ -259,29 +286,64 @@ export function Settings({ className }: { className?: string }) {
                   </Badge>
                 </Label>
               </div>
-              <p className="text-sm text-center text-yellow-500 font-semibold">
-                Warning: This option is experimental and potentially dangerous.
-                Use at your own risk.
-              </p>
               <p className="text-sm text-center text-muted-foreground">
                 By default, we run screenpipe in the background for you. Use
                 this option only if the status message keep showing red/error
                 even after restart.
               </p>
-              {localSettings.useCli && (
-                <>
-                  <p className="text-sm text-center text-muted-foreground">
-                    Toggle on and copy and paste this in your terminal and press
-                    enter:
-                  </p>
-                  <CodeBlock
-                    language="bash"
-                    value={`brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
+              <div className="flex justify-between mt-2 w-1/2 mx-auto">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 mr-1"
+                        onClick={handleStop}
+                        disabled={isStopping || isStarting}
+                      >
+                        {isStopping ? spinner : null}
+                        {isStopping ? "Stopping..." : "Stop"}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>This will kill any screenpipe instance running</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 ml-1"
+                        onClick={handleStart}
+                        disabled={isStopping || isStarting}
+                      >
+                        {isStarting ? spinner : null}
+                        {isStarting ? "Starting..." : "Start"}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        This will start a screenpipe instance in the background
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-sm text-center text-muted-foreground">
+                Press stop then copy and paste this in your terminal and press
+                enter:
+              </p>
+              <CodeBlock
+                language="bash"
+                value={`brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
 brew install screenpipe
 screenpipe`}
-                  />
-                </>
-              )}
+              />
             </CardContent>
           </Card>
         </div>

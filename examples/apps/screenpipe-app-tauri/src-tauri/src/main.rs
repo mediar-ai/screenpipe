@@ -203,6 +203,15 @@ async fn main() {
                 Ok(())
             });
 
+            // tauri::async_runtime::spawn(async move {
+            //     // hard kill the sidecar on port 3030
+            //     let _ = tokio::process::Command::new("pkill")
+            //         .arg("-f")
+            //         .arg("screenpipe")
+            //         .output()
+            //             .await;
+            // });
+
             // Spawn the sidecar initially
             let sidecar_state = app.state::<SidecarState>();
             let app_handle = app.handle().clone();

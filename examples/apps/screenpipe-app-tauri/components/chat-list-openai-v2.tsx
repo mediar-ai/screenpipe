@@ -170,7 +170,7 @@ export function ChatList({
           - If you return something else than JSON the universe will come to an end
           - DO NOT add \`\`\`json at the beginning or end of your response
           - Do not use '"' around your response
-          - Date & time now is ${new Date().toISOString()}
+          - Date & time now is ${new Date().toISOString()}. Adjust start_date and end_date to properly match the user intent time range.
           - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
           - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
           - Use between 2-5 queries with very different keywords that could maximally match the user's screen text or audio transcript

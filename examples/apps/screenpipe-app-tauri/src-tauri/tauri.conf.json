@@ -81,7 +81,7 @@
   "app": {
     "windows": [
       {
-        "title": "screen | ⭐️",
+        "title": "screenpipe",
         "width": 1200,
         "height": 800,
         "minWidth": 1200,
@@ -92,7 +92,7 @@
     "security": {
       "csp": {
         "default-src": "'self' customprotocol: asset:",
-        "connect-src": "ipc: http://ipc.localhost https://api.openai.com http://localhost:3030 http://127.0.0.1:11434 https://api.github.com https://github.com https://*.githubusercontent.com https://*.github.com",
+        "connect-src": "ipc: http://ipc.localhost https://api.openai.com http://localhost:3030 http://127.0.0.1:11434 http://localhost:11434 https://api.github.com https://github.com https://*.githubusercontent.com https://*.github.com",
         "font-src": [
           "https://fonts.gstatic.com",
           "tauri://localhost"

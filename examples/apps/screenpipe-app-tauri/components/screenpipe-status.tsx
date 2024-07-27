@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { MemoizedReactMarkdown } from "./markdown";
+import { invoke } from "@tauri-apps/api/core";
+import { spinner } from "./spinner";
 
 interface HealthCheckResponse {
   status: string;
@@ -31,45 +33,46 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isBlinking, setIsBlinking] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  // const [error, setError] = useState<HealthCheckResponse | null>(null);
+  const [isStopping, setIsStopping] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
 
-  useEffect(() => {
-    const fetchHealth = async () => {
-      try {
-        const response = await fetch("http://localhost:3030/health");
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`HTTP error! status: ${response.status} ${text}`);
-        }
-        const data: HealthCheckResponse = await response.json();
-        if (health && data.status !== health.status) {
-          setIsBlinking(true);
-          setTimeout(() => setIsBlinking(false), 5000); // Blink for 5 seconds on status change
-        }
-        setHealth(data);
-        // setError(null);
-      } catch (error) {
-        console.error("Failed to fetch health status:", error);
-        // setError("Failed to fetch health status. Server might be down.");
-        setHealth({
-          last_frame_timestamp: null,
-          last_audio_timestamp: null,
-          frame_status: "Error",
-          audio_status: "Error",
-          status: "Error",
-          message: "Failed to fetch health status. Server might be down.",
-          verbose_instructions:
-            "If you're experiencing issues, please try the following steps:\n\
+  const fetchHealth = async () => {
+    try {
+      const response = await fetch("http://localhost:3030/health");
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`HTTP error! status: ${response.status} ${text}`);
+      }
+      const data: HealthCheckResponse = await response.json();
+      if (health && data.status !== health.status) {
+        setIsBlinking(true);
+        setTimeout(() => setIsBlinking(false), 5000); // Blink for 5 seconds on status change
+      }
+      setHealth(data);
+      // setError(null);
+    } catch (error) {
+      console.error("Failed to fetch health status:", error);
+      // setError("Failed to fetch health status. Server might be down.");
+      setHealth({
+        last_frame_timestamp: null,
+        last_audio_timestamp: null,
+        frame_status: "Error",
+        audio_status: "Error",
+        status: "Error",
+        message: "Failed to fetch health status. Server might be down.",
+        verbose_instructions:
+          "If you're experiencing issues, please try the following steps:\n\
 1. Restart the application.\n\
 2. If using a desktop app, reset your Screenpipe OS permissions.\n\
 3. Check your system's audio and video input devices.\n\
 4. Ensure you have granted necessary permissions to the application.\n\
 5. If the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
 6. Last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot.",
-        });
-      }
-    };
+      });
+    }
+  };
 
+  useEffect(() => {
     fetchHealth();
     const interval = setInterval(fetchHealth, 1000); // Poll every 1 seconds
 
@@ -89,6 +92,34 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
 # View last 10 audio transcriptions:
 sqlite3 $HOME/.screenpipe/db.sqlite \\
 "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`;
+
+  const handleStop = async () => {
+    setIsStopping(true);
+    try {
+      await invoke("use_cli", { useCli: true });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await fetchHealth();
+    } catch (error) {
+      console.error("Failed to stop:", error);
+      // Handle error
+    } finally {
+      setIsStopping(false);
+    }
+  };
+  const handleStart = async () => {
+    setIsStarting(true);
+    try {
+      await invoke("use_cli", { useCli: false });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await fetchHealth();
+    } catch (error) {
+      console.error("Failed to start:", error);
+      // Handle error
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
   if (health && health.status === "Error") {
     return (
       <>
@@ -106,6 +137,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
             animation: pulse-custom 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
           }
         `}</style>
+
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -113,7 +145,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
                 className={`w-4 h-4 rounded-full bg-red-500 animate-pulse-custom shadow-lg flex items-center justify-center text-white font-bold ${className}`}
               />
             </TooltipTrigger>
-            <TooltipContent className="w-[200px] p-2">
+            <TooltipContent className="w-[32em] p-2">
               <h3 className="font-bold mb-2">Error</h3>
               <p className="text-sm">{health.message}</p>
               {health && health.verbose_instructions && (
@@ -137,6 +169,31 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
               >
                 View Log Commands
               </Button>
+              <span className="text-xs mt-2 text-gray-500">
+                ... or restart screenpipe instance
+              </span>
+              <div className="flex justify-between mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 mr-1"
+                  onClick={handleStop}
+                  disabled={isStopping || isStarting}
+                >
+                  {isStopping ? spinner : null}
+                  {isStopping ? "Stopping..." : "Stop"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 ml-1"
+                  onClick={handleStart}
+                  disabled={isStopping || isStarting}
+                >
+                  {isStarting ? spinner : null}
+                  {isStarting ? "Starting..." : "Start"}
+                </Button>
+              </div>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -222,7 +279,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
               )} ${blinkingClass} animate-pulse-custom shadow-lg flex items-center justify-center text-white font-bold ${className}`}
             />
           </TooltipTrigger>
-          <TooltipContent className="w-64 p-2">
+          <TooltipContent className="w-[32em] p-2">
             <h3 className="font-bold mb-2">{health.status}</h3>
             <p className="text-sm mb-2">{health.message}</p>
             <p className="text-xs mb-1">Frame: {health.frame_status}</p>
@@ -252,6 +309,31 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
             >
               View Log Commands
             </Button>
+            <span className="text-xs mt-2 text-gray-500">
+              ... or restart screenpipe instance
+            </span>
+            <div className="flex justify-between mt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 mr-1"
+                onClick={handleStop}
+                disabled={isStopping || isStarting}
+              >
+                {isStopping ? spinner : null}
+                {isStopping ? "Stopping..." : "Stop"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 ml-1"
+                onClick={handleStart}
+                disabled={isStopping || isStarting}
+              >
+                {isStarting ? spinner : null}
+                {isStarting ? "Starting..." : "Start"}
+              </Button>
+            </div>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
