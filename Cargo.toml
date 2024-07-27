@@ -3,7 +3,8 @@ members = [
     "screenpipe-core",
     "screenpipe-vision",
     "screenpipe-audio",
-    "screenpipe-server",
+    "screenpipe-server", 
+    "screenpipe-phone/iphone/screenshot_server",
 
 ]
 exclude = [
