@@ -1,0 +1,15 @@
+[package]
+name = "screenshot_server"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web = "4.3.1"
+actix-multipart = "0.6.0"
+futures = "0.3.28"
+tokio = { version = "1.28.2", features = ["full"] }
+chrono = "0.4"
