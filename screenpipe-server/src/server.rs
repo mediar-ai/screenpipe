@@ -32,12 +32,12 @@ use tower_http::{
 
 use crate::plugin::ApiPluginLayer;
 
-pub(crate) struct AppState {
-    db: Arc<DatabaseManager>,
-    vision_control: Arc<AtomicBool>,
-    audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
-    devices_status: HashMap<AudioDevice, DeviceControl>,
-    app_start_time: DateTime<Utc>,
+pub struct AppState {
+    pub db: Arc<DatabaseManager>,
+    pub vision_control: Arc<AtomicBool>,
+    pub audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
+    pub devices_status: HashMap<AudioDevice, DeviceControl>,
+    pub app_start_time: DateTime<Utc>,
 }
 
 #[derive(Deserialize)]
@@ -143,15 +143,15 @@ fn default_limit() -> u32 {
     20
 }
 
-#[derive(Serialize)]
-pub(crate) struct HealthCheckResponse {
-    status: String,
-    last_frame_timestamp: Option<DateTime<Utc>>,
-    last_audio_timestamp: Option<DateTime<Utc>>,
-    frame_status: String,
-    audio_status: String,
-    message: String,
-    verbose_instructions: Option<String>,
+#[derive(Serialize, Deserialize)]
+pub struct HealthCheckResponse {
+    pub status: String,
+    pub last_frame_timestamp: Option<DateTime<Utc>>,
+    pub last_audio_timestamp: Option<DateTime<Utc>>,
+    pub frame_status: String,
+    pub audio_status: String,
+    pub message: String,
+    pub verbose_instructions: Option<String>,
 }
 
 pub(crate) async fn search(
@@ -355,14 +355,15 @@ pub(crate) async fn get_devices(
     JsonResponse(devices)
 }
 
-pub(crate) async fn health_check(
-    State(state): State<Arc<AppState>>,
-) -> JsonResponse<HealthCheckResponse> {
-    let (last_frame, last_audio) = state
-        .db
-        .get_latest_timestamps()
-        .await
-        .unwrap_or((None, None));
+pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<HealthCheckResponse> {
+    let (last_frame, last_audio) = match state.db.get_latest_timestamps().await {
+        Ok((frame, audio)) => (frame, audio),
+        Err(e) => {
+            error!("Failed to get latest timestamps: {}", e);
+            (None, None)
+        }
+    };
+
     let now = Utc::now();
     let threshold = Duration::from_secs(60);
     let loading_threshold = Duration::from_secs(120);
@@ -415,7 +416,7 @@ pub(crate) async fn health_check(
     } else {
         (
             "Unhealthy",
-            "Some systems are not functioning properly.".to_string(),
+            format!("Some systems are not functioning properly. Frame status: {}, Audio status: {}", frame_status, audio_status),
             Some("If you're experiencing issues, please try the following steps:\n\
                   1. Restart the application.\n\
                   2. If using a desktop app, reset your Screenpipe OS permissions.\n\

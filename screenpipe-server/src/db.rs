@@ -46,7 +46,7 @@ pub struct AudioResult {
 }
 
 pub struct DatabaseManager {
-    pool: SqlitePool,
+    pub pool: SqlitePool,
 }
 
 impl DatabaseManager {

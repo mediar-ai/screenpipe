@@ -13,7 +13,7 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
     let (result_tx, mut result_rx) = mpsc::channel(100);
 
     let capture_handle = tokio::spawn(async move {
-        continuous_capture(&mut control_rx, result_tx, Duration::from_millis(100)).await;
+        continuous_capture(&mut control_rx, result_tx, Duration::from_millis(100), false).await;
     });
 
     // Run for specified duration

@@ -16,7 +16,15 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
         let text_json = format!(r#"{{"text": "{}"}}"#, ocr_text);
         let new_text_json_vs_previous_frame = format!(r#"{{"text": "{}"}}"#, ocr_text);
         let raw_data_output_from_ocr = format!(r#"{{"output": "{}"}}"#, ocr_text);
-        db.insert_ocr_text(frame_id, &ocr_text, &text_json, &new_text_json_vs_previous_frame, &raw_data_output_from_ocr).await.unwrap();
+        db.insert_ocr_text(
+            frame_id,
+            &ocr_text,
+            &text_json,
+            &new_text_json_vs_previous_frame,
+            &raw_data_output_from_ocr,
+        )
+        .await
+        .unwrap();
 
         let audio_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
         let audio_text = format!("Audio transcription {}", rng.gen::<u32>());
@@ -47,7 +55,9 @@ fn bench_search(c: &mut Criterion) {
                     |b| {
                         b.to_async(&rt).iter(|| async {
                             let db = setup_large_db(size).await;
-                            db.search(query, content_type, 100, 0).await.unwrap()
+                            db.search(query, content_type, 100, 0, None, None)
+                                .await
+                                .unwrap()
                         });
                     },
                 );
