@@ -58,18 +58,12 @@ Struggle to get it running? [I'll install it with you in a 15 min call.](https:/
 
 1. Navigate to the folder where you want the data to be stored
 
-2. Install dependencies:
-```bash
-brew install pkg-config
-brew install ffmpeg
-brew install jq
-```
-3. Install library
+2. Install library
 ```bash
 brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
 brew install screenpipe
 ```
-4. Run it:
+3. Run it:
 ```bash
 screenpipe 
 ```
@@ -97,9 +91,7 @@ you can combine multiple flags if needed
 
 1. Install dependencies:
 ```bash
-brew install pkg-config
-brew install ffmpeg
-brew install jq
+brew install pkg-config ffmpeg jq tesseract
 ```
 
 Install [Rust](https://www.rust-lang.org/tools/install).
@@ -143,15 +135,9 @@ Then run it
   1. Install dependencies:
 
 ```bash
-# Install ffmpeg (you may need to download and add it to your PATH manually)
-# Visit https://www.ffmpeg.org/download.html for installation instructions
-
-# Install Chocolatey from https://chocolatey.org/install
-# Then install pkg config
-choco install pkgconfiglite
+# Install first Chocolatey from https://chocolatey.org/install
+choco install ffmpeg pkgconfiglite rust git
 ```
-
- Install [Rust](https://www.rust-lang.org/tools/install).
 
   2. Clone the repo:
 
@@ -205,6 +191,9 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 
 <details>
   <summary>FRONTEND</summary>
+
+You can either use examples like a Vercel chatbot, or Obsidian integration or our [desktop app](https://screenpi.pe/).  
+To run Vercel chatbot, try this:
 
 ```bash
 git clone https://github.com/louis030195/screen-pipe
@@ -261,6 +250,7 @@ addToNotion(summary)
 ```
 
 Or thousands of other usages of all your screen & mic data!
+
 
 <details>
 <summary>
