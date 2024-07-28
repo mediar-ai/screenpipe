@@ -239,6 +239,29 @@ npm run dev
 
 You can use terminal commands to query and view your data as shown below. Also, we recommend Tableplus.com to view the database, it has a free tier.
 
+Here's a pseudo code to illustrate how to use screenpipe, after a meeting for example (automatically with our webhooks):
+```js
+
+// 1h ago
+const startDate = "<some time 1h ago..>"
+// 10m ago
+const endDate = "<some time 10m ago..>"
+
+// get all the screen & mic data from roughly last hour 
+const results = fetchScreenpipe(startDate, endDate)
+
+// send it to an LLM and ask for a sumarry
+const summary = fetchOllama("{results} here are some meeting summary transcriptions & other stuff, please create a summary")
+// or const summary = fetchOpenai(results)
+
+// add the meeting summary to your notes
+addToNotion(summary)
+// or your favourite note taking app
+
+```
+
+Or thousands of other usages of all your screen & mic data!
+
 <details>
 <summary>
 Check which tables you have in the local database</summary>
