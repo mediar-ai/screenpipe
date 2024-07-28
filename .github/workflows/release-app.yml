@@ -82,9 +82,9 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
-      - name: Install frontend dependencies
-        run: bun install
-        working-directory: ./examples/apps/screenpipe-app-tauri
+      # - name: Install frontend dependencies
+      #   run: bun install
+      #   working-directory: ./examples/apps/screenpipe-app-tauri
 
       # - name: Cache Pre Build
       #   id: cache-pre-build
