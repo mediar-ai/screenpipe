@@ -21,6 +21,12 @@
 
 ![Demo](./content/demo.gif)
 
+---
+
+> **🎉 We just launched the desktop app! [Download now!](https://screenpi.pe) 🎉**
+
+---
+
 # 24/7 Screen & Audio Capture
 
 Library to build personalized AI powered by what you've seen, said, or heard. Works with Ollama. Alternative to Rewind.ai. Open. Secure. You own your data. Rust.  
