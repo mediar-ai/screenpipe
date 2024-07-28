@@ -118,8 +118,9 @@ jobs:
           brew install ffmpeg pkg-config
 
       - name: Build CLI
+        shell: bash # ifs crash on powershell windows
         run: |
-          if [ "${{ matrix.platform }}" = "macos-latest" ]; then
+          if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
           fi
