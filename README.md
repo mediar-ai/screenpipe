@@ -5,7 +5,7 @@
 
 <p align="center">
     <a href="https://screenpi.pe" target="_blank">
-        <img src="https://img.shields.io/badge/Join%20Waitlist-Desktop%20App-blue?style=for-the-badge" alt="Join Waitlist for Desktop App">
+        <img src="https://img.shields.io/badge/Join%20Waitlist-Desktop%20App-blue?style=for-the-badge" alt="Download the Desktop App">
     </a>
 </p>
 
