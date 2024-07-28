@@ -17,24 +17,22 @@
 # For M1 (aarch64-apple-darwin):
 # cargo build --release --features metal --target aarch64-apple-darwin
 # cd examples/apps/screenpipe-app-tauri
-# bun scripts/pre_build.js 
+# bun scripts/pre_build.js
 # bun tauri build --target aarch64-apple-darwin -- --features metal
 # tar -czf screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz -C ../target/aarch64-apple-darwin/release/bundle/dmg screenpipe_0.1.0_aarch64.dmg
 # gh release upload ${VERSION} screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
 # rm screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
-# 
+#
 # For Intel (x86_64-apple-darwin):
 # cd ../../..
 # cargo build --release --features metal --target x86_64-apple-darwin
 # cd examples/apps/screenpipe-app-tauri
-# bun scripts/pre_build.js 
+# bun scripts/pre_build.js
 # bun tauri build --target x86_64-apple-darwin -- --features metal
 # tar -czf screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz -C ../target/x86_64-apple-darwin/release/bundle/dmg screenpipe_0.1.0_x64.dmg
 # gh release upload ${VERSION} screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
 # rm screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
 #
-
-
 
 name: Release App
 
@@ -61,7 +59,7 @@ jobs:
           # - platform: "ubuntu-24.04" # Ubuntu x86_64 # TODO focus on mac atm
           #   args: "" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64
-            args: '--target x86_64-pc-windows-msvc' # TODO CUDA?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc" # TODO CUDA?  --features "openblas"
             pre-build-args: "" # --openblas
 
     runs-on: ${{ matrix.platform }}
@@ -116,6 +114,12 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           brew install ffmpeg pkg-config
+
+      - name: Install Windows dependencies
+        if: matrix.platform == 'windows-latest'
+        run: |
+          choco install pkgconfiglite
+          choco install ffmpeg
 
       - name: Build CLI
         shell: bash # ifs crash on powershell windows
