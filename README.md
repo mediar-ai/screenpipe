@@ -240,7 +240,7 @@ const endDate = "<some time 10m ago..>"
 const results = fetchScreenpipe(startDate, endDate)
 
 // send it to an LLM and ask for a sumarry
-const summary = fetchOllama("{results} here are some meeting summary transcriptions & other stuff, please create a summary")
+const summary = fetchOllama("{results} create a summary from these transcriptions")
 // or const summary = fetchOpenai(results)
 
 // add the meeting summary to your notes
