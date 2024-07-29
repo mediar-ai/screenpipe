@@ -102,10 +102,14 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
-    let _guard = sentry::init(("https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", sentry::ClientOptions {
+
+    let _guard = sentry::init((
+        "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", sentry::ClientOptions {
         release: sentry::release_name!(),
+        traces_sample_rate: 0.2,
         ..Default::default()
       }));
+
     let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
 
     let app = tauri::Builder::default()

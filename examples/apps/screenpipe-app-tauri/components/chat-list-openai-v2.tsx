@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChatMessage } from "./chat-message-v2";
 import { Message, generateText, nanoid, streamText, tool } from "ai";
 import { createOpenAI, openai } from "@ai-sdk/openai";
-import { ollama } from "ollama-ai-provider";
+import { ollama } from "ollama-ai-provider-fix"; // ! HACK TEMPORARY
 
 import { IconOpenAI } from "./ui/icons";
 import { spinner } from "./spinner";

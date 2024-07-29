@@ -40,7 +40,11 @@ reqwest = { version = "0.12", features = ["json"] }
 uuid = { version = "1.10.0", features = ["v4"] }
 
 # Sentry 
-sentry = "0.34.0"
+sentry = { version = "0.34.0", features = ["tracing"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+# broken not compatible w tauri2?
+# sentry-tauri = "0.2"
 
 # Autostart
 tauri-plugin-autostart = "2.0.0-beta.9"
