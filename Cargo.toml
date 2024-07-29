@@ -4,10 +4,10 @@ members = [
     "screenpipe-vision",
     "screenpipe-audio",
     "screenpipe-server",
- 
+
 ]
 exclude = [
-        "examples/apps/screenpipe-app-tauri/src-tauri",
+         "examples/apps/screenpipe-app-tauri/src-tauri",
     "examples/apps/screenpipe-app-dioxus",
 ]
 resolver = "2"
@@ -26,7 +26,7 @@ log = "0.4"
 candle = { package = "candle-core", version = "0.6.0" }
 candle-nn = { package = "candle-nn", version = "0.6.0" }
 candle-transformers = { package = "candle-transformers", version = "0.6.0" }
-
+tokenizers = "0.19.1"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 tokio = { version = "1.15", features = ["full", "tracing"] }
