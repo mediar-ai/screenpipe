@@ -33,7 +33,8 @@ chrono = { version = "0.4.31", features = ["serde"] }
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
-tokenizers = { workspace = true }
+tokenizers = { version = "0.19.1", default-features = false, features = ["progressbar", "cli", "http"] }
+
 lazy_static = "1.4.0"
 base64 = "0.21.7"
 anyhow = "1.0.86"
@@ -88,3 +89,7 @@ harness = false
 name = "stt_benchmark"
 harness = false
 
+
+[target.'cfg(not(target_os = "windows"))'.dependencies.tokenizers]
+version = "0.19.1"
+features = ["onig"]

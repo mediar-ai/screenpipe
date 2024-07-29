@@ -41,7 +41,8 @@ ffmpeg-next = "7.0.2"
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
-tokenizers = { workspace = true }
+tokenizers = { version = "0.19.1", default-features = false, features = ["progressbar", "cli", "http"] }
+
 lazy_static = "1.4.0"
 base64 = "0.21.7"
 anyhow = "1.0.86"
@@ -82,6 +83,12 @@ futures = "0.3.17"
 # Directory management
 dirs = "5.0"
 
+# Client http 
+reqwest = { version = "0.12.5", features = ["json"] }
+
+# Concurrency
+crossbeam = { workspace = true }
+
 [dev-dependencies]
 tempfile = "3.3.0"
 
@@ -110,3 +117,7 @@ path = "src/bin/screenpipe-server.rs"
 [[bin]]
 name = "screenpipe-video"
 path = "src/bin/screenpipe-video.rs"
+
+[target.'cfg(not(target_os = "windows"))'.dependencies.tokenizers]
+version = "0.19.1"
+features = ["onig"]
