@@ -228,6 +228,10 @@ if (hasFeature('cuda')) {
 					[`${cudaPath}\\bin\\cudart64_*`]: './',
 					[`${cudaPath}\\bin\\cublas64_*`]: './',
 					[`${cudaPath}\\bin\\cublasLt64_*`]: './',
+					// Tesseract?
+					'C:\\Windows\\System32\\msvcp140.dll': './',
+					'C:\\Windows\\System32\\vcruntime140.dll': './',
+					'C:\\Windows\\System32\\vcruntime140_1.dll': './',
 				},
 			},
 		}
