@@ -117,6 +117,10 @@ jobs:
       #     choco install pkgconfiglite
       #     choco install ffmpeg
 
+      - name: Install frontend dependencies
+        working-directory: ./examples/apps/screenpipe-app-tauri
+        run: bun install
+
       # Run pre build
       - name: Run pre_build.js on ${{ matrix.platform }}
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
@@ -130,20 +134,6 @@ jobs:
             export PKG_CONFIG_ALLOW_CROSS=1
           fi
           cargo build --release ${{ matrix.args }}
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 8
-
-      - name: setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: "pnpm" # Set this to npm, yarn or pnpm.
-
-      - name: Install frontend dependencies
-        working-directory: ./examples/apps/screenpipe-app-tauri
-        run: pnpm install
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
