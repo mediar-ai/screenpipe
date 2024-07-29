@@ -119,7 +119,6 @@ jobs:
 
       # Run pre build
       - name: Run pre_build.js on ${{ matrix.platform }}
-        shell: bash
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./examples/apps/screenpipe-app-tauri
 
