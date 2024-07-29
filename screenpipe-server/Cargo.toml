@@ -41,7 +41,7 @@ ffmpeg-next = "7.0.2"
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
-tokenizers = { version = "0.19.1", default-features = false, features = ["progressbar", "cli", "http"] }
+tokenizers = { version = "0.19.1", default-features = false, features = ["progressbar", "esaxx_fast"] }
 
 lazy_static = "1.4.0"
 base64 = "0.21.7"

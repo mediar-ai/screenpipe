@@ -16,9 +16,13 @@ anyhow = "1.0.86"
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
-tokenizers = { workspace = true }
+tokenizers = { version = "0.19.1", default-features = false, features = ["progressbar", "esaxx_fast"] }
+
 hf-hub = { workspace = true, features = ["tokio"] }
 
 
 
 
+[target.'cfg(not(target_os = "windows"))'.dependencies.tokenizers]
+version = "0.19.1"
+features = ["onig"]
