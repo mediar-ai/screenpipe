@@ -153,4 +153,4 @@ jobs:
           prerelease: true
           args: ${{ matrix.args }}
           projectPath: "./examples/apps/screenpipe-app-tauri"
-          tauriScript: bunx tauri
+          tauriScript: bunx tauri -v
