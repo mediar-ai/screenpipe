@@ -131,11 +131,21 @@ jobs:
           fi
           cargo build --release ${{ matrix.args }}
 
+      # - name: Install frontend dependencies
+      #   shell: bash
+      #   run: |
+      #     cd ./examples/apps/screenpipe-app-tauri
+      #     bun install
+
+
+      # hjack for windows
       - name: Install frontend dependencies
-        shell: bash
+        shell: pwsh
         run: |
-          cd ./examples/apps/screenpipe-app-tauri
+          Set-Location -Path .\examples\apps\screenpipe-app-tauri
           bun install
+
+
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
