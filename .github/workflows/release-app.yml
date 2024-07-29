@@ -121,7 +121,8 @@ jobs:
         run: |
           cd ..
           git clone https://github.com/louis030195/ollama-ai-provider-fix.git
-          cd ollama-ai-provider-fix
+          mv ollama-ai-provider-fix ollama-ai-provider
+          cd ollama-ai-provider
           bun install
         shell: bash
 
