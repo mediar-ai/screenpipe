@@ -80,10 +80,6 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
-      # - name: Install frontend dependencies
-      #   run: bun install
-      #   working-directory: ./examples/apps/screenpipe-app-tauri
-
       # - name: Cache Pre Build
       #   id: cache-pre-build
       #   uses: actions/cache@v4
@@ -121,7 +117,6 @@ jobs:
       #     choco install pkgconfiglite
       #     choco install ffmpeg
 
-
       # Run pre build
       - name: Run pre_build.js on ${{ matrix.platform }}
         shell: bash
@@ -137,6 +132,10 @@ jobs:
           fi
           cargo build --release ${{ matrix.args }}
 
+      - name: Install frontend dependencies
+        shell: bash
+        run: bun install
+        working-directory: ./examples/apps/screenpipe-app-tauri
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
@@ -152,4 +151,4 @@ jobs:
           prerelease: true
           args: ${{ matrix.args }}
           projectPath: "./examples/apps/screenpipe-app-tauri"
-          tauriScript: bun tauri
+          tauriScript: bunx tauri
