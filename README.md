@@ -23,7 +23,9 @@
 
 ---
 
-> **🎉 We just launched the desktop app! [Download now!](https://screenpi.pe) 🎉**
+*Latest News* 🔥
+- [2024/07] 🎁 Screenpipe won Friends (the AI necklace) hackaton (integrations soon)
+- [2024/07] **We just launched the desktop app! [Download now!](https://screenpi.pe)**
 
 ---
 
