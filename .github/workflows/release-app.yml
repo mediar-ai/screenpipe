@@ -131,9 +131,15 @@ jobs:
           fi
           cargo build --release ${{ matrix.args }}
 
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: "pnpm" # Set this to npm, yarn or pnpm.
+
       - name: Install frontend dependencies
         working-directory: ./examples/apps/screenpipe-app-tauri
-        run: bun install
+        run: pnpm install
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
