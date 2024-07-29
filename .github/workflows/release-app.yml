@@ -133,9 +133,9 @@ jobs:
 
       - name: Install frontend dependencies
         shell: bash
-        run: bun install
-        working-directory: ./examples/apps/screenpipe-app-tauri
-
+        run: |
+          cd ./examples/apps/screenpipe-app-tauri
+          bun install
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
