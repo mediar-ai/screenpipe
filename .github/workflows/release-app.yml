@@ -117,15 +117,6 @@ jobs:
       #     choco install pkgconfiglite
       #     choco install ffmpeg
 
-      - name: Clone and install ollama-ai-provider-fix
-        run: |
-          cd ..
-          git clone https://github.com/louis030195/ollama-ai-provider-fix.git
-          mv ollama-ai-provider-fix ollama-ai-provider
-          cd ollama-ai-provider
-          bun install
-        shell: bash
-
       - name: Install frontend dependencies
         shell: bash
         working-directory: ./examples/apps/screenpipe-app-tauri
