@@ -280,9 +280,9 @@ if (hasFeature('rocm')) {
 // Development hints
 if (!process.env.GITHUB_ENV) {
 	console.log('\nCommands to build 🔨:')
-	if (originalCWD != cwd) {
-		// Get relative path to desktop folder
-		const relativePath = path.relative(originalCWD, path.join(cwd, '..'))
+	// Get relative path to screenpipe-app-tauri folder
+	const relativePath = path.relative(originalCWD, path.join(cwd, '..'))
+	if (originalCWD != cwd && relativePath != '') {
 		console.log(`cd ${relativePath}`)
 	}
 	console.log('bun install')

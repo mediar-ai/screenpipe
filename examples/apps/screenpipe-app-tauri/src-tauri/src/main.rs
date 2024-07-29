@@ -4,6 +4,7 @@
 use dirs::home_dir;
 use log::{debug, error, info, LevelFilter};
 use logs::MultiWriter;
+use tauri::Config;
 use tauri_plugin_shell::ShellExt;
 
 use serde_json::Value;
@@ -184,6 +185,26 @@ async fn main() {
 
             let stores = app.app_handle().state::<StoreCollection<Wry>>();
 
+            // Initialize the store with default values if it doesn't exist
+            let _ = with_store(
+                app.app_handle().clone(),
+                stores.clone(),
+                path.clone(),
+                |store| {
+                    if store.keys().count() == 0 {
+                        // Set default values
+                        store.insert("analytics_enabled".to_string(), Value::Bool(true))?;
+                        store.insert(
+                            "config".to_string(),
+                            serde_json::to_value(Config::default())?,
+                        )?;
+                        store.save()?;
+                    }
+                    Ok(())
+                },
+            );
+
+            // Now use the store
             let _ = with_store(app.app_handle().clone(), stores, path, |store| {
                 store.save()?;
 
