@@ -120,7 +120,9 @@ jobs:
       - name: Install frontend dependencies
         shell: bash
         working-directory: ./examples/apps/screenpipe-app-tauri
-        run: bun install
+        run: |
+          ls . 
+          bun install
 
       # Run pre build
       - name: Run pre_build.js on ${{ matrix.platform }}
