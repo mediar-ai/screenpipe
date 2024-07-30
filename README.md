@@ -57,7 +57,7 @@ This is the instructions to install the command line interface.
 Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
 <details>
-  <summary>BACKEND</summary>
+  <summary>CLI installation</summary>
 
 
 <details>
@@ -202,7 +202,7 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 </details>
 
 <details>
-  <summary>FRONTEND</summary>
+  <summary>run vercel/ai chatbot web interface</summary>
 
 You can either use examples like a Vercel chatbot, or Obsidian integration or our [desktop app](https://screenpi.pe/).  
 To run Vercel chatbot, try this:
