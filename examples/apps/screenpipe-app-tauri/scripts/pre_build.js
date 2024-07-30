@@ -119,7 +119,7 @@ if (platform == 'windows') {
 
 	let copied = false;
 	for (const screenpipeSrc of potentialPaths) {
-		const screenpipeDest = path.join(cwd, 'screenpipe.exe');
+		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-pc-windows-gnu.exe');
 		try {
 			await fs.copyFile(screenpipeSrc, screenpipeDest);
 			console.log(`Screenpipe binary copied successfully from ${screenpipeSrc}`);
