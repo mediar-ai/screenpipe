@@ -45,7 +45,9 @@ Building a reliable stream of audio and screenshot data, where a user simply cli
 
 There are numerous use cases that can be built on top of this layer. To simplify life for other developers, we decided to solve this non-trivial problem. It's still in its early stages, but it works end-to-end. We're working on this full-time and would love to hear your feedback and suggestions.
 
-## Getting started
+## Install CLI
+
+This is the instructions to install the command line interface,
 
 Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
