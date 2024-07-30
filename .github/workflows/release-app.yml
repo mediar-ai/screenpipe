@@ -124,6 +124,12 @@ jobs:
           ls . 
           bun install
 
+      # Run pre build
+      - name: Run pre_build.js on ${{ matrix.platform }}
+        shell: bash
+        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        working-directory: ./examples/apps/screenpipe-app-tauri
+
       - name: Build CLI
         shell: bash
         run: |
@@ -133,7 +139,7 @@ jobs:
           fi
           cargo build --release ${{ matrix.args }}
 
-      # Run pre build
+      # Run pre build again to copy the CLI into app
       - name: Run pre_build.js on ${{ matrix.platform }}
         shell: bash
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
