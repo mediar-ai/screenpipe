@@ -22,7 +22,7 @@ make sure to keep the prompt not too big for the LLM (time interval 1-5 min)
 ```
 pnpm i # or npm i
 export OPENAI_API_KEY="<your key>"
-# or modify the code to use llama3.1 through ollama
+# or modify the code to use llama3.1 through ollama (just two lines to uncomment & comment)
 npx tsx main.ts
 ```
 
