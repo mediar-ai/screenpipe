@@ -3,8 +3,6 @@ import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
 
-
-
 const originalCWD = process.cwd()
 // Change CWD to src-tauri
 process.chdir(path.join(__dirname, '../src-tauri'))
@@ -61,6 +59,29 @@ const config = {
 	},
 }
 
+async function findWget() {
+	const possiblePaths = [
+		'C:\\ProgramData\\chocolatey\\bin\\wget.exe',
+		'C:\\Program Files\\Git\\mingw64\\bin\\wget.exe',
+		'C:\\msys64\\usr\\bin\\wget.exe',
+		'C:\\Windows\\System32\\wget.exe',
+		'wget' // This will work if wget is in PATH
+	];
+
+	for (const wgetPath of possiblePaths) {
+		try {
+			await $`${wgetPath} --version`.quiet();
+			console.log(`wget found at: ${wgetPath}`);
+			return wgetPath;
+		} catch (error) {
+			// wget not found at this path, continue searching
+		}
+	}
+
+	console.error('wget not found. Please install wget and make sure it\'s in your PATH.');
+	process.exit(1);
+}
+
 // Export for Github actions
 const exports = {
 	ffmpeg: path.join(cwd, config.ffmpegRealname),
@@ -84,9 +105,11 @@ if (platform == 'linux') {
 
 /* ########## Windows ########## */
 if (platform == 'windows') {
+	const wgetPath = await findWget();
+
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`C:\\msys64\\usr\\bin\\wget.exe -nc --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
+		await $`${wgetPath} -nc --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
@@ -100,7 +123,7 @@ if (platform == 'windows') {
 
 	if (!(await fs.exists('tesseract'))) {
 		console.log('Setting up Tesseract for Windows...')
-		await $`C:\\msys64\\usr\\bin\\wget.exe -nc --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
+		await $`${wgetPath} -nc --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
 		await $`${tesseractInstaller} /S /D=C:\\Program Files\\Tesseract-OCR`
 		await $`rm ${tesseractInstaller}`
 		await $`mv "C:\\Program Files\\Tesseract-OCR" tesseract`
@@ -114,7 +137,7 @@ if (platform == 'windows') {
 
 	// Setup OpenBlas
 	if (!(await fs.exists(config.openblasRealname)) && hasFeature('openblas')) {
-		await $`C:\\msys64\\usr\\bin\\wget.exe -nc --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
+		await $`${wgetPath} -nc --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
 		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.openBlasName}.zip -o${config.openblasRealname}`
 		await $`rm ${config.windows.openBlasName}.zip`
 		fs.cp(path.join(config.openblasRealname, 'include'), path.join(config.openblasRealname, 'lib'), { recursive: true, force: true })
@@ -124,7 +147,7 @@ if (platform == 'windows') {
 
 	// Setup CLBlast
 	if (!(await fs.exists(config.clblastRealname)) && !hasFeature('cuda')) {
-		await $`C:\\msys64\\usr\\bin\\wget.exe -nc --show-progress ${config.windows.clblastUrl} -O ${config.windows.clblastName}.zip`
+		await $`${wgetPath} -nc --show-progress ${config.windows.clblastUrl} -O ${config.windows.clblastName}.zip`
 		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.zip` // 7z file inside
 		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.7z` // Inner folder
 		await $`mv ${config.windows.clblastName} ${config.clblastRealname}`
@@ -386,4 +409,3 @@ if (action?.includes('--build' || action.includes('--dev'))) {
 	await $`bun install`
 	await $`bunx tauri ${action.includes('--dev') ? 'dev' : 'build'}`
 }
-
