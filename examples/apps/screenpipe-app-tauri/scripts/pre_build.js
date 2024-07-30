@@ -107,6 +107,17 @@ if (platform == 'linux') {
 if (platform == 'windows') {
 	const wgetPath = await findWget();
 
+	console.log('Copying screenpipe binary...');
+	const screenpipeSrc = path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe.exe');
+	const screenpipeDest = path.join(cwd, 'screenpipe.exe');
+	try {
+		await fs.copyFile(screenpipeSrc, screenpipeDest);
+		console.log('Screenpipe binary copied successfully.');
+	} catch (error) {
+		console.error('Failed to copy screenpipe binary:', error);
+		process.exit(1);
+	}
+
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`${wgetPath} -nc --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`

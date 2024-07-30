@@ -4,9 +4,11 @@ use serde_json::json;
 use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
+use sysinfo::{System, SystemExt};
 use tokio::sync::Mutex;
 use tokio::time::interval;
 use uuid::Uuid;
+
 pub struct AnalyticsManager {
     client: Client,
     posthog_api_key: String,
@@ -38,6 +40,7 @@ impl AnalyticsManager {
         }
 
         let posthog_url = format!("{}/capture/", self.api_host);
+        let system = System::new_all();
 
         let mut payload = json!({
             "api_key": self.posthog_api_key,
@@ -45,7 +48,12 @@ impl AnalyticsManager {
             "properties": {
                 "distinct_id": self.distinct_id,
                 "$lib": "rust-reqwest",
-                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "os_name": system.name().unwrap_or_default(),
+                "os_version": system.os_version().unwrap_or_default(),
+                "kernel_version": system.kernel_version().unwrap_or_default(),
+                "host_name": system.host_name().unwrap_or_default(),
+                "cpu_count": system.cpus().len(),
+                "total_memory": system.total_memory(),
             },
         });
 

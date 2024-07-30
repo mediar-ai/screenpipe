@@ -58,6 +58,8 @@ tauri-plugin-store = "2.0.0-beta"
 anyhow = "1.0.71"
 which = "6.0.1"
 
+# System information
+sysinfo = "0.29.0"
 
 # hakc 
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }

@@ -4,11 +4,11 @@ import fetch from "node-fetch";
 import fs from "fs/promises";
 import path from "path";
 
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const OPENAI_MODEL = "gpt-4o";
+// const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+// const OPENAI_MODEL = "gpt-4o";
 // Uncomment the following lines to use Ollama instead
-// const OPENAI_API_URL = "http://localhost:11434/api/chat";
-// const OPENAI_MODEL = "llama3.1";
+const OPENAI_API_URL = "http://localhost:11434/api/chat";
+const OPENAI_MODEL = "llama3.1";
 
 const SCREENPIPE_API_URL = "http://localhost:3030/search";
 const LOG_INTERVAL = 1 * 60 * 1000; // 5 minutes in milliseconds
