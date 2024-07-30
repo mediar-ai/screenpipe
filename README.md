@@ -143,6 +143,8 @@ Then run it
 
 <details>
   <summary>Windows</summary>
+
+  NOT RECOMMENDED. Get the [desktop app](https://screenpi.pe/) instead.
   
   1. Install dependencies:
 
