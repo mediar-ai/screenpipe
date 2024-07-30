@@ -249,6 +249,9 @@ if (hasFeature('cuda')) {
 					[`${cudaPath}\\bin\\cublasLt64_*`]: './',
 					'tesseract\\*': './',
 				},
+				externalBin: [
+					'screenpipe'
+				]
 			},
 		}
 		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(windowsConfig, null, 4))
