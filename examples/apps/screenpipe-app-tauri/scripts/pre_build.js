@@ -108,6 +108,16 @@ if (platform == 'windows') {
 	const wgetPath = await findWget();
 
 	console.log('Copying screenpipe binary...');
+	console.log('Current working directory:', process.cwd());
+	const targetDir = path.join(process.cwd(), '..', '..', '..', 'target', 'release');
+	console.log('Checking contents of:', targetDir);
+	try {
+		const files = await fs.readdir(targetDir);
+		console.log('Files in target/release:', files);
+	} catch (error) {
+		console.error('Error reading target/release directory:', error);
+	}
+
 	const potentialPaths = [
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe.exe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe.exe'),
