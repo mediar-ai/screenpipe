@@ -20,3 +20,5 @@ export OPENAI_API_KEY="<your key>"
 npx tsx main.ts
 ```
 
+running into issues? [will solve your problem in < 15 min call](https://cal.com/louis030195/screenpipe)
+
