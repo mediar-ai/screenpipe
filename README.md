@@ -202,7 +202,7 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 </details>
 
 <details>
-  <summary>run vercel/ai chatbot web interface</summary>
+  <summary>run example vercel/ai chatbot web interface</summary>
 
 You can either use examples like a Vercel chatbot, or Obsidian integration or our [desktop app](https://screenpi.pe/).  
 To run Vercel chatbot, try this:
