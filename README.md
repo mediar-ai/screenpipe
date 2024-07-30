@@ -388,12 +388,8 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
 - [x] local api
-- [x] MacOS CLI (silicon, intel)
-- [x] Windows CLI (nvidia, etc.)
-- [x] Linux CLI (x11, nvidia, etc.)
-- [x] desktop app for MacOS (launching within days)
-- [x] desktop app for Windows
-- [x] desktop app for Linux
+- [x] Cross platform CLI, desktop (MacOS, Windows, Linux)
+- [x] Metal, CUDA
 - [ ] TS SDK
 - [ ] multimodal embeddings
 - [ ] cloud storage options (s3, pgsql, etc.)
