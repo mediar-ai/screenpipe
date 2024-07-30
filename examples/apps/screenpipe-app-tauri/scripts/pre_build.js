@@ -108,13 +108,29 @@ if (platform == 'windows') {
 	const wgetPath = await findWget();
 
 	console.log('Copying screenpipe binary...');
-	const screenpipeSrc = path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe.exe');
-	const screenpipeDest = path.join(cwd, 'screenpipe.exe');
-	try {
-		await fs.copyFile(screenpipeSrc, screenpipeDest);
-		console.log('Screenpipe binary copied successfully.');
-	} catch (error) {
-		console.warn('Failed to copy screenpipe binary:', error); // ! HACK running pre_build.js before cargo build --release need some deps fk
+	const potentialPaths = [
+		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe.exe'),
+		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe.exe'),
+		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe.exe'),
+		'D:\\a\\screen-pipe\\screen-pipe\\target\\release\\screenpipe.exe',
+	];
+
+	let copied = false;
+	for (const screenpipeSrc of potentialPaths) {
+		const screenpipeDest = path.join(cwd, 'screenpipe.exe');
+		try {
+			await fs.copyFile(screenpipeSrc, screenpipeDest);
+			console.log(`Screenpipe binary copied successfully from ${screenpipeSrc}`);
+			copied = true;
+			break;
+		} catch (error) {
+			console.warn(`Failed to copy screenpipe binary from ${screenpipeSrc}:`, error);
+		}
+	}
+
+	if (!copied) {
+		console.error("Failed to copy screenpipe binary from any potential path.");
+		// Uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
 	}
 
