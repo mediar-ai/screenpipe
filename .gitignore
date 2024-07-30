@@ -25,4 +25,4 @@ data/
 text_json/
 
 # Ignore package-lock.json in the vercel-ai-chatbot example
-examples/ts/vercel-ai-chatbot/package-lock.json
+examples/typescript/vercel-ai-chatbot/package-lock.json

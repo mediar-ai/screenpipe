@@ -203,7 +203,7 @@ git clone https://github.com/louis030195/screen-pipe
 
 Navigate to app directory
 ```bash
-cd screen-pipe/examples/ts/vercel-ai-chatbot 
+cd screen-pipe/examples/typescript/vercel-ai-chatbot 
 ```
 Set up you OPENAI API KEY in .env
 ```bash
@@ -401,7 +401,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - UI low-code builder
 
 
-[Example with vercel/ai-chatbot project here inside the repo here:](https://github.com/louis030195/screen-pipe/tree/main/examples/ts/vercel-ai-chatbot)
+[Example with vercel/ai-chatbot project here inside the repo here:](https://github.com/louis030195/screen-pipe/tree/main/examples/typescript/vercel-ai-chatbot)
 
 ## Why open source?
 
