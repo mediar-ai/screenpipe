@@ -126,7 +126,10 @@ if (platform == 'windows') {
 		await $`${wgetPath} -nc --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
 		await $`"${process.cwd()}\\${tesseractInstaller}" /S /D=C:\\Program Files\\Tesseract-OCR`
 		await $`rm ${tesseractInstaller}`
-		await $`mv "C:\\Program Files\\Tesseract-OCR" tesseract`
+		// Replace the mv command with xcopy
+		await $`xcopy "C:\\Program Files\\Tesseract-OCR" tesseract /E /I /H /Y`
+		// Optionally, remove the original directory if needed
+		// await $`rmdir "C:\\Program Files\\Tesseract-OCR" /S /Q`
 		console.log('Tesseract for Windows set up successfully.')
 	} else {
 		console.log('Tesseract for Windows already exists.')
