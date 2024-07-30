@@ -94,7 +94,10 @@ async function generateLogEntry(
           - Date & time now is ${new Date().toISOString()}
           - Use short title with max 4 words
           - Be concise in the content, if you can use bullet list with times if necessary
+          - Despite conciseness, try not to skip important information
+          - Try to add specifics like "browse twitter" etc.
           - YOUR MESSAGES ARE LESS THAN 4 LINES LONG
+          - Make sure to add times in your message 
 
           Log?`,
         },
@@ -126,7 +129,7 @@ async function generateLogEntry(
 async function appendToLogFile(log: ActivityLog): Promise<void> {
   const date = new Date().toISOString().split("T")[0];
   const fileName = `daily_log_${date}.md`;
-  const logEntry = log.content;
+  const logEntry = log.content + "\n\n";
 
   await fs.appendFile(fileName, logEntry);
 }
@@ -142,7 +145,7 @@ async function startLogging(trackingPrompt: string): Promise<void> {
       const screenpipeData = await queryScreenpipe(startTime, endTime);
       const logEntry = await generateLogEntry(trackingPrompt, screenpipeData);
       await appendToLogFile(logEntry);
-      console.log(`Log entry added: ${logEntry}`);
+      console.log(`Log entry added`);
     } catch (error) {
       console.error("Error generating log entry:", error);
     }
