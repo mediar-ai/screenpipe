@@ -368,6 +368,21 @@ https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3
 
 Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 
+- [ ] Integrations
+    - [x] ollama
+    - [x] openai
+    - [x] Friend wearable 
+    - [x] Fileorganizer2000
+    - [x] mem0
+    - [ ] supermemory
+    - [x] Obsidian
+    - [x] Apple shortcut
+    - [ ] multion
+    - [x] iPhone
+    - [ ] Android
+    - [ ] Camera
+    - [ ] Keyboard
+    - [ ] Browser
 - [x] screenshots + OCR
 - [x] audio + STT (works with multi input & output devices, like your iPhone + mac mic)
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
@@ -377,8 +392,8 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] Windows CLI (nvidia, etc.)
 - [x] Linux CLI (x11, nvidia, etc.)
 - [x] desktop app for MacOS (launching within days)
-- [ ] desktop app for Windows
-- [ ] desktop app for Linux
+- [x] desktop app for Windows
+- [x] desktop app for Linux
 - [ ] TS SDK
 - [ ] multimodal embeddings
 - [ ] cloud storage options (s3, pgsql, etc.)
@@ -387,21 +402,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] custom storage settings: customizable capture settings (fps, resolution)
 - [ ] data encryption options & higher security
 - [ ] fast, optimised, energy-efficient modes
-- [ ] webhooks (for automations)
-
-## Dev Roadmap / aspirations
-
-- Data post-processing:
-- - Wikipedia style data structuring
-- - Knowledge graph
-- Android integration
-- Integration with wearables (e.g. Friend)
-- Webcamera integration?
-- Keylogger?
-- UI low-code builder
-
-
-[Example with vercel/ai-chatbot project here inside the repo here:](https://github.com/louis030195/screen-pipe/tree/main/examples/typescript/vercel-ai-chatbot)
+- [ ] webhooks/events (for automations)
 
 ## Why open source?
 
