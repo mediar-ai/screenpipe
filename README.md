@@ -372,7 +372,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
     - [x] ollama
     - [x] openai
     - [x] Friend wearable 
-    - [x] Fileorganizer2000
+    - [x] [Fileorganizer2000](https://github.com/different-ai/file-organizer-2000)
     - [x] mem0
     - [ ] supermemory
     - [x] Obsidian
