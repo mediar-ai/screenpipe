@@ -47,7 +47,7 @@ There are numerous use cases that can be built on top of this layer. To simplify
 
 ## Install CLI
 
-This is the instructions to install the command line interface,
+This is the instructions to install the command line interface (not the desktop app which can be found [here](https://screenpi.pe/)).
 
 Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
 
