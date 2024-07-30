@@ -138,7 +138,7 @@ jobs:
             export PKG_CONFIG_ALLOW_CROSS=1
           fi
           cargo build --release ${{ matrix.args }}
-          ls -R target/release
+          ls -R .
 
       # Run pre build again to copy the CLI into app
       - name: Run pre_build.js on ${{ matrix.platform }}
