@@ -9,7 +9,7 @@ mod video;
 pub use core::{start_continuous_recording, RecorderControl};
 pub use db::{ContentType, DatabaseManager, SearchResult};
 pub use logs::MultiWriter;
-pub use resource_monitor::ResourceMonitor;
+pub use resource_monitor::{ResourceMonitor, RestartSignal};
 pub use server::health_check;
 pub use server::AppState;
 pub use server::HealthCheckResponse;

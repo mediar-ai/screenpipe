@@ -5,6 +5,7 @@ mod tests {
     use axum::Router;
     use axum::{body::to_bytes, routing::get};
     use chrono::{Duration, Utc};
+    use crossbeam::queue::SegQueue;
     use screenpipe_server::HealthCheckResponse;
     use screenpipe_server::{health_check, AppState, DatabaseManager}; // Adjust this import based on your actual module structure
     use std::collections::HashMap;
@@ -17,7 +18,7 @@ mod tests {
         let app_state = Arc::new(AppState {
             db: db.clone(),
             vision_control: Arc::new(AtomicBool::new(false)),
-            audio_devices_control_sender: tokio::sync::mpsc::channel(100).0,
+            audio_devices_control: Arc::new(SegQueue::new()),
             devices_status: HashMap::new(),
             app_start_time: Utc::now(),
         });
@@ -93,7 +94,6 @@ mod tests {
 
         // Simulate passage of time
         tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
-
 
         // Insert some recent data
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();

@@ -93,6 +93,25 @@ if (platform == 'windows') {
 		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
 	}
 
+	// Setup Tesseract
+	const tesseractName = 'tesseract-5.3.3-windows'
+	const tesseractUrl = 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.3.3/tesseract-ocr-w64-setup-5.3.3.20231005.exe'
+	const tesseractInstaller = `${tesseractName}.exe`
+
+	if (!(await fs.exists('tesseract'))) {
+		console.log('Setting up Tesseract for Windows...')
+		await $`C:\\msys64\\usr\\bin\\wget.exe -nc --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
+		await $`${tesseractInstaller} /S /D=C:\\Program Files\\Tesseract-OCR`
+		await $`rm ${tesseractInstaller}`
+		await $`mv "C:\\Program Files\\Tesseract-OCR" tesseract`
+		console.log('Tesseract for Windows set up successfully.')
+	} else {
+		console.log('Tesseract for Windows already exists.')
+	}
+
+	// Add Tesseract to PATH
+	process.env.PATH = `${process.cwd()}\\tesseract;${process.env.PATH}`
+
 	// Setup OpenBlas
 	if (!(await fs.exists(config.openblasRealname)) && hasFeature('openblas')) {
 		await $`C:\\msys64\\usr\\bin\\wget.exe -nc --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
@@ -228,10 +247,7 @@ if (hasFeature('cuda')) {
 					[`${cudaPath}\\bin\\cudart64_*`]: './',
 					[`${cudaPath}\\bin\\cublas64_*`]: './',
 					[`${cudaPath}\\bin\\cublasLt64_*`]: './',
-					// Tesseract?
-					'C:\\Windows\\System32\\msvcp140.dll': './',
-					'C:\\Windows\\System32\\vcruntime140.dll': './',
-					'C:\\Windows\\System32\\vcruntime140_1.dll': './',
+					'tesseract\\*': './',
 				},
 			},
 		}

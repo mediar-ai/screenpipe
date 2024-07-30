@@ -11,8 +11,9 @@ use std::{
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
+use crossbeam::queue::SegQueue;
 use dirs::home_dir;
-use log::{debug, info, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     DeviceControl,
@@ -58,20 +59,10 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     disable_audio: bool,
 
-    /// Memory usage threshold for restart (in percentage)
-    #[arg(long, default_value_t = 80.0)]
-    memory_threshold: f64,
-
-    /// Runtime threshold for restart (in minutes)
-    #[arg(long, default_value_t = 60)]
-    runtime_threshold: u64,
-
-    /// Enable automatic restart when resource thresholds are exceeded.
-    /// This feature will automatically restart the application if the memory usage
-    /// or runtime exceeds the specified thresholds, helping to ensure stability
-    /// and prevent potential crashes or performance degradation.
+    /// EXPERIMENTAL: Enable self healing when detecting unhealthy state based on /health endpoint.
+    /// This feature will automatically restart the recording tasks while keeping the API alive.
     #[arg(long, default_value_t = false)]
-    restart_enabled: bool,
+    self_healing: bool,
 
     /// Audio devices to use (can be specified multiple times)
     #[arg(long)]
@@ -81,7 +72,7 @@ struct Cli {
     #[arg(long)]
     list_audio_devices: bool,
 
-    /// Data directory
+    /// Data directory. Default to $HOME/.screenpipe
     #[arg(long)]
     data_dir: Option<String>,
 
@@ -120,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
     builder
         .filter(None, LevelFilter::Info)
         .filter_module("tokenizers", LevelFilter::Error)
-        // .filter_module("rusty_tesseract", LevelFilter::Error)
+        .filter_module("rusty_tesseract", LevelFilter::Error)
         .filter_module("symphonia", LevelFilter::Error);
 
     if cli.debug {
@@ -177,9 +168,9 @@ async fn main() -> anyhow::Result<()> {
 
     let mut audio_devices = Vec::new();
 
-    let (audio_devices_control_sender, audio_devices_control_receiver) = channel(64);
+    let audio_devices_control = Arc::new(SegQueue::new());
 
-    let audio_devices_control_sender_server = audio_devices_control_sender.clone();
+    let audio_devices_control_server = audio_devices_control.clone();
 
     info!("Available audio devices:");
     // Add all available audio devices to the controls
@@ -237,22 +228,20 @@ async fn main() -> anyhow::Result<()> {
                     is_paused: false,
                 };
                 let device_clone = device.deref().clone();
-                let sender_clone = audio_devices_control_sender.clone();
+                let sender_clone = audio_devices_control.clone();
                 // send signal after everything started
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(15)).await;
-                    let _ = sender_clone.send((device_clone, device_control)).await;
+                    let _ = sender_clone.push((device_clone, device_control));
                 });
             }
         }
     }
 
-    let resource_monitor = ResourceMonitor::new(
-        cli.memory_threshold,
-        cli.runtime_threshold,
-        cli.restart_enabled,
-    );
-    resource_monitor.start_monitoring(Duration::from_secs(10)); // Log every 10 seconds
+    let (restart_sender, mut restart_receiver) = channel(10);
+    let resource_monitor =
+        ResourceMonitor::new(cli.self_healing, Duration::from_secs(60), 3, restart_sender);
+    resource_monitor.start_monitoring(Duration::from_secs(10));
 
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))
@@ -266,31 +255,54 @@ async fn main() -> anyhow::Result<()> {
         "Database initialized, will store files in {}",
         local_data_dir.to_string_lossy()
     );
-    let db_record = db.clone();
     let db_server = db.clone();
 
     // Channel for controlling the recorder ! TODO RENAME SHIT
-    let (_control_tx, control_rx) = channel(64);
     let vision_control = Arc::new(AtomicBool::new(true));
 
     let vision_control_server_clone = vision_control.clone();
 
-    // Start continuous recording in a separate task
-    let _recording_task = tokio::spawn({
-        async move {
-            let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
+    // Function to start or restart the recording task
+    let _start_recording = tokio::spawn(async move {
+        // hack
+        let mut recording_task = tokio::spawn(async move {});
 
-            start_continuous_recording(
-                db_record,
-                Arc::new(local_data_dir.join("data").to_string_lossy().into_owned()),
-                cli.fps,
-                audio_chunk_duration,
-                control_rx,
-                vision_control,
-                audio_devices_control_receiver,
-                cli.save_text_files,
-            )
-            .await
+        loop {
+            let db_clone = db.clone();
+            let local_data_dir = local_data_dir.clone();
+            let vision_control = vision_control.clone();
+            let audio_devices_control = audio_devices_control.clone();
+            tokio::select! {
+                _ = &mut recording_task => {
+                    // Recording task completed or errored, restart it
+                    debug!("Recording task ended. Restarting...");
+                }
+                Some(_) = restart_receiver.recv() => {
+                    // Received restart signal, cancel the current task and restart
+                    info!("Received restart signal. Restarting recording task...");
+                    recording_task.abort();
+                }
+            }
+            recording_task = tokio::spawn(async move {
+                let result = start_continuous_recording(
+                    db_clone,
+                    Arc::new(local_data_dir.join("data").to_string_lossy().into_owned()),
+                    cli.fps,
+                    Duration::from_secs(cli.audio_chunk_duration),
+                    vision_control,
+                    audio_devices_control,
+                    cli.save_text_files,
+                )
+                .await;
+
+                if let Err(e) = result {
+                    error!("Continuous recording error: {:?}", e);
+                }
+            });
+            debug!("Recording task started");
+
+            // Short delay before restarting to avoid rapid restarts
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     });
 
@@ -307,7 +319,7 @@ async fn main() -> anyhow::Result<()> {
             db_server,
             SocketAddr::from(([0, 0, 0, 0], cli.port)),
             vision_control_server_clone,
-            audio_devices_control_sender_server,
+            audio_devices_control_server,
         );
         server.start(devices_status, api_plugin).await.unwrap();
     });

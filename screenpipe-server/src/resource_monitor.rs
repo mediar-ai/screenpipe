@@ -1,28 +1,38 @@
 use log::{error, info, warn};
 use std::process::Command;
 use std::sync::Arc;
-use std::thread;
 use std::time::{Duration, Instant};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
+use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 
 pub struct ResourceMonitor {
     start_time: Instant,
-    memory_threshold: f64,
-    runtime_threshold: Duration,
-    restart_enabled: bool,
+    self_healing_enabled: bool,
+    health_check_interval: Duration,
+    health_check_failures: Mutex<u32>,
+    max_health_check_failures: u32,
+    restart_sender: Sender<RestartSignal>,
+}
+
+pub enum RestartSignal {
+    RecordingTasks,
 }
 
 impl ResourceMonitor {
     pub fn new(
-        memory_threshold: f64,
-        runtime_threshold_minutes: u64,
-        restart_enabled: bool,
+        self_healing_enabled: bool,
+        health_check_interval: Duration,
+        max_health_check_failures: u32,
+        restart_sender: Sender<RestartSignal>,
     ) -> Arc<Self> {
         Arc::new(Self {
             start_time: Instant::now(),
-            memory_threshold,
-            runtime_threshold: Duration::from_secs(runtime_threshold_minutes * 60),
-            restart_enabled,
+            self_healing_enabled,
+            health_check_interval,
+            health_check_failures: Mutex::new(0),
+            max_health_check_failures,
+            restart_sender,
         })
     }
 
@@ -74,75 +84,63 @@ impl ResourceMonitor {
             };
 
             info!("{}", log_message);
-
-            // Check for restart conditions only if restart is enabled
-            if self.restart_enabled
-                && (memory_usage_percent > self.memory_threshold
-                    || runtime > self.runtime_threshold)
-            {
-                warn!(
-                    "Restarting due to: Memory usage: {:.0}%, Runtime: {}s",
-                    memory_usage_percent * 100.0,
-                    runtime.as_secs()
-                );
-                self.restart();
-            } else if memory_usage_percent > self.memory_threshold
-                || runtime > self.runtime_threshold
-            {
-                warn!(
-                    "Resource threshold exceeded: Memory usage: {:.0}%, Runtime: {}s",
-                    memory_usage_percent * 100.0,
-                    runtime.as_secs()
-                );
-            }
-        }
-    }
-
-    fn restart(&self) {
-        if !self.restart_enabled {
-            warn!("Restart requested but restart feature is disabled.");
-            return;
-        }
-        warn!("Initiating restart due to resource thresholds...");
-
-        let args: Vec<String> = std::env::args().collect();
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            let mut cmd = Command::new(&args[0]);
-            cmd.args(&args[1..]);
-            let err = cmd.exec();
-            error!("Failed to restart application: {}", err);
-            std::process::exit(1);
-        }
-
-        #[cfg(not(unix))]
-        {
-            // For non-Unix systems, we'll use a less seamless but still functional approach
-            match Command::new(&args[0]).args(&args[1..]).spawn() {
-                Ok(_) => {
-                    info!("Application restarted successfully");
-                    std::process::exit(0);
-                }
-                Err(e) => {
-                    error!("Failed to restart application: {}", e);
-                    std::process::exit(1);
-                }
-            }
         }
     }
 
     pub fn start_monitoring(self: &Arc<Self>, interval: Duration) {
         let monitor = Arc::clone(self);
-        thread::spawn(move || {
+        tokio::spawn(async move {
             let mut sys = System::new_all();
+            let mut health_check_interval = tokio::time::interval(monitor.health_check_interval);
             loop {
-                sys.refresh_all();
-                monitor.log_status(&sys);
-                thread::sleep(interval);
+                tokio::select! {
+                    _ = tokio::time::sleep(interval) => {
+                        sys.refresh_all();
+                        monitor.log_status(&sys);
+                    }
+                    _ = health_check_interval.tick() => {
+                        monitor.check_health().await;
+                    }
+                }
             }
         });
+    }
+    async fn check_health(&self) {
+        let client = reqwest::Client::new();
+        match client.get("http://localhost:3030/health").send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    *self.health_check_failures.lock().await = 0;
+                } else {
+                    self.handle_health_check_failure().await;
+                }
+            }
+            Err(_) => {
+                self.handle_health_check_failure().await;
+            }
+        }
+    }
+
+    async fn handle_health_check_failure(&self) {
+        let mut failures = self.health_check_failures.lock().await;
+        *failures += 1;
+        warn!("Health check failed. Consecutive failures: {}", *failures);
+
+        if !self.self_healing_enabled {
+            return;
+        }
+
+        if *failures >= self.max_health_check_failures {
+            warn!("Max health check failures reached. Restarting recording tasks...");
+            if let Err(e) = self
+                .restart_sender
+                .send(RestartSignal::RecordingTasks)
+                .await
+            {
+                error!("Failed to send restart signal: {}", e);
+            }
+            *self.health_check_failures.lock().await = 0;
+        }
     }
 
     #[cfg(target_os = "macos")]

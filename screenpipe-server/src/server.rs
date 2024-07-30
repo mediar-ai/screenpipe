@@ -5,11 +5,12 @@ use axum::{
     routing::{get, post},
     serve, Router,
 };
+use crossbeam::queue::SegQueue;
 use tracing::Level;
 
 use crate::{ContentType, DatabaseManager, SearchResult};
 use chrono::{DateTime, Utc};
-use log::{error, info};
+use log::{debug, error, info};
 use screenpipe_audio::{AudioDevice, DeviceControl};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -22,7 +23,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{net::TcpListener, sync::mpsc::Sender};
+use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tower_http::{
     cors::CorsLayer,
@@ -35,7 +36,7 @@ use crate::plugin::ApiPluginLayer;
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub vision_control: Arc<AtomicBool>,
-    pub audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
+    pub audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     pub devices_status: HashMap<AudioDevice, DeviceControl>,
     pub app_start_time: DateTime<Utc>,
 }
@@ -222,6 +223,7 @@ pub(crate) async fn start_device(
     State(state): State<Arc<AppState>>,
     JsonExt(payload): JsonExt<DeviceRequest>,
 ) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
+    debug!("Received start device request: {}", payload.device_id);
     // Create an AudioDevice from the device_id string
     let audio_device = match AudioDevice::from_name(&payload.device_id) {
         Ok(device) => device,
@@ -238,28 +240,21 @@ pub(crate) async fn start_device(
         is_paused: false,
     };
 
-    if let Err(e) = state
-        .audio_devices_control_sender
-        .send((audio_device, device_control))
-        .await
-    {
-        error!("failed to start audio device: {}", e);
-        Err((
-            StatusCode::NOT_FOUND,
-            JsonResponse(json!({"error": "Device not found"})),
-        ))
-    } else {
-        Ok(JsonResponse(DeviceStatus {
-            id: payload.device_id,
-            is_running: true,
-        }))
-    }
+    state
+        .audio_devices_control
+        .push((audio_device, device_control));
+
+    Ok(JsonResponse(DeviceStatus {
+        id: payload.device_id,
+        is_running: true,
+    }))
 }
 
 pub(crate) async fn stop_device(
     State(state): State<Arc<AppState>>,
     JsonExt(payload): JsonExt<DeviceRequest>,
 ) -> Result<JsonResponse<DeviceStatus>, (StatusCode, JsonResponse<serde_json::Value>)> {
+    debug!("Received stop device request: {}", payload.device_id);
     // Create an AudioDevice from the device_id string
     let audio_device = match AudioDevice::from_name(&payload.device_id) {
         Ok(device) => device,
@@ -275,22 +270,14 @@ pub(crate) async fn stop_device(
         is_paused: false,
     };
 
-    if let Err(e) = state
-        .audio_devices_control_sender
-        .send((audio_device, device_control))
-        .await
-    {
-        error!("failed to stop audio device: {}", e);
-        Err((
-            StatusCode::NOT_FOUND,
-            JsonResponse(json!({"error": "Device not found"})),
-        ))
-    } else {
-        Ok(JsonResponse(DeviceStatus {
-            id: payload.device_id,
-            is_running: false,
-        }))
-    }
+    state
+        .audio_devices_control
+        .push((audio_device, device_control));
+
+    Ok(JsonResponse(DeviceStatus {
+        id: payload.device_id,
+        is_running: false,
+    }))
 }
 
 pub(crate) async fn start_recording(
@@ -363,6 +350,8 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             (None, None)
         }
     };
+    debug!("Last frame timestamp: {:?}", last_frame);
+    debug!("Last audio timestamp: {:?}", last_audio);
 
     let now = Utc::now();
     let threshold = Duration::from_secs(60);
@@ -462,7 +451,7 @@ pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
+    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
 }
 
 impl Server {
@@ -470,13 +459,13 @@ impl Server {
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
         vision_control: Arc<AtomicBool>,
-        audio_devices_control_sender: Sender<(AudioDevice, DeviceControl)>,
+        audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     ) -> Self {
         Server {
             db,
             addr,
             vision_control,
-            audio_devices_control_sender,
+            audio_devices_control,
         }
     }
 
@@ -492,7 +481,7 @@ impl Server {
         let app_state = Arc::new(AppState {
             db: self.db,
             vision_control: self.vision_control,
-            audio_devices_control_sender: self.audio_devices_control_sender,
+            audio_devices_control: self.audio_devices_control,
             devices_status: device_status,
             app_start_time: Utc::now(),
         });

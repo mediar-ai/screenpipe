@@ -1,6 +1,7 @@
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
+use crossbeam::queue::SegQueue;
 use log::{debug, error, info, warn};
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput, DeviceControl,
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 pub enum RecorderControl {
     Pause,
@@ -39,15 +40,13 @@ impl DataOutputWrapper {
     }
 }
 
-
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
     audio_chunk_duration: Duration,
-    mut full_control: Receiver<RecorderControl>,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control_receiver: Receiver<(AudioDevice, DeviceControl)>,
+    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     save_text_files: bool,
 ) -> Result<()> {
     info!("Recording now");
@@ -63,7 +62,14 @@ pub async fn start_continuous_recording(
     let output_path_audio = Arc::clone(&output_path);
 
     let video_handle = tokio::spawn(async move {
-        record_video(db_manager_video, output_path_video, fps, is_running_video, save_text_files).await
+        record_video(
+            db_manager_video,
+            output_path_video,
+            fps,
+            is_running_video,
+            save_text_files,
+        )
+        .await
     });
 
     let audio_handle = tokio::spawn(async move {
@@ -73,43 +79,13 @@ pub async fn start_continuous_recording(
             audio_chunk_duration,
             whisper_sender,
             whisper_receiver,
-            audio_devices_control_receiver,
+            audio_devices_control,
         )
         .await
     });
 
-    // Control loop
-    let control_handle = tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                Some(ctrl) = full_control.recv() => {
-                    match ctrl {
-                        RecorderControl::Stop => {
-                            vision_control.store(false, Ordering::SeqCst);
-                            // stop all audio devices
-                            // TODO not implemented
-                            break; // Exit the loop when Stop is received
-                        }
-                        RecorderControl::Pause => {
-                            // pause all audio devices
-                        }
-                        RecorderControl::Resume => {
-                            vision_control.store(true, Ordering::SeqCst);
-                            // resume all audio devices
-                        }
-                    }
-                }
-                else => {
-                    // Channel closed, exit the loop
-                    break;
-                }
-            }
-        }
-    });
-
     video_handle.await??;
     audio_handle.await??;
-    control_handle.await?;
 
     info!("Stopped recording");
     Ok(())
@@ -135,7 +111,7 @@ async fn record_video(
     };
     // debug!("record_video: video_capture");
     let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback, save_text_files);
-    
+
     while is_running.load(Ordering::SeqCst) {
         // let queue_lenglth = video_capture.ocr_frame_queue.lock().await.len();
         // debug!("record_video: Checking for latest frame. Number of frames in OCR queue: {}", queue_length);
@@ -143,12 +119,28 @@ async fn record_video(
             match db.insert_frame().await {
                 Ok(frame_id) => {
                     let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
-                    let new_text_json_vs_previous_frame = serde_json::to_string(&frame.new_text_json).unwrap_or_default();
-                    let raw_data_output_from_ocr = DataOutputWrapper { data_output: frame.data_output }.to_json();
+                    let new_text_json_vs_previous_frame =
+                        serde_json::to_string(&frame.new_text_json).unwrap_or_default();
+                    let raw_data_output_from_ocr = DataOutputWrapper {
+                        data_output: frame.data_output,
+                    }
+                    .to_json();
 
                     // debug!("insert_ocr_text called for frame {}", frame_id);
-                    if let Err(e) = db.insert_ocr_text(frame_id, &frame.text, &text_json, &new_text_json_vs_previous_frame, &raw_data_output_from_ocr).await {
-                        error!("Failed to insert OCR text: {}, skipping frame {}", e, frame_id);
+                    if let Err(e) = db
+                        .insert_ocr_text(
+                            frame_id,
+                            &frame.text,
+                            &text_json,
+                            &new_text_json_vs_previous_frame,
+                            &raw_data_output_from_ocr,
+                        )
+                        .await
+                    {
+                        error!(
+                            "Failed to insert OCR text: {}, skipping frame {}",
+                            e, frame_id
+                        );
                         continue; // Skip to the next iteration
                     }
                 }
@@ -173,13 +165,13 @@ async fn record_audio(
     chunk_duration: Duration,
     whisper_sender: UnboundedSender<AudioInput>,
     mut whisper_receiver: UnboundedReceiver<TranscriptionResult>,
-    mut audio_devices_control_receiver: Receiver<(AudioDevice, DeviceControl)>,
+    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
 
     loop {
         // Non-blocking check for new device controls
-        while let Ok((audio_device, device_control)) = audio_devices_control_receiver.try_recv() {
+        while let Some((audio_device, device_control)) = audio_devices_control.pop() {
             info!("Received audio device: {}", &audio_device);
             let device_id = audio_device.to_string();
 
