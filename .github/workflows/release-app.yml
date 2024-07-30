@@ -140,6 +140,9 @@ jobs:
           cargo build --release ${{ matrix.args }}
           ls -R .
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       # Run pre build again to copy the CLI into app
       - name: Run pre_build.js on ${{ matrix.platform }}
         shell: bash
