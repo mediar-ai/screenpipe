@@ -206,7 +206,10 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 <details>
   <summary>run example vercel/ai chatbot web interface</summary>
 
-You can either use examples like a Vercel chatbot, or Obsidian integration or our [desktop app](https://screenpi.pe/).  
+  This example uses OpenAI. If you're looking for ollama example check the [examples folder](https://github.com/louis030195/screen-pipe/tree/main/examples/typescript)
+
+The [desktop app](https://screenpi.pe/) fully support OpenAI & Ollama by default.
+
 To run Vercel chatbot, try this:
 
 ```bash
