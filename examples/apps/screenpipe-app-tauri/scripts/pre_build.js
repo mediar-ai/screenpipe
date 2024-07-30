@@ -114,8 +114,8 @@ if (platform == 'windows') {
 		await fs.copyFile(screenpipeSrc, screenpipeDest);
 		console.log('Screenpipe binary copied successfully.');
 	} catch (error) {
-		console.error('Failed to copy screenpipe binary:', error);
-		process.exit(1);
+		console.warn('Failed to copy screenpipe binary:', error); // ! HACK running pre_build.js before cargo build --release need some deps fk
+		// process.exit(1);
 	}
 
 	// Setup FFMPEG
