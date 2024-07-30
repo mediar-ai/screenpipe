@@ -124,7 +124,7 @@ if (platform == 'windows') {
 	if (!(await fs.exists('tesseract'))) {
 		console.log('Setting up Tesseract for Windows...')
 		await $`${wgetPath} -nc --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
-		await $`${tesseractInstaller} /S /D=C:\\Program Files\\Tesseract-OCR`
+		await $`"${process.cwd()}\\${tesseractInstaller}" /S /D=C:\\Program Files\\Tesseract-OCR`
 		await $`rm ${tesseractInstaller}`
 		await $`mv "C:\\Program Files\\Tesseract-OCR" tesseract`
 		console.log('Tesseract for Windows set up successfully.')
