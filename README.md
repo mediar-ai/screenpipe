@@ -388,7 +388,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
 - [x] local api
-- [x] Cross platform CLI, desktop (MacOS, Windows, Linux)
+- [x] Cross platform CLI, [desktop app](https://screenpi.pe/) (MacOS, Windows, Linux)
 - [x] Metal, CUDA
 - [ ] TS SDK
 - [ ] multimodal embeddings
