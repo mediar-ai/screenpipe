@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/tooltip";
 import React from "react";
 import PipeDialog from "@/components/pipe-store";
+import NotificationHandler from "@/components/notification-handler";
 
 function Header() {
   return (
@@ -138,6 +139,8 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8">
+      <NotificationHandler />
+
       <Header />
       {settings.isLoading ? (
         <div className="flex flex-col items-center justify-center h-full space-y-4">

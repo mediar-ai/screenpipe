@@ -4980,6 +4980,237 @@
           ]
         },
         {
+          "description": "notification:default -> This permission set configures which\nnotification features are by default exposed.\n\n#### Granted Permissions\n\nIt allows all notification related features.\n\n",
+          "type": "string",
+          "enum": [
+            "notification:default"
+          ]
+        },
+        {
+          "description": "notification:allow-batch -> Enables the batch command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-batch"
+          ]
+        },
+        {
+          "description": "notification:allow-cancel -> Enables the cancel command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-cancel"
+          ]
+        },
+        {
+          "description": "notification:allow-check-permissions -> Enables the check_permissions command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-check-permissions"
+          ]
+        },
+        {
+          "description": "notification:allow-create-channel -> Enables the create_channel command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-create-channel"
+          ]
+        },
+        {
+          "description": "notification:allow-delete-channel -> Enables the delete_channel command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-delete-channel"
+          ]
+        },
+        {
+          "description": "notification:allow-get-active -> Enables the get_active command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-get-active"
+          ]
+        },
+        {
+          "description": "notification:allow-get-pending -> Enables the get_pending command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-get-pending"
+          ]
+        },
+        {
+          "description": "notification:allow-is-permission-granted -> Enables the is_permission_granted command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-is-permission-granted"
+          ]
+        },
+        {
+          "description": "notification:allow-list-channels -> Enables the list_channels command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-list-channels"
+          ]
+        },
+        {
+          "description": "notification:allow-notify -> Enables the notify command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-notify"
+          ]
+        },
+        {
+          "description": "notification:allow-permission-state -> Enables the permission_state command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-permission-state"
+          ]
+        },
+        {
+          "description": "notification:allow-register-action-types -> Enables the register_action_types command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-register-action-types"
+          ]
+        },
+        {
+          "description": "notification:allow-register-listener -> Enables the register_listener command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-register-listener"
+          ]
+        },
+        {
+          "description": "notification:allow-remove-active -> Enables the remove_active command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-remove-active"
+          ]
+        },
+        {
+          "description": "notification:allow-request-permission -> Enables the request_permission command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-request-permission"
+          ]
+        },
+        {
+          "description": "notification:allow-show -> Enables the show command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:allow-show"
+          ]
+        },
+        {
+          "description": "notification:deny-batch -> Denies the batch command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-batch"
+          ]
+        },
+        {
+          "description": "notification:deny-cancel -> Denies the cancel command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-cancel"
+          ]
+        },
+        {
+          "description": "notification:deny-check-permissions -> Denies the check_permissions command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-check-permissions"
+          ]
+        },
+        {
+          "description": "notification:deny-create-channel -> Denies the create_channel command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-create-channel"
+          ]
+        },
+        {
+          "description": "notification:deny-delete-channel -> Denies the delete_channel command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-delete-channel"
+          ]
+        },
+        {
+          "description": "notification:deny-get-active -> Denies the get_active command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-get-active"
+          ]
+        },
+        {
+          "description": "notification:deny-get-pending -> Denies the get_pending command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-get-pending"
+          ]
+        },
+        {
+          "description": "notification:deny-is-permission-granted -> Denies the is_permission_granted command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-is-permission-granted"
+          ]
+        },
+        {
+          "description": "notification:deny-list-channels -> Denies the list_channels command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-list-channels"
+          ]
+        },
+        {
+          "description": "notification:deny-notify -> Denies the notify command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-notify"
+          ]
+        },
+        {
+          "description": "notification:deny-permission-state -> Denies the permission_state command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-permission-state"
+          ]
+        },
+        {
+          "description": "notification:deny-register-action-types -> Denies the register_action_types command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-register-action-types"
+          ]
+        },
+        {
+          "description": "notification:deny-register-listener -> Denies the register_listener command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-register-listener"
+          ]
+        },
+        {
+          "description": "notification:deny-remove-active -> Denies the remove_active command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-remove-active"
+          ]
+        },
+        {
+          "description": "notification:deny-request-permission -> Denies the request_permission command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-request-permission"
+          ]
+        },
+        {
+          "description": "notification:deny-show -> Denies the show command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "notification:deny-show"
+          ]
+        },
+        {
           "description": "path:default -> Default permissions for the plugin.",
           "type": "string",
           "enum": [

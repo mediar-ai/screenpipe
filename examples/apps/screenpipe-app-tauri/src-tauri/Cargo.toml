@@ -65,6 +65,7 @@ sysinfo = "0.29.0"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 tauri-plugin-fs = "2.0.0-beta"
+tauri-plugin-notification = "2.0.0-alpha.3"
 
 
 # M series MacOS

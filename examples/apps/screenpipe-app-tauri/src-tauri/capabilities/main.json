@@ -6,6 +6,7 @@
     "main"
   ],
   "permissions": [
+    "notification:default",
     "path:default",
     "event:default",
     "window:default",

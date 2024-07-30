@@ -74,11 +74,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
-                tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
-                    debug!("{:?}", line);
+                tauri_plugin_shell::process::CommandEvent::Stdout(_line) => {
+                    // debug!("{:?}", line); // TODO not u8
                 }
-                tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
-                    debug!("{:?}", line);
+                tauri_plugin_shell::process::CommandEvent::Stderr(_line) => {
+                    // debug!("{:?}", line);
                 }
                 _ => {}
             }
@@ -117,6 +117,7 @@ async fn main() {
         // .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_fs::init())
         // .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_autostart::init(
