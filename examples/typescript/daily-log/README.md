@@ -1,15 +1,9 @@
+![Rocks screenshot (28)](https://github.com/user-attachments/assets/e941ca7e-01c3-4f2c-81a0-0a1edac4e916)
 
 
 
 this is quite experimental but a good start if you want to build a daily log of your day
 
-the output could be like this:
-
-```md
-### 073024 - 9.05 AM - 9.10 AM - Inbox 0 (emails)
-- 2 min: Answer to John
-- 3 min: Checked & scrolled spam folder
-```
 
 feel free to prompt engineer, works with ollama, openai.
 
