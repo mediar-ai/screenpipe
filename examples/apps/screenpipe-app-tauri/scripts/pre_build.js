@@ -94,8 +94,8 @@ if (platform == 'windows') {
 	}
 
 	// Setup Tesseract
-	const tesseractName = 'tesseract-5.3.3-windows'
-	const tesseractUrl = 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.3.3/tesseract-ocr-w64-setup-5.3.3.20231005.exe'
+	const tesseractName = 'tesseract-setup'
+	const tesseractUrl = 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe'
 	const tesseractInstaller = `${tesseractName}.exe`
 
 	if (!(await fs.exists('tesseract'))) {
