@@ -130,9 +130,17 @@ async fn main() {
         .setup(move |app| {
             // run this on windows only
             if cfg!(windows) {
-                let app_dir = app.path().executable_dir().expect("Failed to get app dir");
-                let tessdata_path = app_dir.join("tessdata");
+                // Get the directory of the executable
+                let exe_dir = env::current_exe()
+                    .expect("Failed to get current executable path")
+                    .parent()
+                    .expect("Failed to get parent directory of executable")
+                    .to_path_buf();
+
+                // Set the TESSDATA_PREFIX environment variable
+                let tessdata_path = exe_dir.join("tessdata");
                 env::set_var("TESSDATA_PREFIX", tessdata_path);
+
                 // ! hopefully it passes to CLI too
             }
 
