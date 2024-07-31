@@ -5,8 +5,7 @@
         ],
         "resources": {
             "ffmpeg\\bin\\x64\\*": "./",
-            "ffmpeg\\lib\\*": "./",
-            "screenpipe-x86_64-pc-windows-gnu.exe": "./"
+            "ffmpeg\\lib\\*": "./"
         }
     }
 }
