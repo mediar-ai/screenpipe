@@ -7,7 +7,7 @@ class Screenpipe < Formula
     on_macos do
       if Hardware::CPU.arm?
         url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
-        sha256 "7fa4ffe0791673e8025b48aa26a41b205e8efe5baae1599bbd4927370d5ea957" # arm64
+        sha256 "e763dddc570a3462c0cfaacc2d8ed1b49fec426ff5c7fac10d398b78f7b30ebd" # arm64
       else
         url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
         sha256 "ec20c5cc25856c084970da9c8f95dbae9637e60b74d759d95b2e3c1847768f16" # x86_64
