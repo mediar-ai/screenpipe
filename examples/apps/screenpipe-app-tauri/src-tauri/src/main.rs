@@ -43,6 +43,7 @@ async fn use_cli(
         if let Some(child) = state.0.lock().unwrap().take() {
             child.kill().map_err(|e| e.to_string())?;
         }
+
         // hard kill the sidecar on port 3030
         let _ = tokio::process::Command::new("pkill")
             .arg("-f")
@@ -65,6 +66,13 @@ async fn use_cli(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
+    // if any screenpipe already running, kill it
+    let _ = tokio::process::Command::new("pkill")
+        .arg("-f")
+        .arg("screenpipe")
+        .output()
+        .await;
+
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
     let (mut rx, child) = sidecar
         .args(["--port", "3030", "--debug"])
@@ -246,14 +254,7 @@ async fn main() {
                 Ok(())
             });
 
-            // tauri::async_runtime::spawn(async move {
-            //     // hard kill the sidecar on port 3030
-            //     let _ = tokio::process::Command::new("pkill")
-            //         .arg("-f")
-            //         .arg("screenpipe")
-            //         .output()
-            //             .await;
-            // });
+
 
             // Spawn the sidecar initially
             let sidecar_state = app.state::<SidecarState>();
