@@ -8,6 +8,7 @@ use tauri::Config;
 use tauri_plugin_shell::ShellExt;
 
 use serde_json::Value;
+use std::env;
 use std::fs::File;
 use std::io::Write;
 
@@ -129,10 +130,7 @@ async fn main() {
         .setup(move |app| {
             // run this on windows only
             if cfg!(windows) {
-                let app_dir = app
-                    .path_resolver()
-                    .app_dir()
-                    .expect("Failed to get app dir");
+                let app_dir = app.path().executable_dir().expect("Failed to get app dir");
                 let tessdata_path = app_dir.join("tessdata");
                 env::set_var("TESSDATA_PREFIX", tessdata_path);
                 // ! hopefully it passes to CLI too
