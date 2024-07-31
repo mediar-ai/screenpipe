@@ -98,6 +98,7 @@ async fn record_video(
     is_running: Arc<AtomicBool>,
     save_text_files: bool,
 ) -> Result<()> {
+    debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
     let rt = tokio::runtime::Handle::current();
     let new_chunk_callback = move |file_path: &str| {
