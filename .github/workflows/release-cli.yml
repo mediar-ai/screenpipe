@@ -102,7 +102,9 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          git stash
           git pull origin main
+          git stash pop
           git add Formula/screenpipe.rb
           git commit -m "chore: update brew to version ${{ env.VERSION }} for ${{ matrix.target }}"
           git push
