@@ -66,12 +66,21 @@ async fn use_cli(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    // if any screenpipe already running, kill it
-    let _ = tokio::process::Command::new("pkill")
-        .arg("-f")
-        .arg("screenpipe")
-        .output()
-        .await;
+
+    // basically it user hard kill the app it does not kill the sidecar
+    // resulting in multiple screenpipe instances
+    // (hard kill = cli, right click bottom bar), otherwise click on windows close should
+    // properly kill the sidecar
+    tauri::async_runtime::spawn(async {
+        let _ = tokio::process::Command::new("pkill")
+            .arg("-f")
+            .arg("screenpipe")
+            .output()
+            .await;
+    });
+
+    // sleep 1s hack
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
     let (mut rx, child) = sidecar
@@ -253,8 +262,6 @@ async fn main() {
 
                 Ok(())
             });
-
-
 
             // Spawn the sidecar initially
             let sidecar_state = app.state::<SidecarState>();
