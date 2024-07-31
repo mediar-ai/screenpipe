@@ -16,6 +16,8 @@ use rubato::{
 
 use crate::{multilingual, pcm_decode::pcm_decode};
 
+use webrtc_vad::{Vad, VadMode};
+
 #[derive(Clone)]
 pub struct WhisperModel {
     pub model: Model,
@@ -423,8 +425,48 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel) -> Result<String> {
         pcm_data = resample(pcm_data, sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
+    // Initialize VAD
+    debug!("VAD: Initializing VAD");
+    let mut vad = Vad::new();
+    vad.set_mode(VadMode::VeryAggressive); // Set mode to very aggressive
+
+    // Filter out non-speech segments
+    // debug!("VAD: Filtering out non-speech segments");
+    let frame_size = 160; // 10ms frame size for 16kHz audio
+    let mut speech_frames = Vec::new();
+    for (frame_index, chunk) in pcm_data.chunks(frame_size).enumerate() {
+        // Convert f32 to i16
+        let i16_chunk: Vec<i16> = chunk.iter().map(|&x| (x * 32767.0) as i16).collect();
+        match vad.is_voice_segment(&i16_chunk) {
+            Ok(is_voice) => {
+                if is_voice {
+                    debug!("VAD: Speech detected in frame {}", frame_index);
+                    speech_frames.extend_from_slice(chunk);
+                } else {
+                    // debug!("VAD: Non-speech frame {} filtered out", frame_index);
+                }
+            },
+            Err(e) => {
+                error!("VAD failed for frame {}: {:?}", frame_index, e);
+                // Optionally, you can choose to include the frame if VAD fails
+                // speech_frames.extend_from_slice(chunk);
+            }
+        }
+    }
+
+    debug!("Total frames processed: {}, Speech frames: {}", pcm_data.len() / frame_size, speech_frames.len() / frame_size);
+
+    // If no speech frames detected, skip processing
+    if speech_frames.is_empty() {
+        debug!("No speech detected using VAD, skipping audio processing");
+        return Ok("".to_string()); // Return an empty string or consider a more specific "no speech" indicator
+    }
+
+    debug!("Using {} speech frames out of {} total frames", speech_frames.len() / frame_size, pcm_data.len() / frame_size);
+
     debug!("Converting PCM to mel spectrogram");
-    let mel = audio::pcm_to_mel(&model.config(), &pcm_data, &mel_filters);
+    // let mel = audio::pcm_to_mel(&model.config(), &pcm_data, &mel_filters);
+    let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
     let mel_len = mel.len();
     debug!("Creating tensor from mel spectrogram");
     let mel = Tensor::from_vec(
