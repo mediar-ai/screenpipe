@@ -45,11 +45,11 @@ async fn use_cli(
         }
 
         // hard kill the sidecar on port 3030
-        let _ = tokio::process::Command::new("pkill")
-            .arg("-f")
-            .arg("screenpipe")
-            .output()
-            .await;
+        // let _ = tokio::process::Command::new("pkill")
+        //     .arg("-f")
+        //     .arg("screenpipe")
+        //     .output()
+        //     .await;
         debug!("Killed sidecar thru cli");
     } else {
         // Check if sidecar is already running
