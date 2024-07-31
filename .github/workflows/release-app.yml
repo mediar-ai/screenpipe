@@ -80,6 +80,11 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
+      - uses: actions/cache@v3
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/bun.lockb') }}
+
       - name: Cache Homebrew packages
         if: matrix.platform == 'macos-latest'
         uses: actions/cache@v3
@@ -112,6 +117,8 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-24.04'

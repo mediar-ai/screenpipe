@@ -317,22 +317,25 @@ async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyh
         &fps_str,
         "-i",
         "-",
-        "-vcodec",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-pix_fmt",
-        "yuv420p",
     ];
 
-    // Only add CRF option if not on Windows
-    // ! HACK this is temporary due to our windows prebuild system not having a complete enough ffmpeg (lot of ci infra to tweak)
-    // ! basically sacrificing some tiny video encoding quality on windows
-    if env::consts::OS != "windows" {
-        args.extend_from_slice(&["-crf", "25"]);
+    if env::consts::OS == "windows" {
+        // TODO switch back to libx264 when ffmpeg is updated in pre_build.js
+        // Use MPEG-4 encoder for Windows
+        args.extend_from_slice(&[
+            "-vcodec",
+            "mpeg4",
+            "-q:v",
+            "5", // Adjust quality (1-31, lower is better)
+            "-preset",
+            "ultrafast",
+        ]);
+    } else {
+        // Use libx264 for other platforms
+        args.extend_from_slice(&["-vcodec", "libx264", "-preset", "ultrafast", "-crf", "23"]);
     }
 
-    args.push(output_file);
+    args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 
     command
         .args(&args)
