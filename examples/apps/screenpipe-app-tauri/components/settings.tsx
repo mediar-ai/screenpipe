@@ -55,20 +55,6 @@ export function Settings({ className }: { className?: string }) {
     updateSettings({ ...localSettings, useOllama: checked });
   };
 
-  const handleCliToggle = async (checked: boolean) => {
-    setIsTogglingCli(true);
-    try {
-      await invoke("use_cli", { useCli: checked });
-      setLocalSettings({ ...localSettings, useCli: checked });
-      updateSettings({ ...localSettings, useCli: checked });
-    } catch (error) {
-      console.error("Failed to toggle sidecar:", error);
-      setIsTogglingCliError("Failed to toggle sidecar: " + error);
-    } finally {
-      setIsTogglingCli(false);
-    }
-  };
-
   const handleStop = async () => {
     setIsStopping(true);
     try {

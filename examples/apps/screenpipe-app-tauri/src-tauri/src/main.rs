@@ -71,13 +71,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     // resulting in multiple screenpipe instances
     // (hard kill = cli, right click bottom bar), otherwise click on windows close should
     // properly kill the sidecar
-    tauri::async_runtime::spawn(async {
-        let _ = tokio::process::Command::new("pkill")
-            .arg("-f")
-            .arg("screenpipe")
-            .output()
-            .await;
-    });
+    // tauri::async_runtime::spawn(async {
+    //     let _ = tokio::process::Command::new("pkill")
+    //         .arg("-f")
+    //         .arg("screenpipe")
+    //         .output()
+    //         .await;
+    // });
 
     // sleep 1s hack
     std::thread::sleep(std::time::Duration::from_secs(1));
