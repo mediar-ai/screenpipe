@@ -1,8 +1,12 @@
 {
     "bundle": {
+        "externalBin": [
+            "screenpipe"
+        ],
         "resources": {
             "ffmpeg\\bin\\x64\\*": "./",
-            "ffmpeg\\lib\\*": "./"
+            "ffmpeg\\lib\\*": "./",
+            "screenpipe-x86_64-pc-windows-gnu.exe": "./"
         }
     }
 }
