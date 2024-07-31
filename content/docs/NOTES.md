@@ -4,7 +4,18 @@
 ## Troubleshooting / Product FAQ
 
 
+
 <details>
+  
+<summary>Windows Defender SmartScreen</summary>
+
+  Windows will ask you this because we didn't sign the app yet. Be reassured, it's open source and secure, we have nothing to hide, press run anyway:
+
+  ![image](https://github.com/user-attachments/assets/8e43d2e4-e178-4d3e-8210-712326d59c97)
+
+</details>
+
+  <details>
   <summary>I can't install screenpipe</summary>
 
   Make sure to press control + right click on the `.dmg` file and press open
