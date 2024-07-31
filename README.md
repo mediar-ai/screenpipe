@@ -402,6 +402,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
     - [ ] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort)
 - [x] screenshots + OCR
 - [x] audio + STT (works with multi input & output devices, like your iPhone + mac mic)
+- [x] remote capture (run screenpipe on the cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
 - [x] local api
