@@ -80,6 +80,18 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
+      - name: Cache Homebrew packages
+        if: matrix.platform == 'macos-latest'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Cellar/ffmpeg
+            /usr/local/Cellar/pkg-config
+          key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/release-cli.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-brew-
+
       - name: Cache Pre Build
         id: cache-pre-build
         uses: actions/cache@v4

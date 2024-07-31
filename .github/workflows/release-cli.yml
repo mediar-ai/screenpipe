@@ -56,8 +56,8 @@ jobs:
 
       - name: Build with Metal feature
         run: |
-          # export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
-          # export PKG_CONFIG_ALLOW_CROSS=1
+          export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
+          export PKG_CONFIG_ALLOW_CROSS=1
           cargo build --release --features metal --target ${{ matrix.target }}
 
       # get the current tag or take latest (in the case of a workflow dispatch)
@@ -73,8 +73,8 @@ jobs:
 
       - name: Create deployment package
         run: |
-          # ls -R target/release
-          tar -czf screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz -C target/release screenpipe
+          ls -R target/
+          tar -czf screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release screenpipe
 
       - name: Calculate SHA256
         run: |
