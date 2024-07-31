@@ -103,6 +103,7 @@ fn get_device_and_config(
                         .to_string()
                         .replace(" (input)", "")
                         .replace(" (output)", "")
+                        .trim() // HACK for windows shit spaces :D
                 })
                 .unwrap_or(false)
         })
