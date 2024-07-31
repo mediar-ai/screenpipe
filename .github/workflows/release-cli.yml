@@ -108,7 +108,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
-          gh pr create --base main --head update-formula-${{ matrix.target }} --title "Update Homebrew formula for ${{ matrix.target }}" --body "Automated PR to update Homebrew formula for ${{ matrix.target }}"
+          gh pr create --base main --head update-formula-${{ matrix.target }}-${{ github.sha }} --title "Update Homebrew formula for ${{ matrix.target }}" --body "Automated PR to update Homebrew formula for ${{ matrix.target }}"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
