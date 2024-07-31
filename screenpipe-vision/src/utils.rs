@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
@@ -181,8 +182,8 @@ pub async fn save_text_files(
         .iter()
         .map(|record| record.get("text").cloned().unwrap_or_default())
         .collect();
-
-    let new_text_file_path = format!("text_json/new_text_{}.txt", id);
+    let base_path = PathBuf::from("text_json");
+    let new_text_file_path = base_path.join(format!("new_text_{}.txt", id));
     let mut new_text_file = match File::create(&new_text_file_path) {
         Ok(file) => file,
         Err(e) => {
@@ -194,7 +195,7 @@ pub async fn save_text_files(
         writeln!(new_text_file, "{}", line).unwrap();
     }
 
-    let current_text_file_path = format!("text_json/current_text_{}.txt", id);
+    let current_text_file_path = base_path.join(format!("current_text_{}.txt", id));
     let mut current_text_file = match File::create(&current_text_file_path) {
         Ok(file) => file,
         Err(e) => {
@@ -211,7 +212,7 @@ pub async fn save_text_files(
             .iter()
             .map(|record| record.get("text").cloned().unwrap_or_default())
             .collect();
-        let prev_text_file_path = format!("text_json/previous_text_{}.txt", id);
+        let prev_text_file_path = base_path.join(format!("previous_text_{}.txt", id));
         let mut prev_text_file = match File::create(&prev_text_file_path) {
             Ok(file) => file,
             Err(e) => {

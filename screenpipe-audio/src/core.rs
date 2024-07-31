@@ -96,6 +96,14 @@ fn get_device_and_config(
     let audio_device = if audio_device.to_string() == "default" {
         host.default_input_device()
     } else {
+        // print input device for debugging windows
+        if cfg!(windows) {
+            debug!(
+                "input devices: {:?}",
+                host.input_devices()?.map(|x| x.name()).collect::<Vec<_>>()
+            );
+        }
+
         host.input_devices()?.find(|x| {
             x.name()
                 .map(|y| {

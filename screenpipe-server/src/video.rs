@@ -4,6 +4,7 @@ use log::{debug, error, info, warn};
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage};
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
@@ -185,7 +186,11 @@ async fn save_frames_as_video(
             let time = Utc::now();
             let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
             // Start new FFmpeg process with a new output file
-            let output_file = format!("{}/{}.mp4", output_path, formatted_time);
+            let output_file = PathBuf::from(output_path)
+                .join(format!("{}.mp4", formatted_time))
+                .to_str()
+                .expect("Failed to create valid path")
+                .to_string();
 
             // Call the callback with the new video chunk file path
             new_chunk_callback(&output_file);

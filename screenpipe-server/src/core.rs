@@ -8,6 +8,7 @@ use screenpipe_audio::{
     TranscriptionResult,
 };
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -215,10 +216,11 @@ async fn record_audio(
                     let device_control_clone = device_control_clone.clone();
 
                     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-                    let file_path = format!(
-                        "{}/{}_{}.mp4",
-                        output_path_clone, audio_device_clone, new_file_name
-                    );
+                    let file_path = PathBuf::from(&*output_path_clone)
+                        .join(format!("{}_{}.mp4", audio_device_clone, new_file_name))
+                        .to_str()
+                        .expect("Failed to create valid path")
+                        .to_string();
                     info!(
                         "Starting record_and_transcribe for device {} (iteration {})",
                         audio_device_clone, iteration
