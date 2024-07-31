@@ -69,8 +69,8 @@ jobs:
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
 
-      # - name: Rust cache
-      #   uses: swatinem/rust-cache@v2
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -80,25 +80,26 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
-      # - name: Cache Pre Build
-      #   id: cache-pre-build
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: |
-      #       examples/apps/screenpipe-app-tauri/src-tauri/openblas
-      #       examples/apps/screenpipe-app-tauri/src-tauri/clblast
-      #       examples/apps/screenpipe-app-tauri/src-tauri/ffmpeg
-      #     key: ${{ matrix.platform }}-${{ matrix.args }}-pre-build
+      - name: Cache Pre Build
+        id: cache-pre-build
+        uses: actions/cache@v4
+        with:
+          path: |
+            examples/apps/screenpipe-app-tauri/src-tauri/openblas
+            examples/apps/screenpipe-app-tauri/src-tauri/clblast
+            examples/apps/screenpipe-app-tauri/src-tauri/ffmpeg
+            examples/apps/screenpipe-app-tauri/src-tauri/tesseract-*
+          key: ${{ matrix.platform }}-${{ matrix.args }}-pre-build
 
-      # - uses: actions/cache@v3
-      #   with:
-      #     path: |
-      #       ~/.cargo/bin/
-      #       ~/.cargo/registry/index/
-      #       ~/.cargo/registry/cache/
-      #       ~/.cargo/git/db/
-      #       target/
-      #     key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-24.04'
@@ -110,12 +111,6 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           brew install ffmpeg pkg-config
-
-      # - name: Install Windows dependencies
-      #   if: matrix.platform == 'windows-latest'
-      #   run: |
-      #     choco install pkgconfiglite
-      #     choco install ffmpeg
 
       - name: Install frontend dependencies
         shell: bash
