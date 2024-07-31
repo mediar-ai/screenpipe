@@ -256,7 +256,7 @@ const endDate = "<some time 10m ago..>"
 // get all the screen & mic data from roughly last hour 
 const results = fetchScreenpipe(startDate, endDate)
 
-// send it to an LLM and ask for a sumarry
+// send it to an LLM and ask for a summary
 const summary = fetchOllama("{results} create a summary from these transcriptions")
 // or const summary = fetchOpenai(results)
 
