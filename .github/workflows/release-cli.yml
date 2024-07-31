@@ -91,7 +91,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
           git fetch origin main
-          git checkout -b update-formula-${{ matrix.target }}
+          git checkout -b update-formula-${{ matrix.target }}-${{ github.sha }}
           git merge origin/main --no-edit
           sed -i '' 's/version ".*"/version "'$VERSION'"/' Formula/screenpipe.rb
           if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
@@ -102,7 +102,7 @@ jobs:
           sed -i '' 's|v[0-9.]*\/screenpipe-[0-9.]*-${{ matrix.target }}|v'$VERSION'\/screenpipe-'$VERSION'-${{ matrix.target }}|' Formula/screenpipe.rb
           git add Formula/screenpipe.rb
           git commit -m "chore: update brew to version ${{ env.VERSION }} for ${{ matrix.target }}"
-          git push -u origin update-formula-${{ matrix.target }}
+          git push -u origin update-formula-${{ matrix.target }}-${{ github.sha }}
 
       - name: Create Pull Request
         env:
