@@ -175,7 +175,7 @@ async fn record_audio(
     loop {
         // Non-blocking check for new device controls
         while let Some((audio_device, device_control)) = audio_devices_control.pop() {
-            info!("Received audio device: {}", &audio_device);
+            debug!("Received audio device: {}", &audio_device);
             let device_id = audio_device.to_string();
 
             if !device_control.is_running {
@@ -196,7 +196,7 @@ async fn record_audio(
             let handle = tokio::spawn(async move {
                 let audio_device_clone = Arc::clone(&audio_device);
                 let device_control_clone = Arc::clone(&device_control);
-                info!(
+                debug!(
                     "Starting audio capture thread for device: {}",
                     &audio_device
                 );
@@ -204,7 +204,7 @@ async fn record_audio(
                 let mut iteration = 0;
                 loop {
                     iteration += 1;
-                    info!(
+                    debug!(
                         "Starting iteration {} for device {}",
                         iteration, audio_device_clone
                     );
@@ -221,7 +221,7 @@ async fn record_audio(
                         .to_str()
                         .expect("Failed to create valid path")
                         .to_string();
-                    info!(
+                        debug!(
                         "Starting record_and_transcribe for device {} (iteration {})",
                         audio_device_clone, iteration
                     );

@@ -135,8 +135,8 @@ pub fn detect_language(
     let probs = probs.to_vec1::<f32>()?;
     let mut probs = LANGUAGES.iter().zip(probs.iter()).collect::<Vec<_>>();
     probs.sort_by(|(_, p1), (_, p2)| p2.total_cmp(p1));
-    for ((_, language), p) in probs.iter().take(5) {
-        info!("{language}: {p}")
+    for ((_lang_code, _language), _p) in probs.iter().take(5) {
+        // info!("{language}: {p}")
     }
     let language = super::stt::token_id(tokenizer, &format!("<|{}|>", probs[0].0 .0))?;
     info!("detected language: {:?}", probs[0].0);

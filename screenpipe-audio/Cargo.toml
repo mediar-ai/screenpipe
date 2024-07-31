@@ -60,6 +60,9 @@ bytemuck = "1.16.1"
 # Async
 tokio = { workspace = true }
 
+# Detect speech/silence
+webrtc-vad = "0.4.0"
+
 screenpipe-core = { path = "../screenpipe-core" }
 
 [dev-dependencies]
