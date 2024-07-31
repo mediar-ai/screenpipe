@@ -179,9 +179,10 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 ```bash
 sudo apt-get update
 sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev tesseract-ocr libtesseract-dev
-```
 
- Install [Rust](https://www.rust-lang.org/tools/install).
+# Install Rust programming language
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
   2. Clone the repo:
 
