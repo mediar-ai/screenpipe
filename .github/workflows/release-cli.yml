@@ -216,11 +216,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Download Artifacts
-        uses: actions/download-artifact@v2
-        with:
-          name: screenpipe-linux
-
       - name: Download macOS Artifact Intel
         uses: actions/download-artifact@v2
         with:
@@ -231,27 +226,24 @@ jobs:
         with:
           name: screenpipe-macos-aarch64-apple-darwin
 
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: screenpipe-windows
-
-      - name: Set Version
-        shell: bash
+      # get the current tag or take latest (in the case of a workflow dispatch)
+      - name: Set version
         run: |
-          if [[ $GITHUB_REF_NAME != v* ]]; then
-            VERSION=$(git describe --tags --abbrev=0)
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(git ls-remote --tags --refs --sort="version:refname" | tail -n1 | sed 's/.*\///' | sed 's/^v//')
           fi
-          VERSION=${VERSION#v}
+          if [[ -z "$VERSION" ]]; then
+            VERSION="0.0.0"
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "RELEASE_VERSION=$(echo ${VERSION} | cut -f1 -d-)" >> $GITHUB_ENV
+          echo "Set version to: $VERSION"
 
       - name: Create or update Release
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
-          gh release create ${{ env.RELEASE_VERSION }} --title ${{ env.RELEASE_VERSION }} --generate-notes
-          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-linux.tar.gz
-          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-macos-x86_64-apple-darwin
-          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-macos-aarch64-apple-darwin
-          gh release upload ${{ env.RELEASE_VERSION }} screenpipe-windows.zip
+          gh release create ${{ env.VERSION }} --title ${{ env.VERSION }} --generate-notes
+          gh release upload ${{ env.VERSION }} screenpipe-macos-x86_64-apple-darwin
+          gh release upload ${{ env.VERSION }} screenpipe-macos-aarch64-apple-darwin
