@@ -49,7 +49,7 @@ There are numerous use cases that can be built on top of this layer. To simplify
 
 There are multiple ways to install screenpipe:
 - as a CLI (continue reading), for rather technical users
-- as a [paid desktop app](https://screenpi.pe) with updates, support, and priority features
+- as a [paid desktop app](https://screenpi.pe) with updates, priority support, and features
 - as a free desktop app (but you need to build it yourself). We're 100% OSS.
 
 This is the instructions to install the command line interface.
