@@ -48,7 +48,7 @@ jobs:
 
       - uses: actions/cache@v3
         with:
-          path: | 
+          path: |
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
@@ -64,13 +64,16 @@ jobs:
       # get the current tag or take latest (in the case of a workflow dispatch)
       - name: Set version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          if [[ $VERSION != v* ]]; then
-            git fetch --tags
-            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(git ls-remote --tags --refs --sort="version:refname" | tail -n1 | sed 's/.*\///' | sed 's/^v//')
           fi
-          VERSION=${VERSION#v}
+          if [[ -z "$VERSION" ]]; then
+            VERSION="0.0.0"
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Set version to: $VERSION"
 
       - name: Create deployment package
         run: |
