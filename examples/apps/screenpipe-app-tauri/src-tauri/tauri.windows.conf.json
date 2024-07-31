@@ -5,7 +5,8 @@
         ],
         "resources": {
             "ffmpeg\\bin\\x64\\*": "./",
-            "ffmpeg\\lib\\*": "./"
+            "ffmpeg\\lib\\*": "./",
+            "tesseract\\*": "./"
         }
     }
 }

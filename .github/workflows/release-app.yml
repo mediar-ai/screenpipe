@@ -134,8 +134,21 @@ jobs:
       # Run pre build
       - name: Run pre_build.js on ${{ matrix.platform }}
         shell: bash
-        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        run: |
+          bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+          ls -R .
         working-directory: ./examples/apps/screenpipe-app-tauri
+
+      - name: Verify Tesseract Installation
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $env:PATH += ";${{ github.workspace }}\examples\apps\screenpipe-app-tauri\src-tauri\tesseract"
+          tesseract --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Tesseract is not properly installed or not in PATH"
+            exit 1
+          }
 
       - name: Build CLI
         shell: bash
