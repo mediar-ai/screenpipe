@@ -233,18 +233,13 @@ impl DatabaseManager {
         raw_data_output_from_ocr: &str,
     ) -> Result<(), sqlx::Error> {
         // debug!("Starting insert_ocr_text_old for frame_id: {}", frame_id);
-        // Function to limit string length
-        fn limit_string(s: &str) -> String {
-            s.chars().take(5).collect::<String>() + "..."
-        }
 
         // Log the input parameters with limited length
-        debug!("Inserting OCR text with frame_id: {}, text: {}, text_json: {}, new_text_json_vs_previous_frame: {}, raw_data_output_from_OCR: {}", 
-            frame_id, 
-            limit_string(text), 
-            limit_string(text_json), 
-            limit_string(new_text_json_vs_previous_frame), 
-            limit_string(raw_data_output_from_ocr)
+        info!(
+            "Inserting OCR text with frame_id: {}, text: {}{}",
+            frame_id,
+            text.chars().take(100).collect::<String>(),
+            if text.chars().count() > 100 { "..." } else { "" }
         );
 
         let mut tx = self.pool.begin().await?;
