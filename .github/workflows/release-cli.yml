@@ -245,7 +245,7 @@ jobs:
           gh release create v${{ env.VERSION }} --title ${{ env.VERSION }} --generate-notes || true
           for file in artifacts/screenpipe-macos-*/screenpipe-*.tar.gz; do
             if [ -f "$file" ]; then
-              gh release upload ${{ env.VERSION }} "$file" --clobber
+              gh release upload v${{ env.VERSION }} "$file" --clobber
             else
               echo "Warning: $file not found"
             fi
