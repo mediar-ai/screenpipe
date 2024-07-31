@@ -88,6 +88,8 @@ async function generateLogEntry(
           - 2 min: Opened LinkedIn and scrolled posts
 
 
+          This is just an example do not copy this in your answer
+
           Rules:
           - YOUR LOGS ARE BASED ON THE DATA YOU RECEIVE WHICH IS THE SCREEN TEXT & AUDIO TRANSCRIPTIONS FROM THE USER COMPUTER
           - Do not use '"' around your response
@@ -98,6 +100,7 @@ async function generateLogEntry(
           - Try to add specifics like "browse twitter" etc.
           - YOUR MESSAGES ARE LESS THAN 4 LINES LONG
           - Make sure to add times in your message 
+          - Do not copy exactly the example I gave you, base your answer on what the user is doing
 
           Log?`,
         },
