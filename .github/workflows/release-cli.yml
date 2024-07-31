@@ -242,7 +242,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
-          gh release create ${{ env.VERSION }} --title ${{ env.VERSION }} --generate-notes || true
+          gh release create v${{ env.VERSION }} --title ${{ env.VERSION }} --generate-notes || true
           for file in artifacts/screenpipe-macos-*/screenpipe-*.tar.gz; do
             if [ -f "$file" ]; then
               gh release upload ${{ env.VERSION }} "$file" --clobber
