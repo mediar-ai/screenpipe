@@ -64,18 +64,14 @@ Struggle to get it running? [I'll install it with you in a 15 min call.](https:/
   <summary>MacOS</summary>
 
 <details>
-  <summary>Option I: Library</summary>
+  <summary>Option I: brew</summary>
 
-⚠️ You need to build from source if you have an Intel mac
-
-1. Navigate to the folder where you want the data to be stored
-
-2. Install library
+1. Install CLI
 ```bash
 brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
 brew install screenpipe
 ```
-3. Run it:
+2. Run it:
 ```bash
 screenpipe 
 ```
@@ -203,6 +199,8 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 </details>
 <br><br>
 </details>
+
+By default the data is stored in `$HOME/.screenpipe` (`C:\AppData\Users\<user>\.screenpipe` on Windows) you can change using `--data-dir <mydir>`
 
 <details>
   <summary>run example vercel/ai chatbot web interface</summary>
