@@ -115,6 +115,12 @@ This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
 cd screen-pipe # enter cloned repo
 ```
 
+If you haven't built xcode projects before you have to sign xcode apple agreement by running this command
+```bash
+sudo xcodebuild -license
+```
+
+Build the project, takes 5-10 minutes depending on your hardware
 ```bash
 cargo build --release --features metal
 ```
