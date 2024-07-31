@@ -108,6 +108,7 @@ async fn record_video(
             if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path).await {
                 error!("Failed to insert new video chunk: {}", e);
             }
+            debug!("record_video: Inserted new video chunk: {}", file_path);
         });
     };
     // debug!("record_video: video_capture");
