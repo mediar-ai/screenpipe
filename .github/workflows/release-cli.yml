@@ -216,16 +216,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Download macOS Artifact Intel
-        uses: actions/download-artifact@v2
-        with:
-          name: screenpipe-macos-x86_64-apple-darwin
-
-      - name: Download macOS Artifact ARM
-        uses: actions/download-artifact@v2
-        with:
-          name: screenpipe-macos-aarch64-apple-darwin
-
       # get the current tag or take latest (in the case of a workflow dispatch)
       - name: Set version
         run: |
@@ -240,10 +230,23 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Set version to: $VERSION"
 
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -R artifacts
+
       - name: Create or update Release
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
-          gh release create ${{ env.VERSION }} --title ${{ env.VERSION }} --generate-notes
-          gh release upload ${{ env.VERSION }} screenpipe-macos-x86_64-apple-darwin
-          gh release upload ${{ env.VERSION }} screenpipe-macos-aarch64-apple-darwin
+          gh release create ${{ env.VERSION }} --title ${{ env.VERSION }} --generate-notes || true
+          for file in artifacts/screenpipe-macos-*/screenpipe-*.tar.gz; do
+            if [ -f "$file" ]; then
+              gh release upload ${{ env.VERSION }} "$file" --clobber
+            else
+              echo "Warning: $file not found"
+            fi
+          done

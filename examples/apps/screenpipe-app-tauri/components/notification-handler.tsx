@@ -24,7 +24,7 @@ const NotificationHandler: React.FC = () => {
       if (permission) {
         sendNotification({
           title: "Welcome to Screenpipe",
-          body: "Thank you for using Screenpipe! We&apos;re here to enhance your experience.",
+          body: "Thank you for using Screenpipe! We're here to enhance your experience.",
         });
       }
       // TODO: send notfication when api is down to restart it
