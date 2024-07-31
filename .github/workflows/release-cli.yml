@@ -60,11 +60,13 @@ jobs:
           export PKG_CONFIG_ALLOW_CROSS=1
           cargo build --release --features metal --target ${{ matrix.target }}
 
+      # get the current tag or take latest (in the case of a workflow dispatch)
       - name: Set version
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           if [[ $VERSION != v* ]]; then
-            VERSION=$(git describe --tags --abbrev=0)
+            git fetch --tags
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           fi
           VERSION=${VERSION#v}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
