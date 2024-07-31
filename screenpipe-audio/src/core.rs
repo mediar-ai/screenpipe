@@ -94,24 +94,24 @@ fn get_device_and_config(
     info!("device: {:?}", audio_device.to_string());
 
     let audio_device = if audio_device.to_string() == "default" {
-        host.default_input_device()
-    } else {
-        // print input device for debugging windows
-        if cfg!(windows) {
-            debug!(
-                "input devices: {:?}",
-                host.input_devices()?.map(|x| x.name()).collect::<Vec<_>>()
-            );
+        match audio_device.device_type {
+            DeviceType::Input => host.default_input_device(),
+            DeviceType::Output => host.default_output_device(),
         }
+    } else {
+        let mut devices = match audio_device.device_type {
+            DeviceType::Input => host.input_devices()?,
+            DeviceType::Output => host.output_devices()?,
+        };
 
-        host.input_devices()?.find(|x| {
+        devices.find(|x| {
             x.name()
                 .map(|y| {
                     y == audio_device
                         .to_string()
                         .replace(" (input)", "")
                         .replace(" (output)", "")
-                        .trim() // HACK for windows shit spaces :D
+                        .trim()
                 })
                 .unwrap_or(false)
         })
@@ -324,8 +324,11 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
 
     #[cfg(target_os = "macos")]
     {
-        let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
-        for device in host.input_devices()? {
+        // !HACK macos is suppoed to use special macos feature "display capture"
+        // ! see https://github.com/RustAudio/cpal/pull/894
+        let host = cpal::default_host();
+        // let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
+        for device in host.output_devices()? {
             if let Ok(name) = device.name() {
                 devices.push(AudioDevice::new(name, DeviceType::Output));
             }
@@ -354,9 +357,12 @@ pub fn default_input_device() -> Result<AudioDevice> {
 pub fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
-        let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
+        // !HACK macos is suppoed to use special macos feature "display capture"
+        // ! see https://github.com/RustAudio/cpal/pull/894
+        let host = cpal::default_host();
+        // let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
         let device = host
-            .default_input_device()
+            .default_output_device()
             .ok_or_else(|| anyhow!("No default input device found"))?;
         info!("Using display capture device: {}", device.name()?);
         return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
