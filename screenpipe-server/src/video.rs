@@ -289,6 +289,8 @@ async fn save_frames_as_video(
     }
 }
 
+use std::env;
+
 async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
@@ -299,27 +301,36 @@ async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyh
     };
 
     info!("Starting FFmpeg process for file: {}", output_file);
+    let fps_str = fps.to_string();
     let mut command = Command::new(find_ffmpeg_path().unwrap());
+    let mut args = vec![
+        "-f",
+        "image2pipe",
+        "-vcodec",
+        "png",
+        "-r",
+        &fps_str,
+        "-i",
+        "-",
+        "-vcodec",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+    ];
+
+    // Only add CRF option if not on Windows
+    // ! HACK this is temporary due to our windows prebuild system not having a complete enough ffmpeg (lot of ci infra to tweak)
+    // ! basically sacrificing some tiny video encoding quality on windows
+    if env::consts::OS != "windows" {
+        args.extend_from_slice(&["-crf", "25"]);
+    }
+
+    args.push(output_file);
+
     command
-        .args(&[
-            "-f",
-            "image2pipe",
-            "-vcodec",
-            "png",
-            "-r",
-            &fps.to_string(),
-            "-i",
-            "-",
-            "-vcodec",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-pix_fmt",
-            "yuv420p",
-            "-crf",
-            "25",
-            output_file,
-        ])
+        .args(&args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

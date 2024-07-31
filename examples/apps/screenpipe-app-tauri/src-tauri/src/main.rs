@@ -127,6 +127,17 @@ async fn main() {
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![use_cli])
         .setup(move |app| {
+            // run this on windows only
+            if cfg!(windows) {
+                let app_dir = app
+                    .path_resolver()
+                    .app_dir()
+                    .expect("Failed to get app dir");
+                let tessdata_path = app_dir.join("tessdata");
+                env::set_var("TESSDATA_PREFIX", tessdata_path);
+                // ! hopefully it passes to CLI too
+            }
+
             // let cli = app.cli().matches().expect("Failed to get CLI matches");
 
             // Get the autostart manager
