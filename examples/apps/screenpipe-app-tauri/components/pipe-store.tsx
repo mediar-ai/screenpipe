@@ -55,10 +55,53 @@ const FeatureRequestLink: React.FC<{ className?: string }> = ({
   </PrettyLink>
 );
 
+const dailyLogger = {
+  name: "Daily Logger",
+  author: "louis030195",
+  downloads: 0,
+  description: "Automatically log your daily activities using AI.",
+  lastUpdate: new Date().toISOString(),
+  version: "0.1.0",
+  authorLink: "https://github.com/louis030195",
+  repository:
+    "https://github.com/louis030195/screen-pipe/tree/main/examples/typescript/daily-log",
+  fullDescription: `
+# Daily Logger
+
+This pipe automatically logs your daily activities using AI. It uses your preferred AI settings (OpenAI or Ollama) to generate summaries of your screen and audio data.
+
+## Features
+
+- Automatic logging at regular intervals
+- Uses your preferred AI settings (OpenAI or Ollama)
+- Generates concise summaries of your activities
+
+## Installation
+
+1. Click the "Install" button (coming soon)
+2. The Daily Logger will start running in the background
+
+## Usage
+
+The Daily Logger will automatically run in the background, creating log entries at regular intervals. You can view these logs in your designated output file.
+
+## Configuration
+
+You can configure the AI settings in the Screenpipe settings panel.
+
+## Note
+
+This is an early version and may have limitations. Please report any issues or suggestions for improvement.
+  `,
+};
 const PipeDialog: React.FC = () => {
   const { pipes, loading, error } = usePipes(
     "https://github.com/different-ai/file-organizer-2000"
   );
+
+  // if (pipes.find((pipe) => pipe.name === "Daily Logger") === undefined) {
+  //   pipes.push(dailyLogger);
+  // }
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
 
   const formatUpdatedTime = (date: string) => {

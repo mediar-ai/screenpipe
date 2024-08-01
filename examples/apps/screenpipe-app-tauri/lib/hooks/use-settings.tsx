@@ -3,11 +3,18 @@ import { Store } from "@tauri-apps/plugin-store";
 import { homeDir } from "@tauri-apps/api/path";
 import { join } from "@tauri-apps/api/path";
 
+interface InstalledPipe {
+  name: string;
+  version: string;
+  enabled: boolean;
+}
+
 interface Settings {
   openaiApiKey: string;
   useOllama: boolean;
   isLoading: boolean;
   useCloudAudio: boolean;
+  pipes: InstalledPipe[];
 }
 
 let store: Store | null = null;
@@ -18,6 +25,7 @@ export function useSettings() {
     useOllama: false,
     isLoading: true,
     useCloudAudio: true,
+    pipes: [],
   });
 
   useEffect(() => {
@@ -45,6 +53,7 @@ export function useSettings() {
           useOllama: savedUseOllama,
           isLoading: false,
           useCloudAudio: savedUseCloudAudio,
+          pipes: [],
         });
       } catch (error) {
         console.error("Failed to load settings:", error);

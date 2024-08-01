@@ -22,7 +22,7 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 
 [workspace.dependencies]
-log = "0.4"
+log = "0.4.17"
 candle = { package = "candle-core", version = "0.6.0" }
 candle-nn = { package = "candle-nn", version = "0.6.0" }
 candle-transformers = { package = "candle-transformers", version = "0.6.0" }
@@ -32,9 +32,11 @@ tracing-subscriber = "0.3.18"
 tokio = { version = "1.15", features = ["full", "tracing"] }
 hf-hub = "0.3.0"
 crossbeam = "0.8.4"
+reqwest = { version = "0.11", features = ["json"] }
 
 # dev
 criterion = { version = "0.5.1", features = ["async_tokio"] }
+
 
 
 
