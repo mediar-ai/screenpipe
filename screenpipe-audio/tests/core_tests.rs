@@ -43,12 +43,13 @@ mod tests {
     fn test_speech_to_text() {
         setup();
         println!("Starting speech to text test");
-
+a
         println!("Loading audio file");
         let start = std::time::Instant::now();
         let whisper_model = WhisperModel::new().unwrap();
+        let cloud_audio = true; // Set this based on your test requirements
 
-        let text = stt("./test_data/selah.mp4", &whisper_model).unwrap();
+        let text = stt("./test_data/selah.mp4", &whisper_model, cloud_audio).unwrap();
         let duration = start.elapsed();
 
         println!("Speech to text completed in {:?}", duration);
