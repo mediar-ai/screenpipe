@@ -222,7 +222,7 @@ async fn record_audio(
                         .to_str()
                         .expect("Failed to create valid path")
                         .to_string();
-                        debug!(
+                    debug!(
                         "Starting record_and_transcribe for device {} (iteration {})",
                         audio_device_clone, iteration
                     );
@@ -297,8 +297,12 @@ async fn process_audio_result(db: &DatabaseManager, result: TranscriptionResult)
         );
         return;
     }
-    info!("Inserting audio chunk: {:?}", result.transcription);
     let transcription = result.transcription.unwrap();
+    // if audio text is empty skip, add debug log
+    if transcription.is_empty() {
+        return;
+    }
+    info!("Inserting audio chunk: {:?}", transcription);
     match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
             if let Err(e) = db

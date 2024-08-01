@@ -410,6 +410,7 @@ fn get_deepgram_api_key() -> String {
     "7ed2a159a094337b01fd8178b914b7ae0e77822d".to_string()
 }
 
+// TODO: this should use async reqwest not blocking, cause crash issue because all our code is async
 fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String> {
     debug!("Starting Deepgram transcription");
     let client = Client::new();
