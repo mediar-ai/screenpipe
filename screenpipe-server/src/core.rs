@@ -298,13 +298,15 @@ async fn process_audio_result(db: &DatabaseManager, result: TranscriptionResult)
         return;
     }
     let transcription = result.transcription.unwrap();
-    // if audio text is empty skip, add debug log
-    if transcription.is_empty() {
-        return;
-    }
+
     info!("Inserting audio chunk: {:?}", transcription);
     match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
+            // if audio text is empty skip transcription insertion
+            if transcription.is_empty() {
+                return;
+            }
+
             if let Err(e) = db
                 .insert_audio_transcription(audio_chunk_id, &transcription, 0)
                 .await

@@ -33,6 +33,43 @@ mod logs;
 struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
 
 #[tauri::command]
+async fn is_running_multiple_instances(
+    _state: State<'_, SidecarState>,
+    _app: tauri::AppHandle,
+) -> Result<u32, String> {
+    debug!("is_running_multiple_instances");
+
+    // list screenpipe processes
+    let output = if cfg!(windows) {
+        tokio::process::Command::new("tasklist")
+            .output()
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        tokio::process::Command::new("ps")
+            .arg("-e")
+            .arg("-o")
+            .arg("pid,comm")
+            .output()
+            .await
+            .map_err(|e| e.to_string())?
+    };
+
+    // filter by screenpipe
+    let output = String::from_utf8_lossy(&output.stdout);
+    let lines = output.split('\n');
+    let mut count = 0;
+    for line in lines {
+        debug!("line: {}", line);
+        if line.contains("screenpipe") {
+            count += 1;
+        }
+    }
+
+    Ok(count)
+}
+
+#[tauri::command]
 async fn kill_all_sreenpipes(
     state: State<'_, SidecarState>,
     _app: tauri::AppHandle,
@@ -74,7 +111,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
     let (_, child) = sidecar
-        .args(["--port", "3030", "--debug"])
+        .args(["--port", "3030", "--debug", "--self-healing"])
         .spawn()
         .map_err(|e| e.to_string())?;
 
@@ -122,7 +159,8 @@ async fn main() {
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
-            kill_all_sreenpipes
+            kill_all_sreenpipes,
+            is_running_multiple_instances
         ])
         .setup(move |app| {
             // run this on windows only

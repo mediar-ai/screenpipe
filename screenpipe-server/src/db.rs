@@ -86,8 +86,9 @@ impl DatabaseManager {
 
     pub async fn insert_audio_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        let id = sqlx::query("INSERT INTO audio_chunks (file_path) VALUES (?1)")
+        let id = sqlx::query("INSERT INTO audio_chunks (file_path, timestamp) VALUES (?1, ?2)")
             .bind(file_path)
+            .bind(Utc::now())
             .execute(&mut *tx)
             .await?
             .last_insert_rowid();
@@ -591,7 +592,7 @@ impl DatabaseManager {
         .await?;
 
         let latest_audio: Option<(DateTime<Utc>,)> = sqlx::query_as(
-            "SELECT timestamp FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 1"
+            "SELECT timestamp FROM audio_chunks ORDER BY timestamp DESC LIMIT 1"
         )
         .fetch_optional(&self.pool)
         .await?;
