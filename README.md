@@ -1,4 +1,4 @@
-
+ 
 <p align="center">
     <img src="https://github.com/louis030195/screen-pipe/assets/25003283/289bbee7-79bb-4251-9516-878a1c40dcd0" width="200"/>
 </p>
@@ -7,7 +7,9 @@
     <a href="https://screenpi.pe" target="_blank">
         <img src="https://img.shields.io/badge/Download%20The-Desktop%20App-blue?style=for-the-badge" alt="Download the Desktop App">
     </a>
+    
 </p>
+
 
 <p align="center">
     <a href="https://www.bensbites.com/">
@@ -17,6 +19,13 @@
         <img src="https://img.shields.io/discord/823813159592001537?color=5865F2&logo=discord&logoColor=white&style=flat-square" alt="Join us on Discord">
     </a>
         <a href="https://twitter.com/screen_pipe"><img alt="X account" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe"></a>
+</p>
+
+<p align="center">
+  <a href ="https://cal.com/louis030195/screenpipe">
+    <img alt="Let's chat" src="https://cal.com/book-with-cal-dark.svg" />
+  </a>
+    
 </p>
 
 ![Demo](./content/demo.gif)
