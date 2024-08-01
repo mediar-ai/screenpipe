@@ -3,7 +3,7 @@ mod tests {
     use chrono::Utc;
     use log::{debug, LevelFilter};
     use screenpipe_audio::{default_output_device, list_audio_devices, stt, WhisperModel};
-    use screenpipe_audio::{parse_audio_device, record_and_transcribe};
+    use screenpipe_audio::{parse_audio_device, record_and_transcribe, create_whisper_channel};
     use std::path::PathBuf;
     use std::process::Command;
     use std::str::FromStr;
@@ -11,6 +11,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
     use tokio::sync::mpsc::unbounded_channel;
+    use tokio::time::timeout;
 
     fn setup() {
         // Initialize the logger with an info level filter
@@ -223,6 +224,7 @@ mod tests {
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
+        let cloud_audio = true; // Set this based on your test requirements
         let (whisper_sender, mut whisper_receiver) = create_whisper_channel(cloud_audio).await.unwrap();
         let is_running = Arc::new(AtomicBool::new(true));
         // Start recording in a separate thread
