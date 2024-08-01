@@ -408,11 +408,9 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             format!("Some systems are not functioning properly. Frame status: {}, Audio status: {}", frame_status, audio_status),
             Some("If you're experiencing issues, please try the following steps:\n\
                   1. Restart the application.\n\
-                  2. If using a desktop app, reset your Screenpipe OS permissions.\n\
-                  3. Check your system's audio and video input devices.\n\
-                  4. Ensure you have granted necessary permissions to the application.\n\
-                  5. If the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
-                  6. Last, here are some FAQ to help you troubleshoot: https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md".to_string())
+                  2. If using a desktop app, reset your Screenpipe OS audio/screen recording permissions.\n\
+                  3. If the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
+                  4. Last, here are some FAQ to help you troubleshoot: https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md".to_string())
         )
     };
 
