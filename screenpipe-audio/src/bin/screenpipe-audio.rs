@@ -25,6 +25,9 @@ struct Args {
 
     #[clap(long, help = "List available audio devices")]
     list_audio_devices: bool,
+
+    #[clap(long, help = "Disable cloud audio processing")]
+    cloud_audio_off: bool,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -74,7 +77,8 @@ async fn main() -> Result<()> {
 
     let chunk_duration = Duration::from_secs(5);
     let output_path = PathBuf::from("output.mp4");
-    let (whisper_sender, mut whisper_receiver) = create_whisper_channel().await?;
+    let cloud_audio = !args.cloud_audio_off;
+    let (whisper_sender, mut whisper_receiver) = create_whisper_channel(cloud_audio).await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()
