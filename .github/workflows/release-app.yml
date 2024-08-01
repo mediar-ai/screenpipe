@@ -182,6 +182,3 @@ jobs:
       #     command: release publish ${{ secrets.CN_APP_SLUG }} --framework tauri
       #     api-key: ${{ secrets.CN_API_KEY }}
       # basically wait for macos manual add sset 
-      # cn release upload  --file /Users/louisbeaumont/Documents/screen-pipe/examples/apps/screenpipe-app-tauri/src-tauri/target/release/bundle/dmg/screenpipe_0.1.3_aarch64.dmg screenpipe 0.1.3
-      # then 
-      # cn release publish screenpipe 0.1.3

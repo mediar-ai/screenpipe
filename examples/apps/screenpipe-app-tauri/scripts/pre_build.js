@@ -193,6 +193,8 @@ if (platform == 'windows') {
 
 /* ########## macOS ########## */
 if (platform == 'macos') {
+	// ! trash code that is going away soon :)
+
 	const nativeArch = os.arch();
 	const architectures = ['arm64', 'x86_64'];
 	// Additional steps for x86_64 build on ARM Mac
@@ -205,28 +207,33 @@ if (platform == 'macos') {
 		// console.log('3. When building, use this command:');
 		// console.log('   arch -x86_64 bunx tauri build -- --target x86_64-apple-darwin');
 	}
+	// ! trash code that is going away soon :)
 	for (const arch of architectures) {
 		const tesseractBinary = `./tesseract-${arch}-apple-darwin`;
-		if (!(await fs.exists(tesseractBinary))) {
-			console.log(`Setting up Tesseract for ${arch}...`);
+		console.log(`Setting up Tesseract & screenpipe bin for ${arch}...`);
 
-			if (arch === 'arm64' || (arch === 'x86_64' && nativeArch === 'x64')) {
-				// Native architecture or x86_64 on Intel Mac
+		if (arch === 'arm64') {
+			// Native architecture or x86_64 on Intel Mac
+			if (!(await fs.exists(tesseractBinary))) {
+
 				await $`brew install tesseract`;
 				await $`cp $(brew --prefix)/bin/tesseract ${tesseractBinary}`;
 				await $`cp /usr/local/bin/tesseract ${tesseractBinary}`;
-			} else if (arch === 'x86_64' && nativeArch === 'arm64') {
-				// x86_64 on ARM Mac
-				console.log('Installing x86_64 version using Rosetta 2...');
+			}
+			// copy screenpipe binary
+			await $`cp ../../../../target/aarch64-apple-darwin/release/screenpipe screenpipe-aarch64-apple-darwin`;
+		} else if (arch === 'x86_64' && nativeArch === 'arm64') {
+			// x86_64 on ARM Mac
+			console.log('Installing x86_64 version using Rosetta 2...');
+			if (!(await fs.exists(tesseractBinary))) {
 				await $`arch -x86_64 /usr/local/bin/brew install tesseract`;
 				await $`cp /usr/local/bin/tesseract /tmp/tesseract`
 				await $`cp /tmp/tesseract ${tesseractBinary}`;
 			}
-
-			console.log(`Tesseract for ${arch} set up successfully.`);
-		} else {
-			console.log(`Tesseract for ${arch} already exists.`);
+			await $`cp ../../../../target/x86_64-apple-darwin/release/screenpipe screenpipe-x86_64-apple-darwin`;
 		}
+
+		console.log(`Tesseract & screenpipe for ${arch} set up successfully.`);
 	}
 
 
@@ -237,40 +244,6 @@ if (platform == 'macos') {
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.tar.xz`
 	}
-	// Try multiple potential paths for the screenpipe binary
-	// ! ugly hack bcs CI acts weird
-	const potentialPaths = [
-		'../../../../target/release/screenpipe',
-		'/Users/runner/work/screen-pipe/screen-pipe/target/release/screenpipe',
-		'../../../target/release/screenpipe',
-		'../../target/release/screenpipe',
-		'../../../../target/aarch64-apple-darwin/release/screenpipe',
-		'../../../../target/x86_64-apple-darwin/release/screenpipe',
-	];
-	let found = false;
-	for (const path of potentialPaths) { // TODO intel mac
-		try {
-			await $`cp ${path} ./screenpipe-aarch64-apple-darwin`
-			console.log(`Successfully copied screenpipe from ${path}`);
-			found = true;
-			break;
-		} catch (error) {
-			console.warn(`Failed to copy from ${path}: ${error.message}`);
-		}
-	}
-	if (!found) {
-		console.error("Failed to find screenpipe");
-		console.error("Here's how you can build screenpipe's CLI for Intel or Silicon:");
-		console.error("place yourself in the root directory of screenpipe");
-		console.error("export PKG_CONFIG_PATH=\"/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH\"");
-		console.error("export PKG_CONFIG_ALLOW_CROSS=1");
-		console.error("cargo build --release --metal --target aarch64-apple-darwin");
-		console.error("or for x86_64:");
-		console.error("cargo build --release --metal --target x86_64-apple-darwin");
-		process.exit(1);
-	}
-	// await $`cp /opt/homebrew/bin/tesseract /tmp/tesseract`
-	// await $`mv /tmp/tesseract ./tesseract-aarch64-apple-darwin` // TODO intel
 }
 
 // Nvidia

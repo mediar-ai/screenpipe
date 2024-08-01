@@ -60,28 +60,6 @@
   "productName": "screenpipe",
   "identifier": "com.screenpi.pe",
   "plugins": {
-    "fs": {
-      "readFile": true,
-      "writeFile": true,
-      "readDir": true,
-      "copyFile": true,
-      "createDir": true,
-      "removeDir": true,
-      "removeFile": true,
-      "renameFile": true,
-      "exists": true,
-      "watch": true,
-      "readTextFile": true,
-      "scope": [
-        "$APPDATA/*",
-        "$APPCONFIG/*",
-        "$RESOURCE/*",
-        "$RESOURCE/.screenpipe/*",
-        "$HOME/*",
-        "$HOME/.screenpipe/*",
-        "$APP/*"
-      ]
-    },
     "updater": {
       "active": true,
       "dialog": true,
