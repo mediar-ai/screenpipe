@@ -63,6 +63,9 @@ tokio = { workspace = true }
 # Detect speech/silence
 webrtc-vad = "0.4.0"
 
+# Deepgram
+reqwest = { version = "0.12.5", features = ["json", "blocking"] }
+
 screenpipe-core = { path = "../screenpipe-core" }
 
 [dev-dependencies]
