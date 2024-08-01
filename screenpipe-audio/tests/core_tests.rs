@@ -43,7 +43,6 @@ mod tests {
     fn test_speech_to_text() {
         setup();
         println!("Starting speech to text test");
-a
         println!("Loading audio file");
         let start = std::time::Instant::now();
         let whisper_model = WhisperModel::new().unwrap();
@@ -224,7 +223,7 @@ a
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let (whisper_sender, mut whisper_receiver) = create_whisper_channel().await.unwrap();
+        let (whisper_sender, mut whisper_receiver) = create_whisper_channel(cloud_audio).await.unwrap();
         let is_running = Arc::new(AtomicBool::new(true));
         // Start recording in a separate thread
         let recording_thread = tokio::spawn(async move {
