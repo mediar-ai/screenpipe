@@ -107,7 +107,6 @@ async fn spawn_screenpipe(
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
-
     // Get the current settings
     let stores = app.state::<StoreCollection<Wry>>();
     let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
@@ -125,6 +124,23 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let mut args = vec!["--port", "3030", "--debug", "--self-healing"];
     if !use_cloud_audio {
         args.push("--cloud-audio-off");
+    }
+
+    // hardcode TESSDATA_PREFIX for windows
+    if cfg!(windows) {
+        let exe_dir = env::current_exe()
+            .expect("Failed to get current executable path")
+            .parent()
+            .expect("Failed to get parent directory of executable")
+            .to_path_buf();
+        let tessdata_path = exe_dir.join("tessdata");
+        let c = sidecar.env("TESSDATA_PREFIX", tessdata_path).args(&args);
+
+        let (_, child) = c.spawn().map_err(|e| e.to_string())?;
+
+        debug!("Spawned sidecar with args: {:?}", args);
+
+        return Ok(child);
     }
 
     let (_, child) = sidecar.args(&args).spawn().map_err(|e| e.to_string())?;
