@@ -78,6 +78,8 @@
       ]
     },
     "cli:default",
-    "shell:default"
+    "shell:default",
+    "dialog:default",
+    "updater:default"
   ]
 }

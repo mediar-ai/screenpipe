@@ -84,6 +84,8 @@
       ]
     },
     "updater": {
+      "active": true,
+      "dialog": true,
       "endpoints": [
         "https://cdn.crabnebula.app/update/mediar/screenpipe/{{target}}-{{arch}}/{{current_version}}"
       ],

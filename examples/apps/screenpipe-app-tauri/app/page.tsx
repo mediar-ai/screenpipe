@@ -12,13 +12,18 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import React from "react";
+import React, { useEffect } from "react";
 import NotificationHandler from "@/components/notification-handler";
 import ScreenpipeInstanceChecker from "@/components/screenpipe-instance-checker";
 import Header from "@/components/header";
+import { checkForAppUpdates } from "@/components/updater";
 
 export default function Home() {
   const { settings } = useSettings();
+
+  useEffect(() => {
+    checkForAppUpdates();
+  }, []);
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8">

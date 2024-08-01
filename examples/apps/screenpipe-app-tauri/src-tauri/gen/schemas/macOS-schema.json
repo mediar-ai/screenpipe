@@ -2523,6 +2523,83 @@
           ]
         },
         {
+          "description": "dialog:default -> This permission set configures the types of dialogs\navailable from the dialog plugin.\n\n#### Granted Permissions\n\nAll dialog types are enabled.\n\n\n",
+          "type": "string",
+          "enum": [
+            "dialog:default"
+          ]
+        },
+        {
+          "description": "dialog:allow-ask -> Enables the ask command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:allow-ask"
+          ]
+        },
+        {
+          "description": "dialog:allow-confirm -> Enables the confirm command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:allow-confirm"
+          ]
+        },
+        {
+          "description": "dialog:allow-message -> Enables the message command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:allow-message"
+          ]
+        },
+        {
+          "description": "dialog:allow-open -> Enables the open command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:allow-open"
+          ]
+        },
+        {
+          "description": "dialog:allow-save -> Enables the save command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:allow-save"
+          ]
+        },
+        {
+          "description": "dialog:deny-ask -> Denies the ask command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:deny-ask"
+          ]
+        },
+        {
+          "description": "dialog:deny-confirm -> Denies the confirm command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:deny-confirm"
+          ]
+        },
+        {
+          "description": "dialog:deny-message -> Denies the message command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:deny-message"
+          ]
+        },
+        {
+          "description": "dialog:deny-open -> Denies the open command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:deny-open"
+          ]
+        },
+        {
+          "description": "dialog:deny-save -> Denies the save command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "dialog:deny-save"
+          ]
+        },
+        {
           "description": "event:default -> Default permissions for the plugin.",
           "type": "string",
           "enum": [
@@ -5761,6 +5838,69 @@
           "type": "string",
           "enum": [
             "tray:deny-set-visible"
+          ]
+        },
+        {
+          "description": "updater:default -> This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n",
+          "type": "string",
+          "enum": [
+            "updater:default"
+          ]
+        },
+        {
+          "description": "updater:allow-check -> Enables the check command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "updater:allow-check"
+          ]
+        },
+        {
+          "description": "updater:allow-download -> Enables the download command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "updater:allow-download"
+          ]
+        },
+        {
+          "description": "updater:allow-download-and-install -> Enables the download_and_install command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "updater:allow-download-and-install"
+          ]
+        },
+        {
+          "description": "updater:allow-install -> Enables the install command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "updater:allow-install"
+          ]
+        },
+        {
+          "description": "updater:deny-check -> Denies the check command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "updater:deny-check"
+          ]
+        },
+        {
+          "description": "updater:deny-download -> Denies the download command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "updater:deny-download"
+          ]
+        },
+        {
+          "description": "updater:deny-download-and-install -> Denies the download_and_install command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "updater:deny-download-and-install"
+          ]
+        },
+        {
+          "description": "updater:deny-install -> Denies the install command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "updater:deny-install"
           ]
         },
         {
