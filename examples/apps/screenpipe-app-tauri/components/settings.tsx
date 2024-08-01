@@ -19,23 +19,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { PrettyLink } from "./pretty-link";
 import { MemoizedReactMarkdown } from "./markdown";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import { CodeBlock } from "./ui/codeblock";
-import { ChatMessageActions } from "./chat-message-actions";
-import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
-import { cn } from "@/lib/utils";
-import { IconCheck, IconCopy } from "./ui/icons";
 import { invoke } from "@tauri-apps/api/core";
 import { spinner } from "./spinner";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
+  const [isLoading, setIsLoading] = React.useState(false);
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalSettings({ ...localSettings, openaiApiKey: e.target.value });
@@ -46,6 +39,34 @@ export function Settings({ className }: { className?: string }) {
     console.log("checked", checked);
     setLocalSettings({ ...localSettings, useOllama: checked });
     updateSettings({ ...localSettings, useOllama: checked });
+  };
+
+  const handleCloudAudioToggle = async (checked: boolean) => {
+    if (isLoading) return;
+    setIsLoading(true);
+    try {
+      setLocalSettings({ ...localSettings, useCloudAudio: checked });
+      await updateSettings({ ...localSettings, useCloudAudio: checked });
+      // Restart screenpipe with new settings
+      await restartScreenpipe();
+      // user feedback
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    } catch (error) {
+      console.error("Failed to update cloud audio setting:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const restartScreenpipe = async () => {
+    try {
+      await invoke("kill_all_sreenpipes");
+      // sleep 1s
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await invoke("spawn_screenpipe");
+    } catch (error) {
+      console.error("Failed to restart screenpipe:", error);
+    }
   };
 
   React.useEffect(() => {
@@ -65,7 +86,7 @@ export function Settings({ className }: { className?: string }) {
           Settings
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[80vw] w-full max-h-[100vh] h-full overflow-y-auto">
+      <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
@@ -210,6 +231,36 @@ export function Settings({ className }: { className?: string }) {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+
+              <div className="flex flex-col items-center space-y-2">
+                <div className="flex items-center space-x-4">
+                  <Switch
+                    id="use-cloud-audio"
+                    checked={localSettings.useCloudAudio}
+                    onCheckedChange={handleCloudAudioToggle}
+                    disabled={isLoading}
+                  />
+                  <Label
+                    htmlFor="use-cloud-audio"
+                    className="flex items-center space-x-2"
+                  >
+                    Use Cloud Audio Processing
+                  </Label>
+                  {isLoading && (
+                    <div className="ml-4 h-[24px] flex flex-row items-center flex-1 space-y-2 overflow-hidden px-1">
+                      {spinner}
+                    </div>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1 text-center">
+                  <p>
+                    Toggle to use cloud-based audio processing instead of local
+                    processing. Cloud processing may provide better accuracy but
+                    requires an internet connection. This will restart
+                    screenpipe background process.
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>

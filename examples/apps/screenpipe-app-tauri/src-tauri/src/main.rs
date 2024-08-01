@@ -106,16 +106,30 @@ async fn spawn_screenpipe(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    // sleep 1s hack
-    std::thread::sleep(std::time::Duration::from_secs(1));
-
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
-    let (_, child) = sidecar
-        .args(["--port", "3030", "--debug", "--self-healing"])
-        .spawn()
-        .map_err(|e| e.to_string())?;
 
-    debug!("Spawned sidecar");
+    // Get the current settings
+    let stores = app.state::<StoreCollection<Wry>>();
+    let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
+
+    let path = base_dir.join("store.bin");
+
+    let use_cloud_audio = with_store(app.clone(), stores, path, |store| {
+        Ok(store
+            .get("useCloudAudio")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true)) // Default to true if not set
+    })
+    .map_err(|e| e.to_string())?;
+
+    let mut args = vec!["--port", "3030", "--debug", "--self-healing"];
+    if !use_cloud_audio {
+        args.push("--cloud-audio-off");
+    }
+
+    let (_, child) = sidecar.args(&args).spawn().map_err(|e| e.to_string())?;
+
+    debug!("Spawned sidecar with args: {:?}", args);
 
     Ok(child)
 }
@@ -176,11 +190,7 @@ async fn main() {
                 // Set the TESSDATA_PREFIX environment variable
                 let tessdata_path = exe_dir.join("tessdata");
                 env::set_var("TESSDATA_PREFIX", tessdata_path);
-
-                // ! hopefully it passes to CLI too
             }
-
-            // let cli = app.cli().matches().expect("Failed to get CLI matches");
 
             // Get the autostart manager
             let autostart_manager = app.autolaunch();
@@ -205,15 +215,13 @@ async fn main() {
             builder
                 .filter(None, LevelFilter::Info)
                 .filter_module("tokenizers", LevelFilter::Error)
-                // .filter_module("rusty_tesseract", LevelFilter::Error)
+                .filter_module("rusty_tesseract", LevelFilter::Error)
                 .filter_module("symphonia", LevelFilter::Error);
 
             if debug {
                 builder.filter_module("screenpipe", LevelFilter::Debug);
                 builder.filter_module("app", LevelFilter::Debug);
             }
-
-            // debug!("all param: {:?}", cli.args);
 
             let log_file =
                 File::create(format!("{}/screenpipe-app.log", base_dir.to_string_lossy())).unwrap();
@@ -247,7 +255,8 @@ async fn main() {
                 |store| {
                     if store.keys().count() == 0 {
                         // Set default values
-                        store.insert("analytics_enabled".to_string(), Value::Bool(true))?;
+                        store.insert("analyticsEnabled".to_string(), Value::Bool(true))?;
+                        store.insert("useCloudAudio".to_string(), Value::Bool(true))?;
                         store.insert(
                             "config".to_string(),
                             serde_json::to_value(Config::default())?,
@@ -263,7 +272,7 @@ async fn main() {
                 store.save()?;
 
                 let is_analytics_enabled = store
-                    .get("analytics_enabled")
+                    .get("analyticsEnabled")
                     .unwrap_or(&Value::Bool(true))
                     .as_bool()
                     .unwrap_or(true);
@@ -298,33 +307,9 @@ async fn main() {
     app.run(|_app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
-            // tauri::async_runtime::spawn(async move {
-            //     // let _ = start_server().await;
-            //     start_screenpipe_server_new(app.app_handle().clone());
-            // });
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
-            // tauri::async_runtime::spawn(async move {
-            //     tx.send(()).unwrap();
-            // });
-            // TODO less dirty stop :D
-            // tauri::async_runtime::spawn(async move {
-            //     let _ = tokio::process::Command::new("pkill")
-            //         .arg("-f")
-            //         .arg("screenpipe")
-            //         .output()
-            //         .await;
-            // });
-            // kill sidecar
-            // let sidecar_state = app.app_handle().state::<SidecarState>();
-            // let mut sidecar = sidecar_state.0.lock().unwrap();
-            // sidecar
-            //     .take()
-            //     .unwrap()
-            //     .kill()
-            //     .map_err(|e| e.to_string())
-            //     .unwrap();
         }
         _ => {}
     });

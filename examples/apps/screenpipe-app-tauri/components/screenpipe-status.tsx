@@ -18,6 +18,10 @@ import { CodeBlock } from "@/components/ui/codeblock";
 import { MemoizedReactMarkdown } from "./markdown";
 import { invoke } from "@tauri-apps/api/core";
 import { spinner } from "./spinner";
+import {
+  isPermissionGranted,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 
 interface HealthCheckResponse {
   status: string;
@@ -35,6 +39,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [lastNotificationTime, setLastNotificationTime] = useState<
+    number | null
+  >(null);
 
   const fetchHealth = async () => {
     try {
@@ -77,6 +84,36 @@ const HealthStatus = ({ className }: { className?: string }) => {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const checkAndNotify = async () => {
+      if (health && health.status === "Unhealthy") {
+        const now = Date.now();
+        const lastNotification = localStorage.getItem(
+          "lastUnhealthyNotification"
+        );
+        const lastNotificationTime = lastNotification
+          ? parseInt(lastNotification, 10)
+          : 0;
+
+        if (now - lastNotificationTime > 3600000) {
+          // 1 hour in milliseconds
+          const permissionGranted = await isPermissionGranted();
+          if (permissionGranted) {
+            sendNotification({
+              title: "Screenpipe Status Alert",
+              body: "Screenpipe is currently unhealthy. Please try to restart. It could also be useful to press 'Stop' in the status badge just in case.",
+            });
+            localStorage.setItem("lastUnhealthyNotification", now.toString());
+            setLastNotificationTime(now);
+          }
+        }
+      }
+    };
+
+    checkAndNotify();
+  }, [health]);
+
   const logCommands = `# Stream the log:
 tail -f $HOME/.screenpipe/screenpipe.log
 
