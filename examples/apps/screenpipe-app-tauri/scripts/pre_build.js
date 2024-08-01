@@ -194,21 +194,27 @@ if (platform == 'windows') {
 /* ########## macOS ########## */
 if (platform == 'macos') {
 	const nativeArch = os.arch();
-	console.log("native arch:", nativeArch);
 	const architectures = ['arm64', 'x86_64'];
-
-	// shouldnt work on intel mac
-
+	// Additional steps for x86_64 build on ARM Mac
+	if (nativeArch === 'arm64') {
+		console.log('\nTo build for x86_64 on your ARM Mac:');
+		console.log('1. Install Rosetta 2 if not already installed:');
+		console.log('   softwareupdate --install-rosetta');
+		console.log('2. Set up an x86_64 Homebrew environment:');
+		console.log('   arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"');
+		// console.log('3. When building, use this command:');
+		// console.log('   arch -x86_64 bunx tauri build -- --target x86_64-apple-darwin');
+	}
 	for (const arch of architectures) {
 		const tesseractBinary = `./tesseract-${arch}-apple-darwin`;
 		if (!(await fs.exists(tesseractBinary))) {
 			console.log(`Setting up Tesseract for ${arch}...`);
 
-			if (arch === 'arm64') {
-				// Native architecture 
+			if (arch === 'arm64' || (arch === 'x86_64' && nativeArch === 'x64')) {
+				// Native architecture or x86_64 on Intel Mac
 				await $`brew install tesseract`;
-				await $`cp $(brew --prefix)/bin/tesseract /tmp/tesseract`;
-				await $`cp /tmp/tesseract ${tesseractBinary}`;
+				await $`cp $(brew --prefix)/bin/tesseract ${tesseractBinary}`;
+				await $`cp /usr/local/bin/tesseract ${tesseractBinary}`;
 			} else if (arch === 'x86_64' && nativeArch === 'arm64') {
 				// x86_64 on ARM Mac
 				console.log('Installing x86_64 version using Rosetta 2...');
@@ -241,15 +247,30 @@ if (platform == 'macos') {
 		'../../../../target/aarch64-apple-darwin/release/screenpipe',
 		'../../../../target/x86_64-apple-darwin/release/screenpipe',
 	];
+	let found = false;
 	for (const path of potentialPaths) { // TODO intel mac
-		// if "x86_64" in path name copy to 
-		if (path.includes('x86_64')) {
-			await $`cp ${path} ./screenpipe-x86_64-apple-darwin`
-		} else { // otherwise likely aarch64 (nobody uses a intel mac for dev right?)
+		try {
 			await $`cp ${path} ./screenpipe-aarch64-apple-darwin`
+			console.log(`Successfully copied screenpipe from ${path}`);
+			found = true;
+			break;
+		} catch (error) {
+			console.warn(`Failed to copy from ${path}: ${error.message}`);
 		}
-		console.log(`Successfully copied screenpipe from ${path}`);
 	}
+	if (!found) {
+		console.error("Failed to find screenpipe");
+		console.error("Here's how you can build screenpipe's CLI for Intel or Silicon:");
+		console.error("place yourself in the root directory of screenpipe");
+		console.error("export PKG_CONFIG_PATH=\"/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH\"");
+		console.error("export PKG_CONFIG_ALLOW_CROSS=1");
+		console.error("cargo build --release --metal --target aarch64-apple-darwin");
+		console.error("or for x86_64:");
+		console.error("cargo build --release --metal --target x86_64-apple-darwin");
+		process.exit(1);
+	}
+	// await $`cp /opt/homebrew/bin/tesseract /tmp/tesseract`
+	// await $`mv /tmp/tesseract ./tesseract-aarch64-apple-darwin` // TODO intel
 }
 
 // Nvidia
