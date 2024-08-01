@@ -49,10 +49,11 @@ pub async fn start_continuous_recording(
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     save_text_files: bool,
+    cloud_audio: bool, // Added cloud_audio parameter
 ) -> Result<()> {
     info!("Recording now");
 
-    let (whisper_sender, whisper_receiver) = create_whisper_channel().await?;
+    let (whisper_sender, whisper_receiver) = create_whisper_channel(cloud_audio).await?; // Pass cloud_audio
 
     let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);
