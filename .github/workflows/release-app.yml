@@ -4,35 +4,6 @@
 # # Run for Linux
 # act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P ubuntu-24.04
 
-# Manual release instructions for Mac:
-
-# VERSION=app-0.1.0
-# git tag $VERSION
-# git push origin $VERSION
-# gh release create $VERSION --generate-notes
-# export TAURI_SIGNING_PRIVATE_KEY="..."
-# export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="..."
-# export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
-# export PKG_CONFIG_ALLOW_CROSS=1
-# For M1 (aarch64-apple-darwin):
-# cargo build --release --features metal --target aarch64-apple-darwin
-# cd examples/apps/screenpipe-app-tauri
-# bun scripts/pre_build.js
-# bun tauri build --target aarch64-apple-darwin -- --features metal
-# tar -czf screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz -C ../target/aarch64-apple-darwin/release/bundle/dmg screenpipe_0.1.0_aarch64.dmg
-# gh release upload ${VERSION} screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
-# rm screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
-#
-# For Intel (x86_64-apple-darwin):
-# cd ../../..
-# cargo build --release --features metal --target x86_64-apple-darwin
-# cd examples/apps/screenpipe-app-tauri
-# bun scripts/pre_build.js
-# bun tauri build --target x86_64-apple-darwin -- --features metal
-# tar -czf screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz -C ../target/x86_64-apple-darwin/release/bundle/dmg screenpipe_0.1.0_x64.dmg
-# gh release upload ${VERSION} screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
-# rm screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
-#
 
 name: Release App
 

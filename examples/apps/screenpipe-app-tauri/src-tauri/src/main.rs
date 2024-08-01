@@ -33,75 +33,52 @@ mod logs;
 struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
 
 #[tauri::command]
-async fn use_cli(
+async fn kill_all_sreenpipes(
+    state: State<'_, SidecarState>,
+    _app: tauri::AppHandle,
+) -> Result<(), String> {
+    debug!("Killing screenpipe");
+
+    if let Some(child) = state.0.lock().unwrap().take() {
+        child.kill().map_err(|e| e.to_string())?;
+    }
+    // hard kill the sidecar on port 3030
+    let _ = tokio::process::Command::new("pkill")
+        .arg("-f")
+        .arg("screenpipe")
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn spawn_screenpipe(
     state: State<'_, SidecarState>,
     app: tauri::AppHandle,
-    use_cli: bool,
 ) -> Result<(), String> {
-    if use_cli {
-        // Kill the sidecar if it's running
-        if let Some(child) = state.0.lock().unwrap().take() {
-            child.kill().map_err(|e| e.to_string())?;
-        }
-
-        // hard kill the sidecar on port 3030
-        // let _ = tokio::process::Command::new("pkill")
-        //     .arg("-f")
-        //     .arg("screenpipe")
-        //     .output()
-        //     .await;
-        debug!("Killed sidecar thru cli");
-    } else {
-        // Check if sidecar is already running
-        let sidecar_running = state.0.lock().unwrap().is_some();
-        if !sidecar_running {
-            // Spawn the sidecar
-            let child = spawn_sidecar(&app)?;
-            // Update the state after spawning
-            state.0.lock().unwrap().replace(child);
-        }
-        debug!("Spawned sidecar thru cli");
+    let sidecar_running = state.0.lock().unwrap().is_some();
+    if !sidecar_running {
+        // Spawn the sidecar
+        let child = spawn_sidecar(&app)?;
+        // Update the state after spawning
+        state.0.lock().unwrap().replace(child);
     }
+    debug!("Spawned sidecar thru cli");
     Ok(())
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-
-    // basically it user hard kill the app it does not kill the sidecar
-    // resulting in multiple screenpipe instances
-    // (hard kill = cli, right click bottom bar), otherwise click on windows close should
-    // properly kill the sidecar
-    // tauri::async_runtime::spawn(async {
-    //     let _ = tokio::process::Command::new("pkill")
-    //         .arg("-f")
-    //         .arg("screenpipe")
-    //         .output()
-    //         .await;
-    // });
-
     // sleep 1s hack
     std::thread::sleep(std::time::Duration::from_secs(1));
 
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
-    let (mut rx, child) = sidecar
+    let (_, child) = sidecar
         .args(["--port", "3030", "--debug"])
         .spawn()
         .map_err(|e| e.to_string())?;
 
     debug!("Spawned sidecar");
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                tauri_plugin_shell::process::CommandEvent::Stdout(_line) => {
-                    // debug!("{:?}", line); // TODO not u8
-                }
-                tauri_plugin_shell::process::CommandEvent::Stderr(_line) => {
-                    // debug!("{:?}", line);
-                }
-                _ => {}
-            }
-        }
-    });
 
     Ok(child)
 }
@@ -143,7 +120,10 @@ async fn main() {
             None,
         ))
         .manage(sidecar_state)
-        .invoke_handler(tauri::generate_handler![use_cli])
+        .invoke_handler(tauri::generate_handler![
+            spawn_screenpipe,
+            kill_all_sreenpipes
+        ])
         .setup(move |app| {
             // run this on windows only
             if cfg!(windows) {

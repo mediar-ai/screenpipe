@@ -36,13 +36,6 @@ import { spinner } from "./spinner";
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
-  const [isTogglingCli, setIsTogglingCli] = React.useState(false);
-  const [isTogglingCliError, setIsTogglingCliError] = React.useState("");
-  const [isStopping, setIsStopping] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
-
-  console.log("localSettings", localSettings);
-  console.log("settings", settings);
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalSettings({ ...localSettings, openaiApiKey: e.target.value });
@@ -53,31 +46,6 @@ export function Settings({ className }: { className?: string }) {
     console.log("checked", checked);
     setLocalSettings({ ...localSettings, useOllama: checked });
     updateSettings({ ...localSettings, useOllama: checked });
-  };
-
-  const handleStop = async () => {
-    setIsStopping(true);
-    try {
-      await invoke("use_cli", { useCli: true });
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    } catch (error) {
-      console.error("Failed to stop:", error);
-      // Handle error
-    } finally {
-      setIsStopping(false);
-    }
-  };
-  const handleStart = async () => {
-    setIsStarting(true);
-    try {
-      await invoke("use_cli", { useCli: false });
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    } catch (error) {
-      console.error("Failed to start:", error);
-      // Handle error
-    } finally {
-      setIsStarting(false);
-    }
   };
 
   React.useEffect(() => {
@@ -242,94 +210,6 @@ export function Settings({ className }: { className?: string }) {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </CardContent>
-          </Card>
-
-          <Separator />
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-center">CLI Option</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-center space-x-4">
-                {/* <Switch
-                  id="use-cli"
-                  checked={localSettings.useCli}
-                  onCheckedChange={handleCliToggle}
-                  disabled={isTogglingCli}
-                /> */}
-                <Label
-                  htmlFor="use-cli"
-                  className="flex items-center space-x-2"
-                >
-                  Use screenpipe as a CLI
-                  <Badge variant="destructive" className="ml-2">
-                    Experimental
-                  </Badge>
-                  <Badge variant="outline" className="ml-1">
-                    Expert Only
-                  </Badge>
-                </Label>
-              </div>
-              <p className="text-sm text-center text-muted-foreground">
-                By default, we run screenpipe in the background for you. Use
-                this option only if the status message keep showing red/error
-                even after restart.
-              </p>
-              <div className="flex justify-between mt-2 w-1/2 mx-auto">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 mr-1"
-                        onClick={handleStop}
-                        disabled={isStopping || isStarting}
-                      >
-                        {isStopping ? spinner : null}
-                        {isStopping ? "Stopping..." : "Stop"}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>This will kill any screenpipe instance running</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 ml-1"
-                        onClick={handleStart}
-                        disabled={isStopping || isStarting}
-                      >
-                        {isStarting ? spinner : null}
-                        {isStarting ? "Starting..." : "Start"}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        This will start a screenpipe instance in the background
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <p className="text-sm text-center text-muted-foreground">
-                Press stop then copy and paste this in your terminal and press
-                enter:
-              </p>
-              <CodeBlock
-                language="bash"
-                value={`brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
-brew install screenpipe
-screenpipe`}
-              />
             </CardContent>
           </Card>
         </div>

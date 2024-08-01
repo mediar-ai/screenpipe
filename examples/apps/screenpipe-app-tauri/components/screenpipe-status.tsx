@@ -94,7 +94,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
   const handleStop = async () => {
     setIsStopping(true);
     try {
-      await invoke("use_cli", { useCli: true });
+      await invoke("kill_all_sreenpipes");
       await new Promise((resolve) => setTimeout(resolve, 2000));
       await fetchHealth();
     } catch (error) {
@@ -107,7 +107,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
   const handleStart = async () => {
     setIsStarting(true);
     try {
-      await invoke("use_cli", { useCli: false });
+      await invoke("spawn_screenpipe");
       await new Promise((resolve) => setTimeout(resolve, 2000));
       await fetchHealth();
     } catch (error) {
