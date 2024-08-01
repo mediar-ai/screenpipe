@@ -4,7 +4,6 @@
 # # Run for Linux
 # act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P ubuntu-24.04
 
-
 name: Release App
 
 on:
@@ -162,3 +161,22 @@ jobs:
           args: ${{ matrix.args }}
           projectPath: "./examples/apps/screenpipe-app-tauri"
           tauriScript: bunx tauri -v
+
+      - name: Create CrabNebula Cloud Release Draft
+        uses: crabnebula-dev/cloud-release@v0.1.0
+        with:
+          command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+
+      - name: Upload Assets to CrabNebula Cloud
+        uses: crabnebula-dev/cloud-release@v0.1.0
+        with:
+          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: ./examples/apps/screenpipe-app-tauri/src-tauri
+
+      - name: Publish CrabNebula Cloud Release
+        uses: crabnebula-dev/cloud-release@v0.1.0
+        with:
+          command: release publish ${{ secrets.CN_APP_SLUG }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
