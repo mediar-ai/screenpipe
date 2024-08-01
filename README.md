@@ -24,6 +24,7 @@
 ---
 
 *Latest News* 🔥
+- [2024/07] **The Windows desktop app is here! [Get it now!](https://screenpi.pe)** Due to high demand, we will increase price by 080224.
 - [2024/07] 🎁 Screenpipe won Friends (the AI necklace) hackathon (integrations soon)
 - [2024/07] **We just launched the desktop app! [Download now!](https://screenpi.pe)**
 
