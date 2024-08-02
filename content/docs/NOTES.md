@@ -75,15 +75,20 @@
 
 <details>
   <summary>Where are the files?</summary>
+
+    Windows: Using the CLI, your data should be in C:\Users\YOUR_USER\.screenpipe
+    MacOs/Linux: Using the CLI, your data should be in ~/.screenpipe
+
+    Windows: Using the app, you can find the data in C:\Users\AppData\Local\screenpipe
+    MacOS: Using the app, you can find the data in ~/Library/Application Support/screenpipe
+    Linux: Using the app, you can find the data in ~/.config/screenpipe
   
-    By default files are in your home directory under `.screenpipe`.
 </details>
 
 <details>
   <summary>How can I interpret my data more intuitively?</summary>
 
-  We recommend using [TablePlus](https://tableplus.com/) to open the SQLite database.
-  You can find it in the `.screenpipe` directory with name `db.sqlite`.
+  We recommend using [TablePlus](https://tableplus.com/) to open the SQLite database located alongside the data. 
 </details>
 
 

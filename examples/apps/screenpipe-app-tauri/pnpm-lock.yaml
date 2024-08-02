@@ -59,6 +59,9 @@ dependencies:
   '@tauri-apps/plugin-notification':
     specifier: 2.0.0-beta.7
     version: 2.0.0-beta.7
+  '@tauri-apps/plugin-os':
+    specifier: 2.0.0-beta.8
+    version: 2.0.0-beta.8
   '@tauri-apps/plugin-process':
     specifier: 2.0.0-beta.8
     version: 2.0.0-beta.8
@@ -2277,6 +2280,12 @@ packages:
     resolution: {integrity: sha512-8uvbs0b2ByPw0VaBNolSvVEZKIOxarIBB2GZJERjhYcxJDpKcDzaTxPngPa5v98JrNSO62YdJBWXT5yABIpNMw==}
     dependencies:
       '@tauri-apps/api': 2.0.0-beta.15
+    dev: false
+
+  /@tauri-apps/plugin-os@2.0.0-beta.8:
+    resolution: {integrity: sha512-1685HUe4tGePalYfCWRKaTcLLCVIFyqyO7IMDiMNq23jT+LMJmd8xRBn/d3fDH3NLaI1r52RDpIOrnLx0XU6cw==}
+    dependencies:
+      '@tauri-apps/api': 2.0.0-beta.16
     dev: false
 
   /@tauri-apps/plugin-process@2.0.0-beta.8:

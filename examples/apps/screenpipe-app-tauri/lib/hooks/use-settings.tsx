@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Store } from "@tauri-apps/plugin-store";
-import { homeDir } from "@tauri-apps/api/path";
+import { dataDir, homeDir, localDataDir } from "@tauri-apps/api/path";
 import { join } from "@tauri-apps/api/path";
 
 interface Settings {
@@ -8,6 +8,7 @@ interface Settings {
   useOllama: boolean;
   isLoading: boolean;
   useCloudAudio: boolean;
+  useCloudOcr: boolean;
 }
 
 let store: Store | null = null;
@@ -17,16 +18,11 @@ export function useSettings() {
     openaiApiKey: "",
     useOllama: false,
     isLoading: true,
-    useCloudAudio: true,
+    useCloudAudio: false,
+    useCloudOcr: false,
   });
 
   useEffect(() => {
-    const initStore = async () => {
-      const home = await homeDir();
-      const storePath = await join(home, ".screenpipe", "store.bin");
-      store = new Store(storePath);
-    };
-
     const loadSettings = async () => {
       if (!store) {
         await initStore();
@@ -38,13 +34,16 @@ export function useSettings() {
         const savedUseOllama =
           ((await store!.get("useOllama")) as boolean) || false;
         const savedUseCloudAudio =
-          ((await store!.get("useCloudAudio")) as boolean) ?? true;
+          ((await store!.get("useCloudAudio")) as boolean) ?? false;
+        const savedUseCloudOcr =
+          ((await store!.get("useCloudOcr")) as boolean) ?? false;
 
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
           isLoading: false,
           useCloudAudio: savedUseCloudAudio,
+          useCloudOcr: savedUseCloudOcr,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -64,6 +63,7 @@ export function useSettings() {
       await store!.set("openaiApiKey", updatedSettings.openaiApiKey);
       await store!.set("useOllama", updatedSettings.useOllama);
       await store!.set("useCloudAudio", updatedSettings.useCloudAudio);
+      await store!.set("useCloudOcr", updatedSettings.useCloudOcr);
       await store!.save();
       setSettings(updatedSettings);
     } catch (error) {
@@ -75,7 +75,7 @@ export function useSettings() {
 }
 
 async function initStore() {
-  const home = await homeDir();
-  const storePath = await join(home, ".screenpipe", "store.bin");
+  const dataDir = await localDataDir();
+  const storePath = await join(dataDir, "screenpipe", "store.bin");
   store = new Store(storePath);
 }

@@ -1,7 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use dirs::home_dir;
 use log::{debug, error, info, LevelFilter};
 use logs::MultiWriter;
 use tauri::Config;
@@ -113,17 +112,35 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     let path = base_dir.join("store.bin");
 
-    let use_cloud_audio = with_store(app.clone(), stores, path, |store| {
+    let use_cloud_audio = with_store(app.clone(), stores.clone(), path.clone(), |store| {
         Ok(store
             .get("useCloudAudio")
             .and_then(|v| v.as_bool())
             .unwrap_or(true)) // Default to true if not set
     })
     .map_err(|e| e.to_string())?;
+    let use_cloud_ocr = with_store(app.clone(), stores, path, |store| {
+        Ok(store
+            .get("useCloudOcr")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true)) // Default to true if not set
+    })
+    .map_err(|e| e.to_string())?;
 
-    let mut args = vec!["--port", "3030", "--debug", "--self-healing"];
-    if !use_cloud_audio {
-        args.push("--cloud-audio-off");
+    let data_dir_str = base_dir.to_string_lossy();
+    let mut args = vec![
+        "--port",
+        "3030",
+        "--debug",
+        // "--self-healing",
+        "--data-dir",
+        &data_dir_str,
+    ];
+    if use_cloud_audio {
+        args.push("--cloud-audio-on");
+    }
+    if use_cloud_ocr {
+        args.push("--cloud-ocr-on");
     }
 
     // hardcode TESSDATA_PREFIX for windows
@@ -151,11 +168,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 }
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
-    let default_path = app.path().local_data_dir();
+    let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
-    let local_data_dir = custom_path
-        .map(PathBuf::from)
-        .unwrap_or(default_path.unwrap());
+    let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
 
     fs::create_dir_all(&local_data_dir.join("data"))?;
     Ok(local_data_dir)
@@ -175,6 +190,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())

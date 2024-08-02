@@ -220,8 +220,25 @@ if (platform == 'macos') {
 				await $`cp $(brew --prefix)/bin/tesseract ${tesseractBinary}`;
 				await $`cp /usr/local/bin/tesseract ${tesseractBinary}`;
 			}
-			// copy screenpipe binary
-			await $`cp ../../../../target/aarch64-apple-darwin/release/screenpipe screenpipe-aarch64-apple-darwin`;
+			// copy screenpipe binary (more recent one)
+			const path1 = "../../../../target/aarch64-apple-darwin/release/screenpipe";
+			const path2 = "../../../../target/release/screenpipe";
+
+			if (await fs.exists(path1) && await fs.exists(path2)) {
+				const stat1 = await fs.stat(path1);
+				const stat2 = await fs.stat(path2);
+				const recentPath = stat1.mtime > stat2.mtime ? path1 : path2;
+				await $`cp ${recentPath} screenpipe-aarch64-apple-darwin`;
+				console.log(`copied more recent screenpipe binary from ${recentPath}`);
+			} else if (await fs.exists(path1)) {
+				await $`cp ${path1} screenpipe-aarch64-apple-darwin`;
+				console.log("copied aarch64-apple-darwin screenpipe binary");
+			} else if (await fs.exists(path2)) {
+				await $`cp ${path2} screenpipe-aarch64-apple-darwin`;
+				console.log("copied release screenpipe binary");
+			} else {
+				console.log("no screenpipe binary found");
+			}
 		} else if (arch === 'x86_64' && nativeArch === 'arm64') {
 			// x86_64 on ARM Mac
 			console.log('Installing x86_64 version using Rosetta 2...');

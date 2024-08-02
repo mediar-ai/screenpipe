@@ -58,7 +58,7 @@
     ]
   },
   "productName": "screenpipe",
-  "identifier": "com.screenpi.pe",
+  "identifier": "screenpi.pe",
   "plugins": {
     "updater": {
       "active": true,

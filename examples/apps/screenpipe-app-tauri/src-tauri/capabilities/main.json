@@ -91,6 +91,10 @@
     "cli:default",
     "shell:default",
     "dialog:default",
-    "updater:default"
+    "updater:default",
+    "os:default",
+    "os:allow-arch",
+    "os:allow-hostname",
+    "os:allow-os-type"
   ]
 }

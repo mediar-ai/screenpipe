@@ -22,7 +22,7 @@ import {
   isPermissionGranted,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
-
+import { platform } from "@tauri-apps/plugin-os";
 interface HealthCheckResponse {
   status: string;
   last_frame_timestamp: string | null;
@@ -39,9 +39,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
-  const [lastNotificationTime, setLastNotificationTime] = useState<
-    number | null
-  >(null);
 
   const fetchHealth = async () => {
     try {
@@ -105,28 +102,56 @@ const HealthStatus = ({ className }: { className?: string }) => {
               body: "Screenpipe is currently unhealthy. Please try to restart. It could also be useful to press 'Stop' in the status badge just in case.",
             });
             localStorage.setItem("lastUnhealthyNotification", now.toString());
-            setLastNotificationTime(now);
           }
         }
       }
     };
 
-    checkAndNotify();
+    // checkAndNotify(); // not working well
   }, [health]);
 
-  const logCommands = `# Stream the log:
-tail -f $HOME/.screenpipe/screenpipe.log
+  const getLogCommands = (os: string | null) => {
+    console.log(os);
+    if (os === "windows") {
+      return `# Stream the log:
+Get-Content -Wait $env:APPDATA\\screenpipe\\screenpipe.log
 
 # Scroll the logs:
-less $HOME/.screenpipe/screenpipe.log
+Get-Content $env:APPDATA\\screenpipe\\screenpipe.log | more
 
 # View last 10 frames:
-sqlite3 $HOME/.screenpipe/db.sqlite \\
-"SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+sqlite3 $env:APPDATA\\screenpipe\\db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
 
 # View last 10 audio transcriptions:
-sqlite3 $HOME/.screenpipe/db.sqlite \\
-"SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`;
+sqlite3 $env:APPDATA\\screenpipe\\db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`;
+    } else if (os === "macos") {
+      return `# Stream the log:
+tail -f $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
+
+# Scroll the logs:
+less $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
+
+# View last 10 frames:
+sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+
+# View last 10 audio transcriptions:
+sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`;
+    } else if (os === "linux") {
+      return `# Stream the log:
+tail -f $HOME/.config/screenpipe/screenpipe.log
+
+# Scroll the logs:
+less $HOME/.config/screenpipe/screenpipe.log
+
+# View last 10 frames:
+sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+
+# View last 10 audio transcriptions:
+sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`;
+    } else {
+      return "OS not recognized. \n\nPlease check the documentation for your specific operating system.";
+    }
+  };
 
   const handleStop = async () => {
     setIsStopping(true);
@@ -238,7 +263,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
               <DialogTitle>Log Commands</DialogTitle>
             </DialogHeader>
             <div className="flex-grow overflow-auto">
-              <CodeBlock language="bash" value={logCommands} />
+              <CodeBlock language="bash" value={getLogCommands(platform())} />
             </div>
             <div className="mt-4 text-sm text-gray-500">
               <p>Or, for more advanced queries:</p>
@@ -378,7 +403,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
             <DialogTitle>Log Commands</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-auto">
-            <CodeBlock language="bash" value={logCommands} />
+            <CodeBlock language="bash" value={getLogCommands(platform())} />
           </div>
           <div className="mt-4 text-sm text-gray-500">
             <p>Or, for more advanced queries:</p>
@@ -396,8 +421,7 @@ sqlite3 $HOME/.screenpipe/db.sqlite \\
               <li>Copy the entire page (Cmd+A, Cmd+C)</li>
               <li>Paste into ChatGPT (Cmd+V)</li>
               <li>
-                Ask: &quot;give me 10 sqlite query CLI to look up my data. My db
-                is in $HOME/.screenpipe/db.sqlite&quot;
+                Ask: &quot;give me 10 sqlite query CLI to look up my data.
               </li>
             </ol>
           </div>

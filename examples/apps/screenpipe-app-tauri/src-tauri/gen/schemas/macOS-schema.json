@@ -5288,6 +5288,125 @@
           ]
         },
         {
+          "description": "os:default -> This permission set configures which\noperating system information are available\nto gather from the frontend.\n\n#### Granted Permissions\n\nAll information except the host name are available.\n\n",
+          "type": "string",
+          "enum": [
+            "os:default"
+          ]
+        },
+        {
+          "description": "os:allow-arch -> Enables the arch command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:allow-arch"
+          ]
+        },
+        {
+          "description": "os:allow-exe-extension -> Enables the exe_extension command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:allow-exe-extension"
+          ]
+        },
+        {
+          "description": "os:allow-family -> Enables the family command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:allow-family"
+          ]
+        },
+        {
+          "description": "os:allow-hostname -> Enables the hostname command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:allow-hostname"
+          ]
+        },
+        {
+          "description": "os:allow-locale -> Enables the locale command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:allow-locale"
+          ]
+        },
+        {
+          "description": "os:allow-os-type -> Enables the os_type command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:allow-os-type"
+          ]
+        },
+        {
+          "description": "os:allow-platform -> Enables the platform command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:allow-platform"
+          ]
+        },
+        {
+          "description": "os:allow-version -> Enables the version command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:allow-version"
+          ]
+        },
+        {
+          "description": "os:deny-arch -> Denies the arch command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:deny-arch"
+          ]
+        },
+        {
+          "description": "os:deny-exe-extension -> Denies the exe_extension command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:deny-exe-extension"
+          ]
+        },
+        {
+          "description": "os:deny-family -> Denies the family command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:deny-family"
+          ]
+        },
+        {
+          "description": "os:deny-hostname -> Denies the hostname command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:deny-hostname"
+          ]
+        },
+        {
+          "description": "os:deny-locale -> Denies the locale command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:deny-locale"
+          ]
+        },
+        {
+          "description": "os:deny-os-type -> Denies the os_type command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:deny-os-type"
+          ]
+        },
+        {
+          "description": "os:deny-platform -> Denies the platform command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:deny-platform"
+          ]
+        },
+        {
+          "description": "os:deny-version -> Denies the version command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "os:deny-version"
+          ]
+        },
+        {
           "description": "path:default -> Default permissions for the plugin.",
           "type": "string",
           "enum": [
@@ -6450,6 +6569,13 @@
           ]
         },
         {
+          "description": "window:allow-set-size-constraints -> Enables the set_size_constraints command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "window:allow-set-size-constraints"
+          ]
+        },
+        {
           "description": "window:allow-set-skip-taskbar -> Enables the set_skip_taskbar command without any pre-configured scope.",
           "type": "string",
           "enum": [
@@ -6895,6 +7021,13 @@
           "type": "string",
           "enum": [
             "window:deny-set-size"
+          ]
+        },
+        {
+          "description": "window:deny-set-size-constraints -> Denies the set_size_constraints command without any pre-configured scope.",
+          "type": "string",
+          "enum": [
+            "window:deny-set-size-constraints"
           ]
         },
         {

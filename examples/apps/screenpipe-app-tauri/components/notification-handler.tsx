@@ -7,8 +7,6 @@ import {
 } from "@tauri-apps/plugin-notification";
 
 const NotificationHandler: React.FC = () => {
-  const [permissionGranted, setPermissionGranted] = useState(false);
-
   useEffect(() => {
     const checkAndRequestPermission = async () => {
       let permission = await isPermissionGranted();
@@ -19,13 +17,22 @@ const NotificationHandler: React.FC = () => {
         permission = result === "granted";
       }
 
-      setPermissionGranted(permission);
-
       if (permission) {
-        sendNotification({
-          title: "Welcome to Screenpipe",
-          body: "Thank you for using Screenpipe! We're dedicated to help you get the most out of screenpipe.",
-        });
+        const lastNotificationTime = localStorage.getItem(
+          "lastNotificationTime"
+        );
+        const currentTime = Date.now();
+
+        if (
+          !lastNotificationTime ||
+          currentTime - parseInt(lastNotificationTime) > 3600000
+        ) {
+          sendNotification({
+            title: "Welcome to Screenpipe",
+            body: "Thank you for using Screenpipe! We're dedicated to help you get the most out of screenpipe.",
+          });
+          localStorage.setItem("lastNotificationTime", currentTime.toString());
+        }
       }
     };
 

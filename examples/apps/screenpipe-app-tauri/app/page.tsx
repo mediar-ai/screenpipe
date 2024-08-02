@@ -20,6 +20,7 @@ import { checkForAppUpdates } from "@/components/updater";
 
 export default function Home() {
   const { settings } = useSettings();
+  console.log("settings", settings);
 
   useEffect(() => {
     checkForAppUpdates();
