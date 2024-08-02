@@ -98,9 +98,13 @@ if you want to run screenpipe in debug mode to show more logs in terminal:
 ```bash
 screenpipe --debug
 ```
-by default screenpipe is using deepgram nova-t text-to-audio model via cloud api. To use whisper-tiny that runs locally you should add this flag:
+by default screenpipe is using deepgram nova-t text-to-audio model via cloud api. To use whisper-tiny that runs LOCALLY you should add this flag:
 ```bash
 screenpipe --cloud-audio-off
+```
+by default screenpipe is using unstructured.io for screen capture OCR processing via cloud api. To use tesseract that runs LOCALLY you should add this flag:
+```bash
+screenpipe --cloud-ocr-off
 ```
 
 you can combine multiple flags if needed
