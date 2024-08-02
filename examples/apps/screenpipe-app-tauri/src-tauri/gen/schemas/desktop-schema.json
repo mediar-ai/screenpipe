@@ -6450,13 +6450,6 @@
           ]
         },
         {
-          "description": "window:allow-set-size-constraints -> Enables the set_size_constraints command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "window:allow-set-size-constraints"
-          ]
-        },
-        {
           "description": "window:allow-set-skip-taskbar -> Enables the set_skip_taskbar command without any pre-configured scope.",
           "type": "string",
           "enum": [
@@ -6902,13 +6895,6 @@
           "type": "string",
           "enum": [
             "window:deny-set-size"
-          ]
-        },
-        {
-          "description": "window:deny-set-size-constraints -> Denies the set_size_constraints command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "window:deny-set-size-constraints"
           ]
         },
         {

@@ -84,13 +84,13 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     save_text_files: bool,
 
-    /// Disable cloud audio processing
-    #[arg(long, default_value_t = false)]
-    cloud_audio_off: bool,
+    /// Enable cloud audio processing
+    #[arg(long, default_value_t = true)]
+    cloud_audio_on: bool,
 
-    /// Disable cloud OCR processing
-    #[arg(long, default_value_t = false)]
-    cloud_ocr_off: bool,
+    /// Enable cloud OCR processing
+    #[arg(long, default_value_t = true)]
+    cloud_ocr_on: bool,
 }
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
@@ -300,8 +300,8 @@ async fn main() -> anyhow::Result<()> {
                     vision_control,
                     audio_devices_control,
                     cli.save_text_files,
-                    !cli.cloud_audio_off, // Pass the cloud_audio flag
-                    !cli.cloud_ocr_off, // Pass the cloud_ocr flag
+                    cli.cloud_audio_on, // Pass the cloud_audio flag
+                    cli.cloud_ocr_on, // Pass the cloud_ocr flag
                 )
                 .await;
 
