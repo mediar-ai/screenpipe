@@ -85,11 +85,11 @@ struct Cli {
     save_text_files: bool,
 
     /// Enable cloud audio processing
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = false)]
     cloud_audio_on: bool,
 
     /// Enable cloud OCR processing
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = false)]
     cloud_ocr_on: bool,
 }
 
@@ -301,7 +301,7 @@ async fn main() -> anyhow::Result<()> {
                     audio_devices_control,
                     cli.save_text_files,
                     cli.cloud_audio_on, // Pass the cloud_audio flag
-                    cli.cloud_ocr_on, // Pass the cloud_ocr flag
+                    cli.cloud_ocr_on,   // Pass the cloud_ocr flag
                 )
                 .await;
 
@@ -349,6 +349,20 @@ async fn main() -> anyhow::Result<()> {
         "{}\n\n",
         "Open source | Runs locally | Developer friendly".bright_green()
     );
+
+    // Add warning for cloud arguments
+    if cli.cloud_audio_on || cli.cloud_ocr_on {
+        eprintln!(
+            "{}",
+            "WARNING: You are using cloud now. Make sure to understand the data privacy risks."
+                .bright_yellow()
+        );
+    } else {
+        eprintln!(
+            "{}",
+            "You are using local processing. All your data stays on your computer.".bright_yellow()
+        );
+    }
 
     // Keep the main thread running
     loop {
