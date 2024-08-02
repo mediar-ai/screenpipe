@@ -46,7 +46,7 @@ pub(crate) struct DeviceRequest {
     device_id: String,
 }
 
-// Request structs
+// Update the SearchQuery struct
 #[derive(Deserialize)]
 pub(crate) struct SearchQuery {
     q: Option<String>,
@@ -58,6 +58,8 @@ pub(crate) struct SearchQuery {
     start_time: Option<DateTime<Utc>>,
     #[serde(default)]
     end_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    app_name: Option<String>, // Add this line
 }
 
 #[derive(Deserialize)]
@@ -117,6 +119,7 @@ pub(crate) struct OCRContent {
     timestamp: DateTime<Utc>,
     file_path: String,
     offset_index: i64,
+    app_name: String, // Add this line
 }
 
 #[derive(Serialize)]
@@ -163,25 +166,35 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}",
+        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
         query.pagination.offset,
         query.start_time,
-        query.end_time
+        query.end_time,
+        query.app_name
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
+
+    // If app_name is specified, force content_type to OCR
+    let content_type = if query.app_name.is_some() {
+        ContentType::OCR
+    } else {
+        query.content_type
+    };
+
     let results = state
         .db
         .search(
             query_str,
-            query.content_type,
+            content_type,
             query.pagination.limit,
             query.pagination.offset,
             query.start_time,
             query.end_time,
+            query.app_name.as_deref(),
         )
         .await
         .map_err(|e| {
@@ -196,9 +209,10 @@ pub(crate) async fn search(
         .db
         .count_search_results(
             query_str,
-            query.content_type,
+            content_type,
             query.start_time,
             query.end_time,
+            query.app_name.as_deref(),
         )
         .await
         .map_err(|e| {
@@ -434,6 +448,7 @@ fn into_content_item(result: SearchResult) -> ContentItem {
             timestamp: ocr.timestamp,
             file_path: ocr.file_path,
             offset_index: ocr.offset_index,
+            app_name: ocr.app_name, // Add this line
         }),
         SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
             chunk_id: audio.audio_chunk_id,
@@ -631,5 +646,6 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=
 # Search for audio content with a keyword from the beginning of the current month
 curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
 
+curl "http://localhost:3030/search?app_name=cursor"
 
 */

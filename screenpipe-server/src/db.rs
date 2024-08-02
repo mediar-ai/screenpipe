@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{
@@ -6,7 +7,6 @@ use sqlx::{
     FromRow,
 };
 use std::time::Duration;
-use log::{debug, error, info, warn};
 use tokio::time::{timeout, Duration as TokioDuration};
 
 #[derive(Debug, Serialize)]
@@ -19,12 +19,13 @@ pub enum SearchResult {
 pub struct OCRResult {
     pub frame_id: i64,
     pub ocr_text: String,
-    pub text_json: String, // Store as JSON string
+    pub text_json: String,                       // Store as JSON string
     pub new_text_json_vs_previous_frame: String, // Store as JSON string
-    pub raw_data_output_from_ocr: String, // Store as JSON string
+    pub raw_data_output_from_ocr: String,        // Store as JSON string
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
+    pub app_name: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default, Clone, Copy)]
@@ -51,8 +52,10 @@ pub struct DatabaseManager {
 
 impl DatabaseManager {
     pub async fn new(database_path: &str) -> Result<Self, sqlx::Error> {
-
-        debug!("Initializing DatabaseManager with database path: {}", database_path);
+        debug!(
+            "Initializing DatabaseManager with database path: {}",
+            database_path
+        );
         let connection_string = format!("sqlite:{}", database_path);
 
         // Create the database if it doesn't exist
@@ -62,7 +65,7 @@ impl DatabaseManager {
 
         let pool = SqlitePoolOptions::new()
             .max_connections(10)
-            .min_connections(3)  // Minimum number of idle connections
+            .min_connections(3) // Minimum number of idle connections
             .acquire_timeout(Duration::from_secs(10))
             .connect(&connection_string)
             .await?;
@@ -127,7 +130,7 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_frame(&self) -> Result<i64, sqlx::Error> {
+    pub async fn insert_frame(&self, app_name: &str) -> Result<i64, sqlx::Error> {
         // debug!("Starting insert_frame");
 
         let mut tx = self.pool.begin().await?;
@@ -161,11 +164,12 @@ impl DatabaseManager {
 
         // Insert the new frame
         let id = sqlx::query(
-            "INSERT INTO frames (video_chunk_id, offset_index, timestamp) VALUES (?1, ?2, ?3)",
+        "INSERT INTO frames (video_chunk_id, offset_index, timestamp, app_name) VALUES (?1, ?2, ?3, ?4)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
         .bind(Utc::now())
+        .bind(app_name)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -185,43 +189,65 @@ impl DatabaseManager {
         text_json: &str,
         new_text_json_vs_previous_frame: &str,
         raw_data_output_from_ocr: &str,
+        app_name: &str,
     ) -> Result<(), sqlx::Error> {
         const MAX_RETRIES: u32 = 3;
         const TIMEOUT_DURATION: TokioDuration = TokioDuration::from_secs(10);
 
-        // debug!("Starting insert_ocr_text for frame_id: {}", frame_id);
-
         for attempt in 1..=MAX_RETRIES {
             // debug!("Attempt {} for frame_id: {}", attempt, frame_id);
-            match timeout(TIMEOUT_DURATION, self.insert_ocr_text_old(
-                frame_id,
-                text,
-                text_json,
-                new_text_json_vs_previous_frame,
-                raw_data_output_from_ocr,
-            )).await {
+            match timeout(
+                TIMEOUT_DURATION,
+                self.insert_ocr_text_old(
+                    frame_id,
+                    text,
+                    text_json,
+                    new_text_json_vs_previous_frame,
+                    raw_data_output_from_ocr,
+                    app_name,
+                ),
+            )
+            .await
+            {
                 Ok(Ok(())) => {
                     // Log successful insertion
-                    debug!("Successfully inserted OCR text for frame_id: {} on attempt {}", frame_id, attempt);
+                    debug!(
+                        "Successfully inserted OCR text for frame_id: {} on attempt {}",
+                        frame_id, attempt
+                    );
                     return Ok(());
                 }
                 Ok(Err(e)) => {
                     error!("Failed to insert OCR text on attempt {}: {}", attempt, e);
                 }
                 Err(_) => {
-                    warn!("Timeout occurred on attempt {} while inserting OCR text for frame_id: {}", attempt, frame_id);
+                    warn!(
+                        "Timeout occurred on attempt {} while inserting OCR text for frame_id: {}",
+                        attempt, frame_id
+                    );
                 }
             }
 
             if attempt < MAX_RETRIES {
-                warn!("Retrying to insert OCR text for frame_id: {} (attempt {}/{})", frame_id, attempt + 1, MAX_RETRIES);
+                warn!(
+                    "Retrying to insert OCR text for frame_id: {} (attempt {}/{})",
+                    frame_id,
+                    attempt + 1,
+                    MAX_RETRIES
+                );
             } else {
-                error!("Failed to insert OCR text for frame_id: {} after {} attempts", frame_id, MAX_RETRIES);
+                error!(
+                    "Failed to insert OCR text for frame_id: {} after {} attempts",
+                    frame_id, MAX_RETRIES
+                );
                 return Err(sqlx::Error::PoolTimedOut); // Return error after max retries
             }
         }
 
-        debug!("Exiting insert_ocr_text for frame_id: {} with PoolTimedOut error", frame_id);
+        debug!(
+            "Exiting insert_ocr_text for frame_id: {} with PoolTimedOut error",
+            frame_id
+        );
         Err(sqlx::Error::PoolTimedOut)
     }
 
@@ -232,6 +258,7 @@ impl DatabaseManager {
         text_json: &str,
         new_text_json_vs_previous_frame: &str,
         raw_data_output_from_ocr: &str,
+        app_name: &str,
     ) -> Result<(), sqlx::Error> {
         // debug!("Starting insert_ocr_text_old for frame_id: {}", frame_id);
 
@@ -240,24 +267,25 @@ impl DatabaseManager {
             "Inserting OCR text with frame_id: {}, text: {}{}",
             frame_id,
             text.chars().take(100).collect::<String>(),
-            if text.chars().count() > 100 { "..." } else { "" }
+            if text.chars().count() > 100 {
+                "..."
+            } else {
+                ""
+            }
         );
 
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, new_text_json_vs_previous_frame, raw_data_output_from_OCR) VALUES (?1, ?2, ?3, ?4, ?5)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, new_text_json_vs_previous_frame, raw_data_output_from_OCR, app_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
             .bind(new_text_json_vs_previous_frame)
             .bind(raw_data_output_from_ocr)
+            .bind(app_name)
             .execute(&mut *tx)
             .await?;
-    
-        // Log successful insertion
-        // debug!("Successfully inserted OCR text for frame_id: {}", frame_id);
-    
+
         tx.commit().await?;
-        // debug!("Transaction committed for frame_id: {}", frame_id);
         Ok(())
     }
 
@@ -269,17 +297,31 @@ impl DatabaseManager {
         offset: u32,
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
-        if content_type == ContentType::All || content_type == ContentType::OCR {
-            let ocr_results = self.search_ocr(query, limit, offset, start_time, end_time).await?;
+        // If app_name is specified, only search OCR content
+        if app_name.is_some() {
+            let ocr_results = self
+                .search_ocr(query, limit, offset, start_time, end_time, app_name)
+                .await?;
             results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-        }
+        } else {
+            // If no app_name is specified, proceed with normal search
+            if content_type == ContentType::All || content_type == ContentType::OCR {
+                let ocr_results = self
+                    .search_ocr(query, limit, offset, start_time, end_time, None)
+                    .await?;
+                results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+            }
 
-        if content_type == ContentType::All || content_type == ContentType::Audio {
-            let audio_results = self.search_audio(query, limit, offset, start_time, end_time).await?;
-            results.extend(audio_results.into_iter().map(SearchResult::Audio));
+            if content_type == ContentType::All || content_type == ContentType::Audio {
+                let audio_results = self
+                    .search_audio(query, limit, offset, start_time, end_time)
+                    .await?;
+                results.extend(audio_results.into_iter().map(SearchResult::Audio));
+            }
         }
 
         // Sort results by timestamp in descending order
@@ -301,6 +343,7 @@ impl DatabaseManager {
         Ok(results)
     }
 
+    // Update the search_ocr method
     async fn search_ocr(
         &self,
         query: &str,
@@ -308,9 +351,9 @@ impl DatabaseManager {
         offset: u32,
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>, // Add this parameter
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
-        sqlx::query_as::<_, OCRResult>(
-            r#"
+        let mut sql = r#"
             SELECT 
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
@@ -319,7 +362,8 @@ impl DatabaseManager {
                 ocr_text.raw_data_output_from_OCR,
                 frames.timestamp,
                 video_chunks.file_path,
-                frames.offset_index
+                frames.offset_index,
+                frames.app_name
             FROM 
                 ocr_text
             JOIN 
@@ -330,18 +374,33 @@ impl DatabaseManager {
                 ocr_text.text LIKE '%' || ?1 || '%'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
+        "#
+        .to_string();
+
+        if app_name.is_some() {
+            sql.push_str(" AND frames.app_name = ?6");
+        }
+
+        sql.push_str(
+            r#"
             ORDER BY 
                 frames.timestamp DESC
             LIMIT ?4 OFFSET ?5
             "#,
-        )
-        .bind(query)
-        .bind(start_time)
-        .bind(end_time)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await
+        );
+
+        let mut query = sqlx::query_as::<_, OCRResult>(&sql)
+            .bind(query)
+            .bind(start_time)
+            .bind(end_time)
+            .bind(limit)
+            .bind(offset);
+
+        if let Some(app_name) = app_name {
+            query = query.bind(app_name);
+        }
+
+        query.fetch_all(&self.pool).await
     }
 
     async fn search_audio(
@@ -401,142 +460,38 @@ impl DatabaseManager {
         .await
     }
 
-    pub async fn get_recent_results(
-        &self,
-        limit: u32,
-        offset: u32,
-        start_timestamp: Option<DateTime<Utc>>,
-        end_timestamp: Option<DateTime<Utc>>,
-    ) -> Result<Vec<SearchResult>, sqlx::Error> {
-        let mut results = Vec::new();
-
-        let ocr_query = r#"
-            SELECT 
-                ocr_text.frame_id,
-                ocr_text.text as ocr_text,
-                ocr_text.text_json,
-                ocr_text.new_text_json_vs_previous_frame,
-                ocr_text.raw_data_output_from_OCR,
-                frames.timestamp,
-                video_chunks.file_path,
-                frames.offset_index
-            FROM 
-                ocr_text
-            JOIN 
-                frames ON ocr_text.frame_id = frames.id
-            JOIN 
-                video_chunks ON frames.video_chunk_id = video_chunks.id
-            WHERE 
-                1=1
-                AND (?1 IS NULL OR frames.timestamp >= ?1)
-                AND (?2 IS NULL OR frames.timestamp <= ?2)
-            ORDER BY 
-                frames.timestamp DESC
-            LIMIT ?3 OFFSET ?4
-        "#;
-
-        let ocr_results = sqlx::query_as::<_, OCRResult>(ocr_query)
-            .bind(start_timestamp)
-            .bind(end_timestamp)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?;
-
-        results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-
-        let audio_query = r#"
-            SELECT 
-                audio_transcriptions.audio_chunk_id,
-                audio_transcriptions.transcription,
-                audio_transcriptions.timestamp,
-                audio_chunks.file_path,
-                audio_transcriptions.offset_index
-            FROM 
-                audio_transcriptions
-            JOIN 
-                audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
-            WHERE 
-                1=1
-                AND (?1 IS NULL OR audio_transcriptions.timestamp >= ?1)
-                AND (?2 IS NULL OR audio_transcriptions.timestamp <= ?2)
-            ORDER BY 
-                audio_transcriptions.timestamp DESC
-            LIMIT ?3 OFFSET ?4
-        "#;
-
-        let audio_results = sqlx::query_as::<_, AudioResult>(audio_query)
-            .bind(start_timestamp)
-            .bind(end_timestamp)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?;
-
-        results.extend(audio_results.into_iter().map(SearchResult::Audio));
-
-        // Sort combined results by timestamp
-        results.sort_by(|a, b| {
-            let timestamp_a = match a {
-                SearchResult::OCR(ocr) => ocr.timestamp,
-                SearchResult::Audio(audio) => audio.timestamp,
-            };
-            let timestamp_b = match b {
-                SearchResult::OCR(ocr) => ocr.timestamp,
-                SearchResult::Audio(audio) => audio.timestamp,
-            };
-            timestamp_b.cmp(&timestamp_a)
-        });
-
-        // Limit the final combined results
-        results.truncate(limit as usize);
-
-        Ok(results)
-    }
+    // Update the count_search_results method
     pub async fn count_search_results(
         &self,
         query: &str,
         content_type: ContentType,
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>,
     ) -> Result<usize, sqlx::Error> {
         let mut total_count = 0;
 
-        if content_type == ContentType::All || content_type == ContentType::OCR {
-            let ocr_count: (i64,) = sqlx::query_as(
-                r#"
-                SELECT COUNT(*)
-                FROM ocr_text
-                JOIN frames ON ocr_text.frame_id = frames.id
-                WHERE text LIKE '%' || ?1 || '%'
-                    AND (?2 IS NULL OR frames.timestamp >= ?2)
-                    AND (?3 IS NULL OR frames.timestamp <= ?3)
-                "#,
-            )
-            .bind(query)
-            .bind(start_time)
-            .bind(end_time)
-            .fetch_one(&self.pool)
-            .await?;
-            total_count += ocr_count.0 as usize;
-        }
+        // If app_name is specified, only count OCR results
+        if app_name.is_some() {
+            let ocr_count = self
+                .count_ocr_results(query, start_time, end_time, app_name)
+                .await?;
+            total_count += ocr_count;
+        } else {
+            // If no app_name is specified, proceed with normal counting
+            if content_type == ContentType::All || content_type == ContentType::OCR {
+                let ocr_count = self
+                    .count_ocr_results(query, start_time, end_time, None)
+                    .await?;
+                total_count += ocr_count;
+            }
 
-        if content_type == ContentType::All || content_type == ContentType::Audio {
-            let audio_count: (i64,) = sqlx::query_as(
-                r#"
-                SELECT COUNT(*)
-                FROM audio_transcriptions
-                WHERE transcription LIKE '%' || ?1 || '%'
-                    AND (?2 IS NULL OR timestamp >= ?2)
-                    AND (?3 IS NULL OR timestamp <= ?3)
-                "#,
-            )
-            .bind(query)
-            .bind(start_time)
-            .bind(end_time)
-            .fetch_one(&self.pool)
-            .await?;
-            total_count += audio_count.0 as usize;
+            if content_type == ContentType::All || content_type == ContentType::Audio {
+                let audio_count = self
+                    .count_audio_results(query, start_time, end_time)
+                    .await?;
+                total_count += audio_count;
+            }
         }
 
         Ok(total_count)
@@ -583,24 +538,76 @@ impl DatabaseManager {
 
         Ok(total_count)
     }
+    async fn count_ocr_results(
+        &self,
+        query: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>,
+    ) -> Result<usize, sqlx::Error> {
+        let mut sql = r#"
+            SELECT COUNT(*)
+            FROM ocr_text
+            JOIN frames ON ocr_text.frame_id = frames.id
+            WHERE text LIKE '%' || ?1 || '%'
+                AND (?2 IS NULL OR frames.timestamp >= ?2)
+                AND (?3 IS NULL OR frames.timestamp <= ?3)
+        "#
+        .to_string();
 
-    pub async fn get_latest_timestamps(&self) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>), sqlx::Error> {
-        let latest_frame: Option<(DateTime<Utc>,)> = sqlx::query_as(
-            "SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1"
+        if app_name.is_some() {
+            sql.push_str(" AND frames.app_name = ?4");
+        }
+
+        let mut query = sqlx::query_as::<_, (i64,)>(&sql)
+            .bind(query)
+            .bind(start_time)
+            .bind(end_time);
+
+        if let Some(app_name) = app_name {
+            query = query.bind(app_name);
+        }
+
+        let (count,) = query.fetch_one(&self.pool).await?;
+        Ok(count as usize)
+    }
+    async fn count_audio_results(
+        &self,
+        query: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<usize, sqlx::Error> {
+        let (count,): (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)
+            FROM audio_transcriptions
+            WHERE transcription LIKE '%' || ?1 || '%'
+                AND (?2 IS NULL OR timestamp >= ?2)
+                AND (?3 IS NULL OR timestamp <= ?3)
+            "#,
         )
-        .fetch_optional(&self.pool)
+        .bind(query)
+        .bind(start_time)
+        .bind(end_time)
+        .fetch_one(&self.pool)
         .await?;
 
-        let latest_audio: Option<(DateTime<Utc>,)> = sqlx::query_as(
-            "SELECT timestamp FROM audio_chunks ORDER BY timestamp DESC LIMIT 1"
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        Ok(count as usize)
+    }
+    pub async fn get_latest_timestamps(
+        &self,
+    ) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>), sqlx::Error> {
+        let latest_frame: Option<(DateTime<Utc>,)> =
+            sqlx::query_as("SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await?;
 
-        Ok((
-            latest_frame.map(|f| f.0),
-            latest_audio.map(|a| a.0)
-        ))
+        let latest_audio: Option<(DateTime<Utc>,)> =
+            sqlx::query_as("SELECT timestamp FROM audio_chunks ORDER BY timestamp DESC LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await?;
+
+        Ok((latest_frame.map(|f| f.0), latest_audio.map(|a| a.0)))
     }
 }
 
@@ -611,4 +618,3 @@ impl Clone for DatabaseManager {
         }
     }
 }
-

@@ -127,7 +127,7 @@ async fn record_video(
 
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.ocr_frame_queue.lock().await.pop_front() {
-            match db.insert_frame().await {
+            match db.insert_frame(&frame.app_name).await {
                 Ok(frame_id) => {
                     let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
                     let new_text_json_vs_previous_frame =
@@ -144,6 +144,7 @@ async fn record_video(
                             &text_json,
                             &new_text_json_vs_previous_frame,
                             &raw_data_output_from_ocr,
+                            &frame.app_name
                         )
                         .await
                     {

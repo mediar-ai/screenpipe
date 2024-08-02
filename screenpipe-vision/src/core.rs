@@ -12,10 +12,13 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
     Mutex,
 }; // Corrected import for Mutex
-use xcap::Monitor;
+use xcap::{Monitor, Window};
 
-use crate::utils::{capture_screenshot, compare_with_previous_image, perform_ocr, perform_ocr_cloud, save_text_files};
-use rusty_tesseract::{DataOutput, Data}; // Add this import
+use crate::utils::{
+    capture_screenshot, compare_with_previous_image, perform_ocr, perform_ocr_cloud,
+    save_text_files,
+};
+use rusty_tesseract::{Data, DataOutput}; // Add this import
 
 pub enum ControlMessage {
     Pause,
@@ -47,10 +50,11 @@ pub struct CaptureResult {
     pub image: Arc<DynamicImage>,
     pub text: String,
     pub text_json: Vec<HashMap<String, String>>,
-    pub new_text_json: Vec<HashMap<String, String>>, 
+    pub new_text_json: Vec<HashMap<String, String>>,
     pub frame_number: u64,
     pub timestamp: Instant,
     pub data_output: DataOutput,
+    pub app_name: String,
 }
 
 impl Clone for CaptureResult {
@@ -64,21 +68,27 @@ impl Clone for CaptureResult {
             timestamp: self.timestamp,
             data_output: DataOutput {
                 output: self.data_output.output.clone(),
-                data: self.data_output.data.iter().map(|d| Data {
-                    level: d.level,
-                    page_num: d.page_num,
-                    block_num: d.block_num,
-                    par_num: d.par_num,
-                    line_num: d.line_num,
-                    word_num: d.word_num,
-                    left: d.left,
-                    top: d.top,
-                    width: d.width,
-                    height: d.height,
-                    conf: d.conf,
-                    text: d.text.clone(),
-                }).collect(),
+                data: self
+                    .data_output
+                    .data
+                    .iter()
+                    .map(|d| Data {
+                        level: d.level,
+                        page_num: d.page_num,
+                        block_num: d.block_num,
+                        par_num: d.par_num,
+                        line_num: d.line_num,
+                        word_num: d.word_num,
+                        left: d.left,
+                        top: d.top,
+                        width: d.width,
+                        height: d.height,
+                        conf: d.conf,
+                        text: d.text.clone(),
+                    })
+                    .collect(),
             },
+            app_name: self.app_name.clone(),
         }
     }
 }
@@ -98,6 +108,7 @@ pub async fn continuous_capture(
     cloud_ocr: bool, // Add this parameter
 ) {
     let monitor = Monitor::all().unwrap().first().unwrap().clone(); // Simplified monitor retrieval
+
     debug!("continuous_capture: Starting using monitor: {:?}", monitor);
     let previous_text_json = Arc::new(Mutex::new(None));
     let ocr_task_running = Arc::new(AtomicBool::new(false));
@@ -149,6 +160,8 @@ pub async fn continuous_capture(
                 ocr_task_running.store(true, Ordering::SeqCst);
                 // debug!("ocr_task_running {}", ocr_task_running.load(Ordering::SeqCst));
                 tokio::spawn(async move {
+                    let w = Window::all().unwrap().first().unwrap().clone();
+                    let app_name = w.app_name();
                     if let Err(e) = process_ocr_task(
                         ocr_task_data.image,
                         ocr_task_data.frame_number,
@@ -156,33 +169,23 @@ pub async fn continuous_capture(
                         ocr_task_data.result_tx,
                         &previous_text_json_clone,
                         save_text_files_flag, // Pass the flag here
-                        cloud_ocr, // Pass the cloud_ocr flag here
+                        cloud_ocr,            // Pass the cloud_ocr flag here
+                        app_name.to_string().to_lowercase(),
                     )
                     .await
                     {
                         error!("Error processing OCR task: {}", e);
                     }
                     ocr_task_running_clone.store(false, Ordering::SeqCst);
-                    // debug!("ocr_task_running_clone {}", ocr_task_running_clone.load(Ordering::SeqCst));
                 });
 
                 // Reset max_average and max_avg_value after spawning the OCR task
                 max_avg_value = 0.0;
-                // debug!("max_avg_value {}", max_avg_value);
             }
         }
 
         frame_counter += 1;
-        // debug!("frame_counter triggered to {}, interval is {:?}", frame_counter, interval);
-        // let total_duration = start_time.elapsed();
-        // info!(
-        //     "Capture completed. Total frames: {}, Total time: {:.1?}, Avg FPS: {:.2}",
-        //     frame_counter,
-        //     total_duration,
-        //     frame_counter as f64 / total_duration.as_secs_f64()
-        // );
         tokio::time::sleep(interval).await;
-        // debug!("paseed tokio::time::sleep");
     }
 }
 
@@ -202,12 +205,16 @@ async fn process_ocr_task(
     result_tx: Sender<CaptureResult>,
     previous_text_json: &Arc<Mutex<Option<Vec<HashMap<String, String>>>>>,
     save_text_files_flag: bool, // Add this parameter
-    cloud_ocr: bool, // Add this parameter
+    cloud_ocr: bool,            // Add this parameter
+    app_name: String,
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
 
-    // not to confuse with frame id which is wholly different thing 
-    debug!("Performing OCR for frame number since beginning of program {}", frame_number);
+    // not to confuse with frame id which is wholly different thing
+    debug!(
+        "Performing OCR for frame number since beginning of program {}",
+        frame_number
+    );
     let (text, data_output, json_output) = if cloud_ocr {
         debug!("Cloud Unstructured.io OCR");
         perform_ocr_cloud(&image_arc).await
@@ -266,10 +273,11 @@ async fn process_ocr_task(
             image: image_arc.into(),
             text: text.clone(),
             text_json: current_text_json,
-            new_text_json, 
+            new_text_json,
             frame_number,
             timestamp,
             data_output,
+            app_name,
         })
         .await
     {
