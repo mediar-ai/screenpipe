@@ -40,15 +40,11 @@ jobs:
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+      - name: Install stable toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
-          override: true
+          cache: true
           target: ${{ matrix.target }}
 
       - uses: actions/cache@v3
@@ -181,4 +177,4 @@ jobs:
       #   with:
       #     command: release publish ${{ secrets.CN_APP_SLUG }} --framework tauri
       #     api-key: ${{ secrets.CN_API_KEY }}
-      # basically wait for macos manual add sset 
+      # basically wait for macos manual add sset
