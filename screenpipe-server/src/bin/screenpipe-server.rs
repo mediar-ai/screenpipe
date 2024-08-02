@@ -352,15 +352,16 @@ async fn main() -> anyhow::Result<()> {
 
     // Add warning for cloud arguments
     if cli.cloud_audio_on || cli.cloud_ocr_on {
-        eprintln!(
+        println!(
             "{}",
             "WARNING: You are using cloud now. Make sure to understand the data privacy risks."
                 .bright_yellow()
         );
     } else {
-        eprintln!(
+        println!(
             "{}",
-            "You are using local processing. All your data stays on your computer.".bright_yellow()
+            "You are using local processing. All your data stays on your computer.\n"
+                .bright_yellow()
         );
     }
 
