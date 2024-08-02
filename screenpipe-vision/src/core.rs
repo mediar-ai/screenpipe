@@ -14,7 +14,7 @@ use tokio::sync::{
 }; // Corrected import for Mutex
 use xcap::Monitor;
 
-use crate::utils::{capture_screenshot, compare_with_previous_image, perform_ocr, save_text_files};
+use crate::utils::{capture_screenshot, compare_with_previous_image, perform_ocr, perform_ocr_cloud, save_text_files};
 use rusty_tesseract::{DataOutput, Data}; // Add this import
 
 pub enum ControlMessage {
@@ -95,6 +95,7 @@ pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
     save_text_files_flag: bool,
+    cloud_ocr: bool, // Add this parameter
 ) {
     let monitor = Monitor::all().unwrap().first().unwrap().clone(); // Simplified monitor retrieval
     debug!("continuous_capture: Starting using monitor: {:?}", monitor);
@@ -155,6 +156,7 @@ pub async fn continuous_capture(
                         ocr_task_data.result_tx,
                         &previous_text_json_clone,
                         save_text_files_flag, // Pass the flag here
+                        cloud_ocr, // Pass the cloud_ocr flag here
                     )
                     .await
                     {
@@ -200,12 +202,19 @@ async fn process_ocr_task(
     result_tx: Sender<CaptureResult>,
     previous_text_json: &Arc<Mutex<Option<Vec<HashMap<String, String>>>>>,
     save_text_files_flag: bool, // Add this parameter
+    cloud_ocr: bool, // Add this parameter
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
 
     // not to confuse with frame id which is wholly different thing 
     debug!("Performing OCR for frame number since beginning of program {}", frame_number);
-    let (text, data_output, json_output) = perform_ocr(&image_arc);
+    let (text, data_output, json_output) = if cloud_ocr {
+        debug!("Cloud Unstructured.io OCR");
+        perform_ocr_cloud(&image_arc).await
+    } else {
+        debug!("Local Tesseract OCR");
+        perform_ocr(&image_arc)
+    };
 
     let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output)
         .unwrap_or_else(|e| {

@@ -19,6 +19,10 @@ struct Cli {
     /// Save text files
     #[arg(long, default_value_t = false)]
     save_text_files: bool,
+
+    /// Disable cloud OCR processing
+    #[arg(long, default_value_t = false)]
+    cloud_ocr_off: bool, // Add this flag
 }
 
 fn write_json_frame(writer: &mut BufWriter<File>, frame_data: &Value) -> std::io::Result<()> {
@@ -35,6 +39,7 @@ async fn main() {
 
     let cli = Cli::parse();
     let save_text_files = cli.save_text_files;
+    let cloud_ocr = !cli.cloud_ocr_off; // Determine the cloud_ocr flag
 
     let time = Utc::now();
     let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
@@ -52,7 +57,7 @@ async fn main() {
         }
     };
 
-    let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback, save_text_files);
+    let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback, save_text_files, cloud_ocr); // Pass the cloud_ocr flag
     let (_tx, rx): (Sender<()>, Receiver<()>) = channel(32);
     let rx = Arc::new(Mutex::new(rx));
     let rx_thread = rx.clone();

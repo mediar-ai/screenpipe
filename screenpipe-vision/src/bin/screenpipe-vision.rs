@@ -9,6 +9,10 @@ struct Cli {
     /// Save text files
     #[arg(long, default_value_t = false)]
     save_text_files: bool,
+
+    /// Disable cloud OCR processing
+    #[arg(long, default_value_t = false)]
+    cloud_ocr_off: bool, // Add this flag
 }
 
 #[tokio::main]
@@ -19,9 +23,10 @@ async fn main() {
     let (result_tx, mut result_rx) = channel(512);
 
     let save_text_files = cli.save_text_files;
+    let cloud_ocr = !cli.cloud_ocr_off; // Determine the cloud_ocr flag
 
     let capture_thread = tokio::spawn(async move {
-        continuous_capture(&mut control_rx, result_tx, Duration::from_secs(1), save_text_files).await
+        continuous_capture(&mut control_rx, result_tx, Duration::from_secs(1), save_text_files, cloud_ocr).await
     });
 
     // Example: Process results for 10 seconds, then pause for 5 seconds, then stop
