@@ -88,7 +88,6 @@
           "https://fonts.gstatic.com",
           "tauri://localhost",
           "http://tauri.localhost"
-
         ],
         "media-src": "'self' mediadevices:",
         "img-src": "'self' asset: http://asset.localhost blob: data: https://*.githubusercontent.com https://*.github.com https://github.com https://*.s3.amazonaws.com",

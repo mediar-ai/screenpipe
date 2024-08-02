@@ -109,7 +109,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
     // Get the current settings
     let stores = app.state::<StoreCollection<Wry>>();
-    let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
+    let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
 
     let path = base_dir.join("store.bin");
 
@@ -150,13 +150,12 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     Ok(child)
 }
 
-fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
-    let default_path = home_dir()
-        .ok_or("Failed to get home directory")
-        .unwrap()
-        .join(".screenpipe");
+fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
+    let default_path = app.path().local_data_dir();
 
-    let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
+    let local_data_dir = custom_path
+        .map(PathBuf::from)
+        .unwrap_or(default_path.unwrap());
 
     fs::create_dir_all(&local_data_dir.join("data"))?;
     Ok(local_data_dir)
@@ -219,8 +218,10 @@ async fn main() {
             );
             // Disable autostart
             // let _ = autostart_manager.disable();
+            let app_handle = app.handle().clone();
 
-            let base_dir = get_base_dir(None).expect("Failed to ensure local data directory");
+            let base_dir =
+                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
             let port = 3030;
 
             app.manage(port);

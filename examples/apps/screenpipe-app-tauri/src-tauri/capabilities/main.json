@@ -32,9 +32,17 @@
     "fs:allow-exists",
     "fs:allow-watch",
     "fs:allow-read-text-file",
+    "fs:allow-create",
+    "fs:allow-mkdir",
     {
       "identifier": "fs:scope",
       "allow": [
+        {
+          "path": "$APPLOCALDATA/*"
+        },
+        {
+          "path": "$APPLOCALDATA/**"
+        },
         {
           "path": "$APPDATA/*"
         },
@@ -52,6 +60,9 @@
         },
         {
           "path": "$HOME/*"
+        },
+        {
+          "path": "$HOME/.screenpipe/*"
         },
         {
           "path": "$HOME/.screenpipe/*"
