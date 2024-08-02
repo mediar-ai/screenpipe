@@ -111,7 +111,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
   }, [health]);
 
   const getLogCommands = (os: string | null) => {
-    console.log(os);
     if (os === "windows") {
       return `# Stream the log:
 Get-Content -Wait $env:APPDATA\\screenpipe\\screenpipe.log

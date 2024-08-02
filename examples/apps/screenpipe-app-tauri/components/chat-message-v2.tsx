@@ -18,6 +18,10 @@ export interface ChatMessageProps {
 
 export function ChatMessage({ message, ...props }: ChatMessageProps) {
   const { settings } = useSettings();
+
+  const isMP4File = (content: string) =>
+    content.trim().toLowerCase().endsWith(".mp4");
+
   return (
     <div
       className={cn("group relative mb-4 flex items-start md:-ml-12 w-full")}
@@ -52,8 +56,16 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
               const content = String(children).replace(/\n$/, "");
               const match = /language-(\w+)/.exec(className || "");
 
-              console.log("isInline", content, node);
+              // console.log("isInline", content, node);
               if (!match) {
+                if (isMP4File(content)) {
+                  return (
+                    <video controls className="w-full max-w-2xl">
+                      <source src={content} type="video/mp4" />
+                      your browser does not support the video tag.
+                    </video>
+                  );
+                }
                 return (
                   <code
                     className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono text-sm"

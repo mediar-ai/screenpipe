@@ -1,22 +1,9 @@
 // ignore all file ts errors
-// @ts-nocheck
 "use client";
 import { useState } from "react";
-import OpenAI from "openai";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChatMessage } from "./chat-message-v2";
 import { Message, generateText, nanoid, streamText, tool } from "ai";
 import { createOpenAI, openai } from "@ai-sdk/openai";
@@ -27,17 +14,16 @@ import { spinner } from "./spinner";
 import { useScrollAnchor } from "@/lib/hooks/use-scroll-anchor";
 import { FunctionCallMessage } from "./function-call-message";
 import { EmptyScreen } from "./empty-screen";
-import { IconOllama } from "./ui/icons";
 import { useSettings } from "@/lib/hooks/use-settings";
-
 
 const screenpipeQuery = z.object({
   q: z
     .string()
     .describe(
-      "The search query matching exact keywords. Use a single keyword that best matches the user intent"
-    ),
-  contentType: z
+      "The search query matching exact keywords. Use a single keyword that best matches the user intent. This would match either audio transcription or OCR screen text. Example: do not use 'discuss' the user ask about conversation, this is dumb, won't return any result"
+    )
+    .optional(),
+  content_type: z
     .enum(["ocr", "audio", "all"])
     .default("all")
     .describe(
@@ -50,15 +36,21 @@ const screenpipeQuery = z.object({
       "Number of results to return (default: 5). Don't return more than 50 results as it will be fed to an LLM"
     ),
   offset: z.number().default(0).describe("Offset for pagination (default: 0)"),
-  startTime: z
+  start_time: z
     .string()
     // 1 hour ago
     .default(new Date(Date.now() - 3600000).toISOString())
     .describe("Start time for search range in ISO 8601 format"),
-  endTime: z
+  end_time: z
     .string()
     .default(new Date().toISOString())
     .describe("End time for search range in ISO 8601 format"),
+  app_name: z
+    .string()
+    .describe(
+      "The name of the app the user was using. This filter out all audio conversations. Only works with screen text. Use this to filter on the app context that would give context matching the user intent. For example 'cursor'. Use lower case. Browser is usually 'arc', 'chrome', 'safari', etc."
+    )
+    .optional(),
 });
 const screenpipeMultiQuery = z.object({
   queries: z.array(screenpipeQuery),
@@ -73,14 +65,18 @@ async function queryScreenpipeNtimes(
 // Add this new function to handle screenpipe requests
 async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
   try {
-    const queryParams = new URLSearchParams({
-      q: params.q,
-      offset: params.offset.toString(),
-      limit: params.limit.toString(),
-      start_date: params.startTime,
-      end_date: params.endTime,
-      content_type: params.contentType,
-    });
+    console.log("params", params);
+    const queryParams = new URLSearchParams(
+      Object.entries({
+        q: params.q,
+        offset: params.offset.toString(),
+        limit: params.limit.toString(),
+        start_date: params.start_time,
+        end_date: params.end_time,
+        content_type: params.content_type,
+        app_name: params.app_name,
+      }).filter(([_, v]) => v != null) as [string, string][]
+    );
     console.log("calling screenpipe", JSON.stringify(params));
     const response = await fetch(`http://localhost:3030/search?${queryParams}`);
     if (!response.ok) {
@@ -93,6 +89,24 @@ async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
   } catch (error) {
     console.error("Error querying screenpipe:", error);
     return null;
+  }
+}
+
+// Add this function outside of the ChatList component
+async function generateTextWithRetry(
+  params: any,
+  maxRetries = 3,
+  delay = 1000
+) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await generateText(params);
+    } catch (error) {
+      console.error(`Attempt ${i + 1} failed:`, error);
+      if (i === maxRetries - 1) throw error;
+      // sleep
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
 }
 
@@ -117,6 +131,7 @@ export function ChatList({
     setError(null);
 
     const userMessage = { id: nanoid(), role: "user", content: inputMessage };
+    // @ts-ignore
     setMessages((prevMessages) => [...prevMessages, userMessage]);
     setInputMessage("");
 
@@ -142,7 +157,7 @@ export function ChatList({
       // console.log("provider", provider);
       console.log("model", model);
 
-      const text = await generateText({
+      const text = await generateTextWithRetry({
         model: useOllama ? ollama(model) : provider(model),
         tools: {
           query_screenpipe: {
@@ -160,7 +175,7 @@ export function ChatList({
           The user is using a product called "screenpipe" which records
           his screen and mics 24/7. The user ask you questions
           and you use his screenpipe recordings to answer him.
-          Based on the user request, use tools to screenpipe to best help the user. 
+          Based on the user request, use tools to query screenpipe to best help the user. 
           Each query should have "q", "offset", "limit", "start_date", "end_date", and "content_type" fields. 
           Rules:
           - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
@@ -175,13 +190,16 @@ export function ChatList({
           - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
           - Use between 2-5 queries with very different keywords that could maximally match the user's screen text or audio transcript
           - Use "all" for querying the same keyword over vision and audio
-          - Keep in mind, use "q", "offset", "limit", "start_date", "end_date", and "content_type" as keys in your JSON object. q is optional.
+          - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
+          - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
+          - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
+          - You typically always query screenpipe in the first user message
 
           Example answers from you:
           "{
             "queries": [
-              {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
-              {"q": "stripe", "offset": 0, "limit": 50, "content_type": "ocr", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
+              {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z", "app_name": "arc"},
+              {"offset": 0, "limit": 50, "content_type": "ocr", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
               {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
             ]
           }"
@@ -191,18 +209,19 @@ export function ChatList({
             "queries": [
               {"q": "sales", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
               {"q": "customer", "offset": 0, "limit": 20, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
-              {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
+              {"offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z", "app_name": "notes"}
             ]
           }"
 
           `,
           },
+          ...messages,
           {
             role: "user",
             content: inputMessage,
           },
         ],
-        // maxToolRoundtrips: 5, // allow up to 5 tool roundtrips
+        // maxToolRoundtrips: 2, // allow up to 5 tool roundtrips
         // prompt: inputMessage,
       });
 
@@ -210,10 +229,11 @@ export function ChatList({
 
       console.log("text", text);
 
+      // @ts-ignore
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: nanoid(), role: "assistant", content: text.toolCalls },
-        { id: nanoid(), role: "tool", content: text.toolResults },
+        { id: nanoid(), role: "assistant", content: text!.toolCalls },
+        { id: nanoid(), role: "tool", content: text!.toolResults },
       ]);
 
       console.log("streaming now");
@@ -233,11 +253,11 @@ export function ChatList({
               },
               {
                 role: "assistant",
-                content: text.toolCalls,
+                content: text!.toolCalls,
               },
               {
                 role: "tool",
-                content: text.toolResults,
+                content: text!.toolResults,
               },
               // just a hack because ollama is drunk
               {
@@ -257,11 +277,11 @@ export function ChatList({
               },
               {
                 role: "assistant",
-                content: text.toolCalls,
+                content: text!.toolCalls,
               },
               {
                 role: "tool",
-                content: text.toolResults,
+                content: text!.toolResults,
               },
             ],
           });
@@ -316,74 +336,76 @@ export function ChatList({
   };
 
   return (
-    <div className="flex flex-col">
-      {messages.length === 0 ? (
-        <EmptyScreen onSuggestionClick={handleSuggestionClick} />
-      ) : (
-        <div
-          className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto"
-          ref={messagesRef}
-        >
-          {messages.map((msg, index) => {
-            if (
-              msg.role === "user" ||
-              (msg.role === "assistant" && typeof msg.content === "string")
-            ) {
-              return <ChatMessage key={index} message={msg} />;
-            } else if (
-              msg.role === "assistant" &&
-              msg.content &&
-              typeof msg.content === "object"
-            ) {
-              return <FunctionCallMessage key={index} message={msg} />;
-            } else if (msg.role === "tool") {
-              return <FunctionCallMessage key={index} message={msg} isResult />;
-            }
-            return null;
-          })}
-          {isLoading && <SpinnerMessage />}
-          {error && <p className="text-red-500">{error}</p>}
-        </div>
-      )}
-
-      {messages.length === 0 && (
-        <div className="absolute bottom-0 left-0 right-0 bg-background p-4">
-          <div className="max-w-2xl mx-auto">
-            <div className="relative">
-              <Textarea
-                placeholder="Message screenpipe..."
-                name="message"
-                id="message"
-                rows={1}
-                className="min-h-[48px] rounded-2xl resize-none p-4 border border-neutral-400 shadow-sm pr-16"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-              />
-
-              <Button
-                type="submit"
-                size="icon"
-                className="absolute w-8 h-8 top-3 right-3"
-                onClick={handleSendMessage}
-                disabled={isLoading || !inputMessage.trim()}
-              >
-                <ArrowUpIcon className="w-4 h-4" />
-                <span className="sr-only">Send</span>
-              </Button>
-            </div>
-            <p className="text-xs font-medium text-center text-neutral-700 mt-2">
-              screenpipe is in beta, base its answer on your computer activity
-              and can make errors.
-            </p>
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto pb-32">
+        {messages.length === 0 ? (
+          <EmptyScreen onSuggestionClick={handleSuggestionClick} />
+        ) : (
+          <div
+            className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto"
+            ref={messagesRef}
+          >
+            {messages.map((msg, index) => {
+              if (
+                msg.role === "user" ||
+                (msg.role === "assistant" && typeof msg.content === "string")
+              ) {
+                return <ChatMessage key={index} message={msg} />;
+              } else if (
+                msg.role === "assistant" &&
+                msg.content &&
+                typeof msg.content === "object"
+              ) {
+                return <FunctionCallMessage key={index} message={msg} />;
+              } else if (msg.role === "tool") {
+                return (
+                  <FunctionCallMessage key={index} message={msg} isResult />
+                );
+              }
+              return null;
+            })}
+            {isLoading && <SpinnerMessage />}
+            {error && <p className="text-red-500">{error}</p>}
           </div>
+        )}
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-background p-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="relative">
+            <Textarea
+              placeholder="Message screenpipe..."
+              name="message"
+              id="message"
+              rows={1}
+              className="min-h-[48px] rounded-2xl resize-none p-4 border border-neutral-400 shadow-sm pr-16"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+            />
+
+            <Button
+              type="submit"
+              size="icon"
+              className="absolute w-8 h-8 top-3 right-3"
+              onClick={handleSendMessage}
+              disabled={isLoading || !inputMessage.trim()}
+            >
+              <ArrowUpIcon className="w-4 h-4" />
+              <span className="sr-only">Send</span>
+            </Button>
+          </div>
+          <p className="text-xs font-medium text-center text-neutral-700 mt-2">
+            screenpipe is in beta, base its answer on your computer activity and
+            can make errors.
+          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -402,7 +424,7 @@ export function SpinnerMessage() {
   );
 }
 
-function ArrowUpIcon(props) {
+function ArrowUpIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
       {...props}
@@ -418,208 +440,6 @@ function ArrowUpIcon(props) {
     >
       <path d="m5 12 7-7 7 7" />
       <path d="M12 19V5" />
-    </svg>
-  );
-}
-
-function BotIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 8V4H8" />
-      <rect width="16" height="12" x="4" y="8" rx="2" />
-      <path d="M2 14h2" />
-      <path d="M20 14h2" />
-      <path d="M15 13v2" />
-      <path d="M9 13v2" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function ClipboardIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-    </svg>
-  );
-}
-
-function PenIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-    </svg>
-  );
-}
-
-function RefreshCcwIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-      <path d="M16 16h5v5" />
-    </svg>
-  );
-}
-
-function SparkleIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-    </svg>
-  );
-}
-
-function ThumbsDownIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M17 14V2" />
-      <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
-    </svg>
-  );
-}
-
-function ThumbsUpIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M7 10v12" />
-      <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" />
-    </svg>
-  );
-}
-
-function XIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  );
-}
-
-function ZapIcon(props) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
     </svg>
   );
 }

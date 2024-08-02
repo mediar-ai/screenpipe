@@ -31,9 +31,9 @@ const fetchReadme = async (fullName: string) => {
     );
     const data = await response.json();
     const decodedContent = atob(data.content);
-    console.log("YOOOO dd", decodedContent);
+    // console.log("YOOOO dd", decodedContent);
     const markdown = convertHtmlToMarkdown(decodedContent);
-    console.log("YOOOO md", markdown);
+    // console.log("YOOOO md", markdown);
     return markdown;
   } catch (error) {
     console.error("error fetching readme:", error);

@@ -35,14 +35,14 @@ export function FunctionCallMessage({
 }: FunctionCallMessageProps) {
   const { settings } = useSettings();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  console.log("FunctionCallMessage", message);
+  // console.log("FunctionCallMessage", message);
   // @ts-ignore TODO
   const toolCalls = message.content.filter((content) => !content.result);
   // @ts-ignore TODO
   const toolResults = message.content.filter((content) => content.result);
 
-  console.log("toolCalls", toolCalls);
-  console.log("toolResults", toolResults);
+  // console.log("toolCalls", toolCalls);
+  // console.log("toolResults", toolResults);
   // message.content.find((content) => content.args.queries
   return (
     <div className="group relative mb-4 flex items-start md:-ml-12">
