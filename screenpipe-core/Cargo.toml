@@ -21,4 +21,9 @@ hf-hub = { workspace = true, features = ["tokio"] }
 
 
 
+[package.metadata.macos]
+deployment-target = "14.0"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9.4"
+core-graphics = "0.23.2"
