@@ -351,6 +351,9 @@ curl "http://localhost:3030/search?q=QUERY_HERE&limit=10&offset=20"
 
 # 6. Search with no query (should return all results)
 curl "http://localhost:3030/search?limit=5&offset=0"
+
+# filter by app (wll only return OCR results)
+curl "http://localhost:3030/search?app_name=cursor"
   ```
 </details>
 <br><br>
