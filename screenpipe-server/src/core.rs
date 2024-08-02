@@ -50,6 +50,7 @@ pub async fn start_continuous_recording(
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     save_text_files: bool,
     cloud_audio: bool, // Added cloud_audio parameter
+    cloud_ocr: bool, // Added cloud_ocr parameter
 ) -> Result<()> {
     info!("Recording now");
 
@@ -70,6 +71,7 @@ pub async fn start_continuous_recording(
             fps,
             is_running_video,
             save_text_files,
+            cloud_ocr, // Pass the cloud_ocr flag
         )
         .await
     });
@@ -99,6 +101,7 @@ async fn record_video(
     fps: f64,
     is_running: Arc<AtomicBool>,
     save_text_files: bool,
+    cloud_ocr: bool, // Added cloud_ocr parameter
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -113,12 +116,16 @@ async fn record_video(
             debug!("record_video: Inserted new video chunk: {}", file_path);
         });
     };
-    // debug!("record_video: video_capture");
-    let video_capture = VideoCapture::new(&output_path, fps, new_chunk_callback, save_text_files);
+
+    let video_capture = VideoCapture::new(
+        &output_path,
+        fps,
+        new_chunk_callback,
+        save_text_files,
+        cloud_ocr, // Pass the cloud_ocr flag
+    );
 
     while is_running.load(Ordering::SeqCst) {
-        // let queue_lenglth = video_capture.ocr_frame_queue.lock().await.len();
-        // debug!("record_video: Checking for latest frame. Number of frames in OCR queue: {}", queue_length);
         if let Some(frame) = video_capture.ocr_frame_queue.lock().await.pop_front() {
             match db.insert_frame().await {
                 Ok(frame_id) => {
@@ -130,7 +137,6 @@ async fn record_video(
                     }
                     .to_json();
 
-                    // debug!("insert_ocr_text called for frame {}", frame_id);
                     if let Err(e) = db
                         .insert_ocr_text(
                             frame_id,
@@ -150,7 +156,6 @@ async fn record_video(
                 }
                 Err(e) => {
                     warn!("Failed to insert frame: {}", e);
-                    // Add a small delay before retrying
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     continue; // Skip to the next iteration
                 }
