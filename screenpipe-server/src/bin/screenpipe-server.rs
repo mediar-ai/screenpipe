@@ -87,6 +87,10 @@ struct Cli {
     /// Disable cloud audio processing
     #[arg(long, default_value_t = false)]
     cloud_audio_off: bool,
+
+    /// Disable cloud OCR processing
+    #[arg(long, default_value_t = false)]
+    cloud_ocr_off: bool,
 }
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
@@ -297,6 +301,7 @@ async fn main() -> anyhow::Result<()> {
                     audio_devices_control,
                     cli.save_text_files,
                     !cli.cloud_audio_off, // Pass the cloud_audio flag
+                    !cli.cloud_ocr_off, // Pass the cloud_ocr flag
                 )
                 .await;
 
