@@ -12,6 +12,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
+use reqwest::multipart::{Form, Part};
+use std::io::Cursor; // Import Cursor for wrapping Vec<u8>
+use image::codecs::png::PngEncoder;
+use image::ImageEncoder;
 
 pub fn calculate_hash(image: &DynamicImage) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -227,4 +231,53 @@ pub async fn save_text_files(
             }
         }
     }
+}
+
+pub async fn perform_ocr_cloud(image: &DynamicImage) -> (String, DataOutput, String) {
+    let api_key = "CDMIN4mAq1TDtufPY2HpIIRdJkHqi6".to_string();
+    let api_url = "https://api.unstructuredapp.io/general/v0/general".to_string();
+
+    let mut buffer = Vec::new();
+    let mut cursor = Cursor::new(&mut buffer); // Wrap Vec<u8> in Cursor
+    PngEncoder::new(&mut cursor).write_image(
+        image.as_bytes(),
+        image.width(),
+        image.height(),
+        image.color().into(), // Convert ColorType to ExtendedColorType
+    ).unwrap();
+
+    let part = Part::bytes(buffer)
+        .file_name("image.png".to_string())
+        .mime_str("image/png").unwrap();
+
+    let form = Form::new()
+        .part("files", part)
+        .text("strategy", "auto")
+        .text("coordinates", "true");
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&api_url)
+        .header("accept", "application/json")
+        .header("unstructured-api-key", &api_key)
+        .multipart(form)
+        .send()
+        .await.unwrap();
+
+    let response_text = if response.status().is_success() {
+        response.text().await.unwrap()
+    } else {
+        panic!("Error: {}", response.status());
+    };
+
+    let json_output = response_text.clone();
+    let data_output = DataOutput { data: Vec::new(), output: String::new() }; // Initialize blank DataOutput
+
+    let parsed_response: Vec<HashMap<String, serde_json::Value>> = serde_json::from_str(&response_text).unwrap();
+    let text = parsed_response.iter()
+        .filter_map(|item| item.get("text").and_then(|v| v.as_str()))
+        .collect::<Vec<&str>>()
+        .join(" ");
+
+    (text, data_output, json_output)
 }
