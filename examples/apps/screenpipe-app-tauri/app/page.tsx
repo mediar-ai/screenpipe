@@ -56,7 +56,9 @@ export default function Home() {
             <CardHeader>
               <CardTitle>Welcome to Screenpipe</CardTitle>
               <CardDescription>
-                Please set your AI provider settings to get started.
+                Screenpipe should be recording your screen and microphone 24/7
+                now. Please set your AI provider settings to ask questions about
+                your data.
               </CardDescription>
             </CardHeader>
             <CardContent>
