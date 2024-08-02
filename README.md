@@ -387,11 +387,7 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
   - Monitor and log system activities for audit purposes
   - Detect potential security threats based on screen content
 
-## Example vercel/ai-chatbot that query screenpipe autonomously
-
-Check this example of screenpipe which is a chatbot that make requests to your data to answer your questions
-
-https://github.com/louis030195/screen-pipe/assets/25003283/6a0d16f6-15fa-4b02-b3fe-f34479fdc45e
+[**Check other examples**](https://github.com/louis030195/screen-pipe/tree/main/examples/typescript)
 
 ## Status 
 
