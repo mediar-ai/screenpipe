@@ -10,7 +10,7 @@ class Screenpipe < Formula
         sha256 "4b269e85d1008268357a7ea4ee49aa392d84488993340d808988a76af7be900c" # arm64
       else
         url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
-        sha256 "0f76ef376bf48565bcb408f6c6227225131f21bf290c02069b68297b299f7c60" # x86_64
+        sha256 "0258b890c5cec2334e959ef2ec2f0a67fb136b6477187f59e7c6bcf2a75ccd50" # x86_64
       end
     end
     
