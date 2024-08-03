@@ -6,11 +6,16 @@ mod tests {
     use screenpipe_vision::{process_ocr_task, OcrEngine};
     use std::{sync::Arc, time::Instant};
     use tokio::sync::{mpsc, Mutex};
-
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn test_process_ocr_task_windows() {
-        let image = DynamicImage::new_rgb8(100, 100);
+        // Use an absolute path that works in both local and CI environments
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests");
+        path.push("testing_OCR.png");
+        println!("Path to testing_OCR.png: {:?}", path);
+        let image = image::open(&path).expect("Failed to open image");
+
         let image_arc = Arc::new(image);
         let frame_number = 1;
         let timestamp = Instant::now();

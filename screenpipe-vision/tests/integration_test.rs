@@ -7,11 +7,11 @@ use screenpipe_vision::perform_ocr_tesseract;
 fn test_ocr_output() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting test_ocr_output");
 
-    // Use the correct path to the testing_OCR.png file
+    // Use an absolute path that works in both local and CI environments
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("tests/testing_OCR.png");
-    println!("Path to image.png: {:?}", path);
-
+    path.push("tests");
+    path.push("testing_OCR.png");
+    println!("Path to testing_OCR.png: {:?}", path);
     let image = image::open(&path).expect("Failed to open image");
 
     // Start timing

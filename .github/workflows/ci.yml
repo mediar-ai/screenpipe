@@ -33,6 +33,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
 
+      - name: Copy test image
+        run: |
+          mkdir -p target/debug/deps
+          cp tests/testing_OCR.png target/debug/deps/
+
       - name: Run tests
         run: cargo test
 
@@ -53,7 +58,7 @@ jobs:
           toolchain: stable
 
       # - name: Run tests
-      #   run: cargo test 
+      #   run: cargo test
 
       - name: Run specific Windows OCR test
-        run: cargo test test_process_ocr_task_windows 
+        run: cargo test test_process_ocr_task_windows
