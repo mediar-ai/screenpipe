@@ -1,0 +1,1 @@
+pub mod friend_wearable;
