@@ -78,3 +78,15 @@ harness = false
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9.4"
+core-graphics = "0.23.2"
+objc = { version = "0.2.7", features = ["exception"] }
+block = "0.1"
+foreign-types-shared = "0.1"
+cocoa-foundation = "0.1.2"
+
+
+
+[build-dependencies]
+cc = "1.0"

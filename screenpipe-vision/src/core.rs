@@ -13,11 +13,11 @@ use xcap::{Monitor, Window};
 
 #[cfg(target_os = "windows")]
 use crate::utils::perform_ocr_windows;
-use crate::utils::OcrEngine;
 use crate::utils::{
     capture_screenshot, compare_with_previous_image, perform_ocr_tesseract,
     save_text_files,
 };
+use crate::utils::{perform_ocr_apple, OcrEngine};
 use rusty_tesseract::{Data, DataOutput}; // Add this import
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 
@@ -243,6 +243,11 @@ pub async fn process_ocr_task(
         OcrEngine::WindowsNative => {
             debug!("Windows Native OCR");
             perform_ocr_windows(&image_arc).await
+        }
+        #[cfg(target_os = "macos")]
+        OcrEngine::AppleNative => {
+            debug!("Apple Native OCR");
+            perform_ocr_apple(&image_arc)
         }
         _ => {
             error!("Unsupported OCR engine");
