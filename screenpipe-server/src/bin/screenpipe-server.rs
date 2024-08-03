@@ -18,12 +18,33 @@ use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     DeviceControl,
 };
+use screenpipe_vision::OcrEngine;
 use std::io::Write;
 
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::logs::MultiWriter;
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
 use tokio::sync::mpsc::channel;
+
+use clap::ValueEnum;
+use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
+
+#[derive(Clone, Debug, ValueEnum, PartialEq)]
+enum CliOcrEngine {
+    Deepgram,
+    Tesseract,
+    WindowsNative,
+}
+
+impl From<CliOcrEngine> for CoreOcrEngine {
+    fn from(cli_engine: CliOcrEngine) -> Self {
+        match cli_engine {
+            CliOcrEngine::Deepgram => CoreOcrEngine::Deepgram,
+            CliOcrEngine::Tesseract => CoreOcrEngine::Tesseract,
+            CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
+        }
+    }
+}
 
 // keep in mind this is the most important feature ever // TODO: add a pipe and a ⭐️ e.g screen | ⭐️ somehow in ascii ♥️🤓
 const DISPLAY: &str = r"
@@ -88,9 +109,11 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     cloud_audio_on: bool,
 
-    /// Enable cloud OCR processing
-    #[arg(long, default_value_t = false)]
-    cloud_ocr_on: bool,
+    /// OCR engine to use. Tesseract is a local OCR engine (default).
+    /// WindowsNative is a local OCR engine for Windows.
+    /// Deepgram is a cloud OCR engine (free of charge on us)
+    #[arg(long, value_enum, default_value_t = CliOcrEngine::Tesseract)]
+    ocr_engine: CliOcrEngine,
 
     /// UID key for sending data to friend wearable (if not provided, data won't be sent)
     #[arg(long)]
@@ -278,6 +301,8 @@ async fn main() -> anyhow::Result<()> {
     // Before the loop starts, clone friend_wearable_uid
     let friend_wearable_uid = cli.friend_wearable_uid.clone();
 
+    let warning_ocr_engine_clone = cli.ocr_engine.clone();
+
     // Function to start or restart the recording task
     let _start_recording = tokio::spawn(async move {
         // hack
@@ -301,6 +326,8 @@ async fn main() -> anyhow::Result<()> {
                     recording_task.abort();
                 }
             }
+            let core_ocr_engine: CoreOcrEngine = cli.ocr_engine.clone().into();
+            let ocr_engine = Arc::new(OcrEngine::from(core_ocr_engine));
             recording_task = tokio::spawn(async move {
                 let result = start_continuous_recording(
                     db_clone,
@@ -311,7 +338,7 @@ async fn main() -> anyhow::Result<()> {
                     audio_devices_control,
                     cli.save_text_files,
                     cli.cloud_audio_on,
-                    cli.cloud_ocr_on,
+                    ocr_engine,
                     friend_wearable_uid_clone, // Use the cloned version
                 )
                 .await;
@@ -362,7 +389,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Add warning for cloud arguments
-    if cli.cloud_audio_on || cli.cloud_ocr_on {
+    if cli.cloud_audio_on || warning_ocr_engine_clone == CliOcrEngine::Deepgram {
         println!(
             "{}",
             "WARNING: You are using cloud now. Make sure to understand the data privacy risks."

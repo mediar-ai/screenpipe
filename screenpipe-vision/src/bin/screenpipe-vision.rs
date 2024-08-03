@@ -1,7 +1,7 @@
-use screenpipe_vision::{continuous_capture, ControlMessage};
-use std::time::Duration;
-use tokio::sync::mpsc::channel;
 use clap::Parser;
+use screenpipe_vision::{continuous_capture, ControlMessage, OcrEngine};
+use std::{sync::Arc, time::Duration};
+use tokio::sync::mpsc::channel;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -23,10 +23,16 @@ async fn main() {
     let (result_tx, mut result_rx) = channel(512);
 
     let save_text_files = cli.save_text_files;
-    let cloud_ocr = !cli.cloud_ocr_off; // Determine the cloud_ocr flag
 
     let capture_thread = tokio::spawn(async move {
-        continuous_capture(&mut control_rx, result_tx, Duration::from_secs(1), save_text_files, cloud_ocr).await
+        continuous_capture(
+            &mut control_rx,
+            result_tx,
+            Duration::from_secs(1),
+            save_text_files,
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
     });
 
     // Example: Process results for 10 seconds, then pause for 5 seconds, then stop

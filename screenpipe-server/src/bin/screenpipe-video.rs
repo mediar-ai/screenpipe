@@ -1,17 +1,18 @@
 use chrono::Utc;
+use clap::Parser;
 use env_logger::Env;
 use image::GenericImageView;
 use log::info;
+use screenpipe_server::core::DataOutputWrapper;
 use screenpipe_server::VideoCapture;
+use screenpipe_vision::OcrEngine;
 use serde_json::{json, Value};
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use clap::Parser;
-use screenpipe_server::core::DataOutputWrapper; // Correct import
+use tokio::sync::mpsc::{channel, Receiver, Sender}; // Correct import
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -39,7 +40,6 @@ async fn main() {
 
     let cli = Cli::parse();
     let save_text_files = cli.save_text_files;
-    let cloud_ocr = !cli.cloud_ocr_off; // Determine the cloud_ocr flag
 
     let time = Utc::now();
     let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
@@ -57,7 +57,13 @@ async fn main() {
         }
     };
 
-    let video_capture = VideoCapture::new(output_path, fps, new_chunk_callback, save_text_files, cloud_ocr); // Pass the cloud_ocr flag
+    let video_capture = VideoCapture::new(
+        output_path,
+        fps,
+        new_chunk_callback,
+        save_text_files,
+        Arc::new(OcrEngine::Tesseract),
+    ); // Pass the cloud_ocr flag
     let (_tx, rx): (Sender<()>, Receiver<()>) = channel(32);
     let rx = Arc::new(Mutex::new(rx));
     let rx_thread = rx.clone();

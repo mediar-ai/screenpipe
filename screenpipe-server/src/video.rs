@@ -2,7 +2,7 @@ use chrono::Utc;
 use image::ImageFormat::{self};
 use log::{debug, error, info, warn};
 use screenpipe_core::find_ffmpeg_path;
-use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage};
+use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage, OcrEngine};
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -32,7 +32,7 @@ impl VideoCapture {
         fps: f64,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         save_text_files: bool,
-        cloud_ocr: bool, // Added cloud_ocr parameter
+        ocr_engine: Arc<OcrEngine>,
     ) -> Self {
         info!("Starting new video capture");
         let (control_tx, mut control_rx) = channel(512);
@@ -55,7 +55,7 @@ impl VideoCapture {
                 result_sender,
                 Duration::from_secs_f64(1.0 / fps),
                 save_text_files,
-                cloud_ocr, // Pass the cloud_ocr flag
+                ocr_engine,
             )
             .await;
         });

@@ -70,3 +70,8 @@ path = "src/bin/screenpipe-vision.rs"
 [[bench]]
 name = "vision_benchmark"
 harness = false
+
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.48", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
+

@@ -1,4 +1,4 @@
 pub mod core;
-mod utils;
-pub use core::{continuous_capture, CaptureResult, ControlMessage};
-pub use utils::perform_ocr;
+pub mod utils;
+pub use core::{continuous_capture, process_ocr_task, CaptureResult, ControlMessage};
+pub use utils::{perform_ocr_tesseract, OcrEngine};

@@ -1,16 +1,15 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use screenpipe_vision::perform_ocr;
+use screenpipe_vision::perform_ocr_tesseract;
 
 #[test]
-#[ignore] // TODO: finish implementation of this test?
 fn test_ocr_output() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting test_ocr_output");
 
     // Use the correct path to the testing_OCR.png file
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("tests/image.png");
+    path.push("tests/testing_OCR.png");
     println!("Path to image.png: {:?}", path);
 
     let image = image::open(&path).expect("Failed to open image");
@@ -18,7 +17,7 @@ fn test_ocr_output() -> Result<(), Box<dyn std::error::Error>> {
     // Start timing
     let start = Instant::now();
 
-    let (text, data_output, json_output) = perform_ocr(&image);
+    let (text, data_output, json_output) = perform_ocr_tesseract(&image);
 
     // Stop timing
     let duration = start.elapsed();
