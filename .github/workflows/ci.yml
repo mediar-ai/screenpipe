@@ -36,7 +36,7 @@ jobs:
       - name: Copy test image
         run: |
           mkdir -p target/debug/deps
-          cp tests/testing_OCR.png target/debug/deps/
+          cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
       - name: Run tests
         run: cargo test
@@ -59,6 +59,11 @@ jobs:
 
       # - name: Run tests
       #   run: cargo test
+
+      - name: Copy test image
+        run: |
+          mkdir -p target/debug/deps
+          cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
       - name: Run specific Windows OCR test
         run: cargo test test_process_ocr_task_windows
