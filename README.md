@@ -403,6 +403,9 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
     - [x] [Fileorganizer2000](https://github.com/different-ai/file-organizer-2000)
     - [x] mem0
     - [ ] supermemory
+    - [x] deepgram
+    - [x] unstructured
+    - [x] excalidraw
     - [x] Obsidian
     - [x] Apple shortcut
     - [ ] multion
