@@ -89,6 +89,9 @@ reqwest = { version = "0.12.5", features = ["json"] }
 # Concurrency
 crossbeam = { workspace = true }
 
+# Friend integration
+external-cloud-integrations = { path = "../external-cloud-integrations" }
+
 [dev-dependencies]
 tempfile = "3.3.0"
 
