@@ -91,6 +91,10 @@ struct Cli {
     /// Enable cloud OCR processing
     #[arg(long, default_value_t = false)]
     cloud_ocr_on: bool,
+
+    /// UID key for sending data to friend wearable (if not provided, data won't be sent)
+    #[arg(long)]
+    friend_wearable_uid: Option<String>,
 }
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
@@ -120,7 +124,8 @@ async fn main() -> anyhow::Result<()> {
         .filter(None, LevelFilter::Info)
         .filter_module("tokenizers", LevelFilter::Error)
         .filter_module("rusty_tesseract", LevelFilter::Error)
-        .filter_module("symphonia", LevelFilter::Error);
+        .filter_module("symphonia", LevelFilter::Error)
+        .filter_module("external_cloud_integrations", LevelFilter::Debug); // Add this line
 
     if cli.debug {
         builder.filter_module("screenpipe", LevelFilter::Debug);
@@ -270,6 +275,9 @@ async fn main() -> anyhow::Result<()> {
 
     let vision_control_server_clone = vision_control.clone();
 
+    // Before the loop starts, clone friend_wearable_uid
+    let friend_wearable_uid = cli.friend_wearable_uid.clone();
+
     // Function to start or restart the recording task
     let _start_recording = tokio::spawn(async move {
         // hack
@@ -280,6 +288,8 @@ async fn main() -> anyhow::Result<()> {
             let local_data_dir = local_data_dir.clone();
             let vision_control = vision_control.clone();
             let audio_devices_control = audio_devices_control.clone();
+            let friend_wearable_uid_clone = friend_wearable_uid.clone(); // Clone for each iteration
+
             tokio::select! {
                 _ = &mut recording_task => {
                     // Recording task completed or errored, restart it
@@ -300,8 +310,9 @@ async fn main() -> anyhow::Result<()> {
                     vision_control,
                     audio_devices_control,
                     cli.save_text_files,
-                    cli.cloud_audio_on, // Pass the cloud_audio flag
-                    cli.cloud_ocr_on,   // Pass the cloud_ocr flag
+                    cli.cloud_audio_on,
+                    cli.cloud_ocr_on,
+                    friend_wearable_uid_clone, // Use the cloned version
                 )
                 .await;
 
