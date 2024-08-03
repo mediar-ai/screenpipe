@@ -2,11 +2,13 @@ use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
 use crossbeam::queue::SegQueue;
+use external_cloud_integrations::friend_wearable::send_data_to_friend_wearable;
 use log::{debug, error, info, warn};
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput, DeviceControl,
     TranscriptionResult,
 };
+use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,7 +16,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
-use external_cloud_integrations::friend_wearable::send_data_to_friend_wearable;
 
 pub enum RecorderControl {
     Pause,
@@ -52,7 +53,7 @@ pub async fn start_continuous_recording(
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     save_text_files: bool,
     cloud_audio: bool,
-    cloud_ocr: bool,
+    ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>, // Updated parameter
 ) -> Result<()> {
     info!("Recording now");
@@ -76,7 +77,7 @@ pub async fn start_continuous_recording(
             fps,
             is_running_video,
             save_text_files,
-            cloud_ocr,
+            ocr_engine,
             friend_wearable_uid_video, // Use the cloned version
         )
         .await
@@ -108,7 +109,7 @@ async fn record_video(
     fps: f64,
     is_running: Arc<AtomicBool>,
     save_text_files: bool,
-    cloud_ocr: bool,
+    ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>, // Updated parameter
 ) -> Result<()> {
     debug!("record_video: Starting");
@@ -130,7 +131,7 @@ async fn record_video(
         fps,
         new_chunk_callback,
         save_text_files,
-        cloud_ocr,
+        ocr_engine,
     );
 
     while is_running.load(Ordering::SeqCst) {
@@ -152,7 +153,7 @@ async fn record_video(
                             &text_json,
                             &new_text_json_vs_previous_frame,
                             &raw_data_output_from_ocr,
-                            &frame.app_name
+                            &frame.app_name,
                         )
                         .await
                     {
@@ -353,7 +354,7 @@ async fn process_audio_result(
                     "Inserted audio transcription for chunk {} from device {}",
                     audio_chunk_id, result.input.device
                 );
-                
+
                 // Send data to friend wearable
                 if let Some(uid) = friend_wearable_uid {
                     if let Err(e) = send_data_to_friend_wearable(
@@ -364,7 +365,10 @@ async fn process_audio_result(
                     ) {
                         error!("Failed to send data to friend wearable: {}", e);
                     } else {
-                        debug!("Sent audio data to friend wearable for chunk {}", audio_chunk_id);
+                        debug!(
+                            "Sent audio data to friend wearable for chunk {}",
+                            audio_chunk_id
+                        );
                     }
                 }
             }

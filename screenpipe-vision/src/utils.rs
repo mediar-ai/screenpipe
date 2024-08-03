@@ -1,22 +1,34 @@
 use crate::core::MaxAverageFrame; // Assuming core.rs is in the same crate under the `core` module
+use image::codecs::png::PngEncoder;
 use image::DynamicImage;
+use image::ImageEncoder;
 use image_compare::{Algorithm, Metric, Similarity}; // Added import for Similarity
 use log::{debug, error};
+use reqwest::multipart::{Form, Part};
 use rusty_tesseract::{Args, DataOutput, Image}; // Added import for Args, Image, DataOutput
 use serde_json;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::io::Cursor; // Import Cursor for wrapping Vec<u8>
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
-use reqwest::multipart::{Form, Part};
-use std::io::Cursor; // Import Cursor for wrapping Vec<u8>
-use image::codecs::png::PngEncoder;
-use image::ImageEncoder;
 
+#[derive(Clone, Debug)]
+pub enum OcrEngine {
+    Deepgram,
+    Tesseract,
+    WindowsNative,
+}
+
+impl Default for OcrEngine {
+    fn default() -> Self {
+        OcrEngine::Tesseract
+    }
+}
 pub fn calculate_hash(image: &DynamicImage) -> u64 {
     let mut hasher = DefaultHasher::new();
     image.as_bytes().hash(&mut hasher);
@@ -41,7 +53,7 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
     result.score
 }
 
-pub fn perform_ocr(image: &DynamicImage) -> (String, DataOutput, String) {
+pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, DataOutput, String) {
     // debug!("inside perform_ocr");
     let args = Args {
         lang: "eng".to_string(),
@@ -239,16 +251,19 @@ pub async fn perform_ocr_cloud(image: &DynamicImage) -> (String, DataOutput, Str
 
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer); // Wrap Vec<u8> in Cursor
-    PngEncoder::new(&mut cursor).write_image(
-        image.as_bytes(),
-        image.width(),
-        image.height(),
-        image.color().into(), // Convert ColorType to ExtendedColorType
-    ).unwrap();
+    PngEncoder::new(&mut cursor)
+        .write_image(
+            image.as_bytes(),
+            image.width(),
+            image.height(),
+            image.color().into(), // Convert ColorType to ExtendedColorType
+        )
+        .unwrap();
 
     let part = Part::bytes(buffer)
         .file_name("image.png".to_string())
-        .mime_str("image/png").unwrap();
+        .mime_str("image/png")
+        .unwrap();
 
     let form = Form::new()
         .part("files", part)
@@ -262,7 +277,8 @@ pub async fn perform_ocr_cloud(image: &DynamicImage) -> (String, DataOutput, Str
         .header("unstructured-api-key", &api_key)
         .multipart(form)
         .send()
-        .await.unwrap();
+        .await
+        .unwrap();
 
     let response_text = if response.status().is_success() {
         response.text().await.unwrap()
@@ -271,13 +287,66 @@ pub async fn perform_ocr_cloud(image: &DynamicImage) -> (String, DataOutput, Str
     };
 
     let json_output = response_text.clone();
-    let data_output = DataOutput { data: Vec::new(), output: String::new() }; // Initialize blank DataOutput
+    let data_output = DataOutput {
+        data: Vec::new(),
+        output: String::new(),
+    }; // Initialize blank DataOutput
 
-    let parsed_response: Vec<HashMap<String, serde_json::Value>> = serde_json::from_str(&response_text).unwrap();
-    let text = parsed_response.iter()
+    let parsed_response: Vec<HashMap<String, serde_json::Value>> =
+        serde_json::from_str(&response_text).unwrap();
+    let text = parsed_response
+        .iter()
         .filter_map(|item| item.get("text").and_then(|v| v.as_str()))
         .collect::<Vec<&str>>()
         .join(" ");
+
+    (text, data_output, json_output)
+}
+
+#[cfg(target_os = "windows")]
+pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, DataOutput, String) {
+    use windows::{
+        Graphics::Imaging::BitmapDecoder,
+        Media::Ocr::OcrEngine as WindowsOcrEngine,
+        Storage::Streams::{DataWriter, InMemoryRandomAccessStream},
+    };
+
+    let mut buffer = Vec::new();
+    image
+        .write_to(&mut Cursor::new(&mut buffer), image::ImageFormat::Png)
+        .unwrap();
+
+    let stream = InMemoryRandomAccessStream::new().unwrap();
+    let writer = DataWriter::CreateDataWriter(&stream).unwrap();
+    writer.WriteBytes(&buffer).unwrap();
+    writer.StoreAsync().unwrap().get().unwrap();
+    writer.FlushAsync().unwrap().get().unwrap();
+    stream.Seek(0).unwrap();
+
+    let decoder = BitmapDecoder::CreateWithIdAsync(BitmapDecoder::PngDecoderId().unwrap(), &stream)
+        .unwrap()
+        .get()
+        .unwrap();
+
+    let bitmap = decoder.GetSoftwareBitmapAsync().unwrap().get().unwrap();
+
+    let engine = WindowsOcrEngine::TryCreateFromUserProfileLanguages().unwrap();
+    let result = engine.RecognizeAsync(&bitmap).unwrap().get().unwrap();
+
+    let text = result.Text().unwrap().to_string();
+
+    // Create a simple DataOutput structure
+    let data_output = DataOutput {
+        data: vec![],
+        output: text.clone(),
+    };
+
+    // Create a simple JSON output
+    let json_output = serde_json::json!({
+        "text": text,
+        "confidence": 1.0, // Windows OCR doesn't provide confidence scores
+    })
+    .to_string();
 
     (text, data_output, json_output)
 }

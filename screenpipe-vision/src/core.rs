@@ -14,12 +14,14 @@ use tokio::sync::{
 }; // Corrected import for Mutex
 use xcap::{Monitor, Window};
 
+#[cfg(target_os = "windows")]
+use crate::utils::perform_ocr_windows;
+use crate::utils::OcrEngine;
 use crate::utils::{
-    capture_screenshot, compare_with_previous_image, perform_ocr, perform_ocr_cloud,
+    capture_screenshot, compare_with_previous_image, perform_ocr_cloud, perform_ocr_tesseract,
     save_text_files,
 };
 use rusty_tesseract::{Data, DataOutput}; // Add this import
-
 pub enum ControlMessage {
     Pause,
     Resume,
@@ -105,7 +107,7 @@ pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
     save_text_files_flag: bool,
-    cloud_ocr: bool, // Add this parameter
+    ocr_engine: Arc<OcrEngine>,
 ) {
     let monitor = Monitor::all().unwrap().first().unwrap().clone(); // Simplified monitor retrieval
 
@@ -159,6 +161,7 @@ pub async fn continuous_capture(
 
                 ocr_task_running.store(true, Ordering::SeqCst);
                 // debug!("ocr_task_running {}", ocr_task_running.load(Ordering::SeqCst));
+                let ocr_engine_clone = ocr_engine.clone();
                 tokio::spawn(async move {
                     let w = Window::all().unwrap().first().unwrap().clone();
                     let app_name = w.app_name();
@@ -169,7 +172,7 @@ pub async fn continuous_capture(
                         ocr_task_data.result_tx,
                         &previous_text_json_clone,
                         save_text_files_flag, // Pass the flag here
-                        cloud_ocr,            // Pass the cloud_ocr flag here
+                        ocr_engine_clone,     // Pass the cloud_ocr flag here
                         app_name.to_string().to_lowercase(),
                     )
                     .await
@@ -198,14 +201,14 @@ pub struct MaxAverageFrame {
     pub average: f64,
 }
 
-async fn process_ocr_task(
+pub async fn process_ocr_task(
     image_arc: Arc<DynamicImage>,
     frame_number: u64,
     timestamp: Instant,
     result_tx: Sender<CaptureResult>,
     previous_text_json: &Arc<Mutex<Option<Vec<HashMap<String, String>>>>>,
     save_text_files_flag: bool, // Add this parameter
-    cloud_ocr: bool,            // Add this parameter
+    ocr_engine: Arc<OcrEngine>, // Add this parameter
     app_name: String,
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
@@ -215,12 +218,28 @@ async fn process_ocr_task(
         "Performing OCR for frame number since beginning of program {}",
         frame_number
     );
-    let (text, data_output, json_output) = if cloud_ocr {
-        debug!("Cloud Unstructured.io OCR");
-        perform_ocr_cloud(&image_arc).await
-    } else {
-        debug!("Local Tesseract OCR");
-        perform_ocr(&image_arc)
+    let (text, data_output, json_output) = match &*ocr_engine {
+        OcrEngine::Deepgram => {
+            debug!("Cloud Deepgram OCR");
+            perform_ocr_cloud(&image_arc).await
+        }
+        OcrEngine::Tesseract => {
+            debug!("Local Tesseract OCR");
+            perform_ocr_tesseract(&image_arc)
+        }
+        #[cfg(target_os = "windows")]
+        OcrEngine::WindowsNative => {
+            debug!("Windows Native OCR");
+            perform_ocr_windows(&image_arc).await
+        }
+        _ => {
+            error!("Unsupported OCR engine");
+            return Err(std::io::Error::new(
+                // TODO we should use anyhow everywhere for error
+                std::io::ErrorKind::Other,
+                "Unsupported OCR engine",
+            ));
+        }
     };
 
     let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output)
