@@ -17,14 +17,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
 
-#[cfg(target_os = "windows")]
-use windows::{
-    core::*,
-    Graphics::Imaging::BitmapDecoder,
-    Storage::Streams::Buffer,
-    Storage::{FileAccessMode, StorageFile},
-};
-
 #[derive(Clone, Debug)]
 pub enum OcrEngine {
     Deepgram,
@@ -313,6 +305,12 @@ pub async fn perform_ocr_cloud(image: &DynamicImage) -> (String, DataOutput, Str
 
 #[cfg(target_os = "windows")]
 pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, DataOutput, String) {
+    use windows::{
+        Graphics::Imaging::{BitmapDecoder, SoftwareBitmap},
+        Media::Ocr::OcrEngine as WindowsOcrEngine,
+        Storage::Streams::{Buffer, InMemoryRandomAccessStream},
+    };
+
     let mut buffer = Vec::new();
     image
         .write_to(&mut Cursor::new(&mut buffer), image::ImageFormat::Png)
@@ -320,20 +318,19 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, DataOutput, S
 
     let windows_buffer = Buffer::Create(buffer.len() as u32).unwrap();
     windows_buffer
-        .CreateReference()
+        .AsBuffer()
         .unwrap()
         .WriteBytes(&buffer)
         .unwrap();
 
-    let stream = windows_buffer
-        .CreateReference()
-        .unwrap()
-        .AsStream()
-        .unwrap();
+    let stream = InMemoryRandomAccessStream::new().unwrap();
+    stream.WriteAsync(&windows_buffer).unwrap().get().unwrap();
+    stream.Seek(0).unwrap();
+
     let decoder = BitmapDecoder::CreateAsync(&stream).unwrap().get().unwrap();
     let bitmap = decoder.GetSoftwareBitmapAsync().unwrap().get().unwrap();
 
-    let engine = windows::Media::Ocr::OcrEngine::TryCreateFromUserProfileLanguages().unwrap();
+    let engine = WindowsOcrEngine::TryCreateFromUserProfileLanguages().unwrap();
     let result = engine.RecognizeAsync(&bitmap).unwrap().get().unwrap();
 
     let text = result.Text().unwrap().to_string();

@@ -73,5 +73,5 @@ harness = false
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.48", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
+windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
 
