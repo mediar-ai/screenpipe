@@ -57,6 +57,14 @@ jobs:
           profile: minimal
           toolchain: stable
 
+      - name: setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Run pre_build.js on
+        shell: bash
+        run: bun ./scripts/pre_build.js
+        working-directory: ./examples/apps/screenpipe-app-tauri
+
       # - name: Run tests
       #   run: cargo test
 
