@@ -318,7 +318,7 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, DataOutput, S
 
     let windows_buffer = Buffer::Create(buffer.len() as u32).unwrap();
     windows_buffer
-        .AsBuffer()
+        .as_buffer() // Change AsBuffer() to as_buffer()
         .unwrap()
         .WriteBytes(&buffer)
         .unwrap();

@@ -230,7 +230,7 @@ pub async fn process_ocr_task(
         #[cfg(target_os = "windows")]
         OcrEngine::WindowsNative => {
             debug!("Windows Native OCR");
-            perform_ocr_windows(&image_arc)
+            perform_ocr_windows(&image_arc).await
         }
         _ => {
             error!("Unsupported OCR engine");
