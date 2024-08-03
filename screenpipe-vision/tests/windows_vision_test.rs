@@ -1,9 +1,8 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use image::DynamicImage;
     use screenpipe_vision::{process_ocr_task, OcrEngine};
+    use std::path::PathBuf;
     use std::{sync::Arc, time::Instant};
     use tokio::sync::{mpsc, Mutex};
     #[cfg(target_os = "windows")]
