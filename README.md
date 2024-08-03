@@ -417,6 +417,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
     - [ ] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort)
 - [x] screenshots + OCR (different options for OCR engines, we're flexible)
 - [x] audio + STT (works with multi input devices, like your iPhone + mac mic, many STT engines)
+  - [x] Linux, MacOS, Windows input
   - [x] Linux output
   - [ ] MacOS output
   - [ ] Windows output  
