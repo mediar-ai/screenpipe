@@ -412,8 +412,8 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
     - [ ] Keyboard
     - [ ] Browser
     - [ ] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort)
-- [x] screenshots + OCR
-- [x] audio + STT (works with multi input & output devices, like your iPhone + mac mic)
+- [x] screenshots + OCR (different options for OCR engines, we're flexible)
+- [x] audio + STT (works with multi input & output devices, like your iPhone + mac mic, many STT engines)
 - [x] [remote capture](https://github.com/louis030195/screen-pipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
@@ -429,6 +429,7 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
 - [ ] data encryption options & higher security
 - [ ] fast, optimised, energy-efficient modes
 - [ ] webhooks/events (for automations)
+- [ ] abstractions for multiplayer usage (e.g. aggregate sales team data, company team data, partner, etc.)
 
 ## Why open source?
 
