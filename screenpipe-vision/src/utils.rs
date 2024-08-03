@@ -19,7 +19,7 @@ use xcap::Monitor;
 
 #[derive(Clone, Debug)]
 pub enum OcrEngine {
-    Deepgram,
+    Unstructured,
     Tesseract,
     WindowsNative,
 }

@@ -219,8 +219,8 @@ pub async fn process_ocr_task(
         frame_number
     );
     let (text, data_output, json_output) = match &*ocr_engine {
-        OcrEngine::Deepgram => {
-            debug!("Cloud Deepgram OCR");
+        OcrEngine::Unstructured => {
+            debug!("Cloud Unstructured OCR");
             perform_ocr_cloud(&image_arc).await
         }
         OcrEngine::Tesseract => {

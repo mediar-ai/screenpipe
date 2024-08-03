@@ -31,7 +31,7 @@ use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 enum CliOcrEngine {
-    Deepgram,
+    Unstructured,
     Tesseract,
     WindowsNative,
 }
@@ -39,7 +39,7 @@ enum CliOcrEngine {
 impl From<CliOcrEngine> for CoreOcrEngine {
     fn from(cli_engine: CliOcrEngine) -> Self {
         match cli_engine {
-            CliOcrEngine::Deepgram => CoreOcrEngine::Deepgram,
+            CliOcrEngine::Unstructured => CoreOcrEngine::Unstructured,
             CliOcrEngine::Tesseract => CoreOcrEngine::Tesseract,
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
         }
@@ -111,7 +111,7 @@ struct Cli {
 
     /// OCR engine to use. Tesseract is a local OCR engine (default).
     /// WindowsNative is a local OCR engine for Windows.
-    /// Deepgram is a cloud OCR engine (free of charge on us)
+    /// Unstructured is a cloud OCR engine (free of charge on us)
     #[arg(long, value_enum, default_value_t = CliOcrEngine::Tesseract)]
     ocr_engine: CliOcrEngine,
 
@@ -389,7 +389,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Add warning for cloud arguments
-    if cli.cloud_audio_on || warning_ocr_engine_clone == CliOcrEngine::Deepgram {
+    if cli.cloud_audio_on || warning_ocr_engine_clone == CliOcrEngine::Unstructured {
         println!(
             "{}",
             "WARNING: You are using cloud now. Make sure to understand the data privacy risks."
