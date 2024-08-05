@@ -78,7 +78,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const getDebuggingCommands = (os: string | null) => {
     const cliInstructions =
       os === "windows"
-        ? "# 1. Open Command Prompt (search for &apos;cmd&apos; in the Start menu)\n# 2. Navigate to: %APPDATA%\\screenpipe\\\n#    Type: cd %APPDATA%\\screenpipe\n"
+        ? "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n"
         : os === "macos"
         ? "# 1. Open Terminal app\n# 2. Navigate to: /Applications/screenpipe.app/Contents/MacOS/\n#    Type: cd /Applications/screenpipe.app/Contents/MacOS/\n"
         : "# 1. Open Terminal\n# 2. Navigate to the Screenpipe installation directory\n";
@@ -92,7 +92,7 @@ ${cliInstructions}
 
     const dataDir =
       os === "windows"
-        ? "%APPDATA%\\screenpipe"
+        ? "%LOCALAPPDATA%\\screenpipe"
         : os === "macos"
         ? "$HOME/Library/Application\\ Support/screenpipe"
         : "$HOME/.config/screenpipe";
@@ -106,16 +106,16 @@ ${cliInstructions}
       return (
         baseCommand +
         `# Stream the log (depending how you set the data-dir):
-Get-Content -Wait $env:APPDATA\\screenpipe\\screenpipe.log
+type %LOCALAPPDATA%\\screenpipe\\screenpipe.log
 
 # Scroll the logs:
-Get-Content $env:APPDATA\\screenpipe\\screenpipe.log | more
+more %LOCALAPPDATA%\\screenpipe\\screenpipe.log
 
 # View last 10 frames:
-sqlite3 $env:APPDATA\\screenpipe\\db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+sqlite3 %LOCALAPPDATA%\\screenpipe\\db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
 
 # View last 10 audio transcriptions:
-sqlite3 $env:APPDATA\\screenpipe\\db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+sqlite3 %LOCALAPPDATA%\\screenpipe\\db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
       );
     } else if (os === "macos") {
       return (

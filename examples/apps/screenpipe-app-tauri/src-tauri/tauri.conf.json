@@ -90,7 +90,7 @@
           "tauri://localhost",
           "http://tauri.localhost"
         ],
-        "media-src": "'self' mediadevices:",
+        "media-src": "'self' mediadevices: asset: http://asset.localhost file:",
         "img-src": "'self' asset: http://asset.localhost blob: data: https://*.githubusercontent.com https://*.github.com https://github.com https://*.s3.amazonaws.com",
         "style-src": "'unsafe-inline' 'self' https://fonts.googleapis.com"
       }

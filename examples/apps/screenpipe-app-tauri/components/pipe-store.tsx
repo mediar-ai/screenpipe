@@ -86,6 +86,15 @@ const PipeDialog: React.FC = () => {
             <br />
             It will process, annotate, help you search, or automate in your
             screenpipe&apos;s data.
+            <br />
+            <a
+              href="https://github.com/louis030195/screen-pipe/tree/main/examples/typescript"
+              className="text-blue-500 hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Check out more examples on GitHub
+            </a>
           </DialogDescription>
 
           {selectedPipe && <FeatureRequestLink className="w-80" />}
