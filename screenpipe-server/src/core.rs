@@ -188,7 +188,6 @@ async fn record_video(
         tokio::time::sleep(Duration::from_secs_f64(1.0 / fps)).await;
     }
 
-    video_capture.stop().await;
     Ok(())
 }
 

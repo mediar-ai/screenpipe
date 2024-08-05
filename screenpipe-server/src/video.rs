@@ -2,7 +2,7 @@ use chrono::Utc;
 use image::ImageFormat::{self};
 use log::{debug, error, info, warn};
 use screenpipe_core::find_ffmpeg_path;
-use screenpipe_vision::{continuous_capture, CaptureResult, ControlMessage, OcrEngine};
+use screenpipe_vision::{continuous_capture, get_monitor, CaptureResult, OcrEngine};
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -18,12 +18,9 @@ use std::time::Duration;
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 
 pub struct VideoCapture {
-    control_tx: Sender<ControlMessage>,
     frame_queue: Arc<Mutex<VecDeque<CaptureResult>>>,
     video_frame_queue: Arc<Mutex<VecDeque<CaptureResult>>>,
     pub ocr_frame_queue: Arc<Mutex<VecDeque<CaptureResult>>>,
-    ffmpeg_handle: Arc<Mutex<Option<Child>>>,
-    is_running: Arc<Mutex<bool>>,
 }
 
 impl VideoCapture {
@@ -35,27 +32,23 @@ impl VideoCapture {
         ocr_engine: Arc<OcrEngine>,
     ) -> Self {
         info!("Starting new video capture");
-        let (control_tx, mut control_rx) = channel(512);
         let frame_queue = Arc::new(Mutex::new(VecDeque::new()));
         let video_frame_queue = Arc::new(Mutex::new(VecDeque::new()));
         let ocr_frame_queue = Arc::new(Mutex::new(VecDeque::new()));
-        let ffmpeg_handle = Arc::new(Mutex::new(None));
-        let is_running = Arc::new(Mutex::new(true));
         let new_chunk_callback = Arc::new(new_chunk_callback);
         let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
 
         let capture_frame_queue = frame_queue.clone();
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
-        let capture_thread_is_running = is_running.clone();
         let (result_sender, mut result_receiver) = channel(512);
         let _capture_thread = tokio::spawn(async move {
             continuous_capture(
-                &mut control_rx,
                 result_sender,
                 Duration::from_secs_f64(1.0 / fps),
                 save_text_files,
                 ocr_engine,
+                get_monitor().await,
             )
             .await;
         });
@@ -64,66 +57,40 @@ impl VideoCapture {
 
         // Spawn another thread to handle receiving and queueing the results
         let _queue_thread = tokio::spawn(async move {
-            while *capture_thread_is_running.lock().await {
-                if let Some(result) = result_receiver.recv().await {
-                    let frame_number = result.frame_number;
-                    debug!("Received frame {} for queueing", frame_number);
-                    let mut queue = capture_frame_queue.lock().await;
-                    let mut video_queue = capture_video_frame_queue.lock().await;
-                    let mut ocr_queue = capture_ocr_frame_queue.lock().await;
-                    queue.push_back(result.clone());
-                    video_queue.push_back(result.clone());
-                    ocr_queue.push_back(result);
-                    debug!("Frame {} pushed to queues. Queue length: {}, Video queue length: {}, OCR queue length: {}", frame_number, queue.len(), video_queue.len(), ocr_queue.len());
+            while let Some(result) = result_receiver.recv().await {
+                let frame_number = result.frame_number;
+                debug!("Received frame {} for queueing", frame_number);
+                let mut queue = capture_frame_queue.lock().await;
+                let mut video_queue = capture_video_frame_queue.lock().await;
+                let mut ocr_queue = capture_ocr_frame_queue.lock().await;
+                queue.push_back(result.clone());
+                video_queue.push_back(result.clone());
+                ocr_queue.push_back(result);
+                debug!("Frame {} pushed to queues. Queue length: {}, Video queue length: {}, OCR queue length: {}", frame_number, queue.len(), video_queue.len(), ocr_queue.len());
 
-                    // Clear the old queue after processing
-                    if queue.len() > 1 {
-                        queue.pop_front();
-                    }
+                // Clear the old queue after processing
+                if queue.len() > 1 {
+                    queue.pop_front();
                 }
             }
         });
 
         let video_frame_queue_clone = video_frame_queue.clone();
-        let video_thread_is_running = is_running.clone();
         let output_path = output_path.to_string();
         let _video_thread = tokio::spawn(async move {
             save_frames_as_video(
                 &video_frame_queue_clone,
                 &output_path,
                 fps,
-                video_thread_is_running,
                 new_chunk_callback_clone,
             )
             .await;
         });
 
         VideoCapture {
-            control_tx,
             frame_queue,
             video_frame_queue,
             ocr_frame_queue,
-            ffmpeg_handle,
-            is_running,
-        }
-    }
-
-    pub async fn pause(&self) {
-        self.control_tx.send(ControlMessage::Pause).await.unwrap();
-    }
-
-    pub async fn resume(&self) {
-        self.control_tx.send(ControlMessage::Resume).await.unwrap();
-    }
-
-    pub async fn stop(&self) {
-        self.control_tx.send(ControlMessage::Stop).await.unwrap();
-        *self.is_running.lock().await = false;
-        if let Some(mut child) = self.ffmpeg_handle.lock().await.take() {
-            child
-                .wait()
-                .await
-                .expect("Failed to wait for ffmpeg process");
         }
     }
 
@@ -142,7 +109,6 @@ async fn save_frames_as_video(
     frame_queue: &Arc<Mutex<VecDeque<CaptureResult>>>,
     output_path: &str,
     fps: f64,
-    is_running: Arc<Mutex<bool>>,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
 ) {
     debug!("Starting save_frames_as_video function");
@@ -153,7 +119,7 @@ async fn save_frames_as_video(
     let mut current_ffmpeg: Option<Child> = None;
     let mut current_stdin: Option<ChildStdin> = None;
 
-    while *is_running.lock().await {
+    loop {
         if frame_count % frames_per_video == 0 || current_ffmpeg.is_none() {
             debug!("Starting new FFmpeg process");
             // Close previous FFmpeg process if exists
@@ -287,12 +253,6 @@ async fn save_frames_as_video(
         if frame_count % 100 == 0 {
             tokio::task::yield_now().await;
         }
-    }
-
-    // Close the final FFmpeg process
-    if let Some(mut child) = current_ffmpeg.take() {
-        drop(current_stdin.take()); // Ensure stdin is closed
-        child.wait().await.expect("ffmpeg process failed");
     }
 }
 
