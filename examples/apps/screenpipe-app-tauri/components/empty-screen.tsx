@@ -10,7 +10,8 @@ const suggestions = [
   "Show me my recent Slack conversations with john about dog food. Only use screen text",
   "Read my coding stuff (python) and tell me how i can write better python code",
   "Summarize my recent email activity, only use screen text",
-  "Turn my audio conversations with Lisa into a table, do use 2-3 queries"
+  "Turn my audio conversations with Lisa into a table, do use 2-3 queries",
+  "I don't remember the sentence I was using related to my product XXX, can you find it, and show me the mp4 videos in codeblocks",
 ];
 
 export function EmptyScreen({ onSuggestionClick }: EmptyScreenProps) {
