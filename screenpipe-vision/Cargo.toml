@@ -25,7 +25,7 @@ num_cpus = "1.0"
 tokio = { workspace = true }
 
 # Image processing
-image = "0.25.0"
+image = { workspace = true }
 
 # OCR
 # rusty-tesseract = "1.1.10"
@@ -55,6 +55,9 @@ image-compare = "0.4.1"
 strsim = "0.10.0"
 clap = { version = "4.0", features = ["derive"] }
 # tokio = { version = "1", features = ["full"] }
+
+# Integrations
+screenpipe-integrations = { path = "../screenpipe-integrations" }
 
 [dev-dependencies]
 tempfile = "3.3.0"
