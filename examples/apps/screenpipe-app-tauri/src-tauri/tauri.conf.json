@@ -7,6 +7,7 @@
     "devUrl": "http://localhost:3000"
   },
   "bundle": {
+    "createUpdaterArtifacts": true,
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
@@ -61,7 +62,6 @@
   "identifier": "screenpi.pe",
   "plugins": {
     "updater": {
-      "createUpdaterArtifacts": true,
       "active": true,
       "dialog": true,
       "endpoints": [
