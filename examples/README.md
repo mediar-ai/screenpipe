@@ -1,3 +1,3 @@
 
-Check out the examples in the [examples](./examples) folder.
+Check out the examples in the [typescript](./typescript) folder.
 
