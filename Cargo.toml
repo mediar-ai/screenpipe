@@ -3,7 +3,7 @@ members = [
     "screenpipe-core",
     "screenpipe-vision",
     "screenpipe-audio",
-    "screenpipe-server", "external-cloud-integrations",
+    "screenpipe-server", "screenpipe-integrations",
 
 ]
 exclude = [

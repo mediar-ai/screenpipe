@@ -90,7 +90,7 @@ reqwest = { version = "0.12.5", features = ["json"] }
 crossbeam = { workspace = true }
 
 # Friend integration
-external-cloud-integrations = { path = "../external-cloud-integrations" }
+screenpipe-integrations = { path = "../screenpipe-integrations" }
 
 [dev-dependencies]
 tempfile = "3.3.0"

@@ -2,12 +2,12 @@ use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
 use crossbeam::queue::SegQueue;
-use external_cloud_integrations::friend_wearable::send_data_to_friend_wearable;
 use log::{debug, error, info, warn};
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput, DeviceControl,
     TranscriptionResult,
 };
+use screenpipe_integrations::friend_wearable::send_data_to_friend_wearable;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
