@@ -69,6 +69,7 @@ jobs:
       #   run: cargo test
 
       - name: Copy test image
+        shell: bash
         run: |
           mkdir -p target/debug/deps || true
           cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
