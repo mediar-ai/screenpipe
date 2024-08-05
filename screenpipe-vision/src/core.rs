@@ -8,10 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 use strsim::levenshtein;
-use tokio::sync::{
-    mpsc::{Receiver, Sender},
-    Mutex,
-}; // Corrected import for Mutex
+use tokio::sync::{mpsc::Sender, Mutex}; // Corrected import for Mutex
 use xcap::{Monitor, Window};
 
 #[cfg(target_os = "windows")]
@@ -22,11 +19,7 @@ use crate::utils::{
     save_text_files,
 };
 use rusty_tesseract::{Data, DataOutput}; // Add this import
-pub enum ControlMessage {
-    Pause,
-    Resume,
-    Stop,
-}
+
 
 pub struct DataOutputWrapper {
     pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,
@@ -102,15 +95,17 @@ pub struct OcrTaskData {
     pub result_tx: Sender<CaptureResult>,
 }
 
+pub async fn get_monitor() -> Monitor {
+    Monitor::all().unwrap().first().unwrap().clone()
+}
+
 pub async fn continuous_capture(
-    _control_rx: &mut Receiver<ControlMessage>,
     result_tx: Sender<CaptureResult>,
     interval: Duration,
     save_text_files_flag: bool,
     ocr_engine: Arc<OcrEngine>,
+    monitor: Monitor,
 ) {
-    let monitor = Monitor::all().unwrap().first().unwrap().clone(); // Simplified monitor retrieval
-
     debug!("continuous_capture: Starting using monitor: {:?}", monitor);
     let previous_text_json = Arc::new(Mutex::new(None));
     let ocr_task_running = Arc::new(AtomicBool::new(false));

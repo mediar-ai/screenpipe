@@ -138,7 +138,7 @@ if (platform == 'windows') {
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`${wgetPath} -nc --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
+		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
@@ -152,7 +152,7 @@ if (platform == 'windows') {
 
 	if (!(await fs.exists('tesseract'))) {
 		console.log('Setting up Tesseract for Windows...')
-		await $`${wgetPath} -nc --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
+		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
 		await $`"${process.cwd()}\\${tesseractInstaller}" /S /D=C:\\Program Files\\Tesseract-OCR`
 		await $`rm ${tesseractInstaller}`
 		// Replace the mv command with xcopy

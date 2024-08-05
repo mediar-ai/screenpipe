@@ -114,7 +114,6 @@ async fn main() {
         }
     }
 
-    video_capture.stop().await;
     println!("Video capture completed. Output saved to: {}", output_path);
     println!("JSON data saved to: {}", json_output_path);
 }
