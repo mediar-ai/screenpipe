@@ -185,7 +185,10 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 <details>
   <summary>Linux</summary>
 
-  1. Install dependencies:
+<details>
+  <summary>Option I: Install from source</summary>
+
+1. Install dependencies:
 
 ```bash
 sudo apt-get update
@@ -195,14 +198,14 @@ sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg l
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-  2. Clone the repo:
+2. Clone the repo:
 
 ```bash
 git clone https://github.com/louis030195/screen-pipe
 cd screen-pipe
 ```
 
-  3. Run the API:
+3. Build and run:
 
 ```bash
 cargo build --release --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
@@ -212,6 +215,41 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 ```
 
 </details>
+
+<details>
+  <summary>Option II: Install through Nix</summary>
+
+Choose one of the following methods:
+
+a. Using `nix-env`:
+```bash
+nix-env -iA nixpkgs.screen-pipe
+```
+
+b. In your `configuration.nix` (for NixOS users):
+Add the following to your `configuration.nix`:
+```nix
+environment.systemPackages = with pkgs; [
+  screen-pipe
+];
+```
+Then rebuild your system with `sudo nixos-rebuild switch`.
+
+c. In a Nix shell:
+```bash
+nix-shell -p screen-pipe
+```
+
+d. Using `nix run` (for ad-hoc usage):
+```bash
+nix run nixpkgs#screen-pipe
+```
+
+Note: Make sure you're using a recent version of nixpkgs that includes the screen-pipe package.
+
+</details>
+</details>
+
 <br><br>
 </details>
 
