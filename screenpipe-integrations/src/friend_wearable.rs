@@ -1,6 +1,5 @@
-use curl::easy::{Easy, List};
+use reqwest::Client;
 use serde_json::{json, Value};
-use std::io::Read;
 use uuid::Uuid;
 use chrono::Utc;
 use log::debug;
@@ -31,7 +30,7 @@ fn decode_from_uuid(uuid: Uuid) -> (String, String) {
     (source.to_string(), parts.get(1).unwrap_or(&"").to_string())
 }
 
-pub fn send_data_to_friend_wearable(
+pub async fn send_data_to_friend_wearable(
     memory_source: String,
     memory_id: String,
     memory_text: String,
@@ -39,11 +38,9 @@ pub fn send_data_to_friend_wearable(
 ) -> Result<Value, Box<dyn std::error::Error>> {
     let request_id = encode_to_uuid(&memory_source, &memory_id);
     
-    // Use the provided UID instead of a hardcoded value
     let friend_user_id = uid.to_string();
     let endpoint = "https://webhook-test.com/c46d38536e2851a100e3c230386ae238";
 
-    // Generate timestamp
     let memory_timestamp = Utc::now().to_rfc3339();
 
     let payload = json!({
@@ -56,35 +53,21 @@ pub fn send_data_to_friend_wearable(
     });
 
     debug!("Sending request to friend endpoint: {}", payload);
-    let data = payload.to_string().into_bytes();
-    let mut handle = Easy::new();
-    let mut response = Vec::new();
 
-    let mut headers = List::new();
-    headers.append("Content-Type: application/json")?;
-    handle.http_headers(headers)?;
+    let client = Client::new();
+    let response = client.post(endpoint)
+        .json(&payload)
+        .send()
+        .await?;
 
-    handle.url(endpoint)?;
-    handle.post(true)?;
-    handle.post_field_size(data.len() as u64)?;
+    let status = response.status();
+    let response_body = response.text().await?;
 
-    {
-        let mut transfer = handle.transfer();
-        transfer.read_function(|buf| {
-            Ok(data.as_slice().read(buf).unwrap_or(0))
-        })?;
-        transfer.write_function(|new_data| {
-            response.extend_from_slice(new_data);
-            Ok(new_data.len())
-        })?;
-        transfer.perform()?;
-    }
-
-    let response_body = String::from_utf8(response)?;
-    let response_json: Value = serde_json::from_str(&response_body)?;
-
-    match handle.response_code()? {
-        200 => Ok(response_json),
+    match status.as_u16() {
+        200 => {
+            let response_json: Value = serde_json::from_str(&response_body)?;
+            Ok(response_json)
+        },
         400 => Err("Bad Request: Invalid data sent".into()),
         401 => Err("Unauthorized: Authentication failed".into()),
         500 => Err("Server Error: Please try again later".into()),
