@@ -335,17 +335,19 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, DataOutput, S
 
     let text = result.Text().unwrap().to_string();
 
+    let text = result.Text().unwrap().to_string();
+
     // Create a simple DataOutput structure
     let data_output = DataOutput {
         data: vec![],
         output: text.clone(),
     };
 
-    // Create a simple JSON output
-    let json_output = serde_json::json!({
+    // Create a JSON output similar to other OCR functions
+    let json_output = serde_json::json!([{
         "text": text,
-        "confidence": 1.0, // Windows OCR doesn't provide confidence scores
-    })
+        "confidence": "100.00" // Windows OCR doesn't provide confidence scores, so we use a default high value
+    }])
     .to_string();
 
     (text, data_output, json_output)

@@ -1,3 +1,4 @@
+#[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
     use screenpipe_vision::{get_monitor, process_ocr_task, OcrEngine};
@@ -9,7 +10,7 @@ mod tests {
     use std::time::Duration;
     use tokio::time::timeout;
 
-    // #[cfg(target_os = "windows")]
+    #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn test_process_ocr_task_windows() {
         // Use an absolute path that works in both local and CI environments
@@ -24,7 +25,7 @@ mod tests {
         let timestamp = Instant::now();
         let (tx, _rx) = mpsc::channel(1);
         let previous_text_json = Arc::new(Mutex::new(None));
-        let ocr_engine = Arc::new(OcrEngine::Tesseract);
+        let ocr_engine = Arc::new(OcrEngine::WindowsNative);
         let app_name = "test_app".to_string();
 
         let result = process_ocr_task(
@@ -55,7 +56,7 @@ mod tests {
         // Set up test parameters
         let interval = Duration::from_millis(1000);
         let save_text_files_flag = false;
-        let ocr_engine = Arc::new(OcrEngine::Tesseract);
+        let ocr_engine = Arc::new(OcrEngine::WindowsNative);
 
         // Spawn the continuous_capture function
         let capture_handle = tokio::spawn(continuous_capture(
