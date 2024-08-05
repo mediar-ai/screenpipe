@@ -52,6 +52,18 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
             p({ children }) {
               return <p className="mb-2 last:mb-0">{children}</p>;
             },
+            a({ node, href, children, ...props }) { // make links open in new tab
+              return (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  {...props}
+                >
+                  {children}
+                </a>
+              );
+            },
             code({ node, className, children, ...props }) {
               const content = String(children).replace(/\n$/, "");
               const match = /language-(\w+)/.exec(className || "");
