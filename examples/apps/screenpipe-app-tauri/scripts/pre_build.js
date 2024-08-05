@@ -247,7 +247,10 @@ if (platform == 'macos') {
 				await $`cp /usr/local/bin/tesseract /tmp/tesseract`
 				await $`cp /tmp/tesseract ${tesseractBinary}`;
 			}
-			await $`cp ../../../../target/x86_64-apple-darwin/release/screenpipe screenpipe-x86_64-apple-darwin`;
+			//check if exists
+			if (await fs.exists('../../../../target/x86_64-apple-darwin/release/screenpipe')) {
+				await $`cp ../../../../target/x86_64-apple-darwin/release/screenpipe screenpipe-x86_64-apple-darwin`;
+			}
 		}
 
 		console.log(`Tesseract & screenpipe for ${arch} set up successfully.`);

@@ -19,6 +19,8 @@
     "fs:allow-watch",
     "fs:default",
     "fs:allow-read-file",
+    "fs:allow-read-dir",
+    "fs:allow-read",
     "fs:allow-write-file",
     "fs:read-dirs",
     "fs:allow-copy-file",
@@ -29,6 +31,18 @@
     {
       "identifier": "fs:scope",
       "allow": [
+        {
+          "path": "$XDG_DATA_HOME"
+        },
+        {
+          "path": "$XDG_DATA_HOME/**"
+        },
+        {
+          "path": "$LOCALAPPDATA/*"
+        },
+        {
+          "path": "$LOCALAPPDATA/**"
+        },
         {
           "path": "$APPLOCALDATA/*"
         },
