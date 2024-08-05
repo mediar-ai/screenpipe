@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { invoke } from "@tauri-apps/api/core";
 import { spinner } from "./spinner";
+import { platform } from "@tauri-apps/plugin-os";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
@@ -211,9 +212,9 @@ export function Settings({ className }: { className?: string }) {
                       ),
                     }}
                   >
-                    You need to [install Ollama](https://ollama.com/) and run
-                    `ollama run llama3.1` first. Currently only supports Llama
-                    3.1.
+                    {platform() === "windows"
+                      ? "You need to [install Ollama](https://ollama.com/) and run `set OLLAMA_ORIGINS=* && ollama run llama3.1` first. Currently only supports Llama 3.1"
+                      : "You need to [install Ollama](https://ollama.com/) and run `ollama run llama3.1` first. Currently only supports Llama 3.1"}
                   </MemoizedReactMarkdown>
                 </div>
               </div>
