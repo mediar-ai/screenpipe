@@ -23,6 +23,8 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 import { platform } from "@tauri-apps/plugin-os";
+import { MarkdownWithExternalLinks } from "./markdown-with-external-links";
+import { Badge } from "./ui/badge";
 interface HealthCheckResponse {
   status: string;
   last_frame_timestamp: string | null;
@@ -30,15 +32,12 @@ interface HealthCheckResponse {
   frame_status: string;
   audio_status: string;
   message: string;
-  verbose_instructions: string | null;
 }
 
 const HealthStatus = ({ className }: { className?: string }) => {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isBlinking, setIsBlinking] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isStopping, setIsStopping] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
 
   const fetchHealth = async () => {
     try {
@@ -64,12 +63,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
         audio_status: "Error",
         status: "Error",
         message: "Failed to fetch health status. Server might be down.",
-        verbose_instructions:
-          "If you're experiencing issues, please try the following steps:\n\
-1. Restart the application.\n\
-2. If using a desktop app, reset your Screenpipe OS audio/screen recording permissions.\n\
-3. If the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
-4. Last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot.",
       });
     }
   };
@@ -82,37 +75,37 @@ const HealthStatus = ({ className }: { className?: string }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const checkAndNotify = async () => {
-      if (health && health.status === "Unhealthy") {
-        const now = Date.now();
-        const lastNotification = localStorage.getItem(
-          "lastUnhealthyNotification"
-        );
-        const lastNotificationTime = lastNotification
-          ? parseInt(lastNotification, 10)
-          : 0;
+  const getDebuggingCommands = (os: string | null) => {
+    const cliInstructions =
+      os === "windows"
+        ? "# 1. Open Command Prompt (search for &apos;cmd&apos; in the Start menu)\n# 2. Navigate to: %APPDATA%\\screenpipe\\\n#    Type: cd %APPDATA%\\screenpipe\n"
+        : os === "macos"
+        ? "# 1. Open Terminal app\n# 2. Navigate to: /Applications/screenpipe.app/Contents/MacOS/\n#    Type: cd /Applications/screenpipe.app/Contents/MacOS/\n"
+        : "# 1. Open Terminal\n# 2. Navigate to the Screenpipe installation directory\n";
 
-        if (now - lastNotificationTime > 3600000) {
-          // 1 hour in milliseconds
-          const permissionGranted = await isPermissionGranted();
-          if (permissionGranted) {
-            sendNotification({
-              title: "Screenpipe Status Alert",
-              body: "Screenpipe is currently unhealthy. Please try to restart. It could also be useful to press 'Stop' in the status badge just in case.",
-            });
-            localStorage.setItem("lastUnhealthyNotification", now.toString());
-          }
-        }
-      }
-    };
+    const baseInstructions = `# First, view the Screenpipe CLI arguments:
+${cliInstructions}
+# 3. Run: screenpipe -h
+# 4. Choose your preferred setup and start Screenpipe:
+#    (Replace [YOUR_ARGS] with your chosen arguments)
+#    Example: screenpipe --data-dir `;
 
-    // checkAndNotify(); // not working well
-  }, [health]);
+    const dataDir =
+      os === "windows"
+        ? "%APPDATA%\\screenpipe"
+        : os === "macos"
+        ? "$HOME/Library/Application\\ Support/screenpipe"
+        : "$HOME/.config/screenpipe";
 
-  const getLogCommands = (os: string | null) => {
+    const baseCommand =
+      baseInstructions +
+      dataDir +
+      "\n\n# 5. If you've already started Screenpipe, try these debugging commands:\n";
+
     if (os === "windows") {
-      return `# Stream the log:
+      return (
+        baseCommand +
+        `# Stream the log (depending how you set the data-dir):
 Get-Content -Wait $env:APPDATA\\screenpipe\\screenpipe.log
 
 # Scroll the logs:
@@ -122,9 +115,12 @@ Get-Content $env:APPDATA\\screenpipe\\screenpipe.log | more
 sqlite3 $env:APPDATA\\screenpipe\\db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
 
 # View last 10 audio transcriptions:
-sqlite3 $env:APPDATA\\screenpipe\\db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`;
+sqlite3 $env:APPDATA\\screenpipe\\db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+      );
     } else if (os === "macos") {
-      return `# Stream the log:
+      return (
+        baseCommand +
+        `# Stream the log (depending how you set the data-dir):
 tail -f $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
 
 # Scroll the logs:
@@ -134,9 +130,12 @@ less $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
 sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
 
 # View last 10 audio transcriptions:
-sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`;
+sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+      );
     } else if (os === "linux") {
-      return `# Stream the log:
+      return (
+        baseCommand +
+        `# Stream the log (depending how you set the data-dir):
 tail -f $HOME/.config/screenpipe/screenpipe.log
 
 # Scroll the logs:
@@ -146,124 +145,134 @@ less $HOME/.config/screenpipe/screenpipe.log
 sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
 
 # View last 10 audio transcriptions:
-sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`;
+sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+      );
     } else {
       return "OS not recognized. \n\nPlease check the documentation for your specific operating system.";
     }
   };
 
-  const handleStop = async () => {
-    setIsStopping(true);
-    try {
-      await invoke("kill_all_sreenpipes");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      await fetchHealth();
-    } catch (error) {
-      console.error("Failed to stop:", error);
-      // Handle error
-    } finally {
-      setIsStopping(false);
-    }
-  };
-  const handleStart = async () => {
-    setIsStarting(true);
-    try {
-      await invoke("spawn_screenpipe");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      await fetchHealth();
-    } catch (error) {
-      console.error("Failed to start:", error);
-      // Handle error
-    } finally {
-      setIsStarting(false);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "Healthy":
+        return "bg-green-500";
+      case "Loading":
+        return "bg-yellow-500";
+      case "Unhealthy":
+      case "Error":
+        return "bg-red-500";
+      default:
+        return "bg-gray-500";
     }
   };
 
   if (health && health.status === "Error") {
     return (
       <>
-        <style jsx>{`
-          @keyframes pulse-custom {
-            0%,
-            100% {
-              opacity: 1;
-            }
-            50% {
-              opacity: 0.5;
-            }
-          }
-          .animate-pulse-custom {
-            animation: pulse-custom 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-          }
-        `}</style>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={`w-4 h-4 rounded-full bg-red-500 animate-pulse-custom shadow-lg flex items-center justify-center text-white font-bold ${className}`}
-              />
-            </TooltipTrigger>
-            <TooltipContent className="w-[32em] p-2">
-              <h3 className="font-bold mb-2">Error</h3>
-              <p className="text-sm">{health.message}</p>
-              {health && health.verbose_instructions && (
-                <div className="text-xs mt-2 text-red-500">
-                  <p className="font-bold mb-1">
-                    Troubleshooting Instructions:
-                  </p>
-                  <MemoizedReactMarkdown className="prose prose-sm">
-                    {health.verbose_instructions}
-                  </MemoizedReactMarkdown>
-                  <p className="font-bold mt-2 text-yellow-500">
-                    Instructions not working? Open settings and try CLI mode.
-                  </p>
-                </div>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2 w-full"
-                onClick={() => setIsDialogOpen(true)}
-              >
-                View Log Commands
-              </Button>
-              <span className="text-xs mt-2 text-gray-500">
-                ... or restart screenpipe instance
-              </span>
-              <div className="flex justify-between mt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 mr-1"
-                  onClick={handleStop}
-                  disabled={isStopping || isStarting}
-                >
-                  {isStopping ? spinner : null}
-                  {isStopping ? "Stopping..." : "Stop"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 ml-1"
-                  onClick={handleStart}
-                  disabled={isStopping || isStarting}
-                >
-                  {isStarting ? spinner : null}
-                  {isStarting ? "Starting..." : "Start"}
-                </Button>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Badge
+          variant="outline"
+          className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
+          onClick={() => setIsDialogOpen(true)}
+        >
+          Status{" "}
+          <span
+            className={`ml-1 w-2 h-2 rounded-full ${getStatusColor(
+              health.status
+            )} inline-block ${
+              health.status === "Unhealthy" || health.status === "Error"
+                ? "animate-pulse"
+                : ""
+            }`}
+          />
+        </Badge>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Log Commands</DialogTitle>
+              <DialogTitle>Error Status</DialogTitle>
             </DialogHeader>
             <div className="flex-grow overflow-auto">
-              <CodeBlock language="bash" value={getLogCommands(platform())} />
+              <p className="text-sm mb-4">{health.message}</p>
+              <div className="text-xs text-red-500">
+                <p className="font-bold mb-1">Troubleshooting Instructions:</p>
+                <MarkdownWithExternalLinks className="prose prose-sm">
+                  {`If you're experiencing issues, please try the following steps:
+1. Restart screenpipe CLI.
+2. Reset your Screenpipe OS audio/screen recording permissions.
+3. If the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn.
+4. Last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot.`}
+                </MarkdownWithExternalLinks>
+                <p className="font-bold mt-2 text-red-500">
+                  Did you run screenpipe CLI first?
+                </p>
+              </div>
+              <CodeBlock
+                language="bash"
+                value={getDebuggingCommands(platform())}
+              />
             </div>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  if (!health) return null;
+
+  const formatTimestamp = (timestamp: string | null) => {
+    return timestamp ? new Date(timestamp).toLocaleString() : "N/A";
+  };
+
+  return (
+    <>
+      <Badge
+        variant="outline"
+        className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
+        onClick={() => setIsDialogOpen(true)}
+      >
+        Status{" "}
+        <span
+          className={`ml-1 w-2 h-2 rounded-full ${getStatusColor(
+            health.status
+          )} inline-block ${
+            health.status === "Unhealthy" || health.status === "Error"
+              ? "animate-pulse"
+              : ""
+          }`}
+        />
+      </Badge>
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{health.status} Status</DialogTitle>
+          </DialogHeader>
+          <div className="flex-grow overflow-auto">
+            <p className="text-sm mb-2">{health.message}</p>
+            <p className="text-xs mb-1">Frame: {health.frame_status}</p>
+            <p className="text-xs mb-1">Audio: {health.audio_status}</p>
+            <p className="text-xs mb-1">
+              Last Frame: {formatTimestamp(health.last_frame_timestamp)}
+            </p>
+            <p className="text-xs mb-1">
+              Last Audio: {formatTimestamp(health.last_audio_timestamp)}
+            </p>
+            <div className="text-xs mt-2 text-red-500">
+              <p className="font-bold mb-1">Troubleshooting Instructions:</p>
+              <MarkdownWithExternalLinks className="prose prose-sm">
+                {`If you're experiencing issues, please try the following steps:
+1. Restart screenpipe CLI.
+2. Reset your Screenpipe OS audio/screen recording permissions.
+3. If the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn.
+4. Last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot.`}
+              </MarkdownWithExternalLinks>
+              <p className="font-bold mt-2 text-red-500">
+                Did you run screenpipe CLI first?
+              </p>
+            </div>
+            <CodeBlock
+              language="bash"
+              value={getDebuggingCommands(platform())}
+            />
+
             <div className="mt-4 text-sm text-gray-500">
               <p>Or, for more advanced queries:</p>
               <ol className="list-decimal list-inside mt-2">
@@ -284,145 +293,19 @@ sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions O
                   db is in $HOME/.screenpipe/db.sqlite&quot;
                 </li>
               </ol>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </>
-    );
-  }
-
-  if (!health) return null;
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Healthy":
-        return "bg-green-500";
-      case "Loading":
-        return "bg-yellow-500";
-      case "Unhealthy":
-        return "bg-red-500";
-      default:
-        return "bg-gray-500";
-    }
-  };
-
-  const formatTimestamp = (timestamp: string | null) => {
-    return timestamp ? new Date(timestamp).toLocaleString() : "N/A";
-  };
-
-  const blinkingClass =
-    isBlinking || health.status === "Unhealthy" ? "animate-pulse" : "";
-
-  return (
-    <>
-      <style jsx>{`
-        @keyframes pulse-custom {
-          0%,
-          100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.5;
-          }
-        }
-        .animate-pulse-custom {
-          animation: pulse-custom 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-      `}</style>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
-              className={`w-4 h-4 rounded-full ${getStatusColor(
-                health.status
-              )} ${blinkingClass} animate-pulse-custom shadow-lg flex items-center justify-center text-white font-bold ${className}`}
-            />
-          </TooltipTrigger>
-          <TooltipContent className="w-[32em] p-2">
-            <h3 className="font-bold mb-2">{health.status}</h3>
-            <p className="text-sm mb-2">{health.message}</p>
-            <p className="text-xs mb-1">Frame: {health.frame_status}</p>
-            <p className="text-xs mb-1">Audio: {health.audio_status}</p>
-            <p className="text-xs mb-1">
-              Last Frame: {formatTimestamp(health.last_frame_timestamp)}
-            </p>
-            <p className="text-xs mb-1">
-              Last Audio: {formatTimestamp(health.last_audio_timestamp)}
-            </p>
-            {health.verbose_instructions && (
-              <div className="text-xs mt-2 text-red-500">
-                <p className="font-bold mb-1">Troubleshooting Instructions:</p>
-                <MemoizedReactMarkdown className="prose prose-sm">
-                  {health.verbose_instructions}
-                </MemoizedReactMarkdown>
-                <p className="font-bold mt-2 text-yellow-500">
-                  Instructions not working? Open settings and try CLI mode.
-                </p>
-              </div>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2 w-full"
-              onClick={() => setIsDialogOpen(true)}
-            >
-              View Log Commands
-            </Button>
-            <span className="text-xs mt-2 text-gray-500">
-              ... or restart screenpipe instance
-            </span>
-            <div className="flex justify-between mt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 mr-1"
-                onClick={handleStop}
-                disabled={isStopping || isStarting}
-              >
-                {isStopping ? spinner : null}
-                {isStopping ? "Stopping..." : "Stop"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 ml-1"
-                onClick={handleStart}
-                disabled={isStopping || isStarting}
-              >
-                {isStarting ? spinner : null}
-                {isStarting ? "Starting..." : "Start"}
-              </Button>
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Log Commands</DialogTitle>
-          </DialogHeader>
-          <div className="flex-grow overflow-auto">
-            <CodeBlock language="bash" value={getLogCommands(platform())} />
-          </div>
-          <div className="mt-4 text-sm text-gray-500">
-            <p>Or, for more advanced queries:</p>
-            <ol className="list-decimal list-inside mt-2">
-              <li>
+              <p className="mt-2">
+                Or if you prefer using curl, follow the same steps with the{" "}
                 <a
-                  href="https://github.com/louis030195/screen-pipe/blob/main/screenpipe-server/src/db.rs"
+                  href="https://github.com/louis030195/screen-pipe/blob/main/screenpipe-server/src/server.rs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-500 hover:underline"
                 >
-                  Go to the database schema
-                </a>
-              </li>
-              <li>Copy the entire page (Cmd+A, Cmd+C)</li>
-              <li>Paste into ChatGPT (Cmd+V)</li>
-              <li>
-                Ask: &quot;give me 10 sqlite query CLI to look up my data.
-              </li>
-            </ol>
+                  server.rs file
+                </a>{" "}
+                and ask ChatGPT for curl commands to interact with the API.
+              </p>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

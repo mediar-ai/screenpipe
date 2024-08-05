@@ -7,22 +7,15 @@
   ],
   "permissions": [
     "notification:default",
-    "path:default",
-    "event:default",
-    "window:default",
-    "app:default",
-    "resources:default",
-    "menu:default",
-    "tray:default",
+    "core:resources:default",
+    "core:menu:default",
+    "core:tray:default",
     "shell:default",
-    "shell:allow-open",
     "store:allow-get",
     "store:allow-set",
     "store:allow-save",
     "store:allow-load",
     "shell:allow-open",
-    "fs:default",
-    "fs:allow-read-file",
     "fs:allow-watch",
     "fs:default",
     "fs:allow-read-file",
@@ -30,7 +23,6 @@
     "fs:read-dirs",
     "fs:allow-copy-file",
     "fs:allow-exists",
-    "fs:allow-watch",
     "fs:allow-read-text-file",
     "fs:allow-create",
     "fs:allow-mkdir",
@@ -65,9 +57,6 @@
           "path": "$HOME/.screenpipe/*"
         },
         {
-          "path": "$HOME/.screenpipe/*"
-        },
-        {
           "path": "$APP/*"
         }
       ]
@@ -95,6 +84,7 @@
     "os:default",
     "os:allow-arch",
     "os:allow-hostname",
-    "os:allow-os-type"
+    "os:allow-os-type",
+    "core:path:default"
   ]
 }

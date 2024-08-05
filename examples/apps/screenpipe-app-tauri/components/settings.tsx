@@ -248,66 +248,6 @@ export function Settings({ className }: { className?: string }) {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-
-              <div className="flex flex-col items-center space-y-2">
-                <div className="flex items-center space-x-4">
-                  <Switch
-                    id="use-cloud-audio"
-                    checked={localSettings.useCloudAudio}
-                    onCheckedChange={handleCloudAudioToggle}
-                    disabled={isLoading}
-                  />
-                  <Label
-                    htmlFor="use-cloud-audio"
-                    className="flex items-center space-x-2"
-                  >
-                    Use Cloud Audio Processing
-                  </Label>
-                  {isLoading && (
-                    <div className="ml-4 h-[24px] flex flex-row items-center flex-1 space-y-2 overflow-hidden px-1">
-                      {spinner}
-                    </div>
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground mt-1 text-center">
-                  <p>
-                    Toggle to use cloud-based audio processing instead of local
-                    processing. Cloud processing may provide better accuracy but
-                    requires an internet connection. This will restart
-                    screenpipe background process.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col items-center space-y-2">
-                <div className="flex items-center space-x-4">
-                  <Switch
-                    id="use-cloud-ocr"
-                    checked={localSettings.useCloudOcr}
-                    onCheckedChange={handleCloudOCRToggle}
-                    disabled={isLoading}
-                  />
-                  <Label
-                    htmlFor="use-cloud-ocr"
-                    className="flex items-center space-x-2"
-                  >
-                    Use Cloud OCR Processing
-                  </Label>
-                  {isLoading && (
-                    <div className="ml-4 h-[24px] flex flex-row items-center flex-1 space-y-2 overflow-hidden px-1">
-                      {spinner}
-                    </div>
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground mt-1 text-center">
-                  <p>
-                    Toggle to use cloud-based OCR processing instead of local
-                    processing. Cloud processing may provide better accuracy but
-                    requires an internet connection. This will restart
-                    screenpipe background process.
-                  </p>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>

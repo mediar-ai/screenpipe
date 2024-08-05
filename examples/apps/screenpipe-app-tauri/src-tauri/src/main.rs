@@ -4,7 +4,6 @@
 use log::{debug, error, info, LevelFilter};
 use logs::MultiWriter;
 use tauri::Config;
-use tauri_plugin_shell::ShellExt;
 
 use serde_json::Value;
 use std::env;
@@ -31,141 +30,6 @@ mod logs;
 
 struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
 
-#[tauri::command]
-async fn is_running_multiple_instances(
-    _state: State<'_, SidecarState>,
-    _app: tauri::AppHandle,
-) -> Result<u32, String> {
-    debug!("is_running_multiple_instances");
-
-    // list screenpipe processes
-    let output = if cfg!(windows) {
-        tokio::process::Command::new("tasklist")
-            .output()
-            .await
-            .map_err(|e| e.to_string())?
-    } else {
-        tokio::process::Command::new("ps")
-            .arg("-e")
-            .arg("-o")
-            .arg("pid,comm")
-            .output()
-            .await
-            .map_err(|e| e.to_string())?
-    };
-
-    // filter by screenpipe
-    let output = String::from_utf8_lossy(&output.stdout);
-    let lines = output.split('\n');
-    let mut count = 0;
-    for line in lines {
-        debug!("line: {}", line);
-        if line.contains("screenpipe") {
-            count += 1;
-        }
-    }
-
-    Ok(count)
-}
-
-#[tauri::command]
-async fn kill_all_sreenpipes(
-    state: State<'_, SidecarState>,
-    _app: tauri::AppHandle,
-) -> Result<(), String> {
-    debug!("Killing screenpipe");
-
-    if let Some(child) = state.0.lock().unwrap().take() {
-        child.kill().map_err(|e| e.to_string())?;
-    }
-    // hard kill the sidecar on port 3030
-    let _ = tokio::process::Command::new("pkill")
-        .arg("-f")
-        .arg("screenpipe")
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn spawn_screenpipe(
-    state: State<'_, SidecarState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let sidecar_running = state.0.lock().unwrap().is_some();
-    if !sidecar_running {
-        // Spawn the sidecar
-        let child = spawn_sidecar(&app)?;
-        // Update the state after spawning
-        state.0.lock().unwrap().replace(child);
-    }
-    debug!("Spawned sidecar thru cli");
-    Ok(())
-}
-
-fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    let sidecar = app.shell().sidecar("screenpipe").unwrap();
-    // Get the current settings
-    let stores = app.state::<StoreCollection<Wry>>();
-    let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-
-    let path = base_dir.join("store.bin");
-
-    let use_cloud_audio = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("useCloudAudio")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true)) // Default to true if not set
-    })
-    .map_err(|e| e.to_string())?;
-    let use_cloud_ocr = with_store(app.clone(), stores, path, |store| {
-        Ok(store
-            .get("useCloudOcr")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true)) // Default to true if not set
-    })
-    .map_err(|e| e.to_string())?;
-
-    let data_dir_str = base_dir.to_string_lossy();
-    let mut args = vec![
-        "--port",
-        "3030",
-        "--debug",
-        // "--self-healing",
-        "--data-dir",
-        &data_dir_str,
-    ];
-    if use_cloud_audio {
-        args.push("--cloud-audio-on");
-    }
-    if use_cloud_ocr {
-        args.push("--cloud-ocr-on");
-    }
-
-    // hardcode TESSDATA_PREFIX for windows
-    if cfg!(windows) {
-        let exe_dir = env::current_exe()
-            .expect("Failed to get current executable path")
-            .parent()
-            .expect("Failed to get parent directory of executable")
-            .to_path_buf();
-        let tessdata_path = exe_dir.join("tessdata");
-        let c = sidecar.env("TESSDATA_PREFIX", tessdata_path).args(&args);
-
-        let (_, child) = c.spawn().map_err(|e| e.to_string())?;
-
-        debug!("Spawned sidecar with args: {:?}", args);
-
-        return Ok(child);
-    }
-
-    let (_, child) = sidecar.args(&args).spawn().map_err(|e| e.to_string())?;
-
-    debug!("Spawned sidecar with args: {:?}", args);
-
-    Ok(child)
-}
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
@@ -187,7 +51,7 @@ async fn main() {
         ..Default::default()
       }));
 
-    let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
+      let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
@@ -197,17 +61,11 @@ async fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_fs::init())
-        // .plugin(tauri_plugin_cli::init())
+        .manage(sidecar_state)
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
         ))
-        .manage(sidecar_state)
-        .invoke_handler(tauri::generate_handler![
-            spawn_screenpipe,
-            kill_all_sreenpipes,
-            is_running_multiple_instances
-        ])
         .setup(move |app| {
             // run this on windows only
             if cfg!(windows) {
@@ -233,7 +91,6 @@ async fn main() {
                 autostart_manager.is_enabled().unwrap()
             );
             // Disable autostart
-            // let _ = autostart_manager.disable();
             let app_handle = app.handle().clone();
 
             let base_dir =
@@ -289,7 +146,6 @@ async fn main() {
                     if store.keys().count() == 0 {
                         // Set default values
                         store.insert("analyticsEnabled".to_string(), Value::Bool(true))?;
-                        store.insert("useCloudAudio".to_string(), Value::Bool(true))?;
                         store.insert(
                             "config".to_string(),
                             serde_json::to_value(Config::default())?,
@@ -323,13 +179,6 @@ async fn main() {
 
                 Ok(())
             });
-
-            // Spawn the sidecar initially
-            let sidecar_state = app.state::<SidecarState>();
-            let app_handle = app.handle().clone();
-            let child = spawn_sidecar(&app_handle).expect("Failed to spawn sidecar");
-            let mut sidecar = sidecar_state.0.lock().unwrap();
-            *sidecar = Some(child);
 
             Ok(())
         })
