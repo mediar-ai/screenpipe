@@ -179,6 +179,7 @@ sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions O
             className={`ml-1 w-2 h-2 rounded-full ${getStatusColor(
               health.status
             )} inline-block ${
+              // @ts-ignore
               health.status === "Unhealthy" || health.status === "Error"
                 ? "animate-pulse"
                 : ""
