@@ -11,13 +11,7 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": [
-      "nsis",
-      "deb",
-      "rpm",
-      "dmg",
-      "app"
-    ],
+    "targets": "all",
     "externalBin": [],
     "icon": [
       "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",
