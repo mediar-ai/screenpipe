@@ -1,3 +1,4 @@
+"use client";
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,7 @@ export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [currentPlatform, setCurrentPlatform] = React.useState<string>("");
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalSettings({ ...localSettings, openaiApiKey: e.target.value });
@@ -42,53 +44,9 @@ export function Settings({ className }: { className?: string }) {
     updateSettings({ ...localSettings, useOllama: checked });
   };
 
-  const handleCloudAudioToggle = async (checked: boolean) => {
-    if (isLoading) return;
-    setIsLoading(true);
-    try {
-      setLocalSettings({ ...localSettings, useCloudAudio: checked });
-      await updateSettings({ ...localSettings, useCloudAudio: checked });
-      // Restart screenpipe with new settings
-      await restartScreenpipe();
-      // user feedback
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    } catch (error) {
-      console.error("Failed to update cloud audio setting:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCloudOCRToggle = async (checked: boolean) => {
-    if (isLoading) return;
-    setIsLoading(true);
-    try {
-      setLocalSettings({ ...localSettings, useCloudOcr: checked });
-      await updateSettings({ ...localSettings, useCloudOcr: checked });
-      // Restart screenpipe with new settings
-      await restartScreenpipe();
-      // user feedback
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    } catch (error) {
-      console.error("Failed to update cloud OCR setting:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const restartScreenpipe = async () => {
-    try {
-      await invoke("kill_all_sreenpipes");
-      // sleep 1s
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      await invoke("spawn_screenpipe");
-    } catch (error) {
-      console.error("Failed to restart screenpipe:", error);
-    }
-  };
-
   React.useEffect(() => {
     setLocalSettings(settings);
+    setCurrentPlatform(platform());
   }, [settings]);
 
   return (
@@ -212,7 +170,7 @@ export function Settings({ className }: { className?: string }) {
                       ),
                     }}
                   >
-                    {platform() === "windows"
+                    {currentPlatform === "windows"
                       ? "You need to [install Ollama](https://ollama.com/) and run `set OLLAMA_ORIGINS=* && ollama run llama3.1` first. Currently only supports Llama 3.1"
                       : "You need to [install Ollama](https://ollama.com/) and run `ollama run llama3.1` first. Currently only supports Llama 3.1"}
                   </MemoizedReactMarkdown>
