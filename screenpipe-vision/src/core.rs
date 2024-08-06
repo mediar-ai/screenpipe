@@ -15,11 +15,11 @@ use xcap::{Monitor, Window};
 use crate::utils::perform_ocr_windows;
 use crate::utils::OcrEngine;
 use crate::utils::{
-    capture_screenshot, compare_with_previous_image, perform_ocr_cloud, perform_ocr_tesseract,
+    capture_screenshot, compare_with_previous_image, perform_ocr_tesseract,
     save_text_files,
 };
 use rusty_tesseract::{Data, DataOutput}; // Add this import
-
+use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 
 pub struct DataOutputWrapper {
     pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,

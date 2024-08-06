@@ -171,7 +171,7 @@ async fn record_video(
                             frame_id.to_string(),
                             frame.text.clone(),
                             uid, // Pass the UID to the function
-                        ) {
+                        ).await {
                             error!("Failed to send screen data to friend wearable: {}", e);
                         } else {
                             debug!("Sent screen data to friend wearable for frame {}", frame_id);
@@ -361,7 +361,7 @@ async fn process_audio_result(
                         audio_chunk_id.to_string(),
                         transcription.clone(),
                         uid, // Pass the UID to the function
-                    ) {
+                    ).await {
                         error!("Failed to send data to friend wearable: {}", e);
                     } else {
                         debug!(
