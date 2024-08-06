@@ -125,6 +125,22 @@ pub async fn continuous_capture(
             &mut max_avg_value,
         )
         .await;
+
+        // Account for situation when there is no previous image
+        let current_average = if previous_image.is_none() {
+            1.0 // Default value to ensure the frame is processed
+        } else {
+            current_average
+        };
+
+        // Skip the frame if the current average difference is less than 0.006
+        if current_average < 0.006 {
+            debug!("Skipping frame {} due to low average difference: {:.3}", frame_counter, current_average);
+            frame_counter += 1;
+            tokio::time::sleep(interval).await;
+            continue;
+        }
+
         if current_average > max_avg_value {
             max_average = Some(MaxAverageFrame {
                 image: Arc::new(image.clone()),
@@ -177,6 +193,7 @@ pub async fn continuous_capture(
                     ocr_task_running_clone.store(false, Ordering::SeqCst);
                 });
 
+                frame_counter = 0; // Reset frame_counter after OCR task is processed
                 // Reset max_average and max_avg_value after spawning the OCR task
                 max_avg_value = 0.0;
             }
