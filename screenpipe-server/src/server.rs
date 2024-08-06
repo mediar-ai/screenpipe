@@ -6,7 +6,6 @@ use axum::{
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
-use tracing::Level;
 
 use crate::{ContentType, DatabaseManager, SearchResult};
 use chrono::{DateTime, Utc};
@@ -25,11 +24,7 @@ use std::{
 };
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
-use tower_http::{
-    cors::CorsLayer,
-    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse},
-    LatencyUnit,
-};
+use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
 use crate::plugin::ApiPluginLayer;
 

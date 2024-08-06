@@ -100,6 +100,9 @@ ${cliInstructions}
     const baseCommand =
       baseInstructions +
       dataDir +
+      (os === "windows"
+        ? "\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir %LOCALAPPDATA%\\screenpipe --ocr-engine windows-native\n"
+        : "") +
       "\n\n# 5. If you've already started Screenpipe, try these debugging commands:\n";
 
     if (os === "windows") {
