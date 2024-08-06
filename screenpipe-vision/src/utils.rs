@@ -243,6 +243,7 @@ pub async fn save_text_files(
 
 #[cfg(target_os = "windows")]
 pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, DataOutput, String) {
+    use std::io::Cursor;
     use windows::{
         Graphics::Imaging::BitmapDecoder,
         Media::Ocr::OcrEngine as WindowsOcrEngine,
