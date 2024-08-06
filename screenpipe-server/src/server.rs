@@ -515,21 +515,11 @@ impl Server {
             .layer(
                 // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs
                 TraceLayer::new_for_http()
-                    .make_span_with(DefaultMakeSpan::new().include_headers(true))
-                    .on_request(DefaultOnRequest::new().level(Level::INFO))
-                    .on_response(
-                        DefaultOnResponse::new()
-                            .level(Level::INFO)
-                            .latency_unit(LatencyUnit::Micros),
-                    ),
+                    .make_span_with(DefaultMakeSpan::new().include_headers(true)),
             )
             .with_state(app_state);
 
         info!("Starting server on {}", self.addr);
-        // info!("Audio devices:");
-        // for (device, control) in device_status.iter() {
-        //     info!("{}: {}", device, control.is_running);
-        // }
 
         match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
             Ok(_) => {

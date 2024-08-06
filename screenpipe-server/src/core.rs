@@ -332,7 +332,7 @@ async fn process_audio_result(
     }
     let transcription = result.transcription.unwrap();
 
-    info!("Inserting audio chunk: {:?}", transcription);
+    info!("Inserting audio chunk: {:?}", result.input.path);
     match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
             // if audio text is empty skip transcription insertion
