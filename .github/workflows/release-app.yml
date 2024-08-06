@@ -2,7 +2,7 @@
 # act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P macos-latest=-self-hosted
 
 # # Run for Linux
-# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P ubuntu-24.04
+# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P ubuntu-22.04
 
 name: Release App
 
@@ -27,7 +27,7 @@ jobs:
           # - platform: "macos-latest" # for Intel based macs.
           #   args: "--target x86_64-apple-darwin --features metal"
           #   target: x86_64-apple-darwin
-          - platform: "ubuntu-24.04" # Ubuntu x86_64
+          - platform: "ubuntu-22.04" # Ubuntu x86_64
             args: "" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA?  --features "openblas"
@@ -92,7 +92,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-24.04'
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
