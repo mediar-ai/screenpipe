@@ -95,7 +95,7 @@ jobs:
         if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libappindicator3-1 libappindicator3-dev
+          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
@@ -181,4 +181,4 @@ jobs:
       #   with:
       #     command: release publish ${{ secrets.CN_APP_SLUG }} --framework tauri
       #     api-key: ${{ secrets.CN_API_KEY }}
-      # basically wait for macos manual add sset 
+      # basically wait for macos manual add sset
