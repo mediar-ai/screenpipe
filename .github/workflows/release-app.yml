@@ -27,8 +27,8 @@ jobs:
           # - platform: "macos-latest" # for Intel based macs.
           #   args: "--target x86_64-apple-darwin --features metal"
           #   target: x86_64-apple-darwin
-          # - platform: "ubuntu-24.04" # Ubuntu x86_64
-          #   args: "" # TODO CUDA
+          - platform: "ubuntu-24.04" # Ubuntu x86_64
+            args: "" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA?  --features "openblas"
             pre-build-args: "" # --openblas

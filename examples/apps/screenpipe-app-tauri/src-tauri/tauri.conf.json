@@ -11,7 +11,11 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": "all",
+    "targets": [
+      "dmg",
+      "appimage",
+      "nsis"
+    ],
     "externalBin": [],
     "icon": [
       "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",
