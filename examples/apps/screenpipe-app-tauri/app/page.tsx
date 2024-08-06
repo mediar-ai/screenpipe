@@ -17,6 +17,7 @@ import NotificationHandler from "@/components/notification-handler";
 import ScreenpipeInstanceChecker from "@/components/screenpipe-instance-checker";
 import Header from "@/components/header";
 import { checkForAppUpdates } from "@/components/updater";
+import UpdateNotification from "@/components/update-notification";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -29,6 +30,7 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center p-8">
       <NotificationHandler />
+      {/* <UpdateNotification checkIntervalHours={3} /> */}
       {/* <ScreenpipeInstanceChecker /> */}
       <Header />
       {settings.isLoading ? (

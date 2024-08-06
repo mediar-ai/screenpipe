@@ -231,6 +231,9 @@ async fn main() -> anyhow::Result<()> {
                 };
                 devices_status.insert(input_device, device_control);
             }
+            // audio output only supported on linux atm
+            // see https://github.com/louis030195/screen-pipe/pull/106
+            #[cfg(target_os = "linux")]
             if let Ok(output_device) = default_output_device() {
                 audio_devices.push(Arc::new(output_device.clone()));
                 let device_control = DeviceControl {
