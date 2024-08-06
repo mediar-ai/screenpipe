@@ -15,6 +15,7 @@ pub struct ResourceMonitor {
     health_check_failures: Mutex<u32>,
     max_health_check_failures: u32,
     restart_sender: Sender<RestartSignal>,
+    is_restarting: Arc<Mutex<bool>>,
     last_restart_attempt: Mutex<Option<Instant>>,
     restart_cooldown: Duration,
 }
@@ -37,6 +38,7 @@ impl ResourceMonitor {
             health_check_failures: Mutex::new(0),
             max_health_check_failures,
             restart_sender,
+            is_restarting: Arc::new(Mutex::new(false)),
             last_restart_attempt: Mutex::new(None),
             restart_cooldown: health_check_interval * 10,
         })
@@ -120,18 +122,16 @@ impl ResourceMonitor {
                         Ok(health_data) => {
                             match health_data.status.as_str() {
                                 "Healthy" => {
-                                    *self.health_check_failures.lock().await = 0;
+                                    let mut failures = self.health_check_failures.lock().await;
+                                    *failures = 0; // Reset failure count on successful health check
                                     debug!("Health check passed: {:?}", health_data);
                                 }
                                 "Loading" => {
                                     debug!("System is still loading: {:?}", health_data);
-                                    // Don't increment failure count, but don't reset it either
                                 }
                                 _ => {
-                                    warn!(
-                                        "Health check returned unhealthy status: {:?}",
-                                        health_data
-                                    );
+                                    warn!("Health check returned unhealthy status");
+                                    debug!("Health data: {:?}", health_data);
                                     self.handle_health_check_failure().await;
                                 }
                             }
@@ -166,10 +166,19 @@ impl ResourceMonitor {
         }
 
         if *failures >= self.max_health_check_failures {
+            let mut is_restarting = self.is_restarting.lock().await;
+            if *is_restarting {
+                warn!("Restart already in progress. Skipping restart attempt.");
+                return;
+            }
+
             let mut last_restart = self.last_restart_attempt.lock().await;
             let now = Instant::now();
 
+            warn!("Last restart: {:?}", last_restart);
+
             if last_restart.map_or(true, |t| now.duration_since(t) > self.restart_cooldown) {
+                *is_restarting = true;
                 warn!("Max health check failures reached. Restarting recording tasks...");
                 if let Err(e) = self
                     .restart_sender
@@ -180,6 +189,17 @@ impl ResourceMonitor {
                 }
                 *failures = 0;
                 *last_restart = Some(now);
+
+                // Clone the necessary data for the spawned task
+                let is_restarting_clone = self.is_restarting.clone();
+                let restart_cooldown = self.restart_cooldown;
+
+                // Set a timer to reset the is_restarting flag after the cooldown period
+                tokio::spawn(async move {
+                    tokio::time::sleep(restart_cooldown).await;
+                    let mut is_restarting = is_restarting_clone.lock().await;
+                    *is_restarting = false;
+                });
             } else {
                 warn!("Restart cooldown in effect. Skipping restart attempt.");
             }

@@ -39,6 +39,13 @@ impl RecordingState {
         let _ = self.cancel_sender.send(true);
     }
 
+    pub fn reset(&mut self) {
+        self.is_running = false;
+        let (new_sender, new_receiver) = watch::channel(false);
+        self.cancel_sender = new_sender;
+        self.cancel_receiver = new_receiver;
+    }
+
     pub fn get_cancel_receiver(&self) -> watch::Receiver<bool> {
         self.cancel_receiver.clone()
     }
@@ -167,7 +174,7 @@ async fn record_video(
         });
     };
 
-    let video_capture = VideoCapture::new(
+    let mut video_capture = VideoCapture::new(
         &output_path,
         fps,
         new_chunk_callback,
@@ -180,6 +187,7 @@ async fn record_video(
             _ = cancel_receiver.changed() => {
                 if *cancel_receiver.borrow() {
                     info!("Video recording cancelled");
+                    video_capture.stop().await;
                     break;
                 }
             }
@@ -259,6 +267,11 @@ async fn record_audio(
             _ = cancel_receiver.changed() => {
                 if *cancel_receiver.borrow() {
                     info!("Audio recording cancelled");
+                    // Stop all devices
+                    while let Some((_, mut device_control)) = audio_devices_control.pop() {
+                        device_control.is_running = false;
+                    }
+
                     // Stop all running audio capture threads
                     for (_, handle) in handles.drain() {
                         handle.abort();

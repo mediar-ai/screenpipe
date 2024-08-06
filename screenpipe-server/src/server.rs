@@ -328,7 +328,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     debug!("Last audio timestamp: {:?}", last_audio);
 
     let now = Utc::now();
-    let threshold = Duration::from_secs(60);
+    let threshold: Duration = Duration::from_secs(60);
     let loading_threshold = Duration::from_secs(120);
 
     let app_start_time = state.app_start_time;

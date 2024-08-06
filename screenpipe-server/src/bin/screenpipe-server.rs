@@ -15,7 +15,7 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use log::{debug, error, info, warn, LevelFilter};
 use screenpipe_audio::{
-    default_input_device, list_audio_devices, parse_audio_device, DeviceControl,
+    default_input_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl,
 };
 use screenpipe_vision::OcrEngine;
 use std::io::Write;
@@ -129,6 +129,27 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 
     fs::create_dir_all(&data_dir)?;
     Ok(base_dir)
+}
+
+fn initialize_audio_devices(
+    audio_devices: &Vec<Arc<AudioDevice>>,
+    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+) {
+    for device in audio_devices {
+        info!("  {}", device);
+
+        let device_control = DeviceControl {
+            is_running: true,
+            is_paused: false,
+        };
+        let device_clone = device.deref().clone();
+        let sender_clone = audio_devices_control.clone();
+
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(15)).await;
+            let _ = sender_clone.push((device_clone, device_control));
+        });
+    }
 }
 
 #[tokio::main]
@@ -256,27 +277,6 @@ async fn main() -> anyhow::Result<()> {
                 devices_status.insert(device, device_control);
             }
         }
-
-        if audio_devices.is_empty() {
-            eprintln!("No audio devices available. Audio recording will be disabled.");
-        } else {
-            info!("Using audio devices:");
-            for device in &audio_devices {
-                info!("  {}", device);
-
-                let device_control = DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                };
-                let device_clone = device.deref().clone();
-                let sender_clone = audio_devices_control.clone();
-                // send signal after everything started
-                tokio::spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(15)).await;
-                    let _ = sender_clone.push((device_clone, device_control));
-                });
-            }
-        }
     }
 
     let (restart_sender, mut restart_receiver) = channel(10);
@@ -313,6 +313,7 @@ async fn main() -> anyhow::Result<()> {
             let recording_state = Arc::clone(&recording_state);
             let recording_state_clone = recording_state.clone();
             let recording_state_clone_2 = recording_state.clone();
+            let recording_state_clone_3 = recording_state.clone();
             let audio_devices_control = audio_devices_control.clone();
             let friend_wearable_uid_clone = friend_wearable_uid.clone();
 
@@ -329,6 +330,9 @@ async fn main() -> anyhow::Result<()> {
                 }
                 state.is_running = true;
             }
+
+            // Reinitialize audio devices on restart
+            initialize_audio_devices(&audio_devices, audio_devices_control.clone());
 
             let recording_task = tokio::spawn(async move {
                 let result = start_continuous_recording(
@@ -353,7 +357,6 @@ async fn main() -> anyhow::Result<()> {
                 state.is_running = false;
             });
 
-
             tokio::select! {
                 _ = recording_task => {
                     debug!("Recording task ended.");
@@ -367,8 +370,16 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // Short delay before restarting to avoid rapid restarts
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            // Wait for the recording task to finish
+            // let _ = tokio::time::timeout(Duration::from_secs(10), recording_task).await;
+
+            // Reset the recording state
+            {
+                let mut state = recording_state_clone_3.lock().await;
+                state.reset();
+            }
+
+            // Cooldown period before attempting to restart
         }
     });
 
