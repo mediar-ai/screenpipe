@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ChatMessage } from "./chat-message-v2";
 import { Message, generateText, nanoid, streamText, tool } from "ai";
 import { createOpenAI, openai } from "@ai-sdk/openai";
-import { ollama } from "ollama-ai-provider-fix"; // ! HACK TEMPORARY
+import { createOllama, ollama } from "ollama-ai-provider"; // ! HACK TEMPORARY
 
 import { IconOpenAI } from "./ui/icons";
 import { spinner } from "./spinner";
@@ -113,9 +113,11 @@ async function generateTextWithRetry(
 export function ChatList({
   apiKey,
   useOllama,
+  ollamaUrl,
 }: {
   apiKey: string;
   useOllama: boolean;
+  ollamaUrl: string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -136,8 +138,11 @@ export function ChatList({
     setInputMessage("");
 
     try {
+      const baseUrl = ollamaUrl.includes("/api")
+        ? ollamaUrl
+        : ollamaUrl + "/api";
       const provider = useOllama
-        ? ollama
+        ? createOllama({ baseURL: baseUrl })
         : createOpenAI({
             apiKey: apiKey,
           });
@@ -147,10 +152,10 @@ export function ChatList({
       // Test Ollama connection
       if (useOllama) {
         try {
-          await fetch("http://localhost:11434/api/tags");
+          await fetch(`${ollamaUrl}/api/tags`);
         } catch (error) {
           console.log("error", error);
-          throw new Error("Cannot reach local Ollama instance");
+          throw new Error("Cannot reach local Ollama instance at " + ollamaUrl);
         }
       }
 
@@ -158,7 +163,7 @@ export function ChatList({
       console.log("model", model);
 
       const text = await generateTextWithRetry({
-        model: useOllama ? ollama(model) : provider(model),
+        model: provider(model),
         tools: {
           query_screenpipe: {
             description:
@@ -243,7 +248,7 @@ export function ChatList({
 
       const { textStream } = useOllama
         ? await streamText({
-            model: ollama(model),
+            model: provider(model),
             prompt: JSON.stringify([
               {
                 role: "user",

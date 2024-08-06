@@ -23,8 +23,6 @@ import { Badge } from "@/components/ui/badge";
 import { MemoizedReactMarkdown } from "./markdown";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { invoke } from "@tauri-apps/api/core";
-import { spinner } from "./spinner";
 import { platform } from "@tauri-apps/plugin-os";
 
 export function Settings({ className }: { className?: string }) {
@@ -42,6 +40,11 @@ export function Settings({ className }: { className?: string }) {
     console.log("checked", checked);
     setLocalSettings({ ...localSettings, useOllama: checked });
     updateSettings({ ...localSettings, useOllama: checked });
+  };
+
+  const handleOllamaUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalSettings({ ...localSettings, ollamaUrl: e.target.value });
+    updateSettings({ ...localSettings, ollamaUrl: e.target.value });
   };
 
   React.useEffect(() => {
@@ -150,6 +153,31 @@ export function Settings({ className }: { className?: string }) {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+                {localSettings.useOllama && (
+                  <div className="w-full max-w-md mt-2">
+                    <div className="flex-col gap-2 mb-4">
+                      <div className="flex items-center gap-4 mb-4">
+                        <Label
+                          htmlFor="ollamaUrl"
+                          className="min-w-[80px] text-right"
+                        >
+                          Ollama URL
+                        </Label>
+                        <Input
+                          id="ollamaUrl"
+                          value={localSettings.ollamaUrl}
+                          onChange={handleOllamaUrlChange}
+                          className="flex-grow"
+                          placeholder="Enter Ollama URL (e.g., http://localhost:11434)"
+                        />
+                      </div>
+                      {/* add small text to indicate only port 11434 is supported for security reasons */}
+                      <p className="mt-1 text-sm text-muted-foreground text-center">
+                        For now only port 11434 is supported for security reasons.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="text-sm text-muted-foreground mt-1">
                   <MemoizedReactMarkdown
                     components={{

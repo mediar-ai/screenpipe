@@ -6,6 +6,7 @@ import { join } from "@tauri-apps/api/path";
 interface Settings {
   openaiApiKey: string;
   useOllama: boolean;
+  ollamaUrl: string;
   isLoading: boolean;
   useCloudAudio: boolean;
   useCloudOcr: boolean;
@@ -17,6 +18,7 @@ export function useSettings() {
   const [settings, setSettings] = useState<Settings>({
     openaiApiKey: "",
     useOllama: false,
+    ollamaUrl: "http://localhost:11434",
     isLoading: true,
     useCloudAudio: false,
     useCloudOcr: false,
@@ -37,13 +39,16 @@ export function useSettings() {
           ((await store!.get("useCloudAudio")) as boolean) ?? false;
         const savedUseCloudOcr =
           ((await store!.get("useCloudOcr")) as boolean) ?? false;
-
+        const savedOllamaUrl =
+          ((await store!.get("ollamaUrl")) as string) ||
+          "http://localhost:11434";
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
           isLoading: false,
           useCloudAudio: savedUseCloudAudio,
           useCloudOcr: savedUseCloudOcr,
+          ollamaUrl: savedOllamaUrl,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -64,6 +69,7 @@ export function useSettings() {
       await store!.set("useOllama", updatedSettings.useOllama);
       await store!.set("useCloudAudio", updatedSettings.useCloudAudio);
       await store!.set("useCloudOcr", updatedSettings.useCloudOcr);
+      await store!.set("ollamaUrl", updatedSettings.ollamaUrl);
       await store!.save();
       setSettings(updatedSettings);
     } catch (error) {

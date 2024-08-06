@@ -82,7 +82,7 @@
     "security": {
       "csp": {
         "default-src": "'self' customprotocol: asset:",
-        "connect-src": "ipc: http://ipc.localhost https://api.openai.com http://localhost:3030 http://127.0.0.1:11434 http://localhost:11434 https://web.crabnebula.cloud https://api.github.com https://github.com https://*.githubusercontent.com https://*.github.com",
+        "connect-src": "ipc: http://ipc.localhost https://api.openai.com http://localhost:3030 https://web.crabnebula.cloud https://api.github.com https://github.com https://*.githubusercontent.com https://*.github.com http://*:11434",
         "font-src": [
           "https://fonts.gstatic.com",
           "tauri://localhost",

@@ -51,12 +51,13 @@ export default function Home() {
         <ChatList
           apiKey={settings.openaiApiKey}
           useOllama={settings.useOllama}
+          ollamaUrl={settings.ollamaUrl}
         />
       ) : (
         <div className="flex flex-col items-center justify-center h-[calc(60vh-200px)]">
           <Card className="w-[350px]">
             <CardHeader>
-              <CardTitle>Welcome to Screenpipe</CardTitle>
+              <CardTitle>Welcome to Screenpipe playground</CardTitle>
               <CardDescription>
                 Make sure to run screenpipe CLI first (check status above).
                 Also, please, set your AI provider settings to ask questions
