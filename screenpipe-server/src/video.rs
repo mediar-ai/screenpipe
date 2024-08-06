@@ -232,12 +232,19 @@ async fn save_frames_as_video(
         // Write encoded frames to FFmpeg
         while let Ok(buffer) = receiver.try_recv() {
             if let Some(stdin) = current_stdin.as_mut() {
-                if let Err(e) = stdin.write_all(buffer.as_slice()).await {
-                    error!("Failed to write frame to ffmpeg: {}", e);
-                    break;
+                match stdin.write_all(buffer.as_slice()).await {
+                    Ok(_) => {
+                        frame_count += 1;
+                        debug!("Wrote frame {} to FFmpeg", frame_count);
+                    }
+                    Err(e) => {
+                        error!("Failed to write frame to ffmpeg: {}", e);
+                        if e.kind() == std::io::ErrorKind::BrokenPipe {
+                            warn!("FFmpeg process may have terminated unexpectedly. Restarting...");
+                            break;
+                        }
+                    }
                 }
-                frame_count += 1;
-                debug!("Wrote frame {} to FFmpeg", frame_count);
 
                 // Flush every second
                 if frame_count % fps as usize == 0 {
