@@ -1,18 +1,12 @@
-<p align="center">
-  <div style="
-    font-family: monospace;
-    font-size: 48px;
-    font-weight: bold;
-    letter-spacing: -0.05em;
-    color: #000000;
-    background-color: transparent;
-    padding: 20px;
-    display: inline-block;
-    text-align: center;
-  ">
-    screenpipe
-  </div>
-</p>
+<pre align="center">
+  <code>
+   ___  ___ _ __ ___  ___ _ __  _ __ (_)_ __   ___ 
+  / __|/ __| '__/ _ \/ _ \ '_ \| '_ \| | '_ \ / _ \
+  \__ \ (__| | |  __/  __/ | | | |_) | | |_) |  __/
+  |___/\___|_|  \___|\___|_| |_| .__/|_| .__/ \___|
+                                |_|    |_|         
+  </code>
+</pre>
 
 <p align="center">
     <a href="https://screenpi.pe" target="_blank">
