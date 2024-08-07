@@ -418,7 +418,7 @@ export function ChatList({
 export function SpinnerMessage() {
   const { settings } = useSettings();
   return (
-    <div className="group relative flex items-start md:-ml-12">
+    <div className="group relative flex items-start ">
       <div className="flex size-[24px] shrink-0 select-none items-center justify-center rounded-md border bg-primary text-primary-foreground shadow-sm">
         {settings.useOllama ? <>🦙</> : <IconOpenAI />}
       </div>

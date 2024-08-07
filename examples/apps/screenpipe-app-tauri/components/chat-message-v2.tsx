@@ -24,7 +24,7 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 
   return (
     <div
-      className={cn("group relative mb-4 flex items-start md:-ml-12 w-full")}
+      className={cn("group relative mb-4 flex items-start  w-full")}
       {...props}
     >
       <div
@@ -52,7 +52,8 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
             p({ children }) {
               return <p className="mb-2 last:mb-0">{children}</p>;
             },
-            a({ node, href, children, ...props }) { // make links open in new tab
+            a({ node, href, children, ...props }) {
+              // make links open in new tab
               return (
                 <a
                   href={href}
