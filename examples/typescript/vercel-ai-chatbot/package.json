@@ -39,6 +39,7 @@
     "next": "14.2.4",
     "next-auth": "5.0.0-beta.4",
     "next-themes": "^0.3.0",
+    "ollama-ai-provider": "^0.11.0",
     "openai": "^4.52.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -9,33 +9,28 @@ import {
   createStreamableValue
 } from 'ai/rsc'
 import { openai } from '@ai-sdk/openai'
+import { ollama } from 'ollama-ai-provider'
 
 import {
   spinner,
   BotCard,
   BotMessage,
-  SystemMessage,
   Stock,
   Purchase
 } from '@/components/stocks'
 
 import { z } from 'zod'
-import { EventsSkeleton } from '@/components/stocks/events-skeleton'
 import { Events } from '@/components/stocks/events'
-import { StocksSkeleton } from '@/components/stocks/stocks-skeleton'
 import { Stocks } from '@/components/stocks/stocks'
-import { StockSkeleton } from '@/components/stocks/stock-skeleton'
-import {
-  formatNumber,
-  runAsyncFnWithoutBlocking,
-  sleep,
-  nanoid
-} from '@/lib/utils'
+import { nanoid } from '@/lib/utils'
 import { saveChat } from '@/app/actions'
 import { SpinnerMessage, UserMessage } from '@/components/stocks/message'
 import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
 import { MemoizedReactMarkdown } from '@/components/markdown'
+
+const useOllama = !!process.env.OLLAMA_HOST
+const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1'
 
 async function submitUserMessage(content: string) {
   'use server'
@@ -58,15 +53,18 @@ async function submitUserMessage(content: string) {
   let textNode: undefined | React.ReactNode
 
   const result = await streamUI({
-    model: openai('gpt-3.5-turbo'),
+    // @ts-expect-error
+    model: useOllama ? ollama(ollamaModel) : openai('gpt-4o'),
     initial: <SpinnerMessage />,
     system: `\
     You are a personal assistant that has access to the history of the laptop screentime and audio of the user. 
-    You should call the user 'My master'
-    Help user find information recorded in the screen, and audio.
-    Once you receive a query your job is to adapt it for keyword search to get the most relevant results from the database.
-    Your responses should be solely based on the information extracted from the database. 
-    Do not include any information from your background knowledge unless explicitly asked. 
+    Rules:
+    - Help user find information recorded in the screen, and audio.
+    - Once you receive a query your job is to adapt it for keyword search to get the most relevant results from the database.
+    - Your responses should be solely based on the information extracted from the database. 
+    - Do not include any information from your background knowledge unless explicitly asked. 
+    - When using tools make sure to provie correct JSON format for the tool call with all the required fields.
+
     `,
     messages: [
       ...aiState.get().messages.map((message: any) => ({
@@ -103,46 +101,63 @@ async function submitUserMessage(content: string) {
     tools: {
       queryScreenpipeAPI: {
         description: `Query the Screenpipe API for OCR that appeared on user's screen and audio transcriptions from their mic. 
-        Rules:
-        - Use the date & time args smartly to get the most relevant results. Current user date & time is ${new Date().toISOString()}
-        - Generate 3-5 queries to get the most relevant results. Use a single keyword that would match the user intent per query
-        - Use only one word per query (in the q field)
-        - Make sure to answer the user question, ignore the data in your prompt not relevant to the user question
+          Rules:
+          - Use single keywords for 'q' to find relevant screen text
+          - Return JSON only, no \`\`\`json wrapper
+          - Current time: ${new Date().toISOString()}. Adjust dates accordingly
+          - Use 2-5 diverse queries for best results
+          - DO NOT ADD QUOTES AROUND THE ARRAY LIKE THIS: ["queries": "[ ... ]"} THIS IS WRONG
+          Example answer from you:
+          {
+            queries: [
+              { "content_type": "audio", "start_time": "2024-03-01T00:00:00Z", "end_time": "2024-03-01T23:59:59Z", "q": "screenpipe" },
+              { "content_type": "ocr", "app_name": "arc", "start_time": "2024-03-01T00:00:00Z", "end_time": "2024-03-01T23:59:59Z", "q": "screenpipe" },
+            ]
+          }
+
         `,
         parameters: z.object({
-          queries: z
-            .array(
-              z.object({
-                query: z
-                  .string()
-                  .describe(
-                    'The search query matching exact keywords. Use a single keyword that best matches the user intent'
-                  ),
-                contentType: z
-                  .enum(['ocr', 'audio'])
-                  .describe(
-                    'The type of content to search for: screenshot data or audio transcriptions'
-                  ),
-                limit: z
-                  .number()
-                  .optional()
-                  .describe(
-                    "Number of results to return (default: 5). Don't return more than 50 results as it will be fed to an LLM"
-                  ),
-                offset: z
-                  .number()
-                  .optional()
-                  .describe('Offset for pagination (default: 0)'),
-                startTime: z
-                  .string()
-                  .optional()
-                  .describe('Start time for search range in ISO 8601 format'),
-                endTime: z
-                  .string()
-                  .optional()
-                  .describe('End time for search range in ISO 8601 format')
-              })
-            )
+          queries: z.array(
+            z.object({
+              q: z
+                .string()
+                .describe(
+                  "The search query matching exact keywords. Use a single keyword that best matches the user intent. This would match either audio transcription or OCR screen text. Example: do not use 'discuss' the user ask about conversation, this is dumb, won't return any result"
+                )
+                .optional(),
+              content_type: z
+                .enum(['ocr', 'audio', 'all'])
+                .default('all')
+                .describe(
+                  'The type of content to search for: screenshot data or audio transcriptions'
+                ),
+              limit: z
+                .number()
+                .default(50)
+                .describe(
+                  "Number of results to return (default: 50). Don't return more than 50 results as it will be fed to an LLM"
+                ),
+              offset: z
+                .number()
+                .default(0)
+                .describe('Offset for pagination (default: 0)'),
+              start_time: z
+                .string()
+                // 1 hour ago
+                .default(new Date(Date.now() - 3600000).toISOString())
+                .describe('Start time for search range in ISO 8601 format'),
+              end_time: z
+                .string()
+                .default(new Date().toISOString())
+                .describe('End time for search range in ISO 8601 format'),
+              app_name: z
+                .string()
+                .describe(
+                  "The name of the app the user was using. This filter out all audio conversations. Only works with screen text. Use this to filter on the app context that would give context matching the user intent. For example 'cursor'. Use lower case. Browser is usually 'arc', 'chrome', 'safari', etc."
+                )
+                .optional()
+            })
+          )
         }),
         generate: async function* ({ queries }) {
           console.log('screenpipe-chatbot will use queries: ', queries)
@@ -160,20 +175,22 @@ async function submitUserMessage(content: string) {
               queries.map(async query => {
                 const {
                   query: q,
-                  contentType,
+                  content_type,
                   limit = 5,
                   offset = 0,
-                  startTime,
-                  endTime
+                  start_time,
+                  end_time,
+                  app_name
                 } = query
                 const url = new URL('http://127.0.0.1:3030/search')
-                url.searchParams.append('q', q)
-                url.searchParams.append('content_type', contentType)
+                if (q) url.searchParams.append('q', q)
+                url.searchParams.append('content_type', content_type)
                 url.searchParams.append('limit', limit.toString())
                 url.searchParams.append('offset', offset.toString())
-                if (startTime) url.searchParams.append('start_time', startTime)
-                if (endTime) url.searchParams.append('end_time', endTime)
-
+                if (start_time)
+                  url.searchParams.append('start_time', start_time)
+                if (end_time) url.searchParams.append('end_time', end_time)
+                if (app_name) url.searchParams.append('app_name', app_name)
                 const response = await fetch(url.toString())
                 if (!response.ok) {
                   throw new Error(
@@ -201,7 +218,8 @@ async function submitUserMessage(content: string) {
             let isStreamingComplete = false
 
             const gpt4Response = await streamUI({
-              model: openai('gpt-4o'),
+              // @ts-expect-error
+              model: useOllama ? ollama(ollamaModel) : openai('gpt-4o'),
               messages: [{ role: 'user', content: prompt }],
               text: ({ content, done, delta }) => {
                 if (done) {
