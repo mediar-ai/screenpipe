@@ -8,8 +8,8 @@ import {
   streamUI,
   createStreamableValue
 } from 'ai/rsc'
-import { openai } from '@ai-sdk/openai'
-import { ollama } from 'ollama-ai-provider'
+import { createOpenAI, openai } from '@ai-sdk/openai'
+import { createOllama, ollama } from 'ollama-ai-provider'
 
 import {
   spinner,
@@ -52,9 +52,21 @@ async function submitUserMessage(content: string) {
   let textStream: undefined | ReturnType<typeof createStreamableValue<string>>
   let textNode: undefined | React.ReactNode
 
+  console.log('screenpipe-chatbot will use content: ', content)
+
+  const baseUrl = process.env.OLLAMA_HOST?.includes('/api')
+    ? process.env.OLLAMA_HOST
+    : process.env.OLLAMA_HOST + '/api'
+  const provider = useOllama
+    ? createOllama({ baseURL: baseUrl })
+    : createOpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      })
+
+  const model = useOllama ? ollamaModel : 'gpt-4o'
+
   const result = await streamUI({
-    // @ts-expect-error
-    model: useOllama ? ollama(ollamaModel) : openai('gpt-4o'),
+    model: provider(model),
     initial: <SpinnerMessage />,
     system: `\
     You are a personal assistant that has access to the history of the laptop screentime and audio of the user. 
@@ -64,6 +76,7 @@ async function submitUserMessage(content: string) {
     - Your responses should be solely based on the information extracted from the database. 
     - Do not include any information from your background knowledge unless explicitly asked. 
     - When using tools make sure to provie correct JSON format for the tool call with all the required fields.
+    - To use tools, only answer with the tool call, do not add any additional text.
 
     `,
     messages: [
@@ -174,7 +187,7 @@ async function submitUserMessage(content: string) {
             const results = await Promise.all(
               queries.map(async query => {
                 const {
-                  query: q,
+                  q,
                   content_type,
                   limit = 5,
                   offset = 0,
@@ -218,8 +231,7 @@ async function submitUserMessage(content: string) {
             let isStreamingComplete = false
 
             const gpt4Response = await streamUI({
-              // @ts-expect-error
-              model: useOllama ? ollama(ollamaModel) : openai('gpt-4o'),
+              model: provider(model),
               messages: [{ role: 'user', content: prompt }],
               text: ({ content, done, delta }) => {
                 if (done) {
