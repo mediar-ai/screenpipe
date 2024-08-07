@@ -1,16 +1,14 @@
- 
 <p align="center">
   <div style="
-    font-family: 'Courier New', monospace;
+    font-family: monospace;
     font-size: 48px;
     font-weight: bold;
-    color: #00ff00;
-    background-color: #000000;
+    letter-spacing: -0.05em;
+    color: #000000;
+    background-color: transparent;
     padding: 20px;
-    border: 2px solid #00ff00;
-    border-radius: 10px;
-    text-shadow: 0 0 5px #00ff00;
-    letter-spacing: 2px;
+    display: inline-block;
+    text-align: center;
   ">
     screenpipe
   </div>
