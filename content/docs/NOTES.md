@@ -6,6 +6,15 @@
 Any other issue? [Will solve your problem in less than 15 min](https://cal.com/louis030195/screenpipe) or [mail me](mailto:louis@screenpi.pe)
 
 
+
+  <details>
+
+  <summary>Permission error in Windows</summary>
+
+  If you run into this error in your CMD terminal using CLI you should run the terminal as administrator (right click on the icon)
+  
+  </details>
+  
   <details>
 
   <summary>`TESSDATA_PREFIX` error</summary>
@@ -15,6 +24,8 @@ Any other issue? [Will solve your problem in less than 15 min](https://cal.com/l
   - Type "environment" in the search bar of Windows, and click environment variables.
   - Click "new" (the first one).
   - The key will be `TESSDATA_PREFIX` and the value will be the path you installed screenpipe (default is `C:\Users\<your username>\AppData\Local\screenpipe`)
+
+  You can also try our experimental Windows OCR engine by adding `--ocr-engine windows-native` which sould solve the above problem too
 
   </details>
 
