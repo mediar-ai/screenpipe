@@ -11,6 +11,7 @@ This folder contains various examples demonstrating the usage of Screen-Pipe in 
 | TypeScript Apple Shortcut | Integration with Apple Shortcuts | [Apple Shortcut](./apple-shortcut) |
 | TypeScript Agent Multi-Turn RAG | Multi-turn Retrieval-Augmented Generation agent | [Agent Multi-Turn RAG](./agent-multi-turn-rag) |
 | TypeScript Vercel AI Chatbot | AI-powered chatbot using Vercel AI SDK | [Vercel AI Chatbot](./vercel-ai-chatbot) |
+| TypeScript Perplexity-alike Asking Confirmation RAG Agent | A Perplexity-inspired RAG agent with user confirmation | [Perplexity RAG Agent](./perplexity-alike-asking-confirmation-rag-agent) |
 
 Each example folder contains its own README with specific instructions on how to set up and run the example.
 
@@ -26,3 +27,4 @@ To run any of these examples:
 ## Contributing
 
 If you have an idea for a new example or want to improve an existing one, feel free to open an issue or submit a pull request!
+
