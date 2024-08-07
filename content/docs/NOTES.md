@@ -6,7 +6,14 @@
 Any other issue? [Will solve your problem in less than 15 min](https://cal.com/louis030195/screenpipe) or [mail me](mailto:louis@screenpi.pe)
 
 
+  <details>
 
+  <summary>WindowsCoreError HRESULT</summary>
+
+  Sometimes this happen when computer goes to sleep for long. Just restart. We're going to make it fix itself automatically soon.
+
+  </details>
+  
   <details>
 
   <summary>Permission error in Windows</summary>
@@ -80,7 +87,7 @@ Any other issue? [Will solve your problem in less than 15 min](https://cal.com/l
 </details>
 
 <details>
-  <summary>Audio does not work</summary>
+  <summary>MacOS Audio does not work</summary>
   
   Make sure to enable permissions in settings. 
   <img width="827" alt="Screenshot 2024-07-24 at 16 08 51" src="https://github.com/user-attachments/assets/799c0834-8d35-476b-80f8-67f94342b891">
@@ -94,7 +101,7 @@ Any other issue? [Will solve your problem in less than 15 min](https://cal.com/l
 </details>
 
 <details>
-  <summary>Screen capture does not work</summary>
+  <summary>MacOS Screen capture does not work</summary>
   
    Make sure to enable permissions in settings. 
   <img width="827" alt="Screenshot 2024-07-24 at 16 08 51" src="https://github.com/user-attachments/assets/799c0834-8d35-476b-80f8-67f94342b891">

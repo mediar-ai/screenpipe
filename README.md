@@ -435,7 +435,7 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 
 ## Status 
 
-Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
+Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop, 24/7.
 
 - [ ] Integrations
     - [x] ollama
@@ -443,19 +443,21 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
     - [x] Friend wearable 
     - [x] [Fileorganizer2000](https://github.com/different-ai/file-organizer-2000)
     - [x] mem0
+    - [x] Brilliant Frames
+    - [x] Vercel AI SDK
     - [ ] supermemory
     - [x] deepgram
     - [x] unstructured
     - [x] excalidraw
     - [x] Obsidian
     - [x] Apple shortcut
-    - [ ] multion
+    - [x] multion
     - [x] iPhone
     - [ ] Android
     - [ ] Camera
     - [ ] Keyboard
     - [ ] Browser
-    - [ ] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort)
+    - [ ] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Deno Typescript engine within screenpipe on your computer
 - [x] screenshots + OCR with different engines to optimise privacy, quality, or energy consumption
   - [x] tesseract
   - [x] Windows native OCR
