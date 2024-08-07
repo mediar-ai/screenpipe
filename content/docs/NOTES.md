@@ -6,7 +6,14 @@
 Any other issue? [Will solve your problem in less than 15 min](https://cal.com/louis030195/screenpipe) or [mail me](mailto:louis@screenpi.pe)
 
 
+  <details>
 
+  <summary>WindowsCoreError HRESULT</summary>
+
+  Sometimes this happen when computer goes to sleep for long. Just restart. We're going to make it fix itself automatically soon.
+
+  </details>
+  
   <details>
 
   <summary>Permission error in Windows</summary>
