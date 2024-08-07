@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { MemoizedReactMarkdown } from "@/components/markdown";
 import { usePipes, Pipe } from "@/lib/hooks/use-pipes";
 import { CodeBlock } from "@/components/ui/codeblock";
@@ -18,7 +18,9 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { Skeleton } from "./ui/skeleton";
 import { PrettyLink } from "@/components/pretty-link";
-
+import { MeetingSummarizer } from "./meeting-summarized";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { open } from "@tauri-apps/plugin-shell";
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
@@ -60,6 +62,7 @@ const PipeDialog: React.FC = () => {
     "https://github.com/different-ai/file-organizer-2000"
   );
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
+  const { settings, updateSettings } = useSettings();
 
   const formatUpdatedTime = (date: string) => {
     const now = new Date();
@@ -69,13 +72,164 @@ const PipeDialog: React.FC = () => {
     return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
   };
 
+  const handleInstall = async (pipe: Pipe) => {
+    // if its file organizer, just open the github url in new tab
+    if (pipe.repository.includes("file-organizer")) {
+      console.log("opening file organizer", pipe.repository);
+      open(pipe.repository);
+      return;
+    }
+
+    const updatedInstalledPipes = [...settings.installedPipes, pipe.name];
+    await updateSettings({ installedPipes: updatedInstalledPipes });
+    setSelectedPipe({ ...pipe });
+  };
+
+  const renderPipeContent = () => {
+    if (!selectedPipe) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full">
+          <p className="text-lg mb-4">no pipe selected</p>
+          <FeatureRequestLink />
+        </div>
+      );
+    }
+
+    if (
+      selectedPipe.name === "Local First Meeting Summarizer" &&
+      settings.installedPipes.includes(selectedPipe.name)
+    ) {
+      return <MeetingSummarizer pipe={selectedPipe} />;
+    }
+
+    const isInstalled = settings.installedPipes.includes(selectedPipe.name);
+
+    return (
+      <>
+        <h2 className="text-2xl font-bold mb-2">{selectedPipe.name}</h2>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <p>downloads: {selectedPipe.downloads}</p>
+            <p>version: {selectedPipe.version}</p>
+            <p>
+              by:{" "}
+              <a
+                href={selectedPipe.authorLink}
+                className="text-blue-500 hover:underline"
+              >
+                {selectedPipe.author}
+              </a>
+            </p>
+            <p>
+              repository:{" "}
+              <a
+                href={selectedPipe.repository}
+                className="text-blue-500 hover:underline"
+              >
+                link
+              </a>
+            </p>
+            <p>
+              last update:{" "}
+              <a
+                href={selectedPipe.repository}
+                className="text-blue-500 hover:underline"
+              >
+                {formatDate(selectedPipe.lastUpdate)}
+              </a>
+            </p>
+          </div>
+        </div>
+        <p className="mb-4">{selectedPipe.description}</p>
+        <div className="flex space-x-2 mb-4">
+          <Button
+            onClick={() => handleInstall(selectedPipe)}
+            disabled={isInstalled}
+          >
+            {isInstalled ? "Installed" : "Install"}
+          </Button>
+          <Button disabled variant="outline">
+            copy share link
+            <Badge variant="secondary" className="ml-2">
+              soon
+            </Badge>
+          </Button>
+          <Button disabled variant="outline">
+            donate
+            <Badge variant="secondary" className="ml-2">
+              soon
+            </Badge>
+          </Button>
+        </div>
+        <Separator className="my-4" />
+        {isInstalled ? (
+          <div className="mt-4">
+            <h3 className="text-xl font-semibold mb-2">Controls</h3>
+            {/* Add controls for the installed pipe here */}
+            <p>Pipe controls will be displayed here.</p>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <h3 className="text-xl font-semibold mb-2">About this pipe</h3>
+            <MemoizedReactMarkdown
+              className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
+              remarkPlugins={[remarkGfm, remarkMath]}
+              components={{
+                p({ children }) {
+                  return <p className="mb-2 last:mb-0">{children}</p>;
+                },
+                code({ node, className, children, ...props }) {
+                  const content = String(children).replace(/\n$/, "");
+                  const match = /language-(\w+)/.exec(className || "");
+
+                  if (!match) {
+                    return (
+                      <code
+                        className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono text-sm"
+                        {...props}
+                      >
+                        {content}
+                      </code>
+                    );
+                  }
+
+                  return (
+                    <CodeBlock
+                      key={Math.random()}
+                      language={(match && match[1]) || ""}
+                      value={content}
+                      {...props}
+                    />
+                  );
+                },
+                img({ src, alt }) {
+                  return (
+                    <img
+                      src={src}
+                      alt={alt}
+                      className="max-w-full h-auto"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.onerror = null;
+                        target.src = "path/to/fallback/image.png"; // Replace with your fallback image
+                      }}
+                    />
+                  );
+                },
+              }}
+            >
+              {selectedPipe.fullDescription.replace(/Â/g, "")}
+            </MemoizedReactMarkdown>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="ghost">Pipe Store</Button>
-        {/* <PrettyLink variant="outline" href="">
-          Pipe Store
-        </PrettyLink> */}
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
         <DialogHeader>
@@ -99,7 +253,7 @@ const PipeDialog: React.FC = () => {
 
           {selectedPipe && <FeatureRequestLink className="w-80" />}
         </DialogHeader>
-        <div className="flex h-[600px]">
+        <div className="flex h-[500px]">
           <div className="w-1/3 pr-4 overflow-y-auto">
             {loading &&
               Array(5)
@@ -110,7 +264,7 @@ const PipeDialog: React.FC = () => {
                   </div>
                 ))}
             {error && <p>error: {error}</p>}
-            {pipes.map((pipe: any) => (
+            {pipes.map((pipe: Pipe) => (
               <Card
                 key={pipe.name}
                 className="cursor-pointer hover:bg-gray-100 mb-2 p-2"
@@ -146,127 +300,8 @@ const PipeDialog: React.FC = () => {
               </Card>
             ))}
           </div>
-          <div className="w-1/2 pl-4 border-l overflow-y-auto">
-            {selectedPipe ? (
-              <>
-                <h2 className="text-2xl font-bold mb-2">{selectedPipe.name}</h2>
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <p>downloads: {selectedPipe.downloads}</p>
-                    <p>version: {selectedPipe.version}</p>
-                    <p>
-                      by:{" "}
-                      <a
-                        href={selectedPipe.authorLink}
-                        className="text-blue-500 hover:underline"
-                      >
-                        {selectedPipe.author}
-                      </a>
-                    </p>
-                    <p>
-                      repository:{" "}
-                      <a
-                        href={selectedPipe.repository}
-                        className="text-blue-500 hover:underline"
-                      >
-                        link
-                      </a>
-                    </p>
-                    <p>
-                      last update:{" "}
-                      <a
-                        href={selectedPipe.repository}
-                        className="text-blue-500 hover:underline"
-                      >
-                        {formatDate(selectedPipe.lastUpdate)}
-                      </a>
-                    </p>
-                  </div>
-                </div>
-                <p className="mb-4">{selectedPipe.description}</p>
-                <div className="flex space-x-2 mb-4">
-                  <Button disabled variant="outline">
-                    install
-                    <Badge variant="secondary" className="ml-2">
-                      soon
-                    </Badge>
-                  </Button>
-                  <Button disabled variant="outline">
-                    copy share link
-                    <Badge variant="secondary" className="ml-2">
-                      soon
-                    </Badge>
-                  </Button>
-                  <Button disabled variant="outline">
-                    donate
-                    <Badge variant="secondary" className="ml-2">
-                      soon
-                    </Badge>
-                  </Button>
-                </div>
-                <Separator className="my-4" />
-                <div className="mt-4">
-                  <h3 className="text-xl font-semibold mb-2">
-                    about this pipe
-                  </h3>
-                  <MemoizedReactMarkdown
-                    className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
-                    remarkPlugins={[remarkGfm, remarkMath]}
-                    components={{
-                      p({ children }) {
-                        return <p className="mb-2 last:mb-0">{children}</p>;
-                      },
-                      code({ node, className, children, ...props }) {
-                        const content = String(children).replace(/\n$/, "");
-                        const match = /language-(\w+)/.exec(className || "");
-
-                        if (!match) {
-                          return (
-                            <code
-                              className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono text-sm"
-                              {...props}
-                            >
-                              {content}
-                            </code>
-                          );
-                        }
-
-                        return (
-                          <CodeBlock
-                            key={Math.random()}
-                            language={(match && match[1]) || ""}
-                            value={content}
-                            {...props}
-                          />
-                        );
-                      },
-                      img({ src, alt }) {
-                        return (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={src}
-                            alt={alt}
-                            className="max-w-full h-auto"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.onerror = null;
-                              target.src = "path/to/fallback/image.png"; // Replace with your fallback image
-                            }}
-                          />
-                        );
-                      },
-                    }}
-                  >
-                    {selectedPipe.fullDescription.replace(/Â/g, "")}
-                  </MemoizedReactMarkdown>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full">
-                <p className="text-lg mb-4">no pipe selected</p>
-                <FeatureRequestLink />
-              </div>
-            )}
+          <div className="w-full pl-4 border-l overflow-y-auto">
+            {renderPipeContent()}
           </div>
         </div>
       </DialogContent>

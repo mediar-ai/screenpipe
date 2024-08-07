@@ -123,6 +123,7 @@ export function ChatList({
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { settings } = useSettings();
 
   const { messagesRef, scrollRef, visibilityRef, isAtBottom, scrollToBottom } =
     useScrollAnchor();
@@ -147,7 +148,7 @@ export function ChatList({
             apiKey: apiKey,
           });
 
-      const model = useOllama ? "llama3.1" : "gpt-4o";
+      const model = settings.aiModel;
 
       // Test Ollama connection
       if (useOllama) {

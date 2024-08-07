@@ -28,7 +28,6 @@ import { platform } from "@tauri-apps/plugin-os";
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
-  const [isLoading, setIsLoading] = React.useState(false);
   const [currentPlatform, setCurrentPlatform] = React.useState<string>("");
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,6 +44,11 @@ export function Settings({ className }: { className?: string }) {
   const handleOllamaUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalSettings({ ...localSettings, ollamaUrl: e.target.value });
     updateSettings({ ...localSettings, ollamaUrl: e.target.value });
+  };
+
+  const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalSettings({ ...localSettings, aiModel: e.target.value });
+    updateSettings({ ...localSettings, aiModel: e.target.value });
   };
 
   React.useEffect(() => {
@@ -71,8 +75,51 @@ export function Settings({ className }: { className?: string }) {
           <DialogDescription>
             Choose your AI provider, enter necessary credentials, and more.
           </DialogDescription>
+          {localSettings.useOllama ? (
+            <p className="text-sm font-medium text-grey-600 dark:text-grey-400">
+              you are now using ollama 🦙
+            </p>
+          ) : (
+            <p className="text-sm font-medium text-grey-600 dark:text-grey-400">
+              you are now using openai 🤖
+            </p>
+          )}
         </DialogHeader>
         <div className="mt-8 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">ai model selection</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <div className="w-full max-w-md">
+                <div className="flex flex-col gap-2 mb-4">
+                  <Label htmlFor="aiModel" className="text-sm font-medium">
+                    {localSettings.useOllama
+                      ? "enter your ollama model:"
+                      : "enter your openai model:"}
+                  </Label>
+                  <Input
+                    autoCorrect="off"
+                    autoComplete="off"
+                    id="aiModel"
+                    value={localSettings.aiModel}
+                    onChange={handleModelChange}
+                    className="w-full"
+                    placeholder={
+                      localSettings.useOllama
+                        ? "e.g., llama3.1"
+                        : "e.g., gpt-4o"
+                    }
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  {localSettings.useOllama
+                    ? "recommended: llama3.1 for ollama"
+                    : "recommended: gpt-4o for openai"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-center">OpenAI</CardTitle>
@@ -173,7 +220,8 @@ export function Settings({ className }: { className?: string }) {
                       </div>
                       {/* add small text to indicate only port 11434 is supported for security reasons */}
                       <p className="mt-1 text-sm text-muted-foreground text-center">
-                        For now only port 11434 is supported for security reasons.
+                        For now only port 11434 is supported for security
+                        reasons.
                       </p>
                     </div>
                   </div>
