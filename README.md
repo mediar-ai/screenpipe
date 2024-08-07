@@ -1,6 +1,19 @@
  
 <p align="center">
-    <img src="https://github.com/louis030195/screen-pipe/assets/25003283/289bbee7-79bb-4251-9516-878a1c40dcd0" width="200"/>
+  <div style="
+    font-family: 'Courier New', monospace;
+    font-size: 48px;
+    font-weight: bold;
+    color: #00ff00;
+    background-color: #000000;
+    padding: 20px;
+    border: 2px solid #00ff00;
+    border-radius: 10px;
+    text-shadow: 0 0 5px #00ff00;
+    letter-spacing: 2px;
+  ">
+    screenpipe
+  </div>
 </p>
 
 <p align="center">
@@ -104,7 +117,7 @@ screenpipe --cloud-audio-on
 ```
 by default screenpipe is using a local model for screen capture OCR processing to use the cloud (through unstructured.io) for better performance use this flag:
 ```bash
-screenpipe --cloud-ocr-on
+screenpipe --ocr-engine unstructured
 ```
 
 you can combine multiple flags if needed
