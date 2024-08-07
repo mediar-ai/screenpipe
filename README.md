@@ -443,13 +443,15 @@ Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
     - [x] Friend wearable 
     - [x] [Fileorganizer2000](https://github.com/different-ai/file-organizer-2000)
     - [x] mem0
+    - [x] Brilliant Frames
+    - [x] Vercel AI SDK
     - [ ] supermemory
     - [x] deepgram
     - [x] unstructured
     - [x] excalidraw
     - [x] Obsidian
     - [x] Apple shortcut
-    - [ ] multion
+    - [x] multion
     - [x] iPhone
     - [ ] Android
     - [ ] Camera
