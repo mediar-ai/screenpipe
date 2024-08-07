@@ -435,7 +435,7 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 
 ## Status 
 
-Alpha: runs on my computer (`Macbook pro m3 32 GB ram`) 24/7.
+Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop, 24/7.
 
 - [ ] Integrations
     - [x] ollama
