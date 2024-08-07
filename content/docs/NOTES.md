@@ -3,17 +3,40 @@
 
 ## Troubleshooting / Product FAQ
 
+Any other issue? [Will solve your problem in less than 15 min](https://cal.com/louis030195/screenpipe) or [mail me](mailto:louis@screenpi.pe)
 
 
-<details>
+  <details>
+
+  <summary>`TESSDATA_PREFIX` error</summary>
+
+  This can happen on Windows. 
   
-<summary>Windows Defender SmartScreen</summary>
+  - Type "environment" in the search bar of Windows, and click environment variables.
+  - Click "new" (the first one).
+  - The key will be `TESSDATA_PREFIX` and the value will be the path you installed screenpipe (default is `C:\Users\<your username>\AppData\Local\screenpipe`)
+
+  </details>
+
+  <details>
+
+  <summary>Windows Defender</summary>
+
+  Windows can sometimes delete screenpipe app, detected as a virus, this is obviously not a virus, and the code is here, open, you can check.
+
+  You can solve this by going to your Defender settings and classify screenpipe as authorized.
+
+  </details>
+
+  <details>
+
+  <summary>Windows Defender SmartScreen</summary>
 
   Windows will ask you this because we didn't sign the app yet. Be reassured, it's open source and secure, we have nothing to hide, press run anyway:
 
   ![image](https://github.com/user-attachments/assets/8e43d2e4-e178-4d3e-8210-712326d59c97)
 
-</details>
+  </details>
 
   <details>
   <summary>I can't install screenpipe</summary>
