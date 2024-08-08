@@ -4,6 +4,8 @@ use std::env;
 fn main() {
     let destination = env::var("DESTINATION").unwrap_or_default();
 
+    println!("cargo:rustc-link-search=native=screenpipe-vision/lib");
+
     if destination == "brew" {
         println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/../lib");
     } else if destination == "tauri" {
