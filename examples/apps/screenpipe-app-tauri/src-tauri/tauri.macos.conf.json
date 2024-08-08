@@ -9,7 +9,8 @@
                 "ffmpeg/lib/libavutil.59.dylib",
                 "ffmpeg/lib/libffmpeg.7.dylib",
                 "ffmpeg/lib/libswresample.5.dylib",
-                "ffmpeg/lib/libswscale.8.dylib"
+                "ffmpeg/lib/libswscale.8.dylib",
+                "../../../../screenpipe-vision/lib/libscreenpipe.dylib"
             ],
             "entitlements": "entitlements.plist",
             "signingIdentity": "-",

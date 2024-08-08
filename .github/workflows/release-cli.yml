@@ -77,8 +77,11 @@ jobs:
 
       - name: Create deployment package
         run: |
-          ls -R target/
-          tar -czf screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release screenpipe
+          mkdir -p screenpipe-${{ env.VERSION }}-${{ matrix.target }}/bin
+          mkdir -p screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib
+          cp target/${{ matrix.target }}/release/screenpipe screenpipe-${{ env.VERSION }}-${{ matrix.target }}/bin/
+          cp target/${{ matrix.target }}/release/libscreenpipe.dylib screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib/
+          tar -czf screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz -C screenpipe-${{ env.VERSION }}-${{ matrix.target }} .
 
       - name: Calculate SHA256
         run: |

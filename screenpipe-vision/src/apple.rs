@@ -2,7 +2,7 @@ use image::DynamicImage;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar};
 
-#[link(name = "ocr")]
+#[link(name = "screenpipe")]
 extern "C" {
     fn perform_ocr(
         image_data: *const c_uchar,

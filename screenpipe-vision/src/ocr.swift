@@ -6,12 +6,12 @@ import Vision
 public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int, height: Int)
   -> UnsafeMutablePointer<CChar>? {
 
-  print("Attempting to create image from raw data")
-  print("Image dimensions: \(width)x\(height)")
+  // print("Attempting to create image from raw data")
+  // print("Image dimensions: \(width)x\(height)")
 
   guard let dataProvider = CGDataProvider(data: Data(bytes: imageData, count: length) as CFData)
   else {
-    print("Failed to create CGDataProvider.")
+    // print("Failed to create CGDataProvider.")
     return strdup("Error: Failed to create CGDataProvider")
   }
 
@@ -30,11 +30,11 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
       intent: .defaultIntent
     )
   else {
-    print("Failed to create CGImage.")
+    // print("Failed to create CGImage.")
     return strdup("Error: Failed to create CGImage")
   }
 
-  print("CGImage created successfully.")
+  // print("CGImage created successfully.")
 
   let semaphore = DispatchSemaphore(value: 0)
   var ocrResult = ""
@@ -43,22 +43,22 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
     defer { semaphore.signal() }
 
     if let error = error {
-      print("Error in text recognition request: \(error)")
+      // print("Error in text recognition request: \(error)")
       ocrResult = "Error: \(error.localizedDescription)"
       return
     }
 
     guard let observations = request.results as? [VNRecognizedTextObservation] else {
-      print("Failed to process image or no text found.")
+      // print("Failed to process image or no text found.")
       ocrResult = "Error: Failed to process image or no text found"
       return
     }
 
-    print("Number of text observations: \(observations.count)")
+    // print("Number of text observations: \(observations.count)")
 
-    for (index, observation) in observations.enumerated() {
+    for (_, observation) in observations.enumerated() {
       guard let topCandidate = observation.topCandidates(1).first else {
-        print("No top candidate for observation \(index)")
+        // print("No top candidate for observation \(index)")
         continue
       }
       ocrResult += "\(topCandidate.string)\n"
@@ -69,10 +69,10 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
 
   let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
   do {
-    print("Performing OCR...")
+    // print("Performing OCR...")
     try handler.perform([request])
   } catch {
-    print("Failed to perform OCR: \(error)")
+    // print("Failed to perform OCR: \(error)")
     return strdup("Error: Failed to perform OCR - \(error.localizedDescription)")
   }
 
@@ -81,6 +81,7 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   return strdup(ocrResult.isEmpty ? "No text found" : ocrResult)
 }
 
-// swiftc -emit-library -o screenpipe-vision/lib/libocr.dylib screenpipe-vision/src/ocr.swift
+// swiftc -emit-library -o screenpipe-vision/lib/libscreenpipe.dylib screenpipe-vision/src/ocr.swift
+
 // or
-// swiftc -emit-library -o /usr/local/lib/libocr.dylib screenpipe-vision/src/ocr.swift
+// swiftc -emit-library -o /usr/local/lib/libscreenpipe.dylib screenpipe-vision/src/ocr.swift
