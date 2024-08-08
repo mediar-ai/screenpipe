@@ -1,13 +1,13 @@
 class Screenpipe < Formula
     desc "Library to build personalized AI powered by what you've seen, said, or heard."
     homepage "https://github.com/louis030195/screen-pipe"
-    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.51/screenpipe-0.1.51-aarch64-apple-darwin.tar.gz"
-    version "0.1.51"
+    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.52/screenpipe-0.1.52-aarch64-apple-darwin.tar.gz"
+    version "0.1.52"
 
     on_macos do
       if Hardware::CPU.arm?
         url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
-        sha256 "cb61fde8e430dd476ce971a106f4e97a7a066c1b58d172de19a8f0bbffbca358" # arm64
+        sha256 "334b4370aa3f6bddf6c282b3a625c04197e6547707a0a4d28f6910542e46dde6" # arm64
       else
         url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
         sha256 "76eb00c7bbbf4c397072534df8c2602df1177657688885f9f4df72054f46b56e" # x86_64
