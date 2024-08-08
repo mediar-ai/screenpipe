@@ -18,7 +18,7 @@ class Screenpipe < Formula
     depends_on "tesseract"
   
     def install
-      bin.install "screenpipe"
+      bin.install Dir["bin/*"]
       lib.install Dir["lib/*"]
     end
   
