@@ -11,7 +11,7 @@ extern "C" {
         height: i32,
     ) -> *mut c_char;
 }
-
+#[cfg(target_os = "macos")]
 pub fn perform_ocr_apple(image: &DynamicImage) -> String {
     let rgba = image.to_rgba8();
     let (width, height) = rgba.dimensions();
