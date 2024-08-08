@@ -144,38 +144,38 @@ impl DatabaseManager {
         tx.commit().await?;
 
         // Now, let's chunk the transcription and insert into chunk tables
-        const CHUNKING_ENGINE: &str = "candle-jina-bert";
-        match text_chunking_local(transcription).await {
-            Ok(chunks) => {
-                info!("Successfully chunked audio transcription into {} chunks", chunks.len());
-                for chunk in chunks.iter() {
-                    if let Err(e) = self.insert_chunked_text(
-                        audio_chunk_id,
-                        chunk,
-                        Utc::now(),
-                        transcription_engine,
-                        CHUNKING_ENGINE,
-                        ContentSource::Audio,
-                    ).await {
-                        error!("Failed to insert chunk into chunked text index: {}", e);
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to chunk audio transcription: {}", e);
-                // Fallback to inserting the whole transcription as a single chunk
-                if let Err(e) = self.insert_chunked_text(
-                    audio_chunk_id,
-                    transcription,
-                    Utc::now(),
-                    transcription_engine,
-                    "No_Chunking",
-                    ContentSource::Audio,
-                ).await {
-                    error!("Failed to insert whole audio transcription into chunked text index: {}", e);
-                }
-            }
-        }
+        // const CHUNKING_ENGINE: &str = "candle-jina-bert";
+        // match text_chunking_local(transcription).await {
+        //     Ok(chunks) => {
+        //         info!("Successfully chunked audio transcription into {} chunks", chunks.len());
+        //         for chunk in chunks.iter() {
+        //             if let Err(e) = self.insert_chunked_text(
+        //                 audio_chunk_id,
+        //                 chunk,
+        //                 Utc::now(),
+        //                 transcription_engine,
+        //                 CHUNKING_ENGINE,
+        //                 ContentSource::Audio,
+        //             ).await {
+        //                 error!("Failed to insert chunk into chunked text index: {}", e);
+        //             }
+        //         }
+        //     }
+        //     Err(e) => {
+        //         error!("Failed to chunk audio transcription: {}", e);
+        //         // Fallback to inserting the whole transcription as a single chunk
+        //         if let Err(e) = self.insert_chunked_text(
+        //             audio_chunk_id,
+        //             transcription,
+        //             Utc::now(),
+        //             transcription_engine,
+        //             "No_Chunking",
+        //             ContentSource::Audio,
+        //         ).await {
+        //             error!("Failed to insert whole audio transcription into chunked text index: {}", e);
+        //         }
+        //     }
+        // }
 
         Ok(())
     }
@@ -275,45 +275,45 @@ impl DatabaseManager {
             .await
             {
                 Ok(Ok(())) => {
-                    debug!("Successfully inserted OCR text, proceeding to chunking");
-                    // Chunk the text before inserting into chunked text index
-                    const CHUNKING_ENGINE: &str = "candle-jina-bert";
-                    match text_chunking_local(text).await {
-                        Ok(chunks) => {
-                            info!("Successfully chunked text into {} chunks", chunks.len());
-                            for chunk in chunks.iter() {
-                                if let Err(e) = self.insert_chunked_text(
-                                    frame_id,
-                                    chunk,
-                                    Utc::now(),
-                                    &format!("{:?}", *ocr_engine),
-                                    CHUNKING_ENGINE,
-                                    ContentSource::Screen,
-                                ).await {
-                                    error!("Failed to insert chunk into chunked text index: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to chunk text: {}", e);
-                            // Fallback to inserting the whole text if chunking fails
-                            debug!("Inserting whole text as a single chunk");
-                            if let Err(e) = self.insert_chunked_text(
-                                frame_id,
-                                text,
-                                Utc::now(),
-                                &format!("{:?}", *ocr_engine),
-                                "No_Chunking",
-                                ContentSource::Screen,
-                            ).await {
-                                error!("Failed to insert whole text into chunked text index: {}", e);
-                            }
-                        }
-                    }
-                    info!(
-                        "Successfully completed OCR text insertion for frame_id: {} on attempt {}",
-                        frame_id, attempt
-                    );
+                    // debug!("Successfully inserted OCR text, proceeding to chunking");
+                    // // Chunk the text before inserting into chunked text index
+                    // const CHUNKING_ENGINE: &str = "candle-jina-bert";
+                    // match text_chunking_local(text).await {
+                    //     Ok(chunks) => {
+                    //         info!("Successfully chunked text into {} chunks", chunks.len());
+                    //         for chunk in chunks.iter() {
+                    //             if let Err(e) = self.insert_chunked_text(
+                    //                 frame_id,
+                    //                 chunk,
+                    //                 Utc::now(),
+                    //                 &format!("{:?}", *ocr_engine),
+                    //                 CHUNKING_ENGINE,
+                    //                 ContentSource::Screen,
+                    //             ).await {
+                    //                 error!("Failed to insert chunk into chunked text index: {}", e);
+                    //             }
+                    //         }
+                    //     }
+                    //     Err(e) => {
+                    //         error!("Failed to chunk text: {}", e);
+                    //         // Fallback to inserting the whole text if chunking fails
+                    //         debug!("Inserting whole text as a single chunk");
+                    //         if let Err(e) = self.insert_chunked_text(
+                    //             frame_id,
+                    //             text,
+                    //             Utc::now(),
+                    //             &format!("{:?}", *ocr_engine),
+                    //             "No_Chunking",
+                    //             ContentSource::Screen,
+                    //         ).await {
+                    //             error!("Failed to insert whole text into chunked text index: {}", e);
+                    //         }
+                    //     }
+                    // }
+                    // info!(
+                    //     "Successfully completed OCR text insertion for frame_id: {} on attempt {}",
+                    //     frame_id, attempt
+                    // );
                     return Ok(());
                 }
                 Ok(Err(e)) => {
