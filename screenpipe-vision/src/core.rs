@@ -11,15 +11,21 @@ use strsim::levenshtein;
 use tokio::sync::{mpsc::Sender, Mutex}; // Corrected import for Mutex
 use xcap::{Monitor, Window};
 
+#[cfg(target_os = "macos")]
+use crate::apple::perform_ocr_apple;
 #[cfg(target_os = "windows")]
 use crate::utils::perform_ocr_windows;
 use crate::utils::OcrEngine;
 use crate::utils::{
-    capture_screenshot, compare_with_previous_image, perform_ocr_tesseract,
-    save_text_files,
+    capture_screenshot, compare_with_previous_image, perform_ocr_tesseract, save_text_files,
 };
-use rusty_tesseract::{Data, DataOutput}; // Add this import
+use rusty_tesseract::{Data, DataOutput};
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
+pub enum ControlMessage {
+    Pause,
+    Resume,
+    Stop,
+}
 
 pub struct DataOutputWrapper {
     pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,
@@ -135,7 +141,10 @@ pub async fn continuous_capture(
 
         // Skip the frame if the current average difference is less than 0.006
         if current_average < 0.006 {
-            debug!("Skipping frame {} due to low average difference: {:.3}", frame_counter, current_average);
+            debug!(
+                "Skipping frame {} due to low average difference: {:.3}",
+                frame_counter, current_average
+            );
             frame_counter += 1;
             tokio::time::sleep(interval).await;
             continue;
@@ -194,7 +203,7 @@ pub async fn continuous_capture(
                 });
 
                 frame_counter = 0; // Reset frame_counter after OCR task is processed
-                // Reset max_average and max_avg_value after spawning the OCR task
+                                   // Reset max_average and max_avg_value after spawning the OCR task
                 max_avg_value = 0.0;
             }
         }
@@ -243,6 +252,23 @@ pub async fn process_ocr_task(
         OcrEngine::WindowsNative => {
             debug!("Windows Native OCR");
             perform_ocr_windows(&image_arc).await
+        }
+        #[cfg(target_os = "macos")]
+        OcrEngine::AppleNative => {
+            debug!("Apple Native OCR");
+            let text = perform_ocr_apple(&image_arc);
+            (
+                text.clone(),
+                DataOutput {
+                    output: String::new(),
+                    data: vec![],
+                },
+                serde_json::json!([{
+                    "text": text,
+                    "confidence": "1.0",
+                }])
+                .to_string(),
+            )
         }
         _ => {
             error!("Unsupported OCR engine");

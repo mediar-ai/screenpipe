@@ -1,5 +1,5 @@
 use clap::Parser;
-use screenpipe_vision::{continuous_capture, get_monitor, OcrEngine};
+use screenpipe_vision::{continuous_capture, core::get_monitor, OcrEngine};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::channel;
 

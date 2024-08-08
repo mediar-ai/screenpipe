@@ -1,4 +1,4 @@
-use crate::core::MaxAverageFrame; // Assuming core.rs is in the same crate under the `core` module
+use crate::core::MaxAverageFrame;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity}; // Added import for Similarity
 use log::{debug, error};
@@ -18,6 +18,7 @@ pub enum OcrEngine {
     Unstructured,
     Tesseract,
     WindowsNative,
+    AppleNative,
 }
 
 impl Default for OcrEngine {
