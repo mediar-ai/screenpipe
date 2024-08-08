@@ -1,6 +1,4 @@
 use crate::core::MaxAverageFrame;
-// Assuming core.rs is in the same crate under the `core` module
-use image::codecs::png::PngEncoder;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity}; // Added import for Similarity
 use log::{debug, error};

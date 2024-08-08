@@ -15,8 +15,7 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use log::{debug, error, info, LevelFilter};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    DeviceControl,
+    default_input_device, list_audio_devices, parse_audio_device, DeviceControl,
 };
 use screenpipe_vision::OcrEngine;
 use std::io::Write;
@@ -235,14 +234,16 @@ async fn main() -> anyhow::Result<()> {
             }
             // audio output only supported on linux atm
             // see https://github.com/louis030195/screen-pipe/pull/106
-            #[cfg(target_os = "linux")]
-            if let Ok(output_device) = default_output_device() {
-                audio_devices.push(Arc::new(output_device.clone()));
-                let device_control = DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                };
-                devices_status.insert(output_device, device_control);
+            if cfg!(target_os = "linux") {
+                use screenpipe_audio::default_output_device;
+                if let Ok(output_device) = default_output_device() {
+                    audio_devices.push(Arc::new(output_device.clone()));
+                    let device_control = DeviceControl {
+                        is_running: true,
+                        is_paused: false,
+                    };
+                    devices_status.insert(output_device, device_control);
+                }
             }
         } else {
             // Use specified devices
