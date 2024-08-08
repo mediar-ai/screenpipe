@@ -11,6 +11,21 @@ use tokio::time::{timeout, Duration as TokioDuration};
 use crate::chunking::text_chunking_local;
 use screenpipe_vision::OcrEngine;
 use std::sync::Arc;
+use screenpipe_integrations::friend_wearable::FriendWearableDatabase;
+use async_trait::async_trait;
+use std::error::Error as StdError;
+use std::fmt;
+
+#[derive(Debug)]
+pub struct DatabaseError(String);
+
+impl fmt::Display for DatabaseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Database error: {}", self.0)
+    }
+}
+
+impl StdError for DatabaseError {}
 
 #[derive(Debug, Serialize)]
 pub enum SearchResult {
@@ -129,7 +144,7 @@ impl DatabaseManager {
         tx.commit().await?;
 
         // Now, let's chunk the transcription and insert into chunk tables
-        const chunking_engine: &str = "candle-jina-bert";
+        const CHUNKING_ENGINE: &str = "candle-jina-bert";
         match text_chunking_local(transcription).await {
             Ok(chunks) => {
                 info!("Successfully chunked audio transcription into {} chunks", chunks.len());
@@ -139,7 +154,7 @@ impl DatabaseManager {
                         chunk,
                         Utc::now(),
                         transcription_engine,
-                        chunking_engine,
+                        CHUNKING_ENGINE,
                         ContentSource::Audio,
                     ).await {
                         error!("Failed to insert chunk into chunked text index: {}", e);
@@ -262,7 +277,7 @@ impl DatabaseManager {
                 Ok(Ok(())) => {
                     debug!("Successfully inserted OCR text, proceeding to chunking");
                     // Chunk the text before inserting into chunked text index
-                    const chunking_engine: &str = "candle-jina-bert";
+                    const CHUNKING_ENGINE: &str = "candle-jina-bert";
                     match text_chunking_local(text).await {
                         Ok(chunks) => {
                             info!("Successfully chunked text into {} chunks", chunks.len());
@@ -272,7 +287,7 @@ impl DatabaseManager {
                                     chunk,
                                     Utc::now(),
                                     &format!("{:?}", *ocr_engine),
-                                    chunking_engine,
+                                    CHUNKING_ENGINE,
                                     ContentSource::Screen,
                                 ).await {
                                     error!("Failed to insert chunk into chunked text index: {}", e);
@@ -767,6 +782,81 @@ impl DatabaseManager {
 
         Ok(results)
     }
+
+    pub async fn get_chunked_data_since_last_request(&self, memory_source: &str, friend_user_id: &str) -> Result<(Vec<String>, i64, i64, DateTime<Utc>, DateTime<Utc>), DatabaseError> {
+        let last_request_info = self.get_last_successful_request_info(memory_source, friend_user_id).await?;
+        let (last_chunk_id, last_timestamp) = last_request_info
+            .map(|(chunk_range, time_range, _)| {
+                let last_chunk_id = chunk_range.split('-').last().unwrap_or("0").parse::<i64>().unwrap_or(0);
+                let last_timestamp = DateTime::parse_from_rfc3339(time_range.split('-').last().unwrap_or("1970-01-01T00:00:00Z"))
+                    .unwrap_or_else(|_| DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z").unwrap())
+                    .with_timezone(&Utc);
+                (last_chunk_id, last_timestamp)
+            })
+            .unwrap_or((0, DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z").unwrap().with_timezone(&Utc)));
+
+        let query = r#"
+            SELECT 
+                GROUP_CONCAT(cti.text, ' ') as texts,
+                MIN(COALESCE(cte.frame_id, cte.audio_chunk_id)) as min_chunk_id,
+                MAX(COALESCE(cte.frame_id, cte.audio_chunk_id)) as max_chunk_id,
+                MIN(cte.timestamp) as min_timestamp,
+                MAX(cte.timestamp) as max_timestamp
+            FROM chunked_text_index cti
+            JOIN chunked_text_entries cte ON cti.text_id = cte.text_id
+            WHERE cte.source = ?1 AND (cte.timestamp > ?2 OR (cte.timestamp = ?2 AND COALESCE(cte.frame_id, cte.audio_chunk_id) > ?3))
+        "#;
+        
+        sqlx::query_as(query)
+            .bind(memory_source)
+            .bind(&last_timestamp.to_rfc3339())
+            .bind(&last_chunk_id.to_string())
+            .fetch_one(&self.pool)
+            .await
+            .map(|row: (String, i64, i64, String, String)| {
+                (
+                    row.0.split(' ').map(String::from).collect(),
+                    row.1,
+                    row.2,
+                    DateTime::parse_from_rfc3339(&row.3).unwrap().with_timezone(&Utc),
+                    DateTime::parse_from_rfc3339(&row.4).unwrap().with_timezone(&Utc),
+                )
+            })
+            .map_err(|e| DatabaseError(e.to_string()))
+    }
+
+    pub async fn get_last_successful_request_info(&self, memory_source: &str, friend_user_id: &str) -> Result<Option<(String, String, String)>, DatabaseError> {
+        let query = r#"
+            SELECT chunk_id_range, timestamp_range, request_id
+            FROM friend_wearable_requests
+            WHERE memory_source = ?1 AND friend_user_id = ?2
+            ORDER BY created_at DESC
+            LIMIT 1
+        "#;
+        sqlx::query_as(query)
+            .bind(memory_source)
+            .bind(friend_user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DatabaseError(e.to_string()))
+    }
+
+    pub async fn insert_friend_wearable_request(&self, request_id: &str, memory_source: &str, chunk_id_range: &str, timestamp_range: &str, friend_user_id: &str) -> Result<(), DatabaseError> {
+        let query = r#"
+            INSERT INTO friend_wearable_requests (request_id, memory_source, chunk_id_range, timestamp_range, friend_user_id)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+        "#;
+        sqlx::query(query)
+            .bind(request_id)
+            .bind(memory_source)
+            .bind(chunk_id_range)
+            .bind(timestamp_range)
+            .bind(friend_user_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| DatabaseError(e.to_string()))
+    }
 }
 
 impl Clone for DatabaseManager {
@@ -789,5 +879,20 @@ impl ToString for ContentSource {
             ContentSource::Screen => "screen".to_string(),
             ContentSource::Audio => "audio".to_string(),
         }
+    }
+}
+
+#[async_trait]
+impl FriendWearableDatabase for DatabaseManager {
+    async fn get_chunked_data_since_last_request(&self, memory_source: &str, friend_user_id: &str) -> Result<(Vec<String>, i64, i64, DateTime<Utc>, DateTime<Utc>), Box<dyn StdError + Send + Sync>> {
+        self.get_chunked_data_since_last_request(memory_source, friend_user_id)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)
+    }
+
+    async fn insert_friend_wearable_request(&self, request_id: &str, memory_source: &str, chunk_id_range: &str, timestamp_range: &str, friend_user_id: &str) -> Result<(), Box<dyn StdError + Send + Sync>> {
+        self.insert_friend_wearable_request(request_id, memory_source, chunk_id_range, timestamp_range, friend_user_id)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)
     }
 }

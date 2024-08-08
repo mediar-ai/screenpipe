@@ -91,6 +91,7 @@ crossbeam = { workspace = true }
 
 # Friend integration
 screenpipe-integrations = { path = "../screenpipe-integrations" }
+async-trait = "0.1.68"
 
 [dev-dependencies]
 tempfile = "3.3.0"

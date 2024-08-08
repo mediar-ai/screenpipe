@@ -7,7 +7,7 @@ use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput, DeviceControl,
     TranscriptionResult,
 };
-use screenpipe_integrations::friend_wearable::send_data_to_friend_wearable;
+use screenpipe_integrations::friend_wearable::{initialize_friend_wearable_loop};
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -54,7 +54,7 @@ pub async fn start_continuous_recording(
     save_text_files: bool,
     cloud_audio: bool,
     ocr_engine: Arc<OcrEngine>,
-    friend_wearable_uid: Option<String>, // Updated parameter
+    friend_wearable_uid: Option<String>,
 ) -> Result<()> {
     info!("Recording now");
 
@@ -68,7 +68,12 @@ pub async fn start_continuous_recording(
     let output_path_video = Arc::clone(&output_path);
     let output_path_audio = Arc::clone(&output_path);
 
-    let friend_wearable_uid_video = friend_wearable_uid.clone(); // Clone for video handle
+    let friend_wearable_uid_video = friend_wearable_uid.clone();
+
+    // Initialize friend wearable loop
+    if let Some(uid) = &friend_wearable_uid {
+        tokio::spawn(initialize_friend_wearable_loop(uid.clone(), Arc::clone(&db)));
+    }
 
     let video_handle = tokio::spawn(async move {
         record_video(
@@ -78,7 +83,7 @@ pub async fn start_continuous_recording(
             is_running_video,
             save_text_files,
             ocr_engine,
-            friend_wearable_uid_video, // Use the cloned version
+            friend_wearable_uid_video,
         )
         .await
     });
@@ -91,8 +96,8 @@ pub async fn start_continuous_recording(
             whisper_sender,
             whisper_receiver,
             audio_devices_control,
-            friend_wearable_uid, // Use the original
-            cloud_audio, // Pass the cloud_audio flag
+            friend_wearable_uid,
+            cloud_audio,
         )
         .await
     });
@@ -118,7 +123,7 @@ async fn record_video(
     is_running: Arc<AtomicBool>,
     save_text_files: bool,
     ocr_engine: Arc<OcrEngine>,
-    friend_wearable_uid: Option<String>, // Updated parameter
+    _friend_wearable_uid: Option<String>, // Add underscore
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -139,7 +144,7 @@ async fn record_video(
         fps,
         new_chunk_callback,
         save_text_files,
-        Arc::clone(&ocr_engine), // Clone the Arc here
+        Arc::clone(&ocr_engine),
     );
 
     while is_running.load(Ordering::SeqCst) {
@@ -162,7 +167,7 @@ async fn record_video(
                             &new_text_json_vs_previous_frame,
                             &raw_data_output_from_ocr,
                             &frame.app_name,
-                            Arc::clone(&ocr_engine), // Clone the Arc here as well
+                            Arc::clone(&ocr_engine),
                         )
                         .await
                     {
@@ -170,29 +175,13 @@ async fn record_video(
                             "Failed to insert OCR text: {}, skipping frame {}",
                             e, frame_id
                         );
-                        continue; // Skip to the next iteration
+                        continue;
                     }
-
-                    // Send data to friend wearable
-                    // if let Some(uid) = &friend_wearable_uid {
-                    //     if let Err(e) = send_data_to_friend_wearable(
-                    //         "screen".to_string(),
-                    //         frame_id.to_string(),
-                    //         frame.text.clone(),
-                    //         uid, // Pass the UID to the function
-                    //     )
-                    //     .await
-                    //     {
-                    //         error!("Failed to send screen data to friend wearable: {}", e);
-                    //     } else {
-                    //         debug!("Sent screen data to friend wearable for frame {}", frame_id);
-                    //     }
-                    // }
                 }
                 Err(e) => {
                     warn!("Failed to insert frame: {}", e);
                     tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue; // Skip to the next iteration
+                    continue;
                 }
             }
         }
@@ -209,13 +198,12 @@ async fn record_audio(
     whisper_sender: UnboundedSender<AudioInput>,
     mut whisper_receiver: UnboundedReceiver<TranscriptionResult>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
-    friend_wearable_uid: Option<String>, // Updated parameter
-    cloud_audio: bool, // Add this parameter
+    friend_wearable_uid: Option<String>,
+    cloud_audio: bool,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
 
     loop {
-        // Non-blocking check for new device controls
         while let Some((audio_device, device_control)) = audio_devices_control.pop() {
             debug!("Received audio device: {}", &audio_device);
             let device_id = audio_device.to_string();
@@ -280,7 +268,6 @@ async fn record_audio(
                         audio_device_clone_2, iteration
                     );
 
-                    // Handle the recording result
                     match result {
                         Ok(file_path) => {
                             info!(
@@ -293,7 +280,7 @@ async fn record_audio(
                                 "Error in record_and_transcribe for device {} (iteration {}): {}, stopping thread",
                                 audio_device, iteration, e
                             );
-                            break; // Stop the loop on first error
+                            break;
                         }
                     }
 
@@ -309,23 +296,20 @@ async fn record_audio(
             handles.insert(device_id, handle);
         }
 
-        // Process existing handles
         handles.retain(|device_id, handle| {
             if handle.is_finished() {
                 info!("Handle for device {} has finished", device_id);
-                false // Remove from HashMap
+                false
             } else {
-                true // Keep in HashMap
+                true
             }
         });
 
-        // Process whisper results
         while let Ok(transcription) = whisper_receiver.try_recv() {
             info!("Received transcription");
             process_audio_result(&db, transcription, friend_wearable_uid.as_deref(), cloud_audio).await;
         }
 
-        // Small delay to prevent busy-waiting
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
@@ -333,8 +317,8 @@ async fn record_audio(
 async fn process_audio_result(
     db: &DatabaseManager,
     result: TranscriptionResult,
-    friend_wearable_uid: Option<&str>, // Updated parameter
-    cloud_audio: bool, // Add this parameter
+    _friend_wearable_uid: Option<&str>, // Add underscore
+    cloud_audio: bool,
 ) {
     if result.error.is_some() || result.transcription.is_none() {
         error!(
@@ -349,7 +333,6 @@ async fn process_audio_result(
     info!("Inserting audio chunk: {:?}", result.input.path);
     match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
-            // if audio text is empty skip transcription insertion
             if transcription.is_empty() {
                 return;
             }
@@ -367,25 +350,6 @@ async fn process_audio_result(
                     "Inserted audio transcription for chunk {} from device {} using {}",
                     audio_chunk_id, result.input.device, transcription_engine
                 );
-
-                // Send data to friend wearable
-                // if let Some(uid) = friend_wearable_uid {
-                //     if let Err(e) = send_data_to_friend_wearable(
-                //         "audio".to_string(),
-                //         audio_chunk_id.to_string(),
-                //         transcription.clone(),
-                //         uid, // Pass the UID to the function
-                //     )
-                //     .await
-                //     {
-                //         error!("Failed to send data to friend wearable: {}", e);
-                //     } else {
-                //         debug!(
-                //             "Sent audio data to friend wearable for chunk {}",
-                //             audio_chunk_id
-                //         );
-                //     }
-                // }
             }
         }
         Err(e) => error!(
