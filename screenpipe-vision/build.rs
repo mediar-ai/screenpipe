@@ -6,9 +6,7 @@ fn main() {
     let destination = env::var("DESTINATION").unwrap_or_default();
 
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-    let lib_path = PathBuf::from(manifest_dir)
-        .join("screenpipe-vision")
-        .join("lib");
+    let lib_path = PathBuf::from(manifest_dir).join("lib");
 
     println!("cargo:rustc-link-search=native={}", lib_path.display());
 
