@@ -36,7 +36,10 @@
 ---
 
 *Latest News* 🔥
-- [2024/07] **The Windows desktop app is here! [Get it now!](https://screenpi.pe)** Due to high demand, we will increase price by 080224.
+- [2024/08] We released the pipe store! Create, share, use plugins that get you the most out of your data in less than 30s, even if you are not technical.
+- [2024/08] We released Apple & Windows Native OCR.
+- [2024/08] **The Linux desktop app is here! [Get it now!](https://screenpi.pe)**.
+- [2024/07] **The Windows desktop app is here! [Get it now!](https://screenpi.pe)**.
 - [2024/07] 🎁 Screenpipe won Friends (the AI necklace) hackathon at AGI House (integrations soon)
 - [2024/07] **We just launched the desktop app! [Download now!](https://screenpi.pe)**
 
