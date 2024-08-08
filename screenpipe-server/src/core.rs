@@ -92,6 +92,7 @@ pub async fn start_continuous_recording(
             whisper_receiver,
             audio_devices_control,
             friend_wearable_uid, // Use the original
+            cloud_audio, // Pass the cloud_audio flag
         )
         .await
     });
@@ -138,7 +139,7 @@ async fn record_video(
         fps,
         new_chunk_callback,
         save_text_files,
-        ocr_engine,
+        Arc::clone(&ocr_engine), // Clone the Arc here
     );
 
     while is_running.load(Ordering::SeqCst) {
@@ -161,6 +162,7 @@ async fn record_video(
                             &new_text_json_vs_previous_frame,
                             &raw_data_output_from_ocr,
                             &frame.app_name,
+                            Arc::clone(&ocr_engine), // Clone the Arc here as well
                         )
                         .await
                     {
@@ -172,20 +174,20 @@ async fn record_video(
                     }
 
                     // Send data to friend wearable
-                    if let Some(uid) = &friend_wearable_uid {
-                        if let Err(e) = send_data_to_friend_wearable(
-                            "screen".to_string(),
-                            frame_id.to_string(),
-                            frame.text.clone(),
-                            uid, // Pass the UID to the function
-                        )
-                        .await
-                        {
-                            error!("Failed to send screen data to friend wearable: {}", e);
-                        } else {
-                            debug!("Sent screen data to friend wearable for frame {}", frame_id);
-                        }
-                    }
+                    // if let Some(uid) = &friend_wearable_uid {
+                    //     if let Err(e) = send_data_to_friend_wearable(
+                    //         "screen".to_string(),
+                    //         frame_id.to_string(),
+                    //         frame.text.clone(),
+                    //         uid, // Pass the UID to the function
+                    //     )
+                    //     .await
+                    //     {
+                    //         error!("Failed to send screen data to friend wearable: {}", e);
+                    //     } else {
+                    //         debug!("Sent screen data to friend wearable for frame {}", frame_id);
+                    //     }
+                    // }
                 }
                 Err(e) => {
                     warn!("Failed to insert frame: {}", e);
@@ -208,6 +210,7 @@ async fn record_audio(
     mut whisper_receiver: UnboundedReceiver<TranscriptionResult>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     friend_wearable_uid: Option<String>, // Updated parameter
+    cloud_audio: bool, // Add this parameter
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
 
@@ -319,7 +322,7 @@ async fn record_audio(
         // Process whisper results
         while let Ok(transcription) = whisper_receiver.try_recv() {
             info!("Received transcription");
-            process_audio_result(&db, transcription, friend_wearable_uid.as_deref()).await;
+            process_audio_result(&db, transcription, friend_wearable_uid.as_deref(), cloud_audio).await;
         }
 
         // Small delay to prevent busy-waiting
@@ -331,6 +334,7 @@ async fn process_audio_result(
     db: &DatabaseManager,
     result: TranscriptionResult,
     friend_wearable_uid: Option<&str>, // Updated parameter
+    cloud_audio: bool, // Add this parameter
 ) {
     if result.error.is_some() || result.transcription.is_none() {
         error!(
@@ -340,6 +344,7 @@ async fn process_audio_result(
         return;
     }
     let transcription = result.transcription.unwrap();
+    let transcription_engine = if cloud_audio { "Deepgram" } else { "Whisper" };
 
     info!("Inserting audio chunk: {:?}", result.input.path);
     match db.insert_audio_chunk(&result.input.path).await {
@@ -350,7 +355,7 @@ async fn process_audio_result(
             }
 
             if let Err(e) = db
-                .insert_audio_transcription(audio_chunk_id, &transcription, 0)
+                .insert_audio_transcription(audio_chunk_id, &transcription, 0, transcription_engine)
                 .await
             {
                 error!(
@@ -359,28 +364,28 @@ async fn process_audio_result(
                 );
             } else {
                 debug!(
-                    "Inserted audio transcription for chunk {} from device {}",
-                    audio_chunk_id, result.input.device
+                    "Inserted audio transcription for chunk {} from device {} using {}",
+                    audio_chunk_id, result.input.device, transcription_engine
                 );
 
                 // Send data to friend wearable
-                if let Some(uid) = friend_wearable_uid {
-                    if let Err(e) = send_data_to_friend_wearable(
-                        "audio".to_string(),
-                        audio_chunk_id.to_string(),
-                        transcription.clone(),
-                        uid, // Pass the UID to the function
-                    )
-                    .await
-                    {
-                        error!("Failed to send data to friend wearable: {}", e);
-                    } else {
-                        debug!(
-                            "Sent audio data to friend wearable for chunk {}",
-                            audio_chunk_id
-                        );
-                    }
-                }
+                // if let Some(uid) = friend_wearable_uid {
+                //     if let Err(e) = send_data_to_friend_wearable(
+                //         "audio".to_string(),
+                //         audio_chunk_id.to_string(),
+                //         transcription.clone(),
+                //         uid, // Pass the UID to the function
+                //     )
+                //     .await
+                //     {
+                //         error!("Failed to send data to friend wearable: {}", e);
+                //     } else {
+                //         debug!(
+                //             "Sent audio data to friend wearable for chunk {}",
+                //             audio_chunk_id
+                //         );
+                //     }
+                // }
             }
         }
         Err(e) => error!(
