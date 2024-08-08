@@ -19,7 +19,7 @@ class Screenpipe < Formula
   
     def install
       bin.install "screenpipe"
-      lib.install "libscreenpipe.dylib"
+      lib.install Dir["lib/*"]
     end
   
     test do
