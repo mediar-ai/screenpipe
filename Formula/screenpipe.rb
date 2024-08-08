@@ -1,31 +1,30 @@
 class Screenpipe < Formula
-    desc "Library to build personalized AI powered by what you've seen, said, or heard."
-    homepage "https://github.com/louis030195/screen-pipe"
-    url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.54/screenpipe-0.1.54-aarch64-apple-darwin.tar.gz"
-    version "0.1.54"
+  desc "Library to build personalized AI powered by what you've seen, said, or heard."
+  homepage "https://github.com/louis030195/screen-pipe"
+  url "https://github.com/louis030195/screen-pipe/releases/download/v0.1.49/screenpipe-0.1.49-aarch64-apple-darwin.tar.gz"
+  version "0.1.49"
 
-    on_macos do
-      if Hardware::CPU.arm?
-        url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
-        sha256 "358f1d5abc2414f956ded0ad100d669876fff853fa00a75e1988c6728f1296c5" # arm64
-      else
-        url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
-        sha256 "378dd5c409a39f166e816526e5207fbc84ef56f42f0c08d9bc45fc4bafebaa21" # x86_64
-      end
-    end
-    
-    depends_on "ffmpeg"
-    depends_on "tesseract"
-  
-    def install
-      bin.install Dir["bin/*"]
-      lib.install Dir["lib/*"]
-    end
-  
-    test do
-      system "#{bin}/screenpipe", "-h"
+  on_macos do
+    if Hardware::CPU.arm?
+      url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
+      sha256 "ba52b189602438147185e4181377cfbe7da7a61fede666c3a009c0eb3a9d6fbc" # arm64
+    else
+      url "https://github.com/louis030195/screen-pipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
+      sha256 "0fc13dcbca83dc22f259011075f4486ed9b769caf96902447e4c5a6942e4f033" # x86_64
     end
   end
+  
+  depends_on "ffmpeg"
+  depends_on "tesseract"
+
+  def install
+      bin.install "screenpipe"
+  end
+
+  test do
+    system "#{bin}/screenpipe", "-h"
+  end
+end
 
 # push stuff
 # VERSION=0.1.35
@@ -67,4 +66,3 @@ git push
 # brew install screenpipe
 
 # todo automate this in the future, not urgent for now ..
-
