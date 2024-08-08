@@ -23,6 +23,14 @@ use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_shell::process::CommandChild;
 
+
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    utils::assets::EmbeddedAssets
+};
+use tauri::image::Image;
+
 mod analytics;
 
 use crate::analytics::start_analytics;
@@ -134,6 +142,37 @@ async fn main() {
             if !path.exists() {
                 let _ = File::create(path.clone()).unwrap();
             }
+
+            // Add System Tray 
+            let toggle = MenuItemBuilder::with_id("toggle", "Screenpipe").build(app)?;
+            let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
+
+            let icon_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("icons")
+                .join("32x32.png");
+
+            let icon = Image::from_path(icon_path).expect("Failed to load icon");
+
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .icon(icon)
+                .on_menu_event(move |_app, event| match event.id().as_ref() {
+                    "toggle" => {
+                        println!("toggle clicked");
+                    }
+                    _ => (),
+                })
+                .on_tray_icon_event(|_tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        println!("tray closed");
+                    }
+                })
+                .build(app)?;
 
             let stores = app.app_handle().state::<StoreCollection<Wry>>();
 
