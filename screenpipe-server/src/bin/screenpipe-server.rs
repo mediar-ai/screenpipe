@@ -34,6 +34,7 @@ enum CliOcrEngine {
     Unstructured,
     Tesseract,
     WindowsNative,
+    AppleNative,
 }
 
 impl From<CliOcrEngine> for CoreOcrEngine {
@@ -42,6 +43,7 @@ impl From<CliOcrEngine> for CoreOcrEngine {
             CliOcrEngine::Unstructured => CoreOcrEngine::Unstructured,
             CliOcrEngine::Tesseract => CoreOcrEngine::Tesseract,
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
+            CliOcrEngine::AppleNative => CoreOcrEngine::AppleNative,
         }
     }
 }
