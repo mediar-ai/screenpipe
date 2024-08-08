@@ -8,6 +8,9 @@ use sqlx::{
 };
 use std::time::Duration;
 use tokio::time::{timeout, Duration as TokioDuration};
+use crate::chunking::text_chunking_local;
+use screenpipe_vision::OcrEngine;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize)]
 pub enum SearchResult {
@@ -26,6 +29,7 @@ pub struct OCRResult {
     pub file_path: String,
     pub offset_index: i64,
     pub app_name: String,
+    pub ocr_engine: String,  // Add this line
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default, Clone, Copy)]
@@ -44,6 +48,7 @@ pub struct AudioResult {
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
+    pub transcription_engine: String, // Add this line
 }
 
 pub struct DatabaseManager {
@@ -104,18 +109,59 @@ impl DatabaseManager {
         audio_chunk_id: i64,
         transcription: &str,
         offset_index: i64,
+        transcription_engine: &str,
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
+
+        // Insert the full transcription
         sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine) VALUES (?1, ?2, ?3, ?4, ?5)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
         .bind(offset_index)
         .bind(Utc::now())
+        .bind(transcription_engine)
         .execute(&mut *tx)
         .await?;
+
+        // Commit the transaction for the full transcription
         tx.commit().await?;
+
+        // Now, let's chunk the transcription and insert into chunk tables
+        const chunking_engine: &str = "candle-jina-bert";
+        match text_chunking_local(transcription).await {
+            Ok(chunks) => {
+                info!("Successfully chunked audio transcription into {} chunks", chunks.len());
+                for chunk in chunks.iter() {
+                    if let Err(e) = self.insert_chunked_text(
+                        audio_chunk_id,
+                        chunk,
+                        Utc::now(),
+                        transcription_engine,
+                        chunking_engine,
+                        ContentSource::Audio,
+                    ).await {
+                        error!("Failed to insert chunk into chunked text index: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to chunk audio transcription: {}", e);
+                // Fallback to inserting the whole transcription as a single chunk
+                if let Err(e) = self.insert_chunked_text(
+                    audio_chunk_id,
+                    transcription,
+                    Utc::now(),
+                    transcription_engine,
+                    "No_Chunking",
+                    ContentSource::Audio,
+                ).await {
+                    error!("Failed to insert whole audio transcription into chunked text index: {}", e);
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -190,12 +236,15 @@ impl DatabaseManager {
         new_text_json_vs_previous_frame: &str,
         raw_data_output_from_ocr: &str,
         app_name: &str,
+        ocr_engine: Arc<OcrEngine>,
     ) -> Result<(), sqlx::Error> {
         const MAX_RETRIES: u32 = 3;
         const TIMEOUT_DURATION: TokioDuration = TokioDuration::from_secs(10);
 
+        debug!("Starting insert_ocr_text for frame_id: {}", frame_id);
+
         for attempt in 1..=MAX_RETRIES {
-            // debug!("Attempt {} for frame_id: {}", attempt, frame_id);
+            debug!("Attempt {} to insert OCR text", attempt);
             match timeout(
                 TIMEOUT_DURATION,
                 self.insert_ocr_text_old(
@@ -205,14 +254,49 @@ impl DatabaseManager {
                     new_text_json_vs_previous_frame,
                     raw_data_output_from_ocr,
                     app_name,
+                    Arc::clone(&ocr_engine),
                 ),
             )
             .await
             {
                 Ok(Ok(())) => {
-                    // Log successful insertion
-                    debug!(
-                        "Successfully inserted OCR text for frame_id: {} on attempt {}",
+                    debug!("Successfully inserted OCR text, proceeding to chunking");
+                    // Chunk the text before inserting into chunked text index
+                    const chunking_engine: &str = "candle-jina-bert";
+                    match text_chunking_local(text).await {
+                        Ok(chunks) => {
+                            info!("Successfully chunked text into {} chunks", chunks.len());
+                            for chunk in chunks.iter() {
+                                if let Err(e) = self.insert_chunked_text(
+                                    frame_id,
+                                    chunk,
+                                    Utc::now(),
+                                    &format!("{:?}", *ocr_engine),
+                                    chunking_engine,
+                                    ContentSource::Screen,
+                                ).await {
+                                    error!("Failed to insert chunk into chunked text index: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to chunk text: {}", e);
+                            // Fallback to inserting the whole text if chunking fails
+                            debug!("Inserting whole text as a single chunk");
+                            if let Err(e) = self.insert_chunked_text(
+                                frame_id,
+                                text,
+                                Utc::now(),
+                                &format!("{:?}", *ocr_engine),
+                                "No_Chunking",
+                                ContentSource::Screen,
+                            ).await {
+                                error!("Failed to insert whole text into chunked text index: {}", e);
+                            }
+                        }
+                    }
+                    info!(
+                        "Successfully completed OCR text insertion for frame_id: {} on attempt {}",
                         frame_id, attempt
                     );
                     return Ok(());
@@ -244,10 +328,7 @@ impl DatabaseManager {
             }
         }
 
-        debug!(
-            "Exiting insert_ocr_text for frame_id: {} with PoolTimedOut error",
-            frame_id
-        );
+        error!("Exiting insert_ocr_text for frame_id: {} with PoolTimedOut error", frame_id);
         Err(sqlx::Error::PoolTimedOut)
     }
 
@@ -259,6 +340,7 @@ impl DatabaseManager {
         new_text_json_vs_previous_frame: &str,
         raw_data_output_from_ocr: &str,
         app_name: &str,
+        ocr_engine: Arc<OcrEngine>,
     ) -> Result<(), sqlx::Error> {
         // debug!("Starting insert_ocr_text_old for frame_id: {}", frame_id);
 
@@ -275,17 +357,19 @@ impl DatabaseManager {
         );
 
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, new_text_json_vs_previous_frame, raw_data_output_from_OCR, app_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, new_text_json_vs_previous_frame, raw_data_output_from_OCR, app_name, ocr_engine) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
             .bind(new_text_json_vs_previous_frame)
             .bind(raw_data_output_from_ocr)
             .bind(app_name)
+            .bind(format!("{:?}", *ocr_engine))
             .execute(&mut *tx)
             .await?;
 
         tx.commit().await?;
+        debug!("OCR text inserted into db successfully");
         Ok(())
     }
 
@@ -363,7 +447,8 @@ impl DatabaseManager {
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index,
-                frames.app_name
+                frames.app_name,
+                ocr_text.ocr_engine
             FROM 
                 ocr_text
             JOIN 
@@ -418,7 +503,8 @@ impl DatabaseManager {
                 audio_transcriptions.transcription,
                 audio_transcriptions.timestamp,
                 audio_chunks.file_path,
-                audio_transcriptions.offset_index
+                audio_transcriptions.offset_index,
+                audio_transcriptions.transcription_engine
             FROM 
                 audio_transcriptions
             JOIN 
@@ -609,12 +695,99 @@ impl DatabaseManager {
 
         Ok((latest_frame.map(|f| f.0), latest_audio.map(|a| a.0)))
     }
+
+    // Modify the insert_chunked_text method to handle both OCR and audio transcriptions
+    pub async fn insert_chunked_text(
+        &self,
+        id: i64,
+        text: &str,
+        timestamp: DateTime<Utc>,
+        engine: &str,
+        chunking_engine: &str,
+        source: ContentSource,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Insert or get the text_id
+        let text_id: i64 = sqlx::query_scalar(
+            "INSERT INTO chunked_text_index (text) VALUES (?1) ON CONFLICT(text) DO UPDATE SET text=text RETURNING text_id",
+        )
+        .bind(text)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // Insert the entry into chunked_text_entries
+        let query = match source {
+            ContentSource::Audio => "INSERT INTO chunked_text_entries (text_id, audio_chunk_id, timestamp, engine, chunking_engine, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            ContentSource::Screen => "INSERT INTO chunked_text_entries (text_id, frame_id, timestamp, engine, chunking_engine, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        };
+
+        sqlx::query(query)
+            .bind(text_id)
+            .bind(id)
+            .bind(timestamp)
+            .bind(engine)
+            .bind(chunking_engine)
+            .bind(source.to_string())
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn search_chunked_text(
+        &self,
+        query: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(i64, DateTime<Utc>)>, sqlx::Error> {
+        let sql = r#"
+            SELECT 
+                chunked_text_entries.frame_id,
+                chunked_text_entries.timestamp
+            FROM 
+                chunked_text_index
+            JOIN 
+                chunked_text_entries ON chunked_text_index.text_id = chunked_text_entries.text_id
+            WHERE 
+                chunked_text_index.text LIKE '%' || ?1 || '%'
+                AND (?2 IS NULL OR chunked_text_entries.timestamp >= ?2)
+                AND (?3 IS NULL OR chunked_text_entries.timestamp <= ?3)
+            ORDER BY 
+                chunked_text_entries.timestamp DESC
+        "#;
+
+        let results = sqlx::query_as::<_, (i64, DateTime<Utc>)>(sql)
+            .bind(query)
+            .bind(start_time)
+            .bind(end_time)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(results)
+    }
 }
 
 impl Clone for DatabaseManager {
     fn clone(&self) -> Self {
         DatabaseManager {
             pool: self.pool.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContentSource {
+    Screen,
+    Audio,
+}
+
+impl ToString for ContentSource {
+    fn to_string(&self) -> String {
+        match self {
+            ContentSource::Screen => "screen".to_string(),
+            ContentSource::Audio => "audio".to_string(),
         }
     }
 }

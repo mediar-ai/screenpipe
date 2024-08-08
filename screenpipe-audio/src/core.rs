@@ -300,14 +300,14 @@ pub async fn record_and_transcribe(
     // Signal the recording thread to stop
     is_running.store(false, Ordering::Relaxed); // TODO: could also just kill the trhead..
 
-    debug!("Sending audio to whisper");
+    debug!("Sending audio to audio model");
     if let Err(e) = whisper_sender.send(AudioInput {
         path: output_path_clone_2.to_str().unwrap().to_string(),
         device: audio_device.to_string(),
     }) {
-        error!("Failed to send audio to whisper: {}", e);
+        error!("Failed to send audio to audio model: {}", e);
     }
-    debug!("Sent audio to whisper");
+    debug!("Sent audio to audio model");
 
     Ok(output_path_clone_2.to_path_buf())
 }
