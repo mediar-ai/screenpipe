@@ -1,10 +1,16 @@
 use std::env;
+use std::path::PathBuf;
 
 #[cfg(target_os = "macos")]
 fn main() {
     let destination = env::var("DESTINATION").unwrap_or_default();
 
-    println!("cargo:rustc-link-search=native=screenpipe-vision/lib");
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let lib_path = PathBuf::from(manifest_dir)
+        .join("screenpipe-vision")
+        .join("lib");
+
+    println!("cargo:rustc-link-search=native={}", lib_path.display());
 
     if destination == "brew" {
         println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/../lib");

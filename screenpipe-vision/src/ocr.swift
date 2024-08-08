@@ -81,7 +81,14 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   return strdup(ocrResult.isEmpty ? "No text found" : ocrResult)
 }
 
-// swiftc -emit-library -o screenpipe-vision/lib/libscreenpipe.dylib screenpipe-vision/src/ocr.swift
+// # Compile for x86_64
+// swiftc -emit-library -target x86_64-apple-macosx10.15 -o libscreenpipe_x86_64.dylib screenpipe-vision/src/ocr.swift
 
-// or
-// swiftc -emit-library -o /usr/local/lib/libscreenpipe.dylib screenpipe-vision/src/ocr.swift
+// # Compile for arm64 (aarch64)
+// swiftc -emit-library -target arm64-apple-macosx11.0 -o libscreenpipe_arm64.dylib screenpipe-vision/src/ocr.swift
+
+// # Combine into a universal binary
+// lipo -create libscreenpipe_x86_64.dylib libscreenpipe_arm64.dylib -output screenpipe-vision/lib/libscreenpipe.dylib
+
+// rm libscreenpipe_x86_64.dylib libscreenpipe_arm64.dylib
+
