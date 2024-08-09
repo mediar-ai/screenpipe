@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use candle::{Device, Tensor, DType};
 use candle_nn::{VarBuilder, Module};
 use candle_transformers::models::jina_bert::{BertModel, Config};
@@ -80,8 +80,25 @@ pub fn text_chunking_simple(text: &str) -> Result<Vec<String>> {
 
         while start < text.len() {
             let end = (start + chunk_size).min(text.len());
-            let chunk = text[start..end].to_string();
-            chunks.push(chunk);
+            
+            // Find a valid char boundary
+            let end = match text[start..].char_indices().take_while(|(i, _)| *i + start <= end).last() {
+                Some((i, _)) => start + i + 1,
+                None => break, // If we can't find a valid boundary, stop processing
+            };
+            
+            if end <= start {
+                // If we couldn't find a valid boundary, skip this character
+                start += 1;
+                continue;
+            }
+
+            // Safely create the chunk
+            match text.get(start..end) {
+                Some(chunk) => chunks.push(chunk.to_string()),
+                None => return Err(anyhow!("Failed to create chunk from indices {} to {}", start, end)),
+            }
+
             start = if end == text.len() { end } else { end - overlap };
         }
     }
