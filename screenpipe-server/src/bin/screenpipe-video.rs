@@ -96,7 +96,6 @@ async fn main() {
                 "timestamp": frame_count as f64 / fps,
                 "ocr_text": frame.text,
                 "text_json": frame.text_json,
-                "new_text_json": frame.new_text_json,
                 "data_output": DataOutputWrapper { data_output: frame.data_output }.to_json(),
             });
 
