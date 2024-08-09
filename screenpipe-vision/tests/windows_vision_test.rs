@@ -33,7 +33,6 @@ mod tests {
             frame_number,
             timestamp,
             tx,
-            &previous_text_json,
             false,
             ocr_engine,
             app_name,
