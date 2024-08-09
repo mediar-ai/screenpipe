@@ -133,18 +133,18 @@ async fn main() {
             }
 
             // Add System Tray
-            let toggle = MenuItemBuilder::with_id("toggle", "Screenpipe").build(app)?;
+            let toggle = MenuItemBuilder::with_id("toggle", "screenpipe").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
 
-            let icon_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("icons")
-                .join("32x32.png");
+            // let icon_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            //     .join("icons")
+            //     .join("32x32.png");
 
-            let icon = Image::from_path(icon_path).expect("Failed to load icon");
+            // let icon = Image::from_path(icon_path).expect("Failed to load icon");
 
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
-                .icon(icon)
+                // .icon(icon)
                 .on_menu_event(move |_app, event| match event.id().as_ref() {
                     "toggle" => {
                         println!("toggle clicked");
@@ -184,7 +184,7 @@ async fn main() {
                 },
             );
 
-            // // Now use the store
+            // Now use the store
             let _ = with_store(app.app_handle().clone(), stores, path, |store| {
                 store.save()?;
 
