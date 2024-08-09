@@ -152,20 +152,12 @@ async fn record_video(
             match db.insert_frame(&frame.app_name).await {
                 Ok(frame_id) => {
                     let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
-                    let new_text_json_vs_previous_frame =
-                        serde_json::to_string(&frame.new_text_json).unwrap_or_default();
-                    let raw_data_output_from_ocr = DataOutputWrapper {
-                        data_output: frame.data_output,
-                    }
-                    .to_json();
 
                     if let Err(e) = db
                         .insert_ocr_text(
                             frame_id,
                             &frame.text,
                             &text_json,
-                            &new_text_json_vs_previous_frame,
-                            &raw_data_output_from_ocr,
                             &frame.app_name,
                             Arc::clone(&ocr_engine),
                         )

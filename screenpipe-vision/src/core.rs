@@ -51,7 +51,6 @@ pub struct CaptureResult {
     pub image: Arc<DynamicImage>,
     pub text: String,
     pub text_json: Vec<HashMap<String, String>>,
-    pub new_text_json: Vec<HashMap<String, String>>,
     pub frame_number: u64,
     pub timestamp: Instant,
     pub data_output: DataOutput,
@@ -64,7 +63,6 @@ impl Clone for CaptureResult {
             image: Arc::clone(&self.image),
             text: self.text.clone(),
             text_json: self.text_json.clone(),
-            new_text_json: self.new_text_json.clone(),
             frame_number: self.frame_number,
             timestamp: self.timestamp,
             data_output: DataOutput {
@@ -113,10 +111,8 @@ pub async fn continuous_capture(
     monitor: Monitor,
 ) {
     debug!("continuous_capture: Starting using monitor: {:?}", monitor);
-    let previous_text_json = Arc::new(Mutex::new(None));
     let ocr_task_running = Arc::new(AtomicBool::new(false));
     let mut frame_counter: u64 = 0;
-    // let start_time = Instant::now();
     let mut previous_image: Option<Arc<DynamicImage>> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
@@ -163,12 +159,9 @@ pub async fn continuous_capture(
         }
 
         previous_image = Some(Arc::new(image.clone()));
-        // debug!("ocr_task_running {} BEFORE if if !ocr_task_running.load(Ordering::SeqCst)", ocr_task_running.load(Ordering::SeqCst));
 
         if !ocr_task_running.load(Ordering::SeqCst) {
-            // debug!("max_avg_frame {} before if let Some(", max_avg_value);
             if let Some(max_avg_frame) = max_average.take() {
-                // Use take() to move out the value
                 let ocr_task_data = OcrTaskData {
                     image: max_avg_frame.image.clone(),
                     frame_number: max_avg_frame.frame_number,
@@ -176,11 +169,9 @@ pub async fn continuous_capture(
                     result_tx: result_tx.clone(),
                 };
 
-                let previous_text_json_clone = previous_text_json.clone();
                 let ocr_task_running_clone = ocr_task_running.clone();
 
                 ocr_task_running.store(true, Ordering::SeqCst);
-                // debug!("ocr_task_running {}", ocr_task_running.load(Ordering::SeqCst));
                 let ocr_engine_clone = ocr_engine.clone();
                 tokio::spawn(async move {
                     let w = Window::all().unwrap().first().unwrap().clone();
@@ -190,9 +181,8 @@ pub async fn continuous_capture(
                         ocr_task_data.frame_number,
                         ocr_task_data.timestamp,
                         ocr_task_data.result_tx,
-                        &previous_text_json_clone,
-                        save_text_files_flag, // Pass the flag here
-                        ocr_engine_clone,     // Pass the cloud_ocr flag here
+                        save_text_files_flag,
+                        ocr_engine_clone,
                         app_name.to_string().to_lowercase(),
                     )
                     .await
@@ -202,8 +192,7 @@ pub async fn continuous_capture(
                     ocr_task_running_clone.store(false, Ordering::SeqCst);
                 });
 
-                frame_counter = 0; // Reset frame_counter after OCR task is processed
-                                   // Reset max_average and max_avg_value after spawning the OCR task
+                frame_counter = 0;
                 max_avg_value = 0.0;
             }
         }
@@ -227,14 +216,12 @@ pub async fn process_ocr_task(
     frame_number: u64,
     timestamp: Instant,
     result_tx: Sender<CaptureResult>,
-    previous_text_json: &Arc<Mutex<Option<Vec<HashMap<String, String>>>>>,
-    save_text_files_flag: bool, // Add this parameter
-    ocr_engine: Arc<OcrEngine>, // Add this parameter
+    save_text_files_flag: bool,
+    ocr_engine: Arc<OcrEngine>,
     app_name: String,
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
 
-    // not to confuse with frame id which is wholly different thing
     debug!(
         "Performing OCR for frame number since beginning of program {}",
         frame_number
@@ -282,7 +269,6 @@ pub async fn process_ocr_task(
         _ => {
             error!("Unsupported OCR engine");
             return Err(std::io::Error::new(
-                // TODO we should use anyhow everywhere for error
                 std::io::ErrorKind::Other,
                 "Unsupported OCR engine",
             ));
@@ -295,51 +281,21 @@ pub async fn process_ocr_task(
             Vec::new()
         });
 
-    let mut previous_text_json = previous_text_json.lock().await;
-    let mut new_text_json = Vec::new();
-    if let Some(prev_json) = &*previous_text_json {
-        for current_record in &current_text_json {
-            let confidence: f64 = current_record["confidence"].parse().unwrap_or(0.0);
-            if confidence > 60.0 {
-                let is_new = prev_json.iter().all(|prev_record| {
-                    let distance = levenshtein(&current_record["text"], &prev_record["text"]);
-                    let threshold = (prev_record["text"].len() as f64 * 0.1).ceil() as usize;
-                    distance > threshold
-                });
-                if is_new {
-                    new_text_json.push(current_record.clone());
-                }
-            }
-        }
-    } else {
-        new_text_json = current_text_json
-            .iter()
-            .filter(|record| record["confidence"].parse::<f64>().unwrap_or(0.0) > 60.0)
-            .cloned()
-            .collect();
-    }
-
-    let mut seen_texts = HashSet::new();
-    new_text_json.retain(|record| seen_texts.insert(record["text"].clone()));
-
     if save_text_files_flag {
         save_text_files(
             frame_number,
-            &new_text_json,
             &current_text_json,
-            &previous_text_json,
+            &current_text_json,
+            &None,
         )
         .await;
     }
-
-    *previous_text_json = Some(current_text_json.clone());
 
     if let Err(e) = result_tx
         .send(CaptureResult {
             image: image_arc.into(),
             text: text.clone(),
             text_json: current_text_json,
-            new_text_json,
             frame_number,
             timestamp,
             data_output,
