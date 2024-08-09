@@ -28,5 +28,5 @@ text_json/
 examples/typescript/vercel-ai-chatbot/package-lock.json
 
 # Unignore
-!screenpipe-vision/lib/libscreenpipe.dylib
+!screenpipe-vision/lib/libscreenpipe*.dylib
 
