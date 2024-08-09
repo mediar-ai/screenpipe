@@ -32,46 +32,60 @@
       "identifier": "fs:scope",
       "allow": [
         {
-          "path": "$XDG_DATA_HOME"
+          "path": "$XDG_DATA_HOME",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$XDG_DATA_HOME/**"
+          "path": "$XDG_DATA_HOME/**",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$LOCALAPPDATA/*"
+          "path": "$LOCALAPPDATA/*",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$LOCALAPPDATA/**"
+          "path": "$LOCALAPPDATA/**",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$APPLOCALDATA/*"
+          "path": "$APPLOCALDATA/*",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$APPLOCALDATA/**"
+          "path": "$APPLOCALDATA/**",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$APPDATA/*"
+          "path": "$APPDATA/*",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$APPDATA/**"
+          "path": "$APPDATA/**",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$APPCONFIG/*"
+          "path": "$APPCONFIG/*",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$RESOURCE/*"
+          "path": "$RESOURCE/*",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$RESOURCE/.screenpipe/*"
+          "path": "$RESOURCE/.screenpipe/*",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$HOME/*"
+          "path": "$HOME/*",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$HOME/.screenpipe/*"
+          "path": "$HOME/.screenpipe/*",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$APP/*"
+          "path": "$APP/*",
+          "requireLiteralLeadingDot": false
         }
       ]
     },
