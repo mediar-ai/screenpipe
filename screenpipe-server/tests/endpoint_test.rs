@@ -7,7 +7,8 @@ mod tests {
     use chrono::{Duration, Utc};
     use crossbeam::queue::SegQueue;
     use screenpipe_server::HealthCheckResponse;
-    use screenpipe_server::{health_check, AppState, DatabaseManager}; // Adjust this import based on your actual module structure
+    use screenpipe_server::{health_check, AppState, DatabaseManager};
+    use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
@@ -99,12 +100,12 @@ mod tests {
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
         let frame_id = db.insert_frame("foo").await.unwrap();
         let _ = db
-            .insert_ocr_text(frame_id, "Test OCR", "{}", "{}", "{}", "foo")
+            .insert_ocr_text(frame_id, "Test OCR", "", "", Arc::new(OcrEngine::Tesseract))
             .await
             .unwrap();
         let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();
         let _ = db
-            .insert_audio_transcription(audio_chunk_id, "Test Audio", 0)
+            .insert_audio_transcription(audio_chunk_id, "Test Audio", 0, "")
             .await
             .unwrap();
 
@@ -144,12 +145,12 @@ mod tests {
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
         let frame_id = db.insert_frame("foo").await.unwrap();
         let _ = db
-            .insert_ocr_text(frame_id, "Test OCR", "{}", "{}", "{}", "foo")
+            .insert_ocr_text(frame_id, "Test OCR", "", "", Arc::new(OcrEngine::Tesseract))
             .await
             .unwrap();
         let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();
         let _ = db
-            .insert_audio_transcription(audio_chunk_id, "Test Audio", 0)
+            .insert_audio_transcription(audio_chunk_id, "Test Audio", 0, "")
             .await
             .unwrap();
 

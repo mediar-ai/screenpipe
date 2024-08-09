@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use chrono::Utc;
     use screenpipe_server::{ContentType, DatabaseManager, SearchResult};
+    use screenpipe_vision::OcrEngine;
 
     async fn setup_test_db() -> DatabaseManager {
         DatabaseManager::new("sqlite::memory:").await.unwrap()
@@ -12,9 +15,15 @@ mod tests {
         let db = setup_test_db().await;
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
         let frame_id = db.insert_frame("").await.unwrap();
-        db.insert_ocr_text(frame_id, "Hello, world!", "", "", "", "")
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id,
+            "Hello, world!",
+            "",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
         let results = db
             .search("Hello", ContentType::OCR, 100, 0, None, None, None)
@@ -33,7 +42,7 @@ mod tests {
     async fn test_insert_and_search_audio() {
         let db = setup_test_db().await;
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0)
+        db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0, "")
             .await
             .unwrap();
 
@@ -57,13 +66,19 @@ mod tests {
         // Insert OCR data
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
         let frame_id = db.insert_frame("").await.unwrap();
-        db.insert_ocr_text(frame_id, "Hello from OCR", "", "", "", "")
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id,
+            "Hello from OCR",
+            "",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
         // Insert Audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0)
+        db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0, "")
             .await
             .unwrap();
 
@@ -95,13 +110,19 @@ mod tests {
         // Insert OCR data
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
         let frame_id1 = db.insert_frame("").await.unwrap();
-        db.insert_ocr_text(frame_id1, "Hello from OCR 1", "", "", "", "")
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id1,
+            "Hello from OCR 1",
+            "",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
         // Insert first audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 1", 0)
+        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 1", 0, "")
             .await
             .unwrap();
 
@@ -115,11 +136,17 @@ mod tests {
 
         // Insert remaining data
         let frame_id2 = db.insert_frame("").await.unwrap();
-        db.insert_ocr_text(frame_id2, "Hello from OCR 2", "", "", "", "")
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id2,
+            "Hello from OCR 2",
+            "",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 2", 1)
+        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 2", 1, "")
             .await
             .unwrap();
 
@@ -201,13 +228,19 @@ mod tests {
         // Insert OCR data
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
         let frame_id1 = db.insert_frame("").await.unwrap();
-        db.insert_ocr_text(frame_id1, "Hello from OCR 1", "", "", "", "")
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id1,
+            "Hello from OCR 1",
+            "",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
         // Insert first audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 1", 0)
+        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 1", 0, "")
             .await
             .unwrap();
 
@@ -219,11 +252,17 @@ mod tests {
 
         // Insert remaining data
         let frame_id2 = db.insert_frame("").await.unwrap();
-        db.insert_ocr_text(frame_id2, "Hello from OCR 2", "", "", "", "")
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id2,
+            "Hello from OCR 2",
+            "",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 2", 1)
+        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 2", 1, "")
             .await
             .unwrap();
 
