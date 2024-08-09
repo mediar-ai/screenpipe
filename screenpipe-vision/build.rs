@@ -11,6 +11,9 @@ fn main() {
 
     // Ensure the linker uses the correct library name
     println!("cargo:rustc-link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib");
+
+    // Debugging: Print the library search path
+    println!("cargo:warning=Library search path: screenpipe-vision/lib");
 }
 
 #[cfg(not(target_os = "macos"))]
