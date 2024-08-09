@@ -78,11 +78,20 @@ jobs:
           echo "Set version to: $VERSION"
 
       - name: Create deployment package
+        env:
+          RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../lib -C link-arg=-Wl,-rpath,@loader_path/../lib"
         run: |
           mkdir -p screenpipe-${{ env.VERSION }}-${{ matrix.target }}/bin
           mkdir -p screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib
           cp target/${{ matrix.target }}/release/screenpipe screenpipe-${{ env.VERSION }}-${{ matrix.target }}/bin/
-          cp screenpipe-vision/lib/libscreenpipe.dylib screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib/
+          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+            cp screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib/libscreenpipe_x86_64.dylib
+          elif [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
+            cp screenpipe-vision/lib/libscreenpipe_arm64.dylib screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib/libscreenpipe_arm64.dylib
+          else
+            echo "Unknown target: ${{ matrix.target }}"
+            exit 1
+          fi
           tar -czf screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz -C screenpipe-${{ env.VERSION }}-${{ matrix.target }} .
 
       - name: Calculate SHA256

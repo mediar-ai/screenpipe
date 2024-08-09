@@ -2,6 +2,8 @@ import CoreGraphics
 import Foundation
 import Vision
 
+// ! TODO long term we should use core_foundation or objc crate to be 100% rust
+
 @_cdecl("perform_ocr")
 public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int, height: Int)
   -> UnsafeMutablePointer<CChar>? {
@@ -82,13 +84,9 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
 }
 
 // # Compile for x86_64
-// swiftc -emit-library -target x86_64-apple-macosx10.15 -o libscreenpipe_x86_64.dylib screenpipe-vision/src/ocr.swift
+// swiftc -emit-library -target x86_64-apple-macosx10.15 -o screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/src/ocr.swift
 
 // # Compile for arm64 (aarch64)
-// swiftc -emit-library -target arm64-apple-macosx11.0 -o libscreenpipe_arm64.dylib screenpipe-vision/src/ocr.swift
+// swiftc -emit-library -target arm64-apple-macosx11.0 -o screenpipe-vision/lib/libscreenpipe_arm64.dylib screenpipe-vision/src/ocr.swift
 
-// # Combine into a universal binary
-// lipo -create libscreenpipe_x86_64.dylib libscreenpipe_arm64.dylib -output screenpipe-vision/lib/libscreenpipe.dylib
-
-// rm libscreenpipe_x86_64.dylib libscreenpipe_arm64.dylib
 

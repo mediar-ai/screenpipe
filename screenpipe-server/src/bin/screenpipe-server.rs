@@ -59,7 +59,13 @@ const DISPLAY: &str = r"
 ";
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(
+    author, 
+    version,
+    about, 
+    long_about = None,
+    name = "screenpipe"
+)]
 struct Cli {
     /// FPS for continuous recording
     /// 1 FPS = 30 GB / month

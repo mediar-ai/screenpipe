@@ -3,12 +3,11 @@ use log::{debug, error};
 use serde_json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
-use strsim::levenshtein;
-use tokio::sync::{mpsc::Sender, Mutex}; // Corrected import for Mutex
+use tokio::sync::mpsc::Sender;
 use xcap::{Monitor, Window};
 
 #[cfg(target_os = "macos")]
@@ -282,13 +281,7 @@ pub async fn process_ocr_task(
         });
 
     if save_text_files_flag {
-        save_text_files(
-            frame_number,
-            &current_text_json,
-            &current_text_json,
-            &None,
-        )
-        .await;
+        save_text_files(frame_number, &current_text_json, &current_text_json, &None).await;
     }
 
     if let Err(e) = result_tx
