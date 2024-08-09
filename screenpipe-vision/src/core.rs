@@ -242,7 +242,16 @@ pub async fn process_ocr_task(
     let (text, data_output, json_output) = match &*ocr_engine {
         OcrEngine::Unstructured => {
             debug!("Cloud Unstructured OCR");
-            perform_ocr_cloud(&image_arc).await
+            match perform_ocr_cloud(&image_arc).await {
+                Ok(result) => result,
+                Err(e) => {
+                    error!("Error performing cloud OCR: {}", e);
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Error performing cloud OCR: {}", e),
+                    ));
+                }
+            }
         }
         OcrEngine::Tesseract => {
             debug!("Local Tesseract OCR");
