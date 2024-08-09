@@ -93,6 +93,10 @@ brew install screenpipe
 ```bash
 screenpipe 
 ```
+we just released experimental apple native OCR, to use it:
+```bash
+screenpipe --ocr-engine apple-native
+```
 or if you don't want audio to be recorded
 ```bash
 screenpipe --disable-audio
@@ -162,7 +166,7 @@ Then run it
 <details>
   <summary>Windows</summary>
 
-  NOT RECOMMENDED. Get the [desktop app](https://screenpi.pe/) instead.
+  NOT RECOMMENDED (Windows build is not straightforward). Get the [desktop app](https://screenpi.pe/) instead. (Which includes the CLI)
   
   1. Install dependencies:
 
@@ -186,6 +190,8 @@ cargo build --release --features cuda # remove "--features cuda" if you do not h
 
 # then run it
 ./target/release/screenpipe
+
+# add --ocr-engine windows-native to use native windows OCR
 ```
 </details>
 
