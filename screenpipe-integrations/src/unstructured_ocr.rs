@@ -5,8 +5,9 @@ use serde_json;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
+use tokio::time::{timeout, Duration}; // Add timeout and Duration
 
-pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> (String, DataOutput, String) {
+pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, DataOutput, String), String> {
     let api_key = "ZUxfTRkf6lRgHZDXPHlFaSoOKAEbwV".to_string();
     let api_url = "https://api.unstructuredapp.io/general/v0/general".to_string();
 
@@ -32,19 +33,21 @@ pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> (String, DataOutput
         .text("coordinates", "true");
 
     let client = reqwest::Client::new();
-    let response = client
+    let response = match timeout(Duration::from_secs(180), client
         .post(&api_url)
         .header("accept", "application/json")
         .header("unstructured-api-key", &api_key)
         .multipart(form)
-        .send()
-        .await
-        .unwrap();
+        .send()).await {
+        Ok(Ok(response)) => response,
+        Ok(Err(e)) => return Err(format!("Request error: {}", e)),
+        Err(_) => return Err("Request timed out".to_string()),
+    };
 
     let response_text = if response.status().is_success() {
         response.text().await.unwrap()
     } else {
-        panic!("Error: {}", response.status());
+        return Err(format!("Error: {}", response.status()));
     };
 
     let json_output = response_text.clone();
@@ -61,5 +64,5 @@ pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> (String, DataOutput
         .collect::<Vec<&str>>()
         .join(" ");
 
-    (text, data_output, json_output)
+    Ok((text, data_output, json_output))
 }
