@@ -5,7 +5,7 @@ use candle_transformers::models::jina_bert::{BertModel, Config};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use tokenizers::Tokenizer;
 
-pub async fn text_chunking_local(text: &str) -> Result<Vec<String>> {
+pub async fn text_chunking_by_similarity(text: &str) -> Result<Vec<String>> {
     let device = Device::Cpu;
     let repo = Repo::with_revision(
         "jinaai/jina-embeddings-v2-base-en".to_string(),
@@ -60,6 +60,30 @@ pub async fn text_chunking_local(text: &str) -> Result<Vec<String>> {
 
     if !current_chunk.is_empty() {
         chunks.push(current_chunk);
+    }
+
+    Ok(chunks)
+}
+
+pub fn text_chunking_simple(text: &str) -> Result<Vec<String>> {
+    let mut chunks = Vec::new();
+    let lines: Vec<&str> = text.split('\n').collect();
+
+    if lines.len() > 1 {
+        // Chunk by newlines
+        chunks = lines.into_iter().map(String::from).collect();
+    } else {
+        // Chunk by fixed character count with overlap
+        let chunk_size = 200;
+        let overlap = 30;
+        let mut start = 0;
+
+        while start < text.len() {
+            let end = (start + chunk_size).min(text.len());
+            let chunk = text[start..end].to_string();
+            chunks.push(chunk);
+            start = if end == text.len() { end } else { end - overlap };
+        }
     }
 
     Ok(chunks)
