@@ -232,10 +232,10 @@ if (platform == 'macos') {
 				console.log(`copied more recent screenpipe binary from ${recentPath}`);
 			} else if (await fs.exists(path1)) {
 				await $`cp ${path1} screenpipe-aarch64-apple-darwin`;
-				console.log("copied aarch64-apple-darwin screenpipe binary");
+				console.log(`copied aarch64-apple-darwin screenpipe binary from ${path1}`);
 			} else if (await fs.exists(path2)) {
 				await $`cp ${path2} screenpipe-aarch64-apple-darwin`;
-				console.log("copied release screenpipe binary");
+				console.log(`copied release screenpipe binary from ${path2}`);
 			} else {
 				console.log("no screenpipe binary found");
 			}
