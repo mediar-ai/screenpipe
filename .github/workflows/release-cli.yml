@@ -57,7 +57,7 @@ jobs:
 
       - name: Build with Metal feature
         env:
-          DESTINATION: "brew"
+          RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../lib -C link-arg=-Wl,-rpath,@loader_path/../lib"
         run: |
           export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
           export PKG_CONFIG_ALLOW_CROSS=1
@@ -78,8 +78,6 @@ jobs:
           echo "Set version to: $VERSION"
 
       - name: Create deployment package
-        env:
-          RUSTFLAGS: "-C link-arg=-Wl,-rpath,@executable_path/../lib -C link-arg=-Wl,-rpath,@loader_path/../lib"
         run: |
           mkdir -p screenpipe-${{ env.VERSION }}-${{ matrix.target }}/bin
           mkdir -p screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib
