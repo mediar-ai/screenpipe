@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 pub mod apple;
 pub mod core;
 pub mod utils;
