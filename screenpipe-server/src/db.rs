@@ -38,8 +38,6 @@ pub struct OCRResult {
     pub frame_id: i64,
     pub ocr_text: String,
     pub text_json: String,                       // Store as JSON string
-    pub new_text_json_vs_previous_frame: String, // Store as JSON string
-    pub raw_data_output_from_ocr: String,        // Store as JSON string
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
@@ -248,8 +246,6 @@ impl DatabaseManager {
         frame_id: i64,
         text: &str,
         text_json: &str,
-        new_text_json_vs_previous_frame: &str,
-        raw_data_output_from_ocr: &str,
         app_name: &str,
         ocr_engine: Arc<OcrEngine>,
     ) -> Result<(), sqlx::Error> {
@@ -266,8 +262,6 @@ impl DatabaseManager {
                     frame_id,
                     text,
                     text_json,
-                    new_text_json_vs_previous_frame,
-                    raw_data_output_from_ocr,
                     app_name,
                     Arc::clone(&ocr_engine),
                 ),
@@ -352,8 +346,6 @@ impl DatabaseManager {
         frame_id: i64,
         text: &str,
         text_json: &str,
-        new_text_json_vs_previous_frame: &str,
-        raw_data_output_from_ocr: &str,
         app_name: &str,
         ocr_engine: Arc<OcrEngine>,
     ) -> Result<(), sqlx::Error> {
@@ -372,12 +364,10 @@ impl DatabaseManager {
         );
 
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, new_text_json_vs_previous_frame, raw_data_output_from_OCR, app_name, ocr_engine) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine) VALUES (?1, ?2, ?3, ?4, ?5)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
-            .bind(new_text_json_vs_previous_frame)
-            .bind(raw_data_output_from_ocr)
             .bind(app_name)
             .bind(format!("{:?}", *ocr_engine))
             .execute(&mut *tx)
@@ -457,8 +447,6 @@ impl DatabaseManager {
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
                 ocr_text.text_json,
-                ocr_text.new_text_json_vs_previous_frame,
-                ocr_text.raw_data_output_from_OCR,
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index,
