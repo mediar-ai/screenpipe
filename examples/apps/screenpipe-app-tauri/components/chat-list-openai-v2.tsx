@@ -15,6 +15,7 @@ import { useScrollAnchor } from "@/lib/hooks/use-scroll-anchor";
 import { FunctionCallMessage } from "./function-call-message";
 import { EmptyScreen } from "./empty-screen";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { usePostHog } from "posthog-js/react";
 
 const screenpipeQuery = z.object({
   q: z
@@ -124,6 +125,7 @@ export function ChatList({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { settings } = useSettings();
+  const posthog = usePostHog();
 
   const { messagesRef, scrollRef, visibilityRef, isAtBottom, scrollToBottom } =
     useScrollAnchor();
@@ -132,6 +134,10 @@ export function ChatList({
 
     setIsLoading(true);
     setError(null);
+    posthog?.capture("send_message", {
+      userId: settings.userId,
+      inputMessage,
+    });
 
     const userMessage = { id: nanoid(), role: "user", content: inputMessage };
     // @ts-ignore

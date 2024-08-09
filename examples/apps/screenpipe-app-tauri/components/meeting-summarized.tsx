@@ -83,6 +83,30 @@ async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
   }
 }
 
+// Add this new function after the existing functions and before the MeetingSummarizer component
+const filterTranscriptErrors = (transcript: string): string => {
+  const errorPatterns = [
+    /<\|\d+\.\d+\|>/g,
+    /^(Thank you\.|See you next time!|Bye!|Hey\.)$/gm,
+  ];
+
+  console.log("before transcript", transcript);
+
+  let filteredTranscript = transcript;
+  errorPatterns.forEach((pattern) => {
+    filteredTranscript = filteredTranscript.replace(pattern, "");
+  });
+
+  console.log("after transcript", filteredTranscript);
+
+  // Remove extra whitespace and empty lines
+  return filteredTranscript
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join("\n");
+};
+
 export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
   const [meetingStartTime, setMeetingStartTime] = useState<Date | null>(null);
   const [manualEndTime, setManualEndTime] = useState("");
@@ -104,7 +128,9 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
   const [useAi, setUseAi] = useState(false);
 
   const handleStartMeeting = () => {
-    setMeetingStartTime(new Date());
+    const startDate = new Date();
+    startDate.setMinutes(startDate.getMinutes() + 1); // Add 1 minute
+    setMeetingStartTime(startDate);
     setIsStreaming(true);
     setTranscript("");
     setProcessedTranscript("");
@@ -234,6 +260,8 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
             }
 
             if (newTranscriptText) {
+              const filteredTranscript =
+                filterTranscriptErrors(newTranscriptText);
               setTranscript((prev) => prev + newTranscriptText);
               if (useAi) {
                 await processTranscriptChunk(newTranscriptText);
@@ -269,7 +297,7 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
   }, [isStreaming, meetingStartTime, settings]);
 
   return (
-    <div className="flex flex-col h-full w-full overflow-y-auto">
+    <div className="flex flex-col h-full overflow-y-auto">
       <h2 className="text-2xl font-bold mb-2">
         Local First Meeting Summarizer
       </h2>
@@ -294,7 +322,10 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
         AI processing uses your configured{" "}
         {settings.useOllama ? "Ollama" : "OpenAI"} settings
       </p>
-      <Tabs defaultValue="controls" className="flex-grow flex flex-col w-3/4">
+      <Tabs
+        defaultValue="controls"
+        className="flex-grow flex flex-col w-[600px]"
+      >
         <TabsList className="bg-background flex justify-start">
           <TabsTrigger value="controls">Controls</TabsTrigger>
           <Separator orientation="vertical" />
@@ -307,7 +338,7 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
           )}
         </TabsList>
         <div className="flex-grow overflow-hidden">
-          <TabsContent value="controls" className="h-full overflow-y-auto p-4">
+          <TabsContent value="controls" className="h-full overflow-y-auto">
             <p className="mb-4">{pipe.description}</p>
             <div className="flex space-x-2 mb-4">
               <Button onClick={handleStartMeeting} disabled={isStreaming}>
@@ -316,34 +347,6 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
               <Button onClick={handleStopMeeting} disabled={!isStreaming}>
                 Stop Meeting
               </Button>
-              {/* <Input
-                type="datetime-local"
-                value={manualEndTime}
-                onChange={(e) => setManualEndTime(e.target.value)}
-                onKeyDown={(e) => {
-                  const now = new Date();
-                  const inputDate = new Date(e.currentTarget.value);
-                  if (
-                    inputDate < now &&
-                    (e.key === "ArrowUp" || e.key === "ArrowDown")
-                  ) {
-                    e.preventDefault(); // Prevent navigating to past dates
-                  }
-                }}
-                className="border rounded px-2 py-1"
-                placeholder="Manual End Time"
-                min={(() => {
-                  const now = new Date();
-                  return `${now.getFullYear()}-${String(
-                    now.getMonth() + 1
-                  ).padStart(2, "0")}-${String(now.getDate()).padStart(
-                    2,
-                    "0"
-                  )}T${String(now.getHours()).padStart(2, "0")}:${String(
-                    now.getMinutes()
-                  ).padStart(2, "0")}`;
-                })()}
-              /> */}
             </div>
             {meetingStartTime && (
               <p className="mb-4">
@@ -351,10 +354,7 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
               </p>
             )}
           </TabsContent>
-          <TabsContent
-            value="transcript"
-            className="h-full overflow-y-auto p-4 "
-          >
+          <TabsContent value="transcript" className="h-full overflow-y-auto">
             <div className="space-y-4 space-x-4">
               <Button
                 variant="outline"

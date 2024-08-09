@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import HealthStatus from "@/components/screenpipe-status";
+import { PHProvider } from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -17,9 +18,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        {children}
-      </body>
+      <PHProvider>
+        {/* https://posthog.com/docs/libraries/next-js for more info */}
+        <body className={inter.className}>{children}</body>
+      </PHProvider>
     </html>
   );
 }

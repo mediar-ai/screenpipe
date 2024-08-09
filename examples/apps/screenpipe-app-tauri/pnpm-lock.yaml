@@ -38,6 +38,9 @@ dependencies:
   '@radix-ui/react-switch':
     specifier: ^1.1.0
     version: 1.1.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
+  '@radix-ui/react-tabs':
+    specifier: ^1.1.0
+    version: 1.1.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
   '@radix-ui/react-tooltip':
     specifier: ^1.1.2
     version: 1.1.2(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
@@ -89,12 +92,15 @@ dependencies:
   next:
     specifier: 14.2.4
     version: 14.2.4(@babel/core@7.25.2)(@opentelemetry/api@1.9.0)(react-dom@18.3.1)(react@18.3.1)
-  ollama-ai-provider-fix:
-    specifier: latest
-    version: 0.9.2(zod@3.23.8)
+  ollama-ai-provider:
+    specifier: ^0.11.0
+    version: 0.11.0(zod@3.23.8)
   openai:
     specifier: ^4.53.0
     version: 4.53.0
+  posthog-js:
+    specifier: ^1.154.6
+    version: 1.154.6
   react:
     specifier: ^18
     version: 18.3.1
@@ -1613,6 +1619,33 @@ packages:
       '@radix-ui/react-use-controllable-state': 1.1.0(@types/react@18.3.3)(react@18.3.1)
       '@radix-ui/react-use-previous': 1.1.0(@types/react@18.3.3)(react@18.3.1)
       '@radix-ui/react-use-size': 1.1.0(@types/react@18.3.3)(react@18.3.1)
+      '@types/react': 18.3.3
+      '@types/react-dom': 18.3.0
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+    dev: false
+
+  /@radix-ui/react-tabs@1.1.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1):
+    resolution: {integrity: sha512-bZgOKB/LtZIij75FSuPzyEti/XBhJH52ExgtdVqjCIh+Nx/FW+LhnbXtbCzIi34ccyMsyOja8T0thCzoHFXNKA==}
+    peerDependencies:
+      '@types/react': '*'
+      '@types/react-dom': '*'
+      react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+      react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      '@types/react-dom':
+        optional: true
+    dependencies:
+      '@radix-ui/primitive': 1.1.0
+      '@radix-ui/react-context': 1.1.0(@types/react@18.3.3)(react@18.3.1)
+      '@radix-ui/react-direction': 1.1.0(@types/react@18.3.3)(react@18.3.1)
+      '@radix-ui/react-id': 1.1.0(@types/react@18.3.3)(react@18.3.1)
+      '@radix-ui/react-presence': 1.1.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
+      '@radix-ui/react-primitive': 2.0.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
+      '@radix-ui/react-roving-focus': 1.1.0(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1)(react@18.3.1)
+      '@radix-ui/react-use-controllable-state': 1.1.0(@types/react@18.3.3)(react@18.3.1)
       '@types/react': 18.3.3
       '@types/react-dom': 18.3.0
       react: 18.3.1
@@ -3984,6 +4017,10 @@ packages:
       format: 0.2.2
     dev: false
 
+  /fflate@0.4.8:
+    resolution: {integrity: sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA==}
+    dev: false
+
   /file-entry-cache@6.0.1:
     resolution: {integrity: sha512-7Gps/XWymbLk2QLYK4NzpMOrYjMhdIxXuIvy2QBsLE6ljuodKvdkWs/cpyJJ3CVIVpH0Oi1Hvg1ovbMzLdFBBg==}
     engines: {node: ^10.12.0 || >=12.0.0}
@@ -5598,8 +5635,8 @@ packages:
       es-object-atoms: 1.0.0
     dev: true
 
-  /ollama-ai-provider-fix@0.9.2(zod@3.23.8):
-    resolution: {integrity: sha512-8C5Ydlmk8MVTMtcUxPShgfAFMEBBd6QnK5840lDnZe/EAoDYKf5NkhQqe1CJeXSgvZG+S88Mm092eapePDtzHA==}
+  /ollama-ai-provider@0.11.0(zod@3.23.8):
+    resolution: {integrity: sha512-zobsS8pZJ7IUfqQF+QiqWBG92ocm4fHpV+iXUCXoFtNMSN65Nr3v0TyW2sTooku3BVm9EmOBeMenKSOIv7h5Sw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -5888,6 +5925,18 @@ packages:
     engines: {node: '>=0.10.0'}
     dependencies:
       xtend: 4.0.2
+    dev: false
+
+  /posthog-js@1.154.6:
+    resolution: {integrity: sha512-8dA9xRex27cIbtSKwxNEvx+khGO+arlwfwyfD/TKuoc0TI5mFAXwtgxE45nnWFnP2hZ4CUCv2WMifLudIqJvcw==}
+    dependencies:
+      fflate: 0.4.8
+      preact: 10.23.1
+      web-vitals: 4.2.3
+    dev: false
+
+  /preact@10.23.1:
+    resolution: {integrity: sha512-O5UdRsNh4vdZaTieWe3XOgSpdMAmkIYBCT3VhQDlKrzyCm8lUYsk0fmVEvoQQifoOjFRTaHZO69ylrzTW2BH+A==}
     dev: false
 
   /prelude-ls@1.2.1:
@@ -6970,6 +7019,10 @@ packages:
   /web-streams-polyfill@4.0.0-beta.3:
     resolution: {integrity: sha512-QW95TCTaHmsYfHDybGMwO5IJIM93I/6vTRk+daHTWFPhwh+C8Cg7j7XyKrwrj8Ib6vYXe0ocYNrmzY4xAAN6ug==}
     engines: {node: '>= 14'}
+    dev: false
+
+  /web-vitals@4.2.3:
+    resolution: {integrity: sha512-/CFAm1mNxSmOj6i0Co+iGFJ58OS4NRGVP+AWS/l509uIK5a1bSoIVaHz/ZumpHTfHSZBpgrJ+wjfpAOrTHok5Q==}
     dev: false
 
   /webidl-conversions@3.0.1:

@@ -19,13 +19,12 @@
     ],
     "externalBin": [],
     "icon": [
-      "icons/generated/Assets.xcassets/AppIcon.appiconset/32.png",
-      "icons/generated/Assets.xcassets/AppIcon.appiconset/128.png",
-      "icons/generated/Assets.xcassets/AppIcon.appiconset/256.png",
-      "icons/generated/Assets.xcassets/AppIcon.appiconset/512.png",
-      "icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
-      "icons/generated/icon.icns",
-      "icons/generated/icon.ico"
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/1024x1024.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
     ],
     "longDescription": "",
     "resources": [],

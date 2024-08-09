@@ -12,32 +12,25 @@ use std::io::Write;
 
 use std::fs;
 use std::path::PathBuf;
+use uuid::Uuid;
 
 use tauri::Manager;
 use tauri::Wry;
 use tauri_plugin_store::{with_store, StoreCollection};
 
-use std::sync::{Arc, Mutex};
-use tauri::State;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
-use tauri_plugin_shell::process::CommandChild;
 
-
+use tauri::image::Image;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    utils::assets::EmbeddedAssets
 };
-use tauri::image::Image;
 
 mod analytics;
 
 use crate::analytics::start_analytics;
 mod logs;
-
-struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
-
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
@@ -59,8 +52,6 @@ async fn main() {
         ..Default::default()
       }));
 
-      let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
-
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -69,7 +60,6 @@ async fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_fs::init())
-        .manage(sidecar_state)
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
@@ -134,7 +124,6 @@ async fn main() {
             info!("Local data directory: {}", base_dir.display());
 
             let posthog_api_key = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce".to_string();
-            let app_name = "screenpipe";
             let interval_hours = 1;
 
             let path = base_dir.join("store.bin");
@@ -143,7 +132,7 @@ async fn main() {
                 let _ = File::create(path.clone()).unwrap();
             }
 
-            // Add System Tray 
+            // Add System Tray
             let toggle = MenuItemBuilder::with_id("toggle", "Screenpipe").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
 
@@ -195,7 +184,7 @@ async fn main() {
                 },
             );
 
-            // Now use the store
+            // // Now use the store
             let _ = with_store(app.app_handle().clone(), stores, path, |store| {
                 store.save()?;
 
@@ -205,8 +194,24 @@ async fn main() {
                     .as_bool()
                     .unwrap_or(true);
 
+                let unique_id = store
+                    .get("userId")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                    .unwrap_or_else(|| {
+                        let new_id = Uuid::new_v4().to_string();
+                        store
+                            .insert(
+                                "userId".to_string(),
+                                serde_json::Value::String(new_id.clone()),
+                            )
+                            .unwrap();
+                        store.save().unwrap();
+                        new_id
+                    });
+
                 if is_analytics_enabled {
-                    match start_analytics(posthog_api_key, app_name, interval_hours) {
+                    match start_analytics(unique_id, posthog_api_key, interval_hours) {
                         Ok(analytics_manager) => {
                             app.manage(analytics_manager);
                         }

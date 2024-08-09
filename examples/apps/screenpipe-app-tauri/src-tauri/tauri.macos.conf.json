@@ -17,14 +17,7 @@
             "entitlements": "entitlements.plist",
             "signingIdentity": "-",
             "hardenedRuntime": false,
-            "exceptionDomain": "com.screenpi.pe",
-            "dmg": {
-                "background": "./icons/generated/Assets.xcassets/AppIcon.appiconset/1024.png",
-                "windowSize": {
-                    "height": 400,
-                    "width": 660
-                }
-            }
+            "exceptionDomain": "com.screenpi.pe"
         },
         "resources": {
             "ffmpeg/bin/*": "./"

@@ -1,14 +1,11 @@
 use log::{error, info};
 use reqwest::Client;
 use serde_json::json;
-use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::{System, SystemExt};
 use tokio::sync::Mutex;
 use tokio::time::interval;
-use uuid::Uuid;
-
 pub struct AnalyticsManager {
     client: Client,
     posthog_api_key: String,
@@ -86,33 +83,14 @@ impl AnalyticsManager {
     }
 }
 
-pub fn get_or_create_unique_id(app_name: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let home_dir = dirs::home_dir().ok_or("Failed to get home directory")?;
-    let app_dir = home_dir.join(format!(".{}", app_name));
-    let id_file = app_dir.join("unique_id");
-
-    if !app_dir.exists() {
-        fs::create_dir_all(&app_dir)?;
-    }
-
-    if id_file.exists() {
-        Ok(fs::read_to_string(id_file)?)
-    } else {
-        let new_id = Uuid::new_v4().to_string();
-        fs::write(id_file, &new_id)?;
-        Ok(new_id)
-    }
-}
-
 pub fn start_analytics(
+    unique_id: String,
     posthog_api_key: String,
-    app_name: &str,
     interval_hours: u64,
 ) -> Result<Arc<AnalyticsManager>, Box<dyn std::error::Error>> {
-    let distinct_id = get_or_create_unique_id(app_name)?;
     let analytics_manager = Arc::new(AnalyticsManager::new(
         posthog_api_key,
-        distinct_id,
+        unique_id,
         interval_hours,
     ));
 

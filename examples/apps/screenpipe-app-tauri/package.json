@@ -41,6 +41,7 @@
     "next": "14.2.4",
     "ollama-ai-provider": "^0.11.0",
     "openai": "^4.53.0",
+    "posthog-js": "^1.154.6",
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "^9.0.1",

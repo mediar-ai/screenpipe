@@ -18,14 +18,22 @@ import ScreenpipeInstanceChecker from "@/components/screenpipe-instance-checker"
 import Header from "@/components/header";
 import { checkForAppUpdates } from "@/components/updater";
 import UpdateNotification from "@/components/update-notification";
+import { usePostHog } from "posthog-js/react";
 
 export default function Home() {
   const { settings } = useSettings();
+  const posthog = usePostHog();
   // console.log("settings", settings);
 
   useEffect(() => {
     checkForAppUpdates();
   }, []);
+
+  useEffect(() => {
+    if (settings.userId) {
+      posthog?.identify(settings.userId);
+    }
+  }, [settings.userId, posthog]);
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8">

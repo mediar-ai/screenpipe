@@ -7,7 +7,7 @@ use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput, DeviceControl,
     TranscriptionResult,
 };
-use screenpipe_integrations::friend_wearable::{initialize_friend_wearable_loop};
+use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -72,7 +72,10 @@ pub async fn start_continuous_recording(
 
     // Initialize friend wearable loop
     if let Some(uid) = &friend_wearable_uid {
-        tokio::spawn(initialize_friend_wearable_loop(uid.clone(), Arc::clone(&db)));
+        tokio::spawn(initialize_friend_wearable_loop(
+            uid.clone(),
+            Arc::clone(&db),
+        ));
     }
 
     let video_handle = tokio::spawn(async move {
@@ -299,7 +302,18 @@ async fn record_audio(
 
         while let Ok(transcription) = whisper_receiver.try_recv() {
             info!("Received transcription");
-            process_audio_result(&db, transcription, friend_wearable_uid.as_deref(), cloud_audio).await;
+            // avoiding crashing the audio processing if one fails
+            if let Err(e) = process_audio_result(
+                &db,
+                transcription,
+                friend_wearable_uid.as_deref(),
+                cloud_audio,
+            )
+            .await
+            {
+                error!("Error processing audio result: {}", e);
+                // Optionally, you can add more specific error handling here
+            }
         }
 
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -311,13 +325,13 @@ async fn process_audio_result(
     result: TranscriptionResult,
     _friend_wearable_uid: Option<&str>, // Add underscore
     cloud_audio: bool,
-) {
+) -> Result<(), anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
         error!(
             "Error in audio recording: {}. Not inserting audio result",
             result.error.unwrap_or_default()
         );
-        return;
+        return Ok(());
     }
     let transcription = result.transcription.unwrap();
     let transcription_engine = if cloud_audio { "Deepgram" } else { "Whisper" };
@@ -326,7 +340,7 @@ async fn process_audio_result(
     match db.insert_audio_chunk(&result.input.path).await {
         Ok(audio_chunk_id) => {
             if transcription.is_empty() {
-                return;
+                return Ok(());
             }
 
             if let Err(e) = db
@@ -337,6 +351,7 @@ async fn process_audio_result(
                     "Failed to insert audio transcription for device {}: {}",
                     result.input.device, e
                 );
+                return Ok(());
             } else {
                 debug!(
                     "Inserted audio transcription for chunk {} from device {} using {}",
@@ -349,4 +364,5 @@ async fn process_audio_result(
             result.input.device, e
         ),
     }
+    Ok(())
 }
