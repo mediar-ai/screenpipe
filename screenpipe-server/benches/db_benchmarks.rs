@@ -14,14 +14,10 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
         let frame_id = db.insert_frame().await.unwrap();
         let ocr_text = format!("OCR text {}", rng.gen::<u32>());
         let text_json = format!(r#"{{"text": "{}"}}"#, ocr_text);
-        let new_text_json_vs_previous_frame = format!(r#"{{"text": "{}"}}"#, ocr_text);
-        let raw_data_output_from_ocr = format!(r#"{{"output": "{}"}}"#, ocr_text);
         db.insert_ocr_text(
             frame_id,
             &ocr_text,
             &text_json,
-            &new_text_json_vs_previous_frame,
-            &raw_data_output_from_ocr,
         )
         .await
         .unwrap();
