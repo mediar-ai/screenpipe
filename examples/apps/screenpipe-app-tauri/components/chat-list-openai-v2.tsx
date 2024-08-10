@@ -99,7 +99,7 @@ export function ChatList({
       // console.log("provider", provider);
       console.log("model", model);
 
-      generateTextWithRetry({
+      await generateTextWithRetry({
         model: provider(model),
         tools: {
           query_screenpipe: {
