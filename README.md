@@ -133,11 +133,9 @@ you can combine multiple flags if needed
 
 1. Install dependencies:
 ```bash
-brew install rust # takes 5 minutes
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh # takes 5 minutes
 brew install pkg-config ffmpeg jq tesseract
 ```
-
-Install [Rust](https://www.rust-lang.org/tools/install).
 
 2. Clone the repo:
 
@@ -152,6 +150,8 @@ cd screen-pipe # enter cloned repo
 
 Build the project, takes 5-10 minutes depending on your hardware
 ```bash
+# necessary to use apple native OCR
+export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../../screenpipe-vision/bin -C link-arg=-Wl,-rpath,@loader_path/../../screenpipe-vision/lib"
 cargo build --release --features metal # takes 3 minuttes
 ```
 
