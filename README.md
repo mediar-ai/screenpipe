@@ -129,6 +129,7 @@ you can combine multiple flags if needed
 
 1. Install dependencies:
 ```bash
+brew install rust # takes 5 minutes
 brew install pkg-config ffmpeg jq tesseract
 ```
 
@@ -147,7 +148,7 @@ cd screen-pipe # enter cloned repo
 
 Build the project, takes 5-10 minutes depending on your hardware
 ```bash
-cargo build --release --features metal
+cargo build --release --features metal # takes 3 minuttes
 ```
 
 Then run it
