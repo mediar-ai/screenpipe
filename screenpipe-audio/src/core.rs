@@ -154,16 +154,6 @@ async fn run_ffmpeg(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    // ! tmp hack shouldnt be needed
-    // Explicitly set the library paths for the FFmpeg command
-    // if let Ok(ld_library_path) = std::env::var("LD_LIBRARY_PATH") {
-    //     command.env("LD_LIBRARY_PATH", ld_library_path);
-    // }
-    // #[cfg(target_os = "macos")]
-    // if let Ok(dyld_library_path) = std::env::var("DYLD_LIBRARY_PATH") {
-    //     command.env("DYLD_LIBRARY_PATH", dyld_library_path);
-    // }
-
     debug!("FFmpeg command: {:?}", command);
 
     let mut ffmpeg: tokio::process::Child =

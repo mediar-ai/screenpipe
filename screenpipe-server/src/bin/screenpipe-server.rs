@@ -17,7 +17,7 @@ use log::{debug, error, info, LevelFilter};
 use screenpipe_audio::{
     default_input_device, list_audio_devices, parse_audio_device, DeviceControl,
 };
-use screenpipe_vision::OcrEngine;
+use screenpipe_vision::{monitor::{get_monitor_by_id, list_monitors}, OcrEngine};
 use std::io::Write;
 
 use screenpipe_core::find_ffmpeg_path;
@@ -125,6 +125,13 @@ struct Cli {
     /// UID key for sending data to friend wearable (if not provided, data won't be sent)
     #[arg(long)]
     friend_wearable_uid: Option<String>,
+
+    #[arg(long)]
+    list_monitors: bool,
+
+    /// Monitor ID to use
+    #[arg(long)]
+    monitor_id: Option<u32>,
 }
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
@@ -205,6 +212,14 @@ async fn main() -> anyhow::Result<()> {
         println!("Available audio devices:");
         for (i, device) in all_audio_devices.iter().enumerate() {
             println!("  {}. {}", i + 1, device);
+        }
+        return Ok(());
+    }
+    let all_monitors = list_monitors().await;
+    if cli.list_monitors {
+        println!("Available monitors:");
+        for (_, monitor) in all_monitors.iter().enumerate() {
+            println!("  {}. {:?}", monitor.id(), monitor);
         }
         return Ok(());
     }
@@ -314,6 +329,13 @@ async fn main() -> anyhow::Result<()> {
     let friend_wearable_uid = cli.friend_wearable_uid.clone();
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
+    let monitor_id = cli.monitor_id.unwrap_or(all_monitors.first().unwrap().id());  
+
+    // try to use the monitor selected, if not available throw an error
+    get_monitor_by_id(monitor_id).await.unwrap_or_else(|| {
+        eprintln!("{}", format!("Monitor with id {} not found. Try 'screenpipe --list-monitors'", monitor_id).red());
+        std::process::exit(1);
+    });
 
     // Function to start or restart the recording task
     let _start_recording = tokio::spawn(async move {
@@ -352,6 +374,7 @@ async fn main() -> anyhow::Result<()> {
                     cli.cloud_audio_on,
                     ocr_engine,
                     friend_wearable_uid_clone, // Use the cloned version
+                    monitor_id
                 )
                 .await;
 

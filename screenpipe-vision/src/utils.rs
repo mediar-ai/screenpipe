@@ -139,7 +139,7 @@ fn data_output_to_text(data_output: &DataOutput) -> String {
     text
 }
 
-pub async fn capture_screenshot(monitor: &Monitor) -> (DynamicImage, u64, Duration) {
+pub async fn capture_screenshot(monitor: Arc<Monitor>) -> (DynamicImage, u64, Duration) {
     let capture_start = Instant::now();
     let buffer = monitor.capture_image().unwrap();
     let image = DynamicImage::ImageRgba8(buffer);

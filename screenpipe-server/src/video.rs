@@ -2,7 +2,6 @@ use chrono::Utc;
 use image::ImageFormat::{self};
 use log::{debug, error, info, warn};
 use screenpipe_core::find_ffmpeg_path;
-use screenpipe_vision::core::get_monitor;
 use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -31,6 +30,7 @@ impl VideoCapture {
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         save_text_files: bool,
         ocr_engine: Arc<OcrEngine>,
+        monitor_id: u32,
     ) -> Self {
         info!("Starting new video capture");
         let frame_queue = Arc::new(Mutex::new(VecDeque::new()));
@@ -49,7 +49,7 @@ impl VideoCapture {
                 Duration::from_secs_f64(1.0 / fps),
                 save_text_files,
                 ocr_engine,
-                get_monitor().await,
+                monitor_id,
             )
             .await;
         });
@@ -240,9 +240,12 @@ async fn save_frames_as_video(
                 frame_count += 1;
                 debug!("Wrote frame {} to FFmpeg", frame_count);
 
-                // Flush every second
-                if frame_count % fps as usize == 0 {
-                    debug!("Flushing FFmpeg input");
+                // Calculate frames per flush based on fps
+                let frames_per_flush = (fps.max(0.1) * 1.0).ceil() as usize;
+
+                // Flush every calculated number of frames
+                if frame_count % frames_per_flush == 0 {
+                    debug!("Flushing FFmpeg input after {} frames", frames_per_flush);
                     if let Err(e) = stdin.flush().await {
                         error!("Failed to flush FFmpeg input: {}", e);
                     }

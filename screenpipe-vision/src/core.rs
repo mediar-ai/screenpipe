@@ -8,10 +8,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Sender;
-use xcap::{Monitor, Window};
 
 #[cfg(target_os = "macos")]
 use crate::apple::perform_ocr_apple;
+use crate::monitor::{get_focused_window, get_monitor_by_id};
 #[cfg(target_os = "windows")]
 use crate::utils::perform_ocr_windows;
 use crate::utils::OcrEngine;
@@ -20,11 +20,6 @@ use crate::utils::{
 };
 use rusty_tesseract::{Data, DataOutput};
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
-pub enum ControlMessage {
-    Pause,
-    Resume,
-    Stop,
-}
 
 pub struct DataOutputWrapper {
     pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,
@@ -98,26 +93,37 @@ pub struct OcrTaskData {
     pub result_tx: Sender<CaptureResult>,
 }
 
-pub async fn get_monitor() -> Monitor {
-    Monitor::all().unwrap().first().unwrap().clone()
-}
-
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
     save_text_files_flag: bool,
     ocr_engine: Arc<OcrEngine>,
-    monitor: Monitor,
+    monitor_id: u32,
 ) {
-    debug!("continuous_capture: Starting using monitor: {:?}", monitor);
+    debug!(
+        "continuous_capture: Starting using monitor: {:?}",
+        monitor_id
+    );
     let ocr_task_running = Arc::new(AtomicBool::new(false));
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<Arc<DynamicImage>> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
+    let monitor = get_monitor_by_id(monitor_id).await.unwrap();
+    let arc_monitor = Arc::new(monitor.clone());
+
     loop {
-        let (image, image_hash, _capture_duration) = capture_screenshot(&monitor).await;
+        let arc_monitor_one = arc_monitor.clone();
+
+        let app_name = Arc::new(
+            get_focused_window(arc_monitor_one)
+                .await
+                .map(|window| window.app_name().to_lowercase().to_string())
+                .unwrap_or_else(|| String::from("unknown")),
+        );
+        let arc_monitor = arc_monitor.clone();
+        let (image, image_hash, _capture_duration) = capture_screenshot(arc_monitor).await;
         let current_average = compare_with_previous_image(
             &previous_image,
             &image,
@@ -172,9 +178,9 @@ pub async fn continuous_capture(
 
                 ocr_task_running.store(true, Ordering::SeqCst);
                 let ocr_engine_clone = ocr_engine.clone();
+
+                let app_name_clone = app_name.clone();
                 tokio::spawn(async move {
-                    let w = Window::all().unwrap().first().unwrap().clone();
-                    let app_name = w.app_name();
                     if let Err(e) = process_ocr_task(
                         ocr_task_data.image,
                         ocr_task_data.frame_number,
@@ -182,7 +188,7 @@ pub async fn continuous_capture(
                         ocr_task_data.result_tx,
                         save_text_files_flag,
                         ocr_engine_clone,
-                        app_name.to_string().to_lowercase(),
+                        app_name_clone.to_string(),
                     )
                     .await
                     {

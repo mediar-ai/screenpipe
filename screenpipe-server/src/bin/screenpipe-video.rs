@@ -5,6 +5,7 @@ use image::GenericImageView;
 use log::info;
 use screenpipe_server::core::DataOutputWrapper;
 use screenpipe_server::VideoCapture;
+use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
 use serde_json::{json, Value};
 use std::fs::{File, OpenOptions};
@@ -50,6 +51,7 @@ async fn main() {
     std::fs::create_dir_all("data").unwrap_or_default();
     info!("Created data directory {}", output_path);
     let fps = 10.0;
+    let monitor_id = list_monitors().await.first().unwrap().id();
 
     let new_chunk_callback = {
         move |file_path: &str| {
@@ -63,6 +65,7 @@ async fn main() {
         new_chunk_callback,
         save_text_files,
         Arc::new(OcrEngine::Tesseract),
+        monitor_id,
     ); // Pass the cloud_ocr flag
     let (_tx, rx): (Sender<()>, Receiver<()>) = channel(32);
     let rx = Arc::new(Mutex::new(rx));

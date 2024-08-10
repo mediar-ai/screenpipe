@@ -55,6 +55,7 @@ pub async fn start_continuous_recording(
     cloud_audio: bool,
     ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>,
+    monitor_id: u32,
 ) -> Result<()> {
     info!("Recording now");
 
@@ -87,6 +88,7 @@ pub async fn start_continuous_recording(
             save_text_files,
             ocr_engine,
             friend_wearable_uid_video,
+            monitor_id,
         )
         .await
     });
@@ -127,6 +129,7 @@ async fn record_video(
     save_text_files: bool,
     ocr_engine: Arc<OcrEngine>,
     _friend_wearable_uid: Option<String>, // Add underscore
+    monitor_id: u32,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -148,6 +151,7 @@ async fn record_video(
         new_chunk_callback,
         save_text_files,
         Arc::clone(&ocr_engine),
+        monitor_id,
     );
 
     while is_running.load(Ordering::SeqCst) {
