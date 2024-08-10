@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { z } from "zod";
-import { Input } from "./ui/input";
-import { Card, CardContent } from "./ui/card";
 import { Separator } from "./ui/separator";
 import { Pipe } from "@/lib/hooks/use-pipes";
 import { CheckIcon, CopyIcon } from "lucide-react";
@@ -17,6 +15,7 @@ import { ChatMessage } from "./chat-message-v2";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
+import { usePostHog } from "posthog-js/react";
 
 const screenpipeQuery = z.object({
   q: z
@@ -109,7 +108,6 @@ const filterTranscriptErrors = (transcript: string): string => {
 
 export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
   const [meetingStartTime, setMeetingStartTime] = useState<Date | null>(null);
-  const [manualEndTime, setManualEndTime] = useState("");
   const [transcript, setTranscript] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [processedTranscript, setProcessedTranscript] = useState<string>("");
@@ -126,6 +124,7 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
   const transcriptQueueRef = useRef<string[]>([]);
   const processingPromiseRef = useRef<Promise<void> | null>(null);
   const [useAi, setUseAi] = useState(false);
+  const posthog = usePostHog();
 
   const handleStartMeeting = () => {
     const startDate = new Date();
@@ -134,14 +133,15 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
     setIsStreaming(true);
     setTranscript("");
     setProcessedTranscript("");
-    setManualEndTime("");
     setLastProcessedTimestamp(null);
+    posthog.capture("meeting_started", {
+      userId: settings.userId,
+    });
   };
 
   const handleStopMeeting = () => {
     setIsStreaming(false);
     setMeetingStartTime(null);
-    setManualEndTime("");
   };
 
   const processTranscriptChunk = async (chunk: string) => {

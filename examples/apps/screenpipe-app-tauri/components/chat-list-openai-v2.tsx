@@ -134,7 +134,7 @@ export function ChatList({
 
     setIsLoading(true);
     setError(null);
-    posthog?.capture("send_message", {
+    posthog.capture("send_message", {
       userId: settings.userId,
       inputMessage,
     });
