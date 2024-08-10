@@ -106,6 +106,8 @@ export function ChatList({
             description: `Query the local screenpipe instance for relevant information. 
               You will return multiple queries under the key 'queries'.
               Make sure to return a list of queries, not a single query.
+
+              ONLY USE THIS TOOL ONCE
               
               - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
 
@@ -231,7 +233,7 @@ export function ChatList({
             content: inputMessage,
           },
         ],
-        maxToolRoundtrips: 3, // allow up to 5 tool roundtrips
+        maxToolRoundtrips: 2, // allow up to 5 tool roundtrips
       });
     } catch (error) {
       if (error instanceof Error && error.message === "STREAM_COMPLETE") {
