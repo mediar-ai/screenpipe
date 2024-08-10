@@ -452,7 +452,7 @@ impl DatabaseManager {
                 AND (?3 IS NULL OR cte.timestamp <= ?3)
         "#.to_string();
 
-        if let Some(app_name) = app_name {
+        if let Some(_app_name) = app_name {
             sql.push_str(" AND f.app_name = ?6");
         }
 
@@ -855,7 +855,7 @@ impl FriendWearableDatabase for DatabaseManager {
             .map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)
     }
 
-    async fn get_chunked_data_since_timestamp(&self, memory_source: &str, friend_user_id: &str, since: DateTime<Utc>) -> Result<(Vec<String>, i64, i64, DateTime<Utc>, DateTime<Utc>), Box<dyn StdError + Send + Sync>> {
+    async fn get_chunked_data_since_timestamp(&self, memory_source: &str, _friend_user_id: &str, since: DateTime<Utc>) -> Result<(Vec<String>, i64, i64, DateTime<Utc>, DateTime<Utc>), Box<dyn StdError + Send + Sync>> {
         let since_str = since.to_rfc3339();
         let filtered_text = filter_texts(&since_str, memory_source, &self.pool).await?;
 
