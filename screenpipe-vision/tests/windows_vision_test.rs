@@ -1,7 +1,7 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
-    use screenpipe_vision::{get_monitor, process_ocr_task, OcrEngine};
+    use screenpipe_vision::{process_ocr_task, OcrEngine};
     use std::sync::Arc;
     use std::{path::PathBuf, time::Instant};
     use tokio::sync::{mpsc, Mutex};
@@ -24,7 +24,6 @@ mod tests {
         let frame_number = 1;
         let timestamp = Instant::now();
         let (tx, _rx) = mpsc::channel(1);
-        let previous_text_json = Arc::new(Mutex::new(None));
         let ocr_engine = Arc::new(OcrEngine::WindowsNative);
         let app_name = "test_app".to_string();
 
