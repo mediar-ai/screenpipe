@@ -56,16 +56,6 @@ pub enum ContentType {
     Audio,
 }
 
-impl ContentType {
-    fn to_string(&self) -> String {
-        match self {
-            ContentType::All => "all",
-            ContentType::OCR => "screen",
-            ContentType::Audio => "audio",
-        }.to_string()
-    }
-}
-
 #[derive(Debug, Serialize, FromRow)]
 pub struct AudioResult {
     pub audio_chunk_id: i64,
@@ -412,99 +402,146 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
+        let mut results = Vec::new();
+
+        // If app_name is specified, only search OCR content
+        if app_name.is_some() {
+            let ocr_results = self
+                .search_ocr(query, limit, offset, start_time, end_time, app_name)
+                .await?;
+            results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+        } else {
+            // If no app_name is specified, proceed with normal search
+            if content_type == ContentType::All || content_type == ContentType::OCR {
+                let ocr_results = self
+                    .search_ocr(query, limit, offset, start_time, end_time, None)
+                    .await?;
+                results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+            }
+
+            if content_type == ContentType::All || content_type == ContentType::Audio {
+                let audio_results = self
+                    .search_audio(query, limit, offset, start_time, end_time)
+                    .await?;
+                results.extend(audio_results.into_iter().map(SearchResult::Audio));
+            }
+        }
+
+        // Sort results by timestamp in descending order
+        results.sort_by(|a, b| {
+            let timestamp_a = match a {
+                SearchResult::OCR(ocr) => ocr.timestamp,
+                SearchResult::Audio(audio) => audio.timestamp,
+            };
+            let timestamp_b = match b {
+                SearchResult::OCR(ocr) => ocr.timestamp,
+                SearchResult::Audio(audio) => audio.timestamp,
+            };
+            timestamp_b.cmp(&timestamp_a)
+        });
+
+        // Apply limit after combining and sorting
+        results.truncate(limit as usize);
+
+        Ok(results)
+    }
+
+    // Update the search_ocr method
+    async fn search_ocr(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>, // Add this parameter
+    ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let mut sql = r#"
             SELECT 
-                cte.frame_id,
-                cte.audio_chunk_id,
-                cti.text as chunk_text,
-                cte.timestamp,
-                CASE 
-                    WHEN cte.frame_id IS NOT NULL THEN f.app_name 
-                    ELSE NULL 
-                END as app_name,
-                CASE 
-                    WHEN cte.frame_id IS NOT NULL THEN vc.file_path 
-                    WHEN cte.audio_chunk_id IS NOT NULL THEN ac.file_path 
-                    ELSE NULL 
-                END as file_path,
-                CASE 
-                    WHEN cte.frame_id IS NOT NULL THEN f.offset_index 
-                    WHEN cte.audio_chunk_id IS NOT NULL THEN at.offset_index 
-                    ELSE NULL 
-                END as offset_index,
-                cte.engine,
-                cte.source
+                ocr_text.frame_id,
+                ocr_text.text as ocr_text,
+                ocr_text.text_json,
+                frames.timestamp,
+                video_chunks.file_path,
+                frames.offset_index,
+                frames.app_name,
+                ocr_text.ocr_engine
             FROM 
-                chunked_text_index cti
+                ocr_text
             JOIN 
-                chunked_text_entries cte ON cti.text_id = cte.text_id
-            LEFT JOIN 
-                frames f ON cte.frame_id = f.id
-            LEFT JOIN 
-                video_chunks vc ON f.video_chunk_id = vc.id
-            LEFT JOIN 
-                audio_chunks ac ON cte.audio_chunk_id = ac.id
-            LEFT JOIN 
-                audio_transcriptions at ON cte.audio_chunk_id = at.audio_chunk_id
+                frames ON ocr_text.frame_id = frames.id
+            JOIN 
+                video_chunks ON frames.video_chunk_id = video_chunks.id
             WHERE 
-                cti.text LIKE '%' || ?1 || '%'
-                AND (?2 IS NULL OR cte.timestamp >= ?2)
-                AND (?3 IS NULL OR cte.timestamp <= ?3)
-        "#.to_string();
+                ocr_text.text LIKE '%' || ?1 || '%'
+                AND (?2 IS NULL OR frames.timestamp >= ?2)
+                AND (?3 IS NULL OR frames.timestamp <= ?3)
+        "#
+        .to_string();
 
-        if let Some(_app_name) = app_name {
-            sql.push_str(" AND f.app_name = ?6");
+        if app_name.is_some() {
+            sql.push_str(" AND frames.app_name = ?6");
         }
 
-        if content_type != ContentType::All {
-            sql.push_str(" AND cte.source = ?7");
-        }
+        sql.push_str(
+            r#"
+            ORDER BY 
+                frames.timestamp DESC
+            LIMIT ?4 OFFSET ?5
+            "#,
+        );
 
-        sql.push_str(" ORDER BY cte.timestamp DESC LIMIT ?4 OFFSET ?5");
-
-        let mut query = sqlx::query_as(&sql)
+        let mut query = sqlx::query_as::<_, OCRResult>(&sql)
             .bind(query)
             .bind(start_time)
             .bind(end_time)
             .bind(limit)
             .bind(offset);
 
-        if app_name.is_some() {
+        if let Some(app_name) = app_name {
             query = query.bind(app_name);
         }
 
-        if content_type != ContentType::All {
-            query = query.bind(content_type.to_string().to_lowercase());
-        }
+        query.fetch_all(&self.pool).await
+    }
 
-        let results: Vec<(Option<i64>, Option<i64>, String, DateTime<Utc>, Option<String>, Option<String>, Option<i64>, String, String)> = query.fetch_all(&self.pool).await?;
-
-        Ok(results
-            .into_iter()
-            .map(|(frame_id, audio_chunk_id, chunk_text, timestamp, app_name, file_path, offset_index, engine, source)| {
-                match source.as_str() {
-                    "screen" => SearchResult::OCR(OCRResult {
-                        frame_id: frame_id.unwrap(),
-                        ocr_text: chunk_text,
-                        text_json: "".to_string(), // You might want to handle this differently
-                        timestamp,
-                        file_path: file_path.unwrap_or_default(),
-                        offset_index: offset_index.unwrap_or_default(),
-                        app_name: app_name.unwrap_or_default(),
-                        ocr_engine: engine,
-                    }),
-                    "audio" => SearchResult::Audio(AudioResult {
-                        audio_chunk_id: audio_chunk_id.unwrap(),
-                        transcription: chunk_text,
-                        timestamp,
-                        file_path: file_path.unwrap_or_default(),
-                        offset_index: offset_index.unwrap_or_default(),
-                        transcription_engine: engine,
-                    }),
-                    _ => unreachable!("Invalid source type"),
-                }
-            })
-            .collect())
+    async fn search_audio(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AudioResult>, sqlx::Error> {
+        sqlx::query_as::<_, AudioResult>(
+            r#"
+            SELECT 
+                audio_transcriptions.audio_chunk_id,
+                audio_transcriptions.transcription,
+                audio_transcriptions.timestamp,
+                audio_chunks.file_path,
+                audio_transcriptions.offset_index,
+                audio_transcriptions.transcription_engine
+            FROM 
+                audio_transcriptions
+            JOIN 
+                audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
+            WHERE 
+                audio_transcriptions.transcription LIKE '%' || ?1 || '%'
+                AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
+                AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
+            ORDER BY 
+                audio_transcriptions.timestamp DESC
+            LIMIT ?4 OFFSET ?5
+            "#,
+        )
+        .bind(query)
+        .bind(start_time)
+        .bind(end_time)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
     }
 
     pub async fn get_frame(&self, frame_id: i64) -> Result<Option<(String, i64)>, sqlx::Error> {
