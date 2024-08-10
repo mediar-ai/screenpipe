@@ -93,6 +93,10 @@ crossbeam = { workspace = true }
 screenpipe-integrations = { path = "../screenpipe-integrations" }
 async-trait = "0.1.68"
 
+# filtering
+ndarray = "0.15.6"
+rust-stemmers = "1.2.0"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 
