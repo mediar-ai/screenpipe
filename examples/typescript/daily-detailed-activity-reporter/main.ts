@@ -64,7 +64,7 @@ async function askForAIProvider(): Promise<{
   if (provider === "ollama") {
     model = await new Promise<string>((resolve) => {
       rl.question(
-        "Which Ollama model do you want to use? (e.g., llama3.1, mistral-nemo, phi3, etc.): ",
+        "Which Ollama model do you want to use? (we only support models supporting tools: llama3.1, mistral-nemo, etc.): ",
         (answer) => {
           resolve(answer.toLowerCase());
         }
@@ -202,6 +202,12 @@ Remember, the goal is to help workers understand their time usage and productivi
                   new Date(b.content.timestamp).getTime()
                 );
               });
+              // @ts-expect-error
+              if (process.env.DEBUG) {
+                console.log(
+                  `data ${JSON.stringify(data)}`
+                );
+              }
               const firstResultTime = data[0].content.timestamp;
               const lastResultTime = data[data.length - 1].content.timestamp;
               const task = {
@@ -217,12 +223,6 @@ Remember, the goal is to help workers understand their time usage and productivi
               };
               console.log(`task ${JSON.stringify(task)}`);
 
-              // @ts-expect-error
-              if (process.env.DEBUG) {
-                console.log(
-                  `result.data[0] ${JSON.stringify(result.data[0].content)}`
-                );
-              }
               tasks.push(task);
               totalHours += task.duration;
 
