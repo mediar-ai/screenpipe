@@ -6,6 +6,7 @@ mod resource_monitor;
 mod server;
 mod video;
 pub mod chunking;
+pub mod filtering;
 
 pub use core::{start_continuous_recording, RecorderControl};
 pub use db::{ContentType, DatabaseManager, SearchResult};
