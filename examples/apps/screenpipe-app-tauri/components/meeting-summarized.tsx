@@ -297,7 +297,7 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
   }, [isStreaming, meetingStartTime, settings]);
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div className="flex flex-col h-full ">
       <h2 className="text-2xl font-bold mb-2">
         Local First Meeting Summarizer
       </h2>
@@ -338,7 +338,7 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
           )}
         </TabsList>
         <div className="flex-grow overflow-hidden">
-          <TabsContent value="controls" className="h-full overflow-y-auto">
+          <TabsContent value="controls" className="h-full ">
             <p className="mb-4">{pipe.description}</p>
             <div className="flex space-x-2 mb-4">
               <Button onClick={handleStartMeeting} disabled={isStreaming}>
@@ -354,7 +354,7 @@ export const MeetingSummarizer = ({ pipe }: { pipe: Pipe }) => {
               </p>
             )}
           </TabsContent>
-          <TabsContent value="transcript" className="h-full overflow-y-auto">
+          <TabsContent value="transcript" className="h-full ">
             <div className="space-y-4 space-x-4">
               <Button
                 variant="outline"

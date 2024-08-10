@@ -114,7 +114,7 @@ export function Settings({ className }: { className?: string }) {
                 </div>
                 <p className="text-sm text-muted-foreground text-center">
                   {localSettings.useOllama
-                    ? "recommended: llama3.1 for ollama"
+                    ? "recommended: llama3.1 for ollama (we only support models supporting tools like llama3.1, mistral-nemo, etc.)"
                     : "recommended: gpt-4o for openai"}
                 </p>
               </div>
@@ -220,8 +220,8 @@ export function Settings({ className }: { className?: string }) {
                       </div>
                       {/* add small text to indicate only port 11434 is supported for security reasons */}
                       <p className="mt-1 text-sm text-muted-foreground text-center">
-                        For now only port 11434 is supported for security
-                        reasons.
+                        For now only port 11434 and 9000 are supported for
+                        security reasons.
                       </p>
                     </div>
                   </div>

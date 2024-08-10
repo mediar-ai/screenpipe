@@ -16,82 +16,8 @@ import { FunctionCallMessage } from "./function-call-message";
 import { EmptyScreen } from "./empty-screen";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { usePostHog } from "posthog-js/react";
-
-const screenpipeQuery = z.object({
-  q: z
-    .string()
-    .describe(
-      "The search query matching exact keywords. Use a single keyword that best matches the user intent. This would match either audio transcription or OCR screen text. Example: do not use 'discuss' the user ask about conversation, this is dumb, won't return any result"
-    )
-    .optional(),
-  content_type: z
-    .enum(["ocr", "audio", "all"])
-    .default("all")
-    .describe(
-      "The type of content to search for: screenshot data or audio transcriptions"
-    ),
-  limit: z
-    .number()
-    .default(5)
-    .describe(
-      "Number of results to return (default: 5). Don't return more than 50 results as it will be fed to an LLM"
-    ),
-  offset: z.number().default(0).describe("Offset for pagination (default: 0)"),
-  start_time: z
-    .string()
-    // 1 hour ago
-    .default(new Date(Date.now() - 3600000).toISOString())
-    .describe("Start time for search range in ISO 8601 format"),
-  end_time: z
-    .string()
-    .default(new Date().toISOString())
-    .describe("End time for search range in ISO 8601 format"),
-  app_name: z
-    .string()
-    .describe(
-      "The name of the app the user was using. This filter out all audio conversations. Only works with screen text. Use this to filter on the app context that would give context matching the user intent. For example 'cursor'. Use lower case. Browser is usually 'arc', 'chrome', 'safari', etc."
-    )
-    .optional(),
-});
-const screenpipeMultiQuery = z.object({
-  queries: z.array(screenpipeQuery),
-});
-
-async function queryScreenpipeNtimes(
-  params: z.infer<typeof screenpipeMultiQuery>
-) {
-  return Promise.all(params.queries.map(queryScreenpipe));
-}
-
-// Add this new function to handle screenpipe requests
-async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
-  try {
-    console.log("params", params);
-    const queryParams = new URLSearchParams(
-      Object.entries({
-        q: params.q,
-        offset: params.offset.toString(),
-        limit: params.limit.toString(),
-        start_date: params.start_time,
-        end_date: params.end_time,
-        content_type: params.content_type,
-        app_name: params.app_name,
-      }).filter(([_, v]) => v != null) as [string, string][]
-    );
-    console.log("calling screenpipe", JSON.stringify(params));
-    const response = await fetch(`http://localhost:3030/search?${queryParams}`);
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`HTTP error! status: ${response.status} ${text}`);
-    }
-    const result = await response.json();
-    console.log("result", result);
-    return result;
-  } catch (error) {
-    console.error("Error querying screenpipe:", error);
-    return null;
-  }
-}
+import * as Sentry from "@sentry/nextjs";
+import { queryScreenpipeNtimes, screenpipeMultiQuery } from "@/lib/screenpipe";
 
 // Add this function outside of the ChatList component
 async function generateTextWithRetry(
@@ -103,6 +29,10 @@ async function generateTextWithRetry(
     try {
       return await generateText(params);
     } catch (error) {
+      // ignore if the error is "STREAM_COMPLETE"
+      if (error instanceof Error && error.message === "STREAM_COMPLETE") {
+        return;
+      }
       console.error(`Attempt ${i + 1} failed:`, error);
       if (i === maxRetries - 1) throw error;
       // sleep
@@ -169,17 +99,103 @@ export function ChatList({
       // console.log("provider", provider);
       console.log("model", model);
 
-      const text = await generateTextWithRetry({
+      generateTextWithRetry({
         model: provider(model),
         tools: {
           query_screenpipe: {
-            description:
-              "Query the local screenpipe instance for relevant information. You will return multiple queries under the key 'queries'.",
+            description: `Query the local screenpipe instance for relevant information. 
+              You will return multiple queries under the key 'queries'.
+              Make sure to return a list of queries, not a single query.
+              
+              - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
+
+              Example answers from you:
+              "{
+                "queries": [
+                  {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z", "app_name": "arc"},
+                  {"offset": 0, "limit": 50, "content_type": "ocr", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
+                  {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
+                ]
+              }"
+              
+              `,
             parameters: screenpipeMultiQuery,
-            execute: queryScreenpipeNtimes,
+            execute: async (e: z.infer<typeof screenpipeMultiQuery>) => {
+              // @ts-ignore
+              setMessages((prevMessages) => [
+                ...prevMessages,
+                {
+                  id: nanoid(),
+                  role: "toolCall",
+                  content: [
+                    {
+                      type: "function",
+                      toolName: "query_screenpipe",
+                      args: {
+                        queries: e.queries,
+                      },
+                    },
+                  ],
+                },
+              ]);
+              const result = await queryScreenpipeNtimes(e);
+              // @ts-ignore
+              setMessages((prevMessages) => [
+                ...prevMessages,
+                {
+                  id: nanoid(),
+                  role: "toolResult",
+                  content: [
+                    {
+                      type: "function",
+                      toolName: "query_screenpipe",
+                      args: {
+                        queries: e.queries,
+                      },
+                      result: result,
+                    },
+                  ],
+                },
+              ]);
+              return result;
+            },
+          },
+          stream_response: {
+            description:
+              "Stream the final response to the user. ALWAYS FINISH WITH THIS TOOL",
+            parameters: z.object({
+              response: z
+                .string()
+                .describe("The final response to stream to the user"),
+            }),
+            execute: async ({ response }: { response: string }) => {
+              const { textStream } = await streamText({
+                model: provider(model),
+                messages: [{ role: "user", content: response }],
+              });
+              console.log("response", response);
+              const assistantMessageId = nanoid();
+              setMessages((prevMessages) => [
+                ...prevMessages,
+                { id: assistantMessageId, role: "assistant", content: "" },
+              ]);
+              let fullResponse = "";
+              for await (const chunk of textStream) {
+                fullResponse += chunk;
+                setMessages((prevMessages) =>
+                  prevMessages.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  )
+                );
+              }
+
+              throw new Error("STREAM_COMPLETE");
+            },
           },
         },
-        toolChoice: "required",
+        toolChoice: "auto",
         messages: [
           {
             role: "system",
@@ -188,7 +204,6 @@ export function ChatList({
           his screen and mics 24/7. The user ask you questions
           and you use his screenpipe recordings to answer him.
           Based on the user request, use tools to query screenpipe to best help the user. 
-          Each query should have "q", "offset", "limit", "start_date", "end_date", and "content_type" fields. 
           Rules:
           - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
           Return a list of objects with the key "queries"
@@ -202,28 +217,10 @@ export function ChatList({
           - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
           - Use between 2-5 queries with very different keywords that could maximally match the user's screen text or audio transcript
           - Use "all" for querying the same keyword over vision and audio
-          - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
-          - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
-          - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
           - You typically always query screenpipe in the first user message
-
-          Example answers from you:
-          "{
-            "queries": [
-              {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z", "app_name": "arc"},
-              {"offset": 0, "limit": 50, "content_type": "ocr", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
-              {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
-            ]
-          }"
-
-          or 
-          "{
-            "queries": [
-              {"q": "sales", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
-              {"q": "customer", "offset": 0, "limit": 20, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
-              {"offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z", "app_name": "notes"}
-            ]
-          }"
+          - ALWAYS use the "stream_response" tool to stream the final response to the user
+          - ALWAYS use the "stream_response" tool to stream the final response to the user
+          - ALWAYS use the "stream_response" tool to stream the final response to the user
 
           `,
           },
@@ -233,100 +230,20 @@ export function ChatList({
             content: inputMessage,
           },
         ],
-        // maxToolRoundtrips: 2, // allow up to 5 tool roundtrips
-        // prompt: inputMessage,
+        maxToolRoundtrips: 3, // allow up to 5 tool roundtrips
       });
-
-      setIsLoading(false);
-
-      console.log("text", text);
-
-      // @ts-ignore
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: nanoid(), role: "assistant", content: text!.toolCalls },
-        { id: nanoid(), role: "tool", content: text!.toolResults },
-      ]);
-
-      console.log("streaming now");
-
-      // console.log("toolCalls", text.toolCalls);
-      // console.log("toolResults", text.toolResults);
-
-      const { textStream } = useOllama
-        ? await streamText({
-            model: provider(model),
-            prompt: JSON.stringify([
-              {
-                role: "user",
-                content:
-                  messages.findLast((msg) => msg.role === "user")?.content ||
-                  inputMessage,
-              },
-              {
-                role: "assistant",
-                content: text!.toolCalls,
-              },
-              {
-                role: "tool",
-                content: text!.toolResults,
-              },
-              // just a hack because ollama is drunk
-              {
-                role: "user",
-                content: "MAKE SURE TO ANSWER THE USER QUESTION ROLE 'USER'",
-              },
-            ]),
-          })
-        : await streamText({
-            model: provider(model),
-            messages: [
-              {
-                role: "user",
-                content:
-                  messages.findLast((msg) => msg.role === "user")?.content ||
-                  inputMessage,
-              },
-              {
-                role: "assistant",
-                content: text!.toolCalls,
-              },
-              {
-                role: "tool",
-                content: text!.toolResults,
-              },
-            ],
-          });
-
-      // console.log("textStream", textStream);
-
-      // create new assistant
-      const assistantMessageId = nanoid();
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: assistantMessageId, role: "assistant", content: "" },
-      ]);
-
-      let fullResponse = "";
-      for await (const chunk of textStream) {
-        fullResponse += chunk;
-        // console.log("fullResponse", fullResponse);
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, content: fullResponse }
-              : msg
-          )
-        );
-      }
     } catch (error) {
+      if (error instanceof Error && error.message === "STREAM_COMPLETE") {
+        console.log("Streaming completed");
+        return;
+      }
+
       console.error(error);
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
-      const assistantMessageId = nanoid();
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: assistantMessageId, role: "assistant", content: errorMessage },
+        { id: nanoid(), role: "assistant", content: errorMessage },
       ]);
 
       if (errorMessage === "Cannot reach local Ollama instance") {
@@ -337,6 +254,8 @@ export function ChatList({
           { id: nanoid(), role: "assistant", content: ollamaErrorMessage },
         ]);
       }
+
+      Sentry.captureException(error);
     } finally {
       setIsLoading(false);
     }
@@ -349,7 +268,7 @@ export function ChatList({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto pb-32">
+      <div className="flex-1  pb-32">
         {messages.length === 0 ? (
           <EmptyScreen onSuggestionClick={handleSuggestionClick} />
         ) : (
@@ -363,13 +282,9 @@ export function ChatList({
                 (msg.role === "assistant" && typeof msg.content === "string")
               ) {
                 return <ChatMessage key={index} message={msg} />;
-              } else if (
-                msg.role === "assistant" &&
-                msg.content &&
-                typeof msg.content === "object"
-              ) {
+              } else if (msg.role === "toolCall") {
                 return <FunctionCallMessage key={index} message={msg} />;
-              } else if (msg.role === "tool") {
+              } else if (msg.role === "toolResult") {
                 return (
                   <FunctionCallMessage key={index} message={msg} isResult />
                 );
