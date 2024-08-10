@@ -117,6 +117,10 @@ by default screenpipe is using a local model for screen capture OCR processing t
 ```bash
 screenpipe --ocr-engine unstructured
 ```
+friend wearable integration, in order to link your wearable you need to pass user ID from friend app:
+```bash
+screenpipe --friend-wearable-uid AC...........................F3
+```
 
 you can combine multiple flags if needed
 
