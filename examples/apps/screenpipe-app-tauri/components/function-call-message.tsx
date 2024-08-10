@@ -31,15 +31,17 @@ interface FunctionCallMessageProps {
 
 export function FunctionCallMessage({
   message,
-  isResult = false,
 }: FunctionCallMessageProps) {
   const { settings } = useSettings();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   console.log("FunctionCallMessage", message);
+
+
   // @ts-ignore TODO
   const toolCalls = message.content.filter((content) => !content.result);
   // @ts-ignore TODO
   const toolResults = message.content.filter((content) => content.result);
+  const isResult = toolResults && toolResults.length > 0;
 
   console.log("toolCalls", toolCalls);
   console.log("toolResults", toolResults);

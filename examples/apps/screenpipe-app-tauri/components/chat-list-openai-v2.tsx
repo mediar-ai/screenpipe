@@ -126,7 +126,8 @@ export function ChatList({
                 ...prevMessages,
                 {
                   id: nanoid(),
-                  role: "toolCall",
+                  role: "tool",
+                  toolInvocations: e.queries,
                   content: [
                     {
                       type: "function",
@@ -144,7 +145,7 @@ export function ChatList({
                 ...prevMessages,
                 {
                   id: nanoid(),
-                  role: "toolResult",
+                  role: "tool",
                   content: [
                     {
                       type: "function",
@@ -162,7 +163,7 @@ export function ChatList({
           },
           stream_response: {
             description:
-              "Stream the final response to the user. ALWAYS FINISH WITH THIS TOOL",
+              "Stream the final response to the user. ALWAYS FINISH WITH THIS TOOL. ALWAYS FINISH WITH THIS TOOL. ALWAYS FINISH WITH THIS TOOL",
             parameters: z.object({
               response: z
                 .string()
@@ -282,12 +283,8 @@ export function ChatList({
                 (msg.role === "assistant" && typeof msg.content === "string")
               ) {
                 return <ChatMessage key={index} message={msg} />;
-              } else if (msg.role === "toolCall") {
+              } else if (msg.role === "tool") {
                 return <FunctionCallMessage key={index} message={msg} />;
-              } else if (msg.role === "toolResult") {
-                return (
-                  <FunctionCallMessage key={index} message={msg} isResult />
-                );
               }
               return null;
             })}
