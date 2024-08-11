@@ -87,7 +87,7 @@ pub async fn filter_texts(timestamp: &str, memory_source: &str, pool: &SqlitePoo
     debug!("Initial: {} texts, {} words", initial_text_count, initial_word_count);
 
     if texts.is_empty() {
-        return Ok("No results found.".to_string());
+        return Ok("".to_string());
     }
 
     let kept_indices = keep_least_similar(&texts, 0.1);
