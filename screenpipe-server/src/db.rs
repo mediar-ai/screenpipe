@@ -843,10 +843,24 @@ impl DatabaseManager {
             .map_err(|e| DatabaseError(e.to_string()))
     }
 
-    pub async fn insert_friend_wearable_request(&self, request_id: &str, memory_source: &str, chunk_id_range: &str, timestamp_range: &str, friend_user_id: &str) -> Result<(), DatabaseError> {
+    pub async fn insert_friend_wearable_request(
+        &self,
+        request_id: &str,
+        memory_source: &str,
+        chunk_id_range: &str,
+        timestamp_range: &str,
+        friend_user_id: &str,
+        filtered_text: &str,
+        structured_response: &str,
+        response_id: &str,
+        response_created_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError> {
         let query = r#"
-            INSERT INTO friend_wearable_requests (request_id, memory_source, chunk_id_range, timestamp_range, friend_user_id)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO friend_wearable_requests (
+                request_id, memory_source, chunk_id_range, timestamp_range, friend_user_id,
+                filtered_text, structured_response, response_id, response_created_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
         "#;
         sqlx::query(query)
             .bind(request_id)
@@ -854,6 +868,10 @@ impl DatabaseManager {
             .bind(chunk_id_range)
             .bind(timestamp_range)
             .bind(friend_user_id)
+            .bind(filtered_text)
+            .bind(structured_response)
+            .bind(response_id)
+            .bind(response_created_at)
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -906,9 +924,30 @@ impl FriendWearableDatabase for DatabaseManager {
         Ok((texts, min_chunk_id, max_chunk_id, min_timestamp, max_timestamp))
     }
 
-    async fn insert_friend_wearable_request(&self, request_id: &str, memory_source: &str, chunk_id_range: &str, timestamp_range: &str, friend_user_id: &str) -> Result<(), Box<dyn StdError + Send + Sync>> {
-        self.insert_friend_wearable_request(request_id, memory_source, chunk_id_range, timestamp_range, friend_user_id)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)
+    async fn insert_friend_wearable_request(
+        &self,
+        request_id: &str,
+        memory_source: &str,
+        chunk_id_range: &str,
+        timestamp_range: &str,
+        friend_user_id: &str,
+        filtered_text: &str,
+        structured_response: &str,
+        response_id: &str,
+        response_created_at: DateTime<Utc>,
+    ) -> Result<(), Box<dyn StdError + Send + Sync>> {
+        self.insert_friend_wearable_request(
+            request_id,
+            memory_source,
+            chunk_id_range,
+            timestamp_range,
+            friend_user_id,
+            filtered_text,
+            structured_response,
+            response_id,
+            response_created_at,
+        )
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)
     }
 }
