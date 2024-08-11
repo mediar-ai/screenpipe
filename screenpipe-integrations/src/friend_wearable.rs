@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Utc};
 use log::{debug, error};
 use reqwest::Client;
 use serde_json::json;
@@ -49,6 +49,10 @@ pub trait FriendWearableDatabase {
         chunk_id_range: &str,
         timestamp_range: &str,
         friend_user_id: &str,
+        filtered_text: &str,
+        structured_response: &str,
+        response_id: &str,
+        response_created_at: DateTime<Utc>,
     ) -> Result<(), Box<dyn StdError + Send + Sync>>;
 }
 
@@ -89,43 +93,54 @@ async fn filter_and_send_data<DB: FriendWearableDatabase + Send + Sync>(
             .get_chunked_data_since_timestamp(source, uid, since)
             .await?;
 
-        if !texts.is_empty() {
-            let chunk_id_range = format!("{}-{}", min_chunk_id, max_chunk_id);
-            let request_id = encode_to_uuid(source, &chunk_id_range);
-            let memory_text = texts.join(" ");
-            debug!("Friend_wearable: Joined text length: {}", memory_text.len());
-
-            let payload = json!({
-                "request_id": request_id.to_string(),
-                "source": source,
-                "text": memory_text,
-                "timestamp_range": {
-                    "start": min_timestamp.timestamp(),
-                    "end": max_timestamp.timestamp()
-                }
-            });
-            debug!(
-                "Friend_wearable: Created payload with request_id: {}",
-                request_id
-            );
-
-            send_data_to_friend_wearable_with_payload(payload, uid).await?;
-            db.insert_friend_wearable_request(
-                &request_id.to_string(),
-                source,
-                &chunk_id_range,
-                &format!(
-                    "{}-{}",
-                    min_timestamp.timestamp(),
-                    max_timestamp.timestamp()
-                ),
-                uid,
-            )
-            .await?;
-            debug!("Friend_wearable: Inserted friend wearable request");
-        } else {
-            debug!("Friend_wearable: No texts found for source: {}", source);
+        let memory_text = texts.join(" ");
+        if memory_text.is_empty() {
+            debug!("Friend_wearable: Skipping empty result for source: {}", source);
+            continue;
         }
+
+        let chunk_id_range = format!("{}-{}", min_chunk_id, max_chunk_id);
+        let request_id = encode_to_uuid(source, &chunk_id_range);
+        debug!("Friend_wearable: Joined text length: {}", memory_text.len());
+
+        let payload = json!({
+            "request_id": request_id.to_string(),
+            "source": source,
+            "text": memory_text,
+            "timestamp_range": {
+                "start": min_timestamp.timestamp(),
+                "end": max_timestamp.timestamp()
+            }
+        });
+        debug!(
+            "Friend_wearable: Created payload with request_id: {}",
+            request_id
+        );
+
+        let response = send_data_to_friend_wearable_with_payload(payload.clone(), uid).await?;
+        let structured_response = serde_json::to_string(&response["structured"])?;
+        let response_id = response["id"].as_str().unwrap_or("").to_string();
+        let response_created_at = DateTime::parse_from_rfc3339(response["created_at"].as_str().unwrap_or(""))
+            .unwrap_or_else(|_| DateTime::<FixedOffset>::from_naive_utc_and_offset(Utc::now().naive_utc(), FixedOffset::east_opt(0).unwrap()))
+            .with_timezone(&Utc);
+
+        db.insert_friend_wearable_request(
+            &request_id.to_string(),
+            source,
+            &chunk_id_range,
+            &format!(
+                "{}-{}",
+                min_timestamp.timestamp(),
+                max_timestamp.timestamp()
+            ),
+            uid,
+            &memory_text,
+            &structured_response,
+            &response_id,
+            response_created_at,
+        )
+        .await?;
+        debug!("Friend_wearable: Inserted friend wearable request");
     }
     Ok(())
 }
@@ -133,8 +148,8 @@ async fn filter_and_send_data<DB: FriendWearableDatabase + Send + Sync>(
 async fn send_data_to_friend_wearable_with_payload(
     payload: serde_json::Value,
     uid: &str,
-) -> Result<(), Box<dyn StdError + Send + Sync>> {
-    let endpoint = "https://camel-lucky-reliably.ngrok-free.app/v1/integrations/screenpipe";
+) -> Result<serde_json::Value, Box<dyn StdError + Send + Sync>> {
+    let endpoint = "https://josancamon19--api-fastapi-app.modal.run/"; // https://camel-lucky-reliably.ngrok-free.app/v1/integrations/screenpipe
     let api_key = "123";
 
     let client = Client::new();
@@ -158,7 +173,8 @@ async fn send_data_to_friend_wearable_with_payload(
 
     if status.is_success() {
         debug!("Friend_wearable: Successfully sent data to friend wearable");
-        Ok(())
+        let response_body: serde_json::Value = response.json().await?;
+        Ok(response_body)
     } else {
         error!(
             "Friend_wearable: Unexpected response from friend wearable API: {}",
