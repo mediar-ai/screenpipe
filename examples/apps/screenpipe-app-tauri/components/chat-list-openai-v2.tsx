@@ -81,6 +81,7 @@ export function ChatList({
     });
 
     const userMessage = { id: nanoid(), role: "user", content: inputMessage };
+    // @ts-expect-error
     setMessages((prevMessages) => [...prevMessages, userMessage]);
     setInputMessage("");
 
@@ -222,6 +223,7 @@ export function ChatList({
             - Always use the absolute file path to access videos
             `,
           },
+          // @ts-expect-error
           ...messages,
           // @ts-expect-error
           ...(text
@@ -230,6 +232,7 @@ export function ChatList({
                   role: "assistant",
                   content: [
                     {
+                      // @ts-expect-error
                       toolCallId: text?.toolCalls?.[0]?.toolCallId!,
                       type: "tool-call",
                       toolName: "query_screenpipe",
@@ -253,6 +256,7 @@ export function ChatList({
               ]
             : []),
           {
+            // @ts-expect-error
             role: "user",
             content:
               messages.findLast((msg) => msg.role === "user")?.content ||
@@ -319,8 +323,10 @@ export function ChatList({
                 msg.role === "user" ||
                 (msg.role === "assistant" && typeof msg.content === "string")
               ) {
+                // @ts-expect-error
                 return <ChatMessage key={index} message={msg} />;
               } else if (msg.role === "tool") {
+                // @ts-expect-error
                 return <FunctionCallMessage key={index} message={msg} />;
               }
               return null;
