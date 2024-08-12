@@ -36,7 +36,7 @@ pub fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(Vec<f32
         .tracks()
         .iter()
         .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
-        .expect("no supported audio tracks");
+        .ok_or_else(|| anyhow::anyhow!("no supported audio tracks"))?;
 
     // Use the default options for the decoder.
     let dec_opts: DecoderOptions = Default::default();

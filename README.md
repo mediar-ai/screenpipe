@@ -157,7 +157,8 @@ cargo build --release --features metal # takes 3 minuttes
 
 Then run it
 ```bash
-./target/release/screenpipe # add "--disable-audio" if you don't want audio to be recorded
+./target/release/screenpipe # add --ocr-engine apple-native to use apple native OCR
+# add "--disable-audio" if you don't want audio to be recorded
 # "--save-text-files" if you want to save OCR data to text file in text_json folder in the root of your project (good for testing)
 # "--debug" if you want to run screenpipe in debug mode to show more logs in terminal
 ```

@@ -434,7 +434,8 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String>
     // Get the WAV data from the cursor
     let wav_data = cursor.into_inner();
 
-    let response = client.post("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true")
+    let response = client
+        .post("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true")
         .header("Content-Type", "audio/wav")
         .header("Authorization", format!("Token {}", api_key))
         .body(wav_data)
@@ -447,30 +448,40 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String>
                 Ok(result) => {
                     debug!("Successfully parsed JSON response");
                     if let Some(err_code) = result.get("err_code") {
-                        error!("Deepgram API error code: {:?}, result: {:?}", err_code, result);
+                        error!(
+                            "Deepgram API error code: {:?}, result: {:?}",
+                            err_code, result
+                        );
                         return Err(anyhow::anyhow!("Deepgram API error: {:?}", result));
                     }
-                    let transcription = result["results"]["channels"][0]["alternatives"][0]["transcript"]
+                    let transcription = result["results"]["channels"][0]["alternatives"][0]
+                        ["transcript"]
                         .as_str()
                         .unwrap_or("");
-                    
+
                     if transcription.is_empty() {
                         info!("Transcription is empty. Full response: {:?}", result);
                     } else {
-                        info!("Transcription successful. Length: {} characters", transcription.len());
+                        info!(
+                            "Transcription successful. Length: {} characters",
+                            transcription.len()
+                        );
                     }
-                    
+
                     Ok(transcription.to_string())
-                },
+                }
                 Err(e) => {
                     error!("Failed to parse JSON response: {:?}", e);
                     Err(anyhow::anyhow!("Failed to parse JSON response: {:?}", e))
                 }
             }
-        },
+        }
         Err(e) => {
             error!("Failed to send request to Deepgram API: {:?}", e);
-            Err(anyhow::anyhow!("Failed to send request to Deepgram API: {:?}", e))
+            Err(anyhow::anyhow!(
+                "Failed to send request to Deepgram API: {:?}",
+                e
+            ))
         }
     }
 }
@@ -521,7 +532,7 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel, cloud_audio: bool) -> 
                 } else {
                     // debug!("VAD: Non-speech frame {} filtered out", frame_index);
                 }
-            },
+            }
             Err(e) => {
                 debug!("VAD failed for frame {}: {:?}", frame_index, e);
                 // Optionally, you can choose to include the frame if VAD fails
@@ -530,7 +541,11 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel, cloud_audio: bool) -> 
         }
     }
 
-    info!("Total audio_frames processed: {}, frames that include speech: {}", pcm_data.len() / frame_size, speech_frames.len() / frame_size);
+    info!(
+        "Total audio_frames processed: {}, frames that include speech: {}",
+        pcm_data.len() / frame_size,
+        speech_frames.len() / frame_size
+    );
 
     // If no speech frames detected, skip processing
     if speech_frames.is_empty() {
@@ -538,7 +553,11 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel, cloud_audio: bool) -> 
         return Ok("".to_string()); // Return an empty string or consider a more specific "no speech" indicator
     }
 
-    debug!("Using {} speech frames out of {} total frames", speech_frames.len() / frame_size, pcm_data.len() / frame_size);
+    debug!(
+        "Using {} speech frames out of {} total frames",
+        speech_frames.len() / frame_size,
+        pcm_data.len() / frame_size
+    );
 
     if cloud_audio {
         // Deepgram implementation
@@ -546,7 +565,10 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel, cloud_audio: bool) -> 
         match transcribe_with_deepgram(&api_key, &speech_frames) {
             Ok(transcription) => Ok(transcription),
             Err(e) => {
-                error!("Deepgram transcription failed, falling back to Whisper: {:?}", e);
+                error!(
+                    "Deepgram transcription failed, falling back to Whisper: {:?}",
+                    e
+                );
                 // Existing Whisper implementation
                 debug!("Converting PCM to mel spectrogram");
                 let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
@@ -674,7 +696,9 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
-pub async fn create_whisper_channel(cloud_audio: bool) -> Result<(
+pub async fn create_whisper_channel(
+    cloud_audio: bool,
+) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
 )> {
@@ -697,20 +721,21 @@ pub async fn create_whisper_channel(cloud_audio: bool) -> Result<(
                         .expect("Time went backwards")
                         .as_secs();
 
-                    let result = stt(&input.path, &whisper_model, cloud_audio);
-
-                    let transcription_result = match result {
+                    let transcription_result = match stt(&input.path, &whisper_model, cloud_audio) {
                         Ok(transcription) => TranscriptionResult {
                             input: input.clone(),
                             transcription: Some(transcription),
                             timestamp,
                             error: None,
                         },
-                        Err(e) => TranscriptionResult {
-                            input: input.clone(),
-                            transcription: None,
-                            timestamp,
-                            error: Some(e.to_string()),
+                        Err(e) => {
+                            error!("STT error for input {}: {:?}", input.path, e);
+                            TranscriptionResult {
+                                input: input.clone(),
+                                transcription: None,
+                                timestamp,
+                                error: Some(e.to_string()),
+                            }
                         },
                     };
 
