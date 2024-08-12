@@ -13,7 +13,7 @@ resolver = "2"
 
 
 [workspace.package]
-version = "0.1.57"
+version = "0.1.59"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/louis030195/screen-pipe"
