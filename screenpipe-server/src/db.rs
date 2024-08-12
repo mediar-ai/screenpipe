@@ -858,10 +858,13 @@ impl DatabaseManager {
         let query = r#"
             INSERT INTO friend_wearable_requests (
                 request_id, memory_source, chunk_id_range, timestamp_range, friend_user_id,
-                filtered_text, structured_response, response_id, response_created_at
+                filtered_text, structured_response, response_id, response_created_at, is_successful
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
         "#;
+        
+        let is_successful = !structured_response.contains("\"error\"");
+        
         sqlx::query(query)
             .bind(request_id)
             .bind(memory_source)
@@ -872,6 +875,7 @@ impl DatabaseManager {
             .bind(structured_response)
             .bind(response_id)
             .bind(response_created_at)
+            .bind(is_successful)
             .execute(&self.pool)
             .await
             .map(|_| ())
