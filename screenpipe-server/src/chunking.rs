@@ -1,14 +1,13 @@
 use anyhow::Result;
-use candle::{Device, Tensor, DType};
-use candle_nn::{VarBuilder, Module};
+use candle::{DType, Device, Tensor};
+use candle_nn::{Module, VarBuilder};
 use candle_transformers::models::jina_bert::{BertModel, Config};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use tokenizers::Tokenizer;
 
 pub async fn text_chunking_by_similarity(text: &str) -> Result<Vec<String>> {
-    let device = Device::new_metal(0)
-        .unwrap_or_else(|_| Device::new_cuda(0)
-        .unwrap_or(Device::Cpu));
+    let device =
+        Device::new_metal(0).unwrap_or_else(|_| Device::new_cuda(0).unwrap_or(Device::Cpu));
     let repo = Repo::with_revision(
         "jinaai/jina-embeddings-v2-base-en".to_string(),
         RepoType::Model,
@@ -36,14 +35,17 @@ pub async fn text_chunking_by_similarity(text: &str) -> Result<Vec<String>> {
     let max_chunk_length = 300;
 
     for sentence in sentences {
-        let tokens = tokenizer.encode(sentence, true).map_err(anyhow::Error::msg)?;
+        let tokens = tokenizer
+            .encode(sentence, true)
+            .map_err(anyhow::Error::msg)?;
         let token_ids = Tensor::new(tokens.get_ids(), &device)?;
         let embeddings = model.forward(&token_ids.unsqueeze(0)?)?;
         let sentence_embedding = embeddings.mean(1)?;
 
         let should_split = if let Some(prev_emb) = &previous_embedding {
             let similarity = cosine_similarity(&sentence_embedding, prev_emb)?;
-            similarity < similarity_threshold || current_chunk.len() + sentence.len() > max_chunk_length
+            similarity < similarity_threshold
+                || current_chunk.len() + sentence.len() > max_chunk_length
         } else {
             false
         };
@@ -78,22 +80,17 @@ pub fn text_chunking_simple(text: &str) -> Result<Vec<String>> {
         // Chunk by fixed character count with overlap
         let chunk_size = 200;
         let overlap = 30;
+        let chars: Vec<char> = text.chars().collect();
         let mut start = 0;
 
-        while start < text.len() {
-            let end = (start + chunk_size).min(text.len());
-            
-            // Find a valid char boundary
-            let end = text[start..].char_indices()
-                .take_while(|(i, _)| *i + start <= end)
-                .last()
-                .map(|(i, _)| start + i + 1)
-                .unwrap_or(text.len());
-            
-            // Safely create the chunk
-            chunks.push(text[start..end].to_string());
-
-            start = if end == text.len() { end } else { end - overlap };
+        while start < chars.len() {
+            let end = (start + chunk_size).min(chars.len());
+            chunks.push(chars[start..end].iter().collect());
+            start = if end == chars.len() {
+                end
+            } else {
+                end - overlap
+            };
         }
     }
 
@@ -106,6 +103,7 @@ fn cosine_similarity(a: &Tensor, b: &Tensor) -> Result<f32> {
     let dot_product = (&a * &b)?.sum_all()?;
     let norm_a = a.sqr()?.sum_all()?.sqrt()?;
     let norm_b = b.sqr()?.sum_all()?.sqrt()?;
-    let similarity = dot_product.to_scalar::<f32>()? / (norm_a.to_scalar::<f32>()? * norm_b.to_scalar::<f32>()?);
+    let similarity = dot_product.to_scalar::<f32>()?
+        / (norm_a.to_scalar::<f32>()? * norm_b.to_scalar::<f32>()?);
     Ok(similarity)
 }
