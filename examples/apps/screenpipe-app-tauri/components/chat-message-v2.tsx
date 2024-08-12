@@ -1,7 +1,7 @@
 import { Message } from "ai";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { readFile } from "@tauri-apps/plugin-fs";
 
 import { cn } from "@/lib/utils";
@@ -72,7 +72,7 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
                 }
                 return (
                   <code
-                    className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono text-sm"
+                    className="px-1 py-0.5 rounded-sm font-mono text-sm"
                     {...props}
                   >
                     {content}
@@ -99,7 +99,11 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
   );
 }
 
-function VideoComponent({ filePath }: { filePath: string }) {
+const VideoComponent = memo(function VideoComponent({
+  filePath,
+}: {
+  filePath: string;
+}) {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -114,7 +118,6 @@ function VideoComponent({ filePath }: { filePath: string }) {
     }
 
     loadVideo();
-
     return () => {
       if (videoSrc) URL.revokeObjectURL(videoSrc);
     };
@@ -134,4 +137,4 @@ function VideoComponent({ filePath }: { filePath: string }) {
       Your browser does not support the video tag.
     </video>
   );
-}
+});
