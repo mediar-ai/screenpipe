@@ -1,6 +1,7 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
+    use screenpipe_vision::monitor::get_default_monitor;
     use screenpipe_vision::{process_ocr_task, OcrEngine};
     use std::sync::Arc;
     use std::{path::PathBuf, time::Instant};
@@ -49,7 +50,7 @@ mod tests {
         let (result_tx, mut result_rx) = mpsc::channel::<CaptureResult>(10);
 
         // Create a mock monitor
-        let monitor = get_monitor().await;
+        let monitor = get_default_monitor().await.id();
 
         // Set up test parameters
         let interval = Duration::from_millis(1000);
