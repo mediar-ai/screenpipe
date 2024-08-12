@@ -32,13 +32,14 @@ pub fn calculate_hash(image: &DynamicImage) -> u64 {
     hasher.finish()
 }
 
-pub fn compare_images_histogram(image1: &DynamicImage, image2: &DynamicImage) -> f64 {
+pub fn compare_images_histogram(
+    image1: &DynamicImage,
+    image2: &DynamicImage,
+) -> anyhow::Result<f64> {
     let image_one = image1.to_luma8();
     let image_two = image2.to_luma8();
-    let result =
-        image_compare::gray_similarity_histogram(Metric::Hellinger, &image_one, &image_two)
-            .expect("Images had different dimensions");
-    result
+    image_compare::gray_similarity_histogram(Metric::Hellinger, &image_one, &image_two)
+        .map_err(|e| anyhow::anyhow!("Failed to compare images: {}", e))
 }
 
 pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 {
@@ -151,14 +152,14 @@ pub async fn capture_screenshot(monitor: Arc<Monitor>) -> (DynamicImage, u64, Du
 pub async fn compare_with_previous_image(
     previous_image: &Option<Arc<DynamicImage>>,
     current_image: &DynamicImage,
-    max_average: &mut Option<MaxAverageFrame>, // Prefix with underscore if not used
+    max_average: &mut Option<MaxAverageFrame>,
     frame_number: u64,
     max_avg_value: &mut f64,
-) -> f64 {
+) -> anyhow::Result<f64> {
     let mut current_average = 0.0;
     if let Some(prev_image) = previous_image {
-        let histogram_diff = compare_images_histogram(prev_image, &current_image);
-        let ssim_diff = 1.0 - compare_images_ssim(prev_image, &current_image);
+        let histogram_diff = compare_images_histogram(prev_image, current_image)?;
+        let ssim_diff = 1.0 - compare_images_ssim(prev_image, current_image);
         current_average = (histogram_diff + ssim_diff) / 2.0;
         let max_avg_frame_number = max_average.as_ref().map_or(0, |frame| frame.frame_number);
         debug!(
@@ -168,7 +169,7 @@ pub async fn compare_with_previous_image(
     } else {
         debug!("No previous image to compare for frame {}", frame_number);
     }
-    current_average
+    Ok(current_average)
 }
 
 pub async fn save_text_files(

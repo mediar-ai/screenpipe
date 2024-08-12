@@ -124,14 +124,21 @@ pub async fn continuous_capture(
         );
         let arc_monitor = arc_monitor.clone();
         let (image, image_hash, _capture_duration) = capture_screenshot(arc_monitor).await;
-        let current_average = compare_with_previous_image(
+        let current_average = match compare_with_previous_image(
             &previous_image,
             &image,
             &mut max_average,
             frame_counter,
             &mut max_avg_value,
         )
-        .await;
+        .await
+        {
+            Ok(avg) => avg,
+            Err(e) => {
+                error!("Error comparing images: {}", e);
+                0.0 // or some default value
+            }
+        };
 
         // Account for situation when there is no previous image
         let current_average = if previous_image.is_none() {
