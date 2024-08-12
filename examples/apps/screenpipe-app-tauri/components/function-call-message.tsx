@@ -37,7 +37,9 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
   // Assuming message.content is the array shown in the image
   // @ts-ignore
   const toolCalls = message.content
+    // @ts-ignore
     .filter((item) => !item.result)
+    // @ts-ignore
     .map((item) => ({
       type: item.type,
       toolName: item.toolName,
@@ -46,7 +48,9 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
 
   // @ts-ignore
   const toolResults = message.content
+    // @ts-ignore
     .filter((item) => item.result)
+    // @ts-ignore
     .map((item) => ({
       type: item.type,
       toolName: item.toolName,
