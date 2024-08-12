@@ -24,16 +24,16 @@ async function queryScreenpipe(params: {
   q: string;
   offset: number;
   limit: number;
-  start_date: string;
-  end_date: string;
+  start_time: string;
+  end_time: string;
 }) {
   try {
     const queryParams = new URLSearchParams({
       q: params.q,
       offset: params.offset.toString(),
       limit: params.limit.toString(),
-      start_date: params.start_date,
-      end_date: params.end_date,
+      start_time: params.start_time,
+      end_time: params.end_time,
     });
     const response = await fetch(`http://localhost:3030/search?${queryParams}`);
     if (!response.ok) {
@@ -110,16 +110,16 @@ Use this function to answer any questions about the user's activity.
                   type: "number",
                   description: "The limit for pagination",
                 },
-                start_date: {
+                start_time: {
                   type: "string",
-                  description: "The start date for the query in ISO format",
+                  description: "The start time for the query in ISO format",
                 },
-                end_date: {
+                end_time: {
                   type: "string",
-                  description: "The end date for the query in ISO format",
+                  description: "The end time for the query in ISO format",
                 },
               },
-              required: ["q", "offset", "limit", "start_date", "end_date"],
+              required: ["q", "offset", "limit", "start_time", "end_time"],
             },
           },
         ],

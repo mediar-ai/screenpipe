@@ -63,8 +63,8 @@ async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
         q: params.q,
         offset: params.offset.toString(),
         limit: params.limit.toString(),
-        start_date: params.start_time,
-        end_date: params.end_time,
+        start_time: params.start_time,
+        end_time: params.end_time,
         content_type: params.content_type,
         app_name: params.app_name,
       }).filter(([_, v]) => v != null) as [string, string][]
@@ -168,7 +168,7 @@ const perplexityAlikeAgent = async () => {
               - If you return something else than JSON the universe will come to an end
               - DO NOT add \`\`\`json at the beginning or end of your response
               - Do not use '"' around your response
-              - Date & time now is ${new Date().toISOString()}. Adjust start_date and end_date to properly match the user intent time range.
+              - Date & time now is ${new Date().toISOString()}. Adjust start_time and end_time to properly match the user intent time range.
               `,
             parameters: z.object({
               suggested_queries: screenpipeMultiQuery,

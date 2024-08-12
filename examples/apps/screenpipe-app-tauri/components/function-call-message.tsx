@@ -218,15 +218,16 @@ function MarkdownContent({ content }: { content: string }) {
 function generateCurlCommand(query: any): string {
   const baseUrl = "http://localhost:3030";
   const queryParams = new URLSearchParams({
-    q: query.q || "",
     content_type: query.contentType || "all",
     limit: query.limit?.toString() || "10",
     offset: query.offset?.toString() || "0",
     start_time: query.start_time || "",
     end_time: query.end_time || "",
-    app_name: query.app_name || "",
-  }).toString();
+  });
+
+  if (query.q) queryParams.append("q", query.q);
+  if (query.app_name) queryParams.append("app_name", query.app_name);
 
   return `curl "${baseUrl}/search?\\
-${queryParams.replace(/&/g, "\\\n&")}"`;
+${queryParams.toString().replace(/&/g, "\\\n&")}"`;
 }

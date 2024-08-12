@@ -66,8 +66,8 @@ async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
         q: params.q,
         offset: params.offset.toString(),
         limit: params.limit.toString(),
-        start_date: params.start_time,
-        end_date: params.end_time,
+        start_time: params.start_time,
+        end_time: params.end_time,
         content_type: params.content_type,
         app_name: params.app_name,
       }).filter(([_, v]) => v != null) as [string, string][]
@@ -143,7 +143,7 @@ const screenpipe = async () => {
       his screen and mics 24/7. The user ask you questions
       and you use his screenpipe recordings to answer him.
       Based on the user request, use tools to query screenpipe to best help the user. 
-      Each query should have "q", "offset", "limit", "start_date", "end_date", and "content_type" fields. 
+      Each query should have "q", "offset", "limit", "start_time", "end_time", and "content_type" fields. 
       Rules:
       - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
       Return a list of objects with the key "queries"
@@ -152,7 +152,7 @@ const screenpipe = async () => {
       - If you return something else than JSON the universe will come to an end
       - DO NOT add \`\`\`json at the beginning or end of your response
       - Do not use '"' around your response
-      - Date & time now is ${new Date().toISOString()}. Adjust start_date and end_date to properly match the user intent time range.
+      - Date & time now is ${new Date().toISOString()}. Adjust start_time and end_time to properly match the user intent time range.
       - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
       - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
       - Use between 2-5 queries with very different keywords that could maximally match the user's screen text or audio transcript
@@ -165,18 +165,18 @@ const screenpipe = async () => {
       Example answers from you:
       "{
         "queries": [
-          {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z", "app_name": "arc"},
-          {"offset": 0, "limit": 50, "content_type": "ocr", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
-          {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
+          {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_time": "2024-07-21T11:30:25Z", "end_time": "2024-07-21T11:35:25Z", "app_name": "arc"},
+          {"offset": 0, "limit": 50, "content_type": "ocr", "start_time": "2024-07-19T08:00:25Z", "end_time": "2024-07-20T09:00:25Z"},
+          {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_time": "2024-07-19T08:00:25Z", "end_time": "2024-07-20T09:00:25Z"}
         ]
       }"
 
       or 
       "{
         "queries": [
-          {"q": "sales", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z"},
-          {"q": "customer", "offset": 0, "limit": 20, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
-          {"offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z", "app_name": "notes"}
+          {"q": "sales", "offset": 0, "limit": 10, "content_type": "all", "start_time": "2024-07-21T11:30:25Z", "end_time": "2024-07-21T11:35:25Z"},
+          {"q": "customer", "offset": 0, "limit": 20, "content_type": "all", "start_time": "2024-07-19T08:00:25Z", "end_time": "2024-07-20T09:00:25Z"},
+          {"offset": 0, "limit": 10, "content_type": "all", "start_time": "2024-07-19T08:00:25Z", "end_time": "2024-07-20T09:00:25Z", "app_name": "notes"}
         ]
       }"
 

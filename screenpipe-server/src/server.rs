@@ -75,17 +75,6 @@ where
     s.parse().map_err(serde::de::Error::custom)
 }
 
-#[derive(Deserialize)]
-struct DateRangeQuery {
-    #[allow(dead_code)] // TODO
-    start_date: Option<DateTime<Utc>>,
-    #[allow(dead_code)]
-    end_date: Option<DateTime<Utc>>,
-    #[serde(flatten)]
-    #[allow(dead_code)]
-    pagination: PaginationQuery,
-}
-
 // Response structs
 #[derive(Serialize)]
 pub(crate) struct PaginatedResponse<T> {
@@ -623,7 +612,7 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&start_time=
 curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for content between 2 hours ago and 1 hour ago
-curl "http://localhost:3035/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for OCR content from yesterday
 curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
@@ -632,5 +621,24 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=
 curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
 
 curl "http://localhost:3030/search?app_name=cursor"
+
+curl 'http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z' | jq .
+
+
+curl "http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+date -u -v-2H +%Y-%m-%dT%H:%M:%SZ
+2024-08-12T06:51:54Z
+date -u -v-1H +%Y-%m-%dT%H:%M:%SZ
+2024-08-12T07:52:17Z
+
+curl 'http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=2024-08-12T06:48:18Z&end_time=2024-08-12T07:48:34Z' | jq .
+
+
+curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-12T04:00:00Z&end_time=2024-08-12T05:00:00Z&content_type=all" | jq .
+
+curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-12T06:43:53Z&end_time=2024-08-12T08:43:53Z&content_type=all" | jq .
+
+curl 'http://localhost:3030/search?offset=0&limit=10&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z&content_type=all' | jq .
 
 */

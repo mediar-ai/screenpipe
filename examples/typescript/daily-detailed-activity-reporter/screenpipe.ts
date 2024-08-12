@@ -63,8 +63,8 @@ export async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
         q: params.q,
         offset: params.offset.toString(),
         limit: params.limit.toString(),
-        start_date: params.start_time,
-        end_date: params.end_time,
+        start_time: params.start_time,
+        end_time: params.end_time,
         content_type: params.content_type,
         app_name: params.app_name,
       }).filter(([_, v]) => v != null) as [string, string][]

@@ -96,6 +96,10 @@ export function ChatList({
         }
       }
 
+      console.log(
+        "Intl.DateTimeFormat().resolvedOptions().timeZone",
+        Intl.DateTimeFormat().resolvedOptions().timeZone
+      );
       // console.log("provider", provider);
       console.log("model", model);
 
@@ -103,26 +107,37 @@ export function ChatList({
         model: provider(model),
         tools: {
           query_screenpipe: {
-            description: `Query the local screenpipe instance for relevant information. 
-              You will return multiple queries under the key 'queries'.
-              Make sure to return a list of queries, not a single query.
-
-              ONLY USE THIS TOOL ONCE
-              
-              - MAKE SURE TO RETURN AN ARRAY OF QUERIES e.g. {"queries": [ ... ]}
-
-              Example answers from you:
-              "{
-                "queries": [
-                  {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_date": "2024-07-21T11:30:25Z", "end_date": "2024-07-21T11:35:25Z", "app_name": "arc"},
-                  {"offset": 0, "limit": 50, "content_type": "ocr", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"},
-                  {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_date": "2024-07-19T08:00:25Z", "end_date": "2024-07-20T09:00:25Z"}
-                ]
-              }"
-              
-              `,
+            description: `Query local screenpipe. Return list of queries. Use once, then next tool.
+  - Current time: ${new Date().toISOString()}. Adjust start/end times to match user intent.
+  - Convert user times to UTC. User timezone: ${
+    Intl.DateTimeFormat().resolvedOptions().timeZone
+  }.
+  Example:
+  {
+    "queries": [
+      {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_time": "2024-07-21T11:30:25Z", "end_time": "2024-07-21T11:35:25Z", "app_name": "arc"},
+      {"offset": 0, "limit": 50, "content_type": "ocr", "start_time": "2024-07-19T08:00:25Z", "end_time": "2024-07-20T09:00:25Z"},
+      {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_time": "2024-07-19T08:00:25Z", "end_time": "2024-07-20T09:00:25Z"}
+    ]
+  }
+  Adapt to user intent.`,
             parameters: screenpipeMultiQuery,
             execute: async (e: z.infer<typeof screenpipeMultiQuery>) => {
+              // ! just a hack because maxToolRoundtrips is not working
+              // if model called multiple times query_screenpipe while user just sent a single message, just return the result from the last query_screenpipe
+              if (
+                messages.length > 1 &&
+                messages[messages.length - 1].role === "user" &&
+                messages[messages.length - 2].role === "tool" &&
+                // @ts-ignore
+                messages[messages.length - 2].toolInvocations.length > 0 &&
+                // @ts-ignore
+                messages[messages.length - 2].toolInvocations[0].result
+              ) {
+                // @ts-ignore
+                return messages[messages.length - 2].toolInvocations[0].result;
+              }
+
               // @ts-ignore
               setMessages((prevMessages) => [
                 ...prevMessages,
@@ -209,21 +224,23 @@ export function ChatList({
           Based on the user request, use tools to query screenpipe to best help the user. 
           Rules:
           - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
-          Return a list of objects with the key "queries"
           - q contains a single query, again, for example instead of "life plan" just use "life"
           - Respond with only the updated JSON object
           - If you return something else than JSON the universe will come to an end
           - DO NOT add \`\`\`json at the beginning or end of your response
           - Do not use '"' around your response
-          - Date & time now is ${new Date().toISOString()}. Adjust start_date and end_date to properly match the user intent time range.
+          - Date & time now is ${new Date().toISOString()}. Adjust start_time and end_time to properly match the user intent time range.
+          - When the user mentions specific times (e.g., "9 to 10 am"), convert these to UTC before querying. Assume the user's local timezone is ${
+            Intl.DateTimeFormat().resolvedOptions().timeZone
+          }.
           - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
           - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
-          - Use between 2-5 queries with very different keywords that could maximally match the user's screen text or audio transcript
           - Use "all" for querying the same keyword over vision and audio
           - You typically always query screenpipe in the first user message
           - ALWAYS use the "stream_response" tool to stream the final response to the user
           - ALWAYS use the "stream_response" tool to stream the final response to the user
           - ALWAYS use the "stream_response" tool to stream the final response to the user
+          - ONLY USE query tool ONCE
 
           `,
           },
