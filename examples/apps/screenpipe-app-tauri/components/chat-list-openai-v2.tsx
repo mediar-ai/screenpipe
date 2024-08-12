@@ -5,7 +5,16 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ChatMessage } from "./chat-message-v2";
-import { Message, generateText, nanoid, streamText, tool } from "ai";
+import {
+  CoreMessage,
+  Message,
+  convertToCoreMessages,
+  generateObject,
+  generateText,
+  nanoid,
+  streamText,
+  tool,
+} from "ai";
 import { createOpenAI, openai } from "@ai-sdk/openai";
 import { createOllama, ollama } from "ollama-ai-provider"; // ! HACK TEMPORARY
 
@@ -50,15 +59,16 @@ export function ChatList({
   useOllama: boolean;
   ollamaUrl: string;
 }) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<CoreMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { settings } = useSettings();
   const posthog = usePostHog();
 
-  const { messagesRef, scrollRef, visibilityRef, isAtBottom, scrollToBottom } =
-    useScrollAnchor();
+  const { messagesRef } = useScrollAnchor();
+
+  console.log("messages", messages);
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
@@ -66,11 +76,9 @@ export function ChatList({
     setError(null);
     posthog.capture("send_message", {
       userId: settings.userId,
-      inputMessage,
     });
 
     const userMessage = { id: nanoid(), role: "user", content: inputMessage };
-    // @ts-ignore
     setMessages((prevMessages) => [...prevMessages, userMessage]);
     setInputMessage("");
 
@@ -100,164 +108,144 @@ export function ChatList({
         "Intl.DateTimeFormat().resolvedOptions().timeZone",
         Intl.DateTimeFormat().resolvedOptions().timeZone
       );
-      // console.log("provider", provider);
+      console.log("new Date().toLocaleString()", new Date().toLocaleString());
       console.log("model", model);
 
-      await generateTextWithRetry({
+      const text = await generateTextWithRetry({
         model: provider(model),
-        tools: {
-          query_screenpipe: {
-            description: `Query local screenpipe. Return list of queries. Use once, then next tool.
-  - Current time: ${new Date().toISOString()}. Adjust start/end times to match user intent.
-  - Convert user times to UTC. User timezone: ${
-    Intl.DateTimeFormat().resolvedOptions().timeZone
-  }.
-  Example:
-  {
-    "queries": [
-      {"q": "goal", "offset": 0, "limit": 10, "content_type": "all", "start_time": "2024-07-21T11:30:25Z", "end_time": "2024-07-21T11:35:25Z", "app_name": "arc"},
-      {"offset": 0, "limit": 50, "content_type": "ocr", "start_time": "2024-07-19T08:00:25Z", "end_time": "2024-07-20T09:00:25Z"},
-      {"q": "customer", "offset": 0, "limit": 20, "content_type": "audio", "start_time": "2024-07-19T08:00:25Z", "end_time": "2024-07-20T09:00:25Z"}
-    ]
-  }
-  Adapt to user intent.`,
-            parameters: screenpipeMultiQuery,
-            execute: async (e: z.infer<typeof screenpipeMultiQuery>) => {
-              // ! just a hack because maxToolRoundtrips is not working
-              // if model called multiple times query_screenpipe while user just sent a single message, just return the result from the last query_screenpipe
-              if (
-                messages.length > 1 &&
-                messages[messages.length - 1].role === "user" &&
-                messages[messages.length - 2].role === "tool" &&
-                // @ts-ignore
-                messages[messages.length - 2].toolInvocations.length > 0 &&
-                // @ts-ignore
-                messages[messages.length - 2].toolInvocations[0].result
-              ) {
-                // @ts-ignore
-                return messages[messages.length - 2].toolInvocations[0].result;
-              }
-
-              // @ts-ignore
-              setMessages((prevMessages) => [
-                ...prevMessages,
-                {
-                  id: nanoid(),
-                  role: "tool",
-                  toolInvocations: e.queries,
-                  content: [
-                    {
-                      type: "function",
-                      toolName: "query_screenpipe",
-                      args: {
-                        queries: e.queries,
-                      },
-                    },
-                  ],
-                },
-              ]);
-              const result = await queryScreenpipeNtimes(e);
-              // @ts-ignore
-              setMessages((prevMessages) => [
-                ...prevMessages,
-                {
-                  id: nanoid(),
-                  role: "tool",
-                  content: [
-                    {
-                      type: "function",
-                      toolName: "query_screenpipe",
-                      args: {
-                        queries: e.queries,
-                      },
-                      result: result,
-                    },
-                  ],
-                },
-              ]);
-              return result;
-            },
-          },
-          stream_response: {
-            description:
-              "Stream the final response to the user. ALWAYS FINISH WITH THIS TOOL. ALWAYS FINISH WITH THIS TOOL. ALWAYS FINISH WITH THIS TOOL",
-            parameters: z.object({
-              response: z
-                .string()
-                .describe("The final response to stream to the user"),
-            }),
-            execute: async ({ response }: { response: string }) => {
-              const { textStream } = await streamText({
-                model: provider(model),
-                messages: [{ role: "user", content: response }],
-              });
-              console.log("response", response);
-              const assistantMessageId = nanoid();
-              setMessages((prevMessages) => [
-                ...prevMessages,
-                { id: assistantMessageId, role: "assistant", content: "" },
-              ]);
-              let fullResponse = "";
-              for await (const chunk of textStream) {
-                fullResponse += chunk;
-                setMessages((prevMessages) =>
-                  prevMessages.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { ...msg, content: fullResponse }
-                      : msg
-                  )
-                );
-              }
-
-              throw new Error("STREAM_COMPLETE");
-            },
-          },
-        },
-        toolChoice: "auto",
         messages: [
           {
             role: "system",
             content: `You are a helpful assistant.
-          The user is using a product called "screenpipe" which records
-          his screen and mics 24/7. The user ask you questions
-          and you use his screenpipe recordings to answer him.
-          Based on the user request, use tools to query screenpipe to best help the user. 
-          Rules:
-          - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
-          - q contains a single query, again, for example instead of "life plan" just use "life"
-          - Respond with only the updated JSON object
-          - If you return something else than JSON the universe will come to an end
-          - DO NOT add \`\`\`json at the beginning or end of your response
-          - Do not use '"' around your response
-          - Date & time now is ${new Date().toISOString()}. Adjust start_time and end_time to properly match the user intent time range.
-          - When the user mentions specific times (e.g., "9 to 10 am"), convert these to UTC before querying. Assume the user's local timezone is ${
-            Intl.DateTimeFormat().resolvedOptions().timeZone
-          }.
-          - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
-          - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
-          - Use "all" for querying the same keyword over vision and audio
-          - You typically always query screenpipe in the first user message
-          - ALWAYS use the "stream_response" tool to stream the final response to the user
-          - ALWAYS use the "stream_response" tool to stream the final response to the user
-          - ALWAYS use the "stream_response" tool to stream the final response to the user
-          - ONLY USE query tool ONCE
-
-          `,
+              The user is using a product called "screenpipe" which records
+              his screen and mics 24/7. The user ask you questions
+              and you use his screenpipe recordings to answer him.
+              Based on the user request, use tools to query screenpipe to best help the user. 
+              Rules:
+              - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
+              - q contains a single query, again, for example instead of "life plan" just use "life"
+              - Respond with only the updated JSON object
+              - If you return something else than JSON the universe will come to an end
+              - DO NOT add \`\`\`json at the beginning or end of your response
+              - Do not use '"' around your response
+              - Date & time now is ${new Date().toISOString()}. Adjust start_time and end_time to properly match the user intent time range.
+              - When the user mentions specific times (e.g., "9 to 10 am"), convert these to UTC before querying. Assume the user's local timezone is ${
+                Intl.DateTimeFormat().resolvedOptions().timeZone
+              }.
+              - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
+              - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
+              - Use "all" for querying the same keyword over vision and audio
+              - You typically always query screenpipe in the first user message
+              - ALWAYS use the "stream_response" tool to stream the final response to the user
+              - ALWAYS use the "stream_response" tool to stream the final response to the user
+              - ALWAYS use the "stream_response" tool to stream the final response to the user
+              - ONLY USE query tool ONCE
+              - Do not try to show screenshots
+              - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`
+              - You can analyze/view/show/access videos BY JUST FUCKING PUTTING THE ABSOLUTE FILE PATH IN A CODE BLOCK
+              `,
           },
-          ...messages,
+          // add prev messages but convert all tool role messages to assistant bcs not supported in generateText
+          ...messages.map((msg) => ({
+            ...msg,
+            role: msg.role === "tool" ? "assistant" : msg.role,
+            content: JSON.stringify(msg.content),
+          })),
           {
             role: "user",
             content: inputMessage,
           },
         ],
-        maxToolRoundtrips: 2, // allow up to 5 tool roundtrips
+        tools: {
+          query_screenpipe: {
+            description:
+              "Query the local screenpipe instance for relevant information. You will return multiple queries under the key 'queries'.",
+            parameters: screenpipeMultiQuery,
+            execute: queryScreenpipeNtimes,
+          },
+        },
+        toolChoice: "required",
       });
-    } catch (error) {
-      if (error instanceof Error && error.message === "STREAM_COMPLETE") {
-        console.log("Streaming completed");
-        return;
-      }
 
+      setIsLoading(false);
+
+      console.log("text", text);
+
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        {
+          role: "assistant",
+          content: [
+            {
+              toolCallId: text?.toolCalls?.[0]?.toolCallId!,
+              type: "tool-call",
+              toolName: "query_screenpipe",
+              args: text?.toolCalls?.[0]?.args ? text.toolCalls[0].args : {},
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              toolCallId: text?.toolCalls?.[0]?.toolCallId!,
+              type: "tool-result",
+              toolName: "query_screenpipe",
+              result: text?.toolResults,
+            },
+          ],
+        },
+      ]);
+
+      const { textStream } = await streamText({
+        model: provider(model),
+        messages: [
+          {
+            role: "user",
+            content:
+              messages.findLast((msg) => msg.role === "user")?.content ||
+              inputMessage,
+          },
+          {
+            role: "assistant",
+            content: [
+              {
+                toolCallId: text?.toolCalls?.[0]?.toolCallId!,
+                type: "tool-call",
+                toolName: "query_screenpipe",
+                args: text?.toolCalls?.[0]?.args ? text.toolCalls[0].args : {},
+              },
+            ],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                toolCallId: text?.toolCalls?.[0]?.toolCallId!,
+                type: "tool-result",
+                toolName: "query_screenpipe",
+                result: text?.toolResults,
+              },
+            ],
+          },
+        ],
+      });
+
+      // create empty assistant message
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { id: nanoid(), role: "assistant", content: "" },
+      ]);
+
+      let fullResponse = "";
+      for await (const chunk of textStream) {
+        fullResponse += chunk;
+        setMessages((prevMessages) => [
+          ...prevMessages.slice(0, -1),
+          { id: nanoid(), role: "assistant", content: fullResponse },
+        ]);
+      }
+    } catch (error) {
       console.error(error);
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";

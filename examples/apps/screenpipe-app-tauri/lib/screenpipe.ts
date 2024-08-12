@@ -21,20 +21,28 @@ export const screenpipeQuery = z.object({
     ),
   limit: z
     .number()
-    .default(100)
+    .default(20)
     .describe(
-      "Number of results to return (default: 10). Don't return more than 50 results as it will be fed to an LLM"
+      "Number of results to return (default: 20). Don't return more than 50 results as it will be fed to an LLM"
     ),
   offset: z.number().default(0).describe("Offset for pagination (default: 0)"),
   start_time: z
     .string()
     // 1 hour ago
     .default(new Date(Date.now() - 3600000).toISOString())
-    .describe("Start time for search range in ISO 8601 format"),
-  end_time: z
-    .string()
-    .default(new Date().toISOString())
-    .describe("End time for search range in ISO 8601 format"),
+    .describe(`Start time for search range in ISO 8601 format 
+      - Current time: ${new Date().toLocaleString()}. Adjust start/end times to match user intent.
+      - Convert user times to UTC. User timezone: ${
+        Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+      `),
+  end_time: z.string().default(new Date().toISOString())
+    .describe(`End time for search range in ISO 8601 format 
+      - Current time: ${new Date().toLocaleString()}. Adjust start/end times to match user intent.
+      - Convert user times to UTC. User timezone: ${
+        Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+      `),
   app_name: z
     .string()
     .describe(

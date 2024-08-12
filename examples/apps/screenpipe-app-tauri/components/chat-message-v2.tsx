@@ -1,9 +1,8 @@
-// Inspired by Chatbot-UI and modified to fit the needs of this project
-// @see https://github.com/mckaywrigley/chatbot-ui/blob/main/components/Chat/ChatMessage.tsx
-
 import { Message } from "ai";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { useState, useEffect, useCallback } from "react";
+import { readFile } from "@tauri-apps/plugin-fs";
 
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "@/components/ui/codeblock";
@@ -19,8 +18,8 @@ export interface ChatMessageProps {
 export function ChatMessage({ message, ...props }: ChatMessageProps) {
   const { settings } = useSettings();
 
-  const isMP4File = (content: string) =>
-    content.trim().toLowerCase().endsWith(".mp4");
+  const hasMP4File = (content: string) =>
+    content.trim().toLowerCase().includes(".mp4");
 
   return (
     <div
@@ -38,7 +37,6 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
         {message.role === "user" ? (
           <IconUser />
         ) : settings.useOllama ? (
-          // <IconOllama />
           <>🦙</>
         ) : (
           <IconOpenAI />
@@ -53,7 +51,6 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
               return <p className="mb-2 last:mb-0">{children}</p>;
             },
             a({ node, href, children, ...props }) {
-              // make links open in new tab
               return (
                 <a
                   href={href}
@@ -69,15 +66,9 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
               const content = String(children).replace(/\n$/, "");
               const match = /language-(\w+)/.exec(className || "");
 
-              // console.log("isInline", content, node);
               if (!match) {
-                if (isMP4File(content)) {
-                  return (
-                    <video controls className="w-full max-w-2xl">
-                      <source src={content} type="video/mp4" />
-                      your browser does not support the video tag.
-                    </video>
-                  );
+                if (hasMP4File(content)) {
+                  return <VideoComponent filePath={content.trim()} />;
                 }
                 return (
                   <code
@@ -105,5 +96,42 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
         <ChatMessageActions message={message} />
       </div>
     </div>
+  );
+}
+
+function VideoComponent({ filePath }: { filePath: string }) {
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadVideo() {
+      try {
+        const videoData = await readFile(filePath);
+        const blob = new Blob([videoData], { type: "video/mp4" });
+        setVideoSrc(URL.createObjectURL(blob));
+      } catch (error) {
+        console.error("Failed to load video:", error);
+      }
+    }
+
+    loadVideo();
+
+    return () => {
+      if (videoSrc) URL.revokeObjectURL(videoSrc);
+    };
+  }, [filePath]);
+
+  if (!videoSrc) {
+    return (
+      <div className="w-full h-48 bg-gray-200 animate-pulse rounded-md flex items-center justify-center">
+        <span className="text-gray-500">Loading video...</span>
+      </div>
+    );
+  }
+
+  return (
+    <video controls className="w-full max-w-2xl">
+      <source src={videoSrc} type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
   );
 }

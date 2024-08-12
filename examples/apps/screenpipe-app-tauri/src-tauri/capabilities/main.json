@@ -86,6 +86,10 @@
         {
           "path": "$APP/*",
           "requireLiteralLeadingDot": false
+        }, 
+        {
+          "path": "$HOME/.screenpipe/data/**",
+          "requireLiteralLeadingDot": false
         }
       ]
     },

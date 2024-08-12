@@ -29,19 +29,32 @@ interface FunctionCallMessageProps {
   isResult?: boolean;
 }
 
-export function FunctionCallMessage({
-  message,
-}: FunctionCallMessageProps) {
+export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
   const { settings } = useSettings();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   console.log("FunctionCallMessage", message);
 
+  // Assuming message.content is the array shown in the image
+  // @ts-ignore
+  const toolCalls = message.content
+    .filter((item) => !item.result)
+    .map((item) => ({
+      type: item.type,
+      toolName: item.toolName,
+      args: item.args,
+    }));
 
-  // @ts-ignore TODO
-  const toolCalls = message.content.filter((content) => !content.result);
-  // @ts-ignore TODO
-  const toolResults = message.content.filter((content) => content.result);
-  const isResult = toolResults && toolResults.length > 0;
+  // @ts-ignore
+  const toolResults = message.content
+    .filter((item) => item.result)
+    .map((item) => ({
+      type: item.type,
+      toolName: item.toolName,
+      result: item.result,
+    }));
+
+  // @ts-ignore
+  const isResult = toolResults.some((result) => result.result !== null);
 
   console.log("toolCalls", toolCalls);
   console.log("toolResults", toolResults);
@@ -102,7 +115,7 @@ export function FunctionCallMessage({
                     <AccordionContent>
                       <MarkdownContent
                         content={`\`\`\`json\n${JSON.stringify(
-                          toolCall,
+                          toolCall.args,
                           null,
                           2
                         )}\n\`\`\``}
@@ -146,7 +159,7 @@ export function FunctionCallMessage({
                           <CodeBlock
                             language="bash"
                             value={generateCurlCommand(
-                              toolResult.args.queries[0]
+                              toolResult.result[0].args.queries[0]
                             )}
                           />
                         </DialogContent>
@@ -155,7 +168,7 @@ export function FunctionCallMessage({
                     <AccordionContent>
                       <MarkdownContent
                         content={`\`\`\`json\n${JSON.stringify(
-                          toolResult,
+                          toolResult.result,
                           null,
                           2
                         )}\n\`\`\``}
