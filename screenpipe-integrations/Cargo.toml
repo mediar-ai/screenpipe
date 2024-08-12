@@ -19,3 +19,4 @@ chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
 tempfile = "3.2"
 anyhow = "1.0"
+chrono-tz = "0.8"
