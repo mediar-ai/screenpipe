@@ -19,6 +19,7 @@ import Header from "@/components/header";
 import { checkForAppUpdates } from "@/components/updater";
 import UpdateNotification from "@/components/update-notification";
 import { usePostHog } from "posthog-js/react";
+import Link from "next/link";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -70,6 +71,17 @@ export default function Home() {
                 Make sure to run screenpipe CLI first (check status above).
                 Also, please, set your AI provider settings to ask questions
                 about your data.
+                <br />
+                <br />
+                <Link
+                  // open new tab
+                  href="https://youtu.be/WGnHmFFFJOc"
+                  target="_blank"
+                  // bold underline
+                  className="font-bold underline"
+                >
+                  Watch the onboarding video
+                </Link>
               </CardDescription>
             </CardHeader>
             <CardContent>

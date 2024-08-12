@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ChatMessage } from "./chat-message-v2";
 import {
   CoreMessage,
+  CoreTool,
+  GenerateTextResult,
   Message,
   convertToCoreMessages,
   generateObject,
@@ -111,101 +113,63 @@ export function ChatList({
       console.log("new Date().toLocaleString()", new Date().toLocaleString());
       console.log("model", model);
 
-      const text = await generateTextWithRetry({
-        model: provider(model),
-        messages: [
-          {
-            role: "system",
-            content: `You are a helpful assistant.
-              The user is using a product called "screenpipe" which records
-              his screen and mics 24/7. The user ask you questions
-              and you use his screenpipe recordings to answer him.
-              Based on the user request, use tools to query screenpipe to best help the user. 
-              Rules:
-              - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
-              - q contains a single query, again, for example instead of "life plan" just use "life"
-              - Respond with only the updated JSON object
-              - If you return something else than JSON the universe will come to an end
-              - DO NOT add \`\`\`json at the beginning or end of your response
-              - Do not use '"' around your response
-              - Date & time now is ${new Date().toISOString()}. Adjust start_time and end_time to properly match the user intent time range.
-              - When the user mentions specific times (e.g., "9 to 10 am"), convert these to UTC before querying. Assume the user's local timezone is ${
-                Intl.DateTimeFormat().resolvedOptions().timeZone
-              }.
-              - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
-              - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
-              - Use "all" for querying the same keyword over vision and audio
-              - You typically always query screenpipe in the first user message
-              - ALWAYS use the "stream_response" tool to stream the final response to the user
-              - ALWAYS use the "stream_response" tool to stream the final response to the user
-              - ALWAYS use the "stream_response" tool to stream the final response to the user
-              - ONLY USE query tool ONCE
-              - Do not try to show screenshots
-              - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`
-              - You can analyze/view/show/access videos BY JUST FUCKING PUTTING THE ABSOLUTE FILE PATH IN A CODE BLOCK
-              `,
-          },
-          // add prev messages but convert all tool role messages to assistant bcs not supported in generateText
-          ...messages.map((msg) => ({
-            ...msg,
-            role: msg.role === "tool" ? "assistant" : msg.role,
-            content: JSON.stringify(msg.content),
-          })),
-          {
-            role: "user",
-            content: inputMessage,
-          },
-        ],
-        tools: {
-          query_screenpipe: {
-            description:
-              "Query the local screenpipe instance for relevant information. You will return multiple queries under the key 'queries'.",
-            parameters: screenpipeMultiQuery,
-            execute: queryScreenpipeNtimes,
-          },
-        },
-        toolChoice: "required",
-      });
+      const hasFunctionCalls = messages.some(
+        (msg) =>
+          msg.role === "assistant" &&
+          Array.isArray(msg.content) &&
+          msg.content.some((item) => item.type === "tool-call")
+      );
 
-      setIsLoading(false);
-
-      console.log("text", text);
-
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        {
-          role: "assistant",
-          content: [
+      let text:
+        | GenerateTextResult<Record<string, CoreTool<any, any>>>
+        | undefined;
+      if (!hasFunctionCalls) {
+        text = await generateTextWithRetry({
+          model: provider(model),
+          messages: [
             {
-              toolCallId: text?.toolCalls?.[0]?.toolCallId!,
-              type: "tool-call",
-              toolName: "query_screenpipe",
-              args: text?.toolCalls?.[0]?.args ? text.toolCalls[0].args : {},
+              role: "system",
+              content: `You are a helpful assistant.
+                The user is using a product called "screenpipe" which records
+                his screen and mics 24/7. The user ask you questions
+                and you use his screenpipe recordings to answer him.
+                Based on the user request, use tools to query screenpipe to best help the user. 
+                Rules:
+                - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
+                - q contains a single query, again, for example instead of "life plan" just use "life"
+                - Respond with only the updated JSON object
+                - If you return something else than JSON the universe will come to an end
+                - DO NOT add \`\`\`json at the beginning or end of your response
+                - Do not use '"' around your response
+                - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
+                - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
+                - Use "all" for querying the same keyword over vision and audio
+                `,
+            },
+            // add prev messages but convert all tool role messages to assistant bcs not supported in generateText
+            ...messages.map((msg) => ({
+              ...msg,
+              role: msg.role === "tool" ? "assistant" : msg.role,
+              content: JSON.stringify(msg.content),
+            })),
+            {
+              role: "user",
+              content: inputMessage,
             },
           ],
-        },
-        {
-          role: "tool",
-          content: [
-            {
-              toolCallId: text?.toolCalls?.[0]?.toolCallId!,
-              type: "tool-result",
-              toolName: "query_screenpipe",
-              result: text?.toolResults,
+          tools: {
+            query_screenpipe: {
+              description:
+                "Query the local screenpipe instance for relevant information. You will return multiple queries under the key 'queries'.",
+              parameters: screenpipeMultiQuery,
+              execute: queryScreenpipeNtimes,
             },
-          ],
-        },
-      ]);
-
-      const { textStream } = await streamText({
-        model: provider(model),
-        messages: [
-          {
-            role: "user",
-            content:
-              messages.findLast((msg) => msg.role === "user")?.content ||
-              inputMessage,
           },
+          toolChoice: "required",
+        });
+
+        setMessages((prevMessages) => [
+          ...prevMessages,
           {
             role: "assistant",
             content: [
@@ -227,6 +191,72 @@ export function ChatList({
                 result: text?.toolResults,
               },
             ],
+          },
+        ]);
+      }
+
+      const { textStream } = await streamText({
+        model: provider(model),
+        messages: [
+          {
+            role: "system",
+            content: `You are a helpful assistant.
+            The user is using a product called "screenpipe" which records
+            his screen and mics 24/7. The user ask you questions
+            and you use his screenpipe recordings to answer him.
+
+            Rules:
+            - Date & time now is ${new Date().toISOString()}. Adjust start_time and end_time to properly match the user intent time range.
+            - When the user mentions specific times (e.g., "9 to 10 am"), convert these to UTC before querying. Assume the user's local timezone is ${
+              Intl.DateTimeFormat().resolvedOptions().timeZone
+            }.
+
+            - You typically always query screenpipe in the first user message
+            - ALWAYS use the "stream_response" tool to stream the final response to the user
+            - ALWAYS use the "stream_response" tool to stream the final response to the user
+            - ALWAYS use the "stream_response" tool to stream the final response to the user
+            - ONLY USE query tool ONCE
+            - Do not try to show screenshots
+            - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`
+            - You can analyze/view/show/access videos BY JUST FUCKING PUTTING THE ABSOLUTE FILE PATH IN A CODE BLOCK
+            - Always use the absolute file path to access videos
+            `,
+          },
+          ...messages,
+          // @ts-expect-error
+          ...(text
+            ? [
+                {
+                  role: "assistant",
+                  content: [
+                    {
+                      toolCallId: text?.toolCalls?.[0]?.toolCallId!,
+                      type: "tool-call",
+                      toolName: "query_screenpipe",
+                      args: text?.toolCalls?.[0]?.args
+                        ? text.toolCalls[0].args
+                        : {},
+                    },
+                  ],
+                },
+                {
+                  role: "tool",
+                  content: [
+                    {
+                      toolCallId: text?.toolCalls?.[0]?.toolCallId!,
+                      type: "tool-result",
+                      toolName: "query_screenpipe",
+                      result: text?.toolResults,
+                    },
+                  ],
+                },
+              ]
+            : []),
+          {
+            role: "user",
+            content:
+              messages.findLast((msg) => msg.role === "user")?.content ||
+              inputMessage,
           },
         ],
       });
