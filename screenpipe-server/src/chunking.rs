@@ -6,7 +6,9 @@ use hf_hub::{api::sync::Api, Repo, RepoType};
 use tokenizers::Tokenizer;
 
 pub async fn text_chunking_by_similarity(text: &str) -> Result<Vec<String>> {
-    let device = Device::Cpu;
+    let device = Device::new_metal(0)
+        .unwrap_or_else(|_| Device::new_cuda(0)
+        .unwrap_or(Device::Cpu));
     let repo = Repo::with_revision(
         "jinaai/jina-embeddings-v2-base-en".to_string(),
         RepoType::Model,
