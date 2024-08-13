@@ -17,6 +17,8 @@ use std::error::Error as StdError;
 use std::fmt;
 use screenpipe_integrations::unstructured_ocr::unstructured_chunking;
 use crate::filtering::filter_texts;
+use sqlx::sqlite::SqliteRow;
+use sqlx::Row;
 
 #[derive(Debug)]
 pub struct DatabaseError(String);
@@ -29,10 +31,23 @@ impl fmt::Display for DatabaseError {
 
 impl StdError for DatabaseError {}
 
+// Define the FTSSearchResult struct
+#[derive(Debug, Serialize)]
+pub struct FTSSearchResult {
+    pub text_id: i64,
+    pub matched_text: String,
+    pub frame_id: i64,
+    pub frame_timestamp: DateTime<Utc>,
+    pub app_name: String,
+    pub video_file_path: String,
+    pub original_frame_text: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub enum SearchResult {
     OCR(OCRResult),
     Audio(AudioResult),
+    FTS(FTSSearchResult),
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -404,44 +419,102 @@ impl DatabaseManager {
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
-        // If app_name is specified, only search OCR content
-        if app_name.is_some() {
-            let ocr_results = self
-                .search_ocr(query, limit, offset, start_time, end_time, app_name)
-                .await?;
-            results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-        } else {
-            // If no app_name is specified, proceed with normal search
-            if content_type == ContentType::All || content_type == ContentType::OCR {
-                let ocr_results = self
-                    .search_ocr(query, limit, offset, start_time, end_time, None)
-                    .await?;
-                results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-            }
+        // Add FTS search results
+        let fts_results = self.search_fts(query, limit).await?;
+        debug!("FTS search returned {} results", fts_results.len());
+        results.extend(fts_results);
 
-            if content_type == ContentType::All || content_type == ContentType::Audio {
-                let audio_results = self
-                    .search_audio(query, limit, offset, start_time, end_time)
-                    .await?;
-                results.extend(audio_results.into_iter().map(SearchResult::Audio));
-            }
-        }
+        // If app_name is specified, only search OCR content
+        // if app_name.is_some() {
+        //     let ocr_results = self
+        //         .search_ocr(query, limit, offset, start_time, end_time, app_name)
+        //         .await?;
+        //     results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+        // } else {
+        //     // If no app_name is specified, proceed with normal search
+        //     if content_type == ContentType::All || content_type == ContentType::OCR {
+        //         let ocr_results = self
+        //             .search_ocr(query, limit, offset, start_time, end_time, None)
+        //             .await?;
+        //         results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+        //     }
+
+        //     if content_type == ContentType::All || content_type == ContentType::Audio {
+        //         let audio_results = self
+        //             .search_audio(query, limit, offset, start_time, end_time)
+        //             .await?;
+        //         results.extend(audio_results.into_iter().map(SearchResult::Audio));
+        //     }
+        // }
 
         // Sort results by timestamp in descending order
         results.sort_by(|a, b| {
             let timestamp_a = match a {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
+                SearchResult::FTS(fts) => fts.frame_timestamp,
             };
             let timestamp_b = match b {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
+                SearchResult::FTS(fts) => fts.frame_timestamp,
             };
             timestamp_b.cmp(&timestamp_a)
         });
 
         // Apply limit after combining and sorting
         results.truncate(limit as usize);
+
+        Ok(results)
+    }
+
+    pub async fn search_fts(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<SearchResult>, sqlx::Error> {
+        let sql = r#"
+        SELECT 
+            fts.text_id,
+            fts.text AS matched_text,
+            f.id AS frame_id,
+            f.timestamp AS frame_timestamp,
+            f.app_name,
+            vc.file_path AS video_file_path,
+            o.text AS original_frame_text
+        FROM chunked_text_index_fts fts
+        JOIN chunked_text_entries cte ON fts.text_id = cte.text_id
+        JOIN frames f ON cte.frame_id = f.id
+        JOIN video_chunks vc ON f.video_chunk_id = vc.id
+        LEFT JOIN ocr_text o ON f.id = o.frame_id
+        WHERE fts.text MATCH ?1
+        ORDER BY fts.rank
+        LIMIT ?2
+        "#;
+
+        // debug!("Executing FTS query: {}", sql);
+        // debug!("Query parameters: query={}, limit={}", query, limit);
+
+        let results = sqlx::query(sql)
+            .bind(query)
+            .bind(limit)
+            .map(|row: SqliteRow| {
+                let result = SearchResult::FTS(FTSSearchResult {
+                    text_id: row.get("text_id"),
+                    matched_text: row.get("matched_text"),
+                    frame_id: row.get("frame_id"),
+                    frame_timestamp: row.get("frame_timestamp"),
+                    app_name: row.get("app_name"),
+                    video_file_path: row.get("video_file_path"),
+                    original_frame_text: row.get("original_frame_text"),
+                });
+                // debug!("Mapped FTS result: {:?}", result);
+                result
+            })
+            .fetch_all(&self.pool)
+            .await?;
+
+        // debug!("FTS query returned {} results", results.len());
 
         Ok(results)
     }
