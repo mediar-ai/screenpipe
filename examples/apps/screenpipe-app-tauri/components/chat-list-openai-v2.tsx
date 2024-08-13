@@ -145,6 +145,7 @@ export function ChatList({
                 - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
                 - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
                 - Use "all" for querying the same keyword over vision and audio
+                - When the user ask "show me what i was doing at 10.11 am" do not use "q" intent is not looking for specific content but for a time range
                 `,
             },
             // add prev messages but convert all tool role messages to assistant bcs not supported in generateText

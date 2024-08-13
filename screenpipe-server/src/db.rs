@@ -420,32 +420,32 @@ impl DatabaseManager {
         let mut results = Vec::new();
 
         // Add FTS search results
-        let fts_results = self.search_fts(query, limit).await?;
-        debug!("FTS search returned {} results", fts_results.len());
-        results.extend(fts_results);
+        // let fts_results = self.search_fts(query, limit).await?;
+        // debug!("FTS search returned {} results", fts_results.len());
+        // results.extend(fts_results);
 
         // If app_name is specified, only search OCR content
-        // if app_name.is_some() {
-        //     let ocr_results = self
-        //         .search_ocr(query, limit, offset, start_time, end_time, app_name)
-        //         .await?;
-        //     results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-        // } else {
-        //     // If no app_name is specified, proceed with normal search
-        //     if content_type == ContentType::All || content_type == ContentType::OCR {
-        //         let ocr_results = self
-        //             .search_ocr(query, limit, offset, start_time, end_time, None)
-        //             .await?;
-        //         results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-        //     }
+        if app_name.is_some() {
+            let ocr_results = self
+                .search_ocr(query, limit, offset, start_time, end_time, app_name)
+                .await?;
+            results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+        } else {
+            // If no app_name is specified, proceed with normal search
+            if content_type == ContentType::All || content_type == ContentType::OCR {
+                let ocr_results = self
+                    .search_ocr(query, limit, offset, start_time, end_time, None)
+                    .await?;
+                results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+            }
 
-        //     if content_type == ContentType::All || content_type == ContentType::Audio {
-        //         let audio_results = self
-        //             .search_audio(query, limit, offset, start_time, end_time)
-        //             .await?;
-        //         results.extend(audio_results.into_iter().map(SearchResult::Audio));
-        //     }
-        // }
+            if content_type == ContentType::All || content_type == ContentType::Audio {
+                let audio_results = self
+                    .search_audio(query, limit, offset, start_time, end_time)
+                    .await?;
+                results.extend(audio_results.into_iter().map(SearchResult::Audio));
+            }
+        }
 
         // Sort results by timestamp in descending order
         results.sort_by(|a, b| {
