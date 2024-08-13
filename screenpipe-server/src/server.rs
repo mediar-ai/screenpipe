@@ -94,6 +94,7 @@ struct PaginationInfo {
 pub(crate) enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
+    FTS(FTSContent),
 }
 
 #[derive(Serialize)]
@@ -113,6 +114,17 @@ pub(crate) struct AudioContent {
     timestamp: DateTime<Utc>,
     file_path: String,
     offset_index: i64,
+}
+
+#[derive(Serialize)]
+pub(crate) struct FTSContent {
+    text_id: i64,
+    matched_text: String,
+    frame_id: i64,
+    timestamp: DateTime<Utc>,
+    app_name: String,
+    file_path: String,
+    original_frame_text: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -432,7 +444,7 @@ fn into_content_item(result: SearchResult) -> ContentItem {
             timestamp: ocr.timestamp,
             file_path: ocr.file_path,
             offset_index: ocr.offset_index,
-            app_name: ocr.app_name, // Add this line
+            app_name: ocr.app_name,
         }),
         SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
             chunk_id: audio.audio_chunk_id,
@@ -440,6 +452,15 @@ fn into_content_item(result: SearchResult) -> ContentItem {
             timestamp: audio.timestamp,
             file_path: audio.file_path,
             offset_index: audio.offset_index,
+        }),
+        SearchResult::FTS(fts) => ContentItem::FTS(FTSContent {
+            text_id: fts.text_id,
+            matched_text: fts.matched_text,
+            frame_id: fts.frame_id,
+            timestamp: fts.frame_timestamp,
+            app_name: fts.app_name,
+            file_path: fts.video_file_path,
+            original_frame_text: fts.original_frame_text,
         }),
     }
 }
