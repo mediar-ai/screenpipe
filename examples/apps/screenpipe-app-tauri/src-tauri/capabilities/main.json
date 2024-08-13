@@ -6,6 +6,8 @@
     "main"
   ],
   "permissions": [
+    "process:allow-restart",
+    "process:allow-exit",
     "notification:default",
     "core:resources:default",
     "core:menu:default",
@@ -86,7 +88,7 @@
         {
           "path": "$APP/*",
           "requireLiteralLeadingDot": false
-        }, 
+        },
         {
           "path": "$HOME/.screenpipe/data/**",
           "requireLiteralLeadingDot": false
@@ -117,6 +119,7 @@
     "os:allow-arch",
     "os:allow-hostname",
     "os:allow-os-type",
-    "core:path:default"
+    "core:path:default",
+    "process:default"
   ]
 }

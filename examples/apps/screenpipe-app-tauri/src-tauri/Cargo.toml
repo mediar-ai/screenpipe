@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.1.38"
+version = "0.1.39"
 description = ""
 authors = ["you"]
 license = ""
@@ -69,6 +69,7 @@ tauri-plugin-notification = "2.0.0-alpha.3"
 tauri-plugin-updater = "2.0.0-alpha.2"
 tauri-plugin-dialog = "2.0.0-alpha.2"
 tauri-plugin-os = "2.0.0-alpha.2"
+tauri-plugin-process = "2.0.0-alpha.2"
 
 
 # M series MacOS
