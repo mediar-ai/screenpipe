@@ -264,18 +264,44 @@ pub async fn process_ocr_task(
         #[cfg(target_os = "macos")]
         OcrEngine::AppleNative => {
             debug!("Apple Native OCR");
-            let text = perform_ocr_apple(&image_arc);
+            let json_result = perform_ocr_apple(&image_arc);
+
+            let parsed_result: serde_json::Value = serde_json::from_str(&json_result).unwrap_or_else(|e| {
+                error!("Failed to parse JSON output: {}", e);
+                serde_json::json!({
+                    "ocrResult": "",
+                    "textElements": [],
+                    "overallConfidence": 0.0
+                })
+            });
+
+            let text = parsed_result["ocrResult"].as_str().unwrap_or("").to_string();
+            let text_elements = parsed_result["textElements"].as_array().unwrap_or(&vec![]).clone();
+
+            let data_output = DataOutput {
+                output: text.clone(),
+                data: text_elements.iter().map(|element| {
+                    Data {
+                        level: 0, // Assuming level is not provided in the JSON
+                        page_num: 0, // Assuming page_num is not provided in the JSON
+                        block_num: 0, // Assuming block_num is not provided in the JSON
+                        par_num: 0, // Assuming par_num is not provided in the JSON
+                        line_num: 0, // Assuming line_num is not provided in the JSON
+                        word_num: 0, // Assuming word_num is not provided in the JSON
+                        left: element["boundingBox"]["x"].as_f64().unwrap_or(0.0) as i32,
+                        top: element["boundingBox"]["y"].as_f64().unwrap_or(0.0) as i32,
+                        width: element["boundingBox"]["width"].as_f64().unwrap_or(0.0) as i32,
+                        height: element["boundingBox"]["height"].as_f64().unwrap_or(0.0) as i32,
+                        conf: element["confidence"].as_f64().unwrap_or(0.0) as f32,
+                        text: element["text"].as_str().unwrap_or("").to_string(),
+                    }
+                }).collect(),
+            };
+
             (
                 text.clone(),
-                DataOutput {
-                    output: String::new(),
-                    data: vec![],
-                },
-                serde_json::json!([{
-                    "text": text,
-                    "confidence": "1.0",
-                }])
-                .to_string(),
+                data_output,
+                json_result,
             )
         }
         _ => {
@@ -287,11 +313,35 @@ pub async fn process_ocr_task(
         }
     };
 
-    let current_text_json: Vec<HashMap<String, String>> = serde_json::from_str(&json_output)
-        .unwrap_or_else(|e| {
+    let current_text_json: Vec<HashMap<String, String>> = {
+        let parsed_json: serde_json::Value = serde_json::from_str(&json_output).unwrap_or_else(|e| {
             error!("Failed to parse JSON output: {}", e);
-            Vec::new()
+            serde_json::json!([])
         });
+
+        let mut text_json = if let Some(text_elements) = parsed_json["textElements"].as_array() {
+            text_elements.iter().map(|element| {
+                let mut map = HashMap::new();
+                map.insert("text".to_string(), element["text"].as_str().unwrap_or("").to_string());
+                map.insert("confidence".to_string(), element["confidence"].to_string());
+                map.insert("boundingBox".to_string(), serde_json::to_string(&element["boundingBox"]).unwrap_or("".to_string()));
+                map
+            }).collect()
+        } else {
+            Vec::new()
+        };
+
+        if let Some(overall_confidence) = parsed_json["overallConfidence"].as_f64() {
+            let mut confidence_map = HashMap::new();
+            confidence_map.insert("overallConfidence".to_string(), overall_confidence.to_string());
+            text_json.push(confidence_map);
+            debug!("Overall OCR confidence: {:.2}", overall_confidence);
+        }
+
+        text_json
+    };
+
+    // debug!("Current Text JSON: {:?}", current_text_json);
 
     if save_text_files_flag {
         save_text_files(frame_number, &current_text_json, &current_text_json, &None).await;
