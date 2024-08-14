@@ -150,6 +150,11 @@ export function ChatList({
                 - Convert user times to UTC. User timezone: ${
                   Intl.DateTimeFormat().resolvedOptions().timeZone
                 }
+                - To convert to UTC: ${
+                  new Date().getTimezoneOffset() / -60 > 0 ? "subtract" : "add"
+                } ${Math.abs(
+                new Date().getTimezoneOffset() / 60
+              )} hours from the user's local time.
                 - MAKE SURE TO ADAPT THE TIME RANGE PROPS TO THE USER'S INTENT
                 - Also make sure to follow the user's custom system prompt: "${customPrompt}"
 

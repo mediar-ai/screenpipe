@@ -239,7 +239,7 @@ function MarkdownContent({ content }: { content: string }) {
 function generateCurlCommand(query: any): string {
   const baseUrl = "http://localhost:3030";
   const queryParams = new URLSearchParams({
-    content_type: query.contentType || "all",
+    content_type: query.content_type || "all",
     limit: query.limit?.toString() || "10",
     offset: query.offset?.toString() || "0",
     start_time: query.start_time || "",

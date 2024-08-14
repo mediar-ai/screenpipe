@@ -21,8 +21,11 @@ export default function RootLayout({
     <html lang="en">
       <PHProvider>
         {/* https://posthog.com/docs/libraries/next-js for more info */}
-        <body className={inter.className}>{children}</body>
-        <Toaster />
+        <body className={inter.className}>
+          {children}
+
+          <Toaster />
+        </body>
       </PHProvider>
     </html>
   );
