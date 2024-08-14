@@ -67,10 +67,11 @@ export function ChatList({
   const [error, setError] = useState<string | null>(null);
   const { settings } = useSettings();
   const posthog = usePostHog();
+  const customPrompt = settings.customPrompt || "";
 
   const { messagesRef } = useScrollAnchor();
 
-  console.log("messages", messages);
+  // console.log("messages", messages);
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
@@ -137,32 +138,61 @@ export function ChatList({
                 Based on the user request, use tools to query screenpipe to best help the user. 
                 Rules:
                 - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
-                - q contains a single query, again, for example instead of "life plan" just use "life"
-                - Respond with only the updated JSON object
                 - If you return something else than JSON the universe will come to an end
-                - DO NOT add \`\`\`json at the beginning or end of your response
-                - Do not use '"' around your response
-                - If the user ask about his morning do not use morning as query that's dumb, try to infer some keywords from the user question
-                - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
-                - Use "all" for querying the same keyword over vision and audio
-                - When the user ask "show me what i was doing at 10.11 am" do not use "q" intent is not looking for specific content but for a time range
+                - your output will be given to another llm, so return concise data (1 to 4 queries max in the array)
+                - use "all" for querying the same keyword over vision and audio
+                - for time-specific queries, focus on the time range rather than content
+                - Do not add '"' around JSON arrays e.g. bad: "queries": "[ ... ]" good: "queries": [ ... ]
+                - adapt queries to the user's specific question, intent, and time range
+                - use 'app_name' when the user mentions a specific application but keep in mind user might use the app thru browser
+                - limit to 1-4 queries per response
+                - Current time: ${new Date().toLocaleString()}. Adjust start/end times to match user intent.
+                - Convert user times to UTC. User timezone: ${
+                  Intl.DateTimeFormat().resolvedOptions().timeZone
+                }
+                - MAKE SURE TO ADAPT THE TIME RANGE PROPS TO THE USER'S INTENT
+                - Also make sure to follow the user's custom system prompt: "${customPrompt}"
 
+                examples of user queries and expected responses:
 
-                Example of your answer:
+                1. user: "what was i working on yesterday afternoon in vscode and chrome?"
                 {
-                  queries: [
-                    { content_type: "audio", start_time: "2024-03-01T00:00:00Z", end_time: "2024-03-01T23:59:59Z" },
-                    { content_type: "ocr", app_name: "arc", start_time: "2024-03-01T00:00:00Z", end_time: "2024-03-01T23:59:59Z", q: "john" },
+                  "queries": [
+                    { "content_type": "ocr", "app_name": "vscode", "start_time": "2024-03-14T12:00:00Z", "end_time": "2024-03-14T17:00:00Z" },
+                    { "content_type": "ocr", "app_name": "chrome", "start_time": "2024-03-14T12:00:00Z", "end_time": "2024-03-14T17:00:00Z" }
                   ]
                 }
-                
-                Or 
 
+                2. user: "find emails from john and mentions of project deadlines in my recent calls"
                 {
-                  queries: [
-                    { content_type: "all", start_time: "2024-03-01T00:00:00Z", end_time: "2024-03-01T01:00:00Z" },
+                  "queries": [
+                    { "content_type": "ocr", "app_name": "gmail", "start_time": "2024-03-08T00:00:00Z", "end_time": "2024-03-15T23:59:59Z", "q": "john" },
+                    { "content_type": "audio", "start_time": "2024-03-01T00:00:00Z", "end_time": "2024-03-15T23:59:59Z", "q": "deadline" }
                   ]
                 }
+
+                3. user: "show me what i was doing at 10:11 am today across all apps"
+                {
+                  "queries": [
+                    { "content_type": "all", "start_time": "2024-03-15T10:11:00Z", "end_time": "2024-03-15T10:12:00Z" }
+                  ]
+                }
+
+                4. user: "what did i work on in the last hour in vscode, notion, and slack?"
+                {
+                  "queries": [
+                    { "content_type": "ocr", "app_name": "vscode", "start_time": "2024-03-15T09:00:00Z", "end_time": "2024-03-15T10:00:00Z" },
+                    { "content_type": "ocr", "app_name": "notion", "start_time": "2024-03-15T09:00:00Z", "end_time": "2024-03-15T10:00:00Z" },
+                    { "content_type": "ocr", "app_name": "slack", "start_time": "2024-03-15T09:00:00Z", "end_time": "2024-03-15T10:00:00Z" }
+                  ]
+                }            
+                  
+                BAD RESPONSE: {"queries":"[{"content_type": "all", "start_time": "2024-03-15T11:48:00Z", "end_time": "2024-03-15T11:49:00Z"}]"}
+                BAD RESPONSE: {"queries":"[{"content_type": "all", "start_time": "2024-03-15T11:48:00Z", "end_time": "2024-03-15T11:49:00Z"}]"}
+                You added '"' around the array, you should not do that.
+                DO NOT FUCKING ADD '"' AROUND JSON ARRAYS
+                - MAKE SURE TO ADAPT THE TIME RANGE PROPS TO THE USER'S INTENT
+
                 `,
             },
             // add prev messages but convert all tool role messages to assistant bcs not supported in generateText
@@ -234,17 +264,24 @@ export function ChatList({
               Intl.DateTimeFormat().resolvedOptions().timeZone
             }.
 
-            - You typically always query screenpipe in the first user message
-            - ALWAYS use the "stream_response" tool to stream the final response to the user
-            - ALWAYS use the "stream_response" tool to stream the final response to the user
-            - ALWAYS use the "stream_response" tool to stream the final response to the user
-            - ONLY USE query tool ONCE
             - Do not try to show screenshots
             - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`
             - You can analyze/view/show/access videos BY JUST FUCKING PUTTING THE ABSOLUTE FILE PATH IN A CODE BLOCK
             - Always use the absolute file path to access videos
             - When the user ask "show me what i was doing at 10.11 am" make sure to embed the path to the video in the response in a code block
             - MAKE SURE TO FUCKING ANSWER THE USER QUESTION
+            - Also make sure to follow the user's custom system prompt: "${customPrompt}"
+            - If the data retuned by tools is empty or not relevant, make sure to tell the user that you could not find anything relevant to the user question and ask the user to try something more precise in a new chat
+
+            Example responses:
+
+            1. "You were coding in VSCode from 2-3 PM, working on 'UserProfile.js'. In Chrome, you researched React hooks. Need more details?"
+
+            2. "Found 2 emails from John about the project. In a call at 3 PM, the frontend deadline was moved to Friday. Video: \`/users/calls/2024-03-15-15-00.mp4\`"
+
+            3. "At 10:11 AM: Slack chat in #project-alpha, VSCode open to 'dataProcessor.js', Chrome on AWS docs. Video: \`/users/screen/2024-03-15-10-11.mp4\`"
+
+            4. "Last hour: VSCode - API integration, Notion - roadmap updates, Slack - code review discussion. More on any of these?"
             `,
           },
           // @ts-ignore
@@ -393,8 +430,8 @@ export function ChatList({
             </Button>
           </div>
           <p className="text-xs font-medium text-center text-neutral-700 mt-2">
-            screenpipe is in beta, base its answer on your computer activity and
-            can make errors.
+            screenpipe is in alpha, base its answer on your screen & audio
+            recordings and can make errors.
           </p>
         </div>
       </div>

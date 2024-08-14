@@ -13,6 +13,7 @@ interface Settings {
   aiModel: string;
   installedPipes: string[];
   userId: string;
+  customPrompt: string;
 }
 
 let store: Store | null = null;
@@ -28,6 +29,7 @@ export function useSettings() {
     aiModel: "gpt-4o",
     installedPipes: [],
     userId: "",
+    customPrompt: "",
   });
 
   useEffect(() => {
@@ -53,6 +55,8 @@ export function useSettings() {
         const savedInstalledPipes =
           ((await store!.get("installedPipes")) as string[]) || [];
         const savedUserId = ((await store!.get("userId")) as string) || "";
+        const savedCustomPrompt =
+          ((await store!.get("customPrompt")) as string) || "";
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
@@ -63,6 +67,7 @@ export function useSettings() {
           aiModel: savedAiModel,
           installedPipes: savedInstalledPipes,
           userId: savedUserId,
+          customPrompt: savedCustomPrompt,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -87,6 +92,7 @@ export function useSettings() {
       await store!.set("aiModel", updatedSettings.aiModel);
       await store!.set("installedPipes", updatedSettings.installedPipes);
       await store!.set("userId", updatedSettings.userId);
+      await store!.set("customPrompt", updatedSettings.customPrompt);
       await store!.save();
       setSettings(updatedSettings);
     } catch (error) {

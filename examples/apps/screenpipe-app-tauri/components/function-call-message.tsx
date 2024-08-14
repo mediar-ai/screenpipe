@@ -32,7 +32,7 @@ interface FunctionCallMessageProps {
 export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
   const { settings } = useSettings();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  console.log("FunctionCallMessage", message);
+  // console.log("FunctionCallMessage", message);
 
   // Assuming message.content is the array shown in the image
   // @ts-ignore
@@ -60,8 +60,8 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
   // @ts-ignore
   const isResult = toolResults.some((result) => result.result !== null);
 
-  console.log("toolCalls", toolCalls);
-  console.log("toolResults", toolResults);
+  // console.log("toolCalls", toolCalls);
+  // console.log("toolResults", toolResults);
   // message.content.find((content) => content.args.queries
   return (
     <div className="group relative mb-4 flex items-start md:-ml-12">

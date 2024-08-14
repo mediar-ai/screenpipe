@@ -24,6 +24,7 @@ import { MemoizedReactMarkdown } from "./markdown";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { platform } from "@tauri-apps/plugin-os";
+import { Textarea } from "./ui/textarea";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
@@ -49,6 +50,13 @@ export function Settings({ className }: { className?: string }) {
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalSettings({ ...localSettings, aiModel: e.target.value });
     updateSettings({ ...localSettings, aiModel: e.target.value });
+  };
+
+  const handleCustomPromptChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>
+  ) => {
+    setLocalSettings({ ...localSettings, customPrompt: e.target.value });
+    updateSettings({ ...localSettings, customPrompt: e.target.value });
   };
 
   React.useEffect(() => {
@@ -88,7 +96,7 @@ export function Settings({ className }: { className?: string }) {
         <div className="mt-8 space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-center">ai model selection</CardTitle>
+              <CardTitle className="text-center">general ai settings</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center">
               <div className="w-full max-w-md">
@@ -116,6 +124,27 @@ export function Settings({ className }: { className?: string }) {
                   {localSettings.useOllama
                     ? "recommended: llama3.1 for ollama (we only support models supporting tools like llama3.1, mistral-nemo, etc.)"
                     : "recommended: gpt-4o for openai"}
+                </p>
+              </div>
+              <Separator className="my-4" />
+              <div className="w-full max-w-md">
+                <div className="flex flex-col gap-2 mb-4">
+                  <Label htmlFor="customPrompt" className="text-sm font-medium">
+                    Enter your custom prompt (keep it short):
+                  </Label>
+                  <Textarea
+                    id="customPrompt"
+                    value={localSettings.customPrompt || ""}
+                    onChange={handleCustomPromptChange}
+                    className="w-full"
+                    placeholder="Enter additional instructions for the AI..."
+                    rows={4}
+                    maxLength={200}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  This prompt will be added to the system message for all your
+                  queries.
                 </p>
               </div>
             </CardContent>
@@ -168,42 +197,24 @@ export function Settings({ className }: { className?: string }) {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-col items-center space-y-2">
-                <TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-4">
-                          <Switch
-                            id="use-ollama"
-                            checked={localSettings.useOllama}
-                            onCheckedChange={handleOllamaToggle}
-                          />
-                          <Label
-                            htmlFor="use-ollama"
-                            className="flex items-center space-x-2"
-                          >
-                            Use Ollama
-                            <Badge variant="outline" className="ml-2">
-                              Disabled
-                            </Badge>
-                          </Label>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Ollama support is currently disabled.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <a
-                    href="https://github.com/sgomez/ollama-ai-provider/issues/22"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline"
+                <div className="flex items-center space-x-4">
+                  <Switch
+                    id="use-ollama"
+                    checked={localSettings.useOllama}
+                    onCheckedChange={handleOllamaToggle}
+                  />
+                  <Label
+                    htmlFor="use-ollama"
+                    className="flex items-center space-x-2"
                   >
-                    want to make this work?
-                  </a>
-                </TooltipProvider>
-                {/* {localSettings.useOllama && (
+                    Use Ollama
+                    <Badge variant="outline" className="ml-2">
+                      Experimental
+                    </Badge>
+                  </Label>
+                </div>
+
+                {localSettings.useOllama && (
                   <div className="w-full max-w-md mt-2">
                     <div className="flex-col gap-2 mb-4">
                       <div className="flex items-center gap-4 mb-4">
@@ -249,10 +260,18 @@ export function Settings({ className }: { className?: string }) {
                     }}
                   >
                     {currentPlatform === "windows"
-                      ? "You need to [install Ollama](https://ollama.com/) and run `set OLLAMA_ORIGINS=* && ollama run llama3.1` first. Currently only supports Llama 3.1"
-                      : "You need to [install Ollama](https://ollama.com/) and run `ollama run llama3.1` first. Currently only supports Llama 3.1"}
+                      ? "You need to [install Ollama](https://ollama.com/) and run `set OLLAMA_ORIGINS=* && ollama run llama3.1` first. \n\nCurrently only supports models supporting tools like llama3.1, mistral-nemo, etc."
+                      : "You need to [install Ollama](https://ollama.com/) and run `ollama run llama3.1` first. \n\nCurrently only supports models supporting tools like llama3.1, mistral-nemo, etc."}
                   </MemoizedReactMarkdown>
-                </div> */}
+                </div>
+                <a
+                  href="https://github.com/louis030195/screen-pipe/issues/167"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary hover:underline"
+                >
+                  want to help make this well?
+                </a>
               </div>
 
               <Separator />

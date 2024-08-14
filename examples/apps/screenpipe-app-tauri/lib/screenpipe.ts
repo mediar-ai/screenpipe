@@ -64,6 +64,7 @@ export const screenpipeMultiQuery = z.object({
 export async function queryScreenpipeNtimes(
   params: z.infer<typeof screenpipeMultiQuery>
 ) {
+  console.log("queryScreenpipeNtimes", params);
   return Promise.all(params.queries.map(queryScreenpipe));
 }
 
