@@ -20,15 +20,16 @@ import { checkForAppUpdates } from "@/components/updater";
 import UpdateNotification from "@/components/update-notification";
 import { usePostHog } from "posthog-js/react";
 import Link from "next/link";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function Home() {
   const { settings } = useSettings();
   const posthog = usePostHog();
   // console.log("settings", settings);
-
+  const { toast } = useToast();
   useEffect(() => {
-    checkForAppUpdates();
-  }, []);
+    checkForAppUpdates({ toast });
+  }, [toast]);
 
   useEffect(() => {
     if (settings.userId) {

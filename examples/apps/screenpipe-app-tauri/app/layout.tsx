@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import HealthStatus from "@/components/screenpipe-status";
 import { PHProvider } from "./providers";
+import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,6 +22,7 @@ export default function RootLayout({
       <PHProvider>
         {/* https://posthog.com/docs/libraries/next-js for more info */}
         <body className={inter.className}>{children}</body>
+        <Toaster />
       </PHProvider>
     </html>
   );

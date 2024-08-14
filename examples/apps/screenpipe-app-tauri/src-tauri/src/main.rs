@@ -133,35 +133,37 @@ async fn main() {
             }
 
             // Add System Tray
-            let toggle = MenuItemBuilder::with_id("toggle", "screenpipe").build(app)?;
-            let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
+            // let toggle = MenuItemBuilder::with_id("quit", "quit").build(app)?;
+            // let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
 
-            // let icon_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            //     .join("icons")
-            //     .join("32x32.png");
+            // // let icon_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            // //     .join("icons")
+            // //     .join("32x32.png");
 
-            // let icon = Image::from_path(icon_path).expect("Failed to load icon");
+            // // let icon = Image::from_path(icon_path).expect("Failed to load icon");
 
-            let _tray = TrayIconBuilder::new()
-                .menu(&menu)
-                // .icon(icon)
-                .on_menu_event(move |_app, event| match event.id().as_ref() {
-                    "toggle" => {
-                        println!("toggle clicked");
-                    }
-                    _ => (),
-                })
-                .on_tray_icon_event(|_tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        println!("tray closed");
-                    }
-                })
-                .build(app)?;
+            // let icon = app.default_window_icon().unwrap();
+            // let _tray = TrayIconBuilder::new()
+            //     .menu(&menu)
+            //     .icon(icon.clone())
+            //     .on_menu_event(move |app, event| match event.id().as_ref() {
+            //         "quit" => {
+            //             println!("quit clicked");
+            //             app.exit(0);
+            //         }
+            //         _ => (),
+            //     })
+            //     .on_tray_icon_event(|_tray, event| {
+            //         if let TrayIconEvent::Click {
+            //             button: MouseButton::Left,
+            //             button_state: MouseButtonState::Up,
+            //             ..
+            //         } = event
+            //         {
+            //             println!("tray closed");
+            //         }
+            //     })
+            //     .build(app)?;
 
             let stores = app.app_handle().state::<StoreCollection<Wry>>();
 
