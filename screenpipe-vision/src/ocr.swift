@@ -41,8 +41,10 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   }
 
   let semaphore = DispatchSemaphore(value: 0)
-  var result = ""
-  var textConfidences: [Float] = []
+  var ocrResult = ""
+  var textElements: [[String: Any]] = []
+  var totalConfidence: Float = 0.0
+  var observationCount: Int = 0
 
   // Slice the image horizontally with overlap
   let sliceCount = 5 // Adjust this number based on your needs
@@ -57,47 +59,70 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
       continue
     }
 
-    let textRequest = VNRecognizeTextRequest()
-    let requestHandler = VNImageRequestHandler(cgImage: sliceCGImage, options: [:])
-    
-    do {
-      try requestHandler.perform([textRequest])
-      
-      if let textObservations = textRequest.results {
-        for observation in textObservations {
-          if let topCandidate = observation.topCandidates(1).first {
-            let adjustedBoundingBox = CGRect(
-              x: observation.boundingBox.origin.x,
-              y: (CGFloat(sliceY) + observation.boundingBox.origin.y * CGFloat(sliceHeight)) / CGFloat(height),
-              width: observation.boundingBox.width,
-              height: observation.boundingBox.height * CGFloat(sliceHeight) / CGFloat(height)
-            )
-            result += "\(topCandidate.string)\n" // Text: \
-            // result += "Bounding Box: \(adjustedBoundingBox)\n"
-            // result += "Confidence: \(topCandidate.confidence)\n\n"
-            textConfidences.append(topCandidate.confidence)
-          }
-        }
+    let textRequest = VNRecognizeTextRequest { request, error in
+      if let error = error {
+        ocrResult = "Error: \(error.localizedDescription)"
+        semaphore.signal()
+        return
       }
-    } catch {
-      print("Error processing slice \(i): \(error.localizedDescription)")
+
+      guard let observations = request.results as? [VNRecognizedTextObservation] else {
+        ocrResult = "Error: Failed to process image or no text found"
+        semaphore.signal()
+        return
+      }
+
+      for observation in observations {
+        guard let topCandidate = observation.topCandidates(1).first else {
+          continue
+        }
+        let text = topCandidate.string
+        let confidence = topCandidate.confidence
+        let boundingBox = observation.boundingBox
+        textElements.append([
+          "text": text,
+          "confidence": confidence,
+          "boundingBox": [
+            "x": boundingBox.origin.x,
+            "y": (CGFloat(sliceY) + boundingBox.origin.y * CGFloat(sliceHeight)) / CGFloat(height),
+            "width": boundingBox.size.width,
+            "height": boundingBox.size.height * CGFloat(sliceHeight) / CGFloat(height)
+          ]
+        ])
+
+        ocrResult += "\(text)\n"
+        totalConfidence += confidence
+        observationCount += 1
+      }
+      semaphore.signal()
     }
+
+    textRequest.recognitionLevel = .accurate
+
+    let handler = VNImageRequestHandler(cgImage: sliceCGImage, options: [:])
+    do {
+      try handler.perform([textRequest])
+    } catch {
+      return strdup("Error: Failed to perform OCR - \(error.localizedDescription)")
+    }
+
+    semaphore.wait()
   }
 
-  // Calculate and add average confidence score for text
-  let textAvg = textConfidences.isEmpty ? 0 : textConfidences.reduce(0, +) / Float(textConfidences.count)
+  let overallConfidence = observationCount > 0 ? totalConfidence / Float(observationCount) : 0.0
+  let result: [String: Any] = [
+    "ocrResult": ocrResult.isEmpty ? "No text found" : ocrResult,
+    "textElements": textElements,
+    "overallConfidence": overallConfidence
+  ]
 
-  result += "Average Text Confidence: \(textAvg)\n"
-
-  // Print average
-  print("Text Average Confidence: \(textAvg)")
-
-  semaphore.signal()
-  semaphore.wait()
-
-  return strdup(result.isEmpty ? "No content found" : result)
+  if let jsonData = try? JSONSerialization.data(withJSONObject: result, options: []),
+     let jsonString = String(data: jsonData, encoding: .utf8) {
+    return strdup(jsonString)
+  } else {
+    return strdup("Error: Failed to serialize result to JSON")
+  }
 }
-
 
 // # Compile for x86_64
 // swiftc -emit-library -target x86_64-apple-macosx10.15 -o screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/src/ocr.swift
