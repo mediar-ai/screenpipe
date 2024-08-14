@@ -8,6 +8,33 @@ Any other issue? [Will solve your problem in less than 15 min](https://cal.com/l
 
   <details>
 
+  <summary>Library not loaded</summary>
+
+  >dyld[60479]: Library not loaded: screenpipe-vision/lib/libscreenpipe_arm64.dylib
+  Referenced from: <805CE854-929E-36F6-AC66-9CEBA7A073BC> /Applications/screenpipe.app/Contents/MacOS/screenpipe
+  Reason: tried: '/Users/louisbeaumont/.wasmedge/lib/libscreenpipe_arm64.dylib' (no such file), 'screenpipe-vision/lib/libscreenpipe_arm64.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OSscreenpipe-vision/lib/libscreenpipe_arm64.dylib' (no such file), 'screenpipe-vision/lib/libscreenpipe_arm64.dylib' (no such file)
+Abort trap: 6
+>
+
+  i'll investigate this issue now, in the meantime you can do this:
+  
+  ```
+  brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
+  brew install screenpipe
+  ```
+  
+  
+  and then 
+  
+  ```
+  cd
+  screenpipe --ocr-engine apple-native
+  ```
+  
+  </details>
+
+  <details>
+
   <summary>WindowsCoreError HRESULT</summary>
 
   Sometimes this happen when computer goes to sleep for long. Just restart. We're going to make it fix itself automatically soon.
