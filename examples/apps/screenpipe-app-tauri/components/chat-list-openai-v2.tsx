@@ -268,7 +268,11 @@ export function ChatList({
             - When the user mentions specific times (e.g., "9 to 10 am"), convert these to UTC before querying. Assume the user's local timezone is ${
               Intl.DateTimeFormat().resolvedOptions().timeZone
             }.
-
+            - To convert to UTC: ${
+              new Date().getTimezoneOffset() / -60 > 0 ? "subtract" : "add"
+            } ${Math.abs(
+              new Date().getTimezoneOffset() / 60
+            )} hours from the user's local time.
             - Do not try to show screenshots
             - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`
             - You can analyze/view/show/access videos BY JUST FUCKING PUTTING THE ABSOLUTE FILE PATH IN A CODE BLOCK
