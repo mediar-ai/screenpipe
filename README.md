@@ -29,9 +29,11 @@
     <img alt="Let's chat" src="https://cal.com/book-with-cal-dark.svg" />
   </a>
     
-</p>
 
-![Demo](./content/demo.gif)
+
+<p align="center">
+ <img alt="demo" src="https://github.com/user-attachments/assets/39d27adc-e17e-4ca5-89c5-faf45a3ea20f" width="800" />
+</p>
 
 ---
 
