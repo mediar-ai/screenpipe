@@ -146,6 +146,23 @@ export function ChatList({
                 - Very important: your output will be given to another LLM so make sure not to return too much data (typically each row returns lot of data)
                 - Use "all" for querying the same keyword over vision and audio
                 - When the user ask "show me what i was doing at 10.11 am" do not use "q" intent is not looking for specific content but for a time range
+
+
+                Example of your answer:
+                {
+                  queries: [
+                    { content_type: "audio", start_time: "2024-03-01T00:00:00Z", end_time: "2024-03-01T23:59:59Z" },
+                    { content_type: "ocr", app_name: "arc", start_time: "2024-03-01T00:00:00Z", end_time: "2024-03-01T23:59:59Z", q: "john" },
+                  ]
+                }
+                
+                Or 
+
+                {
+                  queries: [
+                    { content_type: "all", start_time: "2024-03-01T00:00:00Z", end_time: "2024-03-01T01:00:00Z" },
+                  ]
+                }
                 `,
             },
             // add prev messages but convert all tool role messages to assistant bcs not supported in generateText
@@ -197,6 +214,10 @@ export function ChatList({
         ]);
       }
 
+      console.log("text", text);
+
+      setIsLoading(false);
+
       const { textStream } = await streamText({
         model: provider(model),
         messages: [
@@ -222,6 +243,8 @@ export function ChatList({
             - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`
             - You can analyze/view/show/access videos BY JUST FUCKING PUTTING THE ABSOLUTE FILE PATH IN A CODE BLOCK
             - Always use the absolute file path to access videos
+            - When the user ask "show me what i was doing at 10.11 am" make sure to embed the path to the video in the response in a code block
+            - MAKE SURE TO FUCKING ANSWER THE USER QUESTION
             `,
           },
           // @ts-ignore

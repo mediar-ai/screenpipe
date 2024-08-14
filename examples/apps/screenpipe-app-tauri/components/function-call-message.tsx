@@ -107,12 +107,14 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
                               your application.
                             </DialogDescription>
                           </DialogHeader>
-                          <CodeBlock
-                            language="bash"
-                            value={generateCurlCommand(
-                              toolCall.args.queries[0]
-                            )}
-                          />
+                          {toolCall.args.queries && (
+                            <CodeBlock
+                              language="bash"
+                              value={generateCurlCommand(
+                                toolCall.args.queries[0]
+                              )}
+                            />
+                          )}
                         </DialogContent>
                       </Dialog>
                     </AccordionTrigger>
@@ -160,12 +162,14 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
                               your application.
                             </DialogDescription>
                           </DialogHeader>
-                          <CodeBlock
-                            language="bash"
-                            value={generateCurlCommand(
-                              toolResult.result[0].args.queries[0]
-                            )}
-                          />
+                          {toolResult.result?.[0]?.args?.queries && (
+                            <CodeBlock
+                              language="bash"
+                              value={generateCurlCommand(
+                                toolResult.result[0].args.queries[0]
+                              )}
+                            />
+                          )}
                         </DialogContent>
                       </Dialog>
                     </AccordionTrigger>

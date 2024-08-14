@@ -169,38 +169,41 @@ export function Settings({ className }: { className?: string }) {
             <CardContent className="space-y-6">
               <div className="flex flex-col items-center space-y-2">
                 <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center space-x-4">
-                        <Switch
-                          id="use-ollama"
-                          checked={localSettings.useOllama}
-                          onCheckedChange={handleOllamaToggle}
-                        />
-                        <Label
-                          htmlFor="use-ollama"
-                          className="flex items-center space-x-2"
-                        >
-                          Use Ollama
-                          <Badge variant="outline" className="ml-2">
-                            Beta
-                          </Badge>
-                        </Label>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        Toggle to use Ollama instead of OpenAI API. Expect
-                        errors as this is experimental.
-                        <br />
-                        Function calling was just announced and doesn&apos;t
-                        work well, usually requiring more prompt engineering
-                        compared to OpenAI.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center space-x-4">
+                          <Switch
+                            id="use-ollama"
+                            checked={localSettings.useOllama}
+                            onCheckedChange={handleOllamaToggle}
+                          />
+                          <Label
+                            htmlFor="use-ollama"
+                            className="flex items-center space-x-2"
+                          >
+                            Use Ollama
+                            <Badge variant="outline" className="ml-2">
+                              Disabled
+                            </Badge>
+                          </Label>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Ollama support is currently disabled.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <a
+                    href="https://github.com/sgomez/ollama-ai-provider/issues/22"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    want to make this work?
+                  </a>
                 </TooltipProvider>
-                {localSettings.useOllama && (
+                {/* {localSettings.useOllama && (
                   <div className="w-full max-w-md mt-2">
                     <div className="flex-col gap-2 mb-4">
                       <div className="flex items-center gap-4 mb-4">
@@ -218,7 +221,6 @@ export function Settings({ className }: { className?: string }) {
                           placeholder="Enter Ollama URL (e.g., http://localhost:11434)"
                         />
                       </div>
-                      {/* add small text to indicate only port 11434 is supported for security reasons */}
                       <p className="mt-1 text-sm text-muted-foreground text-center">
                         For now only port 11434 and 9000 are supported for
                         security reasons.
@@ -250,7 +252,7 @@ export function Settings({ className }: { className?: string }) {
                       ? "You need to [install Ollama](https://ollama.com/) and run `set OLLAMA_ORIGINS=* && ollama run llama3.1` first. Currently only supports Llama 3.1"
                       : "You need to [install Ollama](https://ollama.com/) and run `ollama run llama3.1` first. Currently only supports Llama 3.1"}
                   </MemoizedReactMarkdown>
-                </div>
+                </div> */}
               </div>
 
               <Separator />
