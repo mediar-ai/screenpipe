@@ -1,3 +1,7 @@
+<p align="center">
+   <img src="https://github.com/user-attachments/assets/d3b1de26-c3c0-4c84-b9c4-b03213b97a30" alt="logo" width="200">
+</p>
+
 <pre align="center">
    ___  ___ _ __ ___  ___ _ __  _ __ (_)_ __   ___ 
   / __|/ __| '__/ _ \/ _ \ '_ \| '_ \| | '_ \ / _ \
