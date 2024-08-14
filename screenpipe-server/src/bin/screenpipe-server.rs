@@ -31,8 +31,11 @@ use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 enum CliOcrEngine {
     Unstructured,
+    #[cfg(not(target_os = "macos"))]
     Tesseract,
+    #[cfg(target_os = "windows")]
     WindowsNative,
+    #[cfg(target_os = "macos")]
     AppleNative,
 }
 
@@ -40,12 +43,17 @@ impl From<CliOcrEngine> for CoreOcrEngine {
     fn from(cli_engine: CliOcrEngine) -> Self {
         match cli_engine {
             CliOcrEngine::Unstructured => CoreOcrEngine::Unstructured,
+            #[cfg(not(target_os = "macos"))]
             CliOcrEngine::Tesseract => CoreOcrEngine::Tesseract,
+            #[cfg(target_os = "windows")]
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
+            #[cfg(target_os = "macos")]
             CliOcrEngine::AppleNative => CoreOcrEngine::AppleNative,
         }
     }
 }
+
+
 
 // keep in mind this is the most important feature ever // TODO: add a pipe and a ⭐️ e.g screen | ⭐️ somehow in ascii ♥️🤓
 const DISPLAY: &str = r"
@@ -71,7 +79,7 @@ struct Cli {
     /// 1 FPS = 30 GB / month
     /// 5 FPS = 150 GB / month
     /// Optimise based on your needs.
-    /// You rarely change change more than 1 times within a second, right?
+    /// Your screen rarely change more than 1 times within a second, right?
     #[arg(short, long, default_value_t = 1.0)]
     fps: f64,
 
@@ -116,20 +124,30 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     cloud_audio_on: bool,
 
-    /// OCR engine to use. Tesseract is a local OCR engine (default).
+    /// OCR engine to use.
+    /// AppleNative is the default local OCR engine for macOS.
     /// WindowsNative is a local OCR engine for Windows.
     /// Unstructured is a cloud OCR engine (free of charge on us)
-    #[arg(long, value_enum, default_value_t = CliOcrEngine::Tesseract)]
+    /// Tesseract is a local OCR engine (not supported on macOS)
+    #[cfg_attr(
+        target_os = "macos",
+        arg(long, value_enum, default_value_t = CliOcrEngine::AppleNative)
+    )]
+    #[cfg_attr(
+        not(target_os = "macos"),
+        arg(long, value_enum, default_value_t = CliOcrEngine::Tesseract)
+    )]
     ocr_engine: CliOcrEngine,
 
     /// UID key for sending data to friend wearable (if not provided, data won't be sent)
     #[arg(long)]
     friend_wearable_uid: Option<String>,
 
+    /// List available monitors, then you can use --monitor-id to select one (with the ID)
     #[arg(long)]
     list_monitors: bool,
 
-    /// Monitor ID to use
+    /// Monitor ID to use, this will be used to select the monitor to record
     #[arg(long)]
     monitor_id: Option<u32>,
 }

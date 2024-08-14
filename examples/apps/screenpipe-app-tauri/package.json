@@ -7,7 +7,7 @@
     "lint": "next lint",
     "build": "next build",
     "tauri": "tauri",
-    "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe,tesseract,ffmpeg} node_modules"
+    "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg} node_modules"
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.39",

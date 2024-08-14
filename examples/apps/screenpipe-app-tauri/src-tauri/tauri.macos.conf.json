@@ -23,7 +23,6 @@
             "ffmpeg/bin/*": "./"
         },
         "externalBin": [
-            "tesseract",
             "screenpipe"
         ]
     }

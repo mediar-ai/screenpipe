@@ -4,6 +4,7 @@ use std::path::PathBuf;
 fn main() {
     #[cfg(target_os = "macos")]
     {
+
         println!("cargo:rustc-link-lib=dylib=screenpipe");
 
         // Get the package root directory

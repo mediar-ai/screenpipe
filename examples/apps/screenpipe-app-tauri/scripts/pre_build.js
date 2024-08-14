@@ -209,17 +209,10 @@ if (platform == 'macos') {
 	}
 	// ! trash code that is going away soon :)
 	for (const arch of architectures) {
-		const tesseractBinary = `./tesseract-${arch}-apple-darwin`;
 		console.log(`Setting up Tesseract & screenpipe bin for ${arch}...`);
 
 		if (arch === 'arm64') {
-			// Native architecture or x86_64 on Intel Mac
-			if (!(await fs.exists(tesseractBinary))) {
 
-				await $`brew install tesseract`;
-				await $`cp $(brew --prefix)/bin/tesseract ${tesseractBinary}`;
-				await $`cp /usr/local/bin/tesseract ${tesseractBinary}`;
-			}
 			// copy screenpipe binary (more recent one)
 			const path1 = "../../../../target/aarch64-apple-darwin/release/screenpipe";
 			const path2 = "../../../../target/release/screenpipe";
@@ -238,22 +231,29 @@ if (platform == 'macos') {
 				console.log(`copied release screenpipe binary from ${path2}`);
 			} else {
 				console.log("no screenpipe binary found");
+				process.exit(1);
+			}
+			// if the binary exists, hard code the fucking dylib
+			if (await fs.exists('screenpipe-aarch64-apple-darwin')) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
+				console.log(`hard coded the FUCKING dylib`);
 			}
 		} else if (arch === 'x86_64' && nativeArch === 'arm64') {
-			// x86_64 on ARM Mac
-			console.log('Installing x86_64 version using Rosetta 2...');
-			if (!(await fs.exists(tesseractBinary))) {
-				await $`arch -x86_64 /usr/local/bin/brew install tesseract`;
-				await $`cp /usr/local/bin/tesseract /tmp/tesseract`
-				await $`cp /tmp/tesseract ${tesseractBinary}`;
-			}
+
 			//check if exists
 			if (await fs.exists('../../../../target/x86_64-apple-darwin/release/screenpipe')) {
 				await $`cp ../../../../target/x86_64-apple-darwin/release/screenpipe screenpipe-x86_64-apple-darwin`;
 			}
+			// hard code the fucking dylib
+			if (await fs.exists('screenpipe-x86_64-apple-darwin')) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
+				console.log(`hard coded the FUCKING dylib`);
+			}
 		}
 
-		console.log(`Tesseract & screenpipe for ${arch} set up successfully.`);
+		console.log(`screenpipe for ${arch} set up successfully.`);
 	}
 
 
