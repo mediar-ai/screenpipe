@@ -1,5 +1,8 @@
 {
     "bundle": {
+        "externalBin": [
+            "screenpipe"
+        ],
         "linux": {
             "deb": {
                 "depends": [

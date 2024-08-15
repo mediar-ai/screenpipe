@@ -34,12 +34,12 @@ jobs:
       matrix:
         include:
           # ! manual release on mac for now
-          # - platform: "macos-latest" # for Arm based macs (M1 and above).
-          #   args: "--target aarch64-apple-darwin --features metal"
-          #   target: aarch64-apple-darwin
-          # - platform: "macos-latest" # for Intel based macs.
-          #   args: "--target x86_64-apple-darwin --features metal"
-          #   target: x86_64-apple-darwin
+          - platform: "macos-latest" # for Arm based macs (M1 and above).
+            args: "--target aarch64-apple-darwin --features metal"
+            target: aarch64-apple-darwin
+          - platform: "macos-latest" # for Intel based macs.
+            args: "--target x86_64-apple-darwin --features metal"
+            target: x86_64-apple-darwin
           - platform: "ubuntu-22.04" # Ubuntu x86_64
             args: "" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64

@@ -101,6 +101,35 @@ if (platform == 'linux') {
 	for (const name of config.linux.aptPackages) {
 		await $`sudo apt-get install -y ${name}`
 	}
+
+	// Copy screenpipe binary
+	console.log('Copying screenpipe binary for Linux...');
+	const potentialPaths = [
+		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
+		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
+		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
+		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
+		'/home/runner/work/screen-pipe/screen-pipe/target/release/screenpipe',
+	];
+
+	let copied = false;
+	for (const screenpipeSrc of potentialPaths) {
+		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-unknown-linux-gnu');
+		try {
+			await fs.copyFile(screenpipeSrc, screenpipeDest);
+			console.log(`screenpipe binary copied successfully from ${screenpipeSrc}`);
+			copied = true;
+			break;
+		} catch (error) {
+			console.warn(`failed to copy screenpipe binary from ${screenpipeSrc}:`, error);
+		}
+	}
+
+	if (!copied) {
+		console.error("failed to copy screenpipe binary from any potential path.");
+		// uncomment the following line if you want the script to exit on failure
+		// process.exit(1);
+	}
 }
 
 /* ########## Windows ########## */
