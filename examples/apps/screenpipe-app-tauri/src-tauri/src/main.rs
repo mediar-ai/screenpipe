@@ -12,24 +12,131 @@ use std::io::Write;
 
 use std::fs;
 use std::path::PathBuf;
-use uuid::Uuid;
-
+use std::sync::Arc;
+use std::sync::Mutex;
 use tauri::Manager;
+use tauri::State;
 use tauri::Wry;
-use tauri_plugin_store::{with_store, StoreCollection};
-
-use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_autostart::ManagerExt;
-
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState},
 };
+use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::{with_store, StoreCollection};
+use uuid::Uuid;
 
 mod analytics;
 
 use crate::analytics::start_analytics;
 mod logs;
+
+struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
+
+#[tauri::command]
+async fn kill_all_sreenpipes(
+    state: State<'_, SidecarState>,
+    _app: tauri::AppHandle,
+) -> Result<(), String> {
+    debug!("Killing screenpipe");
+
+    if let Some(child) = state.0.lock().unwrap().take() {
+        child.kill().map_err(|e| e.to_string())?;
+    }
+    // hard kill the sidecar on port 3030
+    let _ = tokio::process::Command::new("pkill")
+        .arg("-f")
+        .arg("screenpipe")
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn spawn_screenpipe(
+    state: State<'_, SidecarState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let sidecar_running = state.0.lock().unwrap().is_some();
+    if !sidecar_running {
+        // Spawn the sidecar
+        let child = spawn_sidecar(&app)?;
+        // Update the state after spawning
+        state.0.lock().unwrap().replace(child);
+    }
+    debug!("Spawned sidecar thru cli");
+    Ok(())
+}
+
+fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
+    let sidecar = app.shell().sidecar("screenpipe").unwrap();
+    // Get the current settings
+    let stores = app.state::<StoreCollection<Wry>>();
+    let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
+
+    let path = base_dir.join("store.bin");
+
+    let use_cloud_audio = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("useCloudAudio")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true)) // Default to true if not set
+    })
+    .map_err(|e| e.to_string())?;
+    let use_cloud_ocr = with_store(app.clone(), stores, path, |store| {
+        Ok(store
+            .get("useCloudOcr")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true)) // Default to true if not set
+    })
+    .map_err(|e| e.to_string())?;
+
+    let _data_dir_str = base_dir.to_string_lossy();
+    let mut args = vec![
+        "--port", "3030",
+        "--debug",
+        // "--self-healing",
+        // "--data-dir",
+        // &data_dir_str,
+    ];
+    // if macos do --fps 0.2
+    if cfg!(target_os = "macos") {
+        args.push("--fps");
+        args.push("0.2");
+    }
+    if use_cloud_audio {
+        args.push("--cloud-audio-on");
+    }
+    if use_cloud_ocr {
+        args.push("--ocr-engine unstructured");
+    }
+
+    // hardcode TESSDATA_PREFIX for windows
+    if cfg!(windows) {
+        let exe_dir = env::current_exe()
+            .expect("Failed to get current executable path")
+            .parent()
+            .expect("Failed to get parent directory of executable")
+            .to_path_buf();
+        let tessdata_path = exe_dir.join("tessdata");
+        let c = sidecar.env("TESSDATA_PREFIX", tessdata_path).args(&args);
+
+        let (_, child) = c.spawn().map_err(|e| e.to_string())?;
+
+        debug!("Spawned sidecar with args: {:?}", args);
+
+        return Ok(child);
+    }
+
+    let (_, child) = sidecar.args(&args).spawn().map_err(|e| e.to_string())?;
+
+    debug!("Spawned sidecar with args: {:?}", args);
+
+    Ok(child)
+}
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
@@ -51,6 +158,8 @@ async fn main() {
         ..Default::default()
       }));
 
+    let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -64,6 +173,11 @@ async fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .manage(sidecar_state)
+        .invoke_handler(tauri::generate_handler![
+            spawn_screenpipe,
+            kill_all_sreenpipes,
+        ])
         .setup(move |app| {
             // run this on windows only
             if cfg!(windows) {
@@ -132,38 +246,34 @@ async fn main() {
                 let _ = File::create(path.clone()).unwrap();
             }
 
-            // Add System Tray
-            // let toggle = MenuItemBuilder::with_id("quit", "quit").build(app)?;
-            // let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
+            if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
+                // Add System Tray
+                let toggle = MenuItemBuilder::with_id("quit", "Quit screenpipe").build(app)?;
+                let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
 
-            // // let icon_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            // //     .join("icons")
-            // //     .join("32x32.png");
-
-            // // let icon = Image::from_path(icon_path).expect("Failed to load icon");
-
-            // let icon = app.default_window_icon().unwrap();
-            // let _tray = TrayIconBuilder::new()
-            //     .menu(&menu)
-            //     .icon(icon.clone())
-            //     .on_menu_event(move |app, event| match event.id().as_ref() {
-            //         "quit" => {
-            //             println!("quit clicked");
-            //             app.exit(0);
-            //         }
-            //         _ => (),
-            //     })
-            //     .on_tray_icon_event(|_tray, event| {
-            //         if let TrayIconEvent::Click {
-            //             button: MouseButton::Left,
-            //             button_state: MouseButtonState::Up,
-            //             ..
-            //         } = event
-            //         {
-            //             println!("tray closed");
-            //         }
-            //     })
-            //     .build(app)?;
+                let _ = main_tray.set_menu(Some(menu));
+                main_tray.on_menu_event(move |app, event| match event.id().as_ref() {
+                    "quit" => {
+                        println!("quit clicked");
+                        app.exit(0);
+                    }
+                    _ => (),
+                });
+                main_tray.on_tray_icon_event(move |_tray, event| match event {
+                    tauri::tray::TrayIconEvent::Click {
+                        button,
+                        button_state,
+                        ..
+                    } => {
+                        if button == MouseButton::Left && button_state == MouseButtonState::Down {
+                            // if let Err(err) = tray.app_handle().emit("cap://tray/clicked", ()) {
+                            //     eprintln!("Failed to emit event for tray {}", err);
+                            // };
+                        }
+                    }
+                    _ => {}
+                });
+            }
 
             let stores = app.app_handle().state::<StoreCollection<Wry>>();
 
@@ -186,45 +296,73 @@ async fn main() {
                 },
             );
 
+            let path_clone = path.clone();
+            let stores_clone = stores.clone();
+
             // Now use the store
-            let _ = with_store(app.app_handle().clone(), stores, path, |store| {
-                store.save()?;
+            let _ = with_store(
+                app.app_handle().clone(),
+                stores_clone,
+                path_clone,
+                |store| {
+                    store.save()?;
 
-                let is_analytics_enabled = store
-                    .get("analyticsEnabled")
-                    .unwrap_or(&Value::Bool(true))
-                    .as_bool()
-                    .unwrap_or(true);
+                    let is_analytics_enabled = store
+                        .get("analyticsEnabled")
+                        .unwrap_or(&Value::Bool(true))
+                        .as_bool()
+                        .unwrap_or(true);
 
-                let unique_id = store
-                    .get("userId")
-                    .and_then(|v| v.as_str())
-                    .map(String::from)
-                    .unwrap_or_else(|| {
-                        let new_id = Uuid::new_v4().to_string();
-                        store
-                            .insert(
-                                "userId".to_string(),
-                                serde_json::Value::String(new_id.clone()),
-                            )
-                            .unwrap();
-                        store.save().unwrap();
-                        new_id
-                    });
+                    let unique_id = store
+                        .get("userId")
+                        .and_then(|v| v.as_str())
+                        .map(String::from)
+                        .unwrap_or_else(|| {
+                            let new_id = Uuid::new_v4().to_string();
+                            store
+                                .insert(
+                                    "userId".to_string(),
+                                    serde_json::Value::String(new_id.clone()),
+                                )
+                                .unwrap();
+                            store.save().unwrap();
+                            new_id
+                        });
 
-                if is_analytics_enabled {
-                    match start_analytics(unique_id, posthog_api_key, interval_hours) {
-                        Ok(analytics_manager) => {
-                            app.manage(analytics_manager);
-                        }
-                        Err(e) => {
-                            error!("Failed to start analytics: {}", e);
+                    if is_analytics_enabled {
+                        match start_analytics(unique_id, posthog_api_key, interval_hours) {
+                            Ok(analytics_manager) => {
+                                app.manage(analytics_manager);
+                            }
+                            Err(e) => {
+                                error!("Failed to start analytics: {}", e);
+                            }
                         }
                     }
-                }
+
+                    Ok(())
+                },
+            );
+
+            let mut use_embedded_screenpipe = false;
+            let _ = with_store(app.app_handle().clone(), stores, path, |store| {
+                use_embedded_screenpipe = store
+                    .get("useEmbeddedScreenpipe")
+                    .unwrap_or(&Value::Bool(false))
+                    .as_bool()
+                    .unwrap_or(false);
 
                 Ok(())
             });
+
+            if use_embedded_screenpipe {
+                // Spawn the sidecar initially
+                let sidecar_state = app.state::<SidecarState>();
+                let app_handle = app.handle().clone();
+                let child = spawn_sidecar(&app_handle).unwrap();
+                let mut sidecar = sidecar_state.0.lock().unwrap();
+                *sidecar = Some(child);
+            }
 
             Ok(())
         })

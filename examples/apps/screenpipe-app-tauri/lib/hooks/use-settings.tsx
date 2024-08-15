@@ -14,6 +14,7 @@ interface Settings {
   installedPipes: string[];
   userId: string;
   customPrompt: string;
+  useEmbeddedScreenpipe: boolean;
 }
 
 let store: Store | null = null;
@@ -30,6 +31,7 @@ export function useSettings() {
     installedPipes: [],
     userId: "",
     customPrompt: "",
+    useEmbeddedScreenpipe: false,
   });
 
   useEffect(() => {
@@ -57,6 +59,8 @@ export function useSettings() {
         const savedUserId = ((await store!.get("userId")) as string) || "";
         const savedCustomPrompt =
           ((await store!.get("customPrompt")) as string) || "";
+        const savedUseEmbeddedScreenpipe =
+          ((await store!.get("useEmbeddedScreenpipe")) as boolean) || false;
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
@@ -68,6 +72,7 @@ export function useSettings() {
           installedPipes: savedInstalledPipes,
           userId: savedUserId,
           customPrompt: savedCustomPrompt,
+          useEmbeddedScreenpipe: savedUseEmbeddedScreenpipe,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -93,6 +98,7 @@ export function useSettings() {
       await store!.set("installedPipes", updatedSettings.installedPipes);
       await store!.set("userId", updatedSettings.userId);
       await store!.set("customPrompt", updatedSettings.customPrompt);
+      await store!.set("useEmbeddedScreenpipe", updatedSettings.useEmbeddedScreenpipe);
       await store!.save();
       setSettings(updatedSettings);
     } catch (error) {

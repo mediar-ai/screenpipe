@@ -72,6 +72,7 @@
   },
   "app": {
     "trayIcon": {
+      "id": "screenpipe_main",
       "iconPath": "icons/32x32.png"
     },
     "windows": [
