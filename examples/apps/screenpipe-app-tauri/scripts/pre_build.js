@@ -226,18 +226,12 @@ if (platform == 'macos') {
 
 	const nativeArch = os.arch();
 	const architectures = ['arm64', 'x86_64'];
-	// Additional steps for x86_64 build on ARM Mac
-	if (nativeArch === 'arm64') {
-		console.log('\nTo build for x86_64 on your ARM Mac:');
-		console.log('1. Install Rosetta 2 if not already installed:');
-		console.log('   softwareupdate --install-rosetta');
-		console.log('2. Set up an x86_64 Homebrew environment:');
-		console.log('   arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"');
-		// console.log('3. When building, use this command:');
-		// console.log('   arch -x86_64 bunx tauri build -- --target x86_64-apple-darwin');
-	}
+
 	// ! trash code that is going away soon :)
 	for (const arch of architectures) {
+		if (process.env['SKIP_SCREENPIPE_SETUP']) {
+			break;
+		}
 		console.log(`Setting up Tesseract & screenpipe bin for ${arch}...`);
 
 		if (arch === 'arm64') {
