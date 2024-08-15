@@ -273,7 +273,7 @@ export function Settings({ className }: { className?: string }) {
                     className="w-full"
                     placeholder="Enter additional instructions for the AI..."
                     rows={4}
-                    maxLength={200}
+                    maxLength={600}
                   />
                 </div>
                 <p className="text-sm text-muted-foreground text-center">

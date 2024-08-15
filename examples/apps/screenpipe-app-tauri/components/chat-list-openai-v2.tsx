@@ -9,6 +9,7 @@ import {
   CoreMessage,
   CoreTool,
   GenerateTextResult,
+  GenerateObjectResult,
   Message,
   convertToCoreMessages,
   generateObject,
@@ -16,6 +17,8 @@ import {
   nanoid,
   streamText,
   tool,
+  ToolCallPart,
+  ToolResultPart,
 } from "ai";
 import { createOpenAI, openai } from "@ai-sdk/openai";
 import { createOllama, ollama } from "ollama-ai-provider"; // ! HACK TEMPORARY
@@ -30,15 +33,20 @@ import { usePostHog } from "posthog-js/react";
 import * as Sentry from "@sentry/nextjs";
 import { queryScreenpipeNtimes, screenpipeMultiQuery } from "@/lib/screenpipe";
 
+// function to generate a tool call id
+function generateToolCallId() {
+  return nanoid();
+}
+
 // Add this function outside of the ChatList component
 async function generateTextWithRetry(
-  params: any,
+  params: any, // TODO: typed
   maxRetries = 3,
   delay = 1000
 ) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await generateText(params);
+      return await generateObject(params);
     } catch (error) {
       // ignore if the error is "STREAM_COMPLETE"
       if (error instanceof Error && error.message === "STREAM_COMPLETE") {
@@ -122,11 +130,11 @@ export function ChatList({
           msg.content.some((item) => item.type === "tool-call")
       );
 
-      let text:
-        | GenerateTextResult<Record<string, CoreTool<any, any>>>
-        | undefined;
+      let toolCall: ToolCallPart | undefined;
+      let toolResult: ToolResultPart | undefined;
+
       if (!hasFunctionCalls) {
-        text = await generateTextWithRetry({
+        const generateObjectResult = await generateObject({
           model: provider(model),
           messages: [
             {
@@ -155,6 +163,7 @@ export function ChatList({
                 } ${Math.abs(
                 new Date().getTimezoneOffset() / 60
               )} hours from the user's local time.
+                - So if the user asks "show me what i was doing at 10:11 am" and the conversion between local and UTC is 2 hour difference, then the start_time should be 8:11 am and the end_time should be 8:12 am for example
                 - MAKE SURE TO ADAPT THE TIME RANGE PROPS TO THE USER'S INTENT
                 - Also make sure to follow the user's custom system prompt: "${customPrompt}"
 
@@ -193,10 +202,9 @@ export function ChatList({
                 }            
                   
                 BAD RESPONSE: {"queries":"[{"content_type": "all", "start_time": "2024-03-15T11:48:00Z", "end_time": "2024-03-15T11:49:00Z"}]"}
-                BAD RESPONSE: {"queries":"[{"content_type": "all", "start_time": "2024-03-15T11:48:00Z", "end_time": "2024-03-15T11:49:00Z"}]"}
                 You added '"' around the array, you should not do that.
                 DO NOT FUCKING ADD '"' AROUND JSON ARRAYS
-                - MAKE SURE TO ADAPT THE TIME RANGE PROPS TO THE USER'S INTENT
+                - MAKE SURE TO ADAPT THE TIME RANGE PROPS TO THE USER'S INTENT VERY IMPORTANT
 
                 `,
             },
@@ -211,54 +219,52 @@ export function ChatList({
               content: inputMessage,
             },
           ],
-          tools: {
-            query_screenpipe: {
-              description:
-                "Query the local screenpipe instance for relevant information. You will return multiple queries under the key 'queries'.",
-              parameters: screenpipeMultiQuery,
-              execute: queryScreenpipeNtimes,
-            },
-          },
-          toolChoice: "required",
+          schema: screenpipeMultiQuery,
         });
+
+        // call query_screenpipe tool
+        const results = await queryScreenpipeNtimes(
+          generateObjectResult.object
+        );
+        const toolCallId = generateToolCallId();
+        const toolCallArgs = generateObjectResult.object;
+
+        toolCall = {
+          toolCallId,
+          type: "tool-call",
+          toolName: "query_screenpipe",
+          args: toolCallArgs,
+        };
+
+        toolResult = {
+          toolCallId,
+          type: "tool-result",
+          toolName: "query_screenpipe",
+          result: results,
+        };
 
         setMessages((prevMessages) => [
           ...prevMessages,
           {
             role: "assistant",
-            content: [
-              {
-                toolCallId: text?.toolCalls?.[0]?.toolCallId!,
-                type: "tool-call",
-                toolName: "query_screenpipe",
-                args: text?.toolCalls?.[0]?.args ? text.toolCalls[0].args : {},
-              },
-            ],
+            content: [toolCall!],
           },
           {
             role: "tool",
-            content: [
-              {
-                toolCallId: text?.toolCalls?.[0]?.toolCallId!,
-                type: "tool-result",
-                toolName: "query_screenpipe",
-                result: text?.toolResults,
-              },
-            ],
+            content: [toolResult!],
           },
         ]);
       }
 
-      console.log("text", text);
+      console.log("toolCall", toolCall);
+      console.log("toolResult", toolResult);
 
       setIsLoading(false);
 
-      const { textStream } = await streamText({
-        model: provider(model),
-        messages: [
-          {
-            role: "system",
-            content: `You are a helpful assistant.
+      const streamMessages = [
+        {
+          role: "system",
+          content: `You are a helpful assistant.
             The user is using a product called "screenpipe" which records
             his screen and mics 24/7. The user ask you questions
             and you use his screenpipe recordings to answer him.
@@ -271,8 +277,8 @@ export function ChatList({
             - To convert to UTC: ${
               new Date().getTimezoneOffset() / -60 > 0 ? "subtract" : "add"
             } ${Math.abs(
-              new Date().getTimezoneOffset() / 60
-            )} hours from the user's local time.
+            new Date().getTimezoneOffset() / 60
+          )} hours from the user's local time.
             - Do not try to show screenshots
             - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`
             - You can analyze/view/show/access videos BY JUST FUCKING PUTTING THE ABSOLUTE FILE PATH IN A CODE BLOCK
@@ -281,6 +287,8 @@ export function ChatList({
             - MAKE SURE TO FUCKING ANSWER THE USER QUESTION
             - Also make sure to follow the user's custom system prompt: "${customPrompt}"
             - If the data retuned by tools is empty or not relevant, make sure to tell the user that you could not find anything relevant to the user question and ask the user to try something more precise in a new chat
+            - Do not use [video](/path/to/video.mp4) in your responses, use \`/path/to/video.mp4\` instead (with appropriate path, not the example one)
+            - Never use links in your responses, only code blocks for video/audio
 
             Example responses:
 
@@ -292,49 +300,45 @@ export function ChatList({
 
             4. "Last hour: VSCode - API integration, Notion - roadmap updates, Slack - code review discussion. More on any of these?"
             `,
-          },
+        },
+        // @ts-ignore
+        ...messages,
+        // @ts-ignore
+        ...(toolCall
+          ? [
+              {
+                role: "assistant",
+                content: [toolCall],
+              },
+              {
+                role: "tool",
+                content: [toolResult!],
+              },
+            ]
+          : []),
+        {
           // @ts-ignore
-          ...messages,
+          role: "user",
           // @ts-ignore
-          ...(text
-            ? [
-                {
-                  role: "assistant",
-                  content: [
-                    {
-                      // @ts-ignore
-                      toolCallId: text?.toolCalls?.[0]?.toolCallId!,
-                      type: "tool-call",
-                      toolName: "query_screenpipe",
-                      args: text?.toolCalls?.[0]?.args
-                        ? text.toolCalls[0].args
-                        : {},
-                    },
-                  ],
-                },
-                {
-                  role: "tool",
-                  content: [
-                    {
-                      toolCallId: text?.toolCalls?.[0]?.toolCallId!,
-                      type: "tool-result",
-                      toolName: "query_screenpipe",
-                      result: text?.toolResults,
-                    },
-                  ],
-                },
-              ]
-            : []),
-          {
+          content:
+            messages.findLast((msg) => msg.role === "user")?.content ||
+            inputMessage,
+        },
+      ];
+
+      console.log("streamMessages", streamMessages);
+
+      const { textStream } = useOllama
+        ? await streamText({
+            model: provider(model),
+            // ! hack because ollama does not support messages it seems
+            prompt: JSON.stringify(streamMessages),
+          })
+        : await streamText({
+            model: provider(model),
             // @ts-ignore
-            role: "user",
-            // @ts-ignore
-            content:
-              messages.findLast((msg) => msg.role === "user")?.content ||
-              inputMessage,
-          },
-        ],
-      });
+            messages: streamMessages,
+          });
 
       // create empty assistant message
       setMessages((prevMessages) => [
@@ -396,8 +400,14 @@ export function ChatList({
               ) {
                 // @ts-ignore
                 return <ChatMessage key={index} message={msg} />;
+              } else if (
+                // tool call message
+                msg.role === "assistant" &&
+                Array.isArray(msg.content)
+              ) {
+                return <FunctionCallMessage key={index} message={msg} />;
               } else if (msg.role === "tool") {
-                // @ts-ignore
+                // tool result message
                 return <FunctionCallMessage key={index} message={msg} />;
               }
               return null;

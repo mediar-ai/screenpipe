@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Message } from "ai";
+import { CoreMessage, Message, ToolCallPart, ToolResultPart } from "ai";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IconCode, IconOpenAI } from "@/components/ui/icons";
@@ -25,7 +25,7 @@ import { Button } from "./ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
 
 interface FunctionCallMessageProps {
-  message: Message;
+  message: CoreMessage;
   isResult?: boolean;
 }
 
@@ -35,29 +35,18 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
   // console.log("FunctionCallMessage", message);
 
   // Assuming message.content is the array shown in the image
-  // @ts-ignore
-  const toolCalls = message.content
-    // @ts-ignore
-    .filter((item) => !item.result)
-    // @ts-ignore
-    .map((item) => ({
-      type: item.type,
-      toolName: item.toolName,
-      args: item.args,
-    }));
+  const toolCalls: ToolCallPart[] = Array.isArray(message.content)
+    ? message.content.filter(
+        (item): item is ToolCallPart => item.type === "tool-call"
+      )
+    : [];
 
-  // @ts-ignore
-  const toolResults = message.content
-    // @ts-ignore
-    .filter((item) => item.result)
-    // @ts-ignore
-    .map((item) => ({
-      type: item.type,
-      toolName: item.toolName,
-      result: item.result,
-    }));
+  const toolResults: ToolResultPart[] = Array.isArray(message.content)
+    ? message.content.filter(
+        (item): item is ToolResultPart => item.type === "tool-result"
+      )
+    : [];
 
-  // @ts-ignore
   const isResult = toolResults.some((result) => result.result !== null);
 
   // console.log("toolCalls", toolCalls);
@@ -78,7 +67,7 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
           <CardContent>
             {!isResult && (
               <Accordion type="single" collapsible className="w-full">
-                {toolCalls.map((toolCall: any, index: number) => (
+                {toolCalls.map((toolCall, index: number) => (
                   <AccordionItem key={index} value={`item-${index}`}>
                     <AccordionTrigger className="flex justify-between items-center">
                       <div className="flex items-center">
@@ -107,11 +96,13 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
                               your application.
                             </DialogDescription>
                           </DialogHeader>
-                          {toolCall.args.queries && (
+                          {/* @ts-ignore */}
+                          {toolCall.args?.queries && (
                             <CodeBlock
                               language="bash"
                               value={generateCurlCommand(
-                                toolCall.args.queries[0]
+                                // @ts-ignore
+                                toolCall.args?.queries[0]
                               )}
                             />
                           )}
@@ -133,7 +124,7 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
             )}
             {isResult && (
               <Accordion type="single" collapsible className="w-full">
-                {toolResults.map((toolResult: any, index: number) => (
+                {toolResults.map((toolResult, index: number) => (
                   <AccordionItem key={index} value={`item-${index}`}>
                     <AccordionTrigger className="flex justify-between items-center">
                       <div className="flex items-center">
@@ -144,34 +135,6 @@ export function FunctionCallMessage({ message }: FunctionCallMessageProps) {
                       <span className="flex-grow text-center">
                         {toolResult.toolName}
                       </span>
-                      <Dialog
-                        open={isDialogOpen}
-                        onOpenChange={setIsDialogOpen}
-                      >
-                        <DialogTrigger asChild>
-                          <Button variant="outline" size="sm" className="mr-2">
-                            <IconCode />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>View code</DialogTitle>
-                            <DialogDescription>
-                              You can use the following code to start
-                              integrating your current prompt and settings into
-                              your application.
-                            </DialogDescription>
-                          </DialogHeader>
-                          {toolResult.result?.[0]?.args?.queries && (
-                            <CodeBlock
-                              language="bash"
-                              value={generateCurlCommand(
-                                toolResult.result[0].args.queries[0]
-                              )}
-                            />
-                          )}
-                        </DialogContent>
-                      </Dialog>
                     </AccordionTrigger>
                     <AccordionContent>
                       <MarkdownContent
