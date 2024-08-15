@@ -220,41 +220,53 @@ if (platform == 'windows') {
 	await $`C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
 
+async function getMostRecentBinaryPath(targetArch, paths) {
+	const validPaths = await Promise.all(paths.map(async (path) => {
+		if (await fs.exists(path)) {
+			const { stdout } = await $`file ${path}`.quiet();
+			const binaryArch = stdout.includes('arm64') ? 'arm64' :
+				stdout.includes('x86_64') ? 'x86_64' : null;
+			if (binaryArch === targetArch) {
+				const stat = await fs.stat(path);
+				return { path, mtime: stat.mtime };
+			}
+		}
+		return null;
+	}));
+
+	const filteredPaths = validPaths.filter(Boolean);
+
+	if (filteredPaths.length === 0) {
+		return null;
+	}
+
+	return filteredPaths.reduce((mostRecent, current) =>
+		current.mtime > mostRecent.mtime ? current : mostRecent
+	).path;
+}
 /* ########## macOS ########## */
 if (platform == 'macos') {
-	// ! trash code that is going away soon :)
 
-	const nativeArch = os.arch();
 	const architectures = ['arm64', 'x86_64'];
 
-	// ! trash code that is going away soon :)
 	for (const arch of architectures) {
 		if (process.env['SKIP_SCREENPIPE_SETUP']) {
 			break;
 		}
-		console.log(`Setting up Tesseract & screenpipe bin for ${arch}...`);
+		console.log(`Setting up screenpipe bin for ${arch}...`);
 
 		if (arch === 'arm64') {
+			const paths = [
+				"../../../../target/aarch64-apple-darwin/release/screenpipe",
+				"../../../../target/release/screenpipe"
+			];
 
-			// copy screenpipe binary (more recent one)
-			const path1 = "../../../../target/aarch64-apple-darwin/release/screenpipe";
-			const path2 = "../../../../target/release/screenpipe";
-
-			if (await fs.exists(path1) && await fs.exists(path2)) {
-				const stat1 = await fs.stat(path1);
-				const stat2 = await fs.stat(path2);
-				const recentPath = stat1.mtime > stat2.mtime ? path1 : path2;
-				await $`cp ${recentPath} screenpipe-aarch64-apple-darwin`;
-				console.log(`copied more recent screenpipe binary from ${recentPath}`);
-			} else if (await fs.exists(path1)) {
-				await $`cp ${path1} screenpipe-aarch64-apple-darwin`;
-				console.log(`copied aarch64-apple-darwin screenpipe binary from ${path1}`);
-			} else if (await fs.exists(path2)) {
-				await $`cp ${path2} screenpipe-aarch64-apple-darwin`;
-				console.log(`copied release screenpipe binary from ${path2}`);
+			const mostRecentPath = await getMostRecentBinaryPath('arm64', paths);
+			if (mostRecentPath) {
+				await $`cp ${mostRecentPath} screenpipe-aarch64-apple-darwin`;
+				console.log(`Copied most recent arm64 screenpipe binary from ${mostRecentPath}`);
 			} else {
-				console.log("no screenpipe binary found");
-				process.exit(1);
+				console.error("No suitable arm64 screenpipe binary found");
 			}
 			// if the binary exists, hard code the fucking dylib
 			if (await fs.exists('screenpipe-aarch64-apple-darwin')) {
@@ -262,11 +274,20 @@ if (platform == 'macos') {
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
 				console.log(`hard coded the FUCKING dylib`);
 			}
-		} else if (arch === 'x86_64' && nativeArch === 'arm64') {
+		} else if (arch === 'x86_64') {
+			// copy screenpipe binary (more recent one)
+			const paths = [
+				"../../../../target/x86_64-apple-darwin/release/screenpipe",
+				"../../../../target/release/screenpipe"
+			];
 
-			//check if exists
-			if (await fs.exists('../../../../target/x86_64-apple-darwin/release/screenpipe')) {
-				await $`cp ../../../../target/x86_64-apple-darwin/release/screenpipe screenpipe-x86_64-apple-darwin`;
+			const mostRecentPath = await getMostRecentBinaryPath('x86_64', paths);
+
+			if (mostRecentPath) {
+				await $`cp ${mostRecentPath} screenpipe-x86_64-apple-darwin`;
+				console.log(`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`);
+			} else {
+				console.error("No suitable x86_64 screenpipe binary found");
 			}
 			// hard code the fucking dylib
 			if (await fs.exists('screenpipe-x86_64-apple-darwin')) {

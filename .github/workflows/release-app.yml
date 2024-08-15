@@ -33,7 +33,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ! manual release on mac for now
           - platform: "macos-latest" # for Arm based macs (M1 and above).
             args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
