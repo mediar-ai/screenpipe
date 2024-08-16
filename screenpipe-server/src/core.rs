@@ -128,7 +128,7 @@ async fn record_video(
     is_running: Arc<AtomicBool>,
     save_text_files: bool,
     ocr_engine: Arc<OcrEngine>,
-    _friend_wearable_uid: Option<String>, // Add underscore
+    _friend_wearable_uid: Option<String>,
     monitor_id: u32,
 ) -> Result<()> {
     debug!("record_video: Starting");
@@ -156,31 +156,35 @@ async fn record_video(
 
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.ocr_frame_queue.lock().await.pop_front() {
-            match db.insert_frame(&frame.app_name).await {
-                Ok(frame_id) => {
-                    let text_json = serde_json::to_string(&frame.text_json).unwrap_or_default();
+            for window_result in &frame.window_ocr_results {
+                match db.insert_frame().await {
+                    Ok(frame_id) => {
+                        let text_json = serde_json::to_string(&window_result.text_json).unwrap_or_default();
 
-                    if let Err(e) = db
-                        .insert_ocr_text(
-                            frame_id,
-                            &frame.text,
-                            &text_json,
-                            &frame.app_name,
-                            Arc::clone(&ocr_engine),
-                        )
-                        .await
-                    {
-                        error!(
-                            "Failed to insert OCR text: {}, skipping frame {}",
-                            e, frame_id
-                        );
+                        if let Err(e) = db
+                            .insert_ocr_text(
+                                frame_id,
+                                &window_result.text,
+                                &text_json,
+                                &window_result.app_name,
+                                &window_result.window_name,
+                                Arc::clone(&ocr_engine),
+                                window_result.focused, // Add this line
+                            )
+                            .await
+                        {
+                            error!(
+                                "Failed to insert OCR text: {}, skipping window {} of frame {}",
+                                e, window_result.window_name, frame_id
+                            );
+                            continue;
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to insert frame: {}", e);
+                        tokio::time::sleep(Duration::from_millis(100)).await;
                         continue;
                     }
-                }
-                Err(e) => {
-                    warn!("Failed to insert frame: {}", e);
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue;
                 }
             }
         }
@@ -327,7 +331,7 @@ async fn record_audio(
 async fn process_audio_result(
     db: &DatabaseManager,
     result: TranscriptionResult,
-    _friend_wearable_uid: Option<&str>, // Add underscore
+    _friend_wearable_uid: Option<&str>,
     cloud_audio: bool,
 ) -> Result<(), anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
