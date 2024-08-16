@@ -41,7 +41,7 @@ async fn main() {
     let start_time = std::time::Instant::now();
     loop {
         if let Some(result) = result_rx.recv().await {
-            println!("OCR Text length: {}", result.text.len());
+            println!("OCR Text length across visible windows: {}", result.window_ocr_results.iter().map(|w| w.text.len()).sum::<usize>());
         }
 
         let elapsed = start_time.elapsed();
