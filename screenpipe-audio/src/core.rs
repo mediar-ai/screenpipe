@@ -16,6 +16,29 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::AudioInput;
 
+async fn get_macos_version() -> Option<f32> {
+    let output = Command::new("sw_vers")
+        .arg("-productVersion")
+        .output()
+        .await
+        .ok()?;
+    let version = String::from_utf8(output.stdout).ok()?;
+    version.trim().parse().ok()
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AudioTranscriptionEngine {
+    #[allow(dead_code)]
+    Deepgram,
+    WhisperTiny,
+}
+
+impl Default for AudioTranscriptionEngine {
+    fn default() -> Self {
+        AudioTranscriptionEngine::WhisperTiny
+    }
+}
+
 #[derive(Clone)]
 pub struct DeviceControl {
     pub is_running: bool,
@@ -82,12 +105,12 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
     AudioDevice::from_name(name)
 }
 
-fn get_device_and_config(
+async fn get_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = match audio_device.device_type {
         #[cfg(target_os = "macos")]
-        DeviceType::Output => cpal::default_host(),
+        DeviceType::Output => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
         _ => cpal::default_host(),
     };
 
@@ -103,6 +126,25 @@ fn get_device_and_config(
             DeviceType::Input => host.input_devices()?,
             DeviceType::Output => host.output_devices()?,
         };
+
+        #[cfg(target_os = "macos")]
+        {
+            if audio_device.device_type == DeviceType::Output {
+                match get_macos_version().await {
+                    Some(version) if version < 15.0 => {
+                        if let Ok(screen_capture_host) =
+                            cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
+                        {
+                            devices = screen_capture_host.input_devices()?;
+                        }
+                    }
+                    _ => {
+                        warn!("Audio output not supported on macOS 15.0 and above");
+                        return Err(anyhow!("Audio output not supported on this macOS version"));
+                    }
+                }
+            }
+        }
 
         devices.find(|x| {
             x.name()
@@ -211,7 +253,7 @@ pub async fn record_and_transcribe(
     whisper_sender: UnboundedSender<AudioInput>,
     is_running: Arc<AtomicBool>,
 ) -> Result<PathBuf> {
-    let (cpal_audio_device, config) = get_device_and_config(&audio_device)?;
+    let (cpal_audio_device, config) = get_device_and_config(&audio_device).await?;
     let sample_rate = config.sample_rate().0;
     let channels = config.channels() as u16;
     debug!(
@@ -302,7 +344,7 @@ pub async fn record_and_transcribe(
     Ok(output_path_clone_2.to_path_buf())
 }
 
-pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
+pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     let host = cpal::default_host();
     let mut devices = Vec::new();
 
@@ -316,11 +358,18 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     {
         // !HACK macos is suppoed to use special macos feature "display capture"
         // ! see https://github.com/RustAudio/cpal/pull/894
-        let host = cpal::default_host();
-        // let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
-        for device in host.output_devices()? {
-            if let Ok(name) = device.name() {
-                devices.push(AudioDevice::new(name, DeviceType::Output));
+        match get_macos_version().await {
+            Some(version) if version < 15.0 => {
+                if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+                    for device in host.input_devices()? {
+                        if let Ok(name) = device.name() {
+                            devices.push(AudioDevice::new(name, DeviceType::Output));
+                        }
+                    }
+                }
+            }
+            _ => {
+                warn!("Audio output disabled for macOS");
             }
         }
     }
@@ -343,18 +392,24 @@ pub fn default_input_device() -> Result<AudioDevice> {
     Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
 
-pub fn default_output_device() -> Result<AudioDevice> {
+pub async fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
-        // !HACK macos is suppoed to use special macos feature "display capture"
         // ! see https://github.com/RustAudio/cpal/pull/894
-        let host = cpal::default_host();
-        // let host = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?;
-        let device = host
-            .default_output_device()
-            .ok_or_else(|| anyhow!("No default input device found"))?;
-        info!("Using display capture device: {}", device.name()?);
-        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
+        match get_macos_version().await {
+            Some(version) if version < 15.0 => {
+                if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+                    if let Some(device) = host.default_input_device() {
+                        if let Ok(name) = device.name() {
+                            info!("Using display capture device: {}", name);
+                            return Ok(AudioDevice::new(name, DeviceType::Output));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        Err(anyhow!("Audio output disabled for macOS"))
     }
 
     #[cfg(not(target_os = "macos"))]

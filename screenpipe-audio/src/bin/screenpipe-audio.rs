@@ -8,6 +8,7 @@ use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::AudioDevice;
+use screenpipe_audio::AudioTranscriptionEngine;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -25,16 +26,16 @@ struct Args {
 
     #[clap(long, help = "List available audio devices")]
     list_audio_devices: bool,
-
-    #[clap(long, help = "Disable cloud audio processing")]
-    cloud_audio_off: bool,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
-    for (i, device) in devices.iter().enumerate() {
-        println!("  {}. {}", i + 1, device);
+    for (_, device) in devices.iter().enumerate() {
+        println!("  {}", device);
     }
+
+    #[cfg(target_os = "macos")]
+    println!("On macOS, it's not intuitive but output devices are your displays");
 }
 
 // TODO - kinda bad cli here
@@ -51,7 +52,7 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let devices = list_audio_devices()?;
+    let devices = list_audio_devices().await?;
 
     if args.list_audio_devices {
         print_devices(&devices);
@@ -59,7 +60,7 @@ async fn main() -> Result<()> {
     }
 
     let devices = if args.audio_device.is_empty() {
-        vec![default_input_device()?, default_output_device()?]
+        vec![default_input_device()?, default_output_device().await?]
     } else {
         args.audio_device
             .iter()
@@ -77,8 +78,8 @@ async fn main() -> Result<()> {
 
     let chunk_duration = Duration::from_secs(5);
     let output_path = PathBuf::from("output.mp4");
-    let cloud_audio = !args.cloud_audio_off;
-    let (whisper_sender, mut whisper_receiver) = create_whisper_channel(cloud_audio).await?;
+    let (whisper_sender, mut whisper_receiver) =
+        create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperTiny)).await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()

@@ -4,8 +4,8 @@ use chrono::Utc;
 use crossbeam::queue::SegQueue;
 use log::{debug, error, info, warn};
 use screenpipe_audio::{
-    create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput, DeviceControl,
-    TranscriptionResult,
+    create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput,
+    AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
 };
 use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
 use screenpipe_vision::OcrEngine;
@@ -52,13 +52,13 @@ pub async fn start_continuous_recording(
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     save_text_files: bool,
-    cloud_audio: bool,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>,
     monitor_id: u32,
 ) -> Result<()> {
-
-    let (whisper_sender, whisper_receiver) = create_whisper_channel(cloud_audio).await?;
+    let (whisper_sender, whisper_receiver) =
+        create_whisper_channel(audio_transcription_engine.clone()).await?;
 
     let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);
@@ -101,7 +101,7 @@ pub async fn start_continuous_recording(
             whisper_receiver,
             audio_devices_control,
             friend_wearable_uid,
-            cloud_audio,
+            audio_transcription_engine,
         )
         .await
     });
@@ -158,7 +158,8 @@ async fn record_video(
             for window_result in &frame.window_ocr_results {
                 match db.insert_frame().await {
                     Ok(frame_id) => {
-                        let text_json = serde_json::to_string(&window_result.text_json).unwrap_or_default();
+                        let text_json =
+                            serde_json::to_string(&window_result.text_json).unwrap_or_default();
 
                         if let Err(e) = db
                             .insert_ocr_text(
@@ -201,7 +202,7 @@ async fn record_audio(
     mut whisper_receiver: UnboundedReceiver<TranscriptionResult>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     friend_wearable_uid: Option<String>,
-    cloud_audio: bool,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
 
@@ -314,7 +315,7 @@ async fn record_audio(
                 &db,
                 transcription,
                 friend_wearable_uid.as_deref(),
-                cloud_audio,
+                audio_transcription_engine.clone(),
             )
             .await
             {
@@ -331,7 +332,7 @@ async fn process_audio_result(
     db: &DatabaseManager,
     result: TranscriptionResult,
     _friend_wearable_uid: Option<&str>,
-    cloud_audio: bool,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<(), anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
         error!(
@@ -341,7 +342,12 @@ async fn process_audio_result(
         return Ok(());
     }
     let transcription = result.transcription.unwrap();
-    let transcription_engine = if cloud_audio { "Deepgram" } else { "Whisper" };
+    let transcription_engine =
+        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
+            "Deepgram"
+        } else {
+            "Whisper"
+        };
 
     info!("Inserting audio chunk: {:?}", result.input.path);
     match db.insert_audio_chunk(&result.input.path).await {
