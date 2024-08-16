@@ -1,0 +1,18 @@
+name: Publish App Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish Release
+        uses: crabnebula-dev/cloud-release@v0.2.0
+        with:
+          command: release publish ${{ secrets.CN_APP_SLUG }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: ./examples/apps/screenpipe-app-tauri/src-tauri
