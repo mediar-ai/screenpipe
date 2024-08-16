@@ -112,5 +112,5 @@ jobs:
       - name: Run specific Apple OCR test
         shell: bash
         env:
-          DYLD_LIBRARY_PATH: $(pwd)/screenpipe-vision/lib
+          DYLD_LIBRARY_PATH: /Users/runner/work/screen-pipe/screen-pipe/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr
