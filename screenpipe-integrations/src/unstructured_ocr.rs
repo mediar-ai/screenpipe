@@ -1,6 +1,5 @@
 use image::{DynamicImage, ImageEncoder, codecs::png::PngEncoder};
 use reqwest::multipart::{Form, Part};
-use rusty_tesseract::DataOutput;
 use serde_json;
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -12,7 +11,7 @@ use serde_json::Value;
 use tempfile::NamedTempFile;
 use anyhow::{Result, anyhow};
 
-pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, DataOutput, String), String> {
+pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, String), String> {
     let api_key = "ZUxfTRkf6lRgHZDXPHlFaSoOKAEbwV".to_string();
     let api_url = "https://api.unstructuredapp.io/general/v0/general".to_string();
 
@@ -56,10 +55,6 @@ pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, Dat
     };
 
     let json_output = response_text.clone();
-    let data_output = DataOutput {
-        data: Vec::new(),
-        output: String::new(),
-    };
 
     let parsed_response: Vec<HashMap<String, serde_json::Value>> =
         serde_json::from_str(&response_text).unwrap();
@@ -69,7 +64,7 @@ pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, Dat
         .collect::<Vec<&str>>()
         .join(" ");
 
-    Ok((text, data_output, json_output))
+    Ok((text, json_output))
 }
 
 pub fn unstructured_chunking(text: &str) -> Result<Vec<String>> {
