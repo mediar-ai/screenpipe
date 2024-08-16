@@ -145,7 +145,7 @@ const screenpipe = async () => {
       Based on the user request, use tools to query screenpipe to best help the user. 
       Each query should have "q", "offset", "limit", "start_time", "end_time", and "content_type" fields. 
       Rules:
-      - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
+      - q should be a single keyword that would properly find in the text found on the user screen some information that would help answering the user question.
       Return a list of objects with the key "queries"
       - q contains a single query, again, for example instead of "life plan" just use "life"
       - Respond with only the updated JSON object
