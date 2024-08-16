@@ -8,6 +8,7 @@ use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::AudioDevice;
+use screenpipe_audio::AudioTranscriptionEngine;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -25,9 +26,6 @@ struct Args {
 
     #[clap(long, help = "List available audio devices")]
     list_audio_devices: bool,
-
-    #[clap(long, help = "Disable cloud audio processing")]
-    cloud_audio_off: bool,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -77,8 +75,8 @@ async fn main() -> Result<()> {
 
     let chunk_duration = Duration::from_secs(5);
     let output_path = PathBuf::from("output.mp4");
-    let cloud_audio = !args.cloud_audio_off;
-    let (whisper_sender, mut whisper_receiver) = create_whisper_channel(cloud_audio).await?;
+    let (whisper_sender, mut whisper_receiver) =
+        create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperTiny)).await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()

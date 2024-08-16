@@ -24,9 +24,25 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::logs::MultiWriter;
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
 use tokio::sync::mpsc::channel;
+use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
+use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
 
 use clap::ValueEnum;
-use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
+
+#[derive(Clone, Debug, ValueEnum, PartialEq)]
+enum CliAudioTranscriptionEngine {
+    Deepgram,
+    WhisperTiny,
+}
+
+impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
+    fn from(cli_engine: CliAudioTranscriptionEngine) -> Self {
+        match cli_engine {
+            CliAudioTranscriptionEngine::Deepgram => CoreAudioTranscriptionEngine::Deepgram,
+            CliAudioTranscriptionEngine::WhisperTiny => CoreAudioTranscriptionEngine::WhisperTiny,
+        }
+    }
+}
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 enum CliOcrEngine {
@@ -121,14 +137,16 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     save_text_files: bool,
 
-    /// Enable cloud audio processing
-    #[arg(long, default_value_t = false)]
-    cloud_audio_on: bool,
+    /// Audio transcription engine to use.
+    /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now).
+    /// WhisperTiny is a local, lightweight transcription model.
+    #[arg(long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTiny)]
+    audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// OCR engine to use.
     /// AppleNative is the default local OCR engine for macOS.
     /// WindowsNative is a local OCR engine for Windows.
-    /// Unstructured is a cloud OCR engine (free of charge on us)
+    /// Unstructured is a cloud OCR engine (free of charge on us for now)
     /// Tesseract is a local OCR engine (not supported on macOS)
     #[cfg_attr(
         target_os = "macos",
@@ -345,6 +363,7 @@ async fn main() -> anyhow::Result<()> {
     let friend_wearable_uid = cli.friend_wearable_uid.clone();
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
+    let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
     let monitor_id = cli.monitor_id.unwrap_or(all_monitors.first().unwrap().id());  
 
     // try to use the monitor selected, if not available throw an error
@@ -379,6 +398,9 @@ async fn main() -> anyhow::Result<()> {
             }
             let core_ocr_engine: CoreOcrEngine = cli.ocr_engine.clone().into();
             let ocr_engine = Arc::new(OcrEngine::from(core_ocr_engine));
+            let core_audio_transcription_engine: CoreAudioTranscriptionEngine = cli.audio_transcription_engine.clone().into();
+            let audio_transcription_engine = Arc::new(core_audio_transcription_engine);
+
             recording_task = tokio::spawn(async move {
                 let result = start_continuous_recording(
                     db_clone,
@@ -388,7 +410,7 @@ async fn main() -> anyhow::Result<()> {
                     vision_control,
                     audio_devices_control,
                     cli.save_text_files,
-                    cli.cloud_audio_on,
+                    audio_transcription_engine,
                     ocr_engine,
                     friend_wearable_uid_clone, // Use the cloned version
                     monitor_id
@@ -449,7 +471,7 @@ async fn main() -> anyhow::Result<()> {
     println!("│ Audio Disabled      │ {:<34} │", cli.disable_audio);
     println!("│ Self Healing        │ {:<34} │", cli.self_healing);
     println!("│ Save Text Files     │ {:<34} │", cli.save_text_files);
-    println!("│ Cloud Audio         │ {:<34} │", cli.cloud_audio_on);
+    println!("│ Audio Engine        │ {:<34} │", format!("{:?}", warning_audio_transcription_engine_clone));
     println!("│ OCR Engine          │ {:<34} │", format!("{:?}", ocr_engine_clone));
     println!("│ Monitor ID          │ {:<34} │", monitor_id);
     println!("│ Data Directory      │ {:<34} │", local_data_dir_clone.display());
@@ -489,7 +511,7 @@ async fn main() -> anyhow::Result<()> {
 
 
     // Add warning for cloud arguments
-    if cli.cloud_audio_on || warning_ocr_engine_clone == CliOcrEngine::Unstructured {
+    if warning_audio_transcription_engine_clone == CliAudioTranscriptionEngine::Deepgram || warning_ocr_engine_clone == CliOcrEngine::Unstructured {
         println!(
             "{}",
             "WARNING: You are using cloud now. Make sure to understand the data privacy risks."

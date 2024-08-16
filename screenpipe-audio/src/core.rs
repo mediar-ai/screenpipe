@@ -16,6 +16,19 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::AudioInput;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum AudioTranscriptionEngine {
+    #[allow(dead_code)]
+    Deepgram,
+    WhisperTiny,
+}
+
+impl Default for AudioTranscriptionEngine {
+    fn default() -> Self {
+        AudioTranscriptionEngine::WhisperTiny
+    }
+}
+
 #[derive(Clone)]
 pub struct DeviceControl {
     pub is_running: bool,

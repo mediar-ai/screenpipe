@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
@@ -14,7 +17,7 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
-use crate::{multilingual, pcm_decode::pcm_decode};
+use crate::{multilingual, pcm_decode::pcm_decode, AudioTranscriptionEngine};
 
 use webrtc_vad::{Vad, VadMode};
 
@@ -486,7 +489,11 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String>
     }
 }
 
-pub fn stt(file_path: &str, whisper_model: &WhisperModel, cloud_audio: bool) -> Result<String> {
+pub fn stt(
+    file_path: &str,
+    whisper_model: &WhisperModel,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+) -> Result<String> {
     debug!("Starting speech to text for file: {}", file_path);
     let model = &whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
@@ -559,7 +566,7 @@ pub fn stt(file_path: &str, whisper_model: &WhisperModel, cloud_audio: bool) -> 
         pcm_data.len() / frame_size
     );
 
-    if cloud_audio {
+    if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
         // Deepgram implementation
         let api_key = get_deepgram_api_key();
         match transcribe_with_deepgram(&api_key, &speech_frames) {
@@ -697,7 +704,7 @@ pub struct TranscriptionResult {
     pub error: Option<String>,
 }
 pub async fn create_whisper_channel(
-    cloud_audio: bool,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
@@ -721,7 +728,7 @@ pub async fn create_whisper_channel(
                         .expect("Time went backwards")
                         .as_secs();
 
-                    let transcription_result = match stt(&input.path, &whisper_model, cloud_audio) {
+                    let transcription_result = match stt(&input.path, &whisper_model, audio_transcription_engine.clone()) {
                         Ok(transcription) => TranscriptionResult {
                             input: input.clone(),
                             transcription: Some(transcription),
