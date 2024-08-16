@@ -57,7 +57,6 @@ pub async fn start_continuous_recording(
     friend_wearable_uid: Option<String>,
     monitor_id: u32,
 ) -> Result<()> {
-    info!("Recording now");
 
     let (whisper_sender, whisper_receiver) = create_whisper_channel(cloud_audio).await?;
 

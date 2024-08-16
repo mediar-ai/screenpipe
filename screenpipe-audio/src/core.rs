@@ -340,7 +340,6 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
 pub fn default_input_device() -> Result<AudioDevice> {
     let host = cpal::default_host();
     let device = host.default_input_device().unwrap();
-    info!("Using default input device: {}", device.name()?);
     Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
 
@@ -364,7 +363,6 @@ pub fn default_output_device() -> Result<AudioDevice> {
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        info!("Using default output device: {}", device.name()?);
         return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
 }

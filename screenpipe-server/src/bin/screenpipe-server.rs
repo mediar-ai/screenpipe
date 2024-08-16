@@ -80,9 +80,10 @@ struct Cli {
     /// 5 FPS = 150 GB / month
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
-    #[arg(short, long, default_value_t = 1.0)]
-    fps: f64,
-
+    #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
+    fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/louis030195/screen-pipe/issues/173
+    
     /// Audio chunk duration in seconds
     #[arg(short, long, default_value_t = 30)]
     audio_chunk_duration: u64,
@@ -194,6 +195,7 @@ async fn main() -> anyhow::Result<()> {
     // tokio-console
     // console_subscriber::init();
     let local_data_dir = get_base_dir(cli.data_dir)?;
+    let local_data_dir_clone = local_data_dir.clone();
 
     let log_file = File::create(format!(
         "{}/screenpipe.log",
@@ -248,7 +250,6 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_devices_control_server = audio_devices_control.clone();
 
-    info!("Available audio devices:");
     // Add all available audio devices to the controls
     for device in &all_audio_devices {
         let device_control = DeviceControl {
@@ -256,12 +257,10 @@ async fn main() -> anyhow::Result<()> {
             is_paused: false,
         };
         devices_status.insert(device.clone(), device_control);
-        info!("  {}", device);
     }
 
     if !cli.disable_audio {
         if cli.audio_device.is_empty() {
-            debug!("Using default devices");
             // Use default devices
             if let Ok(input_device) = default_input_device() {
                 audio_devices.push(Arc::new(input_device.clone()));
@@ -300,7 +299,6 @@ async fn main() -> anyhow::Result<()> {
         if audio_devices.is_empty() {
             eprintln!("No audio devices available. Audio recording will be disabled.");
         } else {
-            info!("Using audio devices:");
             for device in &audio_devices {
                 info!("  {}", device);
 
@@ -354,6 +352,7 @@ async fn main() -> anyhow::Result<()> {
         eprintln!("{}", format!("Monitor with id {} not found. Try 'screenpipe --list-monitors'", monitor_id).red());
         std::process::exit(1);
     });
+    let ocr_engine_clone = cli.ocr_engine.clone();
 
     // Function to start or restart the recording task
     let _start_recording = tokio::spawn(async move {
@@ -440,6 +439,54 @@ async fn main() -> anyhow::Result<()> {
         "{}\n\n",
         "Open source | Runs locally | Developer friendly".bright_green()
     );
+
+    println!("┌─────────────────────┬────────────────────────────────────┐");
+    println!("│ Setting             │ Value                              │");
+    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("│ FPS                 │ {:<34} │", cli.fps);
+    println!("│ Audio Chunk Duration│ {:<34} │", format!("{} seconds", cli.audio_chunk_duration));
+    println!("│ Port                │ {:<34} │", cli.port);
+    println!("│ Audio Disabled      │ {:<34} │", cli.disable_audio);
+    println!("│ Self Healing        │ {:<34} │", cli.self_healing);
+    println!("│ Save Text Files     │ {:<34} │", cli.save_text_files);
+    println!("│ Cloud Audio         │ {:<34} │", cli.cloud_audio_on);
+    println!("│ OCR Engine          │ {:<34} │", format!("{:?}", ocr_engine_clone));
+    println!("│ Monitor ID          │ {:<34} │", monitor_id);
+    println!("│ Data Directory      │ {:<34} │", local_data_dir_clone.display());
+    println!("│ Debug Mode          │ {:<34} │", cli.debug);
+    const VALUE_WIDTH: usize = 34;
+
+    // Function to truncate and pad strings
+    fn format_cell(s: &str, width: usize) -> String {
+        if s.len() > width {
+            format!("{}...", &s[..width - 3])
+        } else {
+            format!("{:<width$}", s, width = width)
+        }
+    }
+
+    // In the main function, replace the audio devices section with:
+    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("│ Audio Devices       │                                    │");
+
+    if cli.disable_audio {
+        println!("│ {:<19} │ {:<34} │", "", "Disabled");
+    } else if audio_devices.is_empty() {
+        println!("│ {:<19} │ {:<34} │", "", "No devices available");
+    } else {
+        for (i, device) in audio_devices.iter().enumerate() {
+            let device_str = device.deref().to_string();
+            let formatted_device = format_cell(&device_str, VALUE_WIDTH);
+            if i == 0 {
+                println!("│ {:<19} │ {:<34} │", "", formatted_device);
+            } else {
+                println!("│ {:<19} │ {:<34} │", "", formatted_device);
+            }
+        }
+    }
+
+    println!("└─────────────────────┴────────────────────────────────────┘");
+
 
     // Add warning for cloud arguments
     if cli.cloud_audio_on || warning_ocr_engine_clone == CliOcrEngine::Unstructured {
