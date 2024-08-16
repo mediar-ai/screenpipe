@@ -6,6 +6,8 @@
 .pnp.js
 .yarn/install-state.gz
 
+pnpm-lock.yaml
+
 # testing
 /coverage
 
@@ -35,7 +37,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-pnpm-lock.yaml
 
 ffmpeg*
 *src-tauri/screenpipe* 
