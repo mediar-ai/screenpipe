@@ -74,10 +74,10 @@ async fn spawn_screenpipe(
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
     // Get the current settings
-    let stores = app.state::<StoreCollection<Wry>>();
+    // let stores = app.state::<StoreCollection<Wry>>();
     let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
 
-    let path = base_dir.join("store.bin");
+    // let path = base_dir.join("store.bin");
 
     let _data_dir_str = base_dir.to_string_lossy();
     let mut args = vec![
@@ -320,18 +320,18 @@ async fn main() {
                 },
             );
 
-            let mut use_embedded_screenpipe = true;
+            let mut use_dev_mode = false;
             let _ = with_store(app.app_handle().clone(), stores, path, |store| {
-                use_embedded_screenpipe = store
-                    .get("useEmbeddedScreenpipe")
-                    .unwrap_or(&Value::Bool(true))
+                use_dev_mode = store
+                    .get("devMode")
+                    .unwrap_or(&Value::Bool(false))
                     .as_bool()
-                    .unwrap_or(true);
+                    .unwrap_or(false);
 
                 Ok(())
             });
 
-            if use_embedded_screenpipe {
+            if !use_dev_mode {
                 // Spawn the sidecar initially
                 let sidecar_state = app.state::<SidecarState>();
                 let app_handle = app.handle().clone();

@@ -111,8 +111,8 @@ const DevModeSettings = () => {
   const handleStartScreenpipe = async () => {
     setIsLoading(true);
     const toastId = toast({
-      title: "Starting Screenpipe",
-      description: "Please wait...",
+      title: "starting screenpipe",
+      description: "please wait...",
       duration: Infinity,
     });
     try {
@@ -120,16 +120,16 @@ const DevModeSettings = () => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       toastId.update({
         id: toastId.id,
-        title: "Screenpipe Started",
-        description: "Screenpipe is now running.",
+        title: "screenpipe started",
+        description: "screenpipe is now running.",
         duration: 3000,
       });
     } catch (error) {
-      console.error("Failed to start screenpipe:", error);
+      console.error("failed to start screenpipe:", error);
       toastId.update({
         id: toastId.id,
-        title: "Error",
-        description: "Failed to start Screenpipe.",
+        title: "error",
+        description: "failed to start screenpipe.",
         variant: "destructive",
         duration: 3000,
       });
@@ -142,8 +142,8 @@ const DevModeSettings = () => {
   const handleStopScreenpipe = async () => {
     setIsLoading(true);
     const toastId = toast({
-      title: "Stopping Screenpipe",
-      description: "Please wait...",
+      title: "stopping screenpipe",
+      description: "please wait...",
       duration: Infinity,
     });
     try {
@@ -151,16 +151,16 @@ const DevModeSettings = () => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       toastId.update({
         id: toastId.id,
-        title: "Screenpipe Stopped",
-        description: "Screenpipe is now stopped.",
+        title: "screenpipe stopped",
+        description: "screenpipe is now stopped.",
         duration: 3000,
       });
     } catch (error) {
-      console.error("Failed to stop screenpipe:", error);
+      console.error("failed to stop screenpipe:", error);
       toastId.update({
         id: toastId.id,
-        title: "Error",
-        description: "Failed to stop Screenpipe.",
+        title: "error",
+        description: "failed to stop screenpipe.",
         variant: "destructive",
         duration: 3000,
       });
@@ -216,7 +216,7 @@ const DevModeSettings = () => {
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Stop Screenpipe backend</p>
+                          <p>stop screenpipe backend</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -235,7 +235,7 @@ const DevModeSettings = () => {
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Start Screenpipe backend</p>
+                          <p>start screenpipe backend</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -399,8 +399,12 @@ const HealthStatus = ({ className }: { className?: string }) => {
           </DialogHeader>
           <div className="flex-grow overflow-auto">
             <p className="text-sm mb-2">{health.message.toLowerCase()}</p>
-            <p className="text-xs mb-1">frame: {health.frame_status}</p>
-            <p className="text-xs mb-1">audio: {health.audio_status}</p>
+            <p className="text-xs mb-1">
+              frame: {health.frame_status.toLowerCase()}
+            </p>
+            <p className="text-xs mb-1">
+              audio: {health.audio_status.toLowerCase()}
+            </p>
             <p className="text-xs mb-1">
               last frame: {formatTimestamp(health.last_frame_timestamp)}
             </p>
@@ -413,7 +417,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
               <MarkdownWithExternalLinks className="prose prose-sm">
                 {`if you're experiencing issues, please try the following steps:
 1. restart screenpipe
-2. reset your Screenpipe OS audio/screen recording permissions
+2. reset your screenpipe OS audio/screen recording permissions
 3. if the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn
 4. last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot`}
               </MarkdownWithExternalLinks>

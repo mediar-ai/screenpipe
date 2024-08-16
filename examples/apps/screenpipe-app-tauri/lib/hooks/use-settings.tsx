@@ -33,7 +33,6 @@ export function useSettings() {
     customPrompt: "",
     devMode: false,
   });
-  console.log("settings", settings);
 
   useEffect(() => {
     const loadSettings = async () => {
