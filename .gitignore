@@ -30,3 +30,7 @@ examples/typescript/vercel-ai-chatbot/package-lock.json
 # Unignore
 !screenpipe-vision/lib/libscreenpipe*.dylib
 
+# Tauri signing key
+tauri_key_louis.key
+
+.DS_Store
