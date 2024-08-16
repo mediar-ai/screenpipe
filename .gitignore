@@ -32,5 +32,6 @@ examples/typescript/vercel-ai-chatbot/package-lock.json
 
 # Tauri signing key
 tauri_key_louis.key
+pnpm-lock.yaml
 
 .DS_Store
