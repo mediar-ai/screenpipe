@@ -368,9 +368,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
                     }
                 }
             }
-            _ => {
-                warn!("Audio output disabled for macOS");
-            }
+            _ => {}
         }
     }
 
@@ -409,7 +407,11 @@ pub async fn default_output_device() -> Result<AudioDevice> {
             }
             _ => {}
         }
-        Err(anyhow!("Audio output disabled for macOS"))
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .ok_or_else(|| anyhow!("No default output device found"))?;
+        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
 
     #[cfg(not(target_os = "macos"))]
