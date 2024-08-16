@@ -17,17 +17,13 @@ fn test_ocr_output() -> Result<(), Box<dyn std::error::Error>> {
     // Start timing
     let start = Instant::now();
 
-    let (text, data_output, json_output) = perform_ocr_tesseract(&image);
+    let (text, json_output) = perform_ocr_tesseract(&image);
 
     // Stop timing
     let duration = start.elapsed();
     let duration_secs = duration.as_secs_f64();
 
     // Calculate average confidence score
-    let total_conf: f32 = data_output.data.iter().map(|line| line.conf).sum();
-    let avg_conf = total_conf / data_output.data.len() as f32;
-
-    println!("Average confidence score: {:.2}", avg_conf);
 
     // println!("TSV:");
     // println!("{}", tsv_output);

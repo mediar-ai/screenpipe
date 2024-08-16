@@ -2,7 +2,9 @@
 mod tests {
     use chrono::Utc;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::{default_output_device, list_audio_devices, stt, WhisperModel};
+    use screenpipe_audio::{
+        default_output_device, list_audio_devices, stt, AudioTranscriptionEngine, WhisperModel,
+    };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
     use std::path::PathBuf;
     use std::process::Command;
@@ -25,10 +27,10 @@ mod tests {
     }
 
     // ! what happen in github action?
-    #[test]
+    #[tokio::test]
     #[ignore]
-    fn test_list_audio_devices() {
-        let devices = list_audio_devices().unwrap();
+    async fn test_list_audio_devices() {
+        let devices = list_audio_devices().await.unwrap();
         assert!(!devices.is_empty());
     }
 
@@ -46,9 +48,13 @@ mod tests {
         println!("Loading audio file");
         let start = std::time::Instant::now();
         let whisper_model = WhisperModel::new().unwrap();
-        let cloud_audio = true; // Set this based on your test requirements
 
-        let text = stt("./test_data/selah.mp4", &whisper_model, cloud_audio).unwrap();
+        let text = stt(
+            "./test_data/selah.mp4",
+            &whisper_model,
+            Arc::new(AudioTranscriptionEngine::WhisperTiny),
+        )
+        .unwrap();
         let duration = start.elapsed();
 
         println!("Speech to text completed in {:?}", duration);
@@ -63,7 +69,7 @@ mod tests {
         setup();
 
         // Setup
-        let device_spec = Arc::new(default_output_device().unwrap());
+        let device_spec = Arc::new(default_output_device().await.unwrap());
         let duration = Duration::from_secs(30); // Record for 3 seconds
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_{}.mp4", time));
@@ -119,7 +125,7 @@ mod tests {
         setup();
 
         // Setup
-        let device_spec = Arc::new(default_output_device().unwrap());
+        let device_spec = Arc::new(default_output_device().await.unwrap());
         let duration = Duration::from_secs(30);
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_interrupt_{}.mp4", time));
@@ -219,13 +225,14 @@ mod tests {
         // 3. the test should succeed (takes ~120s for some reason?) ! i think whisper is just slow as hell on cpu?
 
         // Setup
-        let device_spec = Arc::new(default_output_device().unwrap());
+        let device_spec = Arc::new(default_output_device().await.unwrap());
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let cloud_audio = true; // Set this based on your test requirements
         let (whisper_sender, mut whisper_receiver) =
-            create_whisper_channel(cloud_audio).await.unwrap();
+            create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperTiny))
+                .await
+                .unwrap();
         let is_running = Arc::new(AtomicBool::new(true));
         // Start recording in a separate thread
         let recording_thread = tokio::spawn(async move {

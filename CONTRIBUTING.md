@@ -83,6 +83,8 @@ Before submitting a pull request, run all the tests to ensure nothing has broken
 
 ```bash
 cargo test
+# on macos you need to set DYLD_LIBRARY_PATH for apple native OCR tests to run
+DYLD_LIBRARY_PATH=$(pwd)/screenpipe-vision/lib cargo test
 ```
 
 

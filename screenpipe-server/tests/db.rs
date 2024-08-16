@@ -14,19 +14,21 @@ mod tests {
     async fn test_insert_and_search_ocr() {
         let db = setup_test_db().await;
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame("").await.unwrap();
+        let frame_id = db.insert_frame().await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello, world!",
             "",
             "",
+            "",
             Arc::new(OcrEngine::Tesseract),
+            false,
         )
         .await
         .unwrap();
 
         let results = db
-            .search("Hello", ContentType::OCR, 100, 0, None, None, None)
+            .search("Hello", ContentType::OCR, 100, 0, None, None, None, None)
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
@@ -47,7 +49,7 @@ mod tests {
             .unwrap();
 
         let results = db
-            .search("audio", ContentType::Audio, 100, 0, None, None, None)
+            .search("audio", ContentType::Audio, 100, 0, None, None, None, None)
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
@@ -65,13 +67,15 @@ mod tests {
 
         // Insert OCR data
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame("").await.unwrap();
+        let frame_id = db.insert_frame().await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
             "",
             "",
+            "",
             Arc::new(OcrEngine::Tesseract),
+            false,
         )
         .await
         .unwrap();
@@ -83,7 +87,7 @@ mod tests {
             .unwrap();
 
         let results = db
-            .search("Hello", ContentType::All, 100, 0, None, None, None)
+            .search("Hello", ContentType::All, 100, 0, None, None, None, None)
             .await
             .unwrap();
         assert_eq!(results.len(), 2);
@@ -109,13 +113,15 @@ mod tests {
 
         // Insert OCR data
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id1 = db.insert_frame("").await.unwrap();
+        let frame_id1 = db.insert_frame().await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
             "",
             "",
+            "",
             Arc::new(OcrEngine::Tesseract),
+            false,
         )
         .await
         .unwrap();
@@ -135,13 +141,15 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("").await.unwrap();
+        let frame_id2 = db.insert_frame().await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
             "",
             "",
+            "",
             Arc::new(OcrEngine::Tesseract),
+            false,
         )
         .await
         .unwrap();
@@ -162,6 +170,7 @@ mod tests {
                 Some(start_time),
                 Some(end_time),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -177,6 +186,7 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
                 None,
             )
             .await
@@ -198,6 +208,7 @@ mod tests {
                 Some(start_time),
                 Some(end_time),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -213,6 +224,7 @@ mod tests {
                 Some(start_time),
                 Some(end_time),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -227,13 +239,15 @@ mod tests {
 
         // Insert OCR data
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id1 = db.insert_frame("").await.unwrap();
+        let frame_id1 = db.insert_frame().await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
             "",
             "",
+            "",
             Arc::new(OcrEngine::Tesseract),
+            false,
         )
         .await
         .unwrap();
@@ -251,13 +265,15 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("").await.unwrap();
+        let frame_id2 = db.insert_frame().await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
             "",
             "",
+            "",
             Arc::new(OcrEngine::Tesseract),
+            false,
         )
         .await
         .unwrap();
@@ -278,6 +294,7 @@ mod tests {
                 Some(mid_time),
                 Some(end_time),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -296,6 +313,7 @@ mod tests {
                 ContentType::Audio,
                 Some(start_time),
                 Some(end_time),
+                None,
                 None,
             )
             .await

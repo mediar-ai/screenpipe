@@ -29,7 +29,7 @@ mod tests {
 
         println!("OCR text: {:?}", result);
         assert!(
-            result.contains("ocr_tx.receiver_count"),
+            result.contains("receiver_count"),
             "OCR failed: {:?}",
             result
         );

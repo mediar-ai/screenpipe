@@ -1,4 +1,3 @@
-use anyhow::Result;
 use screenpipe_server::chunking::text_chunking_simple;
 
 #[test]

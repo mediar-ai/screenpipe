@@ -98,9 +98,17 @@ mod tests {
 
         // Insert some recent data
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame("foo").await.unwrap();
+        let frame_id = db.insert_frame().await.unwrap();
         let _ = db
-            .insert_ocr_text(frame_id, "Test OCR", "", "", Arc::new(OcrEngine::Tesseract))
+            .insert_ocr_text(
+                frame_id,
+                "Test OCR",
+                "",
+                "",
+                "",
+                Arc::new(OcrEngine::Tesseract),
+                false,
+            )
             .await
             .unwrap();
         let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();
@@ -143,9 +151,17 @@ mod tests {
         // Insert some stale data (more than 60 seconds old)
         let stale_time = Utc::now() - Duration::seconds(61);
         let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame("foo").await.unwrap();
+        let frame_id = db.insert_frame().await.unwrap();
         let _ = db
-            .insert_ocr_text(frame_id, "Test OCR", "", "", Arc::new(OcrEngine::Tesseract))
+            .insert_ocr_text(
+                frame_id,
+                "Test OCR",
+                "",
+                "",
+                "",
+                Arc::new(OcrEngine::Tesseract),
+                false,
+            )
             .await
             .unwrap();
         let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();

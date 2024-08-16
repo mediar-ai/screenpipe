@@ -76,3 +76,41 @@ jobs:
 
       - name: Run specific Windows OCR test
         run: cargo test test_process_ocr_task_windows
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\cargo\
+            target\
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+
+      - name: setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Run pre_build.js on
+        shell: bash
+        env:
+          SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
+        run: bun ./scripts/pre_build.js
+        working-directory: ./examples/apps/screenpipe-app-tauri
+
+      - name: Copy test image
+        shell: bash
+        run: |
+          mkdir -p target/debug/deps || true
+          cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
+
+      - name: Run specific Apple OCR test
+        shell: bash
+        env:
+          DYLD_LIBRARY_PATH: $(pwd)/screenpipe-vision/lib
+        run: cargo test test_apple_native_ocr
