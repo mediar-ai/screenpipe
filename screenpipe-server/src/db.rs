@@ -336,7 +336,7 @@ impl DatabaseManager {
                             }
                         }
                     }
-                    info!(
+                    debug!(
                         "Successfully completed OCR text insertion for frame_id: {} on attempt {}",
                         frame_id, attempt
                     );
