@@ -51,6 +51,12 @@ const screenpipeQuery = z.object({
       "The name of the app the user was using. This filter out all audio conversations. Only works with screen text. Use this to filter on the app context that would give context matching the user intent. For example 'cursor'. Use lower case. Browser is usually 'arc', 'chrome', 'safari', etc. Do not use thing like 'mail' because the user use the browser to read the mail."
     )
     .optional(),
+  window_name: z
+    .string()
+    .describe(
+      "The name of the window the user was using. This helps to further filter the context within the app. For example, 'inbox' for email apps, 'project' for project management apps, etc."
+    )
+    .optional(), // Add window_name with description
 });
 
 async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
@@ -65,6 +71,7 @@ async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
         end_time: params.end_time,
         content_type: params.content_type,
         app_name: params.app_name,
+        window_name: params.window_name, // Add window_name to queryParams
       }).filter(([_, v]) => v != null) as [string, string][]
     );
     console.log("calling screenpipe", JSON.stringify(params));
