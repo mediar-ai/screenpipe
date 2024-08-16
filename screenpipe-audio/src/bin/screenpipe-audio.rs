@@ -30,9 +30,12 @@ struct Args {
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
-    for (i, device) in devices.iter().enumerate() {
-        println!("  {}. {}", i + 1, device);
+    for (_, device) in devices.iter().enumerate() {
+        println!("  {}", device);
     }
+
+    #[cfg(target_os = "macos")]
+    println!("On macOS, it's not intuitive but output devices are your displays");
 }
 
 // TODO - kinda bad cli here
@@ -49,7 +52,7 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let devices = list_audio_devices()?;
+    let devices = list_audio_devices().await?;
 
     if args.list_audio_devices {
         print_devices(&devices);
@@ -57,7 +60,7 @@ async fn main() -> Result<()> {
     }
 
     let devices = if args.audio_device.is_empty() {
-        vec![default_input_device()?, default_output_device()?]
+        vec![default_input_device()?, default_output_device().await?]
     } else {
         args.audio_device
             .iter()

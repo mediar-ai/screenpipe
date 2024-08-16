@@ -15,7 +15,7 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use log::{debug, error, info, LevelFilter};
 use screenpipe_audio::{
-    default_input_device, list_audio_devices, parse_audio_device, DeviceControl,
+    default_input_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
 };
 use screenpipe_vision::{monitor::{get_monitor_by_id, list_monitors}, OcrEngine};
 use std::io::Write;
@@ -69,7 +69,15 @@ impl From<CliOcrEngine> for CoreOcrEngine {
     }
 }
 
+fn print_devices(devices: &[AudioDevice]) {
+    println!("Available audio devices:");
+    for (_, device) in devices.iter().enumerate() {
+        println!("  {}", device);
+    }
 
+    #[cfg(target_os = "macos")]
+    println!("On macOS, it's not intuitive but output devices are your displays");
+}
 
 // keep in mind this is the most important feature ever // TODO: add a pipe and a ⭐️ e.g screen | ⭐️ somehow in ascii ♥️🤓
 const DISPLAY: &str = r"
@@ -244,13 +252,10 @@ async fn main() -> anyhow::Result<()> {
                 .underline()
         );
     }
-    let all_audio_devices = list_audio_devices()?;
+    let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
     if cli.list_audio_devices {
-        println!("Available audio devices:");
-        for (i, device) in all_audio_devices.iter().enumerate() {
-            println!("  {}. {}", i + 1, device);
-        }
+        print_devices(&all_audio_devices);
         return Ok(());
     }
     let all_monitors = list_monitors().await;
@@ -292,7 +297,7 @@ async fn main() -> anyhow::Result<()> {
             // see https://github.com/louis030195/screen-pipe/pull/106
             if cfg!(target_os = "linux") {
                 use screenpipe_audio::default_output_device;
-                if let Ok(output_device) = default_output_device() {
+                if let Ok(output_device) = default_output_device().await {
                     audio_devices.push(Arc::new(output_device.clone()));
                     let device_control = DeviceControl {
                         is_running: true,
