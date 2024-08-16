@@ -549,6 +549,7 @@ impl DatabaseManager {
                 video_chunks ON frames.video_chunk_id = video_chunks.id
             WHERE 
                 ocr_text.text LIKE '%' || ?1 || '%'
+                AND ocr_text.text != 'No text found'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
         "#.to_string();

@@ -1,30 +1,316 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { CodeBlock } from "@/components/ui/codeblock";
-import { MemoizedReactMarkdown } from "./markdown";
-import { invoke } from "@tauri-apps/api/core";
-import { spinner } from "./spinner";
-import {
-  isPermissionGranted,
-  sendNotification,
-} from "@tauri-apps/plugin-notification";
 import { platform } from "@tauri-apps/plugin-os";
 import { MarkdownWithExternalLinks } from "./markdown-with-external-links";
 import { Badge } from "./ui/badge";
+import { Label } from "./ui/label";
+import { Switch } from "./ui/switch";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { invoke } from "@tauri-apps/api/core";
+import { toast, useToast } from "./ui/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
+import { Button } from "./ui/button";
+import { Separator } from "./ui/separator";
+import { Card, CardContent, CardFooter } from "./ui/card";
+
+const getDebuggingCommands = (os: string | null) => {
+  const cliInstructions =
+    os === "windows"
+      ? "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n"
+      : os === "macos"
+      ? "# 1. Open Terminal app\n# 2. Navigate to: /Applications/screenpipe.app/Contents/MacOS/\n#    Type: cd /Applications/screenpipe.app/Contents/MacOS/\n"
+      : "# 1. Open Terminal\n# 2. Navigate to the Screenpipe installation directory\n";
+
+  const baseInstructions = `# First, view the Screenpipe CLI arguments:
+${cliInstructions}
+# 3. Run: screenpipe -h
+# 4. Choose your preferred setup and start Screenpipe:
+#    (Replace [YOUR_ARGS] with your chosen arguments)
+#    Example: screenpipe --data-dir `;
+
+  const dataDir =
+    os === "windows"
+      ? "%LOCALAPPDATA%\\screenpipe"
+      : os === "macos"
+      ? "$HOME/Library/Application\\ Support/screenpipe"
+      : "$HOME/.config/screenpipe";
+
+  const baseCommand =
+    baseInstructions +
+    dataDir +
+    (os === "windows"
+      ? "\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir %LOCALAPPDATA%\\screenpipe --ocr-engine windows-native\n"
+      : "") +
+    "\n\n# 5. If you've already started Screenpipe, try these debugging commands:\n";
+
+  if (os === "windows") {
+    return (
+      baseCommand +
+      `# Stream the log (depending how you set the data-dir):
+type %LOCALAPPDATA%\\screenpipe\\screenpipe.log
+
+# Scroll the logs:
+more %LOCALAPPDATA%\\screenpipe\\screenpipe.log
+
+# View last 10 frames:
+sqlite3 %LOCALAPPDATA%\\screenpipe\\db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+
+# View last 10 audio transcriptions:
+sqlite3 %LOCALAPPDATA%\\screenpipe\\db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+    );
+  } else if (os === "macos") {
+    return (
+      baseCommand +
+      `# Stream the log (depending how you set the data-dir):
+tail -f $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
+
+# Scroll the logs:
+less $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
+
+# View last 10 frames:
+sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+
+# View last 10 audio transcriptions:
+sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+    );
+  } else if (os === "linux") {
+    return (
+      baseCommand +
+      `# Stream the log (depending how you set the data-dir):
+tail -f $HOME/.config/screenpipe/screenpipe.log
+
+# Scroll the logs:
+less $HOME/.config/screenpipe/screenpipe.log
+
+# View last 10 frames:
+sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+
+# View last 10 audio transcriptions:
+sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+    );
+  } else {
+    return "OS not recognized. \n\nPlease check the documentation for your specific operating system.";
+  }
+};
+
+const DevModeSettings = () => {
+  const { settings, updateSettings } = useSettings();
+  const [localSettings, setLocalSettings] = useState(settings);
+  const handleDevModeToggle = (checked: boolean) => {
+    setLocalSettings({ ...localSettings, devMode: checked });
+    updateSettings({ ...localSettings, devMode: checked });
+  };
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  React.useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
+  const handleStartScreenpipe = async () => {
+    setIsLoading(true);
+    const toastId = toast({
+      title: "Starting Screenpipe",
+      description: "Please wait...",
+      duration: Infinity,
+    });
+    try {
+      await invoke("spawn_screenpipe");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      toastId.update({
+        id: toastId.id,
+        title: "Screenpipe Started",
+        description: "Screenpipe is now running.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("Failed to start screenpipe:", error);
+      toastId.update({
+        id: toastId.id,
+        title: "Error",
+        description: "Failed to start Screenpipe.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      toastId.dismiss();
+      setIsLoading(false);
+    }
+  };
+
+  const handleStopScreenpipe = async () => {
+    setIsLoading(true);
+    const toastId = toast({
+      title: "Stopping Screenpipe",
+      description: "Please wait...",
+      duration: Infinity,
+    });
+    try {
+      await invoke("kill_all_sreenpipes");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      toastId.update({
+        id: toastId.id,
+        title: "Screenpipe Stopped",
+        description: "Screenpipe is now stopped.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("Failed to stop screenpipe:", error);
+      toastId.update({
+        id: toastId.id,
+        title: "Error",
+        description: "Failed to stop Screenpipe.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      toastId.dismiss();
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="w-full my-4">
+        <div className="flex  justify-around">
+          <Card className="p-4 ">
+            <CardContent>
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Label htmlFor="dev-mode">enable dev mode</Label>
+                  <Switch
+                    id="dev-mode"
+                    checked={localSettings.devMode}
+                    onCheckedChange={handleDevModeToggle}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  on = use CLI for more control
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="relative">
+            <Badge
+              variant="secondary"
+              className="text-xs absolute -top-3 left-1/2 transform -translate-x-1/2 z-10"
+            >
+              expert only
+            </Badge>
+            <Card className="p-4">
+              <CardContent>
+                <div className="flex items-center space-x-2">
+                  <div className="flex flex-col items-center w-full">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            onClick={handleStopScreenpipe}
+                            disabled={isLoading}
+                            className="text-xs w-full"
+                          >
+                            stop
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Stop Screenpipe backend</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <div className="flex flex-col items-center w-full">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            onClick={handleStartScreenpipe}
+                            disabled={isLoading}
+                            className="text-xs w-full"
+                          >
+                            start
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Start Screenpipe backend</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col items-center">
+                <p className="text-sm text-muted-foreground">
+                  start or stop screenpipe backend
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  (auto started when dev mode is off)
+                </p>
+              </CardFooter>
+            </Card>
+          </div>
+        </div>
+      </div>
+      {/* vertical separator */}
+      <Separator orientation="vertical" />
+      {settings.devMode === true && (
+        <>
+          <p className="font-bold my-2">did you run screenpipe backend? either click start on the right, or thru CLI 👇</p>
+          <CodeBlock language="bash" value={getDebuggingCommands(platform())} />
+
+          <div className="mt-4 text-sm text-gray-500">
+            <p>or, for more advanced queries:</p>
+            <ol className="list-decimal list-inside mt-2">
+              <li>
+                <a
+                  href="https://github.com/louis030195/screen-pipe/blob/main/screenpipe-server/src/db.rs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline"
+                >
+                  go to the database schema
+                </a>
+              </li>
+              <li>Copy the entire page (Cmd+A, Cmd+C)</li>
+              <li>Paste into ChatGPT (Cmd+V)</li>
+              <li>
+                ask: &quot;give me 10 sqlite query CLI to look up my data. My db
+                is in $HOME/.screenpipe/db.sqlite&quot;
+              </li>
+            </ol>
+            <p className="mt-2">
+              or if you prefer using curl, follow the same steps with the{" "}
+              <a
+                href="https://github.com/louis030195/screen-pipe/blob/main/screenpipe-server/src/server.rs"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline"
+              >
+                server.rs file
+              </a>{" "}
+              and ask ChatGPT for curl commands to interact with the API.
+            </p>
+          </div>
+        </>
+      )}
+    </>
+  );
+};
+
 interface HealthCheckResponse {
   status: string;
   last_frame_timestamp: string | null;
@@ -38,7 +324,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isBlinking, setIsBlinking] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-
+  const { settings } = useSettings();
   const fetchHealth = async () => {
     try {
       const response = await fetch("http://localhost:3030/health");
@@ -47,6 +333,10 @@ const HealthStatus = ({ className }: { className?: string }) => {
         throw new Error(`HTTP error! status: ${response.status} ${text}`);
       }
       const data: HealthCheckResponse = await response.json();
+      // only change blink and health if it changed
+      if (health !== null && health.status === data.status) {
+        return;
+      }
       if (health && data.status !== health.status) {
         setIsBlinking(true);
         setTimeout(() => setIsBlinking(false), 5000); // Blink for 5 seconds on status change
@@ -59,101 +349,21 @@ const HealthStatus = ({ className }: { className?: string }) => {
       setHealth({
         last_frame_timestamp: null,
         last_audio_timestamp: null,
-        frame_status: "Error",
-        audio_status: "Error",
-        status: "Error",
-        message: "Failed to fetch health status. Server might be down.",
+        frame_status: "error",
+        audio_status: "error",
+        status: "error",
+        message: "failed to fetch health status. server might be down.",
       });
     }
   };
 
   useEffect(() => {
-    fetchHealth();
+    // fetchHealth();
     const interval = setInterval(fetchHealth, 1000); // Poll every 1 seconds
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const getDebuggingCommands = (os: string | null) => {
-    const cliInstructions =
-      os === "windows"
-        ? "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n"
-        : os === "macos"
-        ? "# 1. Open Terminal app\n# 2. Navigate to: /Applications/screenpipe.app/Contents/MacOS/\n#    Type: cd /Applications/screenpipe.app/Contents/MacOS/\n"
-        : "# 1. Open Terminal\n# 2. Navigate to the Screenpipe installation directory\n";
-
-    const baseInstructions = `# First, view the Screenpipe CLI arguments:
-${cliInstructions}
-# 3. Run: screenpipe -h
-# 4. Choose your preferred setup and start Screenpipe:
-#    (Replace [YOUR_ARGS] with your chosen arguments)
-#    Example: screenpipe --data-dir `;
-
-    const dataDir =
-      os === "windows"
-        ? "%LOCALAPPDATA%\\screenpipe"
-        : os === "macos"
-        ? "$HOME/Library/Application\\ Support/screenpipe"
-        : "$HOME/.config/screenpipe";
-
-    const baseCommand =
-      baseInstructions +
-      dataDir +
-      (os === "windows"
-        ? "\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir %LOCALAPPDATA%\\screenpipe --ocr-engine windows-native\n"
-        : "") +
-      "\n\n# 5. If you've already started Screenpipe, try these debugging commands:\n";
-
-    if (os === "windows") {
-      return (
-        baseCommand +
-        `# Stream the log (depending how you set the data-dir):
-type %LOCALAPPDATA%\\screenpipe\\screenpipe.log
-
-# Scroll the logs:
-more %LOCALAPPDATA%\\screenpipe\\screenpipe.log
-
-# View last 10 frames:
-sqlite3 %LOCALAPPDATA%\\screenpipe\\db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-
-# View last 10 audio transcriptions:
-sqlite3 %LOCALAPPDATA%\\screenpipe\\db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
-      );
-    } else if (os === "macos") {
-      return (
-        baseCommand +
-        `# Stream the log (depending how you set the data-dir):
-tail -f $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
-
-# Scroll the logs:
-less $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
-
-# View last 10 frames:
-sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-
-# View last 10 audio transcriptions:
-sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
-      );
-    } else if (os === "linux") {
-      return (
-        baseCommand +
-        `# Stream the log (depending how you set the data-dir):
-tail -f $HOME/.config/screenpipe/screenpipe.log
-
-# Scroll the logs:
-less $HOME/.config/screenpipe/screenpipe.log
-
-# View last 10 frames:
-sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-
-# View last 10 audio transcriptions:
-sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
-      );
-    } else {
-      return "OS not recognized. \n\nPlease check the documentation for your specific operating system.";
-    }
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -168,57 +378,6 @@ sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions O
         return "bg-gray-500";
     }
   };
-
-  if (health && health.status === "Error") {
-    return (
-      <>
-        <Badge
-          variant="outline"
-          className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
-          onClick={() => setIsDialogOpen(true)}
-        >
-          Status{" "}
-          <span
-            className={`ml-1 w-2 h-2 rounded-full ${getStatusColor(
-              health.status
-            )} inline-block ${
-              // @ts-ignore
-              health.status === "Unhealthy" || health.status === "Error"
-                ? "animate-pulse"
-                : ""
-            }`}
-          />
-        </Badge>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle>Error Status</DialogTitle>
-            </DialogHeader>
-            <div className="flex-grow overflow-auto">
-              <p className="text-sm mb-4">{health.message}</p>
-              <div className="text-xs text-red-500">
-                <p className="font-bold mb-1">Troubleshooting Instructions:</p>
-                <MarkdownWithExternalLinks className="prose prose-sm">
-                  {`If you're experiencing issues, please try the following steps:
-1. Restart screenpipe CLI.
-2. Reset your Screenpipe OS audio/screen recording permissions.
-3. If the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn.
-4. Last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot.`}
-                </MarkdownWithExternalLinks>
-                <p className="font-bold mt-2 text-red-500">
-                  Did you run screenpipe CLI first?
-                </p>
-              </div>
-              <CodeBlock
-                language="bash"
-                value={getDebuggingCommands(platform())}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
-      </>
-    );
-  }
 
   if (!health) return null;
 
@@ -245,71 +404,36 @@ sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions O
         />
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+        <DialogContent
+          className="max-w-3xl max-h-[80vh] flex flex-col"
+          aria-describedby="status-dialog-description"
+        >
           <DialogHeader>
-            <DialogTitle>{health.status} Status</DialogTitle>
+            <DialogTitle>{health.status.toLowerCase()} status</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-auto">
-            <p className="text-sm mb-2">{health.message}</p>
-            <p className="text-xs mb-1">Frame: {health.frame_status}</p>
-            <p className="text-xs mb-1">Audio: {health.audio_status}</p>
+            <p className="text-sm mb-2">{health.message.toLowerCase()}</p>
+            <p className="text-xs mb-1">frame: {health.frame_status}</p>
+            <p className="text-xs mb-1">audio: {health.audio_status}</p>
             <p className="text-xs mb-1">
-              Last Frame: {formatTimestamp(health.last_frame_timestamp)}
+              last frame: {formatTimestamp(health.last_frame_timestamp)}
             </p>
             <p className="text-xs mb-1">
-              Last Audio: {formatTimestamp(health.last_audio_timestamp)}
+              last audio: {formatTimestamp(health.last_audio_timestamp)}
             </p>
-            <div className="text-xs mt-2 text-red-500">
-              <p className="font-bold mb-1">Troubleshooting Instructions:</p>
-              <MarkdownWithExternalLinks className="prose prose-sm">
-                {`If you're experiencing issues, please try the following steps:
-1. Restart screenpipe CLI.
-2. Reset your Screenpipe OS audio/screen recording permissions.
-3. If the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn.
-4. Last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot.`}
-              </MarkdownWithExternalLinks>
-              <p className="font-bold mt-2 text-red-500">
-                Did you run screenpipe CLI first?
-              </p>
-            </div>
-            <CodeBlock
-              language="bash"
-              value={getDebuggingCommands(platform())}
-            />
 
-            <div className="mt-4 text-sm text-gray-500">
-              <p>Or, for more advanced queries:</p>
-              <ol className="list-decimal list-inside mt-2">
-                <li>
-                  <a
-                    href="https://github.com/louis030195/screen-pipe/blob/main/screenpipe-server/src/db.rs"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline"
-                  >
-                    Go to the database schema
-                  </a>
-                </li>
-                <li>Copy the entire page (Cmd+A, Cmd+C)</li>
-                <li>Paste into ChatGPT (Cmd+V)</li>
-                <li>
-                  Ask: &quot;give me 10 sqlite query CLI to look up my data. My
-                  db is in $HOME/.screenpipe/db.sqlite&quot;
-                </li>
-              </ol>
-              <p className="mt-2">
-                Or if you prefer using curl, follow the same steps with the{" "}
-                <a
-                  href="https://github.com/louis030195/screen-pipe/blob/main/screenpipe-server/src/server.rs"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline"
-                >
-                  server.rs file
-                </a>{" "}
-                and ask ChatGPT for curl commands to interact with the API.
-              </p>
+            <div className="text-xs mt-2">
+              <p className="font-bold mb-1">troubleshooting Instructions:</p>
+              <MarkdownWithExternalLinks className="prose prose-sm">
+                {`if you're experiencing issues, please try the following steps:
+1. restart screenpipe
+2. reset your Screenpipe OS audio/screen recording permissions
+3. if the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn
+4. last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot`}
+              </MarkdownWithExternalLinks>
             </div>
+            <Separator className="my-4" />
+            <DevModeSettings />
           </div>
         </DialogContent>
       </Dialog>

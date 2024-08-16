@@ -64,17 +64,16 @@ export default function Home() {
           ollamaUrl={settings.ollamaUrl}
         />
       ) : (
-        <div className="flex flex-col items-center justify-center h-[calc(60vh-200px)]">
-          <Card className="w-[350px]">
+        <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
+          <Card className="w-[600px]">
             <CardHeader>
               <CardTitle>Welcome to Screenpipe playground</CardTitle>
               <CardDescription>
-                Make sure to run screenpipe CLI first (check status above).
-                Also, please, set your AI provider settings to ask questions
+                Make sure to set your AI provider settings to ask questions
                 about your data.
                 <br />
                 <br />
-                <Link
+                {/* <Link
                   // open new tab
                   href="https://youtu.be/WGnHmFFFJOc"
                   target="_blank"
@@ -82,7 +81,16 @@ export default function Home() {
                   className="font-bold underline"
                 >
                   Watch the onboarding video
-                </Link>
+                </Link> */}
+                <div className="aspect-w-16 aspect-h-9">
+                  <iframe
+                    src="https://www.youtube.com/embed/WGnHmFFFJOc"
+                    title="Onboarding Video"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-[300px] rounded-lg shadow-lg"
+                  ></iframe>
+                </div>
               </CardDescription>
             </CardHeader>
             <CardContent>

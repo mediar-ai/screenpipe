@@ -1,4 +1,3 @@
-// ignore all file ts errors
 "use client";
 import { useState } from "react";
 import { z } from "zod";
