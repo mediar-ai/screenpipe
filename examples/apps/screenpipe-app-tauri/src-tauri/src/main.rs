@@ -79,39 +79,15 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     let path = base_dir.join("store.bin");
 
-    let use_cloud_audio = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("useCloudAudio")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true)) // Default to true if not set
-    })
-    .map_err(|e| e.to_string())?;
-    let use_cloud_ocr = with_store(app.clone(), stores, path, |store| {
-        Ok(store
-            .get("useCloudOcr")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true)) // Default to true if not set
-    })
-    .map_err(|e| e.to_string())?;
-
     let _data_dir_str = base_dir.to_string_lossy();
     let mut args = vec![
         "--port", "3030",
         "--debug",
-        // "--self-healing",
-        // "--data-dir",
-        // &data_dir_str,
     ];
     // if macos do --fps 0.2
     if cfg!(target_os = "macos") {
         args.push("--fps");
         args.push("0.2");
-    }
-    if use_cloud_audio {
-        args.push("--cloud-audio-on");
-    }
-    if use_cloud_ocr {
-        args.push("--ocr-engine unstructured");
     }
 
     // hardcode TESSDATA_PREFIX for windows
@@ -344,13 +320,13 @@ async fn main() {
                 },
             );
 
-            let mut use_embedded_screenpipe = false;
+            let mut use_embedded_screenpipe = true;
             let _ = with_store(app.app_handle().clone(), stores, path, |store| {
                 use_embedded_screenpipe = store
                     .get("useEmbeddedScreenpipe")
-                    .unwrap_or(&Value::Bool(false))
+                    .unwrap_or(&Value::Bool(true))
                     .as_bool()
-                    .unwrap_or(false);
+                    .unwrap_or(true);
 
                 Ok(())
             });

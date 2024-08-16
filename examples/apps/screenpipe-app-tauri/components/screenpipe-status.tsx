@@ -28,10 +28,8 @@ import { Card, CardContent, CardFooter } from "./ui/card";
 const getDebuggingCommands = (os: string | null) => {
   const cliInstructions =
     os === "windows"
-      ? "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n"
-      : os === "macos"
-      ? "# 1. Open Terminal app\n# 2. Navigate to: /Applications/screenpipe.app/Contents/MacOS/\n#    Type: cd /Applications/screenpipe.app/Contents/MacOS/\n"
-      : "# 1. Open Terminal\n# 2. Navigate to the Screenpipe installation directory\n";
+      ? "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %USERPROFILE%\\.screenpipe\\\n#    Type: cd %USERPROFILE%\\.screenpipe\n"
+      : "# 1. Open Terminal\n# 2. Navigate to: $HOME/.screenpipe/\n#    Type: cd $HOME/.screenpipe\n";
 
   const baseInstructions = `# First, view the Screenpipe CLI arguments:
 ${cliInstructions}
@@ -41,64 +39,55 @@ ${cliInstructions}
 #    Example: screenpipe --data-dir `;
 
   const dataDir =
+    os === "windows" ? "%USERPROFILE%\\.screenpipe" : "$HOME/.screenpipe";
+
+  const logPath =
     os === "windows"
-      ? "%LOCALAPPDATA%\\screenpipe"
-      : os === "macos"
-      ? "$HOME/Library/Application\\ Support/screenpipe"
-      : "$HOME/.config/screenpipe";
+      ? "%USERPROFILE%\\.screenpipe\\screenpipe.log"
+      : "$HOME/.screenpipe/screenpipe.log";
+
+  const dbPath =
+    os === "windows"
+      ? "%USERPROFILE%\\.screenpipe\\db.sqlite"
+      : "$HOME/.screenpipe/db.sqlite";
 
   const baseCommand =
     baseInstructions +
     dataDir +
     (os === "windows"
-      ? "\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir %LOCALAPPDATA%\\screenpipe --ocr-engine windows-native\n"
+      ? "\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir %USERPROFILE%\\.screenpipe --ocr-engine windows-native\n"
       : "") +
     "\n\n# 5. If you've already started Screenpipe, try these debugging commands:\n";
 
   if (os === "windows") {
     return (
       baseCommand +
-      `# Stream the log (depending how you set the data-dir):
-type %LOCALAPPDATA%\\screenpipe\\screenpipe.log
+      `# Stream the log:
+type "${logPath}"
 
 # Scroll the logs:
-more %LOCALAPPDATA%\\screenpipe\\screenpipe.log
+more "${logPath}"
 
 # View last 10 frames:
-sqlite3 %LOCALAPPDATA%\\screenpipe\\db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
 
 # View last 10 audio transcriptions:
-sqlite3 %LOCALAPPDATA%\\screenpipe\\db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
     );
-  } else if (os === "macos") {
+  } else if (os === "macos" || os === "linux") {
     return (
       baseCommand +
-      `# Stream the log (depending how you set the data-dir):
-tail -f $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
+      `# Stream the log:
+tail -f "${logPath}"
 
 # Scroll the logs:
-less $HOME/Library/Application\\ Support/screenpipe/screenpipe.log
+less "${logPath}"
 
 # View last 10 frames:
-sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
+sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
 
 # View last 10 audio transcriptions:
-sqlite3 $HOME/Library/Application\\ Support/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
-    );
-  } else if (os === "linux") {
-    return (
-      baseCommand +
-      `# Stream the log (depending how you set the data-dir):
-tail -f $HOME/.config/screenpipe/screenpipe.log
-
-# Scroll the logs:
-less $HOME/.config/screenpipe/screenpipe.log
-
-# View last 10 frames:
-sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-
-# View last 10 audio transcriptions:
-sqlite3 $HOME/.config/screenpipe/db.sqlite "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
+sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
     );
   } else {
     return "OS not recognized. \n\nPlease check the documentation for your specific operating system.";
@@ -269,7 +258,10 @@ const DevModeSettings = () => {
       <Separator orientation="vertical" />
       {settings.devMode === true && (
         <>
-          <p className="font-bold my-2">did you run screenpipe backend? either click start on the right, or thru CLI 👇</p>
+          <p className="font-bold my-2">
+            did you run screenpipe backend? either click start on the right, or
+            thru CLI 👇
+          </p>
           <CodeBlock language="bash" value={getDebuggingCommands(platform())} />
 
           <div className="mt-4 text-sm text-gray-500">
@@ -322,9 +314,7 @@ interface HealthCheckResponse {
 
 const HealthStatus = ({ className }: { className?: string }) => {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
-  const [isBlinking, setIsBlinking] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const { settings } = useSettings();
   const fetchHealth = async () => {
     try {
       const response = await fetch("http://localhost:3030/health");
@@ -336,10 +326,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
       // only change blink and health if it changed
       if (health !== null && health.status === data.status) {
         return;
-      }
-      if (health && data.status !== health.status) {
-        setIsBlinking(true);
-        setTimeout(() => setIsBlinking(false), 5000); // Blink for 5 seconds on status change
       }
       setHealth(data);
       // setError(null);
@@ -358,7 +344,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   };
 
   useEffect(() => {
-    // fetchHealth();
+    fetchHealth();
     const interval = setInterval(fetchHealth, 1000); // Poll every 1 seconds
 
     return () => clearInterval(interval);
@@ -375,7 +361,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
       case "Error":
         return "bg-red-500";
       default:
-        return "bg-gray-500";
+        return "bg-red-500";
     }
   };
 

@@ -293,9 +293,9 @@ async fn main() -> anyhow::Result<()> {
                 };
                 devices_status.insert(input_device, device_control);
             }
-            // audio output only supported on linux atm
+            // audio output only supported on linux and macos <15.0 atm
             // see https://github.com/louis030195/screen-pipe/pull/106
-            if cfg!(target_os = "linux") {
+            if cfg!(any(target_os = "linux", target_os = "macos")) {
                 use screenpipe_audio::default_output_device;
                 if let Ok(output_device) = default_output_device().await {
                     audio_devices.push(Arc::new(output_device.clone()));
