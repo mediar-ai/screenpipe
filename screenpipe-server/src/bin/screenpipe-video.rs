@@ -3,7 +3,6 @@ use clap::Parser;
 use env_logger::Env;
 use image::GenericImageView;
 use log::info;
-use screenpipe_server::core::DataOutputWrapper;
 use screenpipe_server::VideoCapture;
 use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
@@ -92,14 +91,13 @@ async fn main() {
     loop {
         if let Some(frame) = video_capture.get_latest_frame().await {
             info!("Captured frame size: {:?}", frame.image.dimensions());
-            info!("OCR Text len: {}", frame.text.len());
+            info!("OCR Text len: {}", frame.window_ocr_results.iter().map(|w| w.text.len()).sum::<usize>());
 
             let frame_data = json!({
                 "frame": frame_count,
                 "timestamp": frame_count as f64 / fps,
-                "ocr_text": frame.text,
-                "text_json": frame.text_json,
-                "data_output": DataOutputWrapper { data_output: frame.data_output }.to_json(),
+                "ocr_text": frame.window_ocr_results.iter().map(|w| w.text.clone()).collect::<Vec<String>>().join(" "),
+                "text_json": frame.window_ocr_results.iter().flat_map(|w| w.text_json.clone()).collect::<Vec<_>>(),
             });
 
             write_json_frame(&mut json_writer, &frame_data).expect("Failed to write JSON frame");

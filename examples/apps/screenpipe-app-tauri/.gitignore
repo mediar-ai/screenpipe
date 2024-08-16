@@ -6,6 +6,8 @@
 .pnp.js
 .yarn/install-state.gz
 
+pnpm-lock.yaml
+
 # testing
 /coverage
 
@@ -34,7 +36,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
 
 
 ffmpeg*

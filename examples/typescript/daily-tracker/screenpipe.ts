@@ -11,6 +11,12 @@ const SearchQuerySchema = z.object({
   start_time: z.string().optional(),
   end_time: z.string().optional(),
   app_name: z.string().optional(),
+  window_name: z
+    .string()
+    .describe(
+      "The name of the window the user was using. This helps to further filter the context within the app. For example, 'inbox' for email apps, 'project' for project management apps, etc."
+    )
+    .optional(), // Add window_name with description
 });
 
 const OCRContentSchema = z.object({
@@ -67,6 +73,7 @@ export async function queryScreenpipe(
     ...(params.start_time && { start_time: params.start_time }),
     ...(params.end_time && { end_time: params.end_time }),
     ...(params.app_name && { app_name: params.app_name }),
+    ...(params.window_name && { window_name: params.window_name }), // Add window_name to query parameters
   });
 
   const response = await fetch(`http://localhost:3030/search?${queryParams}`);

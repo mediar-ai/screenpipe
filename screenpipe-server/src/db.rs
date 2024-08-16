@@ -39,6 +39,7 @@ pub struct FTSSearchResult {
     pub frame_id: i64,
     pub frame_timestamp: DateTime<Utc>,
     pub app_name: String,
+    pub window_name: String,
     pub video_file_path: String,
     pub original_frame_text: Option<String>,
 }
@@ -54,12 +55,13 @@ pub enum SearchResult {
 pub struct OCRResult {
     pub frame_id: i64,
     pub ocr_text: String,
-    pub text_json: String,                       // Store as JSON string
+    pub text_json: String,
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
     pub app_name: String,
-    pub ocr_engine: String,  // Add this line
+    pub ocr_engine: String,
+    pub window_name: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default, Clone, Copy)]
@@ -78,7 +80,7 @@ pub struct AudioResult {
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
-    pub transcription_engine: String, // Add this line
+    pub transcription_engine: String,
 }
 
 pub struct DatabaseManager {
@@ -214,9 +216,7 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_frame(&self, app_name: &str) -> Result<i64, sqlx::Error> {
-        // debug!("Starting insert_frame");
-
+    pub async fn insert_frame(&self) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
 
@@ -248,12 +248,11 @@ impl DatabaseManager {
 
         // Insert the new frame
         let id = sqlx::query(
-        "INSERT INTO frames (video_chunk_id, offset_index, timestamp, app_name) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO frames (video_chunk_id, offset_index, timestamp) VALUES (?1, ?2, ?3)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
         .bind(Utc::now())
-        .bind(app_name)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -272,15 +271,14 @@ impl DatabaseManager {
         text: &str,
         text_json: &str,
         app_name: &str,
+        window_name: &str,
         ocr_engine: Arc<OcrEngine>,
+        focused: bool,
     ) -> Result<(), sqlx::Error> {
         const MAX_RETRIES: u32 = 3;
         const TIMEOUT_DURATION: TokioDuration = TokioDuration::from_secs(10);
 
-        // debug!("Starting insert_ocr_text for frame_id: {}", frame_id);
-
         for attempt in 1..=MAX_RETRIES {
-            // debug!("Attempt {} to insert OCR text", attempt);
             match timeout(
                 TIMEOUT_DURATION,
                 self.insert_ocr_text_old(
@@ -288,13 +286,14 @@ impl DatabaseManager {
                     text,
                     text_json,
                     app_name,
+                    window_name,
                     Arc::clone(&ocr_engine),
+                    focused,
                 ),
             )
             .await
             {
                 Ok(Ok(())) => {
-                    // debug!("Successfully inserted OCR text, proceeding to chunking");
                     // Chunk the text before inserting into chunked text index
                     const CHUNKING_ENGINE: &str = "local_simple";
 
@@ -380,25 +379,35 @@ impl DatabaseManager {
         text: &str,
         text_json: &str,
         app_name: &str,
+        window_name: &str,
         ocr_engine: Arc<OcrEngine>,
+        focused: bool,
     ) -> Result<(), sqlx::Error> {
-        // debug!("Starting insert_ocr_text_old for frame_id: {}", frame_id);
+        let display_window_name = if window_name.chars().count() > 20 {
+            format!("{}...", window_name.chars().take(20).collect::<String>())
+        } else {
+            window_name.to_string()
+        };
 
-        // Log the input parameters with limited length
         debug!(
-            "Inserting OCR text with frame_id: {}, text: {}{}",
+            "Inserting OCR: frame_id {}, app {}, window {}, focused {}, text {}{}",
             frame_id,
-            text.replace('\n', " ").chars().take(100).collect::<String>(),
-            if text.len() > 100 { "..." } else { "" }
+            app_name,
+            display_window_name,
+            focused,
+            text.replace('\n', " ").chars().take(60).collect::<String>(),
+            if text.len() > 60 { "..." } else { "" },
         );
 
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine) VALUES (?1, ?2, ?3, ?4, ?5)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, focused) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
             .bind(app_name)
             .bind(format!("{:?}", *ocr_engine))
+            .bind(window_name)
+            .bind(focused)
             .execute(&mut *tx)
             .await?;
 
@@ -416,29 +425,25 @@ impl DatabaseManager {
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
+        window_name: Option<&str>, // Add window_name parameter
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
-
-        // Add FTS search results
-        // let fts_results = self.search_fts(query, limit).await?;
-        // debug!("FTS search returned {} results", fts_results.len());
-        // results.extend(fts_results);
-
+    
         // If app_name is specified, only search OCR content
-        if app_name.is_some() {
+        if app_name.is_some() || window_name.is_some() {
             let ocr_results = self
-                .search_ocr(query, limit, offset, start_time, end_time, app_name)
+                .search_ocr(query, limit, offset, start_time, end_time, app_name, window_name) // Add window_name parameter
                 .await?;
             results.extend(ocr_results.into_iter().map(SearchResult::OCR));
         } else {
-            // If no app_name is specified, proceed with normal search
+            // If no app_name or window_name is specified, proceed with normal search
             if content_type == ContentType::All || content_type == ContentType::OCR {
                 let ocr_results = self
-                    .search_ocr(query, limit, offset, start_time, end_time, None)
+                    .search_ocr(query, limit, offset, start_time, end_time, None, None) // Add window_name parameter
                     .await?;
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
             }
-
+    
             if content_type == ContentType::All || content_type == ContentType::Audio {
                 let audio_results = self
                     .search_audio(query, limit, offset, start_time, end_time)
@@ -446,7 +451,7 @@ impl DatabaseManager {
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
             }
         }
-
+    
         // Sort results by timestamp in descending order
         results.sort_by(|a, b| {
             let timestamp_a = match a {
@@ -461,10 +466,10 @@ impl DatabaseManager {
             };
             timestamp_b.cmp(&timestamp_a)
         });
-
+    
         // Apply limit after combining and sorting
         results.truncate(limit as usize);
-
+    
         Ok(results)
     }
 
@@ -479,7 +484,8 @@ impl DatabaseManager {
             fts.text AS matched_text,
             f.id AS frame_id,
             f.timestamp AS frame_timestamp,
-            f.app_name,
+            cte.app_name,
+            cte.window_name, // Ensure this field is selected
             vc.file_path AS video_file_path,
             o.text AS original_frame_text
         FROM chunked_text_index_fts fts
@@ -492,9 +498,6 @@ impl DatabaseManager {
         LIMIT ?2
         "#;
 
-        // debug!("Executing FTS query: {}", sql);
-        // debug!("Query parameters: query={}, limit={}", query, limit);
-
         let results = sqlx::query(sql)
             .bind(query)
             .bind(limit)
@@ -505,21 +508,18 @@ impl DatabaseManager {
                     frame_id: row.get("frame_id"),
                     frame_timestamp: row.get("frame_timestamp"),
                     app_name: row.get("app_name"),
+                    window_name: row.get("window_name"), // Add this line
                     video_file_path: row.get("video_file_path"),
                     original_frame_text: row.get("original_frame_text"),
                 });
-                // debug!("Mapped FTS result: {:?}", result);
                 result
             })
             .fetch_all(&self.pool)
             .await?;
 
-        // debug!("FTS query returned {} results", results.len());
-
         Ok(results)
     }
 
-    // Update the search_ocr method
     async fn search_ocr(
         &self,
         query: &str,
@@ -527,7 +527,8 @@ impl DatabaseManager {
         offset: u32,
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
-        app_name: Option<&str>, // Add this parameter
+        app_name: Option<&str>,
+        window_name: Option<&str>, // Add window_name parameter
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let mut sql = r#"
             SELECT 
@@ -537,8 +538,9 @@ impl DatabaseManager {
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index,
-                frames.app_name,
-                ocr_text.ocr_engine
+                ocr_text.app_name,
+                ocr_text.ocr_engine,
+                ocr_text.window_name
             FROM 
                 ocr_text
             JOIN 
@@ -549,13 +551,16 @@ impl DatabaseManager {
                 ocr_text.text LIKE '%' || ?1 || '%'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
-        "#
-        .to_string();
-
+        "#.to_string();
+    
         if app_name.is_some() {
-            sql.push_str(" AND frames.app_name = ?6");
+            sql.push_str(" AND ocr_text.app_name = ?6");
         }
-
+    
+        if window_name.is_some() {
+            sql.push_str(" AND ocr_text.window_name = ?7");
+        }
+    
         sql.push_str(
             r#"
             ORDER BY 
@@ -563,19 +568,25 @@ impl DatabaseManager {
             LIMIT ?4 OFFSET ?5
             "#,
         );
-
+    
         let mut query = sqlx::query_as::<_, OCRResult>(&sql)
             .bind(query)
             .bind(start_time)
             .bind(end_time)
             .bind(limit)
             .bind(offset);
-
+    
         if let Some(app_name) = app_name {
             query = query.bind(app_name);
         }
-
-        query.fetch_all(&self.pool).await
+    
+        if let Some(window_name) = window_name {
+            query = query.bind(window_name);
+        }
+    
+        let ocr_results = query.fetch_all(&self.pool).await?;
+        debug!("Fetched OCR results: {:?}", ocr_results);
+        Ok(ocr_results)
     }
 
     async fn search_audio(
@@ -636,7 +647,6 @@ impl DatabaseManager {
         .await
     }
 
-    // Update the count_search_results method
     pub async fn count_search_results(
         &self,
         query: &str,
@@ -644,24 +654,25 @@ impl DatabaseManager {
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
+        window_name: Option<&str>, // Add window_name parameter
     ) -> Result<usize, sqlx::Error> {
         let mut total_count = 0;
-
+    
         // If app_name is specified, only count OCR results
-        if app_name.is_some() {
+        if app_name.is_some() || window_name.is_some() {
             let ocr_count = self
-                .count_ocr_results(query, start_time, end_time, app_name)
+                .count_ocr_results(query, start_time, end_time, app_name, window_name) // Add window_name parameter
                 .await?;
             total_count += ocr_count;
         } else {
             // If no app_name is specified, proceed with normal counting
             if content_type == ContentType::All || content_type == ContentType::OCR {
                 let ocr_count = self
-                    .count_ocr_results(query, start_time, end_time, None)
+                    .count_ocr_results(query, start_time, end_time, None, window_name) // Add window_name parameter
                     .await?;
                 total_count += ocr_count;
             }
-
+    
             if content_type == ContentType::All || content_type == ContentType::Audio {
                 let audio_count = self
                     .count_audio_results(query, start_time, end_time)
@@ -669,7 +680,7 @@ impl DatabaseManager {
                 total_count += audio_count;
             }
         }
-
+    
         Ok(total_count)
     }
     pub async fn count_recent_results(
@@ -720,6 +731,7 @@ impl DatabaseManager {
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
+        window_name: Option<&str>, // Add window_name parameter
     ) -> Result<usize, sqlx::Error> {
         let mut sql = r#"
             SELECT COUNT(*)
@@ -728,11 +740,14 @@ impl DatabaseManager {
             WHERE text LIKE '%' || ?1 || '%'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
-        "#
-        .to_string();
+        "#.to_string();
 
         if app_name.is_some() {
-            sql.push_str(" AND frames.app_name = ?4");
+            sql.push_str(" AND ocr_text.app_name = ?6");
+        }
+
+        if window_name.is_some() {
+            sql.push_str(" AND ocr_text.window_name = ?7");
         }
 
         let mut query = sqlx::query_as::<_, (i64,)>(&sql)
@@ -742,6 +757,10 @@ impl DatabaseManager {
 
         if let Some(app_name) = app_name {
             query = query.bind(app_name);
+        }
+
+        if let Some(window_name) = window_name {
+            query = query.bind(window_name);
         }
 
         let (count,) = query.fetch_one(&self.pool).await?;

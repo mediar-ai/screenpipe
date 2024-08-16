@@ -56,7 +56,17 @@ export const screenpipeQuery = z.object({
       `
     )
     .optional(),
+  window_name: z
+    .string()
+    .describe(
+      `The name of the window the user was using. 
+      This helps to further filter the context within the app. 
+      For example, 'inbox' for email apps, 'project' for project management apps, etc.
+      `
+    )
+    .optional(), // Add window_name with description
 });
+
 export const screenpipeMultiQuery = z.object({
   queries: z.array(screenpipeQuery),
 });
@@ -81,6 +91,7 @@ export async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
         end_time: params.end_time,
         content_type: params.content_type,
         app_name: params.app_name,
+        window_name: params.window_name, // Add window_name to query parameters
       }).filter(([_, v]) => v != null) as [string, string][]
     );
     console.log("calling screenpipe", JSON.stringify(params));

@@ -1,8 +1,8 @@
 use crate::core::MaxAverageFrame;
 use image::DynamicImage;
-use image_compare::{Algorithm, Metric, Similarity}; // Added import for Similarity
+use image_compare::{Algorithm, Metric, Similarity};
 use log::{debug, error};
-use rusty_tesseract::{Args, DataOutput, Image}; // Added import for Args, Image, DataOutput
+use rusty_tesseract::{Args, Image, DataOutput};
 use serde_json;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
+use crate::capture_screenshot_by_window::capture_all_visible_windows;
 
 #[derive(Clone, Debug)]
 pub enum OcrEngine {
@@ -51,8 +52,7 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
     result.score
 }
 
-pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, DataOutput, String) {
-    // debug!("inside perform_ocr");
+pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, String) {
     let args = Args {
         lang: "eng".to_string(),
         config_variables: HashMap::from([("tessedit_create_tsv".into(), "1".into())]),
@@ -69,15 +69,31 @@ pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, DataOutput, Strin
 
     // Extract text from data output
     let text = data_output_to_text(&data_output);
+    let json_output = data_output_to_json(&data_output);
 
-    // Extract JSON output with confidence scores
+    (text, json_output)
+}
+
+fn data_output_to_text(data_output: &DataOutput) -> String {
+    let mut text = String::new();
+    for record in &data_output.data {
+        if !record.text.is_empty() {
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            text.push_str(&record.text);
+        }
+    }
+    text
+}
+
+fn data_output_to_json(data_output: &DataOutput) -> String {
     let mut lines: Vec<HashMap<String, String>> = Vec::new();
     let mut current_line = String::new();
     let mut current_conf = 0.0;
     let mut word_count = 0;
     let mut last_word_num = 0;
 
-    // debug!("inside data_output inside perform_ocr");
     for record in &data_output.data {
         if record.word_num == 0 {
             if !current_line.is_empty() {
@@ -120,33 +136,20 @@ pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, DataOutput, Strin
         lines.push(line_data);
     }
 
-    // Sort lines by confidence in descending order
-    // lines.sort_by(|a, b| b["confidence"].partial_cmp(&a["confidence"]).unwrap());
-    let json_output = serde_json::to_string_pretty(&lines).unwrap();
-
-    (text, data_output, json_output)
+    serde_json::to_string_pretty(&lines).unwrap()
 }
 
-fn data_output_to_text(data_output: &DataOutput) -> String {
-    let mut text = String::new();
-    for record in &data_output.data {
-        if !record.text.is_empty() {
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            text.push_str(&record.text);
-        }
-    }
-    text
-}
-
-pub async fn capture_screenshot(monitor: Arc<Monitor>) -> (DynamicImage, u64, Duration) {
+pub async fn capture_screenshot(monitor: Arc<Monitor>) -> (DynamicImage, Vec<(DynamicImage, String, String, bool)>, u64, Duration) {
     let capture_start = Instant::now();
     let buffer = monitor.capture_image().unwrap();
     let image = DynamicImage::ImageRgba8(buffer);
     let image_hash = calculate_hash(&image);
     let capture_duration = capture_start.elapsed();
-    (image, image_hash, capture_duration)
+
+    // Capture all visible windows
+    let window_images = capture_all_visible_windows(monitor.clone()).await.unwrap_or_default();
+
+    (image, window_images, image_hash, capture_duration)
 }
 
 pub async fn compare_with_previous_image(
@@ -181,7 +184,6 @@ pub async fn save_text_files(
     let id = frame_number;
     debug!("Saving text files for frame {}", frame_number);
 
-    // Ensure the text_json directory exists
     if let Err(e) = fs::create_dir_all("text_json") {
         error!("Failed to create text_json directory: {}", e);
         return;
@@ -244,7 +246,7 @@ pub async fn save_text_files(
 }
 
 #[cfg(target_os = "windows")]
-pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, DataOutput, String) {
+pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String) {
     use std::io::Cursor;
     use windows::{
         Graphics::Imaging::BitmapDecoder,
@@ -276,20 +278,11 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, DataOutput, S
 
     let text = result.Text().unwrap().to_string();
 
-    let text = result.Text().unwrap().to_string();
-
-    // Create a simple DataOutput structure
-    let data_output = DataOutput {
-        data: vec![],
-        output: text.clone(),
-    };
-
-    // Create a JSON output similar to other OCR functions
     let json_output = serde_json::json!([{
         "text": text,
-        "confidence": "100.00" // Windows OCR doesn't provide confidence scores, so we use a default high value
+        "confidence": "n/a" // Windows OCR doesn't provide confidence scores, so we use a default high value
     }])
     .to_string();
 
-    (text, data_output, json_output)
+    (text, json_output)
 }

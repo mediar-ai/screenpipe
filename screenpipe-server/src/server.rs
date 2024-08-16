@@ -55,6 +55,8 @@ pub(crate) struct SearchQuery {
     end_time: Option<DateTime<Utc>>,
     #[serde(default)]
     app_name: Option<String>, // Add this line
+    #[serde(default)]
+    window_name: Option<String>, // Add this line
 }
 
 #[derive(Deserialize)]
@@ -104,7 +106,8 @@ pub(crate) struct OCRContent {
     timestamp: DateTime<Utc>,
     file_path: String,
     offset_index: i64,
-    app_name: String, // Add this line
+    app_name: String,
+    window_name: String, 
 }
 
 #[derive(Serialize)]
@@ -123,6 +126,7 @@ pub(crate) struct FTSContent {
     frame_id: i64,
     timestamp: DateTime<Utc>,
     app_name: String,
+    window_name: String, // Add this field
     file_path: String,
     original_frame_text: Option<String>,
 }
@@ -162,14 +166,15 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}",
+        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
         query.pagination.offset,
         query.start_time,
         query.end_time,
-        query.app_name
+        query.app_name,
+        query.window_name // Log window_name
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -191,6 +196,7 @@ pub(crate) async fn search(
             query.start_time,
             query.end_time,
             query.app_name.as_deref(),
+            query.window_name.as_deref(), // Add window_name parameter
         )
         .await
         .map_err(|e| {
@@ -209,6 +215,7 @@ pub(crate) async fn search(
             query.start_time,
             query.end_time,
             query.app_name.as_deref(),
+            query.window_name.as_deref(), // Add window_name parameter
         )
         .await
         .map_err(|e| {
@@ -445,6 +452,7 @@ fn into_content_item(result: SearchResult) -> ContentItem {
             file_path: ocr.file_path,
             offset_index: ocr.offset_index,
             app_name: ocr.app_name,
+            window_name: ocr.window_name, // Ensure this field is included
         }),
         SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
             chunk_id: audio.audio_chunk_id,
@@ -459,6 +467,7 @@ fn into_content_item(result: SearchResult) -> ContentItem {
             frame_id: fts.frame_id,
             timestamp: fts.frame_timestamp,
             app_name: fts.app_name,
+            window_name: fts.window_name, // Ensure this field is included
             file_path: fts.video_file_path,
             original_frame_text: fts.original_frame_text,
         }),

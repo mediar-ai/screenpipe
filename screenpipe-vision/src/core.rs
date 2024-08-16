@@ -8,86 +8,39 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Sender;
+use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 
 #[cfg(target_os = "macos")]
 use crate::apple::perform_ocr_apple;
-use crate::monitor::{get_focused_window, get_monitor_by_id};
+use crate::monitor::{get_monitor_by_id};
 #[cfg(target_os = "windows")]
 use crate::utils::perform_ocr_windows;
 use crate::utils::OcrEngine;
 use crate::utils::{
     capture_screenshot, compare_with_previous_image, perform_ocr_tesseract, save_text_files,
 };
-use rusty_tesseract::{Data, DataOutput};
-use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 
-pub struct DataOutputWrapper {
-    pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,
-}
-
-impl DataOutputWrapper {
-    pub fn to_json(&self) -> String {
-        let data_json: Vec<String> = self.data_output.data.iter().map(|d| {
-            format!(
-                r#"{{"level": {}, "page_num": {}, "block_num": {}, "par_num": {}, "line_num": {}, "word_num": {}, "left": {}, "top": {}, "width": {}, "height": {}, "conf": {}, "text": "{}"}}"#,
-                d.level, d.page_num, d.block_num, d.par_num, d.line_num, d.word_num, d.left, d.top, d.width, d.height, d.conf, d.text
-            )
-        }).collect();
-        format!(
-            r#"{{"output": "{}", "data": [{}]}}"#,
-            self.data_output.output,
-            data_json.join(", ")
-        )
-    }
-}
-
+#[derive(Clone)]
 pub struct CaptureResult {
+    pub image: Arc<DynamicImage>,
+    pub frame_number: u64,
+    pub timestamp: Instant,
+    pub window_ocr_results: Vec<WindowOcrResult>,
+}
+
+#[derive(Clone)]
+pub struct WindowOcrResult {
+    pub window_name: String,
+    pub app_name: String,
     pub image: Arc<DynamicImage>,
     pub text: String,
     pub text_json: Vec<HashMap<String, String>>,
-    pub frame_number: u64,
-    pub timestamp: Instant,
-    pub data_output: DataOutput,
-    pub app_name: String,
-}
-
-impl Clone for CaptureResult {
-    fn clone(&self) -> Self {
-        CaptureResult {
-            image: Arc::clone(&self.image),
-            text: self.text.clone(),
-            text_json: self.text_json.clone(),
-            frame_number: self.frame_number,
-            timestamp: self.timestamp,
-            data_output: DataOutput {
-                output: self.data_output.output.clone(),
-                data: self
-                    .data_output
-                    .data
-                    .iter()
-                    .map(|d| Data {
-                        level: d.level,
-                        page_num: d.page_num,
-                        block_num: d.block_num,
-                        par_num: d.par_num,
-                        line_num: d.line_num,
-                        word_num: d.word_num,
-                        left: d.left,
-                        top: d.top,
-                        width: d.width,
-                        height: d.height,
-                        conf: d.conf,
-                        text: d.text.clone(),
-                    })
-                    .collect(),
-            },
-            app_name: self.app_name.clone(),
-        }
-    }
+    pub focused: bool,
 }
 
 pub struct OcrTaskData {
     pub image: Arc<DynamicImage>,
+    pub window_images: Vec<(DynamicImage, String, String, bool)>,
     pub frame_number: u64,
     pub timestamp: Instant,
     pub result_tx: Sender<CaptureResult>,
@@ -114,16 +67,8 @@ pub async fn continuous_capture(
     let arc_monitor = Arc::new(monitor.clone());
 
     loop {
-        let arc_monitor_one = arc_monitor.clone();
-
-        let app_name = Arc::new(
-            get_focused_window(arc_monitor_one)
-                .await
-                .map(|window| window.app_name().to_lowercase().to_string())
-                .unwrap_or_else(|| String::from("unknown")),
-        );
         let arc_monitor = arc_monitor.clone();
-        let (image, image_hash, _capture_duration) = capture_screenshot(arc_monitor).await;
+        let (image, window_images, image_hash, _capture_duration) = capture_screenshot(arc_monitor).await;
         let current_average = match compare_with_previous_image(
             &previous_image,
             &image,
@@ -161,6 +106,7 @@ pub async fn continuous_capture(
         if current_average > max_avg_value {
             max_average = Some(MaxAverageFrame {
                 image: Arc::new(image.clone()),
+                window_images: window_images.clone(),
                 image_hash,
                 frame_number: frame_counter,
                 timestamp: Instant::now(),
@@ -176,9 +122,10 @@ pub async fn continuous_capture(
             if let Some(max_avg_frame) = max_average.take() {
                 let ocr_task_data = OcrTaskData {
                     image: max_avg_frame.image.clone(),
+                    window_images: max_avg_frame.window_images.clone(),
                     frame_number: max_avg_frame.frame_number,
                     timestamp: max_avg_frame.timestamp,
-                    result_tx: result_tx.clone(),
+                    result_tx: max_avg_frame.result_tx.clone(),
                 };
 
                 let ocr_task_running_clone = ocr_task_running.clone();
@@ -186,16 +133,15 @@ pub async fn continuous_capture(
                 ocr_task_running.store(true, Ordering::SeqCst);
                 let ocr_engine_clone = ocr_engine.clone();
 
-                let app_name_clone = app_name.clone();
                 tokio::spawn(async move {
                     if let Err(e) = process_ocr_task(
                         ocr_task_data.image,
+                        ocr_task_data.window_images,
                         ocr_task_data.frame_number,
                         ocr_task_data.timestamp,
                         ocr_task_data.result_tx,
                         save_text_files_flag,
                         ocr_engine_clone,
-                        app_name_clone.to_string(),
                     )
                     .await
                     {
@@ -216,6 +162,7 @@ pub async fn continuous_capture(
 
 pub struct MaxAverageFrame {
     pub image: Arc<DynamicImage>,
+    pub window_images: Vec<(DynamicImage, String, String, bool)>,
     pub image_hash: u64,
     pub frame_number: u64,
     pub timestamp: Instant,
@@ -225,12 +172,12 @@ pub struct MaxAverageFrame {
 
 pub async fn process_ocr_task(
     image_arc: Arc<DynamicImage>,
+    window_images: Vec<(DynamicImage, String, String, bool)>,
     frame_number: u64,
     timestamp: Instant,
     result_tx: Sender<CaptureResult>,
     save_text_files_flag: bool,
     ocr_engine: Arc<OcrEngine>,
-    app_name: String,
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
 
@@ -238,137 +185,115 @@ pub async fn process_ocr_task(
         "Performing OCR for frame number since beginning of program {}",
         frame_number
     );
-    let (text, data_output, json_output) = match &*ocr_engine {
-        OcrEngine::Unstructured => {
-            debug!("Cloud Unstructured OCR");
-            match perform_ocr_cloud(&image_arc).await {
-                Ok(result) => result,
-                Err(e) => {
-                    error!("Error performing cloud OCR: {}", e);
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Error performing cloud OCR: {}", e),
-                    ));
-                }
-            }
-        }
-        OcrEngine::Tesseract => {
-            debug!("Local Tesseract OCR");
-            perform_ocr_tesseract(&image_arc)
-        }
-        #[cfg(target_os = "windows")]
-        OcrEngine::WindowsNative => {
-            debug!("Windows Native OCR");
-            perform_ocr_windows(&image_arc).await
-        }
-        #[cfg(target_os = "macos")]
-        OcrEngine::AppleNative => {
-            debug!("Apple Native OCR");
-            let json_result = perform_ocr_apple(&image_arc);
 
-            let parsed_result: serde_json::Value = serde_json::from_str(&json_result).unwrap_or_else(|e| {
-                error!("Failed to parse JSON output: {}", e);
-                serde_json::json!({
-                    "ocrResult": "",
-                    "textElements": [],
-                    "overallConfidence": 0.0
-                })
-            });
-
-            let text = parsed_result["ocrResult"].as_str().unwrap_or("").to_string();
-            let text_elements = parsed_result["textElements"].as_array().unwrap_or(&vec![]).clone();
-
-            let data_output = DataOutput {
-                output: text.clone(),
-                data: text_elements.iter().map(|element| {
-                    Data {
-                        level: 0, // Assuming level is not provided in the JSON
-                        page_num: 0, // Assuming page_num is not provided in the JSON
-                        block_num: 0, // Assuming block_num is not provided in the JSON
-                        par_num: 0, // Assuming par_num is not provided in the JSON
-                        line_num: 0, // Assuming line_num is not provided in the JSON
-                        word_num: 0, // Assuming word_num is not provided in the JSON
-                        left: element["boundingBox"]["x"].as_f64().unwrap_or(0.0) as i32,
-                        top: element["boundingBox"]["y"].as_f64().unwrap_or(0.0) as i32,
-                        width: element["boundingBox"]["width"].as_f64().unwrap_or(0.0) as i32,
-                        height: element["boundingBox"]["height"].as_f64().unwrap_or(0.0) as i32,
-                        conf: element["confidence"].as_f64().unwrap_or(0.0) as f32,
-                        text: element["text"].as_str().unwrap_or("").to_string(),
-                    }
-                }).collect(),
-            };
-
-            (
-                text.clone(),
-                data_output,
-                json_result,
-            )
-        }
-        _ => {
-            error!("Unsupported OCR engine");
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Unsupported OCR engine",
-            ));
-        }
-    };
-
-    let current_text_json: Vec<HashMap<String, String>> = {
-        let parsed_json: serde_json::Value = serde_json::from_str(&json_output).unwrap_or_else(|e| {
-            error!("Failed to parse JSON output: {}", e);
-            serde_json::json!([])
-        });
-
-        let mut text_json = if let Some(text_elements) = parsed_json["textElements"].as_array() {
-            text_elements.iter().map(|element| {
-                let mut map = HashMap::new();
-                map.insert("text".to_string(), element["text"].as_str().unwrap_or("").to_string());
-                map.insert("confidence".to_string(), element["confidence"].to_string());
-                map.insert("boundingBox".to_string(), serde_json::to_string(&element["boundingBox"]).unwrap_or("".to_string()));
-                map
-            }).collect()
-        } else {
-            Vec::new()
+    // Perform OCR on window images
+    let mut window_ocr_results = Vec::new();
+    for (window_image, window_app_name, window_name, focused) in window_images {
+        let window_image_arc = Arc::new(window_image);
+        let (window_text, window_json_output) = match &*ocr_engine {
+            OcrEngine::Unstructured => {
+                perform_ocr_cloud(&window_image_arc).await
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+            },
+            OcrEngine::Tesseract => perform_ocr_tesseract(&window_image_arc),
+            #[cfg(target_os = "windows")]
+            OcrEngine::WindowsNative => perform_ocr_windows(&window_image_arc).await,
+            #[cfg(target_os = "macos")]
+            OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&window_image_arc)),
+            _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unsupported OCR engine")),
         };
 
-        if let Some(overall_confidence) = parsed_json["overallConfidence"].as_f64() {
-            let mut confidence_map = HashMap::new();
-            confidence_map.insert("overallConfidence".to_string(), overall_confidence.to_string());
-            text_json.push(confidence_map);
-            debug!("Overall OCR confidence: {:.2}", overall_confidence);
-        }
-
-        text_json
-    };
-
-    // debug!("Current Text JSON: {:?}", current_text_json);
-
-    if save_text_files_flag {
-        save_text_files(frame_number, &current_text_json, &current_text_json, &None).await;
+        window_ocr_results.push(WindowOcrResult {
+            window_name,
+            app_name: window_app_name,
+            image: window_image_arc,
+            text: window_text,
+            text_json: parse_json_output(&window_json_output),
+            focused,
+        });
     }
 
-    if let Err(e) = result_tx
-        .send(CaptureResult {
-            image: image_arc.into(),
-            text: text.clone(),
-            text_json: current_text_json,
-            frame_number,
-            timestamp,
-            data_output,
-            app_name,
-        })
-        .await
-    {
+    if save_text_files_flag {
+        // Save text files for window OCR results if needed
+        for (index, window_result) in window_ocr_results.iter().enumerate() {
+            save_text_files(
+                frame_number * 1000 + index as u64, // Unique ID for each window
+                &window_result.text_json,
+                &window_result.text_json,
+                &None,
+            ).await;
+        }
+    }
+
+    let capture_result = CaptureResult {
+        image: image_arc,
+        frame_number,
+        timestamp,
+        window_ocr_results: window_ocr_results.clone(),
+    };
+
+    if let Err(e) = result_tx.send(capture_result).await {
         error!("Failed to send OCR result: {}", e);
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             "Failed to send OCR result",
         ));
     }
-    let _duration = start_time.elapsed();
+
+    let duration = start_time.elapsed();
     debug!(
-        "OCR task processed frame {} in {:?}",
-        frame_number, _duration
+        "OCR task processed frame {} with {} windows in {:?}",
+        frame_number,
+        window_ocr_results.len(),
+        duration
     );
     Ok(())
+}
+
+fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
+    let parsed_output: Vec<HashMap<String, String>> = serde_json::from_str(json_output).unwrap_or_else(|e| {
+        error!("Failed to parse JSON output: {}", e);
+        Vec::new()
+    });
+
+    parsed_output
+}
+
+#[cfg(target_os = "macos")]
+fn parse_apple_ocr_result(json_result: &str) -> (String, String) {
+    let parsed_result: serde_json::Value = serde_json::from_str(json_result).unwrap_or_else(|e| {
+        error!("Failed to parse JSON output: {}", e);
+        serde_json::json!({
+            "ocrResult": "",
+            "textElements": [],
+            "overallConfidence": 0.0
+        })
+    });
+
+    let text = parsed_result["ocrResult"].as_str().unwrap_or("").to_string();
+    let text_elements = parsed_result["textElements"].as_array().unwrap_or(&vec![]).clone();
+
+    let json_output: Vec<serde_json::Value> = text_elements.iter().map(|element| {
+        serde_json::json!({
+            "level": "0",
+            "page_num": "0",
+            "block_num": "0",
+            "par_num": "0",
+            "line_num": "0",
+            "word_num": "0",
+            "left": element["boundingBox"]["x"].as_f64().unwrap_or(0.0).to_string(),
+            "top": element["boundingBox"]["y"].as_f64().unwrap_or(0.0).to_string(),
+            "width": element["boundingBox"]["width"].as_f64().unwrap_or(0.0).to_string(),
+            "height": element["boundingBox"]["height"].as_f64().unwrap_or(0.0).to_string(),
+            "conf": element["confidence"].as_f64().unwrap_or(0.0).to_string(),
+            "text": element["text"].as_str().unwrap_or("").to_string()
+        })
+    }).collect();
+
+    let json_output_string = serde_json::to_string(&json_output).unwrap_or_else(|e| {
+        error!("Failed to serialize JSON output: {}", e);
+        "[]".to_string()
+    });
+
+    (text, json_output_string)
 }
