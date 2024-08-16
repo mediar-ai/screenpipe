@@ -7,3 +7,4 @@ pub mod utils;
 pub use apple::perform_ocr_apple;
 pub use core::{continuous_capture, process_ocr_task, CaptureResult};
 pub use utils::{perform_ocr_tesseract, OcrEngine};
+pub mod capture_screenshot_by_window;
