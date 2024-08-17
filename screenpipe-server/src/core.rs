@@ -342,12 +342,7 @@ async fn process_audio_result(
         return Ok(());
     }
     let transcription = result.transcription.unwrap();
-    let transcription_engine =
-        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
-            "Deepgram"
-        } else {
-            "Whisper"
-        };
+    let transcription_engine = audio_transcription_engine.to_string();
 
     info!("Inserting audio chunk: {:?}", result.input.path);
     match db.insert_audio_chunk(&result.input.path).await {
@@ -357,7 +352,12 @@ async fn process_audio_result(
             }
 
             if let Err(e) = db
-                .insert_audio_transcription(audio_chunk_id, &transcription, 0, transcription_engine)
+                .insert_audio_transcription(
+                    audio_chunk_id,
+                    &transcription,
+                    0,
+                    &transcription_engine,
+                )
                 .await
             {
                 error!(

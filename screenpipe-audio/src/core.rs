@@ -28,10 +28,19 @@ async fn get_macos_version() -> Option<f32> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
-    #[allow(dead_code)]
     Deepgram,
     WhisperTiny,
     WhisperDistilLargeV3,
+}
+
+impl fmt::Display for AudioTranscriptionEngine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AudioTranscriptionEngine::Deepgram => write!(f, "Deepgram"),
+            AudioTranscriptionEngine::WhisperTiny => write!(f, "WhisperTiny"),
+            AudioTranscriptionEngine::WhisperDistilLargeV3 => write!(f, "WhisperLarge"),
+        }
+    }
 }
 
 impl Default for AudioTranscriptionEngine {
