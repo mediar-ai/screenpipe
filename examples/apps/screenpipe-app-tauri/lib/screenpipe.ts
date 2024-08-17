@@ -30,19 +30,11 @@ export const screenpipeQuery = z.object({
     .string()
     // 1 hour ago
     .default(new Date(Date.now() - 3600000).toISOString())
-    .describe(`Start time for search range in ISO 8601 format 
-      - Current time: ${new Date().toLocaleString()}. Adjust start/end times to match user intent.
-      - Convert user times to UTC. User timezone: ${
-        Intl.DateTimeFormat().resolvedOptions().timeZone
-      }
-      `),
-  end_time: z.string().default(new Date().toISOString())
-    .describe(`End time for search range in ISO 8601 format 
-      - Current time: ${new Date().toLocaleString()}. Adjust start/end times to match user intent.
-      - Convert user times to UTC. User timezone: ${
-        Intl.DateTimeFormat().resolvedOptions().timeZone
-      }
-      `),
+    .describe(`Start time for search range in ISO 8601 format`),
+  end_time: z
+    .string()
+    .default(new Date().toISOString())
+    .describe(`End time for search range in ISO 8601 format`),
   app_name: z
     .string()
     .describe(
