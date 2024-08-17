@@ -42,7 +42,7 @@ jobs:
           - platform: "ubuntu-22.04" # Ubuntu x86_64
             args: "" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64
-            args: "--locked --target x86_64-pc-windows-msvc" # TODO CUDA?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc" # TODO CUDA?  --features "openblas"
             pre-build-args: "" # --openblas
             # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
 
@@ -177,7 +177,7 @@ jobs:
           prerelease: true
           args: ${{ matrix.args }}
           projectPath: "./examples/apps/screenpipe-app-tauri"
-          tauriScript: bunx tauri -v
+          tauriScript: bunx tauri -v --locked
 
       - name: Upload Assets to CrabNebula Cloud
         uses: crabnebula-dev/cloud-release@v0.2.0
