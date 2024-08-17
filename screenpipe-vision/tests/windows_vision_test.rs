@@ -82,10 +82,10 @@ mod tests {
                 // assert!(
                 //     capture_result.image.width() == 100 && capture_result.image.height() == 100
                 // );
-                println!(
-                    "capture_result: {:?}\n\n",
-                    capture_result.window_ocr_results.join("\n")
-                );
+                // println!(
+                //     "capture_result: {:?}\n\n",
+                //     capture_result.window_ocr_results.join("\n")
+                // );
                 if capture_count >= 3 {
                     break;
                 }
