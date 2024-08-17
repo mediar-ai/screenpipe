@@ -5,7 +5,7 @@ mod tests {
     use screenpipe_vision::{process_ocr_task, OcrEngine};
     use std::sync::Arc;
     use std::{path::PathBuf, time::Instant};
-    use tokio::sync::{mpsc, Mutex};
+    use tokio::sync::mpsc;
 
     use screenpipe_vision::{continuous_capture, CaptureResult};
     use std::time::Duration;
@@ -21,21 +21,28 @@ mod tests {
         println!("Path to testing_OCR.png: {:?}", path);
         let image = image::open(&path).expect("Failed to open image");
 
-        let image_arc = Arc::new(image);
+        let image_arc = Arc::new(image.clone());
         let frame_number = 1;
         let timestamp = Instant::now();
         let (tx, _rx) = mpsc::channel(1);
         let ocr_engine = Arc::new(OcrEngine::WindowsNative);
         let app_name = "test_app".to_string();
 
+        let window_images = vec![(
+            image.clone(),
+            "test_app".to_string(),
+            "test_window".to_string(),
+            true,
+        )];
+
         let result = process_ocr_task(
             image_arc,
+            window_images,
             frame_number,
             timestamp,
             tx,
             false,
             ocr_engine,
-            app_name,
         )
         .await;
 
@@ -75,7 +82,10 @@ mod tests {
                 // assert!(
                 //     capture_result.image.width() == 100 && capture_result.image.height() == 100
                 // );
-                println!("capture_result: {:?}\n\n", capture_result.text);
+                println!(
+                    "capture_result: {:?}\n\n",
+                    capture_result.window_ocr_results.join("\n")
+                );
                 if capture_count >= 3 {
                     break;
                 }
