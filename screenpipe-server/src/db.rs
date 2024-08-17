@@ -493,7 +493,7 @@ impl DatabaseManager {
         JOIN frames f ON cte.frame_id = f.id
         JOIN video_chunks vc ON f.video_chunk_id = vc.id
         LEFT JOIN ocr_text o ON f.id = o.frame_id
-        WHERE fts.text MATCH ?1
+        WHERE fts.text MATCH ?1 COLLATE NOCASE
         ORDER BY fts.rank
         LIMIT ?2
         "#;
@@ -548,18 +548,18 @@ impl DatabaseManager {
             JOIN 
                 video_chunks ON frames.video_chunk_id = video_chunks.id
             WHERE 
-                ocr_text.text LIKE '%' || ?1 || '%'
+                ocr_text.text LIKE '%' || ?1 || '%' COLLATE NOCASE
                 AND ocr_text.text != 'No text found'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
         "#.to_string();
     
         if app_name.is_some() {
-            sql.push_str(" AND ocr_text.app_name = ?6");
+            sql.push_str(" AND ocr_text.app_name = ?6 COLLATE NOCASE");
         }
     
         if window_name.is_some() {
-            sql.push_str(" AND ocr_text.window_name = ?7");
+            sql.push_str(" AND ocr_text.window_name = ?7 COLLATE NOCASE");
         }
     
         sql.push_str(
@@ -612,7 +612,7 @@ impl DatabaseManager {
             JOIN 
                 audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
             WHERE 
-                audio_transcriptions.transcription LIKE '%' || ?1 || '%'
+                audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
                 AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                 AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
             ORDER BY 
@@ -738,17 +738,17 @@ impl DatabaseManager {
             SELECT COUNT(*)
             FROM ocr_text
             JOIN frames ON ocr_text.frame_id = frames.id
-            WHERE text LIKE '%' || ?1 || '%'
+            WHERE text LIKE '%' || ?1 || '%' COLLATE NOCASE
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
         "#.to_string();
 
         if app_name.is_some() {
-            sql.push_str(" AND ocr_text.app_name = ?6");
+            sql.push_str(" AND ocr_text.app_name = ?6 COLLATE NOCASE");
         }
 
         if window_name.is_some() {
-            sql.push_str(" AND ocr_text.window_name = ?7");
+            sql.push_str(" AND ocr_text.window_name = ?7 COLLATE NOCASE");
         }
 
         let mut query = sqlx::query_as::<_, (i64,)>(&sql)
@@ -777,7 +777,7 @@ impl DatabaseManager {
             r#"
             SELECT COUNT(*)
             FROM audio_transcriptions
-            WHERE transcription LIKE '%' || ?1 || '%'
+            WHERE transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
                 AND (?2 IS NULL OR timestamp >= ?2)
                 AND (?3 IS NULL OR timestamp <= ?3)
             "#,
@@ -861,7 +861,7 @@ impl DatabaseManager {
             JOIN 
                 chunked_text_entries ON chunked_text_index.text_id = chunked_text_entries.text_id
             WHERE 
-                chunked_text_index.text LIKE '%' || ?1 || '%'
+                chunked_text_index.text LIKE '%' || ?1 || '%' COLLATE NOCASE
                 AND (?2 IS NULL OR chunked_text_entries.timestamp >= ?2)
                 AND (?3 IS NULL OR chunked_text_entries.timestamp <= ?3)
             ORDER BY 
