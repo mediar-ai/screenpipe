@@ -177,7 +177,7 @@ jobs:
           prerelease: true
           args: ${{ matrix.args }}
           projectPath: "./examples/apps/screenpipe-app-tauri"
-          tauriScript: bunx tauri -v --locked
+          tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
         uses: crabnebula-dev/cloud-release@v0.2.0
