@@ -151,16 +151,16 @@ struct Cli {
     save_text_files: bool,
 
     /// Audio transcription engine to use.
-    /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now).
-    /// WhisperTiny is a local, lightweight transcription model.
-    /// WhisperDistilLargeV3 is a local, lightweight transcription model (--a whisper-large)
+    /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
+    /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
+    /// WhisperDistilLargeV3 is a local, lightweight transcription model (--a whisper-large), recommended for higher quality audio than tiny.
     #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTiny)]
     audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// OCR engine to use.
     /// AppleNative is the default local OCR engine for macOS.
     /// WindowsNative is a local OCR engine for Windows.
-    /// Unstructured is a cloud OCR engine (free of charge on us for now)
+    /// Unstructured is a cloud OCR engine (free of charge on us for now), recommended for high quality OCR.
     /// Tesseract is a local OCR engine (not supported on macOS)
     #[cfg_attr(
         target_os = "macos",

@@ -28,7 +28,7 @@ import { Card, CardContent, CardFooter } from "./ui/card";
 const getDebuggingCommands = (os: string | null) => {
   const cliInstructions =
     os === "windows"
-      ? "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %USERPROFILE%\\.screenpipe\\\n#    Type: cd %USERPROFILE%\\.screenpipe\n"
+      ? "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n"
       : "# 1. Open Terminal\n# 2. Navigate to: $HOME/.screenpipe/\n#    Type: cd $HOME/.screenpipe\n";
 
   const baseInstructions = `# First, view the Screenpipe CLI arguments:
