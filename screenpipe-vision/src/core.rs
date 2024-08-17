@@ -1,5 +1,6 @@
 use image::DynamicImage;
 use log::{debug, error};
+use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde_json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
@@ -8,11 +9,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Sender;
-use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 
 #[cfg(target_os = "macos")]
 use crate::apple::perform_ocr_apple;
-use crate::monitor::{get_monitor_by_id};
+use crate::monitor::get_monitor_by_id;
 #[cfg(target_os = "windows")]
 use crate::utils::perform_ocr_windows;
 use crate::utils::OcrEngine;
@@ -68,98 +68,111 @@ pub async fn continuous_capture(
 
     loop {
         let arc_monitor = arc_monitor.clone();
-        let (image, window_images, image_hash, _capture_duration) = capture_screenshot(arc_monitor).await;
-        let current_average = match compare_with_previous_image(
-            &previous_image,
-            &image,
-            &mut max_average,
-            frame_counter,
-            &mut max_avg_value,
-        )
-        .await
-        {
-            Ok(avg) => avg,
+        let capture_result = match capture_screenshot(arc_monitor).await {
+            Ok((image, window_images, image_hash, _capture_duration)) => {
+                Some((image, window_images, image_hash))
+            }
             Err(e) => {
-                error!("Error comparing images: {}", e);
-                0.0 // or some default value
+                error!("Failed to capture screenshot: {}", e);
+                None
             }
         };
 
-        // Account for situation when there is no previous image
-        let current_average = if previous_image.is_none() {
-            1.0 // Default value to ensure the frame is processed
-        } else {
-            current_average
-        };
+        if let Some((image, window_images, image_hash)) = capture_result {
+            let current_average = match compare_with_previous_image(
+                &previous_image,
+                &image,
+                &mut max_average,
+                frame_counter,
+                &mut max_avg_value,
+            )
+            .await
+            {
+                Ok(avg) => avg,
+                Err(e) => {
+                    error!("Error comparing images: {}", e);
+                    0.0 // or some default value
+                }
+            };
 
-        // Skip the frame if the current average difference is less than 0.006
-        if current_average < 0.006 {
-            debug!(
-                "Skipping frame {} due to low average difference: {:.3}",
-                frame_counter, current_average
-            );
-            frame_counter += 1;
-            tokio::time::sleep(interval).await;
-            continue;
-        }
+            // Account for situation when there is no previous image
+            let current_average = if previous_image.is_none() {
+                1.0 // Default value to ensure the frame is processed
+            } else {
+                current_average
+            };
 
-        if current_average > max_avg_value {
-            max_average = Some(MaxAverageFrame {
-                image: Arc::new(image.clone()),
-                window_images: window_images.clone(),
-                image_hash,
-                frame_number: frame_counter,
-                timestamp: Instant::now(),
-                result_tx: result_tx.clone(),
-                average: current_average,
-            });
-            max_avg_value = current_average;
-        }
+            // Skip the frame if the current average difference is less than 0.006
+            if current_average < 0.006 {
+                debug!(
+                    "Skipping frame {} due to low average difference: {:.3}",
+                    frame_counter, current_average
+                );
+                frame_counter += 1;
+                tokio::time::sleep(interval).await;
+                continue;
+            }
 
-        previous_image = Some(Arc::new(image.clone()));
-
-        if !ocr_task_running.load(Ordering::SeqCst) {
-            if let Some(max_avg_frame) = max_average.take() {
-                let ocr_task_data = OcrTaskData {
-                    image: max_avg_frame.image.clone(),
-                    window_images: max_avg_frame.window_images.clone(),
-                    frame_number: max_avg_frame.frame_number,
-                    timestamp: max_avg_frame.timestamp,
-                    result_tx: max_avg_frame.result_tx.clone(),
-                };
-
-                let ocr_task_running_clone = ocr_task_running.clone();
-
-                ocr_task_running.store(true, Ordering::SeqCst);
-                let ocr_engine_clone = ocr_engine.clone();
-
-                tokio::spawn(async move {
-                    if let Err(e) = process_ocr_task(
-                        ocr_task_data.image,
-                        ocr_task_data.window_images,
-                        ocr_task_data.frame_number,
-                        ocr_task_data.timestamp,
-                        ocr_task_data.result_tx,
-                        save_text_files_flag,
-                        ocr_engine_clone,
-                    )
-                    .await
-                    {
-                        error!("Error processing OCR task: {}", e);
-                    }
-                    ocr_task_running_clone.store(false, Ordering::SeqCst);
+            if current_average > max_avg_value {
+                max_average = Some(MaxAverageFrame {
+                    image: Arc::new(image.clone()),
+                    window_images: window_images.clone(),
+                    image_hash,
+                    frame_number: frame_counter,
+                    timestamp: Instant::now(),
+                    result_tx: result_tx.clone(),
+                    average: current_average,
                 });
-
-                frame_counter = 0;
-                max_avg_value = 0.0;
+                max_avg_value = current_average;
             }
+
+            previous_image = Some(Arc::new(image.clone()));
+
+            if !ocr_task_running.load(Ordering::SeqCst) {
+                if let Some(max_avg_frame) = max_average.take() {
+                    let ocr_task_data = OcrTaskData {
+                        image: max_avg_frame.image.clone(),
+                        window_images: max_avg_frame.window_images.clone(),
+                        frame_number: max_avg_frame.frame_number,
+                        timestamp: max_avg_frame.timestamp,
+                        result_tx: max_avg_frame.result_tx.clone(),
+                    };
+
+                    let ocr_task_running_clone = ocr_task_running.clone();
+
+                    ocr_task_running.store(true, Ordering::SeqCst);
+                    let ocr_engine_clone = ocr_engine.clone();
+
+                    tokio::spawn(async move {
+                        if let Err(e) = process_ocr_task(
+                            ocr_task_data.image,
+                            ocr_task_data.window_images,
+                            ocr_task_data.frame_number,
+                            ocr_task_data.timestamp,
+                            ocr_task_data.result_tx,
+                            save_text_files_flag,
+                            ocr_engine_clone,
+                        )
+                        .await
+                        {
+                            error!("Error processing OCR task: {}", e);
+                        }
+                        ocr_task_running_clone.store(false, Ordering::SeqCst);
+                    });
+
+                    frame_counter = 0;
+                    max_avg_value = 0.0;
+                }
+            }
+        } else {
+            // Skip this iteration if capture failed
+            debug!("Skipping frame {} due to capture failure", frame_counter);
         }
 
         frame_counter += 1;
         tokio::time::sleep(interval).await;
     }
 }
-
 pub struct MaxAverageFrame {
     pub image: Arc<DynamicImage>,
     pub window_images: Vec<(DynamicImage, String, String, bool)>,
@@ -191,16 +204,20 @@ pub async fn process_ocr_task(
     for (window_image, window_app_name, window_name, focused) in window_images {
         let window_image_arc = Arc::new(window_image);
         let (window_text, window_json_output) = match &*ocr_engine {
-            OcrEngine::Unstructured => {
-                perform_ocr_cloud(&window_image_arc).await
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
-            },
+            OcrEngine::Unstructured => perform_ocr_cloud(&window_image_arc)
+                .await
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             OcrEngine::Tesseract => perform_ocr_tesseract(&window_image_arc),
             #[cfg(target_os = "windows")]
             OcrEngine::WindowsNative => perform_ocr_windows(&window_image_arc).await,
             #[cfg(target_os = "macos")]
             OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&window_image_arc)),
-            _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unsupported OCR engine")),
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unsupported OCR engine",
+                ))
+            }
         };
 
         window_ocr_results.push(WindowOcrResult {
@@ -221,7 +238,8 @@ pub async fn process_ocr_task(
                 &window_result.text_json,
                 &window_result.text_json,
                 &None,
-            ).await;
+            )
+            .await;
         }
     }
 
@@ -251,10 +269,11 @@ pub async fn process_ocr_task(
 }
 
 fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
-    let parsed_output: Vec<HashMap<String, String>> = serde_json::from_str(json_output).unwrap_or_else(|e| {
-        error!("Failed to parse JSON output: {}", e);
-        Vec::new()
-    });
+    let parsed_output: Vec<HashMap<String, String>> = serde_json::from_str(json_output)
+        .unwrap_or_else(|e| {
+            error!("Failed to parse JSON output: {}", e);
+            Vec::new()
+        });
 
     parsed_output
 }
@@ -270,25 +289,34 @@ fn parse_apple_ocr_result(json_result: &str) -> (String, String) {
         })
     });
 
-    let text = parsed_result["ocrResult"].as_str().unwrap_or("").to_string();
-    let text_elements = parsed_result["textElements"].as_array().unwrap_or(&vec![]).clone();
+    let text = parsed_result["ocrResult"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    let text_elements = parsed_result["textElements"]
+        .as_array()
+        .unwrap_or(&vec![])
+        .clone();
 
-    let json_output: Vec<serde_json::Value> = text_elements.iter().map(|element| {
-        serde_json::json!({
-            "level": "0",
-            "page_num": "0",
-            "block_num": "0",
-            "par_num": "0",
-            "line_num": "0",
-            "word_num": "0",
-            "left": element["boundingBox"]["x"].as_f64().unwrap_or(0.0).to_string(),
-            "top": element["boundingBox"]["y"].as_f64().unwrap_or(0.0).to_string(),
-            "width": element["boundingBox"]["width"].as_f64().unwrap_or(0.0).to_string(),
-            "height": element["boundingBox"]["height"].as_f64().unwrap_or(0.0).to_string(),
-            "conf": element["confidence"].as_f64().unwrap_or(0.0).to_string(),
-            "text": element["text"].as_str().unwrap_or("").to_string()
+    let json_output: Vec<serde_json::Value> = text_elements
+        .iter()
+        .map(|element| {
+            serde_json::json!({
+                "level": "0",
+                "page_num": "0",
+                "block_num": "0",
+                "par_num": "0",
+                "line_num": "0",
+                "word_num": "0",
+                "left": element["boundingBox"]["x"].as_f64().unwrap_or(0.0).to_string(),
+                "top": element["boundingBox"]["y"].as_f64().unwrap_or(0.0).to_string(),
+                "width": element["boundingBox"]["width"].as_f64().unwrap_or(0.0).to_string(),
+                "height": element["boundingBox"]["height"].as_f64().unwrap_or(0.0).to_string(),
+                "conf": element["confidence"].as_f64().unwrap_or(0.0).to_string(),
+                "text": element["text"].as_str().unwrap_or("").to_string()
+            })
         })
-    }).collect();
+        .collect();
 
     let json_output_string = serde_json::to_string(&json_output).unwrap_or_else(|e| {
         error!("Failed to serialize JSON output: {}", e);
