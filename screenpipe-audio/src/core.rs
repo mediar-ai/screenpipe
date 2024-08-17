@@ -23,7 +23,7 @@ async fn get_macos_version() -> Option<f32> {
         .await
         .ok()?;
     let version = String::from_utf8(output.stdout).ok()?;
-    version.trim().parse().ok()
+    version.split('.').next()?.parse().ok()
 }
 
 #[derive(Clone, Debug, PartialEq)]
