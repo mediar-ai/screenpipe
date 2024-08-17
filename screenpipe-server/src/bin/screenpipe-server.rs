@@ -31,8 +31,12 @@ use clap::ValueEnum;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 enum CliAudioTranscriptionEngine {
+    #[clap(name = "deepgram")]
     Deepgram,
+    #[clap(name = "whisper-tiny")]
     WhisperTiny,
+    #[clap(name = "whisper-large")]
+    WhisperDistilLargeV3,
 }
 
 impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
@@ -40,6 +44,7 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
         match cli_engine {
             CliAudioTranscriptionEngine::Deepgram => CoreAudioTranscriptionEngine::Deepgram,
             CliAudioTranscriptionEngine::WhisperTiny => CoreAudioTranscriptionEngine::WhisperTiny,
+            CliAudioTranscriptionEngine::WhisperDistilLargeV3 => CoreAudioTranscriptionEngine::WhisperDistilLargeV3,
         }
     }
 }
@@ -109,11 +114,11 @@ struct Cli {
     fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/louis030195/screen-pipe/issues/173
     
     /// Audio chunk duration in seconds
-    #[arg(short, long, default_value_t = 30)]
+    #[arg(short = 'd', long, default_value_t = 30)]
     audio_chunk_duration: u64,
 
     /// Port to run the server on
-    #[arg(short, long, default_value_t = 3030)]
+    #[arg(short = 'p', long, default_value_t = 3030)]
     port: u16,
 
     /// Disable audio recording
@@ -126,7 +131,7 @@ struct Cli {
     self_healing: bool,
 
     /// Audio devices to use (can be specified multiple times)
-    #[arg(long)]
+    #[arg(short = 'i', long)]
     audio_device: Vec<String>,
 
     /// List available audio devices
@@ -148,7 +153,8 @@ struct Cli {
     /// Audio transcription engine to use.
     /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now).
     /// WhisperTiny is a local, lightweight transcription model.
-    #[arg(long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTiny)]
+    /// WhisperDistilLargeV3 is a local, lightweight transcription model (--a whisper-large)
+    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTiny)]
     audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// OCR engine to use.
@@ -158,11 +164,11 @@ struct Cli {
     /// Tesseract is a local OCR engine (not supported on macOS)
     #[cfg_attr(
         target_os = "macos",
-        arg(long, value_enum, default_value_t = CliOcrEngine::AppleNative)
+        arg(short = 'o', long, value_enum, default_value_t = CliOcrEngine::AppleNative)
     )]
     #[cfg_attr(
         not(target_os = "macos"),
-        arg(long, value_enum, default_value_t = CliOcrEngine::Tesseract)
+        arg(short = 'o', long, value_enum, default_value_t = CliOcrEngine::Tesseract)
     )]
     ocr_engine: CliOcrEngine,
 
@@ -175,7 +181,7 @@ struct Cli {
     list_monitors: bool,
 
     /// Monitor ID to use, this will be used to select the monitor to record
-    #[arg(long)]
+    #[arg(short = 'm', long)]
     monitor_id: Option<u32>,
 }
 

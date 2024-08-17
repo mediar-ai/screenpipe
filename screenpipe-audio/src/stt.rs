@@ -32,7 +32,7 @@ pub struct WhisperModel {
 }
 
 impl WhisperModel {
-    pub fn new() -> Result<Self> {
+    pub fn new(engine: Arc<AudioTranscriptionEngine>) -> Result<Self> {
         debug!("Initializing WhisperModel");
         let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
         info!("device = {:?}", device);
@@ -40,14 +40,28 @@ impl WhisperModel {
         debug!("Fetching model files");
         let (config_filename, tokenizer_filename, weights_filename) = {
             let api = Api::new()?;
-            let repo = api.repo(Repo::with_revision(
-                "openai/whisper-tiny".to_string(),
-                RepoType::Model,
-                "main".to_string(),
-            ));
-            let config = repo.get("config.json")?;
-            let tokenizer = repo.get("tokenizer.json")?;
-            let model = repo.get("model.safetensors")?;
+            let repo = match engine.as_ref() {
+                AudioTranscriptionEngine::WhisperTiny => Repo::with_revision(
+                    "openai/whisper-tiny".to_string(),
+                    RepoType::Model,
+                    "main".to_string(),
+                ),
+                AudioTranscriptionEngine::WhisperDistilLargeV3 => Repo::with_revision(
+                    "distil-whisper/distil-large-v3".to_string(),
+                    RepoType::Model,
+                    "main".to_string(),
+                ),
+                _ => Repo::with_revision(
+                    "openai/whisper-tiny".to_string(),
+                    RepoType::Model,
+                    "main".to_string(),
+                ),
+                // ... other engine options ...
+            };
+            let api_repo = api.repo(repo);
+            let config = api_repo.get("config.json")?;
+            let tokenizer = api_repo.get("tokenizer.json")?;
+            let model = api_repo.get("model.safetensors")?;
             (config, tokenizer, model)
         };
 
@@ -709,7 +723,7 @@ pub async fn create_whisper_channel(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
 )> {
-    let whisper_model = WhisperModel::new()?;
+    let whisper_model = WhisperModel::new(audio_transcription_engine.clone())?;
     let (input_sender, mut input_receiver): (
         UnboundedSender<AudioInput>,
         UnboundedReceiver<AudioInput>,

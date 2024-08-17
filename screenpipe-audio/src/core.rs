@@ -31,6 +31,7 @@ pub enum AudioTranscriptionEngine {
     #[allow(dead_code)]
     Deepgram,
     WhisperTiny,
+    WhisperDistilLargeV3,
 }
 
 impl Default for AudioTranscriptionEngine {
