@@ -5,6 +5,12 @@
 
 Any other issue? [Will solve your problem in less than 15 min](https://cal.com/louis030195/screenpipe) or [mail me](mailto:louis@screenpi.pe)
 
+  <details>
+  <summary>Frames not recorded</summary>
+
+  Try a different monitor. `screenpipe --list-monitors` and `screenpipe --monitor-id <monitor id>`
+    
+  </details>
 
   <details>
 
