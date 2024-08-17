@@ -47,7 +47,8 @@ mod tests {
         println!("Starting speech to text test");
         println!("Loading audio file");
         let start = std::time::Instant::now();
-        let whisper_model = WhisperModel::new().unwrap();
+        let whisper_model =
+            WhisperModel::new(Arc::new(AudioTranscriptionEngine::WhisperTiny)).unwrap();
 
         let text = stt(
             "./test_data/selah.mp4",

@@ -87,6 +87,16 @@ cargo test
 DYLD_LIBRARY_PATH=$(pwd)/screenpipe-vision/lib cargo test
 ```
 
+You can add env var to `.vscode/settings.json`:
+
+```json
+{
+    "terminal.integrated.env.osx": {
+        "DYLD_LIBRARY_PATH": "$(pwd)/screenpipe-vision/lib"
+    }
+}
+```
+
 
 ## Other hacks
 
