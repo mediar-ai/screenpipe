@@ -1,8 +1,9 @@
+use crate::capture_screenshot_by_window::capture_all_visible_windows;
 use crate::core::MaxAverageFrame;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
 use log::{debug, error};
-use rusty_tesseract::{Args, Image, DataOutput};
+use rusty_tesseract::{Args, DataOutput, Image};
 use serde_json;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -12,7 +13,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
-use crate::capture_screenshot_by_window::capture_all_visible_windows;
 
 #[derive(Clone, Debug)]
 pub enum OcrEngine {
@@ -139,7 +139,17 @@ fn data_output_to_json(data_output: &DataOutput) -> String {
     serde_json::to_string_pretty(&lines).unwrap()
 }
 
-pub async fn capture_screenshot(monitor: Arc<Monitor>) -> (DynamicImage, Vec<(DynamicImage, String, String, bool)>, u64, Duration) {
+pub async fn capture_screenshot(
+    monitor: Arc<Monitor>,
+) -> Result<
+    (
+        DynamicImage,
+        Vec<(DynamicImage, String, String, bool)>,
+        u64,
+        Duration,
+    ),
+    anyhow::Error,
+> {
     let capture_start = Instant::now();
     let buffer = monitor.capture_image().unwrap();
     let image = DynamicImage::ImageRgba8(buffer);
@@ -147,9 +157,11 @@ pub async fn capture_screenshot(monitor: Arc<Monitor>) -> (DynamicImage, Vec<(Dy
     let capture_duration = capture_start.elapsed();
 
     // Capture all visible windows
-    let window_images = capture_all_visible_windows(monitor.clone()).await.unwrap_or_default();
+    let window_images = capture_all_visible_windows(monitor.clone())
+        .await
+        .unwrap_or_default();
 
-    (image, window_images, image_hash, capture_duration)
+    Ok((image, window_images, image_hash, capture_duration))
 }
 
 pub async fn compare_with_previous_image(

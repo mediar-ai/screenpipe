@@ -387,7 +387,10 @@ const HealthStatus = ({ className }: { className?: string }) => {
               ? "animate-pulse"
               : ""
           }`}
-        />
+        />{" "}
+        {health.status === "Loading" && (
+          <span className="ml-1 text-xs">(up to 3m)</span>
+        )}
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent
