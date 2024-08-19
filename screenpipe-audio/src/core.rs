@@ -300,7 +300,10 @@ pub async fn record_and_transcribe(
                 },
                 None,
             ),
-            _ => Err(cpal::BuildStreamError::StreamConfigNotSupported),
+            f => {
+                error!("Unsupported sample format: {:?}", f);
+                return;
+            }
         };
 
         match stream {
