@@ -22,7 +22,7 @@ impl AnalyticsManager {
             posthog_api_key,
             distinct_id,
             interval: Duration::from_secs(interval_hours * 3600),
-            enabled: Arc::new(Mutex::new(true)),
+            enabled: Arc::new(Mutex::new(!cfg!(debug_assertions))),
             api_host: "https://eu.i.posthog.com".to_string(),
         }
     }
@@ -88,6 +88,15 @@ pub fn start_analytics(
     posthog_api_key: String,
     interval_hours: u64,
 ) -> Result<Arc<AnalyticsManager>, Box<dyn std::error::Error>> {
+    if cfg!(debug_assertions) {
+        info!("Skipping analytics in development mode");
+        return Ok(Arc::new(AnalyticsManager::new(
+            posthog_api_key,
+            unique_id,
+            interval_hours,
+        )));
+    }
+
     let analytics_manager = Arc::new(AnalyticsManager::new(
         posthog_api_key,
         unique_id,

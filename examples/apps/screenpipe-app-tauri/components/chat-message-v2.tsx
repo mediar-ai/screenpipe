@@ -51,6 +51,11 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
               return <p className="mb-2 last:mb-0">{children}</p>;
             },
             a({ node, href, children, ...props }) {
+              const isMP4Link = href?.toLowerCase().includes(".mp4");
+
+              if (isMP4Link && href) {
+                return <VideoComponent filePath={href} />;
+              }
               return (
                 <a
                   href={href}
@@ -66,8 +71,10 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
               const content = String(children).replace(/\n$/, "");
               const match = /language-(\w+)/.exec(className || "");
 
-              if (!match) {
-                if (hasMP4File(content)) {
+              const isMP4File = hasMP4File(content);
+
+              if (isMP4File || !match) {
+                if (isMP4File) {
                   return <VideoComponent filePath={content.trim()} />;
                 }
                 return (
@@ -105,15 +112,26 @@ const VideoComponent = memo(function VideoComponent({
   filePath: string;
 }) {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const sanitizeFilePath = useCallback((path: string): string => {
+    // just extract the .mp4 file
+    return (
+      path.match(/[^"'()\[\]]+\.mp4/i)?.[0]?.trim() ||
+      "i failed to show the video 😭"
+    );
+  }, []);
 
   useEffect(() => {
     async function loadVideo() {
       try {
-        const videoData = await readFile(filePath);
+        const sanitizedPath = sanitizeFilePath(filePath);
+        const videoData = await readFile(sanitizedPath);
         const blob = new Blob([videoData], { type: "video/mp4" });
         setVideoSrc(URL.createObjectURL(blob));
       } catch (error) {
         console.error("Failed to load video:", error);
+        setError(`Failed to load video: ${sanitizeFilePath(filePath)}`);
       }
     }
 
@@ -121,7 +139,15 @@ const VideoComponent = memo(function VideoComponent({
     return () => {
       if (videoSrc) URL.revokeObjectURL(videoSrc);
     };
-  }, [filePath]);
+  }, [filePath, sanitizeFilePath]);
+
+  if (error) {
+    return (
+      <div className="w-full p-4 bg-red-100 border border-red-300 rounded-md">
+        <p className="text-red-700">{error}</p>
+      </div>
+    );
+  }
 
   if (!videoSrc) {
     return (

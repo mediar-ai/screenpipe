@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::env;
 use std::fs::File;
 use std::io::Write;
+use tauri_plugin_shell::process::CommandEvent;
 
 use std::fs;
 use std::path::PathBuf;
@@ -27,7 +28,6 @@ use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
 use uuid::Uuid;
-
 mod analytics;
 
 use crate::analytics::start_analytics;
@@ -74,20 +74,75 @@ async fn spawn_screenpipe(
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let sidecar = app.shell().sidecar("screenpipe").unwrap();
     // Get the current settings
-    // let stores = app.state::<StoreCollection<Wry>>();
+    let stores = app.state::<StoreCollection<Wry>>();
     let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
 
-    // let path = base_dir.join("store.bin");
+    let path = base_dir.join("store.bin");
+
+    let audio_transcription_engine =
+        with_store(app.clone(), stores.clone(), path.clone(), |store| {
+            Ok(store
+                .get("audioTranscriptionEngine")
+                .and_then(|v| v.as_str().map(String::from)))
+        })
+        .map_err(|e| e.to_string())?
+        .unwrap_or(String::from("default"));
+
+    let ocr_engine = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("ocrEngine")
+            .and_then(|v| v.as_str().map(String::from)))
+    })
+    .map_err(|e| e.to_string())?
+    .unwrap_or(String::from("default"));
+
+    let monitor_id = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("monitorId")
+            .and_then(|v| v.as_str().map(String::from)))
+    })
+    .map_err(|e| e.to_string())?
+    .unwrap_or(String::from("default"));
+
+    let audio_devices = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("audioDevices")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.to_vec()))
+    })
+    .map_err(|e| e.to_string())?
+    .unwrap_or_default();
 
     let _data_dir_str = base_dir.to_string_lossy();
-    let mut args = vec![
-        "--port", "3030",
-        "--debug",
-    ];
+    let mut args = vec!["--port", "3030"];
     // if macos do --fps 0.2
     if cfg!(target_os = "macos") {
         args.push("--fps");
         args.push("0.2");
+    }
+
+    if audio_transcription_engine != "default" {
+        args.push("--audio-transcription-engine");
+        let model = audio_transcription_engine.as_str();
+        args.push(model);
+    }
+
+    if ocr_engine != "default" {
+        args.push("--ocr-engine");
+        let model = ocr_engine.as_str();
+        args.push(model);
+    }
+    if monitor_id != "default" {
+        args.push("--monitor-id");
+        let id = monitor_id.as_str();
+        args.push(id);
+    }
+
+    if !audio_devices.is_empty() && audio_devices[0] != Value::String("default".to_string()) {
+        for device in &audio_devices {
+            args.push("--audio-device");
+            args.push(device.as_str().unwrap());
+        }
     }
 
     // hardcode TESSDATA_PREFIX for windows
@@ -100,16 +155,38 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         let tessdata_path = exe_dir.join("tessdata");
         let c = sidecar.env("TESSDATA_PREFIX", tessdata_path).args(&args);
 
-        let (_, child) = c.spawn().map_err(|e| e.to_string())?;
+        let (_, child) = c.spawn().map_err(|e| {
+            error!("Failed to spawn sidecar: {}", e);
+            e.to_string()
+        })?;
 
-        debug!("Spawned sidecar with args: {:?}", args);
+        info!("Spawned sidecar with args: {:?}", args);
 
         return Ok(child);
     }
 
-    let (_, child) = sidecar.args(&args).spawn().map_err(|e| e.to_string())?;
+    let result = sidecar.args(&args).spawn();
 
-    debug!("Spawned sidecar with args: {:?}", args);
+    if let Err(e) = result {
+        error!("Failed to spawn sidecar: {}", e);
+        return Err(e.to_string());
+    }
+
+    let (mut rx, child) = result.unwrap();
+
+    tauri::async_runtime::spawn(async move {
+        let mut i = 0;
+        while let Some(event) = rx.recv().await {
+            if let CommandEvent::Stdout(line) = event {
+                print!("{}", String::from_utf8(line).unwrap());
+                i += 1;
+            } else if let CommandEvent::Stderr(line) = event {
+                error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
+            }
+        }
+    });
+
+    info!("Spawned sidecar with args: {:?}", args);
 
     Ok(child)
 }
@@ -166,7 +243,9 @@ async fn main() {
 
                 // Set the TESSDATA_PREFIX environment variable
                 let tessdata_path = exe_dir.join("tessdata");
-                env::set_var("TESSDATA_PREFIX", tessdata_path);
+                unsafe {
+                    env::set_var("TESSDATA_PREFIX", tessdata_path);
+                }
             }
 
             // Get the autostart manager

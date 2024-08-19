@@ -63,8 +63,8 @@ pub enum DeviceType {
 
 #[derive(Clone, Eq, PartialEq, Hash, Serialize)]
 pub struct AudioDevice {
-    name: String,
-    device_type: DeviceType,
+    pub name: String,
+    pub device_type: DeviceType,
 }
 
 impl AudioDevice {

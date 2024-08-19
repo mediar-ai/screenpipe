@@ -24,6 +24,7 @@ import {
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
 const getDebuggingCommands = (os: string | null) => {
   const cliInstructions =
@@ -98,6 +99,7 @@ const DevModeSettings = () => {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
   const handleDevModeToggle = (checked: boolean) => {
+    console.log("checked", checked);
     setLocalSettings({ ...localSettings, devMode: checked });
     updateSettings({ ...localSettings, devMode: checked });
   };
@@ -313,43 +315,8 @@ interface HealthCheckResponse {
 }
 
 const HealthStatus = ({ className }: { className?: string }) => {
-  const [health, setHealth] = useState<HealthCheckResponse | null>(null);
+  const { health } = useHealthCheck();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const fetchHealth = async () => {
-    try {
-      const response = await fetch("http://localhost:3030/health");
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} ${text}`);
-      }
-      const data: HealthCheckResponse = await response.json();
-      // only change blink and health if it changed
-      if (health !== null && health.status === data.status) {
-        return;
-      }
-      setHealth(data);
-      // setError(null);
-    } catch (error) {
-      console.error("Failed to fetch health status:", error);
-      // setError("Failed to fetch health status. Server might be down.");
-      setHealth({
-        last_frame_timestamp: null,
-        last_audio_timestamp: null,
-        frame_status: "error",
-        audio_status: "error",
-        status: "error",
-        message: "failed to fetch health status. server might be down.",
-      });
-    }
-  };
-
-  useEffect(() => {
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 1000); // Poll every 1 seconds
-
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -387,10 +354,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
               ? "animate-pulse"
               : ""
           }`}
-        />{" "}
-        {health.status === "Loading" && (
-          <span className="ml-1 text-xs">(up to 3m)</span>
-        )}
+        />
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent
@@ -401,7 +365,12 @@ const HealthStatus = ({ className }: { className?: string }) => {
             <DialogTitle>{health.status.toLowerCase()} status</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-auto">
-            <p className="text-sm mb-2">{health.message.toLowerCase()}</p>
+            <p className="text-sm mb-2">
+              {health.message.toLowerCase()}{" "}
+              {health.status === "Loading" && (
+                <span className="ml-1 text-xs">(up to 3m)</span>
+              )}
+            </p>
             <p className="text-xs mb-1">
               frame: {health.frame_status.toLowerCase()}
             </p>
@@ -414,7 +383,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
             <p className="text-xs mb-1">
               last audio: {formatTimestamp(health.last_audio_timestamp)}
             </p>
-
             <div className="text-xs mt-2">
               <p className="font-bold mb-1">troubleshooting Instructions:</p>
               <MarkdownWithExternalLinks className="prose prose-sm">
