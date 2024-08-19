@@ -3,7 +3,7 @@ use std::{
     fs::{self, File},
     net::SocketAddr,
     ops::Deref,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
@@ -20,7 +20,7 @@ use screenpipe_audio::{
 use screenpipe_vision::{monitor::{get_monitor_by_id, list_monitors}, OcrEngine};
 use std::io::Write;
 
-use screenpipe_core::find_ffmpeg_path;
+use screenpipe_core::{find_ffmpeg_path, Pipe};
 use screenpipe_server::logs::MultiWriter;
 use screenpipe_server::{start_continuous_recording, DatabaseManager, ResourceMonitor, Server};
 use tokio::sync::mpsc::channel;
@@ -183,6 +183,10 @@ struct Cli {
     /// Monitor ID to use, this will be used to select the monitor to record
     #[arg(short = 'm', long)]
     monitor_id: Option<u32>,
+
+    /// File path for the pipe
+    #[arg(long)]
+    pipe: Vec<String>,
 }
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
@@ -456,6 +460,10 @@ async fn main() -> anyhow::Result<()> {
         );
         server.start(devices_status, api_plugin).await.unwrap();
     });
+
+    let isolate = Pipe::new();
+    let path_to_main_module = Path::new(cli.pipe[0].as_str()).canonicalize().unwrap();
+    isolate.run(&path_to_main_module).await.unwrap();
 
     // Wait for the server to start
     info!("Server started on http://localhost:{}", cli.port);

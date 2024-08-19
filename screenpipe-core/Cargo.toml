@@ -20,5 +20,11 @@ tokenizers = { workspace = true }
 hf-hub = { workspace = true, features = ["tokio"] }
 
 
+# pipes
+reqwest = { workspace = true }
+tokio = { workspace = true }
+deno_core = { version = "0.299" }
+deno_runtime = { version = "0.173" }
+
 
 

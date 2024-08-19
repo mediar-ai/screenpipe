@@ -387,10 +387,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
               ? "animate-pulse"
               : ""
           }`}
-        />{" "}
-        {health.status === "Loading" && (
-          <span className="ml-1 text-xs">(up to 3m)</span>
-        )}
+        />
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent
@@ -402,6 +399,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
           </DialogHeader>
           <div className="flex-grow overflow-auto">
             <p className="text-sm mb-2">{health.message.toLowerCase()}</p>
+            {health.status === "Loading" && (
+              <span className="ml-1 text-xs"> (up to 3m)</span>
+            )}
             <p className="text-xs mb-1">
               frame: {health.frame_status.toLowerCase()}
             </p>

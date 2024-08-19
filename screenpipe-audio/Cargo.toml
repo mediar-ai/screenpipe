@@ -64,7 +64,7 @@ tokio = { workspace = true }
 webrtc-vad = "0.4.0"
 
 # Deepgram
-reqwest = { version = "0.12.5", features = ["json", "blocking"] }
+reqwest = { workspace = true }
 
 screenpipe-core = { path = "../screenpipe-core" }
 
