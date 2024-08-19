@@ -70,10 +70,8 @@ export function RecordingSettings({
           }
         );
         if (!monitorsResponse.ok) {
-          console.log("monitorsResponse", monitorsResponse);
           throw new Error("Failed to fetch monitors");
         }
-        console.log("monitorsResponse", monitorsResponse);
         const monitors: MonitorDevice[] = await monitorsResponse.json();
         console.log("monitors", monitors);
         setAvailableMonitors(monitors);
@@ -83,20 +81,39 @@ export function RecordingSettings({
           "http://localhost:3030/audio/list"
         );
         if (!audioDevicesResponse.ok) {
-          console.log("audioDevicesResponse", audioDevicesResponse);
           throw new Error("Failed to fetch audio devices");
         }
-        console.log("audioDevicesResponse", audioDevicesResponse);
         const audioDevices: AudioDevice[] = await audioDevicesResponse.json();
         console.log("audioDevices", audioDevices);
         setAvailableAudioDevices(audioDevices);
+
+        console.log("localSettings", localSettings);
+        // Update local settings if current values are default
+        if (localSettings.monitorId === "default" && monitors.length > 0) {
+          setLocalSettings({
+            ...localSettings,
+            monitorId: monitors.find((monitor) => monitor.is_default)?.id!,
+          });
+        }
+        if (
+          localSettings.audioDevices.length === 1 &&
+          localSettings.audioDevices[0] === "default" &&
+          audioDevices.length > 0
+        ) {
+          setLocalSettings({
+            ...localSettings,
+            audioDevices: audioDevices
+              .filter((device) => device.is_default)
+              .map((device) => device.name),
+          });
+        }
       } catch (error) {
         console.error("Failed to load devices:", error);
       }
     };
 
     loadDevices();
-  }, []);
+  }, [localSettings, setLocalSettings]);
 
   const handleUpdate = async () => {
     setIsUpdating(true);
@@ -157,7 +174,8 @@ export function RecordingSettings({
         {!isUpdating && isDisabled && (
           <Card className="p-16 shadow-lg w-fit absolute bottom-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 text-center font-bold text-xl mb-4 ">
             <CardTitle>
-              make sure to start screenpipe recorder once first (go to status)
+              make sure to turn off dev mode and start screenpipe recorder first
+              (go to status)
             </CardTitle>
           </Card>
         )}

@@ -425,12 +425,37 @@ async fn main() {
         .expect("error while building tauri application");
 
     // Run the app
-    app.run(|_app_handle, event| match event {
+    app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
+            // kill all screenpipe processes if the user is not using dev mode using pkill
+            // get dev mode from the store
+            let stores = app_handle.state::<StoreCollection<Wry>>();
+            let path = app_handle
+                .path()
+                .local_data_dir()
+                .unwrap()
+                .join("store.bin");
+            let use_dev_mode = with_store(app_handle.clone(), stores, path, |store| {
+                Ok(store
+                    .get("devMode")
+                    .unwrap_or(&Value::Bool(false))
+                    .as_bool()
+                    .unwrap_or(false))
+            })
+            .unwrap_or(false);
+            if !use_dev_mode {
+                tauri::async_runtime::spawn(async move {
+                    let _ = tokio::process::Command::new("pkill")
+                        .arg("-f")
+                        .arg("screenpipe")
+                        .output()
+                        .await;
+                });
+            }
         }
         _ => {}
     });

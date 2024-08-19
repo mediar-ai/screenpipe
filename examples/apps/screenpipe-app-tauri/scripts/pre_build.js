@@ -35,6 +35,7 @@ const config = {
 	},
 	linux: {
 		aptPackages: [
+			'tesseract',
 			'ffmpeg',
 			'libopenblas-dev', // Runtime
 			'pkg-config',
