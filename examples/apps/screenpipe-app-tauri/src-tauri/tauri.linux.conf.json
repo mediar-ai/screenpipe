@@ -6,7 +6,8 @@
         "linux": {
             "deb": {
                 "depends": [
-                    "tesseract",
+                    "tesseract-ocr",
+                    "libtesseract-dev",
                     "ffmpeg",
                     "libopenblas-dev"
                 ]

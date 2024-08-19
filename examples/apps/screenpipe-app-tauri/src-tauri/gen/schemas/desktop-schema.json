@@ -3300,13 +3300,6 @@
           ]
         },
         {
-          "description": "core:webview:allow-get-all-webviews -> Enables the get_all_webviews command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "core:webview:allow-get-all-webviews"
-          ]
-        },
-        {
           "description": "core:webview:allow-internal-toggle-devtools -> Enables the internal_toggle_devtools command without any pre-configured scope.",
           "type": "string",
           "enum": [
@@ -3388,13 +3381,6 @@
           "type": "string",
           "enum": [
             "core:webview:deny-create-webview-window"
-          ]
-        },
-        {
-          "description": "core:webview:deny-get-all-webviews -> Denies the get_all_webviews command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "core:webview:deny-get-all-webviews"
           ]
         },
         {
@@ -3521,13 +3507,6 @@
           "type": "string",
           "enum": [
             "core:window:allow-destroy"
-          ]
-        },
-        {
-          "description": "core:window:allow-get-all-windows -> Enables the get_all_windows command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "core:window:allow-get-all-windows"
           ]
         },
         {
@@ -3983,13 +3962,6 @@
           "type": "string",
           "enum": [
             "core:window:deny-destroy"
-          ]
-        },
-        {
-          "description": "core:window:deny-get-all-windows -> Denies the get_all_windows command without any pre-configured scope.",
-          "type": "string",
-          "enum": [
-            "core:window:deny-get-all-windows"
           ]
         },
         {
@@ -7287,13 +7259,8 @@
             "validator"
           ],
           "properties": {
-            "raw": {
-              "description": "Marks the validator as a raw regex, meaning the plugin should not make any modification at runtime.\n\nThis means the regex will not match on the entire string by default, which might be exploited if your regex allow unexpected input to be considered valid. When using this option, make sure your regex is correct.",
-              "default": false,
-              "type": "boolean"
-            },
             "validator": {
-              "description": "[regex] validator to require passed values to conform to an expected input.\n\nThis will require the argument value passed to this variable to match the `validator` regex before it will be executed.\n\nThe regex string is by default surrounded by `^...$` to match the full string. For example the `https?://\\w+` regex would be registered as `^https?://\\w+$`.\n\n[regex]: <https://docs.rs/regex/latest/regex/#syntax>",
+              "description": "[regex] validator to require passed values to conform to an expected input.\n\nThis will require the argument value passed to this variable to match the `validator` regex before it will be executed.\n\n[regex]: https://docs.rs/regex/latest/regex/#syntax",
               "type": "string"
             }
           },
