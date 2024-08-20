@@ -23,13 +23,17 @@ import { Badge } from "@/components/ui/badge";
 import { MemoizedReactMarkdown } from "./markdown";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { platform } from "@tauri-apps/plugin-os";
 import { Textarea } from "./ui/textarea";
 
+import { platform } from "@tauri-apps/plugin-os";
+import { Eye, EyeOff, RefreshCw } from "lucide-react";
+import { RecordingSettings } from "./recording-settings";
+
 export function Settings({ className }: { className?: string }) {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, resetSetting } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [currentPlatform, setCurrentPlatform] = React.useState<string>("");
+  const [showApiKey, setShowApiKey] = React.useState(false);
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalSettings({ ...localSettings, openaiApiKey: e.target.value });
@@ -57,6 +61,10 @@ export function Settings({ className }: { className?: string }) {
   ) => {
     setLocalSettings({ ...localSettings, customPrompt: e.target.value });
     updateSettings({ ...localSettings, customPrompt: e.target.value });
+  };
+
+  const handleResetCustomPrompt = () => {
+    resetSetting("customPrompt");
   };
 
   React.useEffect(() => {
@@ -94,12 +102,20 @@ export function Settings({ className }: { className?: string }) {
           )}
         </DialogHeader>
         <div className="mt-8 space-y-6">
+          <RecordingSettings
+            localSettings={localSettings}
+            setLocalSettings={setLocalSettings}
+            currentPlatform={currentPlatform}
+          />
+
+          <Separator />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-center">general ai settings</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center">
-              <div className="w-full max-w-md">
+              <div className="w-full ">
                 <div className="flex flex-col gap-2 mb-4">
                   <Label htmlFor="aiModel" className="text-sm font-medium">
                     {localSettings.useOllama
@@ -115,31 +131,51 @@ export function Settings({ className }: { className?: string }) {
                     className="w-full"
                     placeholder={
                       localSettings.useOllama
-                        ? "e.g., llama3.1"
+                        ? "e.g., mistral-nemo"
                         : "e.g., gpt-4o"
                     }
                   />
                 </div>
                 <p className="text-sm text-muted-foreground text-center">
                   {localSettings.useOllama
-                    ? "recommended: llama3.1 for ollama (we only support models supporting tools like llama3.1, mistral-nemo, etc.)"
+                    ? "recommended: mistral-nemo for ollama (we only support models supporting tools like llama3.1, mistral-nemo, etc.)"
                     : "recommended: gpt-4o for openai"}
                 </p>
               </div>
               <Separator className="my-4" />
-              <div className="w-full max-w-md">
+              <div className="w-full ">
                 <div className="flex flex-col gap-2 mb-4">
-                  <Label htmlFor="customPrompt" className="text-sm font-medium">
-                    Enter your custom prompt (keep it short):
-                  </Label>
+                  <div className="flex justify-between items-center">
+                    <Label
+                      htmlFor="customPrompt"
+                      className="text-sm font-medium"
+                    >
+                      enter your custom prompt (keep it short, less is more):
+                    </Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleResetCustomPrompt}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Reset to default prompt</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Textarea
                     id="customPrompt"
                     value={localSettings.customPrompt || ""}
                     onChange={handleCustomPromptChange}
                     className="w-full"
-                    placeholder="Enter additional instructions for the AI..."
-                    rows={4}
-                    maxLength={600}
+                    rows={6}
+                    maxLength={2000}
                   />
                 </div>
                 <p className="text-sm text-muted-foreground text-center">
@@ -151,41 +187,60 @@ export function Settings({ className }: { className?: string }) {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-center">OpenAI</CardTitle>
+              <CardTitle className="text-center">openai</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center">
-              <div className="w-full max-w-md">
+              <div className="w-full ">
                 <div className="flex items-center gap-4 mb-4">
                   <Label htmlFor="apiKey" className="min-w-[80px] text-right">
-                    API Key
+                    api key
                   </Label>
-                  <Input
-                    id="apiKey"
-                    value={settings.openaiApiKey}
-                    onChange={handleApiKeyChange}
-                    className="flex-grow"
-                    placeholder="Enter your OpenAI API Key"
-                  />
+                  <div className="flex-grow relative">
+                    <Input
+                      id="apiKey"
+                      type={showApiKey ? "text" : "password"}
+                      value={settings.openaiApiKey}
+                      onChange={handleApiKeyChange}
+                      className="pr-10"
+                      placeholder="Enter your OpenAI API Key"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
               <p className="mt-2 text-sm text-muted-foreground text-center">
-                OpenAI&apos;s GPT models are currently the most reliable for
+                openai&apos;s GPT models are currently the most reliable for
                 this application.
               </p>
               <p className="mt-1 text-sm text-muted-foreground text-center">
-                Don&apos;t have an API key? Get one from{" "}
+                don&apos;t have an API key? Get one from{" "}
                 <a
                   href="https://platform.openai.com/api-keys"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
-                  OpenAI&apos;s website
+                  openai&apos;s website
                 </a>
                 .
               </p>
             </CardContent>
           </Card>
+
+          
+          
 
           <Separator />
 
@@ -215,7 +270,7 @@ export function Settings({ className }: { className?: string }) {
                 </div>
 
                 {localSettings.useOllama && (
-                  <div className="w-full max-w-md mt-2">
+                  <div className="w-full  mt-2">
                     <div className="flex-col gap-2 mb-4">
                       <div className="flex items-center gap-4 mb-4">
                         <Label
@@ -260,17 +315,17 @@ export function Settings({ className }: { className?: string }) {
                     }}
                   >
                     {currentPlatform === "windows"
-                      ? "You need to [install Ollama](https://ollama.com/) and run `set OLLAMA_ORIGINS=* && ollama run llama3.1` first. \n\nCurrently only supports models supporting tools like llama3.1, mistral-nemo, etc."
-                      : "You need to [install Ollama](https://ollama.com/) and run `ollama run llama3.1` first. \n\nCurrently only supports models supporting tools like llama3.1, mistral-nemo, etc."}
+                      ? "You need to [install Ollama](https://ollama.com/) and run `set OLLAMA_ORIGINS=* && ollama run mistral-nemo` first. \n\nCurrently only supports models supporting tools like llama3.1, mistral-nemo, etc."
+                      : "You need to [install Ollama](https://ollama.com/) and run `ollama run mistral-nemo` first. \n\nCurrently only supports models supporting tools like llama3.1, mistral-nemo, etc."}
                   </MemoizedReactMarkdown>
                 </div>
                 <a
                   href="https://github.com/louis030195/screen-pipe/issues/167"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline"
+                  className="text-sm text-primary hover:underline font-bold"
                 >
-                  want to help make this well?
+                  want to help make this work well?
                 </a>
               </div>
 

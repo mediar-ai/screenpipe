@@ -63,8 +63,8 @@ pub enum DeviceType {
 
 #[derive(Clone, Eq, PartialEq, Hash, Serialize)]
 pub struct AudioDevice {
-    name: String,
-    device_type: DeviceType,
+    pub name: String,
+    pub device_type: DeviceType,
 }
 
 impl AudioDevice {
@@ -126,6 +126,8 @@ async fn get_device_and_config(
 
     info!("device: {:?}", audio_device.to_string());
 
+    let is_output_device = audio_device.device_type == DeviceType::Output;
+
     let audio_device = if audio_device.to_string() == "default" {
         match audio_device.device_type {
             DeviceType::Input => host.default_input_device(),
@@ -170,7 +172,11 @@ async fn get_device_and_config(
     }
     .ok_or_else(|| anyhow!("Audio device not found"))?;
 
-    let config = audio_device.default_input_config()?;
+    let mut config = audio_device.default_input_config()?;
+    // if output device and windows, using output config
+    if cfg!(target_os = "windows") && is_output_device {
+        config = audio_device.default_output_config()?;
+    }
     Ok((audio_device, config))
 }
 
@@ -300,7 +306,10 @@ pub async fn record_and_transcribe(
                 },
                 None,
             ),
-            _ => Err(cpal::BuildStreamError::StreamConfigNotSupported),
+            f => {
+                error!("Unsupported sample format: {:?}", f);
+                return;
+            }
         };
 
         match stream {

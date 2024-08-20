@@ -10,6 +10,8 @@ export const screenpipeQuery = z.object({
       
       Example: do not use 'discuss' the user ask about conversation, this is dumb, won't return any result
       Other example: 'what did i do this morning?' do not use any keywords, just look at everything
+
+      In general avoid using "q" as it will filter out all data
       `
     )
     .optional(),

@@ -35,6 +35,8 @@ const config = {
 	},
 	linux: {
 		aptPackages: [
+			'tesseract-ocr',
+			'libtesseract-dev',
 			'ffmpeg',
 			'libopenblas-dev', // Runtime
 			'pkg-config',

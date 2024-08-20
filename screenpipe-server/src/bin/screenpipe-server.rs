@@ -15,7 +15,7 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use log::{debug, error, info, LevelFilter};
 use screenpipe_audio::{
-    default_input_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
 };
 use screenpipe_vision::{monitor::{get_monitor_by_id, list_monitors}, OcrEngine};
 use std::io::Write;
@@ -303,18 +303,15 @@ async fn main() -> anyhow::Result<()> {
                 };
                 devices_status.insert(input_device, device_control);
             }
-            // audio output only supported on linux and macos <15.0 atm
+            // audio output only on macos <15.0 atm ?
             // see https://github.com/louis030195/screen-pipe/pull/106
-            if cfg!(any(target_os = "linux", target_os = "macos")) {
-                use screenpipe_audio::default_output_device;
-                if let Ok(output_device) = default_output_device().await {
-                    audio_devices.push(Arc::new(output_device.clone()));
-                    let device_control = DeviceControl {
-                        is_running: true,
-                        is_paused: false,
-                    };
-                    devices_status.insert(output_device, device_control);
-                }
+            if let Ok(output_device) = default_output_device().await {
+                audio_devices.push(Arc::new(output_device.clone()));
+                let device_control = DeviceControl {
+                    is_running: true,
+                    is_paused: false,
+                };
+                devices_status.insert(output_device, device_control);
             }
         } else {
             // Use specified devices
