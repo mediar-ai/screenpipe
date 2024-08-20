@@ -99,9 +99,9 @@ const DevModeSettings = () => {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
   const handleDevModeToggle = (checked: boolean) => {
-    console.log("checked", checked);
-    setLocalSettings({ ...localSettings, devMode: checked });
-    updateSettings({ ...localSettings, devMode: checked });
+
+    setLocalSettings((prev) => ({ ...prev, devMode: checked }));
+    updateSettings({ devMode: checked });
   };
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();

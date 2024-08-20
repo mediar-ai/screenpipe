@@ -7,14 +7,13 @@ use tauri::Config;
 
 use serde_json::Value;
 use std::env;
+use std::fs;
 use std::fs::File;
 use std::io::Write;
-use tauri_plugin_shell::process::CommandEvent;
-
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::Manager;
 use tauri::State;
 use tauri::Wry;
@@ -25,8 +24,10 @@ use tauri::{
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
+use tokio::time::sleep;
 use uuid::Uuid;
 mod analytics;
 
@@ -42,30 +43,54 @@ async fn kill_all_sreenpipes(
 ) -> Result<(), String> {
     debug!("Killing screenpipe");
 
-    if let Some(child) = state.0.lock().unwrap().take() {
-        child.kill().map_err(|e| e.to_string())?;
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY: Duration = Duration::from_secs(1);
+
+    for attempt in 1..=MAX_RETRIES {
+        if let Some(child) = state.0.lock().unwrap().take() {
+            if let Err(e) = child.kill() {
+                error!("Failed to kill child process (attempt {}): {}", attempt, e);
+            }
+        }
+
+        // Hard kill the sidecar
+        let kill_result = async {
+            #[cfg(not(target_os = "windows"))]
+            {
+                tokio::process::Command::new("pkill")
+                    .arg("-f")
+                    .arg("screenpipe")
+                    .output()
+                    .await
+            }
+            #[cfg(target_os = "windows")]
+            {
+                tokio::process::Command::new("taskkill")
+                    .args(&["/F", "/IM", "screenpipe.exe"])
+                    .output()
+                    .await
+            }
+        }
+        .await;
+
+        match kill_result {
+            Ok(_) => {
+                debug!("Successfully killed screenpipe processes");
+                return Ok(());
+            }
+            Err(e) => {
+                error!(
+                    "Failed to kill screenpipe processes (attempt {}): {}",
+                    attempt, e
+                );
+                if attempt < MAX_RETRIES {
+                    sleep(RETRY_DELAY).await;
+                }
+            }
+        }
     }
 
-    // Hard kill the sidecar
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = tokio::process::Command::new("pkill")
-            .arg("-f")
-            .arg("screenpipe")
-            .output()
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let _ = tokio::process::Command::new("taskkill")
-            .args(&["/F", "/IM", "screenpipe.exe"])
-            .output()
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-
-    Ok(())
+    Err("Failed to kill screenpipe processes after multiple attempts".to_string())
 }
 
 #[tauri::command]
@@ -187,7 +212,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     let (mut rx, child) = result.unwrap();
 
+    // only in production mode because it breaks the "bun tauri dev"
+    #[cfg(not(debug_assertions))]
     tauri::async_runtime::spawn(async move {
+        #[allow(unused_variables)]
         let mut i = 0;
         while let Some(event) = rx.recv().await {
             if let CommandEvent::Stdout(line) = event {
@@ -443,6 +471,8 @@ async fn main() {
             debug!("Ready event");
         }
         tauri::RunEvent::ExitRequested { .. } => {
+            let app_handle_clone = app_handle.clone();
+            let app_handle_clone2 = app_handle.clone();
             debug!("ExitRequested event");
             // kill all screenpipe processes if the user is not using dev mode using pkill
             // get dev mode from the store
@@ -462,20 +492,9 @@ async fn main() {
             .unwrap_or(false);
             if !use_dev_mode {
                 tauri::async_runtime::spawn(async move {
-                    #[cfg(not(target_os = "windows"))]
-                    {
-                        let _ = tokio::process::Command::new("pkill")
-                            .arg("-f")
-                            .arg("screenpipe")
-                            .output()
-                            .await;
-                    }
-                    #[cfg(target_os = "windows")]
-                    {
-                        let _ = tokio::process::Command::new("taskkill")
-                            .args(&["/F", "/IM", "screenpipe.exe"])
-                            .output()
-                            .await;
+                    let state = app_handle_clone.state::<SidecarState>();
+                    if let Err(e) = kill_all_sreenpipes(state, app_handle_clone2).await {
+                        error!("Failed to kill screenpipe processes: {}", e);
                     }
                 });
             }

@@ -24,6 +24,7 @@ import { Settings, useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { invoke } from "@tauri-apps/api/core";
+import { Badge } from "./ui/badge";
 
 interface AudioDevice {
   name: string;
@@ -124,7 +125,15 @@ export function RecordingSettings({
 
     try {
       console.log("localSettings", localSettings);
-      await updateSettings(localSettings);
+      // Only update specific fields
+      const settingsToUpdate = {
+        audioTranscriptionEngine: localSettings.audioTranscriptionEngine,
+        ocrEngine: localSettings.ocrEngine,
+        monitorId: localSettings.monitorId,
+        audioDevices: localSettings.audioDevices,
+      };
+      console.log("Settings to update:", settingsToUpdate);
+      await updateSettings(settingsToUpdate);
 
       await invoke("kill_all_sreenpipes");
 
@@ -200,7 +209,12 @@ export function RecordingSettings({
                   <SelectValue placeholder="select audio transcription engine" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="deepgram">deepgram</SelectItem>
+                  <SelectItem value="deepgram">
+                    <div className="flex items-center justify-between w-full space-x-2">
+                      <span>deepgram</span>
+                      <Badge variant="secondary">cloud</Badge>
+                    </div>
+                  </SelectItem>
                   <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
                   <SelectItem value="whisper-large">whisper-large</SelectItem>
                 </SelectContent>
@@ -220,7 +234,12 @@ export function RecordingSettings({
                   <SelectValue placeholder="select ocr engine" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unstructured">unstructured</SelectItem>
+                  <SelectItem value="unstructured">
+                    <div className="flex items-center justify-between w-full space-x-2">
+                      <span>unstructured</span>
+                      <Badge variant="secondary">cloud</Badge>
+                    </div>
+                  </SelectItem>
                   {currentPlatform !== "macos" && (
                     <SelectItem value="tesseract">tesseract</SelectItem>
                   )}

@@ -36,31 +36,34 @@ export function Settings({ className }: { className?: string }) {
   const [showApiKey, setShowApiKey] = React.useState(false);
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalSettings({ ...localSettings, openaiApiKey: e.target.value });
-    updateSettings({ ...localSettings, openaiApiKey: e.target.value });
+    const newValue = e.target.value;
+    setLocalSettings((prev) => ({ ...prev, openaiApiKey: newValue }));
+    updateSettings({ openaiApiKey: newValue });
   };
 
   const handleOllamaToggle = (checked: boolean) => {
-    console.log("checked", checked);
-    setLocalSettings({ ...localSettings, useOllama: checked });
-    updateSettings({ ...localSettings, useOllama: checked });
+    setLocalSettings((prev) => ({ ...prev, useOllama: checked }));
+    updateSettings({ useOllama: checked });
   };
 
   const handleOllamaUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalSettings({ ...localSettings, ollamaUrl: e.target.value });
-    updateSettings({ ...localSettings, ollamaUrl: e.target.value });
+    const newValue = e.target.value;
+    setLocalSettings((prev) => ({ ...prev, ollamaUrl: newValue }));
+    updateSettings({ ollamaUrl: newValue });
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalSettings({ ...localSettings, aiModel: e.target.value });
-    updateSettings({ ...localSettings, aiModel: e.target.value });
+    const newValue = e.target.value;
+    setLocalSettings((prev) => ({ ...prev, aiModel: newValue }));
+    updateSettings({ aiModel: newValue });
   };
 
   const handleCustomPromptChange = (
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
-    setLocalSettings({ ...localSettings, customPrompt: e.target.value });
-    updateSettings({ ...localSettings, customPrompt: e.target.value });
+    const newValue = e.target.value;
+    setLocalSettings((prev) => ({ ...prev, customPrompt: newValue }));
+    updateSettings({ customPrompt: newValue });
   };
 
   const handleResetCustomPrompt = () => {
@@ -238,9 +241,6 @@ export function Settings({ className }: { className?: string }) {
               </p>
             </CardContent>
           </Card>
-
-          
-          
 
           <Separator />
 

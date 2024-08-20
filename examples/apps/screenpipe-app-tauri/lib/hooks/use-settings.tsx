@@ -96,8 +96,9 @@ export function useSettings() {
         const savedUserId = ((await store!.get("userId")) as string) || "";
         const savedCustomPrompt =
           ((await store!.get("customPrompt")) as string) || "";
-        const savedDevMode =
-          ((await store!.get("devMode")) as boolean) || false;
+        let savedDevMode = (await store!.get("devMode")) as boolean;
+
+        savedDevMode = savedDevMode === true;
         const savedAudioTranscriptionEngine =
           ((await store!.get("audioTranscriptionEngine")) as string) ||
           "whisper-tiny";
@@ -138,23 +139,24 @@ export function useSettings() {
     }
 
     try {
-      const updatedSettings = { ...settings, ...newSettings };
+      // Only update the fields that are explicitly provided in newSettings
+      const updatedSettings = { ...settings };
+      for (const key in newSettings) {
+        if (Object.prototype.hasOwnProperty.call(newSettings, key)) {
+          // @ts-ignore
+          updatedSettings[key as keyof Settings] =
+            newSettings[key as keyof Settings]!;
+        }
+      }
+
       setSettings(updatedSettings);
-      await store!.set("openaiApiKey", updatedSettings.openaiApiKey);
-      await store!.set("useOllama", updatedSettings.useOllama);
-      await store!.set("ollamaUrl", updatedSettings.ollamaUrl);
-      await store!.set("aiModel", updatedSettings.aiModel);
-      await store!.set("installedPipes", updatedSettings.installedPipes);
-      await store!.set("userId", updatedSettings.userId);
-      await store!.set("customPrompt", updatedSettings.customPrompt);
-      await store!.set("devMode", updatedSettings.devMode);
-      await store!.set(
-        "audioTranscriptionEngine",
-        updatedSettings.audioTranscriptionEngine
-      );
-      await store!.set("ocrEngine", updatedSettings.ocrEngine);
-      await store!.set("monitorId", updatedSettings.monitorId);
-      await store!.set("audioDevices", updatedSettings.audioDevices);
+      // Only update the store for the fields that were changed
+      for (const key in newSettings) {
+        if (Object.prototype.hasOwnProperty.call(newSettings, key)) {
+          await store!.set(key, updatedSettings[key as keyof Settings]);
+        }
+      }
+
       await store!.save();
     } catch (error) {
       console.error("Failed to update settings:", error);
