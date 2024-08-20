@@ -20,5 +20,16 @@ tokenizers = { workspace = true }
 hf-hub = { workspace = true, features = ["tokio"] }
 
 
+# pipes
+reqwest = { workspace = true }
+tokio = { workspace = true }
 
+deno_core = { version = "0.283.0", optional = true }
+deno_ast = { version = "0.38.2", features = ["transpiling"], optional = true }
 
+[features]
+pipes = ["dep:deno_core", "dep:deno_ast"]
+
+[build-dependencies]
+# Move this under the same feature flag
+deno_core = { version = "0.283.0", optional = true }

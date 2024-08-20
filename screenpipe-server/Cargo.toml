@@ -15,7 +15,7 @@ serde_json = "1.0"
 
 screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
-screenpipe-core = { path = "../screenpipe-core" }
+screenpipe-core = { path = "../screenpipe-core", features = ["pipes"] }
 
 # Image processing
 image = { workspace = true }
@@ -84,7 +84,7 @@ futures = "0.3.17"
 dirs = "5.0"
 
 # Client http 
-reqwest = { version = "0.12.5", features = ["json"] }
+reqwest = { workspace = true }
 
 # Concurrency
 crossbeam = { workspace = true }
@@ -116,6 +116,7 @@ static-ffmpeg = ["ffmpeg-next/static"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 
+pipes = ["screenpipe-core/pipes"]
 
 [[bin]]
 name = "screenpipe"
@@ -124,3 +125,8 @@ path = "src/bin/screenpipe-server.rs"
 [[bin]]
 name = "screenpipe-video"
 path = "src/bin/screenpipe-video.rs"
+
+[[bin]]
+name = "screenpipe-pipe-runner"
+path = "src/bin/screenpipe-pipe-runner.rs"
+required-features = ["pipes"]

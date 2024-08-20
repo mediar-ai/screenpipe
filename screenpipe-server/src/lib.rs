@@ -1,13 +1,14 @@
+pub mod chunking;
+pub mod cli;
 pub mod core;
 mod db;
+pub mod filtering;
 pub mod logs;
 mod plugin;
 mod resource_monitor;
 mod server;
 mod video;
-pub mod chunking;
-pub mod filtering;
-
+pub use cli::Cli;
 pub use core::{start_continuous_recording, RecorderControl};
 pub use db::{ContentType, DatabaseManager, SearchResult};
 pub use logs::MultiWriter;
