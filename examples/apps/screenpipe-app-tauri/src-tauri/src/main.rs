@@ -45,13 +45,26 @@ async fn kill_all_sreenpipes(
     if let Some(child) = state.0.lock().unwrap().take() {
         child.kill().map_err(|e| e.to_string())?;
     }
-    // hard kill the sidecar on port 3030
-    let _ = tokio::process::Command::new("pkill")
-        .arg("-f")
-        .arg("screenpipe")
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
+
+    // Hard kill the sidecar
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = tokio::process::Command::new("pkill")
+            .arg("-f")
+            .arg("screenpipe")
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = tokio::process::Command::new("taskkill")
+            .args(&["/F", "/IM", "screenpipe.exe"])
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
@@ -449,11 +462,21 @@ async fn main() {
             .unwrap_or(false);
             if !use_dev_mode {
                 tauri::async_runtime::spawn(async move {
-                    let _ = tokio::process::Command::new("pkill")
-                        .arg("-f")
-                        .arg("screenpipe")
-                        .output()
-                        .await;
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        let _ = tokio::process::Command::new("pkill")
+                            .arg("-f")
+                            .arg("screenpipe")
+                            .output()
+                            .await;
+                    }
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = tokio::process::Command::new("taskkill")
+                            .args(&["/F", "/IM", "screenpipe.exe"])
+                            .output()
+                            .await;
+                    }
                 });
             }
         }
