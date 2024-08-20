@@ -32,7 +32,7 @@ use screenpipe_server::{
     start_continuous_recording, DatabaseManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
-use tokio::{process::Command, sync::mpsc::channel};
+use tokio::sync::mpsc::channel;
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
@@ -330,6 +330,7 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(feature = "pipes")]
     if !cli.pipe.is_empty() {
+        use tokio::process::Command;
         let status = Command::new("screenpipe-pipe-runner")
             .arg("--pipe")
             .args(&cli.pipe)
