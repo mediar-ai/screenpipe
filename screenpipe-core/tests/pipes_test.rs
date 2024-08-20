@@ -14,7 +14,7 @@ mod tests {
             }
             add(2, 3);
             console.log("Hello, world!");
-            const response = await runjs.fetch("https://jsonplaceholder.typicode.com/todos/1");
+            const response = await pipe.get("https://jsonplaceholder.typicode.com/todos/1");
             console.log(response);
             "#;
 
