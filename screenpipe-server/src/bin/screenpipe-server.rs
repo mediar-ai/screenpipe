@@ -331,7 +331,8 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "pipes")]
     if !cli.pipe.is_empty() {
         use tokio::process::Command;
-        let status = Command::new("screenpipe-pipe-runner")
+        // ! HACK until we have clean way to store the bin 
+        let status = Command::new("target/release/screenpipe-pipe-runner")
             .arg("--pipe")
             .args(&cli.pipe)
             .status()

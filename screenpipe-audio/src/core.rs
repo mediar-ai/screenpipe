@@ -287,9 +287,47 @@ pub async fn record_and_transcribe(
     let output_path_clone = Arc::new(output_path);
     let output_path_clone_2 = Arc::clone(&output_path_clone);
 
+    // Define the error callback function
+    let error_callback = move |err: StreamError| {
+        error!("An error occurred on the audio stream: {}", err);
+        if err.to_string().contains("device is no longer valid") {
+            warn!("Audio device disconnected. Stopping recording.");
+            is_running_clone_2.store(false, Ordering::Relaxed);
+        }
+    };
     // Spawn a thread to handle the non-Send stream
     thread::spawn(move || {
         let stream = match config.sample_format() {
+            cpal::SampleFormat::I8 => cpal_audio_device.build_input_stream(
+                &config.into(),
+                move |data: &[i8], _: &_| {
+                    if is_running_clone_3.load(Ordering::Relaxed) {
+                        let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
+                    }
+                },
+                error_callback,
+                None,
+            ),
+            cpal::SampleFormat::I16 => cpal_audio_device.build_input_stream(
+                &config.into(),
+                move |data: &[i16], _: &_| {
+                    if is_running_clone_3.load(Ordering::Relaxed) {
+                        let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
+                    }
+                },
+                error_callback,
+                None,
+            ),
+            cpal::SampleFormat::I32 => cpal_audio_device.build_input_stream(
+                &config.into(),
+                move |data: &[i32], _: &_| {
+                    if is_running_clone_3.load(Ordering::Relaxed) {
+                        let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
+                    }
+                },
+                error_callback,
+                None,
+            ),
             cpal::SampleFormat::F32 => cpal_audio_device.build_input_stream(
                 &config.into(),
                 move |data: &[f32], _: &_| {
@@ -297,17 +335,11 @@ pub async fn record_and_transcribe(
                         let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
                     }
                 },
-                move |err: StreamError| {
-                    error!("An error occurred on the audio stream: {}", err);
-                    if err.to_string().contains("device is no longer valid") {
-                        warn!("Audio device disconnected. Stopping recording.");
-                        is_running_clone_2.store(false, Ordering::Relaxed);
-                    }
-                },
+                error_callback,
                 None,
             ),
-            f => {
-                error!("Unsupported sample format: {:?}", f);
+            _ => {
+                error!("Unsupported sample format: {:?}", config.sample_format());
                 return;
             }
         };
