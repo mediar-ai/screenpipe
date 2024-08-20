@@ -1,6 +1,6 @@
 
 
-usage
+usage (will run 24/7 on your computer and update a local json file)
 
 ```
 ollama run mistral-nemo
