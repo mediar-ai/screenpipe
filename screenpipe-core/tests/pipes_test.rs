@@ -1,51 +1,33 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use deno_core::{JsRuntime, RuntimeOptions};
-    use screenpipe_core::PluginSystem;
+    use screenpipe_core::run_js;
+    use tokio::{
+        fs::{remove_file, File},
+        io::AsyncWriteExt,
+    };
 
     #[tokio::test]
     async fn test_js_execution() {
-        let mut runtime = JsRuntime::new(RuntimeOptions::default());
-
-        // Test a simple JavaScript function
-        let result = runtime.execute_script(
-            "test.js",
-            r#"
+        let code = r#"
             function add(a, b) {
                 return a + b;
             }
             add(2, 3);
-            "#,
-        );
+            console.log("Hello, world!");
+            const response = await runjs.fetch("https://jsonplaceholder.typicode.com/todos/1");
+            console.log(response);
+            "#;
+
+        // write code to a file
+        let file_path = "test.js";
+        let mut file = File::create(file_path).await.unwrap();
+        file.write_all(code.as_bytes()).await.unwrap();
+        file.flush().await.unwrap();
+        // Test a simple JavaScript function
+        let result = run_js(file_path).await;
 
         assert!(result.is_ok());
         println!("result: {:?}", result);
-        // let result = result.unwrap();
-        // assert_eq!(result.get_i32(), Some(5));
-    }
-
-    #[tokio::test]
-    async fn test_plugin_system() {
-        let plugin_system = PluginSystem::new();
-
-        // Add a test plugin
-        plugin_system
-            .add_plugin(
-                "test_plugin".to_string(),
-                r#"
-            console.log('Test plugin executed');
-            "#
-                .to_string(),
-            )
-            .await;
-
-        // Run plugins
-        plugin_system.run_plugins().await;
-
-        // Assert that the plugin was added successfully
-        // let plugins = plugin_system.plugins.lock().await;
-        // assert_eq!(plugins.len(), 1);
-        // assert_eq!(plugins[0].name, "test_plugin");
+        remove_file(file_path).await.unwrap();
     }
 }
