@@ -3,6 +3,8 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
 use screenpipe_server::{ContentType, DatabaseManager};
+use std::sync::Arc;
+use screenpipe_vision::OcrEngine;
 use tokio::runtime::Runtime;
 
 async fn setup_large_db(size: usize) -> DatabaseManager {
@@ -18,13 +20,17 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             frame_id,
             &ocr_text,
             &text_json,
+            "test_app",
+            "test_window",
+            Arc::new(OcrEngine::default()), // Assuming a default implementation
+            false,
         )
         .await
         .unwrap();
 
         let audio_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
         let audio_text = format!("Audio transcription {}", rng.gen::<u32>());
-        db.insert_audio_transcription(audio_id, &audio_text, 0)
+        db.insert_audio_transcription(audio_id, &audio_text, 0, "test_engine")
             .await
             .unwrap();
     }
@@ -40,8 +46,8 @@ fn bench_search(c: &mut Criterion) {
     let search_queries = ["random", "specific"];
 
     let mut group = c.benchmark_group("search_benchmarks");
-    group.sample_size(5);
-    group.measurement_time(std::time::Duration::from_secs(30));
+    group.sample_size(10); // Increase sample size to at least 10
+    group.measurement_time(std::time::Duration::from_secs(60)); // Increase measurement time to 60 seconds
 
     for &size in &db_sizes {
         for &content_type in &content_types {
@@ -51,7 +57,7 @@ fn bench_search(c: &mut Criterion) {
                     |b| {
                         b.to_async(&rt).iter(|| async {
                             let db = setup_large_db(size).await;
-                            db.search(query, content_type, 100, 0, None, None)
+                            db.search(query, content_type, 100, 0, None, None, None, None)
                                 .await
                                 .unwrap()
                         });
