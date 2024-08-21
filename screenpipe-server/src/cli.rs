@@ -142,4 +142,8 @@ pub struct Cli {
     /// File path for the pipe
     #[arg(long)]
     pub pipe: Vec<String>,
+
+    /// Enable PII removal from OCR text property that is saved to db and returned in search results
+    #[arg(long, default_value_t = false)]
+    pub use_pii_removal: bool,
 }

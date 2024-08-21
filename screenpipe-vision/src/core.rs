@@ -2,7 +2,6 @@ use image::DynamicImage;
 use log::{debug, error};
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde_json;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -57,7 +56,6 @@ pub async fn continuous_capture(
         "continuous_capture: Starting using monitor: {:?}",
         monitor_id
     );
-    let ocr_task_running = Arc::new(AtomicBool::new(false));
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<Arc<DynamicImage>> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
@@ -128,41 +126,33 @@ pub async fn continuous_capture(
 
             previous_image = Some(Arc::new(image.clone()));
 
-            if !ocr_task_running.load(Ordering::SeqCst) {
-                if let Some(max_avg_frame) = max_average.take() {
-                    let ocr_task_data = OcrTaskData {
-                        image: max_avg_frame.image.clone(),
-                        window_images: max_avg_frame.window_images.clone(),
-                        frame_number: max_avg_frame.frame_number,
-                        timestamp: max_avg_frame.timestamp,
-                        result_tx: max_avg_frame.result_tx.clone(),
-                    };
+            if let Some(max_avg_frame) = max_average.take() {
+                let ocr_task_data = OcrTaskData {
+                    image: max_avg_frame.image.clone(),
+                    window_images: max_avg_frame.window_images.clone(),
+                    frame_number: max_avg_frame.frame_number,
+                    timestamp: max_avg_frame.timestamp,
+                    result_tx: max_avg_frame.result_tx.clone(),
+                };
 
-                    let ocr_task_running_clone = ocr_task_running.clone();
+                let ocr_engine_clone = ocr_engine.clone();
 
-                    ocr_task_running.store(true, Ordering::SeqCst);
-                    let ocr_engine_clone = ocr_engine.clone();
-
-                    tokio::spawn(async move {
-                        if let Err(e) = process_ocr_task(
-                            ocr_task_data.image,
-                            ocr_task_data.window_images,
-                            ocr_task_data.frame_number,
-                            ocr_task_data.timestamp,
-                            ocr_task_data.result_tx,
-                            save_text_files_flag,
-                            ocr_engine_clone,
-                        )
-                        .await
-                        {
-                            error!("Error processing OCR task: {}", e);
-                        }
-                        ocr_task_running_clone.store(false, Ordering::SeqCst);
-                    });
-
-                    frame_counter = 0;
-                    max_avg_value = 0.0;
+                if let Err(e) = process_ocr_task(
+                    ocr_task_data.image,
+                    ocr_task_data.window_images,
+                    ocr_task_data.frame_number,
+                    ocr_task_data.timestamp,
+                    ocr_task_data.result_tx,
+                    save_text_files_flag,
+                    ocr_engine_clone,
+                )
+                .await
+                {
+                    error!("Error processing OCR task: {}", e);
                 }
+
+                frame_counter = 0;
+                max_avg_value = 0.0;
             }
         } else {
             // Skip this iteration if capture failed

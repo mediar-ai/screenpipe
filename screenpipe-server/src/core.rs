@@ -7,6 +7,7 @@ use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput,
     AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
 };
+use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
@@ -16,7 +17,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
-
 pub enum RecorderControl {
     Pause,
     Resume,
@@ -56,6 +56,7 @@ pub async fn start_continuous_recording(
     ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>,
     monitor_id: u32,
+    use_pii_removal: bool,
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver) =
         create_whisper_channel(audio_transcription_engine.clone()).await?;
@@ -88,6 +89,7 @@ pub async fn start_continuous_recording(
             ocr_engine,
             friend_wearable_uid_video,
             monitor_id,
+            use_pii_removal,
         )
         .await
     });
@@ -129,6 +131,7 @@ async fn record_video(
     ocr_engine: Arc<OcrEngine>,
     _friend_wearable_uid: Option<String>,
     monitor_id: u32,
+    use_pii_removal: bool,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -161,10 +164,15 @@ async fn record_video(
                         let text_json =
                             serde_json::to_string(&window_result.text_json).unwrap_or_default();
 
+                        let text = if use_pii_removal {
+                            &remove_pii(&window_result.text)
+                        } else {
+                            &window_result.text
+                        };
                         if let Err(e) = db
                             .insert_ocr_text(
                                 frame_id,
-                                &window_result.text,
+                                text,
                                 &text_json,
                                 &window_result.app_name,
                                 &window_result.window_name,
