@@ -107,6 +107,11 @@ impl DatabaseManager {
             .connect(&connection_string)
             .await?;
 
+        // Enable WAL mode
+        sqlx::query("PRAGMA journal_mode = WAL;")
+            .execute(&pool)
+            .await?;
+
         let db_manager = DatabaseManager { pool };
 
         // Run migrations after establishing the connection
