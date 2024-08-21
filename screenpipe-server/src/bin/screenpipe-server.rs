@@ -296,6 +296,7 @@ async fn main() -> anyhow::Result<()> {
                     ocr_engine,
                     friend_wearable_uid_clone, // Use the cloned version
                     monitor_id,
+                    cli.use_pii_removal,
                 )
                 .await;
 

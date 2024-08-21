@@ -7,4 +7,6 @@ pub mod pipes;
 #[cfg(feature = "pipes")]
 pub use pipes::*;
 #[cfg(feature = "security")]
-mod pii_removal;
+pub mod pii_removal;
+#[cfg(feature = "security")]
+pub use pii_removal::*;
