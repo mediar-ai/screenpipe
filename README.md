@@ -119,7 +119,7 @@ screenpipe --debug
 ```
 by default screenpipe is using whisper-tiny that runs LOCALLY to get better quality or lower compute you can use cloud model (we use Deepgram) via cloud api:
 ```bash
-screenpipe --cloud-audio-on 
+screenpipe -audio-transcription-engine deepgram
 ```
 by default screenpipe is using a local model for screen capture OCR processing to use the cloud (through unstructured.io) for better performance use this flag:
 ```bash
