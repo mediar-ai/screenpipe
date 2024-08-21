@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Json as JsonResponse,
     routing::{get, post},
@@ -8,7 +8,7 @@ use axum::{
 use crossbeam::queue::SegQueue;
 use screenpipe_vision::monitor::list_monitors;
 
-use crate::{ContentType, DatabaseManager, SearchResult};
+use crate::{db::TagContentType, ContentType, DatabaseManager, SearchResult};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
@@ -73,57 +73,60 @@ where
 }
 
 // Response structs
-#[derive(Serialize)]
-pub(crate) struct PaginatedResponse<T> {
-    data: Vec<T>,
-    pagination: PaginationInfo,
+#[derive(Serialize, Deserialize)]
+pub struct PaginatedResponse<T> {
+    pub data: Vec<T>,
+    pub pagination: PaginationInfo,
 }
 
-#[derive(Serialize)]
-struct PaginationInfo {
-    limit: u32,
-    offset: u32,
-    total: i64,
+#[derive(Serialize, Deserialize)]
+pub struct PaginationInfo {
+    pub limit: u32,
+    pub offset: u32,
+    pub total: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(tag = "type", content = "content")]
-pub(crate) enum ContentItem {
+pub enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
     FTS(FTSContent),
 }
 
-#[derive(Serialize)]
-pub(crate) struct OCRContent {
-    frame_id: i64,
-    text: String,
-    timestamp: DateTime<Utc>,
-    file_path: String,
-    offset_index: i64,
-    app_name: String,
-    window_name: String,
+#[derive(Serialize, Deserialize)]
+pub struct OCRContent {
+    pub frame_id: i64,
+    pub text: String,
+    pub timestamp: DateTime<Utc>,
+    pub file_path: String,
+    pub offset_index: i64,
+    pub app_name: String,
+    pub window_name: String,
+    pub tags: Vec<String>,
 }
 
-#[derive(Serialize)]
-pub(crate) struct AudioContent {
-    chunk_id: i64,
-    transcription: String,
-    timestamp: DateTime<Utc>,
-    file_path: String,
-    offset_index: i64,
+#[derive(Serialize, Deserialize)]
+pub struct AudioContent {
+    pub chunk_id: i64,
+    pub transcription: String,
+    pub timestamp: DateTime<Utc>,
+    pub file_path: String,
+    pub offset_index: i64,
+    pub tags: Vec<String>,
 }
 
-#[derive(Serialize)]
-pub(crate) struct FTSContent {
-    text_id: i64,
-    matched_text: String,
-    frame_id: i64,
-    timestamp: DateTime<Utc>,
-    app_name: String,
-    window_name: String, // Add this field
-    file_path: String,
-    original_frame_text: Option<String>,
+#[derive(Serialize, Deserialize)]
+pub struct FTSContent {
+    pub text_id: i64,
+    pub matched_text: String,
+    pub frame_id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub app_name: String,
+    pub window_name: String, // Add this field
+    pub file_path: String,
+    pub original_frame_text: Option<String>,
+    pub tags: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -139,6 +142,26 @@ pub struct MonitorInfo {
     width: u32,
     height: u32,
     is_default: bool,
+}
+
+#[derive(Deserialize)]
+pub struct AddTagsRequest {
+    tags: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct AddTagsResponse {
+    success: bool,
+}
+
+#[derive(Deserialize)]
+pub struct RemoveTagsRequest {
+    tags: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct RemoveTagsResponse {
+    success: bool,
 }
 
 // Helper functions
@@ -179,13 +202,13 @@ pub(crate) async fn search(
     let query_str = query.q.as_deref().unwrap_or("");
 
     // If app_name is specified, force content_type to OCR
-    let content_type = if query.app_name.is_some() {
+    let content_type = if query.app_name.is_some() || query.window_name.is_some() {
         ContentType::OCR
     } else {
         query.content_type
     };
 
-    let results = state
+    let results = match state
         .db
         .search(
             query_str,
@@ -195,16 +218,19 @@ pub(crate) async fn search(
             query.start_time,
             query.end_time,
             query.app_name.as_deref(),
-            query.window_name.as_deref(), // Add window_name parameter
+            query.window_name.as_deref(),
         )
         .await
-        .map_err(|e| {
+    {
+        Ok(results) => results,
+        Err(e) => {
             error!("Failed to search for content: {}", e);
-            (
+            return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({"error": format!("Failed to search for content: {}", e)})),
-            )
-        })?;
+            ));
+        }
+    };
 
     let total = state
         .db
@@ -305,6 +331,46 @@ pub async fn api_list_monitors(
     }
 }
 
+pub(crate) async fn add_tags(
+    State(state): State<Arc<AppState>>,
+    Path((content_type, id)): Path<(String, i64)>,
+    JsonResponse(payload): JsonResponse<AddTagsRequest>,
+) -> Result<JsonResponse<AddTagsResponse>, (StatusCode, String)> {
+    let content_type = match content_type.as_str() {
+        "vision" => TagContentType::Vision,
+        "audio" => TagContentType::Audio,
+        _ => return Err((StatusCode::BAD_REQUEST, "Invalid content type".to_string())),
+    };
+
+    match state.db.add_tags(id, content_type, payload.tags).await {
+        Ok(_) => Ok(JsonResponse(AddTagsResponse { success: true })),
+        Err(e) => {
+            error!("Failed to add tags: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        }
+    }
+}
+
+pub(crate) async fn remove_tags(
+    State(state): State<Arc<AppState>>,
+    Path((content_type, id)): Path<(String, i64)>,
+    JsonResponse(payload): JsonResponse<RemoveTagsRequest>,
+) -> Result<JsonResponse<RemoveTagsResponse>, (StatusCode, String)> {
+    let content_type = match content_type.as_str() {
+        "vision" => TagContentType::Vision,
+        "audio" => TagContentType::Audio,
+        _ => return Err((StatusCode::BAD_REQUEST, "Invalid content type".to_string())),
+    };
+
+    match state.db.remove_tags(id, content_type, payload.tags).await {
+        Ok(_) => Ok(JsonResponse(RemoveTagsResponse { success: true })),
+        Err(e) => {
+            error!("Failed to remove tag: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        }
+    }
+}
+
 pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<HealthCheckResponse> {
     let (last_frame, last_audio) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio)) => (frame, audio),
@@ -398,7 +464,8 @@ fn into_content_item(result: SearchResult) -> ContentItem {
             file_path: ocr.file_path,
             offset_index: ocr.offset_index,
             app_name: ocr.app_name,
-            window_name: ocr.window_name, // Ensure this field is included
+            window_name: ocr.window_name,
+            tags: ocr.tags,
         }),
         SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
             chunk_id: audio.audio_chunk_id,
@@ -406,6 +473,7 @@ fn into_content_item(result: SearchResult) -> ContentItem {
             timestamp: audio.timestamp,
             file_path: audio.file_path,
             offset_index: audio.offset_index,
+            tags: audio.tags,
         }),
         SearchResult::FTS(fts) => ContentItem::FTS(FTSContent {
             text_id: fts.text_id,
@@ -416,6 +484,7 @@ fn into_content_item(result: SearchResult) -> ContentItem {
             window_name: fts.window_name, // Ensure this field is included
             file_path: fts.video_file_path,
             original_frame_text: fts.original_frame_text,
+            tags: fts.tags,
         }),
     }
 }
@@ -460,11 +529,7 @@ impl Server {
         });
 
         // https://github.com/tokio-rs/console
-        let app = Router::new()
-            .route("/search", get(search))
-            .route("/audio/list", get(api_list_audio_devices))
-            .route("/vision/list", post(api_list_monitors))
-            .route("/health", get(health_check))
+        let app = create_router()
             .layer(ApiPluginLayer::new(api_plugin))
             .layer(CorsLayer::permissive())
             .layer(
@@ -487,6 +552,18 @@ impl Server {
             }
         }
     }
+}
+
+pub fn create_router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/search", get(search))
+        .route("/audio/list", get(api_list_audio_devices))
+        .route("/vision/list", post(api_list_monitors))
+        .route(
+            "/tags/:content_type/:id",
+            post(add_tags).delete(remove_tags),
+        )
+        .route("/health", get(health_check))
 }
 
 // Curl commands for reference:
