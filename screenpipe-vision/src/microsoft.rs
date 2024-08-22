@@ -1,3 +1,4 @@
+use image::DynamicImage;
 #[cfg(target_os = "windows")]
 pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String) {
     use std::io::Cursor;
