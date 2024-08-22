@@ -157,11 +157,23 @@ jobs:
         with:
           path: ./cache
 
+      - name: List contents of cache directory
+        run: ls -R ./cache
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+
       - name: Analyze benchmarks
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: "cargo"
-          output-file-path: ./cache/pcm-benchmark-data/pcm-benchmark-data.json,./cache/apple-ocr-benchmark-data/apple-ocr-benchmark-data.json,./cache/tesseract-ocr-benchmark-data/tesseract-ocr-benchmark-data.json,./cache/windows-ocr-benchmark-data/windows-ocr-benchmark-data.json
+          output-file-path: |
+            ./cache/pcm-benchmark-data/pcm-benchmark-data.json
+            ./cache/apple-ocr-benchmark-data/apple-ocr-benchmark-data.json
+            ./cache/tesseract-ocr-benchmark-data/tesseract-ocr-benchmark-data.json
+            ./cache/windows-ocr-benchmark-data/windows-ocr-benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           comment-on-alert: true
