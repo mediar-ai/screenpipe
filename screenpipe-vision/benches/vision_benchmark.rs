@@ -6,7 +6,8 @@
 use std::sync::Arc;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use screenpipe_vision::{continuous_capture, get_monitor, OcrEngine};
+use screenpipe_vision::monitor::get_default_monitor;
+use screenpipe_vision::{continuous_capture, OcrEngine};
 use tokio::sync::mpsc;
 use tokio::time::Duration;
 
@@ -19,7 +20,7 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
             Duration::from_millis(100),
             false,
             Arc::new(OcrEngine::Tesseract),
-            get_monitor().await,
+            get_default_monitor().await.id(),
         )
         .await;
     });
