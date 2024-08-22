@@ -1,4 +1,14 @@
+use chrono::Local;
 use log::{debug, error, info, warn};
+use serde_json::json;
+use serde_json::Value;
+use std::env;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::Read;
+use std::io::Seek;
+use std::io::SeekFrom;
+use std::io::Write;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -13,6 +23,7 @@ pub struct ResourceMonitor {
     health_check_failures: Mutex<u32>,
     max_health_check_failures: u32,
     restart_sender: Sender<RestartSignal>,
+    resource_log_file: Option<String>, // analyse output here: https://colab.research.google.com/drive/1zELlGdzGdjChWKikSqZTHekm5XRxY-1r?usp=sharing
 }
 
 pub enum RestartSignal {
@@ -26,6 +37,25 @@ impl ResourceMonitor {
         max_health_check_failures: u32,
         restart_sender: Sender<RestartSignal>,
     ) -> Arc<Self> {
+        let resource_log_file = if env::var("SAVE_RESOURCE_USAGE").is_ok() {
+            let now = Local::now();
+            let filename = format!("resource_usage_{}.json", now.format("%Y%m%d_%H%M%S"));
+            info!("Resource usage data will be saved to file: {}", filename);
+
+            // Initialize the file with an empty JSON array
+            if let Ok(mut file) = File::create(&filename) {
+                if let Err(e) = file.write_all(b"[]") {
+                    error!("Failed to initialize JSON file: {}", e);
+                }
+            } else {
+                error!("Failed to create JSON file: {}", filename);
+            }
+
+            Some(filename)
+        } else {
+            None
+        };
+
         Arc::new(Self {
             start_time: Instant::now(),
             self_healing_enabled,
@@ -33,6 +63,7 @@ impl ResourceMonitor {
             health_check_failures: Mutex::new(0),
             max_health_check_failures,
             restart_sender,
+            resource_log_file,
         })
     }
 
@@ -84,6 +115,46 @@ impl ResourceMonitor {
             };
 
             info!("{}", log_message);
+
+            if let Some(filename) = &self.resource_log_file {
+                let now = Local::now();
+                let json_data = json!({
+                    "timestamp": now.to_rfc3339(),
+                    "runtime_seconds": runtime.as_secs(),
+                    "total_memory_gb": total_memory_gb,
+                    "system_total_memory_gb": system_total_memory,
+                    "memory_usage_percent": memory_usage_percent,
+                    "total_cpu_percent": total_cpu,
+                    "npu_usage_percent": self.get_npu_usage().unwrap_or(-1.0),
+                });
+
+                if let Ok(mut file) = OpenOptions::new().read(true).write(true).open(filename) {
+                    let mut contents = String::new();
+                    if file.read_to_string(&mut contents).is_ok() {
+                        if let Ok(mut json_array) = serde_json::from_str::<Value>(&contents) {
+                            if let Some(array) = json_array.as_array_mut() {
+                                array.push(json_data);
+                                if file.set_len(0).is_ok() && file.seek(SeekFrom::Start(0)).is_ok()
+                                {
+                                    if let Err(e) =
+                                        file.write_all(json_array.to_string().as_bytes())
+                                    {
+                                        error!("Failed to write JSON data to file: {}", e);
+                                    }
+                                } else {
+                                    error!("Failed to truncate and seek file: {}", filename);
+                                }
+                            }
+                        } else {
+                            error!("Failed to parse JSON from file: {}", filename);
+                        }
+                    } else {
+                        error!("Failed to read JSON file: {}", filename);
+                    }
+                } else {
+                    error!("Failed to open JSON file: {}", filename);
+                }
+            }
         }
     }
 
