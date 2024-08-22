@@ -8,40 +8,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  benchmark_pcm:
-    name: Run PCM benchmark
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
-
-      - name: Run PCM benchmarks
-        run: |
-          cargo bench --bench pcm_decode_benchmark -- --output-format bencher | tee pcm_output.txt
-
-      - name: Store PCM benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: PCM Benchmark
-          tool: "cargo"
-          output-file-path: pcm_output.txt
-          external-data-json-path: ./cache/pcm-benchmark-data.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          comment-always: false
-          save-data-file: true
-
-      - name: Upload PCM benchmark artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: pcm-benchmark-data
-          path: ./cache/pcm-benchmark-data.json
-
   apple_ocr_benchmark:
     name: Run Apple OCR benchmark
     runs-on: macos-latest
@@ -143,7 +109,6 @@ jobs:
   analyze_benchmarks:
     needs:
       [
-        benchmark_pcm,
         apple_ocr_benchmark,
         tesseract_ocr_benchmark,
         windows_ocr_benchmark,
@@ -170,7 +135,6 @@ jobs:
         with:
           tool: "cargo"
           output-file-path: |
-            ./cache/pcm-benchmark-data/pcm-benchmark-data.json
             ./cache/apple-ocr-benchmark-data/apple-ocr-benchmark-data.json
             ./cache/tesseract-ocr-benchmark-data/tesseract-ocr-benchmark-data.json
             ./cache/windows-ocr-benchmark-data/windows-ocr-benchmark-data.json
