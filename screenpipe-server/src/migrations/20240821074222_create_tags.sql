@@ -1,7 +1,8 @@
 -- Create tags table
 CREATE TABLE tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create junction table for vision (frames) and tags

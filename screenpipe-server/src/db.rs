@@ -32,6 +32,7 @@ impl StdError for DatabaseError {}
 
 // Intermediate struct for fetching FTS data
 #[derive(FromRow)]
+#[allow(dead_code)]
 struct FTSSearchResultRaw {
     text_id: i64,
     matched_text: String,
@@ -65,7 +66,7 @@ pub enum SearchResult {
 }
 
 // Intermediate struct for fetching data
-#[derive(FromRow)]
+#[derive(FromRow, Debug)]
 struct OCRResultRaw {
     frame_id: i64,
     ocr_text: String,
@@ -563,6 +564,7 @@ impl DatabaseManager {
         Ok(results)
     }
 
+    #[allow(dead_code)]
     async fn search_fts(
         &self,
         query: &str,
@@ -627,7 +629,7 @@ impl DatabaseManager {
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
-        window_name: Option<&str>, // Add window_name parameter
+        window_name: Option<&str>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let mut sql = r#"
             SELECT 
@@ -659,30 +661,41 @@ impl DatabaseManager {
         "#
         .to_string();
 
-        if app_name.is_some() {
-            sql.push_str(" AND ocr_text.app_name = ?6 COLLATE NOCASE");
+        let mut param_count = 5; // We already have 5 parameters
+
+        if let Some(_) = app_name {
+            param_count += 1;
+            sql.push_str(&format!(
+                " AND ocr_text.app_name = ?{} COLLATE NOCASE",
+                param_count
+            ));
         }
 
-        if window_name.is_some() {
-            sql.push_str(" AND ocr_text.window_name = ?7 COLLATE NOCASE");
+        if let Some(_) = window_name {
+            param_count += 1;
+            sql.push_str(&format!(
+                " AND ocr_text.window_name = ?{} COLLATE NOCASE",
+                param_count
+            ));
         }
 
         sql.push_str(
             r#"
+            GROUP BY 
+                ocr_text.frame_id
             ORDER BY 
                 frames.timestamp DESC
             LIMIT ?4 OFFSET ?5
             "#,
         );
 
-        println!("{}", sql);
         let mut query = sqlx::query_as::<_, OCRResultRaw>(&sql)
             .bind(query)
             .bind(start_time)
             .bind(end_time)
             .bind(limit)
             .bind(offset);
-        println!("{:?}", start_time);
+
         if let Some(app_name) = app_name {
             query = query.bind(app_name);
         }
@@ -693,7 +706,6 @@ impl DatabaseManager {
 
         let ocr_results_raw = query.fetch_all(&self.pool).await?;
 
-        // Convert OCRResultRaw to OCRResult
         let ocr_results = ocr_results_raw
             .into_iter()
             .map(|raw| OCRResult {
@@ -821,7 +833,7 @@ impl DatabaseManager {
             // If no app_name is specified, proceed with normal counting
             if content_type == ContentType::All || content_type == ContentType::OCR {
                 let ocr_count = self
-                    .count_ocr_results(query, start_time, end_time, None, window_name) // Add window_name parameter
+                    .count_ocr_results(query, start_time, end_time, None, None) // Add window_name parameter
                     .await?;
                 total_count += ocr_count;
             }

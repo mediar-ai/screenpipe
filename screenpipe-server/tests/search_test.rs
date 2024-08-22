@@ -38,6 +38,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
     // Insert OCR data
     db.insert_video_chunk("test_video.mp4").await.unwrap();
     let frame_id = db.insert_frame().await.unwrap();
+    let window_name = "TestWindow";
     db.insert_ocr_text(
         frame_id,
         "Test OCR text",
@@ -49,12 +50,24 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         }))
         .unwrap(),
         "TestApp",
-        "TestWindow",
+        window_name,
         Arc::new(screenpipe_vision::OcrEngine::Tesseract),
         true,
     )
     .await
     .unwrap();
+
+    println!("Inserted test data with window_name: {}", window_name);
+
+    // Verify the inserted data
+    let result =
+        sqlx::query_as::<_, (String,)>("SELECT window_name FROM ocr_text WHERE frame_id = ?")
+            .bind(frame_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+
+    println!("Verified inserted data: window_name = {:?}", result);
 
     // Insert Audio data
     let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();
@@ -194,17 +207,24 @@ async fn test_time_range_filter() {
     let one_hour_ago = now - Duration::hours(1);
     let two_hours_ago = now - Duration::hours(2);
 
+    use url::form_urlencoded;
+
+    let encoded_start_time =
+        form_urlencoded::byte_serialize(one_hour_ago.to_rfc3339().as_bytes()).collect::<String>();
+    let encoded_end_time =
+        form_urlencoded::byte_serialize(now.to_rfc3339().as_bytes()).collect::<String>();
+
+    let uri = format!(
+        "/search?q=test&limit=10&offset=0&start_time={}&end_time={}",
+        encoded_start_time, encoded_end_time
+    );
     // Test search within the last hour
     let response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!(
-                    "/search?q=test&limit=10&offset=0&start_time={}&end_time={}",
-                    one_hour_ago.to_rfc3339(),
-                    now.to_rfc3339()
-                ))
+                .uri(&uri)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -218,17 +238,22 @@ async fn test_time_range_filter() {
 
     assert_eq!(search_results.data.len(), 2);
 
+    let encoded_start_time =
+        form_urlencoded::byte_serialize(two_hours_ago.to_rfc3339().as_bytes()).collect::<String>();
+    let encoded_end_time =
+        form_urlencoded::byte_serialize(one_hour_ago.to_rfc3339().as_bytes()).collect::<String>();
+
+    let uri = format!(
+        "/search?q=test&limit=10&offset=0&start_time={}&end_time={}",
+        encoded_start_time, encoded_end_time
+    );
     // Test search between two hours ago and one hour ago (should return no results)
     let response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!(
-                    "/search?q=test&limit=10&offset=0&start_time={}&end_time={}",
-                    two_hours_ago.to_rfc3339(),
-                    one_hour_ago.to_rfc3339()
-                ))
+                .uri(&uri)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -274,7 +299,7 @@ async fn test_app_name_filter() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/search?q=test&limit=10&offset=0&app_name=WrongApp&start_time=2024-01-01T00:00:00Z&end_time=2024-01-02T00:00:00Z")
+                .uri("/search?q=test&limit=10&offset=0&app_name=WrongApp&start_time=2024-01-01T00:00:00Z&end_time=2024-01-01T00:00:00Z")
                 .body(Body::empty())
                 .unwrap(),
         )

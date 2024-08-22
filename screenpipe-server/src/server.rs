@@ -86,7 +86,7 @@ pub struct PaginationInfo {
     pub total: i64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "content")]
 pub enum ContentItem {
     OCR(OCRContent),
@@ -94,7 +94,7 @@ pub enum ContentItem {
     FTS(FTSContent),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct OCRContent {
     pub frame_id: i64,
     pub text: String,
@@ -106,7 +106,7 @@ pub struct OCRContent {
     pub tags: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AudioContent {
     pub chunk_id: i64,
     pub transcription: String,
@@ -116,7 +116,7 @@ pub struct AudioContent {
     pub tags: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FTSContent {
     pub text_id: i64,
     pub matched_text: String,
