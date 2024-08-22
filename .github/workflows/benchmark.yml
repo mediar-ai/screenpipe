@@ -160,10 +160,10 @@ jobs:
       - name: List contents of cache directory
         run: ls -R ./cache
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
+      #   with:
+      #     limit-access-to-actor: true
 
       - name: Analyze benchmarks
         uses: benchmark-action/github-action-benchmark@v1
