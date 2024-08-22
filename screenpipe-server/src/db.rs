@@ -534,10 +534,13 @@ impl DatabaseManager {
             }
 
             if content_type == ContentType::All || content_type == ContentType::Audio {
+                println!("Searching for audio");
                 let audio_results = self
                     .search_audio(query, limit, offset, start_time, end_time)
                     .await?;
+                println!("Found {} audio results", audio_results.len());
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
+                println!("Combined results length: {}", results.len());
             }
         }
 
@@ -728,7 +731,7 @@ impl DatabaseManager {
         Ok(ocr_results)
     }
 
-    async fn search_audio(
+    pub async fn search_audio(
         &self,
         query: &str,
         limit: u32,
@@ -737,32 +740,35 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
         let sql = r#"
-            SELECT 
-                audio_transcriptions.audio_chunk_id,
-                audio_transcriptions.transcription,
-                audio_transcriptions.timestamp,
-                audio_chunks.file_path,
-                audio_transcriptions.offset_index,
-                audio_transcriptions.transcription_engine,
-                GROUP_CONCAT(tags.name, ',') as tags
-            FROM 
-                audio_transcriptions
-            JOIN 
-                audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
-            LEFT JOIN
-                audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
-            LEFT JOIN
-                tags ON audio_tags.tag_id = tags.id
-            WHERE 
-                audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
-                AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
-                AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-            GROUP BY
-                audio_transcriptions.audio_chunk_id
-            ORDER BY 
-                audio_transcriptions.timestamp DESC
-            LIMIT ?4 OFFSET ?5
-        "#;
+        SELECT 
+            audio_transcriptions.audio_chunk_id,
+            audio_transcriptions.transcription,
+            audio_transcriptions.timestamp,
+            audio_chunks.file_path,
+            audio_transcriptions.offset_index,
+            audio_transcriptions.transcription_engine,
+            GROUP_CONCAT(tags.name, ',') as tags
+        FROM 
+            audio_transcriptions
+        JOIN 
+            audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
+        LEFT JOIN
+            audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
+        LEFT JOIN
+            tags ON audio_tags.tag_id = tags.id
+        WHERE 
+            audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
+            AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
+            AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
+        GROUP BY
+            audio_transcriptions.audio_chunk_id,
+            audio_transcriptions.transcription,
+            audio_transcriptions.timestamp,
+            audio_transcriptions.offset_index
+        ORDER BY 
+            audio_transcriptions.timestamp DESC
+        LIMIT ?4 OFFSET ?5
+    "#;
 
         let audio_results_raw = sqlx::query_as::<_, AudioResultRaw>(sql)
             .bind(query)
