@@ -689,4 +689,16 @@ curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-1
 
 curl 'http://localhost:3030/search?offset=0&limit=10&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z&content_type=all' | jq .
 
+
+
+
+# First, search for Rust-related content
+curl "http://localhost:3030/search?q=debug&limit=5&offset=0&content_type=ocr"
+
+# Then, assuming you found a relevant item with id 123, tag it
+curl -X POST "http://localhost:3030/tags/vision/626" \
+     -H "Content-Type: application/json" \
+     -d '{"tags": ["debug"]}'
+
+
 */
