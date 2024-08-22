@@ -2,8 +2,13 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use std::path::PathBuf;
 use std::time::Duration;
 
+use screenpipe_vision::perform_ocr_tesseract;
+
 #[cfg(target_os = "macos")]
 use screenpipe_vision::perform_ocr_apple;
+
+#[cfg(target_os = "windows")]
+use screenpipe_vision::perform_ocr_windows;
 
 const EXPECTED_KEYWORDS: &[&str] = &[
     "ocr_handles",
@@ -52,8 +57,8 @@ fn load_test_image() -> image::DynamicImage {
 fn bench_apple_vision_ocr(c: &mut Criterion) {
     let image = load_test_image();
     let mut group = c.benchmark_group("Apple Vision OCR");
-    group.sample_size(10); // Reduce sample size to address warning
-    group.measurement_time(Duration::from_secs(10)); // Increase measurement time
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(10));
 
     group.bench_function(BenchmarkId::new("Performance", ""), |b| {
         b.iter(|| {
@@ -83,16 +88,16 @@ fn test_apple_vision_ocr_accuracy() {
         matched_keywords,
         EXPECTED_KEYWORDS.len()
     );
-    assert!(accuracy > 0.3, "Accuracy below threshold"); // Adjusted threshold based on observed results
+    assert!(accuracy > 0.3, "Accuracy below threshold");
 }
 
-// Combined performance and accuracy test
+// Combined performance and accuracy test for Apple Vision OCR
 #[cfg(target_os = "macos")]
 fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
     let image = load_test_image();
     let mut group = c.benchmark_group("Apple Vision OCR with Accuracy");
-    group.sample_size(10); // Reduce sample size to address warning
-    group.measurement_time(Duration::from_secs(10)); // Increase measurement time
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(10));
 
     group.bench_function(BenchmarkId::new("Performance and Accuracy", ""), |b| {
         b.iter_custom(|iters| {
@@ -120,17 +125,112 @@ fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
     group.finish();
 }
 
+// Tesseract OCR benchmark
+fn bench_tesseract_ocr(c: &mut Criterion) {
+    let image = load_test_image();
+    let mut group = c.benchmark_group("Tesseract OCR");
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(10));
+
+    group.bench_function(BenchmarkId::new("Performance", ""), |b| {
+        b.iter(|| {
+            let (result, _) = perform_ocr_tesseract(black_box(&image));
+            assert!(!result.is_empty(), "OCR failed");
+        })
+    });
+
+    group.finish();
+}
+
+// Tesseract OCR accuracy test
+fn test_tesseract_ocr_accuracy() {
+    let image = load_test_image();
+    let (result, _) = perform_ocr_tesseract(&image);
+
+    let matched_keywords = EXPECTED_KEYWORDS
+        .iter()
+        .filter(|&&keyword| result.contains(keyword))
+        .count();
+    let accuracy = matched_keywords as f32 / EXPECTED_KEYWORDS.len() as f32;
+
+    println!("Tesseract OCR Accuracy: {:.2}", accuracy);
+    println!(
+        "Matched keywords: {}/{}",
+        matched_keywords,
+        EXPECTED_KEYWORDS.len()
+    );
+    assert!(accuracy > 0.3, "Accuracy below threshold");
+}
+
+// Windows OCR benchmark (only on Windows)
+#[cfg(target_os = "windows")]
+fn bench_windows_ocr(c: &mut Criterion) {
+    let image = load_test_image();
+    let mut group = c.benchmark_group("Windows OCR");
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(10));
+
+    group.bench_function(BenchmarkId::new("Performance", ""), |b| {
+        b.to_async(tokio::runtime::Runtime::new().unwrap())
+            .iter(|| async {
+                let (result, _) = perform_ocr_windows(black_box(&image)).await;
+                assert!(!result.is_empty(), "OCR failed");
+            });
+    });
+
+    group.finish();
+}
+
+// Windows OCR accuracy test (only on Windows)
+#[cfg(target_os = "windows")]
+async fn test_windows_ocr_accuracy() {
+    let image = load_test_image();
+    let (result, _) = perform_ocr_windows(&image).await;
+
+    let matched_keywords = EXPECTED_KEYWORDS
+        .iter()
+        .filter(|&&keyword| result.contains(keyword))
+        .count();
+    let accuracy = matched_keywords as f32 / EXPECTED_KEYWORDS.len() as f32;
+
+    println!("Windows OCR Accuracy: {:.2}", accuracy);
+    println!(
+        "Matched keywords: {}/{}",
+        matched_keywords,
+        EXPECTED_KEYWORDS.len()
+    );
+    assert!(accuracy > 0.3, "Accuracy below threshold");
+}
+
 #[cfg(target_os = "macos")]
 criterion_group!(
     benches,
     bench_apple_vision_ocr,
-    bench_apple_vision_ocr_with_accuracy
+    bench_apple_vision_ocr_with_accuracy,
+    bench_tesseract_ocr
 );
-#[cfg(target_os = "macos")]
+
+#[cfg(target_os = "windows")]
+criterion_group!(benches, bench_tesseract_ocr, bench_windows_ocr);
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+criterion_group!(benches, bench_tesseract_ocr);
+
 criterion_main!(benches);
 
 #[cfg(target_os = "macos")]
 #[test]
-fn run_accuracy_test() {
+fn run_apple_accuracy_test() {
     test_apple_vision_ocr_accuracy();
+}
+
+#[test]
+fn run_tesseract_accuracy_test() {
+    test_tesseract_ocr_accuracy();
+}
+
+#[cfg(target_os = "windows")]
+#[tokio::test]
+async fn run_windows_accuracy_test() {
+    test_windows_ocr_accuracy().await;
 }

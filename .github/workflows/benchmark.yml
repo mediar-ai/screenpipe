@@ -8,8 +8,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  benchmark:
-    name: Run Rust benchmark
+  benchmark_pcm:
+    name: Run PCM benchmark
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -20,37 +20,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev
 
-      - name: Run benchmarks
+      - name: Run PCM benchmarks
         run: |
-          cargo bench --bench pcm_decode_benchmark -- --output-format bencher | tee output.txt
+          cargo bench --bench pcm_decode_benchmark -- --output-format bencher | tee pcm_output.txt
 
-      - name: Download previous benchmark data
-        uses: actions/cache@v4
-        with:
-          path: ./cache
-          key: ${{ runner.os }}-benchmark
-
-      - name: Store benchmark result
+      - name: Store PCM benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: Rust Benchmark
+          name: PCM Benchmark
           tool: "cargo"
-          output-file-path: output.txt
-          external-data-json-path: ./cache/benchmark-data.json
-          fail-on-alert: true
-          # GitHub API token to make a commit comment
+          output-file-path: pcm_output.txt
+          external-data-json-path: ./cache/pcm-benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Enable alert commit comment
-          comment-on-alert: true
-          # Enable Job Summary for PRs
-          summary-always: true
-          alert-comment-cc-users: "@louis030195"
+          auto-push: false
+          comment-always: false
+          save-data-file: true
 
-      - name: Upload benchmark results
+      - name: Upload PCM benchmark artifact
         uses: actions/upload-artifact@v3
         with:
-          name: benchmark-results
-          path: output.txt
+          name: pcm-benchmark-data
+          path: ./cache/pcm-benchmark-data.json
 
   apple_ocr_benchmark:
     name: Run OCR benchmark
@@ -69,27 +59,113 @@ jobs:
         run: |
           cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_output.txt
 
-      - name: Download previous OCR benchmark data
-        uses: actions/cache@v4
-        with:
-          path: ./ocr_cache
-          key: ${{ runner.os }}-ocr-benchmark
-
       - name: Store OCR benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmark
           tool: "cargo"
           output-file-path: ocr_output.txt
-          external-data-json-path: ./ocr_cache/ocr-benchmark-data.json
-          fail-on-alert: true
+          external-data-json-path: ./cache/ocr-benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          comment-on-alert: true
-          summary-always: true
-          alert-comment-cc-users: "@louis030195"
+          auto-push: false
+          comment-always: false
+          save-data-file: true
 
-      - name: Upload OCR benchmark results
+      - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ocr-benchmark-results
-          path: ocr_output.txt
+          name: ocr-benchmark-data
+          path: ./cache/ocr-benchmark-data.json
+
+  tesseract_ocr_benchmark:
+    name: Run Tesseract OCR benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libleptonica-dev libtesseract-dev tesseract-ocr-eng
+
+      - name: Run Tesseract OCR benchmarks
+        run: |
+          cargo bench --bench ocr_benchmark -- --output-format bencher | tee tesseract_ocr_output.txt
+
+      - name: Store Tesseract OCR benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Tesseract OCR Benchmark
+          tool: "cargo"
+          output-file-path: tesseract_ocr_output.txt
+          external-data-json-path: ./cache/tesseract-ocr-benchmark-data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          comment-always: false
+          save-data-file: true
+
+      - name: Upload Tesseract OCR benchmark artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: tesseract-ocr-benchmark-data
+          path: ./cache/tesseract-ocr-benchmark-data.json
+
+  windows_ocr_benchmark:
+    name: Run Windows OCR benchmark
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run Windows OCR benchmarks
+        run: |
+          cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -FilePath windows_ocr_output.txt
+
+      - name: Store Windows OCR benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Windows OCR Benchmark
+          tool: "cargo"
+          output-file-path: windows_ocr_output.txt
+          external-data-json-path: ./cache/windows-ocr-benchmark-data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          comment-always: false
+          save-data-file: true
+
+      - name: Upload Windows OCR benchmark artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-ocr-benchmark-data
+          path: ./cache/windows-ocr-benchmark-data.json
+
+  analyze_benchmarks:
+    needs:
+      [
+        benchmark_pcm,
+        apple_ocr_benchmark,
+        tesseract_ocr_benchmark,
+        windows_ocr_benchmark,
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download benchmark data
+        uses: actions/download-artifact@v3
+        with:
+          path: ./cache
+
+      - name: Analyze benchmarks
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: "cargo"
+          output-file-path: ./cache/pcm-benchmark-data/pcm-benchmark-data.json,./cache/ocr-benchmark-data/ocr-benchmark-data.json,./cache/tesseract-ocr-benchmark-data/tesseract-ocr-benchmark-data.json,./cache/windows-ocr-benchmark-data/windows-ocr-benchmark-data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-threshold: "200%"
+          comment-always: true
+          alert-comment-cc-users: "@louis030195"

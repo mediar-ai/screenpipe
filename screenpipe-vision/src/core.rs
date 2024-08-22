@@ -10,15 +10,15 @@ use std::{
 use tokio::sync::mpsc::Sender;
 
 #[cfg(target_os = "macos")]
+use crate::apple::parse_apple_ocr_result;
+#[cfg(target_os = "macos")]
 use crate::apple::perform_ocr_apple;
-use crate::monitor::get_monitor_by_id;
 #[cfg(target_os = "windows")]
-use crate::utils::perform_ocr_windows;
+use crate::microsoft::perform_ocr_windows;
+use crate::monitor::get_monitor_by_id;
+use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
-use crate::utils::{
-    capture_screenshot, compare_with_previous_image, perform_ocr_tesseract, save_text_files,
-};
-
+use crate::utils::{capture_screenshot, compare_with_previous_image, save_text_files};
 #[derive(Clone)]
 pub struct CaptureResult {
     pub image: Arc<DynamicImage>,
@@ -266,52 +266,4 @@ fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
         });
 
     parsed_output
-}
-
-#[cfg(target_os = "macos")]
-fn parse_apple_ocr_result(json_result: &str) -> (String, String) {
-    let parsed_result: serde_json::Value = serde_json::from_str(json_result).unwrap_or_else(|e| {
-        error!("Failed to parse JSON output: {}", e);
-        serde_json::json!({
-            "ocrResult": "",
-            "textElements": [],
-            "overallConfidence": 0.0
-        })
-    });
-
-    let text = parsed_result["ocrResult"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
-    let text_elements = parsed_result["textElements"]
-        .as_array()
-        .unwrap_or(&vec![])
-        .clone();
-
-    let json_output: Vec<serde_json::Value> = text_elements
-        .iter()
-        .map(|element| {
-            serde_json::json!({
-                "level": "0",
-                "page_num": "0",
-                "block_num": "0",
-                "par_num": "0",
-                "line_num": "0",
-                "word_num": "0",
-                "left": element["boundingBox"]["x"].as_f64().unwrap_or(0.0).to_string(),
-                "top": element["boundingBox"]["y"].as_f64().unwrap_or(0.0).to_string(),
-                "width": element["boundingBox"]["width"].as_f64().unwrap_or(0.0).to_string(),
-                "height": element["boundingBox"]["height"].as_f64().unwrap_or(0.0).to_string(),
-                "conf": element["confidence"].as_f64().unwrap_or(0.0).to_string(),
-                "text": element["text"].as_str().unwrap_or("").to_string()
-            })
-        })
-        .collect();
-
-    let json_output_string = serde_json::to_string(&json_output).unwrap_or_else(|e| {
-        error!("Failed to serialize JSON output: {}", e);
-        "[]".to_string()
-    });
-
-    (text, json_output_string)
 }
