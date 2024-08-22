@@ -17,32 +17,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
-pub enum RecorderControl {
-    Pause,
-    Resume,
-    Stop,
-}
-
-// Wrapper struct for DataOutput
-pub struct DataOutputWrapper {
-    pub data_output: rusty_tesseract::tesseract::output_data::DataOutput,
-}
-
-impl DataOutputWrapper {
-    pub fn to_json(&self) -> String {
-        let data_json: Vec<String> = self.data_output.data.iter().map(|d| {
-            format!(
-                r#"{{"level": {}, "page_num": {}, "block_num": {}, "par_num": {}, "line_num": {}, "word_num": {}, "left": {}, "top": {}, "width": {}, "height": {}, "conf": {}, "text": "{}"}}"#,
-                d.level, d.page_num, d.block_num, d.par_num, d.line_num, d.word_num, d.left, d.top, d.width, d.height, d.conf, d.text
-            )
-        }).collect();
-        format!(
-            r#"{{"output": "{}", "data": [{}]}}"#,
-            self.data_output.output,
-            data_json.join(", ")
-        )
-    }
-}
 
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,

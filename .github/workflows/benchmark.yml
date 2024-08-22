@@ -51,3 +51,43 @@ jobs:
         with:
           name: benchmark-results
           path: output.txt
+
+  apple_ocr_benchmark:
+    name: Run OCR benchmark
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          brew install ffmpeg
+
+      - name: Run OCR benchmarks
+        run: |
+          cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_output.txt
+
+      - name: Download previous OCR benchmark data
+        uses: actions/cache@v4
+        with:
+          path: ./ocr_cache
+          key: ${{ runner.os }}-ocr-benchmark
+
+      - name: Store OCR benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: OCR Benchmark
+          tool: "cargo"
+          output-file-path: ocr_output.txt
+          external-data-json-path: ./ocr_cache/ocr-benchmark-data.json
+          fail-on-alert: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-on-alert: true
+          summary-always: true
+          alert-comment-cc-users: "@louis030195"
+
+      - name: Upload OCR benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: ocr-benchmark-results
+          path: ocr_output.txt
