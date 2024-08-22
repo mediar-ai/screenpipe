@@ -172,11 +172,12 @@ async fn get_device_and_config(
     }
     .ok_or_else(|| anyhow!("Audio device not found"))?;
 
-    let mut config = audio_device.default_input_config()?;
     // if output device and windows, using output config
-    if cfg!(target_os = "windows") && is_output_device {
-        config = audio_device.default_output_config()?;
-    }
+    let config = if is_output_device && cfg!(target_os = "windows") {
+        audio_device.default_output_config()?
+    } else {
+        audio_device.default_input_config()?
+    };
     Ok((audio_device, config))
 }
 
