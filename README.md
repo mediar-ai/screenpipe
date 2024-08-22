@@ -179,34 +179,8 @@ Then run it
 
 <details>
   <summary>Windows</summary>
-
-  NOT RECOMMENDED (Windows build is not straightforward). Get the [desktop app](https://screenpi.pe/) instead. (Which includes the CLI)
-  
-  1. Install dependencies:
-
-```bash
-# Install first Chocolatey from https://chocolatey.org/install
-choco install ffmpeg pkgconfiglite rust git
-```
-
-  2. Clone the repo:
-
-```bash
-git clone https://github.com/louis030195/screen-pipe
-cd screen-pipe
-```
-
-  3. Run the API:
-
-```bash
-# This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
-cargo build --release --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
-
-# then run it
-./target/release/screenpipe
-
-# add --ocr-engine windows-native to use native windows OCR
-```
+   
+   Currently updating the instructions for Windows which are not straightforward, please feel free to help
 </details>
 
 <details>
