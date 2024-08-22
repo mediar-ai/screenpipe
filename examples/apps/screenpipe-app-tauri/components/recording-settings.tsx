@@ -9,7 +9,14 @@ import {
 } from "./ui/select";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Check, ChevronsUpDown, Eye, Mic, Monitor } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Eye,
+  HelpCircle,
+  Mic,
+  Monitor,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Command,
@@ -25,6 +32,13 @@ import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { invoke } from "@tauri-apps/api/core";
 import { Badge } from "./ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
+import { Switch } from "./ui/switch";
 
 interface AudioDevice {
   name: string;
@@ -131,6 +145,7 @@ export function RecordingSettings({
         ocrEngine: localSettings.ocrEngine,
         monitorId: localSettings.monitorId,
         audioDevices: localSettings.audioDevices,
+        usePiiRemoval: localSettings.usePiiRemoval,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -175,6 +190,10 @@ export function RecordingSettings({
       : [...localSettings.audioDevices, currentValue];
 
     setLocalSettings({ ...localSettings, audioDevices: updatedDevices });
+  };
+
+  const handlePiiRemovalChange = (checked: boolean) => {
+    setLocalSettings({ ...localSettings, usePiiRemoval: checked });
   };
 
   return (
@@ -341,6 +360,44 @@ export function RecordingSettings({
                   </Command>
                 </PopoverContent>
               </Popover>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="piiRemoval"
+                  checked={localSettings.usePiiRemoval}
+                  onCheckedChange={handlePiiRemovalChange}
+                />
+                <Label
+                  htmlFor="piiRemoval"
+                  className="flex items-center space-x-2"
+                >
+                  <span>remove personal information (PII)</span>
+                  <Badge variant="outline" className="ml-2">
+                    experimental
+                  </Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          removes sensitive information like credit card
+                          numbers, emails, and phone numbers from OCR text
+                          <br />
+                          before saving to the database or returning in search
+                          results
+                          <br />
+                          this will avoid sending these information to openai
+                          for example
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+              </div>
             </div>
 
             <div className="flex flex-col space-y-2">

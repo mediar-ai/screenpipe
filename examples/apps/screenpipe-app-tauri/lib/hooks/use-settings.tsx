@@ -29,6 +29,7 @@ const defaultSettings: Settings = {
   ocrEngine: "default",
   monitorId: "default",
   audioDevices: ["default"],
+  usePiiRemoval: false,
 };
 
 export interface Settings {
@@ -45,6 +46,7 @@ export interface Settings {
   ocrEngine: string;
   monitorId: string;
   audioDevices: string[];
+  usePiiRemoval: boolean;
 }
 
 let store: Store | null = null;
@@ -109,6 +111,8 @@ export function useSettings() {
         const savedAudioDevices = ((await store!.get(
           "audioDevices"
         )) as string[]) || ["default"];
+        const savedUsePiiRemoval =
+          ((await store!.get("usePiiRemoval")) as boolean) || false;
 
         setSettings({
           openaiApiKey: savedKey,
@@ -124,6 +128,7 @@ export function useSettings() {
           ocrEngine: savedOcrEngine,
           monitorId: savedMonitorId,
           audioDevices: savedAudioDevices,
+          usePiiRemoval: savedUsePiiRemoval,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);

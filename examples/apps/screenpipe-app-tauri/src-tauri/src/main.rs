@@ -24,6 +24,7 @@ use tauri::{
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_shell::process::CommandChild;
+#[allow(unused_variables)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
@@ -151,6 +152,15 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     .map_err(|e| e.to_string())?
     .unwrap_or_default();
 
+    let use_pii_removal = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("usePiiRemoval")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false))
+    })
+    .map_err(|e| e.to_string())?;
+
+
     let _data_dir_str = base_dir.to_string_lossy();
     let mut args = vec!["--port", "3030"];
     // if macos do --fps 0.2
@@ -183,6 +193,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         }
     }
 
+    if use_pii_removal {
+        args.push("--use-pii-removal");
+    }
+
     // hardcode TESSDATA_PREFIX for windows
     if cfg!(windows) {
         let exe_dir = env::current_exe()
@@ -210,6 +224,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         return Err(e.to_string());
     }
 
+    #[allow(unused_mut, unused_variables)]
     let (mut rx, child) = result.unwrap();
 
     // only in production mode because it breaks the "bun tauri dev"

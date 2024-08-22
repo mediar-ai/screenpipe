@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.1.54"
+version = "0.1.55"
 description = ""
 authors = ["you"]
 license = ""
@@ -51,7 +51,7 @@ tauri-plugin-autostart = "2.0.0-beta.9"
 
 # Chrono
 chrono = "0.4.3"
-tauri-plugin-shell = "2.0.0-alpha.2"
+tauri-plugin-shell = "2.0.0-rc.2"
 tauri-plugin-store = "2.0.0-beta"
 
 
