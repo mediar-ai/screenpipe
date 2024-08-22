@@ -157,7 +157,7 @@ async fn record_video(
     );
 
     while is_running.load(Ordering::SeqCst) {
-        if let Some(frame) = video_capture.ocr_frame_queue.lock().await.pop_front() {
+        if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
                 match db.insert_frame().await {
                     Ok(frame_id) => {

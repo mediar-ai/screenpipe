@@ -128,10 +128,6 @@ name = "screenpipe"
 path = "src/bin/screenpipe-server.rs"
 
 [[bin]]
-name = "screenpipe-video"
-path = "src/bin/screenpipe-video.rs"
-
-[[bin]]
 name = "screenpipe-pipe-runner"
 path = "src/bin/screenpipe-pipe-runner.rs"
 required-features = ["pipes"]
