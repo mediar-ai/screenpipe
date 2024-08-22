@@ -2,10 +2,11 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use std::path::PathBuf;
 use std::time::Duration;
 
-use screenpipe_vision::perform_ocr_tesseract;
-
 #[cfg(target_os = "macos")]
 use screenpipe_vision::perform_ocr_apple;
+
+#[cfg(target_os = "linux")]
+use screenpipe_vision::perform_ocr_tesseract;
 
 #[cfg(target_os = "windows")]
 use screenpipe_vision::perform_ocr_windows;
@@ -52,7 +53,7 @@ fn load_test_image() -> image::DynamicImage {
     image::open(&path).expect("Failed to open image")
 }
 
-// Performance test for Apple Vision OCR
+// Apple Vision OCR benchmark (macOS only)
 #[cfg(target_os = "macos")]
 fn bench_apple_vision_ocr(c: &mut Criterion) {
     let image = load_test_image();
@@ -70,7 +71,6 @@ fn bench_apple_vision_ocr(c: &mut Criterion) {
     group.finish();
 }
 
-// Accuracy test for Apple Vision OCR
 #[cfg(target_os = "macos")]
 fn test_apple_vision_ocr_accuracy() {
     let image = load_test_image();
@@ -91,7 +91,6 @@ fn test_apple_vision_ocr_accuracy() {
     assert!(accuracy > 0.3, "Accuracy below threshold");
 }
 
-// Combined performance and accuracy test for Apple Vision OCR
 #[cfg(target_os = "macos")]
 fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
     let image = load_test_image();
@@ -125,7 +124,8 @@ fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
     group.finish();
 }
 
-// Tesseract OCR benchmark
+// Tesseract OCR benchmark (Linux only)
+#[cfg(target_os = "linux")]
 fn bench_tesseract_ocr(c: &mut Criterion) {
     let image = load_test_image();
     let mut group = c.benchmark_group("Tesseract OCR");
@@ -142,7 +142,7 @@ fn bench_tesseract_ocr(c: &mut Criterion) {
     group.finish();
 }
 
-// Tesseract OCR accuracy test
+#[cfg(target_os = "linux")]
 fn test_tesseract_ocr_accuracy() {
     let image = load_test_image();
     let (result, _) = perform_ocr_tesseract(&image);
@@ -162,7 +162,7 @@ fn test_tesseract_ocr_accuracy() {
     assert!(accuracy > 0.3, "Accuracy below threshold");
 }
 
-// Windows OCR benchmark (only on Windows)
+// Windows OCR benchmark (Windows only)
 #[cfg(target_os = "windows")]
 fn bench_windows_ocr(c: &mut Criterion) {
     let image = load_test_image();
@@ -181,7 +181,6 @@ fn bench_windows_ocr(c: &mut Criterion) {
     group.finish();
 }
 
-// Windows OCR accuracy test (only on Windows)
 #[cfg(target_os = "windows")]
 async fn test_windows_ocr_accuracy() {
     let image = load_test_image();
@@ -202,28 +201,30 @@ async fn test_windows_ocr_accuracy() {
     assert!(accuracy > 0.3, "Accuracy below threshold");
 }
 
+// Criterion group definitions
 #[cfg(target_os = "macos")]
 criterion_group!(
     benches,
     bench_apple_vision_ocr,
-    bench_apple_vision_ocr_with_accuracy,
-    bench_tesseract_ocr
+    bench_apple_vision_ocr_with_accuracy
 );
 
-#[cfg(target_os = "windows")]
-criterion_group!(benches, bench_tesseract_ocr, bench_windows_ocr);
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(target_os = "linux")]
 criterion_group!(benches, bench_tesseract_ocr);
+
+#[cfg(target_os = "windows")]
+criterion_group!(benches, bench_windows_ocr);
 
 criterion_main!(benches);
 
+// Tests
 #[cfg(target_os = "macos")]
 #[test]
 fn run_apple_accuracy_test() {
     test_apple_vision_ocr_accuracy();
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn run_tesseract_accuracy_test() {
     test_tesseract_ocr_accuracy();
