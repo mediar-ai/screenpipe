@@ -1,3 +1,4 @@
+#[cfg(feature = "pipes")]
 #[cfg(test)]
 mod tests {
     use screenpipe_core::run_js;
