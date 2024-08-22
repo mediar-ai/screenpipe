@@ -157,7 +157,13 @@ mod tests {
         db.insert_audio_transcription(audio_chunk_id, "Hello from audio 2", 1, "")
             .await
             .unwrap();
-
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        // Add this check
+        let audio_results = db
+            .search_audio("Hello from audio 2", 100, 0, None, None)
+            .await
+            .unwrap();
+        println!("Audio results after insertion: {:?}", audio_results);
         let end_time = Utc::now();
 
         // Test search with full time range

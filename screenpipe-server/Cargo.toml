@@ -105,6 +105,10 @@ tempfile = "3.3.0"
 criterion = { workspace = true }
 rand = "0.8"
 
+axum-test = "15.3.0"
+
+# Url encoding
+url = "2.4.0"
 
 [[bench]]
 name = "db_benchmarks"
