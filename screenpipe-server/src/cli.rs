@@ -109,7 +109,7 @@ pub struct Cli {
     /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
     /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
     /// WhisperDistilLargeV3 is a local, lightweight transcription model (--a whisper-large), recommended for higher quality audio than tiny.
-    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTiny)]
+    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperDistilLargeV3)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// OCR engine to use.
