@@ -1,26 +1,28 @@
 use chrono::Utc;
+use crossbeam::queue::ArrayQueue;
 use image::ImageFormat::{self};
-use log::{debug, error, info, warn};
+use log::{debug, error};
+use log::{info, warn};
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
-use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::sync::Mutex;
-
-use std::time::Duration;
 
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
+const MAX_QUEUE_SIZE: usize = 100;
 
 pub struct VideoCapture {
-    frame_queue: Arc<Mutex<VecDeque<CaptureResult>>>,
-    video_frame_queue: Arc<Mutex<VecDeque<CaptureResult>>>,
-    pub ocr_frame_queue: Arc<Mutex<VecDeque<CaptureResult>>>,
+    #[allow(unused)]
+    frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
+    #[allow(unused)]
+    video_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
+    pub ocr_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
 }
 
 impl VideoCapture {
@@ -33,9 +35,9 @@ impl VideoCapture {
         monitor_id: u32,
     ) -> Self {
         info!("Starting new video capture");
-        let frame_queue = Arc::new(Mutex::new(VecDeque::new()));
-        let video_frame_queue = Arc::new(Mutex::new(VecDeque::new()));
-        let ocr_frame_queue = Arc::new(Mutex::new(VecDeque::new()));
+        let frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
+        let video_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
+        let ocr_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let new_chunk_callback = Arc::new(new_chunk_callback);
         let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
 
@@ -56,27 +58,60 @@ impl VideoCapture {
 
         info!("Started capture thread");
 
-        // Spawn another thread to handle receiving and queueing the results
+        // In the _queue_thread
         let _queue_thread = tokio::spawn(async move {
+            // Helper function to push to queue and handle errors
+            fn push_to_queue(
+                queue: &ArrayQueue<Arc<CaptureResult>>,
+                result: &Arc<CaptureResult>,
+                queue_name: &str,
+            ) -> bool {
+                if queue.push(Arc::clone(result)).is_err() {
+                    if queue.pop().is_none() {
+                        error!("{} queue is in an inconsistent state", queue_name);
+                        return false;
+                    }
+                    if queue.push(Arc::clone(result)).is_err() {
+                        error!(
+                            "Failed to push to {} queue after removing oldest frame",
+                            queue_name
+                        );
+                        return false;
+                    }
+                    debug!("{} queue was full, dropped oldest frame", queue_name);
+                }
+                true
+            }
             while let Some(result) = result_receiver.recv().await {
                 let frame_number = result.frame_number;
                 debug!("Received frame {} for queueing", frame_number);
-                let mut queue = capture_frame_queue.lock().await;
-                let mut video_queue = capture_video_frame_queue.lock().await;
-                let mut ocr_queue = capture_ocr_frame_queue.lock().await;
-                queue.push_back(result.clone());
-                video_queue.push_back(result.clone());
-                ocr_queue.push_back(result);
-                debug!("Frame {} pushed to queues. Queue length: {}, Video queue length: {}, OCR queue length: {}", frame_number, queue.len(), video_queue.len(), ocr_queue.len());
 
-                // Clear the old queue after processing
-                if queue.len() > 1 {
-                    queue.pop_front();
+                let result = Arc::new(result);
+
+                let frame_pushed = push_to_queue(&capture_frame_queue, &result, "Frame");
+                let video_pushed = push_to_queue(&capture_video_frame_queue, &result, "Video");
+                let ocr_pushed = push_to_queue(&capture_ocr_frame_queue, &result, "OCR");
+
+                if !frame_pushed || !video_pushed || !ocr_pushed {
+                    error!(
+                        "Failed to push frame {} to one or more queues",
+                        frame_number
+                    );
+                    continue; // Skip to next iteration instead of crashing
                 }
+
+                debug!(
+                    "Frame {} pushed to queues. Queue lengths: {}, {}, {}",
+                    frame_number,
+                    capture_frame_queue.len(),
+                    capture_video_frame_queue.len(),
+                    capture_ocr_frame_queue.len()
+                );
             }
         });
 
         let video_frame_queue_clone = video_frame_queue.clone();
+
         let output_path = output_path.to_string();
         let _video_thread = tokio::spawn(async move {
             save_frames_as_video(
@@ -94,20 +129,9 @@ impl VideoCapture {
             ocr_frame_queue,
         }
     }
-
-    pub async fn get_latest_frame(&self) -> Option<CaptureResult> {
-        let mut queue = self.frame_queue.lock().await;
-        let queue_length = queue.len();
-        debug!("Number of frames in queue before popping: {}", queue_length);
-        queue.pop_front()
-    }
-
-    pub fn get_video_frame_queue(&self) -> Arc<Mutex<VecDeque<CaptureResult>>> {
-        Arc::clone(&self.video_frame_queue)
-    }
 }
 async fn save_frames_as_video(
-    frame_queue: &Arc<Mutex<VecDeque<CaptureResult>>>,
+    frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
     output_path: &str,
     fps: f64,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
@@ -138,7 +162,7 @@ async fn save_frames_as_video(
 
             // Wait for at least one frame before starting a new FFmpeg process
             let first_frame = loop {
-                if let Some(result) = frame_queue.lock().await.pop_front() {
+                if let Some(result) = frame_queue.pop() {
                     debug!("Got first frame for new chunk");
                     break result;
                 }
@@ -206,7 +230,7 @@ async fn save_frames_as_video(
             }
         }
 
-        if let Some(result) = frame_queue.lock().await.pop_front() {
+        if let Some(result) = frame_queue.pop() {
             debug!("Processing frame in video.rs"); // {}", frame_count + 1
             let sender = Arc::clone(&sender);
 

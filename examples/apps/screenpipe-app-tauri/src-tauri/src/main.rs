@@ -29,6 +29,7 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
 use tokio::time::sleep;
+use tracing_subscriber::prelude::*;
 use uuid::Uuid;
 mod analytics;
 
@@ -160,7 +161,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     })
     .map_err(|e| e.to_string())?;
 
-
     let _data_dir_str = base_dir.to_string_lossy();
     let mut args = vec!["--port", "3030"];
     // if macos do --fps 0.2
@@ -259,6 +259,9 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
+    tracing_subscriber::Registry::default()
+        .with(sentry::integrations::tracing::layer())
+        .init();
 
     let _guard = sentry::init((
         "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", sentry::ClientOptions {

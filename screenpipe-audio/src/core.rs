@@ -451,7 +451,6 @@ pub async fn default_output_device() -> Result<AudioDevice> {
                 if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
                     if let Some(device) = host.default_input_device() {
                         if let Ok(name) = device.name() {
-                            info!("Using display capture device: {}", name);
                             return Ok(AudioDevice::new(name, DeviceType::Output));
                         }
                     }

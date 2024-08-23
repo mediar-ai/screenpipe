@@ -83,14 +83,8 @@ name = "screenpipe-audio"
 path = "src/bin/screenpipe-audio.rs"
 
 [[bench]]
-name = "audio_benchmark"
-harness = false
-
-[[bench]]
 name = "pcm_decode_benchmark"
 harness = false
 
-[[bench]]
-name = "stt_benchmark"
-harness = false
+
 
