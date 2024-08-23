@@ -107,12 +107,7 @@ jobs:
           path: ./cache/windows-ocr-benchmark-data.json
 
   analyze_benchmarks:
-    needs:
-      [
-        apple_ocr_benchmark,
-        tesseract_ocr_benchmark,
-        windows_ocr_benchmark,
-      ]
+    needs: [apple_ocr_benchmark, tesseract_ocr_benchmark, windows_ocr_benchmark]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -125,19 +120,34 @@ jobs:
       - name: List contents of cache directory
         run: ls -R ./cache
 
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
-      #   with:
-      #     limit-access-to-actor: true
-
-      - name: Analyze benchmarks
+      - name: Analyze Apple OCR benchmark
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: "cargo"
-          output-file-path: |
-            ./cache/apple-ocr-benchmark-data/apple-ocr-benchmark-data.json
-            ./cache/tesseract-ocr-benchmark-data/tesseract-ocr-benchmark-data.json
-            ./cache/windows-ocr-benchmark-data/windows-ocr-benchmark-data.json
+          output-file-path: ./cache/apple-ocr-benchmark-data/apple-ocr-benchmark-data.json
+          external-data-json-path: ./cache/apple-ocr-benchmark-data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          comment-always: false
+          fail-on-alert: false
+
+      - name: Analyze Tesseract OCR benchmark
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: "cargo"
+          output-file-path: ./cache/tesseract-ocr-benchmark-data/tesseract-ocr-benchmark-data.json
+          external-data-json-path: ./cache/tesseract-ocr-benchmark-data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          comment-always: false
+          fail-on-alert: false
+
+      - name: Analyze Windows OCR benchmark
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: "cargo"
+          output-file-path: ./cache/windows-ocr-benchmark-data/windows-ocr-benchmark-data.json
+          external-data-json-path: ./cache/windows-ocr-benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           comment-on-alert: true
