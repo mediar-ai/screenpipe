@@ -114,6 +114,10 @@ url = "2.4.0"
 name = "db_benchmarks"
 harness = false
 
+[[bench]]
+name = "new_db_benchmark"
+harness = false
+
 [features]
 default = []
 static-ffmpeg = ["ffmpeg-next/static"]

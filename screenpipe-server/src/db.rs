@@ -363,62 +363,62 @@ impl DatabaseManager {
             {
                 Ok(Ok(())) => {
                     // Chunk the text before inserting into chunked text index
-                    const CHUNKING_ENGINE: &str = "local_simple";
+                    // const CHUNKING_ENGINE: &str = "local_simple";
 
-                    let chunks = match CHUNKING_ENGINE {
-                        "local_simple" => text_chunking_simple(text),
-                        "candle_jina_bert" => text_chunking_by_similarity(text).await,
-                        "unstructured" => unstructured_chunking(text)
-                            .map_err(|e| anyhow::anyhow!(e))
-                            .and_then(|chunks| Ok(chunks)),
-                        _ => text_chunking_simple(text), // Default to simple chunking for unknown engines
-                    };
+                    // let chunks = match CHUNKING_ENGINE {
+                    //     "local_simple" => text_chunking_simple(text),
+                    //     "candle_jina_bert" => text_chunking_by_similarity(text).await,
+                    //     "unstructured" => unstructured_chunking(text)
+                    //         .map_err(|e| anyhow::anyhow!(e))
+                    //         .and_then(|chunks| Ok(chunks)),
+                    //     _ => text_chunking_simple(text), // Default to simple chunking for unknown engines
+                    // };
 
-                    match chunks {
-                        Ok(chunks) => {
-                            debug!("Successfully chunked text into {} chunks", chunks.len());
-                            for chunk in chunks.iter() {
-                                if let Err(e) = self
-                                    .insert_chunked_text(
-                                        frame_id,
-                                        chunk,
-                                        Utc::now(),
-                                        &format!("{:?}", *ocr_engine),
-                                        CHUNKING_ENGINE,
-                                        ContentSource::Screen,
-                                    )
-                                    .await
-                                {
-                                    error!("Failed to insert chunk into chunked text index: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to chunk text: {}", e);
-                            // Fallback to inserting the whole text if chunking fails
-                            debug!("Inserting whole text as a single chunk");
-                            if let Err(e) = self
-                                .insert_chunked_text(
-                                    frame_id,
-                                    text,
-                                    Utc::now(),
-                                    &format!("{:?}", *ocr_engine),
-                                    "No_Chunking",
-                                    ContentSource::Screen,
-                                )
-                                .await
-                            {
-                                error!(
-                                    "Failed to insert whole text into chunked text index: {}",
-                                    e
-                                );
-                            }
-                        }
-                    }
-                    debug!(
-                        "Successfully completed OCR text insertion for frame_id: {} on attempt {}",
-                        frame_id, attempt
-                    );
+                    // match chunks {
+                    //     Ok(chunks) => {
+                    //         debug!("Successfully chunked text into {} chunks", chunks.len());
+                    //         for chunk in chunks.iter() {
+                    //             if let Err(e) = self
+                    //                 .insert_chunked_text(
+                    //                     frame_id,
+                    //                     chunk,
+                    //                     Utc::now(),
+                    //                     &format!("{:?}", *ocr_engine),
+                    //                     CHUNKING_ENGINE,
+                    //                     ContentSource::Screen,
+                    //                 )
+                    //                 .await
+                    //             {
+                    //                 error!("Failed to insert chunk into chunked text index: {}", e);
+                    //             }
+                    //         }
+                    //     }
+                    //     Err(e) => {
+                    //         error!("Failed to chunk text: {}", e);
+                    //         // Fallback to inserting the whole text if chunking fails
+                    //         debug!("Inserting whole text as a single chunk");
+                    //         if let Err(e) = self
+                    //             .insert_chunked_text(
+                    //                 frame_id,
+                    //                 text,
+                    //                 Utc::now(),
+                    //                 &format!("{:?}", *ocr_engine),
+                    //                 "No_Chunking",
+                    //                 ContentSource::Screen,
+                    //             )
+                    //             .await
+                    //         {
+                    //             error!(
+                    //                 "Failed to insert whole text into chunked text index: {}",
+                    //                 e
+                    //             );
+                    //         }
+                    //     }
+                    // }
+                    // debug!(
+                    //     "Successfully completed OCR text insertion for frame_id: {} on attempt {}",
+                    //     frame_id, attempt
+                    // );
                     return Ok(());
                 }
                 Ok(Err(e)) => {
