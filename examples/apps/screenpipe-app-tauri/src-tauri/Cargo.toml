@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.1.59"
+version = "0.1.60"
 description = ""
 authors = ["you"]
 license = ""
@@ -42,7 +42,8 @@ uuid = { version = "1.10.0", features = ["v4"] }
 # Sentry 
 sentry = { version = "0.34.0", features = ["tracing"] }
 tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-appender = "0.2.3"
 # broken not compatible w tauri2?
 # sentry-tauri = "0.2"
 

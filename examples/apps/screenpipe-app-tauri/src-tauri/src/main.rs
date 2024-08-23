@@ -1,15 +1,12 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use log::{debug, error, info, LevelFilter};
-use logs::MultiWriter;
 use tauri::Config;
 
 use serde_json::Value;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -24,17 +21,19 @@ use tauri::{
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_shell::process::CommandChild;
-#[allow(unused_variables)]
+#[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
 use tokio::time::sleep;
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::EnvFilter;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 mod analytics;
 
 use crate::analytics::start_analytics;
-mod logs;
 
 struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
 
@@ -259,16 +258,6 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
-    tracing_subscriber::Registry::default()
-        .with(sentry::integrations::tracing::layer())
-        .init();
-
-    let _guard = sentry::init((
-        "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", sentry::ClientOptions {
-        release: sentry::release_name!(),
-        traces_sample_rate: 0.2,
-        ..Default::default()
-      }));
 
     let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
 
@@ -290,81 +279,83 @@ async fn main() {
             spawn_screenpipe,
             kill_all_sreenpipes,
         ])
-        .setup(move |app| {
-            // run this on windows only
+        .setup(|app| {
+            // Logging setup
+            let app_handle = app.handle();
+            let base_dir = get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+
+            // Set up file appender
+            let file_appender = RollingFileAppender::new(
+                Rotation::NEVER,
+                base_dir.clone(),
+                "screenpipe-app.log",
+            );
+
+            // Create a custom layer for file logging
+            let file_layer = tracing_subscriber::fmt::layer()
+                .with_writer(file_appender)
+                .with_ansi(false)
+                .with_filter(EnvFilter::new("info"));
+
+            // Create a custom layer for console logging
+            let console_layer = tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_filter(EnvFilter::new("debug"));
+
+            // Initialize the tracing subscriber with both layers
+            tracing_subscriber::registry()
+                .with(sentry::integrations::tracing::layer())
+                .with(file_layer)
+                .with(console_layer)
+                .init();
+
+            // Initialize Sentry
+            let _guard = sentry::init((
+                "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
+                sentry::ClientOptions {
+                    release: sentry::release_name!(),
+                    traces_sample_rate: 0.2,
+                    ..Default::default()
+                }
+            ));
+
+            // Windows-specific setup
             if cfg!(windows) {
-                // Get the directory of the executable
                 let exe_dir = env::current_exe()
                     .expect("Failed to get current executable path")
                     .parent()
                     .expect("Failed to get parent directory of executable")
                     .to_path_buf();
-
-                // Set the TESSDATA_PREFIX environment variable
                 let tessdata_path = exe_dir.join("tessdata");
-                unsafe {
-                    env::set_var("TESSDATA_PREFIX", tessdata_path);
-                }
+                env::set_var("TESSDATA_PREFIX", tessdata_path);
             }
 
-            // Get the autostart manager
+            // Autostart setup
             let autostart_manager = app.autolaunch();
-            // Enable autostart
             let _ = autostart_manager.enable();
-            // Check enable state
             debug!(
                 "registered for autostart? {}",
                 autostart_manager.is_enabled().unwrap()
             );
-            // Disable autostart
-            let app_handle = app.handle().clone();
 
-            let base_dir =
-                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
             let port = 3030;
-
             app.manage(port);
-
-            let debug = true;
-
-            let mut builder = env_logger::Builder::new();
-            builder
-                .filter(None, LevelFilter::Info)
-                .filter_module("tokenizers", LevelFilter::Error)
-                .filter_module("rusty_tesseract", LevelFilter::Error)
-                .filter_module("symphonia", LevelFilter::Error);
-
-            if debug {
-                builder.filter_module("screenpipe", LevelFilter::Debug);
-                builder.filter_module("app", LevelFilter::Debug);
-            }
-
-            let log_file =
-                File::create(format!("{}/screenpipe-app.log", base_dir.to_string_lossy())).unwrap();
-            let multi_writer = MultiWriter::new(vec![
-                Box::new(log_file) as Box<dyn Write + Send>,
-                Box::new(std::io::stdout()) as Box<dyn Write + Send>,
-            ]);
-
-            builder.target(env_logger::Target::Pipe(Box::new(multi_writer)));
-            builder.format_timestamp_secs().init();
 
             info!("Local data directory: {}", base_dir.display());
 
+            // PostHog analytics setup
             let posthog_api_key = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce".to_string();
             let interval_hours = 1;
 
             let path = base_dir.join("store.bin");
-
             if !path.exists() {
                 let _ = File::create(path.clone()).unwrap();
             }
 
+            // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-                // Add System Tray
                 let toggle = MenuItemBuilder::with_id("quit", "Quit screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
-
                 let _ = main_tray.set_menu(Some(menu));
                 main_tray.on_menu_event(move |app, event| match event.id().as_ref() {
                     "quit" => {
@@ -380,97 +371,78 @@ async fn main() {
                         ..
                     } => {
                         if button == MouseButton::Left && button_state == MouseButtonState::Down {
-                            // if let Err(err) = tray.app_handle().emit("cap://tray/clicked", ()) {
-                            //     eprintln!("Failed to emit event for tray {}", err);
-                            // };
+                            // Handle left click if needed
                         }
                     }
                     _ => {}
                 });
             }
 
-            let stores = app.app_handle().state::<StoreCollection<Wry>>();
-
-            // Initialize the store with default values if it doesn't exist
-            let _ = with_store(
-                app.app_handle().clone(),
-                stores.clone(),
-                path.clone(),
-                |store| {
-                    if store.keys().count() == 0 {
-                        // Set default values
-                        store.insert("analyticsEnabled".to_string(), Value::Bool(true))?;
-                        store.insert(
-                            "config".to_string(),
-                            serde_json::to_value(Config::default())?,
-                        )?;
-                        store.save()?;
-                    }
-                    Ok(())
-                },
-            );
-
-            let path_clone = path.clone();
-            let stores_clone = stores.clone();
-
-            // Now use the store
-            let _ = with_store(
-                app.app_handle().clone(),
-                stores_clone,
-                path_clone,
-                |store| {
+            // Store setup and analytics initialization
+            let stores = app.state::<StoreCollection<Wry>>();
+            let _ = with_store(app.handle().clone(), stores.clone(), path.clone(), |store| {
+                if store.keys().count() == 0 {
+                    store.insert("analyticsEnabled".to_string(), Value::Bool(true))?;
+                    store.insert(
+                        "config".to_string(),
+                        serde_json::to_value(Config::default())?,
+                    )?;
                     store.save()?;
+                }
+                Ok(())
+            });
 
-                    let is_analytics_enabled = store
-                        .get("analyticsEnabled")
-                        .unwrap_or(&Value::Bool(true))
-                        .as_bool()
-                        .unwrap_or(true);
+            let _ = with_store(app.handle().clone(), stores.clone(), path.clone(), |store| {
+                store.save()?;
 
-                    let unique_id = store
-                        .get("userId")
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                        .unwrap_or_else(|| {
-                            let new_id = Uuid::new_v4().to_string();
-                            store
-                                .insert(
-                                    "userId".to_string(),
-                                    serde_json::Value::String(new_id.clone()),
-                                )
-                                .unwrap();
-                            store.save().unwrap();
-                            new_id
-                        });
+                let is_analytics_enabled = store
+                    .get("analyticsEnabled")
+                    .unwrap_or(&Value::Bool(true))
+                    .as_bool()
+                    .unwrap_or(true);
 
-                    if is_analytics_enabled {
-                        match start_analytics(unique_id, posthog_api_key, interval_hours) {
-                            Ok(analytics_manager) => {
-                                app.manage(analytics_manager);
-                            }
-                            Err(e) => {
-                                error!("Failed to start analytics: {}", e);
-                            }
+                let unique_id = store
+                    .get("userId")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                    .unwrap_or_else(|| {
+                        let new_id = Uuid::new_v4().to_string();
+                        store
+                            .insert(
+                                "userId".to_string(),
+                                serde_json::Value::String(new_id.clone()),
+                            )
+                            .unwrap();
+                        store.save().unwrap();
+                        new_id
+                    });
+
+                if is_analytics_enabled {
+                    match start_analytics(unique_id, posthog_api_key, interval_hours) {
+                        Ok(analytics_manager) => {
+                            app.manage(analytics_manager);
+                        }
+                        Err(e) => {
+                            error!("Failed to start analytics: {}", e);
                         }
                     }
+                }
 
-                    Ok(())
-                },
-            );
+                Ok(())
+            });
 
+            // Dev mode check and sidecar spawn
             let mut use_dev_mode = false;
-            let _ = with_store(app.app_handle().clone(), stores, path, |store| {
+            let _ = with_store(app.handle().clone(), stores, path, |store| {
                 use_dev_mode = store
                     .get("devMode")
                     .unwrap_or(&Value::Bool(false))
                     .as_bool()
                     .unwrap_or(false);
-
                 Ok(())
             });
 
             if !use_dev_mode {
-                // Spawn the sidecar initially
                 let sidecar_state = app.state::<SidecarState>();
                 let app_handle = app.handle().clone();
                 let child = spawn_sidecar(&app_handle).unwrap();
@@ -483,17 +455,14 @@ async fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    // Run the app
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
         }
         tauri::RunEvent::ExitRequested { .. } => {
+            debug!("ExitRequested event");
             let app_handle_clone = app_handle.clone();
             let app_handle_clone2 = app_handle.clone();
-            debug!("ExitRequested event");
-            // kill all screenpipe processes if the user is not using dev mode using pkill
-            // get dev mode from the store
             let stores = app_handle.state::<StoreCollection<Wry>>();
             let path = app_handle
                 .path()
