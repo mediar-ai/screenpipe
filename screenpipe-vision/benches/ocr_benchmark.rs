@@ -149,8 +149,9 @@ fn bench_tesseract_ocr(c: &mut Criterion) {
     group.finish();
 }
 
+// TODO fix windows
 // Windows OCR benchmark (Windows only)
-#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")] 
 fn bench_windows_ocr(c: &mut Criterion) {
     let image = load_test_image();
     let mut group = c.benchmark_group("Windows OCR");

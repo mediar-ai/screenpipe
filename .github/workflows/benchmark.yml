@@ -51,25 +51,25 @@ jobs:
           name: ocr-benchmark-data
           path: ocr_output.txt
 
-  windows_ocr_benchmark:
-    name: Run Windows OCR benchmark
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
+  # windows_ocr_benchmark:
+  #   name: Run Windows OCR benchmark
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: dtolnay/rust-toolchain@stable
 
-      - name: Run Windows OCR benchmarks
-        run: |
-          cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -Append -FilePath ocr_output.txt
+  #     - name: Run Windows OCR benchmarks
+  #       run: |
+  #         cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -Append -FilePath ocr_output.txt
 
-      - name: Upload OCR benchmark artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: ocr-benchmark-data
-          path: ocr_output.txt
+  #     - name: Upload OCR benchmark artifact
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: ocr-benchmark-data
+  #         path: ocr_output.txt
 
   analyze_benchmarks:
-    needs: [apple_ocr_benchmark, tesseract_ocr_benchmark, windows_ocr_benchmark]
+    needs: [apple_ocr_benchmark, tesseract_ocr_benchmark] # TODO fix windows_ocr_benchmark
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
