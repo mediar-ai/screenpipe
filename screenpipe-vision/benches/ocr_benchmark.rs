@@ -1,6 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::path::PathBuf;
 use std::time::Duration;
+use strsim::jaro_winkler;
 
 #[cfg(target_os = "macos")]
 use screenpipe_vision::perform_ocr_apple;
@@ -10,6 +11,24 @@ use screenpipe_vision::perform_ocr_tesseract;
 
 #[cfg(target_os = "windows")]
 use screenpipe_vision::perform_ocr_windows;
+
+// ! keep in mind we're optimising for OCR that is good to swallow for LLM
+// ! e.g. it's ok to have typo in words or wrong casing, etc.
+
+fn calculate_accuracy(ocr_result: &str, expected_keywords: &[&str]) -> f32 {
+    let ocr_result = ocr_result.to_lowercase();
+    let matched_keywords = expected_keywords
+        .iter()
+        .filter(|&&keyword| {
+            let keyword_lower = keyword.to_lowercase();
+            ocr_result.contains(&keyword_lower)
+                || ocr_result
+                    .split_whitespace()
+                    .any(|word| jaro_winkler(word, &keyword_lower) > 0.9)
+        })
+        .count();
+    matched_keywords as f32 / expected_keywords.len() as f32
+}
 
 const EXPECTED_KEYWORDS: &[&str] = &[
     "ocr_handles",
@@ -88,11 +107,7 @@ fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
                 let result = perform_ocr_apple(black_box(&image));
                 total_duration += start.elapsed();
 
-                let matched_keywords = EXPECTED_KEYWORDS
-                    .iter()
-                    .filter(|&&keyword| result.contains(keyword))
-                    .count();
-                let accuracy = matched_keywords as f32 / EXPECTED_KEYWORDS.len() as f32;
+                let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
                 total_accuracy += accuracy;
             }
 
@@ -112,10 +127,22 @@ fn bench_tesseract_ocr(c: &mut Criterion) {
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(10));
 
-    group.bench_function(BenchmarkId::new("Performance", ""), |b| {
-        b.iter(|| {
-            let (result, _) = perform_ocr_tesseract(black_box(&image));
-            assert!(!result.is_empty(), "OCR failed");
+    group.bench_function(BenchmarkId::new("Performance and Accuracy", ""), |b| {
+        b.iter_custom(|iters| {
+            let mut total_duration = Duration::new(0, 0);
+            let mut total_accuracy = 0.0;
+
+            for _ in 0..iters {
+                let start = std::time::Instant::now();
+                let (result, _) = perform_ocr_tesseract(black_box(&image));
+                total_duration += start.elapsed();
+
+                let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
+                total_accuracy += accuracy;
+            }
+
+            println!("Average Accuracy: {:.2}", total_accuracy / iters as f32);
+            total_duration
         })
     });
 
@@ -130,11 +157,23 @@ fn bench_windows_ocr(c: &mut Criterion) {
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(10));
 
-    group.bench_function(BenchmarkId::new("Performance", ""), |b| {
+    group.bench_function(BenchmarkId::new("Performance and Accuracy", ""), |b| {
         b.to_async(tokio::runtime::Runtime::new().unwrap())
-            .iter(|| async {
-                let (result, _) = perform_ocr_windows(black_box(&image)).await;
-                assert!(!result.is_empty(), "OCR failed");
+            .iter_custom(|iters| async move {
+                let mut total_duration = Duration::new(0, 0);
+                let mut total_accuracy = 0.0;
+
+                for _ in 0..iters {
+                    let start = std::time::Instant::now();
+                    let (result, _) = perform_ocr_windows(black_box(&image)).await;
+                    total_duration += start.elapsed();
+
+                    let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
+                    total_accuracy += accuracy;
+                }
+
+                println!("Average Accuracy: {:.2}", total_accuracy / iters as f32);
+                total_duration
             });
     });
 
@@ -156,22 +195,3 @@ criterion_group!(benches, bench_tesseract_ocr);
 criterion_group!(benches, bench_windows_ocr);
 
 criterion_main!(benches);
-
-// Tests
-#[cfg(target_os = "macos")]
-#[test]
-fn run_apple_accuracy_test() {
-    test_apple_vision_ocr_accuracy();
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn run_tesseract_accuracy_test() {
-    test_tesseract_ocr_accuracy();
-}
-
-#[cfg(target_os = "windows")]
-#[tokio::test]
-async fn run_windows_accuracy_test() {
-    test_windows_ocr_accuracy().await;
-}

@@ -31,7 +31,6 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   let context = CIContext(options: nil)
 
   // Apply preprocessing filters
-  // Replace the current preprocessing chain with a more efficient one
   let processed =
     ciImage
     .applyingFilter(
@@ -43,7 +42,6 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
     return strdup("Error: Failed to create preprocessed image")
   }
 
-  let semaphore = DispatchSemaphore(value: 0)
   var ocrResult = ""
   var textElements: [[String: Any]] = []
   var totalConfidence: Float = 0.0
@@ -54,63 +52,80 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   let sliceHeight = height / sliceCount
   let overlap = Int(Float(sliceHeight) * 0.1)  // 10% overlap
 
+  let queue = DispatchQueue(label: "com.screenpipe.ocr", attributes: .concurrent)
+  let group = DispatchGroup()
+
+  let resultsQueue = DispatchQueue(label: "com.screenpipe.results", attributes: .concurrent)
+
   for i in 0..<sliceCount {
-    let sliceY = max(0, i * sliceHeight - overlap)
-    let sliceHeight = min(height - sliceY, sliceHeight + overlap)
-    let sliceRect = CGRect(x: 0, y: sliceY, width: width, height: sliceHeight)
-    guard let sliceCGImage = preprocessedCGImage.cropping(to: sliceRect) else {
-      continue
-    }
-
-    let textRequest = VNRecognizeTextRequest { request, error in
-      if let error = error {
-        ocrResult = "Error: \(error.localizedDescription)"
-        semaphore.signal()
+    queue.async(group: group) {
+      let sliceY = max(0, i * sliceHeight - overlap)
+      let sliceHeight = min(height - sliceY, sliceHeight + overlap)
+      let sliceRect = CGRect(x: 0, y: sliceY, width: width, height: sliceHeight)
+      guard let sliceCGImage = preprocessedCGImage.cropping(to: sliceRect) else {
         return
       }
 
-      guard let observations = request.results as? [VNRecognizedTextObservation] else {
-        ocrResult = "Error: Failed to process image or no text found"
-        semaphore.signal()
-        return
-      }
-
-      for observation in observations {
-        guard let topCandidate = observation.topCandidates(1).first else {
-          continue
+      let textRequest = VNRecognizeTextRequest { request, error in
+        if let error = error {
+          print("Error: \(error.localizedDescription)")
+          return
         }
-        let text = topCandidate.string
-        let confidence = topCandidate.confidence
-        let boundingBox = observation.boundingBox
-        textElements.append([
-          "text": text,
-          "confidence": confidence,
-          "boundingBox": [
-            "x": boundingBox.origin.x,
-            "y": (CGFloat(sliceY) + boundingBox.origin.y * CGFloat(sliceHeight)) / CGFloat(height),
-            "width": boundingBox.size.width,
-            "height": boundingBox.size.height * CGFloat(sliceHeight) / CGFloat(height)
-          ]
-        ])
 
-        ocrResult += "\(text)\n"
-        totalConfidence += confidence
-        observationCount += 1
+        guard let observations = request.results as? [VNRecognizedTextObservation] else {
+          print("Error: Failed to process image or no text found")
+          return
+        }
+
+        var sliceResults: [[String: Any]] = []
+        var sliceText = ""
+        var sliceConfidence: Float = 0.0
+        var sliceObservationCount = 0
+
+        for observation in observations {
+          guard let topCandidate = observation.topCandidates(1).first else {
+            continue
+          }
+          let text = topCandidate.string
+          let confidence = topCandidate.confidence
+          let boundingBox = observation.boundingBox
+          sliceResults.append([
+            "text": text,
+            "confidence": confidence,
+            "boundingBox": [
+              "x": boundingBox.origin.x,
+              "y": (CGFloat(sliceY) + boundingBox.origin.y * CGFloat(sliceHeight))
+                / CGFloat(height),
+              "width": boundingBox.size.width,
+              "height": boundingBox.size.height * CGFloat(sliceHeight) / CGFloat(height)
+            ]
+          ])
+
+          sliceText += "\(text)\n"
+          sliceConfidence += confidence
+          sliceObservationCount += 1
+        }
+
+        resultsQueue.async(flags: .barrier) {
+          ocrResult += sliceText
+          textElements.append(contentsOf: sliceResults)
+          totalConfidence += sliceConfidence
+          observationCount += sliceObservationCount
+        }
       }
-      semaphore.signal()
+
+      textRequest.recognitionLevel = .accurate
+
+      let handler = VNImageRequestHandler(cgImage: sliceCGImage, options: [:])
+      do {
+        try handler.perform([textRequest])
+      } catch {
+        print("Error: Failed to perform OCR - \(error.localizedDescription)")
+      }
     }
-
-    textRequest.recognitionLevel = .accurate
-
-    let handler = VNImageRequestHandler(cgImage: sliceCGImage, options: [:])
-    do {
-      try handler.perform([textRequest])
-    } catch {
-      return strdup("Error: Failed to perform OCR - \(error.localizedDescription)")
-    }
-
-    semaphore.wait()
   }
+
+  group.wait()
 
   let overallConfidence = observationCount > 0 ? totalConfidence / Float(observationCount) : 0.0
   let result: [String: Any] = [
