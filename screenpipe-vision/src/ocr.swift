@@ -3,6 +3,8 @@ import CoreImage
 import Foundation
 import Vision
 
+// TODO: how can we use Metal to speed this up?
+
 @available(macOS 10.15, *)
 @_cdecl("perform_ocr")
 public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int, height: Int)
@@ -88,6 +90,11 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
           }
           let text = topCandidate.string
           let confidence = topCandidate.confidence
+
+          // Implement early stopping for low-confidence results
+          if confidence < 0.3 {
+            continue  // Skip low-confidence results to save compute
+          }
           let boundingBox = observation.boundingBox
           sliceResults.append([
             "text": text,
@@ -148,5 +155,16 @@ Compile for multi arch:
 swiftc -emit-library -target x86_64-apple-macosx11.0 -o screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/src/ocr.swift -framework Metal -framework MetalPerformanceShaders -framework Vision -framework CoreImage \
 && swiftc -emit-library -target arm64-apple-macosx11.0 -o screenpipe-vision/lib/libscreenpipe_arm64.dylib screenpipe-vision/src/ocr.swift -framework Metal -framework MetalPerformanceShaders -framework Vision -framework CoreImage \
 && lipo -create screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/lib/libscreenpipe_arm64.dylib -output screenpipe-vision/lib/libscreenpipe.dylib
+
+How to optimise this code:
+
+1. run cargo bench --bench ocr_benchmark
+2. change the code & compile again
+3. run cargo bench --bench ocr_benchmark again to see if it's faster or more accurate
+
+
+
+
+
 
 */
