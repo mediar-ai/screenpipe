@@ -1,5 +1,3 @@
-# act -W .github/workflows/benchmark.yml --container-architecture linux/amd64 -j benchmark -P ubuntu-latest=catthehacker/ubuntu:act-latest
-
 name: Rust Benchmark
 
 on: [push]
@@ -23,25 +21,13 @@ jobs:
         env:
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/screenpipe-vision/lib:${{ env.DYLD_LIBRARY_PATH }}
         run: |
-          cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_output.txt
+          cargo bench --bench ocr_benchmark -- --output-format bencher | tee -a ocr_output.txt
 
-      - name: Store OCR benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: Apple OCR Benchmark
-          tool: "cargo"
-          output-file-path: ocr_output.txt
-          external-data-json-path: ./cache/apple-ocr-benchmark-data.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          comment-always: false
-          save-data-file: true
-
-      - name: Upload Apple OCR benchmark artifact
+      - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v3
         with:
-          name: apple-ocr-benchmark-data
-          path: ./cache/apple-ocr-benchmark-data.json
+          name: ocr-benchmark-data
+          path: ocr_output.txt
 
   tesseract_ocr_benchmark:
     name: Run Tesseract OCR benchmark
@@ -57,25 +43,13 @@ jobs:
 
       - name: Run Tesseract OCR benchmarks
         run: |
-          cargo bench --bench ocr_benchmark -- --output-format bencher | tee tesseract_ocr_output.txt
+          cargo bench --bench ocr_benchmark -- --output-format bencher | tee -a ocr_output.txt
 
-      - name: Store Tesseract OCR benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: Tesseract OCR Benchmark
-          tool: "cargo"
-          output-file-path: tesseract_ocr_output.txt
-          external-data-json-path: ./cache/tesseract-ocr-benchmark-data.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          comment-always: false
-          save-data-file: true
-
-      - name: Upload Tesseract OCR benchmark artifact
+      - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v3
         with:
-          name: tesseract-ocr-benchmark-data
-          path: ./cache/tesseract-ocr-benchmark-data.json
+          name: ocr-benchmark-data
+          path: ocr_output.txt
 
   windows_ocr_benchmark:
     name: Run Windows OCR benchmark
@@ -86,25 +60,13 @@ jobs:
 
       - name: Run Windows OCR benchmarks
         run: |
-          cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -FilePath windows_ocr_output.txt
+          cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -Append -FilePath ocr_output.txt
 
-      - name: Store Windows OCR benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: Windows OCR Benchmark
-          tool: "cargo"
-          output-file-path: windows_ocr_output.txt
-          external-data-json-path: ./cache/windows-ocr-benchmark-data.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          comment-always: false
-          save-data-file: true
-
-      - name: Upload Windows OCR benchmark artifact
+      - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v3
         with:
-          name: windows-ocr-benchmark-data
-          path: ./cache/windows-ocr-benchmark-data.json
+          name: ocr-benchmark-data
+          path: ocr_output.txt
 
   analyze_benchmarks:
     needs: [apple_ocr_benchmark, tesseract_ocr_benchmark, windows_ocr_benchmark]
@@ -115,43 +77,21 @@ jobs:
       - name: Download benchmark data
         uses: actions/download-artifact@v3
         with:
+          name: ocr-benchmark-data
           path: ./cache
 
       - name: List contents of cache directory
         run: ls -R ./cache
 
-      - name: Analyze Apple OCR benchmark
+      - name: Analyze all OCR benchmarks
         uses: benchmark-action/github-action-benchmark@v1
         with:
+          name: OCR Benchmarks
           tool: "cargo"
-          output-file-path: ./cache/apple-ocr-benchmark-data/apple-ocr-benchmark-data.json
-          external-data-json-path: ./cache/apple-ocr-benchmark-data.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          comment-always: false
-          fail-on-alert: false
-
-      - name: Analyze Tesseract OCR benchmark
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: "cargo"
-          output-file-path: ./cache/tesseract-ocr-benchmark-data/tesseract-ocr-benchmark-data.json
-          external-data-json-path: ./cache/tesseract-ocr-benchmark-data.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          comment-always: false
-          fail-on-alert: false
-
-      - name: Analyze Windows OCR benchmark
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: "cargo"
-          output-file-path: ./cache/windows-ocr-benchmark-data/windows-ocr-benchmark-data.json
-          external-data-json-path: ./cache/windows-ocr-benchmark-data.json
+          output-file-path: ./cache/ocr_output.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
+          alert-threshold: "200%"
           comment-on-alert: true
           fail-on-alert: true
-          alert-threshold: "200%"
-          comment-always: true
           alert-comment-cc-users: "@louis030195"
