@@ -1,7 +1,7 @@
 import CoreGraphics
+import CoreImage
 import Foundation
 import Vision
-import CoreImage
 
 @available(macOS 10.15, *)
 @_cdecl("perform_ocr")
@@ -9,19 +9,19 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   -> UnsafeMutablePointer<CChar>? {
 
   guard let dataProvider = CGDataProvider(data: Data(bytes: imageData, count: length) as CFData),
-        let cgImage = CGImage(
-          width: width,
-          height: height,
-          bitsPerComponent: 8,
-          bitsPerPixel: 32,
-          bytesPerRow: width * 4,
-          space: CGColorSpaceCreateDeviceRGB(),
-          bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-          provider: dataProvider,
-          decode: nil,
-          shouldInterpolate: false,
-          intent: .defaultIntent
-        )
+    let cgImage = CGImage(
+      width: width,
+      height: height,
+      bitsPerComponent: 8,
+      bitsPerPixel: 32,
+      bytesPerRow: width * 4,
+      space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+      provider: dataProvider,
+      decode: nil,
+      shouldInterpolate: false,
+      intent: .defaultIntent
+    )
   else {
     return strdup("Error: Failed to create CGImage")
   }
@@ -29,13 +29,16 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   // Preprocess the image
   let ciImage = CIImage(cgImage: cgImage)
   let context = CIContext(options: nil)
-  
+
   // Apply preprocessing filters
-  let processed = ciImage
-    .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.1])
-    .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 1])
-    .applyingFilter("CIColorControls", parameters: [kCIInputBrightnessKey: 0.1])
-  
+  // Replace the current preprocessing chain with a more efficient one
+  let processed =
+    ciImage
+    .applyingFilter(
+      "CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.1]
+    )
+    .applyingFilter(
+      "CIUnsharpMask", parameters: [kCIInputRadiusKey: 1.0, kCIInputIntensityKey: 0.5])
   guard let preprocessedCGImage = context.createCGImage(processed, from: processed.extent) else {
     return strdup("Error: Failed to create preprocessed image")
   }
@@ -47,9 +50,9 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   var observationCount: Int = 0
 
   // Slice the image horizontally with overlap
-  let sliceCount = 5 // Adjust this number based on your needs
+  let sliceCount = 5  // Adjust this number based on your needs
   let sliceHeight = height / sliceCount
-  let overlap = Int(Float(sliceHeight) * 0.1) // 10% overlap
+  let overlap = Int(Float(sliceHeight) * 0.1)  // 10% overlap
 
   for i in 0..<sliceCount {
     let sliceY = max(0, i * sliceHeight - overlap)
@@ -117,18 +120,18 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   ]
 
   if let jsonData = try? JSONSerialization.data(withJSONObject: result, options: []),
-     let jsonString = String(data: jsonData, encoding: .utf8) {
+    let jsonString = String(data: jsonData, encoding: .utf8) {
     return strdup(jsonString)
   } else {
     return strdup("Error: Failed to serialize result to JSON")
   }
 }
 
-// # Compile for x86_64
-// swiftc -emit-library -target x86_64-apple-macosx10.15 -o screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/src/ocr.swift
+/*
+Compile for multi arch:
 
-// # Compile for arm64 (aarch64)
-// swiftc -emit-library -target arm64-apple-macosx11.0 -o screenpipe-vision/lib/libscreenpipe_arm64.dylib screenpipe-vision/src/ocr.swift
+swiftc -emit-library -target x86_64-apple-macosx11.0 -o screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/src/ocr.swift -framework Metal -framework MetalPerformanceShaders -framework Vision -framework CoreImage \
+&& swiftc -emit-library -target arm64-apple-macosx11.0 -o screenpipe-vision/lib/libscreenpipe_arm64.dylib screenpipe-vision/src/ocr.swift -framework Metal -framework MetalPerformanceShaders -framework Vision -framework CoreImage \
+&& lipo -create screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/lib/libscreenpipe_arm64.dylib -output screenpipe-vision/lib/libscreenpipe.dylib
 
-// # Combine into a universal binary
-// lipo -create screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/lib/libscreenpipe_arm64.dylib -output screenpipe-vision/lib/libscreenpipe.dylib
+*/

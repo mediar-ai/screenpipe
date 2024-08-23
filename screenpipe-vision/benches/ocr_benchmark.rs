@@ -72,26 +72,6 @@ fn bench_apple_vision_ocr(c: &mut Criterion) {
 }
 
 #[cfg(target_os = "macos")]
-fn test_apple_vision_ocr_accuracy() {
-    let image = load_test_image();
-    let result = perform_ocr_apple(&image);
-
-    let matched_keywords = EXPECTED_KEYWORDS
-        .iter()
-        .filter(|&&keyword| result.contains(keyword))
-        .count();
-    let accuracy = matched_keywords as f32 / EXPECTED_KEYWORDS.len() as f32;
-
-    println!("Apple Vision OCR Accuracy: {:.2}", accuracy);
-    println!(
-        "Matched keywords: {}/{}",
-        matched_keywords,
-        EXPECTED_KEYWORDS.len()
-    );
-    assert!(accuracy > 0.3, "Accuracy below threshold");
-}
-
-#[cfg(target_os = "macos")]
 fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
     let image = load_test_image();
     let mut group = c.benchmark_group("Apple Vision OCR with Accuracy");
@@ -142,26 +122,6 @@ fn bench_tesseract_ocr(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(target_os = "linux")]
-fn test_tesseract_ocr_accuracy() {
-    let image = load_test_image();
-    let (result, _) = perform_ocr_tesseract(&image);
-
-    let matched_keywords = EXPECTED_KEYWORDS
-        .iter()
-        .filter(|&&keyword| result.contains(keyword))
-        .count();
-    let accuracy = matched_keywords as f32 / EXPECTED_KEYWORDS.len() as f32;
-
-    println!("Tesseract OCR Accuracy: {:.2}", accuracy);
-    println!(
-        "Matched keywords: {}/{}",
-        matched_keywords,
-        EXPECTED_KEYWORDS.len()
-    );
-    assert!(accuracy > 0.3, "Accuracy below threshold");
-}
-
 // Windows OCR benchmark (Windows only)
 #[cfg(target_os = "windows")]
 fn bench_windows_ocr(c: &mut Criterion) {
@@ -179,26 +139,6 @@ fn bench_windows_ocr(c: &mut Criterion) {
     });
 
     group.finish();
-}
-
-#[cfg(target_os = "windows")]
-async fn test_windows_ocr_accuracy() {
-    let image = load_test_image();
-    let (result, _) = perform_ocr_windows(&image).await;
-
-    let matched_keywords = EXPECTED_KEYWORDS
-        .iter()
-        .filter(|&&keyword| result.contains(keyword))
-        .count();
-    let accuracy = matched_keywords as f32 / EXPECTED_KEYWORDS.len() as f32;
-
-    println!("Windows OCR Accuracy: {:.2}", accuracy);
-    println!(
-        "Matched keywords: {}/{}",
-        matched_keywords,
-        EXPECTED_KEYWORDS.len()
-    );
-    assert!(accuracy > 0.3, "Accuracy below threshold");
 }
 
 // Criterion group definitions
