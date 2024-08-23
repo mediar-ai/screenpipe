@@ -9,6 +9,9 @@ mod pipes {
     use deno_core::ModuleLoadResponse;
     use deno_core::ModuleSourceCode;
     use log::error;
+    use reqwest::header::HeaderMap;
+    use reqwest::header::HeaderValue;
+    use reqwest::header::CONTENT_TYPE;
     use std::env;
     use std::rc::Rc;
 
@@ -58,7 +61,13 @@ mod pipes {
         #[string] body: String,
     ) -> Result<String, AnyError> {
         let client = reqwest::Client::new();
-        let response = client.post(&url).body(body).send().await?;
+
+        // Create a HeaderMap and add the Content-Type header
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+        let response = client.post(&url).headers(headers).body(body).send().await?;
+
         let status = response.status();
         let text = response.text().await?;
 
