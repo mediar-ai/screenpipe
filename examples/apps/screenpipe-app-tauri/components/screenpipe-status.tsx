@@ -27,10 +27,21 @@ import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
 const getDebuggingCommands = (os: string | null) => {
-  const cliInstructions =
-    os === "windows"
-      ? "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n"
-      : "# 1. Open Terminal\n# 2. Navigate to: $HOME/.screenpipe/\n#    Type: cd $HOME/.screenpipe\n";
+  let cliInstructions = "";
+
+  if (os === "windows") {
+    cliInstructions =
+      "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n";
+  } else if (os === "macos") {
+    cliInstructions =
+      "# 1. Open Terminal\n# 2. Navigate to: /Applications/screenpipe.app/Contents/MacOS/\n#    Type: cd /Applications/screenpipe.app/Contents/MacOS/\n";
+  } else if (os === "linux") {
+    cliInstructions =
+      "# 1. Open Terminal\n# 2. Navigate to: /usr/local/bin/\n#    Type: cd /usr/local/bin/\n";
+  } else {
+    cliInstructions =
+      "# OS not recognized. Please check the documentation for your specific operating system.\n";
+  }
 
   const baseInstructions = `# First, view the Screenpipe CLI arguments:
 ${cliInstructions}
