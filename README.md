@@ -94,7 +94,7 @@ Struggle to get it running? [I'll install it with you in a 15 min call.](https:/
 
 1. Install CLI
 ```bash
-brew tap louis030195/screen-pipe https://github.com/mediar-ai/screenpipe.git
+brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
 brew install screenpipe
 ```
 2. Run it:
