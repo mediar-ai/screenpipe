@@ -60,7 +60,7 @@ jobs:
 
       - name: Run Windows OCR benchmarks
         run: |
-          cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -Append -FilePath ocr_output.txt
+          cargo bench --bench ocr_benchmark -- --output-format criterion | Tee-Object -Append -FilePath ocr_output.txt
 
       - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v3
@@ -87,7 +87,7 @@ jobs:
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmarks
-          tool: "cargo"
+          tool: "criterion"
           output-file-path: ./cache/ocr_output.txt
           github-token: ${{ secrets.GH_PAGES_TOKEN }}
           auto-push: true
