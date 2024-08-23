@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1724415623512,
+  "lastUpdate": 1724418556168,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -269,6 +269,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1973595708,
             "range": "± 101229625",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0d489b9dd51ad717fa05ca505c96b4852e6c138b",
+          "message": "Merge pull request #207 from chandeldivyam/fix/issue-183/windows-ocr-benchmark\n\nfix for ocr windows benchmark",
+          "timestamp": "2024-08-23T13:03:38Z",
+          "tree_id": "4a5a84a3c1087c9710517ae1b4a3bf82f409c8cb",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/0d489b9dd51ad717fa05ca505c96b4852e6c138b"
+        },
+        "date": 1724418555674,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1949652375,
+            "range": "± 19181052",
             "unit": "ns/iter"
           }
         ]
