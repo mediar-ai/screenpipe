@@ -153,28 +153,32 @@ fn bench_tesseract_ocr(c: &mut Criterion) {
 // Windows OCR benchmark (Windows only)
 #[cfg(target_os = "windows")] 
 fn bench_windows_ocr(c: &mut Criterion) {
-    let image = load_test_image();
+    let image = load_test_image(); // Load the image once
     let mut group = c.benchmark_group("Windows OCR");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(10));
 
     group.bench_function(BenchmarkId::new("Performance and Accuracy", ""), |b| {
+        let image = image.clone();
         b.to_async(tokio::runtime::Runtime::new().unwrap())
-            .iter_custom(|iters| async move {
-                let mut total_duration = Duration::new(0, 0);
-                let mut total_accuracy = 0.0;
+            .iter_custom(move |iters| {
+                let image = image.clone();
+                async move {
+                    let mut total_duration = Duration::new(0, 0);
+                    let mut total_accuracy = 0.0;
 
-                for _ in 0..iters {
-                    let start = std::time::Instant::now();
-                    let (result, _) = perform_ocr_windows(black_box(&image)).await;
-                    total_duration += start.elapsed();
+                    for _ in 0..iters {
+                        let start = std::time::Instant::now();
+                        let (result, _) = perform_ocr_windows(black_box(&image)).await;
+                        total_duration += start.elapsed();
 
-                    let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
-                    total_accuracy += accuracy;
+                        let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
+                        total_accuracy += accuracy;
+                    }
+
+                    println!("Average Accuracy: {:.2}", total_accuracy / iters as f32);
+                    total_duration
                 }
-
-                println!("Average Accuracy: {:.2}", total_accuracy / iters as f32);
-                total_duration
             });
     });
 
