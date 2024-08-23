@@ -15,7 +15,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Cross-platform screen capture
-xcap = "0.0.10"
+xcap = "0.0.12"  # This is the latest version as of now
 
 # threadpool
 threadpool = "1.8.1"
