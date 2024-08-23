@@ -76,6 +76,7 @@ There are multiple ways to install screenpipe:
 - as a free forever desktop app (but you need to build it yourself). We're 100% OSS.
 - as a free forever desktop app - by sending a PR ([example](https://github.com/mediar-ai/screenpipe/issues/120#issuecomment-2275043418)) (or offer free app to a friend)
 - as a Rust or WASM library (documentation WIP)
+- as a business - check [use cases](https://github.com/mediar-ai/screenpipe?tab=readme-ov-file#use-cases) and [DM louis](https://www.linkedin.com/in/louis030195/)
 
 This is the instructions to install the command line interface.
 
