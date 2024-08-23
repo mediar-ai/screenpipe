@@ -66,7 +66,7 @@ pub struct Cli {
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
     #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
-    pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/louis030195/screen-pipe/issues/173
+    pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
     #[arg(short = 'd', long, default_value_t = 30)]
@@ -109,7 +109,7 @@ pub struct Cli {
     /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
     /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
     /// WhisperDistilLargeV3 is a local, lightweight transcription model (--a whisper-large), recommended for higher quality audio than tiny.
-    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTiny)]
+    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperDistilLargeV3)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// OCR engine to use.

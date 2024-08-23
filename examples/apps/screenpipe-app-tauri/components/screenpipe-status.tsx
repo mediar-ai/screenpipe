@@ -99,7 +99,6 @@ const DevModeSettings = () => {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
   const handleDevModeToggle = (checked: boolean) => {
-
     setLocalSettings((prev) => ({ ...prev, devMode: checked }));
     updateSettings({ devMode: checked });
   };
@@ -271,7 +270,7 @@ const DevModeSettings = () => {
             <ol className="list-decimal list-inside mt-2">
               <li>
                 <a
-                  href="https://github.com/louis030195/screen-pipe/blob/main/screenpipe-server/src/db.rs"
+                  href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/db.rs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-500 hover:underline"
@@ -289,7 +288,7 @@ const DevModeSettings = () => {
             <p className="mt-2">
               or if you prefer using curl, follow the same steps with the{" "}
               <a
-                href="https://github.com/louis030195/screen-pipe/blob/main/screenpipe-server/src/server.rs"
+                href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/server.rs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-500 hover:underline"
@@ -390,7 +389,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
 1. restart screenpipe
 2. reset your screenpipe OS audio/screen recording permissions
 3. if the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn
-4. last, here are some [FAQ](https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot`}
+4. last, here are some [FAQ](https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot`}
               </MarkdownWithExternalLinks>
             </div>
             <Separator className="my-4" />

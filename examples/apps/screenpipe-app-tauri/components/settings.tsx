@@ -320,7 +320,7 @@ export function Settings({ className }: { className?: string }) {
                   </MemoizedReactMarkdown>
                 </div>
                 <a
-                  href="https://github.com/louis030195/screen-pipe/issues/167"
+                  href="https://github.com/mediar-ai/screenpipe/issues/167"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-primary hover:underline font-bold"
