@@ -61,7 +61,7 @@ const meetingSummarizerPipe: Pipe = {
   version: "1.0.0",
   author: "Louis",
   authorLink: "https://github.com/louis030195",
-  repository: "https://github.com/louis030195/screen-pipe",
+  repository: "https://github.com/mediar-ai/screenpipe",
   lastUpdate: new Date().toISOString(),
   description: "Summarize your meetings locally with AI",
   fullDescription: `# Local First Meeting Summarizer

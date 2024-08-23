@@ -242,7 +242,7 @@ const PipeDialog: React.FC = () => {
             screenpipe&apos;s data.
             <br />
             <a
-              href="https://github.com/louis030195/screen-pipe/tree/main/examples/typescript"
+              href="https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript"
               className="text-blue-500 hover:underline"
               target="_blank"
               rel="noopener noreferrer"

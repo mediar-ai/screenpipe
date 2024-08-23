@@ -18,7 +18,7 @@ resolver = "2"
 version = "0.1.62"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
-repository = "https://github.com/louis030195/screen-pipe"
+repository = "https://github.com/mediar-ai/screenpipe"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 

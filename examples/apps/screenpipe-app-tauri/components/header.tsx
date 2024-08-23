@@ -76,7 +76,7 @@ export default function Header() {
         <Settings />
         <PipeDialog />
         {/* <LogViewer /> */}
-        {/* <PrettyLink href="https://github.com/louis030195/screen-pipe/tree/main/examples/ts">
+        {/* <PrettyLink href="https://github.com/mediar-ai/screenpipe/tree/main/examples/ts">
             <span className="mr-2">Examples</span>
             <svg
               xmlns="http://www.w3.org/2000/svg"

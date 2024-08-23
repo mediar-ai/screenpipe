@@ -75,7 +75,7 @@ There are multiple ways to install screenpipe:
 - as a CLI (continue reading), for rather technical users
 - as a [paid desktop app](https://screenpi.pe) with 1 year updates, priority support, and priority features
 - as a free forever desktop app (but you need to build it yourself). We're 100% OSS.
-- as a free forever desktop app - by sending a PR ([example](https://github.com/louis030195/screen-pipe/issues/120#issuecomment-2275043418)) (or offer free app to a friend)
+- as a free forever desktop app - by sending a PR ([example](https://github.com/mediar-ai/screenpipe/issues/120#issuecomment-2275043418)) (or offer free app to a friend)
 - as a Rust or WASM library (documentation WIP)
 
 This is the instructions to install the command line interface.
@@ -94,7 +94,7 @@ Struggle to get it running? [I'll install it with you in a 15 min call.](https:/
 
 1. Install CLI
 ```bash
-brew tap louis030195/screen-pipe https://github.com/louis030195/screen-pipe.git
+brew tap louis030195/screen-pipe https://github.com/mediar-ai/screenpipe.git
 brew install screenpipe
 ```
 2. Run it:
@@ -132,7 +132,7 @@ screenpipe --friend-wearable-uid AC...........................F3
 
 you can combine multiple flags if needed
 
-[Didn't work?](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=brew+install+screenpipe+didnt+work)
+[Didn't work?](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=brew+install+screenpipe+didnt+work)
 
 </details>
 
@@ -148,7 +148,7 @@ brew install pkg-config ffmpeg jq tesseract
 2. Clone the repo:
 
 ```bash
-git clone https://github.com/louis030195/screen-pipe
+git clone https://github.com/mediar-ai/screenpipe
 ```
 
 This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
@@ -171,7 +171,7 @@ Then run it
 # "--debug" if you want to run screenpipe in debug mode to show more logs in terminal
 ```
 
-[Didn't work?](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=cloning+screenpipe+didnt+work)
+[Didn't work?](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=cloning+screenpipe+didnt+work)
 </details>
 
 <br><br>
@@ -202,7 +202,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 2. Clone the repo:
 
 ```bash
-git clone https://github.com/louis030195/screen-pipe
+git clone https://github.com/mediar-ai/screenpipe
 cd screen-pipe
 ```
 
@@ -259,14 +259,14 @@ By default the data is stored in `$HOME/.screenpipe` (`C:\AppData\Users\<user>\.
 <details>
   <summary>run example vercel/ai chatbot web interface</summary>
 
-  This example uses OpenAI. If you're looking for ollama example check the [examples folder](https://github.com/louis030195/screen-pipe/tree/main/examples/typescript)
+  This example uses OpenAI. If you're looking for ollama example check the [examples folder](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript)
 
 The [desktop app](https://screenpi.pe/) fully support OpenAI & Ollama by default.
 
 To run Vercel chatbot, try this:
 
 ```bash
-git clone https://github.com/louis030195/screen-pipe
+git clone https://github.com/mediar-ai/screenpipe
 ```
 
 Navigate to app directory
@@ -277,7 +277,7 @@ Set up you OPENAI API KEY in .env
 ```bash
 echo "OPENAI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" > .env
 ```
-[Didn't work?](https://github.com/louis030195/screen-pipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=vercel+app+didnt+work)
+[Didn't work?](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=vercel+app+didnt+work)
 
 Install dependencies and run local web server
 ```bash
@@ -429,7 +429,7 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
   - Monitor and log system activities for audit purposes
   - Detect potential security threats based on screen content
 
-[**Check other examples**](https://github.com/louis030195/screen-pipe/tree/main/examples/typescript)
+[**Check other examples**](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript)
 
 ## Status 
 
@@ -467,7 +467,7 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
   - [x] Linux output
   - [x] MacOS output 
   - [ ] Windows output (shipping on 19 august)
-- [x] [remote capture](https://github.com/louis030195/screen-pipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
+- [x] [remote capture](https://github.com/mediar-ai/screenpipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
 - [x] local api

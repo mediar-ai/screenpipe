@@ -15,7 +15,7 @@ npx tsx screenpipe.ts
 
 [need help?](https://cal.com/louis030195/screenpipe)
 
-[wants me to build something else like this? please let me know](https://github.com/louis030195/screen-pipe/issues/new?title=example+idea)
+[wants me to build something else like this? please let me know](https://github.com/mediar-ai/screenpipe/issues/new?title=example+idea)
 
 
 

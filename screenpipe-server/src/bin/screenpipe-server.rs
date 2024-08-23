@@ -166,7 +166,7 @@ async fn main() -> anyhow::Result<()> {
                 devices_status.insert(input_device, device_control);
             }
             // audio output only on macos <15.0 atm ?
-            // see https://github.com/louis030195/screen-pipe/pull/106
+            // see https://github.com/mediar-ai/screenpipe/pull/106
             if let Ok(output_device) = default_output_device().await {
                 audio_devices.push(Arc::new(output_device.clone()));
                 let device_control = DeviceControl {
@@ -332,7 +332,7 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "pipes")]
     if !cli.pipe.is_empty() {
         use tokio::process::Command;
-        // ! HACK until we have clean way to store the bin 
+        // ! HACK until we have clean way to store the bin
         let status = Command::new("target/release/screenpipe-pipe-runner")
             .arg("--pipe")
             .args(&cli.pipe)

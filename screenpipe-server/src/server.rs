@@ -439,7 +439,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
                   1. Restart the application.\n\
                   2. If using a desktop app, reset your Screenpipe OS audio/screen recording permissions.\n\
                   3. If the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
-                  4. Last, here are some FAQ to help you troubleshoot: https://github.com/louis030195/screen-pipe/blob/main/content/docs/NOTES.md".to_string())
+                  4. Last, here are some FAQ to help you troubleshoot: https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md".to_string())
         )
     };
 

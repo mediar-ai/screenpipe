@@ -19,7 +19,7 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "2.0.0-rc.0", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
 
-screenpipe-vision = { git = "https://github.com/louis030195/screen-pipe", branch = "main" }
+screenpipe-vision = { git = "https://github.com/mediar-ai/screenpipe", branch = "main" }
 
 axum = "0.7.5"
 
