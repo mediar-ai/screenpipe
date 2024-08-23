@@ -50,9 +50,12 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   var observationCount: Int = 0
 
   // Slice the image horizontally with overlap
-  let sliceCount = 5  // Adjust this number based on your needs
+  let sliceCount = 1  // Adjust this number based on your needs 
+  // -> 5 slice = 0.84 accuracy, 450 ms
+  // -> 2 slice = 0.87 accuracy, 450 ms
+  // -> 1 slice = 0.84 accurarcy, 340 ms
   let sliceHeight = height / sliceCount
-  let overlap = Int(Float(sliceHeight) * 0.1)  // 10% overlap
+  let overlap = Int(Float(sliceHeight) * 0)  // 10% overlap - DISABLED harmful hurts CPU does not help accuracy
 
   let queue = DispatchQueue(label: "com.screenpipe.ocr", attributes: .concurrent)
   let group = DispatchGroup()
