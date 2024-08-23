@@ -21,9 +21,6 @@
 
 
 <p align="center">
-    <a href="https://www.bensbites.com/">
-        <img src="https://img.shields.io/badge/Featured%20on-Ben's%20Bites-blue?style=flat-square" alt="Featured on Ben's Bites">
-    </a>
     <a href="https://discord.gg/dU9EBuw7Uq">
         <img src="https://img.shields.io/discord/823813159592001537?color=5865F2&logo=discord&logoColor=white&style=flat-square" alt="Join us on Discord">
     </a>
@@ -46,6 +43,8 @@
 ---
 
 *Latest News* 🔥
+- [2024/08] We're running bounties! Contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
+- [2024/08] Audio input & output works now work on Windows, Linux, MacOS (<15.0). We also support multi monitor capture 
 - [2024/08] We released video embedding. AI gives you links to your video recording in the chat!
 - [2024/08] We released the pipe store! Create, share, use plugins that get you the most out of your data in less than 30s, even if you are not technical.
 - [2024/08] We released Apple & Windows Native OCR.
