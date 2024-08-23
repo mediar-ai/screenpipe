@@ -88,11 +88,11 @@ impl VideoCapture {
 
                 let result = Arc::new(result);
 
-                let frame_pushed = push_to_queue(&capture_frame_queue, &result, "Frame");
+                // let frame_pushed = push_to_queue(&capture_frame_queue, &result, "Frame");
                 let video_pushed = push_to_queue(&capture_video_frame_queue, &result, "Video");
                 let ocr_pushed = push_to_queue(&capture_ocr_frame_queue, &result, "OCR");
 
-                if !frame_pushed || !video_pushed || !ocr_pushed {
+                if !video_pushed || !ocr_pushed {
                     error!(
                         "Failed to push frame {} to one or more queues",
                         frame_number
