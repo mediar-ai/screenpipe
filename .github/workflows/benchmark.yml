@@ -89,7 +89,7 @@ jobs:
           name: OCR Benchmarks
           tool: "cargo"
           output-file-path: ./cache/ocr_output.txt
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_PAGES_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
           comment-on-alert: true
