@@ -63,7 +63,7 @@ git commit -m "chore: update brew to version ${VERSION}"
 git push
 =end
 
-# brew tap louis030195/screen-pipe https://github.com/mediar-ai/screenpipe.git
+# brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
 # brew install screenpipe
 
 # todo automate this in the future, not urgent for now ..

@@ -111,7 +111,7 @@ if (platform == 'linux') {
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
-		'/home/runner/work/screen-pipe/screen-pipe/target/release/screenpipe',
+		'/home/runner/work/screenpipe/screenpipe/target/release/screenpipe',
 	];
 
 	let copied = false;
@@ -145,7 +145,7 @@ if (platform == 'windows') {
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-pc-windows-msvc', 'release', 'screenpipe.exe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe.exe'),
 		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe.exe'),
-		'D:\\a\\screen-pipe\\screen-pipe\\target\\release\\screenpipe.exe',
+		'D:\\a\\screenpipe\\screenpipe\\target\\release\\screenpipe.exe',
 	];
 
 	let copied = false;

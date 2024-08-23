@@ -1,10 +1,10 @@
-# Screen-Pipe Examples
+# screenpipe examples
 
-This folder contains various examples demonstrating the usage of Screen-Pipe in different scenarios. Below is a table of the available examples:
+This folder contains various examples demonstrating the usage of screenpipe in different scenarios. Below is a table of the available examples:
 
 | Example | Description | Link |
 |---------|-------------|------|
-| TypeScript Daily Log | A daily activity logger using Screen-Pipe | [Daily Log](./daily-log) |
+| TypeScript Daily Log | A daily activity logger using screenpipe | [Daily Log](./daily-log) |
 | TypeScript Daily Tracker | An AI-powered daily activity tracker | [Daily Tracker](./daily-tracker) |
 | TypeScript RAG Over Your Life in Obsidian | Retrieval-Augmented Generation for personal knowledge management | [RAG in Obsidian](./rag-over-your-life-in-obsidian) |
 | TypeScript Meeting Summaries in Obsidian | Automated meeting summary generation for Obsidian | [Meeting Summaries](./meeting-summaries-in-obsidian) |

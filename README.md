@@ -153,7 +153,7 @@ git clone https://github.com/mediar-ai/screenpipe
 
 This runs a local SQLite DB + an API + screenshot, ocr, mic, stt, mp4 encoding
 ```bash
-cd screen-pipe # enter cloned repo
+cd screenpipe # enter cloned repo
 ```
 
 Build the project, takes 5-10 minutes depending on your hardware
@@ -203,7 +203,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ```bash
 git clone https://github.com/mediar-ai/screenpipe
-cd screen-pipe
+cd screenpipe
 ```
 
 3. Build and run:
@@ -271,7 +271,7 @@ git clone https://github.com/mediar-ai/screenpipe
 
 Navigate to app directory
 ```bash
-cd screen-pipe/examples/typescript/vercel-ai-chatbot 
+cd screenpipe/examples/typescript/vercel-ai-chatbot 
 ```
 Set up you OPENAI API KEY in .env
 ```bash
