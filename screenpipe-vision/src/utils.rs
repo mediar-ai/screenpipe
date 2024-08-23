@@ -2,7 +2,7 @@ use crate::capture_screenshot_by_window::capture_all_visible_windows;
 use crate::core::MaxAverageFrame;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
-use log::{debug, error};
+use log::{debug, error, warn};
 use rusty_tesseract::{Args, DataOutput, Image};
 use serde_json;
 use std::collections::HashMap;
@@ -150,16 +150,27 @@ pub async fn capture_screenshot(
     ),
     anyhow::Error,
 > {
+    // info!("Starting screenshot capture for monitor: {:?}", monitor);
     let capture_start = Instant::now();
-    let buffer = monitor.capture_image().unwrap();
+    let buffer = monitor.capture_image().map_err(|e| {
+        error!("Failed to capture monitor image: {}", e);
+        anyhow::anyhow!("Monitor capture failed")
+    })?;
     let image = DynamicImage::ImageRgba8(buffer);
     let image_hash = calculate_hash(&image);
     let capture_duration = capture_start.elapsed();
 
-    // Capture all visible windows
-    let window_images = capture_all_visible_windows(monitor.clone())
-        .await
-        .unwrap_or_default();
+    // info!("Attempting to capture all visible windows");
+    let window_images = match capture_all_visible_windows().await {
+        Ok(images) => {
+            // info!("Successfully captured {} window images", images.len());
+            images
+        },
+        Err(e) => {
+            warn!("Failed to capture window images: {}. Continuing with empty result.", e);
+            Vec::new()
+        }
+    };
 
     Ok((image, window_images, image_hash, capture_duration))
 }
