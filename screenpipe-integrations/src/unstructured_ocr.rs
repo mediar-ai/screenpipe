@@ -2,6 +2,7 @@ use image::{DynamicImage, ImageEncoder, codecs::png::PngEncoder};
 use reqwest::multipart::{Form, Part};
 use serde_json;
 use std::collections::HashMap;
+use std::env;
 use std::io::Cursor;
 use std::io::Write;
 use std::sync::Arc;
@@ -10,9 +11,16 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 use tempfile::NamedTempFile;
 use anyhow::{Result, anyhow};
+use log::error;
 
-pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, String, Option<f64>), String> {
-    let api_key = "ZUxfTRkf6lRgHZDXPHlFaSoOKAEbwV".to_string();
+pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, String, Option<f64>)> {
+    let api_key = match env::var("UNSTRUCTURED_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            error!("UNSTRUCTURED_API_KEY environment variable is not set. Please set it to use the OCR cloud service.");
+            return Err(anyhow!("Missing API key"));
+        }
+    };
     let api_url = "https://api.unstructuredapp.io/general/v0/general".to_string();
 
     let mut buffer = Vec::new();
@@ -44,14 +52,14 @@ pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, Str
         .multipart(form)
         .send()).await {
         Ok(Ok(response)) => response,
-        Ok(Err(e)) => return Err(format!("Request error: {}", e)),
-        Err(_) => return Err("Request timed out".to_string()),
+        Ok(Err(e)) => return Err(anyhow!("Request error: {}", e)),
+        Err(_) => return Err(anyhow!("Request timed out")),
     };
 
     let response_text = if response.status().is_success() {
-        response.text().await.unwrap()
+        response.text().await?
     } else {
-        return Err(format!("Error: {}", response.status()));
+        return Err(anyhow!("Error: {}", response.status()));
     };
 
     let json_output = response_text.clone();
@@ -84,7 +92,13 @@ fn calculate_overall_confidence(parsed_response: &Vec<HashMap<String, serde_json
 
 pub fn unstructured_chunking(text: &str) -> Result<Vec<String>> {
     let client = Client::new();
-    
+    let api_key = match env::var("UNSTRUCTURED_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            error!("UNSTRUCTURED_API_KEY environment variable is not set. Please set it to use the OCR cloud service.");
+            return Err(anyhow!("Missing API key"));
+        }
+    };
     // Create temporary file
     let mut temp_file = NamedTempFile::new().map_err(|e| anyhow!(e.to_string()))?;
     temp_file.write_all(text.as_bytes()).map_err(|e| anyhow!(e.to_string()))?;
@@ -100,7 +114,7 @@ pub fn unstructured_chunking(text: &str) -> Result<Vec<String>> {
     // Send request
     let response = client.post("https://api.unstructuredapp.io/general/v0/general")
         .header("accept", "application/json")
-        .header("unstructured-api-key", "ZUxfTRkf6lRgHZDXPHlFaSoOKAEbwV")
+        .header("unstructured-api-key", &api_key)
         .multipart(form)
         .send()
         .map_err(|e| anyhow!(e.to_string()))?;
