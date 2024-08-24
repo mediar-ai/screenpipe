@@ -1,5 +1,5 @@
 use chrono::Local;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use serde_json::json;
 use serde_json::Value;
 use std::env;
