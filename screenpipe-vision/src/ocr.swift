@@ -58,6 +58,13 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
     var result = finalOCRResult
     result["window_id"] = windowID // Include window ID in the result
 
+    // Ensure ocrResult is null if no text is found
+    if let ocrResult = result["ocrResult"] as? String, !ocrResult.isEmpty {
+        result["ocrResult"] = ocrResult
+    } else {
+        result["ocrResult"] = NSNull()
+    }
+
     if let jsonData = try? JSONSerialization.data(withJSONObject: result, options: []),
        let jsonString = String(data: jsonData, encoding: .utf8) {
         return strdup(jsonString)
