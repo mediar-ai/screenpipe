@@ -1,6 +1,6 @@
 use image::DynamicImage;
 #[cfg(target_os = "windows")]
-pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String) {
+pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String, Option<f64>) {
     use std::io::Cursor;
     use windows::{
         Graphics::Imaging::BitmapDecoder,
@@ -34,9 +34,9 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String) {
 
     let json_output = serde_json::json!([{
         "text": text,
-        "confidence": "n/a" // Windows OCR doesn't provide confidence scores, so we use a default high value
+        "confidence": null // Windows OCR doesn't provide confidence scores
     }])
     .to_string();
 
-    (text, json_output)
+    (text, json_output, None)
 }

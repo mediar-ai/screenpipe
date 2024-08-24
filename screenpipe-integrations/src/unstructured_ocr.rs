@@ -11,7 +11,7 @@ use serde_json::Value;
 use tempfile::NamedTempFile;
 use anyhow::{Result, anyhow};
 
-pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, String), String> {
+pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, String, Option<f64>), String> {
     let api_key = "ZUxfTRkf6lRgHZDXPHlFaSoOKAEbwV".to_string();
     let api_url = "https://api.unstructuredapp.io/general/v0/general".to_string();
 
@@ -64,7 +64,22 @@ pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, Str
         .collect::<Vec<&str>>()
         .join(" ");
 
-    Ok((text, json_output))
+    let overall_confidence = calculate_overall_confidence(&parsed_response);
+
+    Ok((text, json_output, Some(overall_confidence)))
+}
+
+fn calculate_overall_confidence(parsed_response: &Vec<HashMap<String, serde_json::Value>>) -> f64 {
+    let confidence_sum: f64 = parsed_response
+        .iter()
+        .filter_map(|item| item.get("confidence").and_then(|v| v.as_f64()))
+        .sum();
+    let count = parsed_response.len();
+    if count > 0 {
+        confidence_sum / count as f64
+    } else {
+        0.0
+    }
 }
 
 pub fn unstructured_chunking(text: &str) -> Result<Vec<String>> {
