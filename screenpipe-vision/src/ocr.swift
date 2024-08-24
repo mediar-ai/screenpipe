@@ -17,7 +17,7 @@ func captureWindow(windowID: Int) -> CGImage? {
 @_cdecl("perform_ocr")
 public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int, height: Int, windowID: Int) -> UnsafeMutablePointer<CChar>? {
     // Hardcode lightProcessing value
-    let lightProcessing = true  // Set this to true for light processing, false for full processing
+    let lightProcessing = false  // Set this to true for light processing, false for full processing
 
     // Create CGImage from raw data
     let dataProvider = CGDataProvider(dataInfo: nil, data: imageData, size: length) { _, _, _ in }
