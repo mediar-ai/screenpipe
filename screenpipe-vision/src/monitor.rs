@@ -4,8 +4,8 @@ use scap::{get_all_targets, Target};
 pub struct Monitor {
     pub id: u32,
     pub name: String,
-    pub width: u32,
-    pub height: u32,
+    // pub width: u32,
+    // pub height: u32,
     pub is_primary: bool,
 }
 
@@ -17,14 +17,16 @@ pub async fn list_monitors() -> Vec<Monitor> {
         .collect();
     monitors
         .iter()
-        .map(|m| {
+        .enumerate()
+        .map(|(index, m)| {
             if let Target::Display(display) = m {
                 Monitor {
                     id: display.id,
                     name: display.title.clone(),
-                    width: display.raw_handle.screen_size().width as u32,
-                    height: display.raw_handle.screen_size().height as u32,
-                    is_primary: display.raw_handle.is_active(),
+                    // width: display.raw_handle.screen_size().width as u32,
+                    // height: display.raw_handle.screen_size().height as u32,
+                    // is_primary: display.raw_handle.is_active(),
+                    is_primary: index == 0, // HACK bcs not available in windows
                 }
             } else {
                 unreachable!("All targets should be Display at this point")

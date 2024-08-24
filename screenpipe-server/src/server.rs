@@ -139,8 +139,8 @@ pub(crate) struct ListDeviceResponse {
 pub struct MonitorInfo {
     id: u32,
     name: String,
-    width: u32,
-    height: u32,
+    // width: u32,
+    // height: u32,
     is_default: bool,
 }
 
@@ -315,8 +315,8 @@ pub async fn api_list_monitors(
         .map(|monitor| MonitorInfo {
             id: monitor.id,
             name: monitor.name,
-            width: monitor.width,
-            height: monitor.height,
+            // width: monitor.width,
+            // height: monitor.height,
             is_default: monitor.is_primary,
         })
         .collect();

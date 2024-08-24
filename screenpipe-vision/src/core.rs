@@ -218,7 +218,7 @@ pub async fn process_ocr_task(
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
         OcrEngine::Tesseract => perform_ocr_tesseract(&image_arc),
         #[cfg(target_os = "windows")]
-        OcrEngine::WindowsNative => perform_ocr_windows(&window_image_arc).await,
+        OcrEngine::WindowsNative => perform_ocr_windows(&image_arc).await,
         #[cfg(target_os = "macos")]
         OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&image_arc)),
         _ => {
