@@ -64,9 +64,8 @@ pub struct Cli {
     /// 5 FPS = 150 GB / month
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
-    #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
-    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
-    pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
+    #[arg(short, long, default_value_t = 1)]
+    pub fps: u32, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
     #[arg(short = 'd', long, default_value_t = 30)]
@@ -100,10 +99,6 @@ pub struct Cli {
     /// Enable debug logging for screenpipe modules
     #[arg(long)]
     pub debug: bool,
-
-    /// Save text files
-    #[arg(long, default_value_t = false)]
-    pub save_text_files: bool,
 
     /// Audio transcription engine to use.
     /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.

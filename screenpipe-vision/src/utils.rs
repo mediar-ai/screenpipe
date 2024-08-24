@@ -1,4 +1,3 @@
-use crate::capture_screenshot_by_window::capture_all_visible_windows;
 use crate::core::MaxAverageFrame;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
@@ -10,7 +9,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use xcap::Monitor;
 
 #[derive(Clone, Debug)]
 pub enum OcrEngine {
@@ -48,42 +46,6 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
         image_compare::gray_similarity_structure(&Algorithm::MSSIMSimple, &image_one, &image_two)
             .expect("Images had different dimensions");
     result.score
-}
-
-pub async fn capture_screenshot(
-    monitor: Arc<Monitor>,
-) -> Result<
-    (
-        DynamicImage,
-        Vec<(DynamicImage, String, String, bool)>,
-        u64,
-        Duration,
-    ),
-    anyhow::Error,
-> {
-    // info!("Starting screenshot capture for monitor: {:?}", monitor);
-    let capture_start = Instant::now();
-    let buffer = monitor.capture_image().map_err(|e| {
-        error!("Failed to capture monitor image: {}", e);
-        anyhow::anyhow!("Monitor capture failed")
-    })?;
-    let image = DynamicImage::ImageRgba8(buffer);
-    let image_hash = calculate_hash(&image);
-    let capture_duration = capture_start.elapsed();
-
-    // info!("Attempting to capture all visible windows");
-    let window_images = match capture_all_visible_windows().await {
-        Ok(images) => {
-            // info!("Successfully captured {} window images", images.len());
-            images
-        },
-        Err(e) => {
-            warn!("Failed to capture window images: {}. Continuing with empty result.", e);
-            Vec::new()
-        }
-    };
-
-    Ok((image, window_images, image_hash, capture_duration))
 }
 
 pub async fn compare_with_previous_image(
@@ -178,4 +140,3 @@ pub async fn save_text_files(
         }
     }
 }
-

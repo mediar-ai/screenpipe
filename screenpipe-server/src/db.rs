@@ -337,11 +337,8 @@ impl DatabaseManager {
         &self,
         frame_id: i64,
         text: &str,
-        text_json: &str,
-        app_name: &str,
-        window_name: &str,
+        raw_json: &str,
         ocr_engine: Arc<OcrEngine>,
-        focused: bool,
     ) -> Result<(), sqlx::Error> {
         const MAX_RETRIES: u32 = 3;
         const TIMEOUT_DURATION: TokioDuration = TokioDuration::from_secs(10);
@@ -349,15 +346,7 @@ impl DatabaseManager {
         for attempt in 1..=MAX_RETRIES {
             match timeout(
                 TIMEOUT_DURATION,
-                self.insert_ocr_text_old(
-                    frame_id,
-                    text,
-                    text_json,
-                    app_name,
-                    window_name,
-                    Arc::clone(&ocr_engine),
-                    focused,
-                ),
+                self.insert_ocr_text_old(frame_id, text, raw_json, Arc::clone(&ocr_engine)),
             )
             .await
             {
@@ -459,39 +448,26 @@ impl DatabaseManager {
         &self,
         frame_id: i64,
         text: &str,
-        text_json: &str,
-        app_name: &str,
-        window_name: &str,
+        raw_json: &str,
         ocr_engine: Arc<OcrEngine>,
-        focused: bool,
     ) -> Result<(), sqlx::Error> {
-        let display_window_name = if window_name.chars().count() > 20 {
-            format!("{}...", window_name.chars().take(20).collect::<String>())
-        } else {
-            window_name.to_string()
-        };
-
         debug!(
-            "Inserting OCR: frame_id {}, app {}, window {}, focused {}, text {}{}",
+            "Inserting OCR: frame_id {}, text {}{}",
             frame_id,
-            app_name,
-            display_window_name,
-            focused,
             text.replace('\n', " ").chars().take(60).collect::<String>(),
             if text.len() > 60 { "..." } else { "" },
         );
 
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, focused) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
-            .bind(frame_id)
-            .bind(text)
-            .bind(text_json)
-            .bind(app_name)
-            .bind(format!("{:?}", *ocr_engine))
-            .bind(window_name)
-            .bind(focused)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "INSERT INTO ocr_text (frame_id, text, text_json, ocr_engine) VALUES (?1, ?2, ?3, ?4)",
+        )
+        .bind(frame_id)
+        .bind(text)
+        .bind(raw_json)
+        .bind(format!("{:?}", *ocr_engine))
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         debug!("OCR text inserted into db successfully");

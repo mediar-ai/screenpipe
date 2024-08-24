@@ -87,10 +87,6 @@ async fn main() -> anyhow::Result<()> {
     if cli.debug {
         builder.filter_module("screenpipe", LevelFilter::Debug);
     }
-    // Example usage of the new flag
-    if cli.save_text_files {
-        debug!("Text files will be saved.");
-    }
 
     let local_data_dir = get_base_dir(cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
@@ -134,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
     if cli.list_monitors {
         println!("Available monitors:");
         for (_, monitor) in all_monitors.iter().enumerate() {
-            println!("  {}. {:?}", monitor.id(), monitor);
+            println!("  {}. {:?}", monitor.id, monitor);
         }
         return Ok(());
     }
@@ -238,7 +234,7 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
-    let monitor_id = cli.monitor_id.unwrap_or(all_monitors.first().unwrap().id());
+    let monitor_id = cli.monitor_id.unwrap_or(all_monitors.first().unwrap().id);
 
     // try to use the monitor selected, if not available throw an error
     get_monitor_by_id(monitor_id).await.unwrap_or_else(|| {
@@ -291,7 +287,6 @@ async fn main() -> anyhow::Result<()> {
                     Duration::from_secs(cli.audio_chunk_duration),
                     vision_control,
                     audio_devices_control,
-                    cli.save_text_files,
                     audio_transcription_engine,
                     ocr_engine,
                     friend_wearable_uid_clone, // Use the cloned version
@@ -374,7 +369,6 @@ async fn main() -> anyhow::Result<()> {
     println!("│ Port                │ {:<34} │", cli.port);
     println!("│ Audio Disabled      │ {:<34} │", cli.disable_audio);
     println!("│ Self Healing        │ {:<34} │", cli.self_healing);
-    println!("│ Save Text Files     │ {:<34} │", cli.save_text_files);
     println!(
         "│ Audio Engine        │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)

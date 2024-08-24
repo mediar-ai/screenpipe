@@ -14,7 +14,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-const MAX_FPS: f64 = 30.0; // Adjust based on your needs
+const MAX_FPS: u32 = 30; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
 
 pub struct VideoCapture {
@@ -28,9 +28,8 @@ pub struct VideoCapture {
 impl VideoCapture {
     pub fn new(
         output_path: &str,
-        fps: f64,
+        fps: u32,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
-        save_text_files: bool,
         ocr_engine: Arc<OcrEngine>,
         monitor_id: u32,
     ) -> Self {
@@ -44,16 +43,9 @@ impl VideoCapture {
         let capture_frame_queue = frame_queue.clone();
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
-        let (result_sender, mut result_receiver) = channel(512);
+        let (result_sender, mut result_receiver) = channel(8);
         let _capture_thread = tokio::spawn(async move {
-            continuous_capture(
-                result_sender,
-                Duration::from_secs_f64(1.0 / fps),
-                save_text_files,
-                ocr_engine,
-                monitor_id,
-            )
-            .await;
+            continuous_capture(result_sender, fps, ocr_engine, monitor_id).await;
         });
 
         info!("Started capture thread");
@@ -61,6 +53,7 @@ impl VideoCapture {
         // In the _queue_thread
         let _queue_thread = tokio::spawn(async move {
             // Helper function to push to queue and handle errors
+            debug!("Starting queue thread");
             fn push_to_queue(
                 queue: &ArrayQueue<Arc<CaptureResult>>,
                 result: &Arc<CaptureResult>,
@@ -82,17 +75,18 @@ impl VideoCapture {
                 }
                 true
             }
+            debug!("Queue thread started");
             while let Some(result) = result_receiver.recv().await {
                 let frame_number = result.frame_number;
                 debug!("Received frame {} for queueing", frame_number);
 
                 let result = Arc::new(result);
 
-                // let frame_pushed = push_to_queue(&capture_frame_queue, &result, "Frame");
+                let frame_pushed = push_to_queue(&capture_frame_queue, &result, "Frame");
                 let video_pushed = push_to_queue(&capture_video_frame_queue, &result, "Video");
                 let ocr_pushed = push_to_queue(&capture_ocr_frame_queue, &result, "OCR");
 
-                if !video_pushed || !ocr_pushed {
+                if !frame_pushed || !video_pushed || !ocr_pushed {
                     error!(
                         "Failed to push frame {} to one or more queues",
                         frame_number
@@ -108,6 +102,7 @@ impl VideoCapture {
                     capture_ocr_frame_queue.len()
                 );
             }
+            debug!("Queue thread finished");
         });
 
         let video_frame_queue_clone = video_frame_queue.clone();
@@ -133,18 +128,19 @@ impl VideoCapture {
 async fn save_frames_as_video(
     frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
     output_path: &str,
-    fps: f64,
+    fps: u32,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
 ) {
     debug!("Starting save_frames_as_video function");
     let frames_per_video = 30; // Adjust this value as needed
     let mut frame_count = 0;
-    let (sender, mut receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel(512);
+    let (sender, mut receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel(32);
     let sender = Arc::new(sender);
     let mut current_ffmpeg: Option<Child> = None;
     let mut current_stdin: Option<ChildStdin> = None;
 
     loop {
+        // debug!("Frame count: {}", frame_count);
         if frame_count % frames_per_video == 0 || current_ffmpeg.is_none() {
             debug!("Starting new FFmpeg process");
             // Close previous FFmpeg process if exists
@@ -265,11 +261,10 @@ async fn save_frames_as_video(
                 debug!("Wrote frame {} to FFmpeg", frame_count);
 
                 // Calculate frames per flush based on fps
-                let frames_per_flush = (fps.max(0.1) * 1.0).ceil() as usize;
 
                 // Flush every calculated number of frames
-                if frame_count % frames_per_flush == 0 {
-                    debug!("Flushing FFmpeg input after {} frames", frames_per_flush);
+                if frame_count % fps == 0 {
+                    debug!("Flushing FFmpeg input after {} frames", fps);
                     if let Err(e) = stdin.flush().await {
                         error!("Failed to flush FFmpeg input: {}", e);
                     }
@@ -286,7 +281,7 @@ async fn save_frames_as_video(
 
 use std::env;
 
-async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
+async fn start_ffmpeg_process(output_file: &str, fps: u32) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
         warn!("Overriding FPS from {} to {}", fps, MAX_FPS);

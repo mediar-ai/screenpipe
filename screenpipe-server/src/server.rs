@@ -313,11 +313,11 @@ pub async fn api_list_monitors(
     let monitor_info: Vec<MonitorInfo> = monitors
         .into_iter()
         .map(|monitor| MonitorInfo {
-            id: monitor.id(),
-            name: monitor.name().to_string(),
-            width: monitor.width(),
-            height: monitor.height(),
-            is_default: monitor.is_primary(),
+            id: monitor.id,
+            name: monitor.name,
+            width: monitor.width,
+            height: monitor.height,
+            is_default: monitor.is_primary,
         })
         .collect();
 

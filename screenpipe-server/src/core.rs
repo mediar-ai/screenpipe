@@ -21,11 +21,10 @@ use tokio::task::JoinHandle;
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
-    fps: f64,
+    fps: u32,
     audio_chunk_duration: Duration,
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
-    save_text_files: bool,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>,
@@ -59,7 +58,6 @@ pub async fn start_continuous_recording(
             output_path_video,
             fps,
             is_running_video,
-            save_text_files,
             ocr_engine,
             friend_wearable_uid_video,
             monitor_id,
@@ -99,9 +97,8 @@ pub async fn start_continuous_recording(
 async fn record_video(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
-    fps: f64,
+    fps: u32,
     is_running: Arc<AtomicBool>,
-    save_text_files: bool,
     ocr_engine: Arc<OcrEngine>,
     _friend_wearable_uid: Option<String>,
     monitor_id: u32,
@@ -125,52 +122,38 @@ async fn record_video(
         &output_path,
         fps,
         new_chunk_callback,
-        save_text_files,
         Arc::clone(&ocr_engine),
         monitor_id,
     );
 
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
-            for window_result in &frame.window_ocr_results {
-                match db.insert_frame().await {
-                    Ok(frame_id) => {
-                        let text_json =
-                            serde_json::to_string(&window_result.text_json).unwrap_or_default();
-
-                        let text = if use_pii_removal {
-                            &remove_pii(&window_result.text)
-                        } else {
-                            &window_result.text
-                        };
-                        if let Err(e) = db
-                            .insert_ocr_text(
-                                frame_id,
-                                text,
-                                &text_json,
-                                &window_result.app_name,
-                                &window_result.window_name,
-                                Arc::clone(&ocr_engine),
-                                window_result.focused, // Add this line
-                            )
-                            .await
-                        {
-                            error!(
-                                "Failed to insert OCR text: {}, skipping window {} of frame {}",
-                                e, window_result.window_name, frame_id
-                            );
-                            continue;
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Failed to insert frame: {}", e);
-                        tokio::time::sleep(Duration::from_millis(100)).await;
+            match db.insert_frame().await {
+                Ok(frame_id) => {
+                    let text = if use_pii_removal {
+                        &remove_pii(&frame.ocr_results)
+                    } else {
+                        &frame.ocr_results
+                    };
+                    if let Err(e) = db
+                        .insert_ocr_text(frame_id, text, &frame.raw_json, Arc::clone(&ocr_engine))
+                        .await
+                    {
+                        error!(
+                            "Failed to insert OCR text: {}, skipping frame {}",
+                            e, frame_id
+                        );
                         continue;
                     }
                 }
+                Err(e) => {
+                    warn!("Failed to insert frame: {}", e);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
             }
         }
-        tokio::time::sleep(Duration::from_secs_f64(1.0 / fps)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     Ok(())

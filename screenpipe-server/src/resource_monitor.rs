@@ -180,7 +180,6 @@ impl ResourceMonitor {
         let client = reqwest::Client::new();
         match client.get("http://localhost:3030/health").send().await {
             Ok(response) => {
-                debug!("Health check response: {:?}", response);
                 if response.status().is_success() {
                     *self.health_check_failures.lock().await = 0;
                 } else {

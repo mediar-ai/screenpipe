@@ -17,7 +17,7 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
     let capture_handle = tokio::spawn(async move {
         continuous_capture(
             result_tx,
-            Duration::from_millis(100),
+            1,
             false,
             Arc::new(OcrEngine::Tesseract),
             get_default_monitor().await.id(),

@@ -1,5 +1,10 @@
+use crate::utils::save_text_files;
 use image::DynamicImage;
 use log::{debug, error};
+use scap::{
+    capturer::{Capturer, Options},
+    frame::Frame,
+};
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde_json;
 use std::{
@@ -15,41 +20,30 @@ use crate::apple::parse_apple_ocr_result;
 use crate::apple::perform_ocr_apple;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
-use crate::monitor::get_monitor_by_id;
-use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
-use crate::utils::{capture_screenshot, compare_with_previous_image, save_text_files};
+use crate::{monitor::list_monitors, tesseract::perform_ocr_tesseract};
+use crate::{
+    monitor::{get_monitor_by_id, get_target_by_id},
+    utils::compare_with_previous_image,
+};
 #[derive(Clone)]
 pub struct CaptureResult {
     pub image: Arc<DynamicImage>,
     pub frame_number: u64,
     pub timestamp: Instant,
-    pub window_ocr_results: Vec<WindowOcrResult>,
-}
-
-#[derive(Clone)]
-pub struct WindowOcrResult {
-    pub window_name: String,
-    pub app_name: String,
-    pub image: Arc<DynamicImage>,
-    pub text: String,
-    pub text_json: Vec<HashMap<String, String>>,
-    pub focused: bool,
-    pub confidence: f64,
+    pub ocr_results: String,
+    pub raw_json: String,
 }
 
 pub struct OcrTaskData {
     pub image: Arc<DynamicImage>,
-    pub window_images: Vec<(DynamicImage, String, String, bool)>,
     pub frame_number: u64,
     pub timestamp: Instant,
     pub result_tx: Sender<CaptureResult>,
 }
-
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
-    interval: Duration,
-    save_text_files_flag: bool,
+    fps: u32,
     ocr_engine: Arc<OcrEngine>,
     monitor_id: u32,
 ) {
@@ -62,25 +56,48 @@ pub async fn continuous_capture(
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
-    let monitor = get_monitor_by_id(monitor_id).await.unwrap();
-    let arc_monitor = Arc::new(monitor.clone());
+    if !scap::is_supported() {
+        error!("Platform not supported");
+        return;
+    }
+
+    if !scap::has_permission() {
+        // ! TODO api /permission
+        debug!("Permission not granted. Requesting permission...");
+        if !scap::request_permission() {
+            error!("Permission denied");
+            return;
+        }
+    }
+
+    let monitor = get_target_by_id(monitor_id).await.unwrap();
+
+    let options = Options {
+        fps: fps,
+        target: Some(monitor.clone()),
+        show_cursor: true,
+        show_highlight: false,
+        excluded_targets: None,
+        output_type: scap::frame::FrameType::RGB,
+        output_resolution: scap::capturer::Resolution::_1080p, // TODO
+        ..Default::default()
+    };
+
+    let mut capturer = Capturer::new(options);
+    capturer.start_capture();
 
     loop {
-        let arc_monitor = arc_monitor.clone();
-        let capture_result = match capture_screenshot(arc_monitor).await {
-            Ok((image, window_images, image_hash, _capture_duration)) => {
-                Some((image, window_images, image_hash))
-            }
-            Err(e) => {
-                error!("Failed to capture screenshot: {}", e);
-                None
-            }
-        };
+        let start_time = Instant::now();
 
-        if let Some((image, window_images, image_hash)) = capture_result {
+        // debug!("Frame count: {}", frame_counter);
+        if let Ok(frame) = capturer.get_next_frame() {
+            // debug!("Frame:");
+            let image = frame_to_dynamic_image(&frame);
+            let image_arc = Arc::new(image.clone());
+
             let current_average = match compare_with_previous_image(
                 &previous_image,
-                &image,
+                &image_arc,
                 &mut max_average,
                 frame_counter,
                 &mut max_avg_value,
@@ -90,33 +107,29 @@ pub async fn continuous_capture(
                 Ok(avg) => avg,
                 Err(e) => {
                     error!("Error comparing images: {}", e);
-                    0.0 // or some default value
+                    0.0
                 }
             };
 
-            // Account for situation when there is no previous image
             let current_average = if previous_image.is_none() {
                 1.0 // Default value to ensure the frame is processed
             } else {
                 current_average
             };
 
-            // Skip the frame if the current average difference is less than 0.006
-            if current_average < 0.006 {
-                debug!(
-                    "Skipping frame {} due to low average difference: {:.3}",
-                    frame_counter, current_average
-                );
+            if current_average < 0.006 && previous_image.is_some() {
+                // debug!(
+                //     "Skipping frame {} due to low average difference: {:.3}",
+                //     frame_counter, current_average
+                // );
                 frame_counter += 1;
-                tokio::time::sleep(interval).await;
+                // tokio::time::sleep(interval).await;
                 continue;
             }
 
             if current_average > max_avg_value {
                 max_average = Some(MaxAverageFrame {
-                    image: Arc::new(image.clone()),
-                    window_images: window_images.clone(),
-                    image_hash,
+                    image: image_arc.clone(),
                     frame_number: frame_counter,
                     timestamp: Instant::now(),
                     result_tx: result_tx.clone(),
@@ -125,12 +138,11 @@ pub async fn continuous_capture(
                 max_avg_value = current_average;
             }
 
-            previous_image = Some(Arc::new(image.clone()));
+            previous_image = Some(image_arc.clone());
 
             if let Some(max_avg_frame) = max_average.take() {
                 let ocr_task_data = OcrTaskData {
                     image: max_avg_frame.image.clone(),
-                    window_images: max_avg_frame.window_images.clone(),
                     frame_number: max_avg_frame.frame_number,
                     timestamp: max_avg_frame.timestamp,
                     result_tx: max_avg_frame.result_tx.clone(),
@@ -140,11 +152,9 @@ pub async fn continuous_capture(
 
                 if let Err(e) = process_ocr_task(
                     ocr_task_data.image,
-                    ocr_task_data.window_images,
                     ocr_task_data.frame_number,
                     ocr_task_data.timestamp,
                     ocr_task_data.result_tx,
-                    save_text_files_flag,
                     ocr_engine_clone,
                 )
                 .await
@@ -156,18 +166,33 @@ pub async fn continuous_capture(
                 max_avg_value = 0.0;
             }
         } else {
-            // Skip this iteration if capture failed
-            debug!("Skipping frame {} due to capture failure", frame_counter);
+            error!("Failed to capture frame");
         }
 
         frame_counter += 1;
-        tokio::time::sleep(interval).await;
+        let elapsed = start_time.elapsed();
+        // if elapsed < interval {
+        //     tokio::time::sleep(interval - elapsed).await;
+        // }
     }
 }
-pub struct MaxAverageFrame {
+
+fn frame_to_dynamic_image(frame: &Frame) -> DynamicImage {
+    match frame {
+        Frame::RGB(rgb_frame) => {
+            let width = rgb_frame.width as u32;
+            let height = rgb_frame.height as u32;
+            let rgb_image = image::ImageBuffer::from_raw(width, height, rgb_frame.data.clone())
+                .expect("Failed to create RGBImage");
+            DynamicImage::ImageRgb8(rgb_image)
+        }
+        // Add more cases for other frame types as needed
+        _ => panic!("Unsupported frame type"),
+    }
+}
+
+pub struct MaxAverageFrame { // ! this struct is 90% dead code (only avg is used)
     pub image: Arc<DynamicImage>,
-    pub window_images: Vec<(DynamicImage, String, String, bool)>,
-    pub image_hash: u64,
     pub frame_number: u64,
     pub timestamp: Instant,
     pub result_tx: Sender<CaptureResult>,
@@ -176,79 +201,54 @@ pub struct MaxAverageFrame {
 
 pub async fn process_ocr_task(
     image_arc: Arc<DynamicImage>,
-    window_images: Vec<(DynamicImage, String, String, bool)>,
     frame_number: u64,
     timestamp: Instant,
     result_tx: Sender<CaptureResult>,
-    save_text_files_flag: bool,
     ocr_engine: Arc<OcrEngine>,
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
-    debug!(
-        "Performing OCR for frame number since beginning of program {}",
-        frame_number
-    );
+    // debug!(
+    //     "Performing OCR for frame number since beginning of program {}",
+    //     frame_number
+    // );
 
-    // Perform OCR on window images
-    let mut window_ocr_results = Vec::new();
-    let mut total_confidence = 0.0;
-    let mut window_count = 0;
-
-    for (window_image, window_app_name, window_name, focused) in window_images {
-        let window_image_arc = Arc::new(window_image);
-        let (window_text, window_json_output, confidence) = match &*ocr_engine {
-            OcrEngine::Unstructured => perform_ocr_cloud(&window_image_arc)
-                .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-            OcrEngine::Tesseract => perform_ocr_tesseract(&window_image_arc),
-            #[cfg(target_os = "windows")]
-            OcrEngine::WindowsNative => perform_ocr_windows(&window_image_arc).await,
-            #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&window_image_arc)),
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Unsupported OCR engine",
-                ))
-            }
-        };
-
-        if let Some(conf) = confidence {
-            total_confidence += conf;
-            window_count += 1;
+    let (ocr, json_output, confidence) = match &*ocr_engine {
+        OcrEngine::Unstructured => perform_ocr_cloud(&image_arc)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
+        OcrEngine::Tesseract => perform_ocr_tesseract(&image_arc),
+        #[cfg(target_os = "windows")]
+        OcrEngine::WindowsNative => perform_ocr_windows(&window_image_arc).await,
+        #[cfg(target_os = "macos")]
+        OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&image_arc)),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Unsupported OCR engine",
+            ))
         }
+    };
 
-        window_ocr_results.push(WindowOcrResult {
-            window_name,
-            app_name: window_app_name,
-            image: window_image_arc,
-            text: window_text,
-            text_json: parse_json_output(&window_json_output),
-            focused,
-            confidence: confidence.unwrap_or(0.0),
-        });
-    }
+    // if std::env::var("SAVE_TEXT_FILES").is_ok() {
+    //     // Save text files for window OCR results if needed
+    //     save_text_files(
+    //         frame_number,
+    //         &parse_json_output(&json_output),
+    //         &parse_json_output(&json_output),
+    //         &None,
+    //     )
+    //     .await;
+    // }
 
-    if save_text_files_flag {
-        // Save text files for window OCR results if needed
-        for (index, window_result) in window_ocr_results.iter().enumerate() {
-            save_text_files(
-                frame_number * 1000 + index as u64, // Unique ID for each window
-                &window_result.text_json,
-                &window_result.text_json,
-                &None,
-            )
-            .await;
-        }
-    }
-
+    // debug!("Creating capture result");
     let capture_result = CaptureResult {
         image: image_arc,
         frame_number,
         timestamp,
-        window_ocr_results: window_ocr_results.clone(),
+        ocr_results: ocr,
+        raw_json: json_output,
     };
-
+    // debug!("Sending OCR result");
     if let Err(e) = result_tx.send(capture_result).await {
         error!("Failed to send OCR result: {}", e);
         return Err(std::io::Error::new(
@@ -256,16 +256,16 @@ pub async fn process_ocr_task(
             "Failed to send OCR result",
         ));
     }
+    // debug!("Sent OCR result");
 
     let duration = start_time.elapsed();
-    let avg_confidence = if window_count > 0 { total_confidence / window_count as f64 } else { 0.0 };
-    debug!(
-        "OCR task processed frame {} with {} windows in {:?}, average confidence: {:.2}",
-        frame_number,
-        window_ocr_results.len(),
-        duration,
-        avg_confidence
-    );
+
+    // debug!(
+    //     "OCR task processed frame {} with {:?}, confidence: {:.2}",
+    //     frame_number,
+    //     duration,
+    //     confidence.unwrap_or(1.0)
+    // );
     Ok(())
 }
 
