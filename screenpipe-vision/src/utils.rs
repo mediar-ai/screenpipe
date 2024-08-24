@@ -55,7 +55,7 @@ pub async fn capture_screenshot(
 ) -> Result<
     (
         DynamicImage,
-        Vec<(DynamicImage, String, String, bool)>,
+        Vec<(DynamicImage, String, String, bool, u32)>, // Include window_id
         u64,
         Duration,
     ),
@@ -178,4 +178,3 @@ pub async fn save_text_files(
         }
     }
 }
-

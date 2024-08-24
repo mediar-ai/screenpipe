@@ -1,5 +1,5 @@
 use image::DynamicImage;
-use log::error;
+use log::{error, debug};
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar};
 
@@ -11,10 +11,11 @@ extern "C" {
         length: usize,
         width: i32,
         height: i32,
+        window_id: u32, // Add window_id
     ) -> *mut c_char;
 }
 #[cfg(target_os = "macos")]
-pub fn perform_ocr_apple(image: &DynamicImage) -> String {
+pub fn perform_ocr_apple(image: &DynamicImage, window_id: u32) -> String {
     let rgba = image.to_rgba8();
     let (width, height) = rgba.dimensions();
     let raw_data = rgba.as_raw();
@@ -25,9 +26,11 @@ pub fn perform_ocr_apple(image: &DynamicImage) -> String {
             raw_data.len(),
             width as i32,
             height as i32,
+            window_id, // Pass window_id
         );
         let result = CStr::from_ptr(result_ptr).to_string_lossy().into_owned();
         libc::free(result_ptr as *mut libc::c_void);
+        
         result
     }
 }
@@ -37,13 +40,23 @@ pub fn parse_apple_ocr_result(json_result: &str) -> (String, String) {
     let parsed_result: serde_json::Value = serde_json::from_str(json_result).unwrap_or_else(|e| {
         error!("Failed to parse JSON output: {}", e);
         serde_json::json!({
-            "ocrResult": "",
+            "window_id": 0,
+            "ocr_result": "",
             "textElements": [],
             "overallConfidence": 0.0
         })
     });
 
-    let text = parsed_result["ocrResult"]
+    // Extract window ID
+    let window_id = parsed_result["window_id"].as_u64().unwrap_or(0);
+    debug!("Processing OCR for window ID: {}", window_id);
+
+    // Log overall confidence
+    if let Some(overall_confidence) = parsed_result["overallConfidence"].as_f64() {
+        debug!("Overall OCR confidence: {:.2}", overall_confidence);
+    }
+
+    let text = parsed_result["ocr_result"]
         .as_str()
         .unwrap_or("")
         .to_string();

@@ -35,11 +35,12 @@ pub struct WindowOcrResult {
     pub text: String,
     pub text_json: Vec<HashMap<String, String>>,
     pub focused: bool,
+    pub window_id: u32, // Added window_id
 }
 
 pub struct OcrTaskData {
     pub image: Arc<DynamicImage>,
-    pub window_images: Vec<(DynamicImage, String, String, bool)>,
+    pub window_images: Vec<(DynamicImage, String, String, bool, u32)>, // Added window_id
     pub frame_number: u64,
     pub timestamp: Instant,
     pub result_tx: Sender<CaptureResult>,
@@ -165,7 +166,7 @@ pub async fn continuous_capture(
 }
 pub struct MaxAverageFrame {
     pub image: Arc<DynamicImage>,
-    pub window_images: Vec<(DynamicImage, String, String, bool)>,
+    pub window_images: Vec<(DynamicImage, String, String, bool, u32)>, // Added window_id
     pub image_hash: u64,
     pub frame_number: u64,
     pub timestamp: Instant,
@@ -175,7 +176,7 @@ pub struct MaxAverageFrame {
 
 pub async fn process_ocr_task(
     image_arc: Arc<DynamicImage>,
-    window_images: Vec<(DynamicImage, String, String, bool)>,
+    window_images: Vec<(DynamicImage, String, String, bool, u32)>, // Added window_id
     frame_number: u64,
     timestamp: Instant,
     result_tx: Sender<CaptureResult>,
@@ -191,7 +192,7 @@ pub async fn process_ocr_task(
 
     // Perform OCR on window images
     let mut window_ocr_results = Vec::new();
-    for (window_image, window_app_name, window_name, focused) in window_images {
+    for (window_image, window_app_name, window_name, focused, window_id) in window_images {
         let window_image_arc = Arc::new(window_image);
         let (window_text, window_json_output) = match &*ocr_engine {
             OcrEngine::Unstructured => perform_ocr_cloud(&window_image_arc)
@@ -201,7 +202,7 @@ pub async fn process_ocr_task(
             #[cfg(target_os = "windows")]
             OcrEngine::WindowsNative => perform_ocr_windows(&window_image_arc).await,
             #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&window_image_arc)),
+            OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&window_image_arc, window_id)), // Pass window_id
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -217,6 +218,7 @@ pub async fn process_ocr_task(
             text: window_text,
             text_json: parse_json_output(&window_json_output),
             focused,
+            window_id,
         });
     }
 

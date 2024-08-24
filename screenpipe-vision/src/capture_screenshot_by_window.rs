@@ -35,7 +35,7 @@ impl From<XCapError> for CaptureError {
     }
 }
 
-pub async fn capture_all_visible_windows() -> Result<Vec<(DynamicImage, String, String, bool)>, Box<dyn Error>> {
+pub async fn capture_all_visible_windows() -> Result<Vec<(DynamicImage, String, String, bool, u32)>, Box<dyn Error>> {
     let monitors = Monitor::all()?;
     // info!("Found {} monitors", monitors.len());
 
@@ -72,6 +72,7 @@ pub async fn capture_all_visible_windows() -> Result<Vec<(DynamicImage, String, 
                 let app_name = window.app_name();
                 let window_name = window.title();
                 let is_focused = focused_window.as_ref().map_or(false, |fw| fw.id() == window.id());
+                let window_id = window.id(); // Get the window ID
                 
                 match window.capture_image() {
                     Ok(buffer) => {
@@ -88,7 +89,7 @@ pub async fn capture_all_visible_windows() -> Result<Vec<(DynamicImage, String, 
                         // image.save_with_format(&file_path, ImageFormat::Png)?;
                         // info!("Saved screenshot: {:?}", file_path);
 
-                        all_captured_images.push((image, app_name.to_string(), window_name.to_string(), is_focused));
+                        all_captured_images.push((image, app_name.to_string(), window_name.to_string(), is_focused, window_id));
                     },
                     Err(e) => error!("Failed to capture image for window {} on monitor {}: {}", window_name, monitor.name(), e),
                 }
