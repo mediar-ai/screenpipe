@@ -96,7 +96,7 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   }
 
   let overallConfidence = observationCount > 0 ? totalConfidence / Float(observationCount) : 0.0
-  print("Overall confidence: \(overallConfidence)")
+  // print("Overall confidence: \(overallConfidence)")
   let result: [String: Any] = [
     "ocrResult": ocrResult.isEmpty ? NSNull() : ocrResult,
     "textElements": textElements,
