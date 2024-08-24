@@ -168,12 +168,14 @@ async fn save_frames_as_video(
             };
 
             // Encode the first frame
-            let mut buffer = Vec::new();
-            first_frame
-                .image
-                .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
-                .expect("Failed to encode first frame");
-
+            let buffer = {
+                let mut buf = Vec::new();
+                first_frame
+                    .image
+                    .write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Png)
+                    .expect("Failed to encode first frame");
+                buf
+            };
             let time = Utc::now();
             let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
             // Start new FFmpeg process with a new output file

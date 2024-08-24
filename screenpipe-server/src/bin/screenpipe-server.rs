@@ -18,7 +18,7 @@ use screenpipe_audio::{
     AudioDevice, DeviceControl,
 };
 use screenpipe_vision::{
-    monitor::{get_capturer, get_monitor_by_id, list_monitors},
+    monitor::{get_capturer, get_empty_capturer, get_monitor_by_id, list_monitors},
     OcrEngine,
 };
 use std::io::Write;
@@ -126,9 +126,8 @@ async fn main() -> anyhow::Result<()> {
         print_devices(&all_audio_devices);
         return Ok(());
     }
-    let monitor_id = cli.monitor_id.unwrap_or(1); // ! HACK: check 1 does not crash
     // need to crate capturer BEFORE the list_monitors
-    let capturer = Arc::new(Mutex::new(get_capturer(monitor_id, cli.fps).await));
+    let _capturer = get_empty_capturer().await; // ! HACK for linux reasons
 
     let all_monitors = list_monitors().await;
     if cli.list_monitors {
@@ -138,6 +137,9 @@ async fn main() -> anyhow::Result<()> {
         }
         return Ok(());
     }
+
+    let monitor_id = cli.monitor_id.unwrap_or(all_monitors.first().unwrap().id);
+    let capturer = Arc::new(Mutex::new(get_capturer(monitor_id, cli.fps).await));
 
     let mut audio_devices = Vec::new();
 

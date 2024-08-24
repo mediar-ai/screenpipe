@@ -62,6 +62,19 @@ pub async fn get_target_by_id(id: u32) -> Option<Target> {
     })
 }
 
+pub async fn get_empty_capturer() -> Capturer {
+    let options = Options {
+        show_cursor: true,
+        show_highlight: false,
+        excluded_targets: None,
+        output_type: scap::frame::FrameType::RGB,
+        output_resolution: scap::capturer::Resolution::_1080p, // TODO
+        ..Default::default()
+    };
+
+    Capturer::new(options)
+}
+
 pub async fn get_capturer(monitor_id: u32, fps: u32) -> Capturer {
     let monitor = get_target_by_id(monitor_id).await.unwrap();
 
