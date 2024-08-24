@@ -12,15 +12,5 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Install cargo-machete
-        run: |
-          cargo install cargo-machete
-
       - name: Check for unused dependencies
-        run: |
-          cargo machete
-          exit_code=$?
-          if [ $exit_code != 0 ]; then
-            echo "Found unused dependencies. Run `cargo machete` locally and remove the matches or include them to ignored."
-            exit $exit_code
-          fi
+        uses: bnjbvr/cargo-machete@main
