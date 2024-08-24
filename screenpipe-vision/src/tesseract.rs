@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use image::DynamicImage;
 use rusty_tesseract::{Args, DataOutput, Image};
 
-pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, String) {
+pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, String, Option<f64>) {
     let args = Args {
         lang: "eng".to_string(),
         config_variables: HashMap::from([("tessedit_create_tsv".into(), "1".into())]),
@@ -22,7 +22,9 @@ pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, String) {
     let text = data_output_to_text(&data_output);
     let json_output = data_output_to_json(&data_output);
 
-    (text, json_output)
+    let overall_confidence = calculate_overall_confidence(&data_output);
+
+    (text, json_output, Some(overall_confidence))
 }
 
 fn data_output_to_text(data_output: &DataOutput) -> String {
@@ -88,4 +90,14 @@ fn data_output_to_json(data_output: &DataOutput) -> String {
     }
 
     serde_json::to_string_pretty(&lines).unwrap()
+}
+
+fn calculate_overall_confidence(data_output: &DataOutput) -> f64 {
+    let total_conf: f32 = data_output.data.iter().map(|record| record.conf).sum();
+    let count = data_output.data.len();
+    if count > 0 {
+        (total_conf / count as f32) as f64
+    } else {
+        0.0
+    }
 }

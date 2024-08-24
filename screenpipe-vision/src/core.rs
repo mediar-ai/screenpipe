@@ -35,6 +35,7 @@ pub struct WindowOcrResult {
     pub text: String,
     pub text_json: Vec<HashMap<String, String>>,
     pub focused: bool,
+    pub confidence: f64,
 }
 
 pub struct OcrTaskData {
@@ -183,7 +184,6 @@ pub async fn process_ocr_task(
     ocr_engine: Arc<OcrEngine>,
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
-
     debug!(
         "Performing OCR for frame number since beginning of program {}",
         frame_number
@@ -191,9 +191,12 @@ pub async fn process_ocr_task(
 
     // Perform OCR on window images
     let mut window_ocr_results = Vec::new();
+    let mut total_confidence = 0.0;
+    let mut window_count = 0;
+
     for (window_image, window_app_name, window_name, focused) in window_images {
         let window_image_arc = Arc::new(window_image);
-        let (window_text, window_json_output) = match &*ocr_engine {
+        let (window_text, window_json_output, confidence) = match &*ocr_engine {
             OcrEngine::Unstructured => perform_ocr_cloud(&window_image_arc)
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
@@ -210,6 +213,11 @@ pub async fn process_ocr_task(
             }
         };
 
+        if let Some(conf) = confidence {
+            total_confidence += conf;
+            window_count += 1;
+        }
+
         window_ocr_results.push(WindowOcrResult {
             window_name,
             app_name: window_app_name,
@@ -217,6 +225,7 @@ pub async fn process_ocr_task(
             text: window_text,
             text_json: parse_json_output(&window_json_output),
             focused,
+            confidence: confidence.unwrap_or(0.0),
         });
     }
 
@@ -249,11 +258,13 @@ pub async fn process_ocr_task(
     }
 
     let duration = start_time.elapsed();
+    let avg_confidence = if window_count > 0 { total_confidence / window_count as f64 } else { 0.0 };
     debug!(
-        "OCR task processed frame {} with {} windows in {:?}",
+        "OCR task processed frame {} with {} windows in {:?}, average confidence: {:.2}",
         frame_number,
         window_ocr_results.len(),
-        duration
+        duration,
+        avg_confidence
     );
     Ok(())
 }

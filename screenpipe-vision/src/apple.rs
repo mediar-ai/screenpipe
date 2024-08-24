@@ -33,7 +33,7 @@ pub fn perform_ocr_apple(image: &DynamicImage) -> String {
 }
 
 #[cfg(target_os = "macos")]
-pub fn parse_apple_ocr_result(json_result: &str) -> (String, String) {
+pub fn parse_apple_ocr_result(json_result: &str) -> (String, String, Option<f64>) {
     let parsed_result: serde_json::Value = serde_json::from_str(json_result).unwrap_or_else(|e| {
         error!("Failed to parse JSON output: {}", e);
         serde_json::json!({
@@ -51,6 +51,8 @@ pub fn parse_apple_ocr_result(json_result: &str) -> (String, String) {
         .as_array()
         .unwrap_or(&vec![])
         .clone();
+    let overall_confidence = parsed_result["overallConfidence"]
+        .as_f64();
 
     let json_output: Vec<serde_json::Value> = text_elements
         .iter()
@@ -77,5 +79,5 @@ pub fn parse_apple_ocr_result(json_result: &str) -> (String, String) {
         "[]".to_string()
     });
 
-    (text, json_output_string)
+    (text, json_output_string, overall_confidence)
 }

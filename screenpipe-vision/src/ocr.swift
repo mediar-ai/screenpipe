@@ -32,14 +32,11 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   let ciImage = CIImage(cgImage: cgImage)
   let context = CIContext(options: nil)
 
-  // Apply preprocessing filters
-  let processed =
-    ciImage
-    .applyingFilter(
-      "CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.1]
-    )
-    .applyingFilter(
-      "CIUnsharpMask", parameters: [kCIInputRadiusKey: 1.0, kCIInputIntensityKey: 0.5])
+  // Apply preprocessing filters (slightly reduced contrast compared to original)
+  let processed = ciImage
+    .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.08])
+    .applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 0.8, kCIInputIntensityKey: 0.4])
+
   guard let preprocessedCGImage = context.createCGImage(processed, from: processed.extent) else {
     return strdup("Error: Failed to create preprocessed image")
   }
@@ -67,9 +64,9 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
       let text = topCandidate.string
       let confidence = topCandidate.confidence
 
-      // Implement early stopping for low-confidence results
-      if confidence < 0.3 {
-        continue  // Skip low-confidence results to save compute
+      // Reduced threshold for including results
+      if confidence < 0.2 {
+        continue  // Skip very low-confidence results
       }
       let boundingBox = observation.boundingBox
       textElements.append([
@@ -89,7 +86,7 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
     }
   }
 
-  textRequest.recognitionLevel = .accurate
+  textRequest.recognitionLevel = .accurate  // Keep accurate recognition
 
   let handler = VNImageRequestHandler(cgImage: preprocessedCGImage, options: [:])
   do {
@@ -99,8 +96,9 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
   }
 
   let overallConfidence = observationCount > 0 ? totalConfidence / Float(observationCount) : 0.0
+  // print("Overall confidence: \(overallConfidence)")
   let result: [String: Any] = [
-    "ocrResult": ocrResult.isEmpty ? "No text found" : ocrResult,
+    "ocrResult": ocrResult.isEmpty ? NSNull() : ocrResult,
     "textElements": textElements,
     "overallConfidence": overallConfidence
   ]
