@@ -17,7 +17,7 @@ fn test_ocr_output() -> Result<(), Box<dyn std::error::Error>> {
     // Start timing
     let start = Instant::now();
 
-    let (text, json_output) = perform_ocr_tesseract(&image);
+    let (text, json_output, _) = perform_ocr_tesseract(&image);
 
     // Stop timing
     let duration = start.elapsed();
