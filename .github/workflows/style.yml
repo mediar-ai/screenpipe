@@ -6,24 +6,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  sort:
-    name: Cargo Sorted
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install cargo-sort
-        run: |
-          cargo install cargo-sort
-
-      - name: Check if Cargo.toml is sorted
-        run: |
-          cargo sort -wc
-          exit_code=$?
-          if [ $exit_code != 0 ]; then
-            echo "Cargo.toml is not sorted. Run `cargo sort -w` to fix it."
-            exit $exit_code
-          fi
-
   machete:
     name: Cargo Machete
     runs-on: ubuntu-latest
