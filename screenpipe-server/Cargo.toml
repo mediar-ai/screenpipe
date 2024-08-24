@@ -13,6 +13,8 @@ edition = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+# ! hack: scap shouldn't be a deps in server
+scap = { git = "https://github.com/mediar-ai/scap", branch = "main" }
 screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
 screenpipe-core = { path = "../screenpipe-core", features = ["security"] }

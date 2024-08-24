@@ -3,6 +3,7 @@ use crossbeam::queue::ArrayQueue;
 use image::ImageFormat::{self};
 use log::{debug, error};
 use log::{info, warn};
+use scap::capturer::Capturer;
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
 use std::path::PathBuf;
@@ -13,6 +14,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::Mutex;
 
 const MAX_FPS: u32 = 30; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
@@ -27,11 +29,11 @@ pub struct VideoCapture {
 
 impl VideoCapture {
     pub fn new(
+        capturer: Arc<Mutex<Capturer>>,
         output_path: &str,
         fps: u32,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         ocr_engine: Arc<OcrEngine>,
-        monitor_id: u32,
     ) -> Self {
         info!("Starting new video capture");
         let frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
@@ -45,7 +47,7 @@ impl VideoCapture {
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(8);
         let _capture_thread = tokio::spawn(async move {
-            continuous_capture(result_sender, fps, ocr_engine, monitor_id).await;
+            continuous_capture(capturer, result_sender, ocr_engine).await;
         });
 
         info!("Started capture thread");

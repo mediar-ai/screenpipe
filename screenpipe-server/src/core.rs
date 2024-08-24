@@ -3,6 +3,7 @@ use anyhow::Result;
 use chrono::Utc;
 use crossbeam::queue::SegQueue;
 use log::{debug, error, info, warn};
+use scap::capturer::Capturer;
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput,
     AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
@@ -16,9 +17,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 pub async fn start_continuous_recording(
+    capturer: Arc<Mutex<Capturer>>,
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: u32,
@@ -28,7 +31,6 @@ pub async fn start_continuous_recording(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>,
-    monitor_id: u32,
     use_pii_removal: bool,
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver) =
@@ -54,13 +56,13 @@ pub async fn start_continuous_recording(
 
     let video_handle = tokio::spawn(async move {
         record_video(
+            capturer,
             db_manager_video,
             output_path_video,
             fps,
             is_running_video,
             ocr_engine,
             friend_wearable_uid_video,
-            monitor_id,
             use_pii_removal,
         )
         .await
@@ -95,13 +97,13 @@ pub async fn start_continuous_recording(
 }
 
 async fn record_video(
+    capturer: Arc<Mutex<Capturer>>,
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: u32,
     is_running: Arc<AtomicBool>,
     ocr_engine: Arc<OcrEngine>,
     _friend_wearable_uid: Option<String>,
-    monitor_id: u32,
     use_pii_removal: bool,
 ) -> Result<()> {
     debug!("record_video: Starting");
@@ -119,11 +121,11 @@ async fn record_video(
     };
 
     let video_capture = VideoCapture::new(
+        capturer,
         &output_path,
         fps,
         new_chunk_callback,
         Arc::clone(&ocr_engine),
-        monitor_id,
     );
 
     while is_running.load(Ordering::SeqCst) {

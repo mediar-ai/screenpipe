@@ -1,4 +1,7 @@
-use scap::{get_all_targets, Target};
+use scap::{
+    capturer::{Capturer, Options},
+    get_all_targets, Target,
+};
 
 #[derive(Debug, Clone)]
 pub struct Monitor {
@@ -57,4 +60,21 @@ pub async fn get_target_by_id(id: u32) -> Option<Target> {
             None
         }
     })
+}
+
+pub async fn get_capturer(monitor_id: u32, fps: u32) -> Capturer {
+    let monitor = get_target_by_id(monitor_id).await.unwrap();
+
+    let options = Options {
+        fps,
+        target: Some(monitor.clone()),
+        show_cursor: true,
+        show_highlight: false,
+        excluded_targets: None,
+        output_type: scap::frame::FrameType::RGB,
+        output_resolution: scap::capturer::Resolution::_1080p, // TODO
+        ..Default::default()
+    };
+
+    Capturer::new(options)
 }

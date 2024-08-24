@@ -12,7 +12,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{mpsc::Sender, Mutex};
 
 #[cfg(target_os = "macos")]
 use crate::apple::parse_apple_ocr_result;
@@ -42,15 +42,10 @@ pub struct OcrTaskData {
     pub result_tx: Sender<CaptureResult>,
 }
 pub async fn continuous_capture(
+    capturer: Arc<Mutex<Capturer>>,
     result_tx: Sender<CaptureResult>,
-    fps: u32,
     ocr_engine: Arc<OcrEngine>,
-    monitor_id: u32,
 ) {
-    debug!(
-        "continuous_capture: Starting using monitor: {:?}",
-        monitor_id
-    );
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<Arc<DynamicImage>> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
@@ -70,27 +65,13 @@ pub async fn continuous_capture(
         }
     }
 
-    let monitor = get_target_by_id(monitor_id).await.unwrap();
-
-    let options = Options {
-        fps: fps,
-        target: Some(monitor.clone()),
-        show_cursor: true,
-        show_highlight: false,
-        excluded_targets: None,
-        output_type: scap::frame::FrameType::RGB,
-        output_resolution: scap::capturer::Resolution::_1080p, // TODO
-        ..Default::default()
-    };
-
-    let mut capturer = Capturer::new(options);
-    capturer.start_capture();
+    capturer.lock().await.start_capture();
 
     loop {
         let start_time = Instant::now();
 
         // debug!("Frame count: {}", frame_counter);
-        if let Ok(frame) = capturer.get_next_frame() {
+        if let Ok(frame) = capturer.lock().await.get_next_frame() {
             // debug!("Frame:");
             let image = frame_to_dynamic_image(&frame);
             let image_arc = Arc::new(image.clone());
@@ -191,7 +172,8 @@ fn frame_to_dynamic_image(frame: &Frame) -> DynamicImage {
     }
 }
 
-pub struct MaxAverageFrame { // ! this struct is 90% dead code (only avg is used)
+pub struct MaxAverageFrame {
+    // ! this struct is 90% dead code (only avg is used)
     pub image: Arc<DynamicImage>,
     pub frame_number: u64,
     pub timestamp: Instant,

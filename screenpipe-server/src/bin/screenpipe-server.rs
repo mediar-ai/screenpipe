@@ -18,7 +18,7 @@ use screenpipe_audio::{
     AudioDevice, DeviceControl,
 };
 use screenpipe_vision::{
-    monitor::{get_monitor_by_id, list_monitors},
+    monitor::{get_capturer, get_monitor_by_id, list_monitors},
     OcrEngine,
 };
 use std::io::Write;
@@ -32,7 +32,7 @@ use screenpipe_server::{
     start_continuous_recording, DatabaseManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
-use tokio::sync::mpsc::channel;
+use tokio::sync::{mpsc::channel, Mutex};
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
@@ -126,6 +126,10 @@ async fn main() -> anyhow::Result<()> {
         print_devices(&all_audio_devices);
         return Ok(());
     }
+    let monitor_id = cli.monitor_id.unwrap_or(1); // ! HACK: check 1 does not crash
+    // need to crate capturer BEFORE the list_monitors
+    let capturer = Arc::new(Mutex::new(get_capturer(monitor_id, cli.fps).await));
+
     let all_monitors = list_monitors().await;
     if cli.list_monitors {
         println!("Available monitors:");
@@ -234,7 +238,6 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
-    let monitor_id = cli.monitor_id.unwrap_or(all_monitors.first().unwrap().id);
 
     // try to use the monitor selected, if not available throw an error
     get_monitor_by_id(monitor_id).await.unwrap_or_else(|| {
@@ -256,6 +259,7 @@ async fn main() -> anyhow::Result<()> {
         let mut recording_task = tokio::spawn(async move {});
 
         loop {
+            let capturer_clone = capturer.clone();
             let db_clone = db.clone();
             let local_data_dir = local_data_dir.clone();
             let vision_control = vision_control.clone();
@@ -281,6 +285,7 @@ async fn main() -> anyhow::Result<()> {
 
             recording_task = tokio::spawn(async move {
                 let result = start_continuous_recording(
+                    capturer_clone,
                     db_clone,
                     Arc::new(local_data_dir.join("data").to_string_lossy().into_owned()),
                     cli.fps,
@@ -290,7 +295,6 @@ async fn main() -> anyhow::Result<()> {
                     audio_transcription_engine,
                     ocr_engine,
                     friend_wearable_uid_clone, // Use the cloned version
-                    monitor_id,
                     cli.use_pii_removal,
                 )
                 .await;
