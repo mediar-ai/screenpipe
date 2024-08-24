@@ -18,7 +18,9 @@ use screenpipe_audio::{
     AudioDevice, DeviceControl,
 };
 use screenpipe_vision::{
-    monitor::{get_capturer, get_empty_capturer, get_monitor_by_id, list_monitors},
+    monitor::{
+        get_capturer, get_empty_capturer, get_monitor_by_id, init_linux_capturer, list_monitors,
+    },
     OcrEngine,
 };
 use std::io::Write;
@@ -127,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     // need to crate capturer BEFORE the list_monitors
-    let _capturer = get_empty_capturer().await; // ! HACK for linux reasons
+    let _capturer = init_linux_capturer().await; // ! HACK for linux reasons
 
     let all_monitors = list_monitors().await;
     if cli.list_monitors {

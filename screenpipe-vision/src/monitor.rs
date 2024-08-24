@@ -62,17 +62,27 @@ pub async fn get_target_by_id(id: u32) -> Option<Target> {
     })
 }
 
-pub async fn get_empty_capturer() -> Capturer {
+pub async fn init_linux_capturer() {
+    // Create Options
     let options = Options {
+        fps: 60,
         show_cursor: true,
-        show_highlight: false,
+        show_highlight: true,
         excluded_targets: None,
-        output_type: scap::frame::FrameType::RGB,
-        output_resolution: scap::capturer::Resolution::_1080p, // TODO
+        output_type: scap::frame::FrameType::BGRAFrame,
+        output_resolution: scap::capturer::Resolution::_720p,
         ..Default::default()
     };
 
-    Capturer::new(options)
+    // Create Recorder with options
+    let mut recorder = Capturer::new(options);
+
+    // Start Capture
+    recorder.start_capture();
+    let _frame = recorder.get_next_frame().unwrap();
+    // wait 1 seconds
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    recorder.stop_capture();
 }
 
 pub async fn get_capturer(monitor_id: u32, fps: u32) -> Capturer {
