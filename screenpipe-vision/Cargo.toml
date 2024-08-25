@@ -14,8 +14,6 @@ edition = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Cross-platform screen capture
-xcap = "0.0.13"  # This is the latest version as of now
 
 # threadpool
 threadpool = "1.8.1"
@@ -88,6 +86,12 @@ harness = false
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
+xcap = "0.0.12"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
+xcap = "0.0.13" # memory leak fix, also for some reason 0.0.13 doesn't work on windows
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+xcap = "0.0.12"
