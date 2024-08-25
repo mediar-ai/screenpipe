@@ -209,6 +209,9 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // ! DISGUSTING HACK TEMPORARY FOR MACOS sc
+    std::env::set_var("SCREENPIPE_FPS", cli.fps.to_string());
+
     let (restart_sender, mut restart_receiver) = channel(10);
     let resource_monitor =
         ResourceMonitor::new(cli.self_healing, Duration::from_secs(60), 3, restart_sender);
