@@ -1,0 +1,16 @@
+name: Rust Style
+
+on: [push]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  machete:
+    name: Cargo Machete
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for unused dependencies
+        uses: bnjbvr/cargo-machete@main
