@@ -32,7 +32,10 @@ use screenpipe_server::{
     start_continuous_recording, DatabaseManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
-use tokio::{sync::mpsc::channel, time::interval};
+use tokio::{
+    sync::mpsc::channel,
+    time::{interval, interval_at, Instant},
+};
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
@@ -260,7 +263,12 @@ async fn main() -> anyhow::Result<()> {
         // hack
         let mut recording_task = tokio::spawn(async move {});
         let mut restart_timer = if restart_interval > 0 {
-            Some(interval(Duration::from_secs(restart_interval * 60))) // Changed to minutes
+            // Calculate the first restart time
+            let first_restart = Instant::now() + Duration::from_secs(restart_interval * 60);
+            Some(interval_at(
+                first_restart,
+                Duration::from_secs(restart_interval * 60),
+            ))
         } else {
             None
         };
