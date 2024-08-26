@@ -147,6 +147,7 @@ export function RecordingSettings({
         monitorId: localSettings.monitorId,
         audioDevices: localSettings.audioDevices,
         usePiiRemoval: localSettings.usePiiRemoval,
+        restartInterval: localSettings.restartInterval,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
