@@ -139,6 +139,7 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub monitor_id: Option<u32>,
 
+    #[cfg(feature = "pipes")]
     /// File path for the pipe
     #[arg(long)]
     pub pipe: Vec<String>,
