@@ -78,6 +78,8 @@ There are multiple ways to install screenpipe:
 - as a Rust or WASM library (documentation WIP)
 - as a business - check [use cases](https://github.com/mediar-ai/screenpipe?tab=readme-ov-file#use-cases) and [DM louis](https://www.linkedin.com/in/louis030195/)
 
+PS: we invest 80% of the paid app revenue in [bounties](https://github.com/mediar-ai/screenpipe/issues?q=is:open+is:issue+label:%22%F0%9F%92%8E+Bounty%22), send PR, make money!
+
 This is the instructions to install the command line interface.
 
 Struggle to get it running? [I'll install it with you in a 15 min call.](https://cal.com/louis030195/screenpipe)
