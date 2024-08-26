@@ -39,6 +39,7 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { Switch } from "./ui/switch";
+import { Input } from "./ui/input";
 
 interface AudioDevice {
   name: string;
@@ -194,6 +195,13 @@ export function RecordingSettings({
 
   const handlePiiRemovalChange = (checked: boolean) => {
     setLocalSettings({ ...localSettings, usePiiRemoval: checked });
+  };
+
+  const handleRestartIntervalChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const newValue = parseInt(e.target.value, 10);
+    setLocalSettings({ ...localSettings, restartInterval: newValue });
   };
 
   return (
@@ -398,6 +406,43 @@ export function RecordingSettings({
                   </TooltipProvider>
                 </Label>
               </div>
+            </div>
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="restartInterval"
+                className="flex items-center space-x-2"
+              >
+                <span>restart interval (minutes)</span>
+                <Badge variant="outline" className="ml-2">
+                  experimental
+                </Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        set how often the recording process should restart.
+                        <br />
+                        0 means no automatic restart.
+                        <br />
+                        this can help mitigate potential memory leaks or other
+                        issues.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
+                id="restartInterval"
+                type="number"
+                min="0"
+                value={localSettings.restartInterval}
+                onChange={handleRestartIntervalChange}
+                className="w-full"
+                placeholder="Enter restart interval in minutes (0 to disable)"
+              />
             </div>
 
             <div className="flex flex-col space-y-2">

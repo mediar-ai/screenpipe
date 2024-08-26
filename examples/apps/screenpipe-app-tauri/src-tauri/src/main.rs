@@ -159,6 +159,14 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             .unwrap_or(false))
     })
     .map_err(|e| e.to_string())?;
+    let restart_interval = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("restartInterval")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0))
+    })
+    .map_err(|e| e.to_string())?;
+
 
     let _data_dir_str = base_dir.to_string_lossy();
     let mut args = vec!["--port", "3030"];
@@ -196,6 +204,12 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--use-pii-removal");
     }
 
+    let restart_interval_str = restart_interval.to_string();
+    if restart_interval > 0 {
+        args.push("--restart-interval");
+        args.push(&restart_interval_str);
+    }
+
     // hardcode TESSDATA_PREFIX for windows
     if cfg!(windows) {
         let exe_dir = env::current_exe()
@@ -227,19 +241,19 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let (mut rx, child) = result.unwrap();
 
     // only in production mode because it breaks the "bun tauri dev"
-    #[cfg(not(debug_assertions))]
-    tauri::async_runtime::spawn(async move {
-        #[allow(unused_variables)]
-        let mut i = 0;
-        while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stdout(line) = event {
-                print!("{}", String::from_utf8(line).unwrap());
-                i += 1;
-            } else if let CommandEvent::Stderr(line) = event {
-                error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
-            }
-        }
-    });
+    // #[cfg(not(debug_assertions))]
+    // tauri::async_runtime::spawn(async move {
+    //     #[allow(unused_variables)]
+    //     let mut i = 0;
+    //     while let Some(event) = rx.recv().await {
+    //         if let CommandEvent::Stdout(line) = event {
+    //             print!("{}", String::from_utf8(line).unwrap());
+    //             i += 1;
+    //         } else if let CommandEvent::Stderr(line) = event {
+    //             error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
+    //         }
+    //     }
+    // });
 
     info!("Spawned sidecar with args: {:?}", args);
 

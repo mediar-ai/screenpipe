@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 pub async fn start_continuous_recording(
@@ -25,6 +25,7 @@ pub async fn start_continuous_recording(
     audio_chunk_duration: Duration,
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    audio_disabled: bool,
     save_text_files: bool,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
@@ -32,9 +33,18 @@ pub async fn start_continuous_recording(
     monitor_id: u32,
     use_pii_removal: bool,
 ) -> Result<()> {
-    let (whisper_sender, whisper_receiver) =
-        create_whisper_channel(audio_transcription_engine.clone()).await?;
-
+    let (whisper_sender, whisper_receiver) = if audio_disabled {
+        // Create a dummy channel if no audio devices are available, e.g. audio disabled
+        let (input_sender, _): (UnboundedSender<AudioInput>, UnboundedReceiver<AudioInput>) =
+            unbounded_channel();
+        let (_, output_receiver): (
+            UnboundedSender<TranscriptionResult>,
+            UnboundedReceiver<TranscriptionResult>,
+        ) = unbounded_channel();
+        (input_sender, output_receiver)
+    } else {
+        create_whisper_channel(audio_transcription_engine.clone()).await?
+    };
     let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);
 

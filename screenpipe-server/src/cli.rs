@@ -146,4 +146,8 @@ pub struct Cli {
     /// Enable PII removal from OCR text property that is saved to db and returned in search results
     #[arg(long, default_value_t = false)]
     pub use_pii_removal: bool,
+
+    /// Restart recording process every X minutes (0 means no periodic restart)
+    #[arg(long, default_value_t = 0)]
+    pub restart_interval: u64,
 }

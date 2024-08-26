@@ -32,7 +32,7 @@ use screenpipe_server::{
     start_continuous_recording, DatabaseManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
-use tokio::sync::mpsc::channel;
+use tokio::{sync::mpsc::channel, time::interval};
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
@@ -253,12 +253,17 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     });
     let ocr_engine_clone = cli.ocr_engine.clone();
+    let restart_interval = cli.restart_interval;
 
     // Function to start or restart the recording task
     let _start_recording = tokio::spawn(async move {
         // hack
         let mut recording_task = tokio::spawn(async move {});
-
+        let mut restart_timer = if restart_interval > 0 {
+            Some(interval(Duration::from_secs(restart_interval * 60))) // Changed to minutes
+        } else {
+            None
+        };
         loop {
             let db_clone = db.clone();
             let local_data_dir = local_data_dir.clone();
@@ -268,12 +273,18 @@ async fn main() -> anyhow::Result<()> {
 
             tokio::select! {
                 _ = &mut recording_task => {
-                    // Recording task completed or errored, restart it
                     debug!("Recording task ended. Restarting...");
                 }
                 Some(_) = restart_receiver.recv() => {
-                    // Received restart signal, cancel the current task and restart
                     info!("Received restart signal. Restarting recording task...");
+                    recording_task.abort();
+                }
+                _ = async { if let Some(timer) = &mut restart_timer {
+                    timer.tick().await
+                } else {
+                    std::future::pending().await
+                }}, if restart_interval > 0 => {
+                    info!("Periodic restart interval reached. Restarting recording task...");
                     recording_task.abort();
                 }
             }
@@ -291,6 +302,7 @@ async fn main() -> anyhow::Result<()> {
                     Duration::from_secs(cli.audio_chunk_duration),
                     vision_control,
                     audio_devices_control,
+                    cli.disable_audio,
                     cli.save_text_files,
                     audio_transcription_engine,
                     ocr_engine,
@@ -389,6 +401,14 @@ async fn main() -> anyhow::Result<()> {
         local_data_dir_clone.display()
     );
     println!("│ Debug Mode          │ {:<34} │", cli.debug);
+    println!(
+        "│ Restart Interval    │ {:<34} │",
+        if cli.restart_interval > 0 {
+            format!("Every {} minutes", cli.restart_interval)
+        } else {
+            "Disabled".to_string()
+        }
+    );
     const VALUE_WIDTH: usize = 34;
 
     // Function to truncate and pad strings
@@ -403,13 +423,19 @@ async fn main() -> anyhow::Result<()> {
     // In the main function, replace the audio devices section with:
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ Audio Devices       │                                    │");
+    const MAX_DEVICES_TO_DISPLAY: usize = 5;
 
     if cli.disable_audio {
         println!("│ {:<19} │ {:<34} │", "", "Disabled");
     } else if audio_devices.is_empty() {
         println!("│ {:<19} │ {:<34} │", "", "No devices available");
     } else {
-        for (i, device) in audio_devices.iter().enumerate() {
+        let total_devices = audio_devices.len();
+        for (i, device) in audio_devices
+            .iter()
+            .enumerate()
+            .take(MAX_DEVICES_TO_DISPLAY)
+        {
             let device_str = device.deref().to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
             if i == 0 {
@@ -417,6 +443,13 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 println!("│ {:<19} │ {:<34} │", "", formatted_device);
             }
+        }
+        if total_devices > MAX_DEVICES_TO_DISPLAY {
+            println!(
+                "│ {:<19} │ {:<34} │",
+                "",
+                format!("... and {} more", total_devices - MAX_DEVICES_TO_DISPLAY)
+            );
         }
     }
 

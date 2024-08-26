@@ -30,6 +30,7 @@ const defaultSettings: Settings = {
   monitorId: "default",
   audioDevices: ["default"],
   usePiiRemoval: false,
+  restartInterval: 0,
 };
 
 export interface Settings {
@@ -47,6 +48,7 @@ export interface Settings {
   monitorId: string;
   audioDevices: string[];
   usePiiRemoval: boolean;
+  restartInterval: number;
 }
 
 let store: Store | null = null;
@@ -113,6 +115,8 @@ export function useSettings() {
         )) as string[]) || ["default"];
         const savedUsePiiRemoval =
           ((await store!.get("usePiiRemoval")) as boolean) || false;
+        const savedRestartInterval =
+          ((await store!.get("restartInterval")) as number) || 0;
 
         setSettings({
           openaiApiKey: savedKey,
@@ -129,6 +133,7 @@ export function useSettings() {
           monitorId: savedMonitorId,
           audioDevices: savedAudioDevices,
           usePiiRemoval: savedUsePiiRemoval,
+          restartInterval: savedRestartInterval,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);
