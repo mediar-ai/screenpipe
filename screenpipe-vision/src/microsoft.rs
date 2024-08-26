@@ -34,9 +34,9 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String, Optio
 
     let json_output = serde_json::json!([{
         "text": text,
-        "confidence": null // Windows OCR doesn't provide confidence scores
+        "confidence": 1.0 // Windows OCR doesn't provide confidence scores
     }])
     .to_string();
 
-    (text, json_output, None)
+    (text, json_output, Some(1.0))
 }
