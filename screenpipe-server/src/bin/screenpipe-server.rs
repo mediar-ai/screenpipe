@@ -34,7 +34,7 @@ use screenpipe_server::{
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use tokio::{
     sync::mpsc::channel,
-    time::{interval, interval_at, Instant},
+    time::{interval_at, Instant},
 };
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -69,6 +69,75 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     Ok(base_dir)
 }
 
+#[cfg(feature = "pipes")]
+async fn run_pipe_runner(pipes: Vec<String>) -> anyhow::Result<()> {
+    if pipes.len() == 0 {
+        ()
+    }
+
+    use std::path::Path;
+
+    use tokio::process::Command;
+
+    // ! this is not very beautiful but it works
+
+    let potential_paths = [
+        // General paths
+        "./screenpipe-pipe-runner",
+        "./target/release/screenpipe-pipe-runner",
+        "../target/release/screenpipe-pipe-runner",
+        "../../target/release/screenpipe-pipe-runner",
+        // Linux
+        "./screenpipe-pipe-runner-x86_64-unknown-linux-gnu",
+        // Windows
+        "./screenpipe-pipe-runner-x86_64-pc-windows-msvc.exe",
+        // macOS ARM64
+        "./screenpipe-pipe-runner-aarch64-apple-darwin",
+        // macOS x86_64
+        "./screenpipe-pipe-runner-x86_64-apple-darwin",
+        // Additional paths
+        "./src-tauri/screenpipe-pipe-runner",
+        "../src-tauri/screenpipe-pipe-runner",
+        "../../src-tauri/screenpipe-pipe-runner",
+    ];
+
+    for path in &potential_paths {
+        // list stuff in parent of this path
+        let parent = Path::new(path).parent().unwrap();
+        // ls files there
+        let files = fs::read_dir(parent)
+            .ok()
+            .map(|entries| {
+                entries
+                    .filter_map(|entry| {
+                        entry
+                            .ok()
+                            .map(|e| e.file_name().to_string_lossy().into_owned())
+                    })
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+        debug!("files: {:?}", files);
+        if Path::new(path).exists() {
+            let status = Command::new(path)
+                .arg("--pipe")
+                .args(pipes.iter().next())
+                .status()
+                .await?;
+
+            if status.success() {
+                return Ok(());
+            } else {
+                eprintln!("pipe-runner process failed with status: {}", status);
+                // Continue to the next path if this one failed
+            }
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Failed to find or run screenpipe-pipe-runner"
+    ))
+}
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -351,19 +420,10 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(feature = "pipes")]
     if !cli.pipe.is_empty() {
-        use tokio::process::Command;
-        // ! HACK until we have clean way to store the bin
-        let status = Command::new("target/release/screenpipe-pipe-runner")
-            .arg("--pipe")
-            .args(&cli.pipe)
-            .status()
-            .await
-            .expect("Failed to start pipe-runner process");
-
-        if !status.success() {
-            eprintln!("pipe-runner process failed with status: {}", status);
+        match run_pipe_runner(cli.pipe).await {
+            Ok(_) => info!("Pipe runner completed successfully"),
+            Err(e) => error!("Error running pipe runner: {}", e),
         }
-
         return Ok(());
     }
 

@@ -21,6 +21,8 @@ import { PrettyLink } from "@/components/pretty-link";
 import { MeetingSummarizer } from "./meeting-summarized";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { open } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
+import { toast } from "./ui/use-toast";
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
@@ -58,9 +60,10 @@ const FeatureRequestLink: React.FC<{ className?: string }> = ({
 );
 
 const PipeDialog: React.FC = () => {
-  const { pipes, loading, error } = usePipes(
-    "https://github.com/different-ai/file-organizer-2000"
-  );
+  const { pipes, loading, error } = usePipes([
+    "https://github.com/different-ai/file-organizer-2000",
+    "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity",
+  ]);
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const { settings, updateSettings } = useSettings();
 
@@ -80,9 +83,69 @@ const PipeDialog: React.FC = () => {
       return;
     }
 
-    const updatedInstalledPipes = [...settings.installedPipes, pipe.name];
-    await updateSettings({ installedPipes: updatedInstalledPipes });
-    setSelectedPipe({ ...pipe });
+    try {
+      toast({
+        title: "Installing pipe",
+        description: "This may take a few moments...",
+      });
+
+      // Update installed pipes in settings
+      const updatedInstalledPipes = [...settings.installedPipes, pipe.mainFile!];
+      await updateSettings({ installedPipes: updatedInstalledPipes });
+
+      // Kill existing screenpipe processes
+      await invoke("kill_all_sreenpipes");
+
+      // Spawn new screenpipe process with the pipe
+      await invoke("spawn_screenpipe");
+
+      toast({
+        title: "Pipe installed successfully",
+        description: "Screenpipe has been restarted with the new pipe.",
+      });
+
+      setSelectedPipe({ ...pipe });
+    } catch (error) {
+      console.error("Failed to install pipe:", error);
+      toast({
+        title: "Error installing pipe",
+        description: "Please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUninstall = async (pipe: Pipe) => {
+    try {
+      toast({
+        title: "Uninstalling pipe",
+        description: "This may take a few moments...",
+      });
+
+      // Update installed pipes in settings
+      const updatedInstalledPipes = settings.installedPipes.filter(
+        (p) => p !== pipe.name
+      );
+      await updateSettings({ installedPipes: updatedInstalledPipes });
+
+      // restart screenpipe with no pipe
+      await invoke("kill_all_sreenpipes");
+      await invoke("spawn_screenpipe");
+
+      toast({
+        title: "Pipe uninstalled successfully",
+        description: "Screenpipe has been restarted without the pipe.",
+      });
+
+      setSelectedPipe({ ...pipe });
+    } catch (error) {
+      console.error("Failed to uninstall pipe:", error);
+      toast({
+        title: "Error uninstalling pipe",
+        description: "Please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
   };
 
   const renderPipeContent = () => {
@@ -142,12 +205,13 @@ const PipeDialog: React.FC = () => {
         </div>
         <p className="mb-4">{selectedPipe.description}</p>
         <div className="flex space-x-2 mb-4">
-          <Button
-            onClick={() => handleInstall(selectedPipe)}
-            disabled={isInstalled}
-          >
-            {isInstalled ? "Installed" : "Install"}
-          </Button>
+          {isInstalled ? (
+            <Button onClick={() => handleUninstall(selectedPipe)}>
+              Uninstall
+            </Button>
+          ) : (
+            <Button onClick={() => handleInstall(selectedPipe)}>Install</Button>
+          )}
           <Button disabled variant="outline">
             copy share link
             <Badge variant="secondary" className="ml-2">
@@ -185,7 +249,7 @@ const PipeDialog: React.FC = () => {
                   if (!match) {
                     return (
                       <code
-                        className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono text-sm"
+                        className="py-0.5 rounded-sm  font-mono text-sm"
                         {...props}
                       >
                         {content}

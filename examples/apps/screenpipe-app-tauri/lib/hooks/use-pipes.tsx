@@ -10,32 +10,43 @@ export type Pipe = {
   lastUpdate: string;
   description: string;
   fullDescription: string;
+  mainFile?: string;
+};
+
+const cache: { [key: string]: { data: any; timestamp: number } } = {};
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+
+const fetchWithCache = async (url: string) => {
+  if (cache[url] && Date.now() - cache[url].timestamp < CACHE_DURATION) {
+    return cache[url].data;
+  }
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  const data = await response.json();
+  cache[url] = { data, timestamp: Date.now() };
+  return data;
 };
 
 const convertHtmlToMarkdown = (html: string) => {
-  // Convert <img> tags to Markdown
   const convertedHtml = html.replace(
     /<img\s+(?:[^>]*?\s+)?src="([^"]*)"(?:\s+(?:[^>]*?\s+)?alt="([^"]*)")?\s*\/?>/g,
     (match, src, alt) => {
       return `![${alt || ""}](${src})`;
     }
   );
-
-  // Remove any remaining HTML tags
   return convertedHtml.replace(/<[^>]*>/g, "");
 };
 
 const fetchReadme = async (fullName: string) => {
   try {
-    const response = await fetch(
+    const data = await fetchWithCache(
       `https://api.github.com/repos/${fullName}/readme`
     );
-    const data = await response.json();
     const decodedContent = atob(data.content);
-    // console.log("YOOOO dd", decodedContent);
-    const markdown = convertHtmlToMarkdown(decodedContent);
-    // console.log("YOOOO md", markdown);
-    return markdown;
+    return convertHtmlToMarkdown(decodedContent);
   } catch (error) {
     console.error("error fetching readme:", error);
     return "";
@@ -44,10 +55,9 @@ const fetchReadme = async (fullName: string) => {
 
 const fetchLatestRelease = async (fullName: string) => {
   try {
-    const response = await fetch(
+    const data = await fetchWithCache(
       `https://api.github.com/repos/${fullName}/releases/latest`
     );
-    const data = await response.json();
     return data.tag_name;
   } catch (error) {
     console.error("error fetching latest release:", error);
@@ -55,91 +65,166 @@ const fetchLatestRelease = async (fullName: string) => {
   }
 };
 
-const meetingSummarizerPipe: Pipe = {
-  name: "Local First Meeting Summarizer",
-  downloads: 42,
-  version: "1.0.0",
-  author: "Louis",
-  authorLink: "https://github.com/louis030195",
-  repository: "https://github.com/mediar-ai/screenpipe",
-  lastUpdate: new Date().toISOString(),
-  description: "Summarize your meetings locally with AI",
-  fullDescription: `# Local First Meeting Summarizer
-
-This pipe allows you to summarize your meetings locally using AI. It provides a start and stop button to control the meeting duration, with an additional input for manually setting the end time if you forget to click stop.
-
-## Features
-
-- Start and stop buttons for meeting control
-- Manual end time input
-- Uses Ollama or OpenAI based on user settings
-- Removes noise from transcripts
-- Generates meeting summary with action items
-- Markdown output for easy reading and sharing
-
-## How to Use
-
-1. Click the "Start Meeting" button when your meeting begins.
-2. When the meeting ends, click the "Stop Meeting" button.
-3. If you forgot to stop the meeting, you can manually set the end time using the datetime input.
-4. The pipe will query Screenpipe for audio transcripts during the meeting duration.
-5. An AI model (Ollama or OpenAI, based on your settings) will generate a summary and extract action items.
-6. The summary will be displayed in markdown format, which you can easily copy and share.
-
-## Privacy and Security
-
-This pipe processes all data locally on your machine, ensuring your meeting content remains private and secure. No data is sent to external servers except for the AI model API calls.
-
-## Customization
-
-You can customize the AI model used for summarization in the settings. Choose between Ollama (for local processing) or OpenAI for cloud-based processing.
-
-## Feedback and Improvements
-
-We're constantly working to improve this pipe. If you have any feedback or suggestions, please open an issue on our GitHub repository.
-
-Happy summarizing!`,
+const fetchSubdirContents = async (
+  repoName: string,
+  branch: string,
+  path: string
+) => {
+  try {
+    return await fetchWithCache(
+      `https://api.github.com/repos/${repoName}/contents/${path}?ref=${branch}`
+    );
+  } catch (error) {
+    console.error(`Error fetching subdirectory contents: ${error}`);
+    throw error;
+  }
 };
 
-export const usePipes = (repoUrl: string) => {
+const fetchFileContent = async (
+  repoName: string,
+  branch: string,
+  path: string
+) => {
+  try {
+    const data = await fetchWithCache(
+      `https://api.github.com/repos/${repoName}/contents/${path}?ref=${branch}`
+    );
+    return atob(data.content);
+  } catch (error) {
+    console.error(`Error fetching file content: ${error}`);
+    throw error;
+  }
+};
+
+export const usePipes = (repoUrls: string[]) => {
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchPipes = async () => {
-      try {
-        setLoading(true);
-        const repoName = repoUrl.split("/").slice(-2).join("/");
-        const response = await fetch(
-          `https://api.github.com/repos/${repoName}`
-        );
-        const data = await response.json();
-        const latestVersion = await fetchLatestRelease(repoName);
-        const pipe: Pipe = {
-          name: data.name,
-          downloads: data.stargazers_count,
-          version: latestVersion || data.default_branch,
-          author: data.owner.login,
-          authorLink: data.owner.html_url,
-          repository: data.html_url,
-          lastUpdate: data.updated_at,
-          description: data.description,
-          fullDescription: await fetchReadme(repoName),
-        };
-        setPipes([pipe, meetingSummarizerPipe]);
+    let isMounted = true;
 
-        setError(null);
+    const fetchPipes = async () => {
+      if (!isMounted) return;
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const pipePromises = repoUrls.map(async (repoUrl) => {
+          try {
+            const urlParts = repoUrl.split("/");
+            const isSubdir = urlParts.length > 5; // github.com/owner/repo/tree/branch/subdir
+            const repoOwner = urlParts[3];
+            const repoName = urlParts[4];
+            const repoFullName = `${repoOwner}/${repoName}`;
+            const branch = isSubdir ? urlParts[6] : "main"; // Assume 'main' if not specified
+            const subDir = isSubdir ? urlParts.slice(7).join("/") : "";
+
+            const repoData = await fetchWithCache(
+              `https://api.github.com/repos/${repoFullName}`
+            );
+
+            if (isSubdir) {
+              try {
+                const contents = await fetchSubdirContents(
+                  repoFullName,
+                  branch,
+                  subDir
+                );
+                if (!contents || !Array.isArray(contents)) return null;
+
+                const jsFiles = contents.filter((file: any) =>
+                  file.name.endsWith(".js")
+                );
+                const hasJsFile = jsFiles.length > 0;
+                const readmeFile = contents.find(
+                  (file: any) => file.name.toLowerCase() === "readme.md"
+                );
+
+                if (!hasJsFile || !readmeFile) return null;
+
+                const readmeContent = await fetchFileContent(
+                  repoFullName,
+                  branch,
+                  `${subDir}/${readmeFile.name}`
+                );
+
+                // Find the main JavaScript file (prefer index.js if it exists)
+                const mainFile =
+                  jsFiles.find((file: any) => file.name === "index.js") ||
+                  jsFiles[0];
+
+                const mainFileUrl = mainFile
+                  ? `https://github.com/${repoFullName}/blob/${branch}/${subDir}/${mainFile.name}`
+                  : undefined;
+
+                return {
+                  name: subDir.split("/").pop() || repoData.name,
+                  downloads: repoData.stargazers_count,
+                  version: await fetchLatestRelease(repoFullName),
+                  author: repoData.owner.login,
+                  authorLink: repoData.owner.html_url,
+                  repository: `${repoData.html_url}/tree/${branch}/${subDir}`,
+                  lastUpdate: repoData.updated_at,
+                  description: repoData.description,
+                  fullDescription: readmeContent
+                    ? convertHtmlToMarkdown(readmeContent)
+                    : "",
+                  mainFile: mainFileUrl,
+                };
+              } catch (subdirError) {
+                console.error(
+                  `Error processing subdirectory ${repoUrl}:`,
+                  subdirError
+                );
+                return null; // Skip this subdirectory if there's an error
+              }
+            } else {
+              // Original behavior for root repos
+              return {
+                name: repoData.name,
+                downloads: repoData.stargazers_count,
+                version: await fetchLatestRelease(repoFullName),
+                author: repoData.owner.login,
+                authorLink: repoData.owner.html_url,
+                repository: repoData.html_url,
+                lastUpdate: repoData.updated_at,
+                description: repoData.description,
+                fullDescription: await fetchReadme(repoFullName),
+              };
+            }
+          } catch (error) {
+            console.error(`Error processing ${repoUrl}:`, error);
+            return null;
+          }
+        });
+
+        const fetchedPipes = (await Promise.all(pipePromises)).filter(
+          Boolean
+        ) as Pipe[];
+
+        if (isMounted) {
+          setPipes(fetchedPipes);
+        }
       } catch (error) {
-        console.error("error fetching pipes:", error);
-        setError("Failed to fetch pipes");
+        console.error("Error in fetchPipes:", error);
+        if (isMounted && !error) {
+          setError("Failed to fetch pipes");
+        }
       } finally {
-        setLoading(false);
+        if (isMounted && loading) {
+          setLoading(false);
+        }
       }
     };
 
     fetchPipes();
-  }, [repoUrl]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return { pipes, loading, error };
 };

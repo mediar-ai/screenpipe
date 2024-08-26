@@ -102,12 +102,22 @@ async fn spawn_screenpipe(
     let sidecar_running = state.0.lock().unwrap().is_some();
     if !sidecar_running {
         // Spawn the sidecar
-        let child = spawn_sidecar(&app)?;
-        // Update the state after spawning
-        state.0.lock().unwrap().replace(child);
+        match spawn_sidecar(&app) {
+            Ok(child) => {
+                // Update the state after spawning
+                state.0.lock().unwrap().replace(child);
+                debug!("Spawned sidecar through CLI");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to spawn sidecar: {}", e);
+                Err(format!("Failed to spawn sidecar: {}", e))
+            }
+        }
+    } else {
+        debug!("Sidecar already running");
+        Ok(())
     }
-    debug!("Spawned sidecar thru cli");
-    Ok(())
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
@@ -166,6 +176,14 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             .unwrap_or(0))
     })
     .map_err(|e| e.to_string())?;
+    let pipes = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("installedPipes")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.to_vec()))
+    })
+    .map_err(|e| e.to_string())?
+    .unwrap_or_default();
 
 
     let _data_dir_str = base_dir.to_string_lossy();
@@ -210,6 +228,15 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push(&restart_interval_str);
     }
 
+    if !pipes.is_empty() {
+        for pipe in &pipes {
+            args.push("--pipe");
+            args.push(pipe.as_str().unwrap());
+            debug!("adding pipe: {}", pipe.as_str().unwrap());
+        }
+    }
+    
+
     // hardcode TESSDATA_PREFIX for windows
     if cfg!(windows) {
         let exe_dir = env::current_exe()
@@ -230,7 +257,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         return Ok(child);
     }
 
-    let result = sidecar.args(&args).spawn();
+    let command = sidecar.args(&args);
+    
+    let result = command.spawn();
 
     if let Err(e) = result {
         error!("Failed to spawn sidecar: {}", e);
@@ -242,18 +271,18 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     // only in production mode because it breaks the "bun tauri dev"
     // #[cfg(not(debug_assertions))]
-    // tauri::async_runtime::spawn(async move {
-    //     #[allow(unused_variables)]
-    //     let mut i = 0;
-    //     while let Some(event) = rx.recv().await {
-    //         if let CommandEvent::Stdout(line) = event {
-    //             print!("{}", String::from_utf8(line).unwrap());
-    //             i += 1;
-    //         } else if let CommandEvent::Stderr(line) = event {
-    //             error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
-    //         }
-    //     }
-    // });
+    tauri::async_runtime::spawn(async move {
+        #[allow(unused_variables)]
+        let mut i = 0;
+        while let Some(event) = rx.recv().await {
+            if let CommandEvent::Stdout(line) = event {
+                print!("{}", String::from_utf8(line).unwrap());
+                i += 1;
+            } else if let CommandEvent::Stderr(line) = event {
+                error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
+            }
+        }
+    });
 
     info!("Spawned sidecar with args: {:?}", args);
 

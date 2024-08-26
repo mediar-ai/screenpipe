@@ -119,8 +119,8 @@ name = "new_db_benchmark"
 harness = false
 
 [features]
-default = []
-static-ffmpeg = ["ffmpeg-next/static"]
+default = ["pipes"]
+static-ffmpeg = ["ffmpeg-next/static"] # TODO unused?
 
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]

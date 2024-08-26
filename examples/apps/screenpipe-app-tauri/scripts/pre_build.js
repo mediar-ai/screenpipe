@@ -3,6 +3,8 @@ import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
 
+const isDevMode = process.env.SCREENPIPE_APP_DEV === 'true' || false;
+
 const originalCWD = process.cwd()
 // Change CWD to src-tauri
 process.chdir(path.join(__dirname, '../src-tauri'))
@@ -132,6 +134,33 @@ if (platform == 'linux') {
 		// uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
 	}
+
+	// Copy screenpipe-pipe-runner binary
+	console.log('Copying screenpipe-pipe-runner binary for Linux...');
+	const pipeRunnerPotentialPaths = [
+		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe-pipe-runner'),
+		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe-pipe-runner'),
+		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe-pipe-runner'),
+		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe-pipe-runner'),
+		'/home/runner/work/screenpipe/screenpipe/target/release/screenpipe-pipe-runner',
+	];
+
+	copied = false;
+	for (const pipeRunnerSrc of pipeRunnerPotentialPaths) {
+		const pipeRunnerDest = path.join(cwd, 'screenpipe-pipe-runner-x86_64-unknown-linux-gnu');
+		try {
+			await fs.copyFile(pipeRunnerSrc, pipeRunnerDest);
+			console.log(`Pipe runner binary copied successfully from ${pipeRunnerSrc}`);
+			copied = true;
+			break;
+		} catch (error) {
+			console.warn(`Failed to copy pipe runner binary from ${pipeRunnerSrc}:`, error);
+		}
+	}
+
+	if (!copied) {
+		console.error("Failed to copy pipe runner binary from any potential path.");
+	}
 }
 
 /* ########## Windows ########## */
@@ -165,6 +194,33 @@ if (platform == 'windows') {
 		console.error("Failed to copy screenpipe binary from any potential path.");
 		// Uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
+	}
+
+	// Copy screenpipe-pipe-runner binary
+	console.log('Copying screenpipe-pipe-runner binary...');
+	const pipeRunnerPotentialPaths = [
+		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe-pipe-runner.exe'),
+		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-pc-windows-msvc', 'release', 'screenpipe-pipe-runner.exe'),
+		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe-pipe-runner.exe'),
+		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe-pipe-runner.exe'),
+		'D:\\a\\screenpipe\\screenpipe\\target\\release\\screenpipe-pipe-runner.exe',
+	];
+
+	copied = false;
+	for (const pipeRunnerSrc of pipeRunnerPotentialPaths) {
+		const pipeRunnerDest = path.join(cwd, 'screenpipe-pipe-runner-x86_64-pc-windows-msvc.exe');
+		try {
+			await fs.copyFile(pipeRunnerSrc, pipeRunnerDest);
+			console.log(`Pipe runner binary copied successfully from ${pipeRunnerSrc}`);
+			copied = true;
+			break;
+		} catch (error) {
+			console.warn(`Failed to copy pipe runner binary from ${pipeRunnerSrc}:`, error);
+		}
+	}
+
+	if (!copied) {
+		console.error("Failed to copy pipe runner binary from any potential path.");
 	}
 
 	// Setup FFMPEG
@@ -271,11 +327,42 @@ if (platform == 'macos') {
 				console.error("No suitable arm64 screenpipe binary found");
 			}
 			// if the binary exists, hard code the fucking dylib
-			if (await fs.exists('screenpipe-aarch64-apple-darwin')) {
+			if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
 				console.log(`hard coded the FUCKING dylib`);
+			} else if (await fs.exists('screenpipe-aarch64-apple-darwin') && isDevMode) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
+				await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-aarch64-apple-darwin`
+				console.log(`Updated dylib paths for arm64 in dev mode`);
 			}
+
+			// Copy screenpipe-pipe-runner binary for arm64
+			const pipeRunnerPaths = [
+				"../../../../target/aarch64-apple-darwin/release/screenpipe-pipe-runner",
+				"../../../../target/release/screenpipe-pipe-runner"
+			];
+
+			const mostRecentPipeRunnerPath = await getMostRecentBinaryPath('arm64', pipeRunnerPaths);
+			if (mostRecentPipeRunnerPath) {
+				await $`cp ${mostRecentPipeRunnerPath} screenpipe-pipe-runner-aarch64-apple-darwin`;
+				console.log(`Copied most recent arm64 pipe runner binary from ${mostRecentPipeRunnerPath}`);
+			} else {
+				console.error("No suitable arm64 pipe runner binary found");
+			}
+			// if the binary exists, hard code the fucking dylib
+			if (await fs.exists('screenpipe-pipe-runner-aarch64-apple-darwin') && !isDevMode) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-pipe-runner-aarch64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-pipe-runner-aarch64-apple-darwin`
+				console.log(`hard coded the FUCKING dylib for pipe runner`);
+			} else if (await fs.exists('screenpipe-pipe-runner-aarch64-apple-darwin') && isDevMode) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/target/Frameworks/libscreenpipe_arm64.dylib ./screenpipe-pipe-runner-aarch64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/target/Frameworks/libscreenpipe.dylib ./screenpipe-pipe-runner-aarch64-apple-darwin`
+				await $`install_name_tool -add_rpath @executable_path/target/Frameworks ./screenpipe-pipe-runner-aarch64-apple-darwin`
+				console.log(`Updated dylib paths for arm64 pipe runner in dev mode`);
+			}
+
 		} else if (arch === 'x86_64') {
 			// copy screenpipe binary (more recent one)
 			const paths = [
@@ -292,10 +379,40 @@ if (platform == 'macos') {
 				console.error("No suitable x86_64 screenpipe binary found");
 			}
 			// hard code the fucking dylib
-			if (await fs.exists('screenpipe-x86_64-apple-darwin')) {
+			if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
 				console.log(`hard coded the FUCKING dylib`);
+			} else if (await fs.exists('screenpipe-x86_64-apple-darwin') && isDevMode) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @executable_path/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
+				await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-x86_64-apple-darwin`
+				console.log(`Updated dylib paths for x86_64 in dev mode`);
+			}
+
+			// Copy screenpipe-pipe-runner binary for x86_64
+			const pipeRunnerPaths = [
+				"../../../../target/x86_64-apple-darwin/release/screenpipe-pipe-runner",
+				"../../../../target/release/screenpipe-pipe-runner"
+			];
+
+			const mostRecentPipeRunnerPath = await getMostRecentBinaryPath('x86_64', pipeRunnerPaths);
+			if (mostRecentPipeRunnerPath) {
+				await $`cp ${mostRecentPipeRunnerPath} screenpipe-pipe-runner-x86_64-apple-darwin`;
+				console.log(`Copied most recent x86_64 pipe runner binary from ${mostRecentPipeRunnerPath}`);
+			} else {
+				console.error("No suitable x86_64 pipe runner binary found");
+			}
+			// hard code the fucking dylib for pipe runner
+			if (await fs.exists('screenpipe-pipe-runner-x86_64-apple-darwin') && !isDevMode) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-pipe-runner-x86_64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-pipe-runner-x86_64-apple-darwin`
+				console.log(`hard coded the FUCKING dylib for pipe runner`);
+			} else if (await fs.exists('screenpipe-pipe-runner-x86_64-apple-darwin') && isDevMode) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @executable_path/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-pipe-runner-x86_64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-pipe-runner-x86_64-apple-darwin`
+				await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-pipe-runner-x86_64-apple-darwin`
+				console.log(`Updated dylib paths for x86_64 pipe runner in dev mode`);
 			}
 		}
 
