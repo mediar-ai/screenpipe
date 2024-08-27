@@ -3,19 +3,23 @@ in screenpipe we have a plugin system called "pipe store" or "pipes"
 
 think of it like this:
 
-📺🎙️ | AI tag | notion update
+screenpipe data -> your pipe like "AI annotate" or "send to salesforce"
+
+a more dev-friendly explanation:
+
+screenpipe | AI tag | notion update
 
 or 
 
-📺🎙️ | AI tag | slack send report
+screenpipe | AI tag | slack send report
 
 or 
 
-📺🎙️ | fill salesforce
+screenpipe | fill salesforce
 
 or 
 
-📺🎙️ | logs daily
+screenpipe | logs daily
 
 basically it would read, process, annotate, analyse, summarize, send, your data customisable to your desire, effortlessly
 
