@@ -183,7 +183,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             .map(|arr| arr.to_vec()))
     })
     .map_err(|e| e.to_string())?
-    .unwrap_or_default();
+.unwrap_or_default();
+
+    debug!("pipes: {:?}", pipes);
     let port = with_store(app.clone(), stores.clone(), path.clone(), |store| {
         Ok(store
             .get("port")
@@ -250,13 +252,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     if !pipes.is_empty() {
+        info!("adding pipes: {:?}", pipes);
         let mut added_pipes = std::collections::HashSet::new();
         for pipe in &pipes {
-            if let Some(pipe_str) = pipe.as_str() {
-                if added_pipes.insert(pipe_str) {
-                    args.push("--pipe");
-                    args.push(pipe_str);
-                    info!("adding pipe: {}", pipe_str);
+            if let Some(obj) = pipe.as_object() {
+                if let Some(main_file) = obj.get("mainFile").and_then(Value::as_str) {
+                    if added_pipes.insert(main_file) {
+                        args.push("--pipe");
+                        args.push(main_file);
+                        info!("adding pipe: {}", main_file);
+                    }
                 }
             }
         }

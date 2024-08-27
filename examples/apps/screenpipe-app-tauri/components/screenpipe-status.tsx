@@ -25,6 +25,7 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { DevSettings } from "./dev-dialog";
 
 const getDebuggingCommands = (os: string | null) => {
   let cliInstructions = "";
@@ -309,6 +310,7 @@ const DevModeSettings = () => {
               and ask ChatGPT for curl commands to interact with the API.
             </p>
           </div>
+          <DevSettings />
         </>
       )}
     </>

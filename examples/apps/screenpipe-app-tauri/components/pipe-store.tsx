@@ -91,6 +91,7 @@ const PipeDialog: React.FC = () => {
 
       // Update installed pipes in settings
       const updatedInstalledPipes = [...settings.installedPipes, pipe];
+      console.log("updated installed pipes", updatedInstalledPipes);
       await updateSettings({ installedPipes: updatedInstalledPipes });
 
       // Kill existing screenpipe processes
@@ -98,6 +99,8 @@ const PipeDialog: React.FC = () => {
 
       // Spawn new screenpipe process with the pipe
       await invoke("spawn_screenpipe");
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       toast({
         title: "Pipe installed successfully",
@@ -126,11 +129,13 @@ const PipeDialog: React.FC = () => {
       const updatedInstalledPipes = settings.installedPipes.filter(
         (p) => p.name !== pipe.name
       );
+      console.log("updated installed pipes", updatedInstalledPipes);
       await updateSettings({ installedPipes: updatedInstalledPipes });
 
       // restart screenpipe with no pipe
       await invoke("kill_all_sreenpipes");
       await invoke("spawn_screenpipe");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       toast({
         title: "Pipe uninstalled successfully",
@@ -221,67 +226,60 @@ const PipeDialog: React.FC = () => {
           </Button>
         </div>
         <Separator className="my-4" />
-        {isInstalled ? (
-          <div className="mt-4">
-            <h3 className="text-xl font-semibold mb-2">Controls</h3>
-            {/* Add controls for the installed pipe here */}
-            <p>Pipe controls will be displayed here.</p>
-          </div>
-        ) : (
-          <div className="mt-4">
-            <h3 className="text-xl font-semibold mb-2">About this pipe</h3>
-            <MemoizedReactMarkdown
-              className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
-              remarkPlugins={[remarkGfm, remarkMath]}
-              components={{
-                p({ children }) {
-                  return <p className="mb-2 last:mb-0">{children}</p>;
-                },
-                code({ node, className, children, ...props }) {
-                  const content = String(children).replace(/\n$/, "");
-                  const match = /language-(\w+)/.exec(className || "");
 
-                  if (!match) {
-                    return (
-                      <code
-                        className="py-0.5 rounded-sm  font-mono text-sm"
-                        {...props}
-                      >
-                        {content}
-                      </code>
-                    );
-                  }
+        <div className="mt-4">
+          <h3 className="text-xl font-semibold mb-2">About this pipe</h3>
+          <MemoizedReactMarkdown
+            className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
+            remarkPlugins={[remarkGfm, remarkMath]}
+            components={{
+              p({ children }) {
+                return <p className="mb-2 last:mb-0">{children}</p>;
+              },
+              code({ node, className, children, ...props }) {
+                const content = String(children).replace(/\n$/, "");
+                const match = /language-(\w+)/.exec(className || "");
 
+                if (!match) {
                   return (
-                    <CodeBlock
-                      key={Math.random()}
-                      language={(match && match[1]) || ""}
-                      value={content}
+                    <code
+                      className="py-0.5 rounded-sm  font-mono text-sm"
                       {...props}
-                    />
+                    >
+                      {content}
+                    </code>
                   );
-                },
-                img({ src, alt }) {
-                  return (
-                    /* eslint-disable @next/next/no-img-element */
-                    <img
-                      src={src}
-                      alt={alt}
-                      className="max-w-full h-auto"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.onerror = null;
-                        target.src = "path/to/fallback/image.png"; // Replace with your fallback image
-                      }}
-                    />
-                  );
-                },
-              }}
-            >
-              {selectedPipe.fullDescription.replace(/Â/g, "")}
-            </MemoizedReactMarkdown>
-          </div>
-        )}
+                }
+
+                return (
+                  <CodeBlock
+                    key={Math.random()}
+                    language={(match && match[1]) || ""}
+                    value={content}
+                    {...props}
+                  />
+                );
+              },
+              img({ src, alt }) {
+                return (
+                  /* eslint-disable @next/next/no-img-element */
+                  <img
+                    src={src}
+                    alt={alt}
+                    className="max-w-full h-auto"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null;
+                      target.src = "path/to/fallback/image.png"; // Replace with your fallback image
+                    }}
+                  />
+                );
+              },
+            }}
+          >
+            {selectedPipe.fullDescription.replace(/Â/g, "")}
+          </MemoizedReactMarkdown>
+        </div>
       </>
     );
   };
