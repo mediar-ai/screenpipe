@@ -38,6 +38,10 @@ click "install"
 wait a few minutes then ask AI "read my data from last 5 minutes and list tags you see"
 
 
+### tech details
+
+we run deno runtime (a JS/TS engine) within the rust code, which host your pipes, its 99.9% similar to normal JS code
+
 ### dev mode
 
 if you're in dev mode you can run the cli like this:
