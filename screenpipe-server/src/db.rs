@@ -1,10 +1,8 @@
-use crate::chunking::{text_chunking_by_similarity, text_chunking_simple};
 use crate::filtering::filter_texts;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use screenpipe_integrations::friend_wearable::FriendWearableDatabase;
-use screenpipe_integrations::unstructured_ocr::unstructured_chunking;
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Serialize};
 use sqlx::migrate::MigrateDatabase;

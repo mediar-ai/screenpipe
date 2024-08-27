@@ -11,13 +11,7 @@ edition = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
-
-# threadpool
-threadpool = "1.8.1"
-num_cpus = "1.0"
 
 # async
 tokio = { workspace = true }
@@ -26,25 +20,9 @@ tokio = { workspace = true }
 image = { workspace = true }
 
 # OCR
-# rusty-tesseract = "1.1.10"
 rusty-tesseract = { git = "https://github.com/louis030195/rusty-tesseract.git", branch = "main" }
-reqwest = { workspace = true }
 
-# Dates
-chrono = { version = "0.4.31", features = ["serde"] }
-
-# Local Embeddings
-candle = { workspace = true }
-candle-nn = { workspace = true }
-candle-transformers = { workspace = true }
-tokenizers = { workspace = true }
-
-lazy_static = "1.4.0"
-base64 = "0.21.7"
 anyhow = "1.0.86"
-byteorder = "1.5.0"
-hf-hub = "0.3.2"
-rand = "0.8.5"
 
 # Log
 log = { workspace = true }

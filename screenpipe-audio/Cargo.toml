@@ -34,8 +34,6 @@ candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
 tokenizers = { workspace = true }
-lazy_static = "1.4.0"
-base64 = "0.21.7"
 anyhow = "1.0.86"
 byteorder = "1.5.0"
 hf-hub = "0.3.2"
@@ -47,12 +45,6 @@ rubato = "0.15.0"
 # Log 
 log = { workspace = true }
 env_logger = "0.10"
-
-# File 
-tempfile = "3"
-
-# Tracing
-tracing = { workspace = true }
 
 # Bytes
 bytemuck = "1.16.1"
