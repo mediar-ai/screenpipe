@@ -35,6 +35,10 @@ mod analytics;
 
 use crate::analytics::start_analytics;
 
+mod commands;
+
+pub use commands::reset_screen_permissions;
+pub use commands::open_screen_capture_preferences;
 struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
 
 #[tauri::command]
@@ -351,6 +355,8 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             kill_all_sreenpipes,
+            reset_screen_permissions,
+            open_screen_capture_preferences,
         ])
         .setup(|app| {
             // Logging setup

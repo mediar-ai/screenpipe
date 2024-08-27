@@ -26,6 +26,7 @@ import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { DevSettings } from "./dev-dialog";
+import { Lock } from "lucide-react";
 
 const getDebuggingCommands = (os: string | null) => {
   let cliInstructions = "";
@@ -317,18 +318,44 @@ const DevModeSettings = () => {
   );
 };
 
-interface HealthCheckResponse {
-  status: string;
-  last_frame_timestamp: string | null;
-  last_audio_timestamp: string | null;
-  frame_status: string;
-  audio_status: string;
-  message: string;
-}
-
 const HealthStatus = ({ className }: { className?: string }) => {
   const { health } = useHealthCheck();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    setIsMac(platform() === "macos");
+  }, []);
+
+  const handleResetScreenPermissions = async () => {
+    const toastId = toast({
+      title: "opening permissions",
+      description: "please wait...",
+      duration: Infinity,
+    });
+
+    try {
+      await invoke("open_screen_capture_preferences");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      toastId.update({
+        id: toastId.id,
+        title: "permissions reset",
+        description:
+          "screen capture permissions have been reset. please restart the app.",
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error("failed to reset screen permissions:", error);
+      toastId.update({
+        id: toastId.id,
+        title: "error",
+        description: "failed to reset screen permissions.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -395,8 +422,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
             <p className="text-xs mb-1">
               last audio: {formatTimestamp(health.last_audio_timestamp)}
             </p>
-            <div className="text-xs mt-2">
-              <p className="font-bold mb-1">troubleshooting Instructions:</p>
+            <div className="text-xs mt-2 relative">
+              <p className="font-bold mb-1">troubleshooting instructions:</p>
               <MarkdownWithExternalLinks className="prose prose-sm">
                 {`if you're experiencing issues, please try the following steps:
 1. restart screenpipe
@@ -404,6 +431,28 @@ const HealthStatus = ({ className }: { className?: string }) => {
 3. if the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn
 4. last, here are some [FAQ](https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot`}
               </MarkdownWithExternalLinks>
+              {isMac && (
+                <div className="absolute top-[6.5em] right-0">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleResetScreenPermissions}
+                          className="flex-shrink-0"
+                        >
+                          <Lock className="h-4 w-4 mr-2" />
+                          open permissions
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>open screen capture permissions</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              )}
             </div>
             <Separator className="my-4" />
             <DevModeSettings />
