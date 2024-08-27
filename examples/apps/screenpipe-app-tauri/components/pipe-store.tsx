@@ -178,6 +178,8 @@ const PipeDialog: React.FC = () => {
               by:{" "}
               <a
                 href={selectedPipe.authorLink}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-blue-500 hover:underline"
               >
                 {selectedPipe.author}
@@ -188,6 +190,8 @@ const PipeDialog: React.FC = () => {
               <a
                 href={selectedPipe.repository}
                 className="text-blue-500 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 link
               </a>
@@ -197,6 +201,8 @@ const PipeDialog: React.FC = () => {
               <a
                 href={selectedPipe.repository}
                 className="text-blue-500 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 {formatDate(selectedPipe.lastUpdate)}
               </a>
