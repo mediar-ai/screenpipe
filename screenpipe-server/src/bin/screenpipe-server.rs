@@ -29,7 +29,6 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine},
     logs::MultiWriter,
-    pipe_runner::run_pipe,
     start_continuous_recording, DatabaseManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
@@ -470,6 +469,8 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(feature = "pipes")]
     if !cli.pipe.is_empty() {
+        use screenpipe_server::pipe_runner::run_pipe;
+
         let pipe_future = run_pipe(&cli.pipe[0]);
         tokio::pin!(pipe_future);
 
