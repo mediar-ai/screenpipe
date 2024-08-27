@@ -66,6 +66,12 @@ please look the code, it's 99% normal JS but there are limitations currently:
 
 i recommend you copy paste the current main.js file into AI and ask some changes for whatever you want to do, make sure to run an infinite loop also
 
+get featured in the pipe store:
+
+<img width="1312" alt="Screenshot 2024-08-27 at 17 06 45" src="https://github.com/user-attachments/assets/b6856bf4-2cfd-4888-be11-ee7baae6b84b">
+
+just ask @louis030195
+
 ### what's next for pipes
 
 - use dependencies (like vercel/ai so cool)
