@@ -1,72 +1,54 @@
-use clap::Parser;
-use log::{error, info, warn, LevelFilter};
+use futures::Future;
+use log::{error, info};
 use reqwest;
 #[cfg(feature = "pipes")]
 use screenpipe_core::run_js;
-use screenpipe_server::Cli;
 use std::io::Write;
 use std::path::Path;
 use tempfile::NamedTempFile;
 use url::Url;
 
 #[cfg(feature = "pipes")]
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = Cli::parse();
-
-    if cli.pipe.is_empty() {
-        error!("No pipe specified. Use --pipe to specify the pipe.");
-        eprintln!("No pipe specified. Use --pipe to specify the pipe.");
-        std::process::exit(1);
-    }
-
-    let mut builder = env_logger::Builder::new();
-    builder
-        .filter(None, LevelFilter::Info)
-        .format_timestamp_secs()
-        .init();
-
-    warn!("Warning: only 1 pipe is supported right now. This will change in the future.");
-
-    let pipe_input = &cli.pipe[0];
-    info!("Attempting to process pipe input: {}", pipe_input);
-
-    let path_to_main_module = match Url::parse(pipe_input) {
-        Ok(_) => {
-            info!("Input appears to be a URL. Attempting to download...");
-            match download_pipe(pipe_input).await {
-                Ok(path) => path,
-                Err(e) => {
-                    error!("Failed to download pipe: {}", e);
-                    return Err(e);
+pub fn run_pipe(pipe: &str) -> impl Future<Output = anyhow::Result<()>> + '_ {
+    async move {
+        let path_to_main_module = match Url::parse(pipe) {
+            Ok(_) => {
+                info!("Input appears to be a URL. Attempting to download...");
+                match download_pipe(pipe).await {
+                    Ok(path) => path,
+                    Err(e) => {
+                        error!("Failed to download pipe: {}", e);
+                        anyhow::bail!("Failed to download pipe: {}", e);
+                    }
                 }
             }
-        }
-        Err(_) => {
-            info!("Input appears to be a local path. Attempting to canonicalize...");
-            match Path::new(pipe_input).canonicalize() {
-                Ok(path) => path,
-                Err(e) => {
-                    error!("Failed to canonicalize path: {}", e);
-                    return Err(e.into());
+            Err(_) => {
+                info!("Input appears to be a local path. Attempting to canonicalize...");
+                match Path::new(pipe).canonicalize() {
+                    Ok(path) => path,
+                    Err(e) => {
+                        error!("Failed to canonicalize path: {}", e);
+                        anyhow::bail!("Failed to canonicalize path: {}", e);
+                    }
                 }
             }
-        }
-    };
+        };
 
-    info!("Path to main module: {:?}", path_to_main_module);
+        info!("Path to main module: {:?}", path_to_main_module);
 
-    match run_js(&path_to_main_module.to_string_lossy()).await {
-        Ok(_) => info!("JS execution completed successfully"),
-        Err(error) => {
-            error!("Error during JS execution: {}", error);
-            return Err(error.into());
+        match run_js(&path_to_main_module.to_string_lossy()).await {
+            Ok(_) => info!("JS execution completed successfully"),
+            Err(error) => {
+                error!("Error during JS execution: {}", error);
+                anyhow::bail!("Error during JS execution: {}", error);
+            }
         }
+
+        Ok(())
     }
-
-    Ok(())
 }
 
+#[cfg(feature = "pipes")]
 fn get_raw_github_url(url: &str) -> Result<String, Box<dyn std::error::Error>> {
     info!("Attempting to get raw GitHub URL for: {}", url);
     let parsed_url = Url::parse(url)?;
@@ -92,6 +74,7 @@ fn get_raw_github_url(url: &str) -> Result<String, Box<dyn std::error::Error>> {
     Ok(url.to_string())
 }
 
+#[cfg(feature = "pipes")]
 async fn download_pipe(url: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     info!("Downloading pipe from URL: {}", url);
 
@@ -157,10 +140,4 @@ async fn download_pipe(url: &str) -> Result<std::path::PathBuf, Box<dyn std::err
     info!("Pipe downloaded successfully to: {:?}", final_path);
 
     Ok(final_path)
-}
-
-#[cfg(not(feature = "pipes"))]
-fn main() {
-    eprintln!("Pipes support is not enabled. Compile with --features pipes to enable it.");
-    std::process::exit(1);
 }

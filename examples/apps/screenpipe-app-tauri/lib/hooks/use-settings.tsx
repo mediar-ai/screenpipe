@@ -3,6 +3,7 @@ import { Store } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { join } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
+import { Pipe } from "./use-pipes";
 
 const defaultSettings: Settings = {
   openaiApiKey: "",
@@ -31,6 +32,8 @@ const defaultSettings: Settings = {
   audioDevices: ["default"],
   usePiiRemoval: false,
   restartInterval: 0,
+  port: 3030,
+  dataDir: "default",
 };
 
 export interface Settings {
@@ -39,7 +42,7 @@ export interface Settings {
   ollamaUrl: string;
   isLoading: boolean;
   aiModel: string;
-  installedPipes: string[];
+  installedPipes: Pipe[];
   userId: string;
   customPrompt: string;
   devMode: boolean;
@@ -49,6 +52,8 @@ export interface Settings {
   audioDevices: string[];
   usePiiRemoval: boolean;
   restartInterval: number;
+  port: number;
+  dataDir: string;
 }
 
 let store: Store | null = null;
@@ -96,7 +101,7 @@ export function useSettings() {
         const savedAiModel =
           ((await store!.get("aiModel")) as string) || "gpt-4o";
         const savedInstalledPipes =
-          ((await store!.get("installedPipes")) as string[]) || [];
+          ((await store!.get("installedPipes")) as Pipe[]) || [];
         const savedUserId = ((await store!.get("userId")) as string) || "";
         const savedCustomPrompt =
           ((await store!.get("customPrompt")) as string) || "";
@@ -117,7 +122,8 @@ export function useSettings() {
           ((await store!.get("usePiiRemoval")) as boolean) || false;
         const savedRestartInterval =
           ((await store!.get("restartInterval")) as number) || 0;
-
+        const savedPort = ((await store!.get("port")) as number) || 3030;
+        const savedDataDir = ((await store!.get("dataDir")) as string) || "";
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
@@ -134,6 +140,8 @@ export function useSettings() {
           audioDevices: savedAudioDevices,
           usePiiRemoval: savedUsePiiRemoval,
           restartInterval: savedRestartInterval,
+          port: savedPort,
+          dataDir: savedDataDir,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);

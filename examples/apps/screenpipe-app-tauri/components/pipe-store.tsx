@@ -90,7 +90,7 @@ const PipeDialog: React.FC = () => {
       });
 
       // Update installed pipes in settings
-      const updatedInstalledPipes = [...settings.installedPipes, pipe.mainFile!];
+      const updatedInstalledPipes = [...settings.installedPipes, pipe];
       await updateSettings({ installedPipes: updatedInstalledPipes });
 
       // Kill existing screenpipe processes
@@ -124,7 +124,7 @@ const PipeDialog: React.FC = () => {
 
       // Update installed pipes in settings
       const updatedInstalledPipes = settings.installedPipes.filter(
-        (p) => p !== pipe.name
+        (p) => p.name !== pipe.name
       );
       await updateSettings({ installedPipes: updatedInstalledPipes });
 
@@ -158,14 +158,9 @@ const PipeDialog: React.FC = () => {
       );
     }
 
-    if (
-      selectedPipe.name === "Local First Meeting Summarizer" &&
-      settings.installedPipes.includes(selectedPipe.name)
-    ) {
-      return <MeetingSummarizer pipe={selectedPipe} />;
-    }
-
-    const isInstalled = settings.installedPipes.includes(selectedPipe.name);
+    const isInstalled =
+      settings.installedPipes.find((p) => p.name === selectedPipe.name) !==
+      undefined;
 
     return (
       <>
@@ -268,6 +263,7 @@ const PipeDialog: React.FC = () => {
                 },
                 img({ src, alt }) {
                   return (
+                    /* eslint-disable @next/next/no-img-element */
                     <img
                       src={src}
                       alt={alt}

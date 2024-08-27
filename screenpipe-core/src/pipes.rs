@@ -17,7 +17,7 @@ mod pipes {
 
     #[op2(async)]
     #[string]
-    async fn op_read_file(#[string] path: String) -> Result<String, AnyError> {
+    async fn op_read_file(#[string] path: String) -> anyhow::Result<String> {
         tokio::fs::read_to_string(&path).await.map_err(|e| {
             error!("Failed to read file '{}': {}", path, e);
             AnyError::from(e)
@@ -29,7 +29,7 @@ mod pipes {
     async fn op_write_file(
         #[string] path: String,
         #[string] contents: String,
-    ) -> Result<(), AnyError> {
+    ) -> anyhow::Result<()> {
         tokio::fs::write(&path, contents).await.map_err(|e| {
             error!("Failed to write file '{}': {}", path, e);
             AnyError::from(e)
@@ -38,7 +38,7 @@ mod pipes {
 
     #[op2(async)]
     #[string]
-    async fn op_fetch_get(#[string] url: String) -> Result<String, AnyError> {
+    async fn op_fetch_get(#[string] url: String) -> anyhow::Result<String> {
         let response = reqwest::get(&url).await?;
         let status = response.status();
         let text = response.text().await?;
@@ -59,7 +59,7 @@ mod pipes {
     async fn op_fetch_post(
         #[string] url: String,
         #[string] body: String,
-    ) -> Result<String, AnyError> {
+    ) -> anyhow::Result<String> {
         let client = reqwest::Client::new();
 
         // Create a HeaderMap and add the Content-Type header
@@ -83,13 +83,13 @@ mod pipes {
     }
 
     #[op2(async)]
-    async fn op_set_timeout(delay: f64) -> Result<(), AnyError> {
+    async fn op_set_timeout(delay: f64) -> anyhow::Result<()> {
         tokio::time::sleep(std::time::Duration::from_millis(delay as u64)).await;
         Ok(())
     }
 
     #[op2(fast)]
-    fn op_remove_file(#[string] path: String) -> Result<(), AnyError> {
+    fn op_remove_file(#[string] path: String) -> anyhow::Result<()> {
         std::fs::remove_file(path)?;
         Ok(())
     }
@@ -180,7 +180,7 @@ mod pipes {
         ]
     }
 
-    pub async fn run_js(file_path: &str) -> Result<(), AnyError> {
+    pub async fn run_js(file_path: &str) -> anyhow::Result<()> {
         let main_module = deno_core::resolve_path(file_path, env::current_dir()?.as_path())?;
         let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(TsModuleLoader)),

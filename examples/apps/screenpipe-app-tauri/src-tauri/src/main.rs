@@ -26,10 +26,10 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
 use tokio::time::sleep;
+use tracing::{debug, error, info};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing::{debug, error, info};
 use uuid::Uuid;
 mod analytics;
 
@@ -184,14 +184,35 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     })
     .map_err(|e| e.to_string())?
     .unwrap_or_default();
+    let port = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("port")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(3030))
+    })
+    .map_err(|e| e.to_string())?;
+
+    let data_dir = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("dataDir")
+            .and_then(|v| v.as_str().map(String::from)))
+    })
+    .map_err(|e| e.to_string())?
+    .unwrap_or(String::from("default"));
 
 
-    let _data_dir_str = base_dir.to_string_lossy();
-    let mut args = vec!["--port", "3030"];
+    let port_str = port.to_string();
+    let mut args = vec!["--port", port_str.as_str()];
     // if macos do --fps 0.2
     if cfg!(target_os = "macos") {
         args.push("--fps");
         args.push("0.2");
+    }
+
+    if data_dir != "default" {
+        args.push("--data-dir");
+        let dir = data_dir.as_str();
+        args.push(dir);
     }
 
     if audio_transcription_engine != "default" {
@@ -229,13 +250,17 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     if !pipes.is_empty() {
+        let mut added_pipes = std::collections::HashSet::new();
         for pipe in &pipes {
-            args.push("--pipe");
-            args.push(pipe.as_str().unwrap());
-            debug!("adding pipe: {}", pipe.as_str().unwrap());
+            if let Some(pipe_str) = pipe.as_str() {
+                if added_pipes.insert(pipe_str) {
+                    args.push("--pipe");
+                    args.push(pipe_str);
+                    info!("adding pipe: {}", pipe_str);
+                }
+            }
         }
     }
-    
 
     // hardcode TESSDATA_PREFIX for windows
     if cfg!(windows) {
@@ -258,9 +283,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     let command = sidecar.args(&args);
-    
-    let result = command.spawn();
 
+
+    let result = command.spawn();
     if let Err(e) = result {
         error!("Failed to spawn sidecar: {}", e);
         return Err(e.to_string());

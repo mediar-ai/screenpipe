@@ -21,6 +21,7 @@ import UpdateNotification from "@/components/update-notification";
 import { usePostHog } from "posthog-js/react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
+import { DevSettings } from "@/components/dev-dialog";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -39,6 +40,7 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8">
+      {/* <DevSettings /> */}
       <NotificationHandler />
       {/* <UpdateNotification checkIntervalHours={3} /> */}
       {/* <ScreenpipeInstanceChecker /> */}

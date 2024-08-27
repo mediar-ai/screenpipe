@@ -1,8 +1,7 @@
 {
     "bundle": {
         "externalBin": [
-            "screenpipe",
-            "screenpipe-pipe-runner"
+            "screenpipe"
         ],
         "resources": {
             "ffmpeg\\bin\\x64\\*": "./",

@@ -144,7 +144,3 @@ optional = true
 name = "screenpipe"
 path = "src/bin/screenpipe-server.rs"
 
-[[bin]]
-name = "screenpipe-pipe-runner"
-path = "src/bin/screenpipe-pipe-runner.rs"
-required-features = ["pipes"]

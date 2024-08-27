@@ -214,61 +214,61 @@ impl DatabaseManager {
         // Commit the transaction for the full transcription
         tx.commit().await?;
 
-        // Now, let's chunk the transcription and insert into chunk tables
-        const CHUNKING_ENGINE: &str = "local_simple";
+        // // Now, let's chunk the transcription and insert into chunk tables
+        // const CHUNKING_ENGINE: &str = "local_simple";
 
-        let chunks = match CHUNKING_ENGINE {
-            "local_simple" => text_chunking_simple(transcription),
-            "candle_jina_bert" => text_chunking_by_similarity(transcription).await,
-            "unstructured" => unstructured_chunking(transcription)
-                .map_err(|e| anyhow::anyhow!(e))
-                .and_then(|chunks| Ok(chunks)),
-            _ => text_chunking_simple(transcription), // Default to simple chunking for unknown engines
-        };
+        // let chunks = match CHUNKING_ENGINE {
+        //     "local_simple" => text_chunking_simple(transcription),
+        //     "candle_jina_bert" => text_chunking_by_similarity(transcription).await,
+        //     "unstructured" => unstructured_chunking(transcription)
+        //         .map_err(|e| anyhow::anyhow!(e))
+        //         .and_then(|chunks| Ok(chunks)),
+        //     _ => text_chunking_simple(transcription), // Default to simple chunking for unknown engines
+        // };
 
-        match chunks {
-            Ok(chunks) => {
-                info!(
-                    "Successfully chunked audio transcription into {} chunks",
-                    chunks.len()
-                );
-                for chunk in chunks.iter() {
-                    if let Err(e) = self
-                        .insert_chunked_text(
-                            audio_chunk_id,
-                            chunk,
-                            Utc::now(),
-                            transcription_engine,
-                            CHUNKING_ENGINE,
-                            ContentSource::Audio,
-                        )
-                        .await
-                    {
-                        error!("Failed to insert chunk into chunked text index: {}", e);
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to chunk audio transcription: {}", e);
-                // Fallback to inserting the whole transcription as a single chunk
-                if let Err(e) = self
-                    .insert_chunked_text(
-                        audio_chunk_id,
-                        transcription,
-                        Utc::now(),
-                        transcription_engine,
-                        "No_Chunking",
-                        ContentSource::Audio,
-                    )
-                    .await
-                {
-                    error!(
-                        "Failed to insert whole audio transcription into chunked text index: {}",
-                        e
-                    );
-                }
-            }
-        }
+        // match chunks {
+        //     Ok(chunks) => {
+        //         info!(
+        //             "Successfully chunked audio transcription into {} chunks",
+        //             chunks.len()
+        //         );
+        //         for chunk in chunks.iter() {
+        //             if let Err(e) = self
+        //                 .insert_chunked_text(
+        //                     audio_chunk_id,
+        //                     chunk,
+        //                     Utc::now(),
+        //                     transcription_engine,
+        //                     CHUNKING_ENGINE,
+        //                     ContentSource::Audio,
+        //                 )
+        //                 .await
+        //             {
+        //                 error!("Failed to insert chunk into chunked text index: {}", e);
+        //             }
+        //         }
+        //     }
+        //     Err(e) => {
+        //         error!("Failed to chunk audio transcription: {}", e);
+        //         // Fallback to inserting the whole transcription as a single chunk
+        //         if let Err(e) = self
+        //             .insert_chunked_text(
+        //                 audio_chunk_id,
+        //                 transcription,
+        //                 Utc::now(),
+        //                 transcription_engine,
+        //                 "No_Chunking",
+        //                 ContentSource::Audio,
+        //             )
+        //             .await
+        //         {
+        //             error!(
+        //                 "Failed to insert whole audio transcription into chunked text index: {}",
+        //                 e
+        //             );
+        //         }
+        //     }
+        // }
 
         Ok(())
     }

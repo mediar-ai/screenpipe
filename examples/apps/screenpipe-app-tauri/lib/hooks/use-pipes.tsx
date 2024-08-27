@@ -13,21 +13,41 @@ export type Pipe = {
   mainFile?: string;
 };
 
-const cache: { [key: string]: { data: any; timestamp: number } } = {};
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
 const fetchWithCache = async (url: string) => {
-  if (cache[url] && Date.now() - cache[url].timestamp < CACHE_DURATION) {
-    return cache[url].data;
+  const cacheKey = `cache_${url}`;
+  const cachedData = localStorage.getItem(cacheKey);
+
+  if (cachedData) {
+    const { data, timestamp } = JSON.parse(cachedData);
+    if (Date.now() - timestamp < CACHE_DURATION) {
+      return data;
+    }
   }
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+  try {
+    const response = await fetch(url);
+    if (response.status === 403) {
+      throw new Error("Rate limit exceeded");
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    localStorage.setItem(
+      cacheKey,
+      JSON.stringify({ data, timestamp: Date.now() })
+    );
+    return data;
+  } catch (error) {
+    console.error(`Error fetching ${url}:`, error);
+    if (cachedData) {
+      console.log("Returning stale cached data");
+      return JSON.parse(cachedData).data;
+    }
+    throw error;
   }
-  const data = await response.json();
-  cache[url] = { data, timestamp: Date.now() };
-  return data;
 };
 
 const convertHtmlToMarkdown = (html: string) => {
@@ -156,7 +176,7 @@ export const usePipes = (repoUrls: string[]) => {
                   jsFiles[0];
 
                 const mainFileUrl = mainFile
-                  ? `https://github.com/${repoFullName}/blob/${branch}/${subDir}/${mainFile.name}`
+                  ? `https://raw.githubusercontent.com/${repoFullName}/${branch}/${subDir}/${mainFile.name}`
                   : undefined;
 
                 return {

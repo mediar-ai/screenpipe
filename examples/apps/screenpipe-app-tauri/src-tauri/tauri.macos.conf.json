@@ -23,8 +23,7 @@
             "ffmpeg/bin/*": "./"
         },
         "externalBin": [
-            "screenpipe",
-            "screenpipe-pipe-runner"
+            "screenpipe"
         ]
     }
 }

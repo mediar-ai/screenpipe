@@ -24,6 +24,7 @@ pub struct ResourceMonitor {
     max_health_check_failures: u32,
     restart_sender: Sender<RestartSignal>,
     resource_log_file: Option<String>, // analyse output here: https://colab.research.google.com/drive/1zELlGdzGdjChWKikSqZTHekm5XRxY-1r?usp=sharing
+    port: u16,
 }
 
 pub enum RestartSignal {
@@ -36,6 +37,7 @@ impl ResourceMonitor {
         health_check_interval: Duration,
         max_health_check_failures: u32,
         restart_sender: Sender<RestartSignal>,
+        port: u16,
     ) -> Arc<Self> {
         let resource_log_file = if env::var("SAVE_RESOURCE_USAGE").is_ok() {
             let now = Local::now();
@@ -64,6 +66,7 @@ impl ResourceMonitor {
             max_health_check_failures,
             restart_sender,
             resource_log_file,
+            port,
         })
     }
 
@@ -178,7 +181,7 @@ impl ResourceMonitor {
     }
     async fn check_health(&self) {
         let client = reqwest::Client::new();
-        match client.get("http://localhost:3030/health").send().await {
+        match client.get(format!("http://localhost:{}/health", self.port)).send().await {
             Ok(response) => {
                 debug!("Health check response: {:?}", response);
                 if response.status().is_success() {
