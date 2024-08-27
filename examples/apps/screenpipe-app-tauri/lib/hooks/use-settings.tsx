@@ -110,7 +110,7 @@ export function useSettings() {
         savedDevMode = savedDevMode === true;
         const savedAudioTranscriptionEngine =
           ((await store!.get("audioTranscriptionEngine")) as string) ||
-          "whisper-tiny";
+          "whisper-large";
         const savedOcrEngine =
           ((await store!.get("ocrEngine")) as string) || ocrModel;
         const savedMonitorId =
