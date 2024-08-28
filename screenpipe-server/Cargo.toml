@@ -97,6 +97,9 @@ name = "new_db_benchmark"
 harness = false
 
 [features]
+default = []
+
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.features]
 default = ["pipes"]
 
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
