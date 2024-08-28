@@ -469,23 +469,30 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(feature = "pipes")]
     if !cli.pipe.is_empty() {
+        use futures::stream::{FuturesUnordered, StreamExt};
         use screenpipe_server::pipe_runner::run_pipe;
 
-        let pipe_future = run_pipe(&cli.pipe[0]);
-        tokio::pin!(pipe_future);
+        let mut pipe_futures = FuturesUnordered::new();
+        for pipe in &cli.pipe {
+            pipe_futures.push(run_pipe(pipe));
+        }
 
         tokio::select! {
-            result = &mut pipe_future => {
-                if let Err(e) = result {
-                    error!("Error running pipe runner: {}", e);
+            _ = async {
+                while let Some(result) = pipe_futures.next().await {
+                    if let Err(e) = result {
+                        error!("Error running pipe runner: {}", e);
+                    }
                 }
-                return Ok(());
+            } => {
+                info!("All pipe runners completed");
             }
             _ = tokio::signal::ctrl_c() => {
                 info!("Received Ctrl+C, shutting down...");
-                return Ok(());
             }
         }
+
+        return Ok(());
     }
 
     // Keep the main thread running
