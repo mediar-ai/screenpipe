@@ -34,13 +34,13 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
-            args: "--target aarch64-apple-darwin --features metal,pipes"
+            args: "--target aarch64-apple-darwin --features metal --features pipes"
             target: aarch64-apple-darwin
           - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin --features metal,pipes"
+            args: "--target x86_64-apple-darwin --features metal --features pipes"
             target: x86_64-apple-darwin
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "--features cuda,pipes" # TODO CUDA
+            args: "--features pipes" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64
             args: "--target x86_64-pc-windows-msvc --features pipes" # TODO CUDA?  --features "openblas"
             pre-build-args: "" # --openblas
