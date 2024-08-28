@@ -206,6 +206,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     .map_err(|e| e.to_string())?
     .unwrap_or(String::from("default"));
 
+    let disable_audio = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("disableAudio")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false))
+    })
+    .map_err(|e| e.to_string())?;
 
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
@@ -269,6 +276,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
                 }
             }
         }
+    }
+
+    if disable_audio {
+        args.push("--disable-audio");
     }
 
     // hardcode TESSDATA_PREFIX for windows

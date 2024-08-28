@@ -148,6 +148,7 @@ export function RecordingSettings({
         audioDevices: localSettings.audioDevices,
         usePiiRemoval: localSettings.usePiiRemoval,
         restartInterval: localSettings.restartInterval,
+        disableAudio: localSettings.disableAudio,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -203,6 +204,10 @@ export function RecordingSettings({
   ) => {
     const newValue = parseInt(e.target.value, 10);
     setLocalSettings({ ...localSettings, restartInterval: newValue });
+  };
+
+  const handleDisableAudioChange = (checked: boolean) => {
+    setLocalSettings({ ...localSettings, disableAudio: checked });
   };
 
   return (
@@ -398,9 +403,6 @@ export function RecordingSettings({
                           <br />
                           before saving to the database or returning in search
                           results
-                          <br />
-                          this will avoid sending these information to openai
-                          for example
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -444,6 +446,35 @@ export function RecordingSettings({
                 className="w-full"
                 placeholder="Enter restart interval in minutes (0 to disable)"
               />
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="disableAudio"
+                  checked={localSettings.disableAudio}
+                  onCheckedChange={handleDisableAudioChange}
+                />
+                <Label
+                  htmlFor="disableAudio"
+                  className="flex items-center space-x-2"
+                >
+                  <span>disable audio recording</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          useful if you don&apos;t need audio or if you have
+                          memory/CPU issues
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+              </div>
             </div>
 
             <div className="flex flex-col space-y-2">

@@ -111,14 +111,20 @@ sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC 
 const DevModeSettings = () => {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
-  const handleDevModeToggle = (checked: boolean) => {
-    setLocalSettings((prev) => ({ ...prev, devMode: checked }));
-    updateSettings({ devMode: checked });
+  const handleDevModeToggle = async (checked: boolean) => {
+    try {
+      await updateSettings({ devMode: checked });
+      setLocalSettings((prev) => ({ ...prev, devMode: checked }));
+      // ... rest of the function ...
+    } catch (error) {
+      console.error("Failed to update dev mode:", error);
+      // Add error handling, e.g., show a toast notification
+    }
   };
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  React.useEffect(() => {
+  useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
 
@@ -311,7 +317,7 @@ const DevModeSettings = () => {
               and ask ChatGPT for curl commands to interact with the API.
             </p>
           </div>
-          <DevSettings />
+          {/* <DevSettings /> */}
         </>
       )}
     </>
@@ -336,21 +342,12 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
     try {
       await invoke("open_screen_capture_preferences");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      toastId.update({
-        id: toastId.id,
-        title: "permissions reset",
-        description:
-          "screen capture permissions have been reset. please restart the app.",
-        duration: 5000,
-      });
     } catch (error) {
-      console.error("failed to reset screen permissions:", error);
+      console.error("failed to open screen permissions:", error);
       toastId.update({
         id: toastId.id,
         title: "error",
-        description: "failed to reset screen permissions.",
+        description: "failed to open screen permissions.",
         variant: "destructive",
         duration: 3000,
       });
