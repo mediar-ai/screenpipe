@@ -34,6 +34,7 @@ const defaultSettings: Settings = {
   restartInterval: 0,
   port: 3030,
   dataDir: "default",
+  disableAudio: false,
 };
 
 export interface Settings {
@@ -54,6 +55,7 @@ export interface Settings {
   restartInterval: number;
   port: number;
   dataDir: string;
+  disableAudio: boolean;
 }
 
 let store: Store | null = null;
@@ -125,6 +127,8 @@ export function useSettings() {
           ((await store!.get("restartInterval")) as number) || 0;
         const savedPort = ((await store!.get("port")) as number) || 3030;
         const savedDataDir = ((await store!.get("dataDir")) as string) || "";
+        const savedDisableAudio =
+          ((await store!.get("disableAudio")) as boolean) || false;
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
@@ -143,6 +147,7 @@ export function useSettings() {
           restartInterval: savedRestartInterval,
           port: savedPort,
           dataDir: savedDataDir,
+          disableAudio: savedDisableAudio,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);
