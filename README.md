@@ -162,7 +162,7 @@ Build the project, takes 5-10 minutes depending on your hardware
 ```bash
 # necessary to use apple native OCR
 export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../../screenpipe-vision/bin -C link-arg=-Wl,-rpath,@loader_path/../../screenpipe-vision/lib"
-cargo build --release --no-default-features --features metal # takes 3 minuttes
+cargo build --release --features metal # takes 3 minuttes
 ```
 
 Then run it
@@ -211,7 +211,7 @@ cd screenpipe
 3. Build and run:
 
 ```bash
-cargo build --release --no-default-features --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
+cargo build --release --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
 
 # then run it
 ./target/release/screenpipe
