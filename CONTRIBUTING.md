@@ -132,7 +132,75 @@ cargo install sqlx-cli
 sqlx migrate add <migration_name>
 ```
 
+### Set up Azure Ubuntu VM with display & audio
 
+```bash
+# Set variables
+RG_NAME="my-avd-rgg"
+LOCATION="westus2" 
+VM_NAME="ubuntu-avd"
+IMAGE="Canonical:0001-com-ubuntu-server-jammy:22_04-lts-gen2:latest"
+VM_SIZE="Standard_D2s_v3"  
+
+# Create resource group
+az group create --name $RG_NAME --location $LOCATION
+
+# Create VM
+az vm create \
+  --resource-group $RG_NAME \
+  --name $VM_NAME \
+  --image $IMAGE \
+  --admin-username azureuser \
+  --generate-ssh-keys \
+  --size $VM_SIZE
+
+# Enable RDP
+az vm open-port --port 3389 --resource-group $RG_NAME --name $VM_NAME
+
+# Install xrdp, audio, and desktop environment
+az vm run-command invoke \
+  --resource-group $RG_NAME \
+  --name $VM_NAME \
+  --command-id RunShellScript \
+  --scripts "
+    sudo apt update && sudo apt install -y xrdp ubuntu-desktop pulseaudio
+    sudo systemctl enable xrdp
+    sudo adduser xrdp ssl-cert
+    echo 'startxfce4' | sudo tee /etc/xrdp/startwm.sh
+    sudo systemctl restart xrdp
+    sudo ufw allow 3389/tcp
+  "
+
+# Enable audio redirection
+az vm run-command invoke \
+  --resource-group $RG_NAME \
+  --name $VM_NAME \
+  --command-id RunShellScript \
+  --scripts "
+    echo 'load-module module-native-protocol-tcp auth-anonymous=1' | sudo tee -a /etc/pulse/default.pa
+    sudo systemctl restart pulseaudio
+  "
+
+# Get IP address
+IP=$(az vm list-ip-addresses --resource-group $RG_NAME --name $VM_NAME --output table | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
+
+# Now you can open Microsoft Remote Desktop and use the IP in new PC to connect to it
+
+# RDP into the VM
+ssh azureuser@$IP
+
+# Forwarding port to local 
+ssh -L 13389:localhost:3389 azureuser@$IP
+
+# Changing password
+az vm user update \
+  --resource-group $RG_NAME \
+  --name $VM_NAME \
+  --username azureuser \
+  --password <new-password>
+```
+
+Now you can either dev screenpipe on Linux or run screenpipe in the cloud that record your local MacOS. Make sure to configure Microsoft Remote Desktop to forward audio
 
 
 ## Join the Community
