@@ -21,9 +21,16 @@ export function useHealthCheck() {
         throw new Error(`HTTP error! status: ${response.status} ${text}`);
       }
       const data: HealthCheckResponse = await response.json();
-      if (health !== null && health.status === data.status) {
+      if (
+        (health !== null && health.status === data.status) ||
+        // did not change
+        (health != null &&
+          health.status_code === data.status_code &&
+          health.message === data.message)
+      ) {
         return;
       }
+      console.log("setting health", data);
       setHealth(data);
     } catch (error) {
       console.error("Failed to fetch health status:", error);

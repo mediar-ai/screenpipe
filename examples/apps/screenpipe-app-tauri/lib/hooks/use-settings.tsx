@@ -61,6 +61,7 @@ let store: Store | null = null;
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
 
+  // console.log("settings", settings);
   const resetSetting = async (key: keyof Settings) => {
     if (!store) {
       await initStore();
