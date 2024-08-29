@@ -12,11 +12,11 @@ rust-version = "1.60"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "=2.0.0-rc.3", features = [] }
+tauri-build = { version = "=2.0.0-rc.7", features = [] }
 
 [dependencies]
 serde_json = "1.0"
-tauri = { version = "2.0.0-rc.0", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
+tauri = { version = "2.0.0-rc.8", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
 
 
 # Logging
