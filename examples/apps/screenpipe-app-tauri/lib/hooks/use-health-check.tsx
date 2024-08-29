@@ -30,7 +30,7 @@ export function useHealthCheck() {
       ) {
         return;
       }
-      console.log("setting health", data);
+      // console.log("setting health", data);
       setHealth(data);
     } catch (error) {
       console.error("Failed to fetch health status:", error);

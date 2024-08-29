@@ -116,10 +116,100 @@ const fetchFileContent = async (
   }
 };
 
-export const usePipes = (repoUrls: string[]) => {
+export const usePipes = (initialRepoUrls: string[]) => {
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [repoUrls, setRepoUrls] = useState<string[]>(initialRepoUrls);
+
+  const fetchPipeData = async (repoUrl: string): Promise<Pipe | null> => {
+    try {
+      const urlParts = repoUrl.split("/");
+      const isSubdir = urlParts.length > 5;
+      const repoOwner = urlParts[3];
+      const repoName = urlParts[4];
+      const repoFullName = `${repoOwner}/${repoName}`;
+      const branch = isSubdir ? urlParts[6] : "main";
+      const subDir = isSubdir ? urlParts.slice(7).join("/") : "";
+
+      console.log(`Fetching repo data for ${repoFullName}`);
+      const repoData = await fetchWithCache(
+        `https://api.github.com/repos/${repoFullName}`
+      );
+
+      if (isSubdir) {
+        console.log(
+          `Fetching subdirectory contents for ${repoFullName}/${subDir}`
+        );
+        const contents = await fetchSubdirContents(
+          repoFullName,
+          branch,
+          subDir
+        );
+        if (!contents || !Array.isArray(contents)) return null;
+
+        const jsFiles = contents.filter((file: any) =>
+          file.name.endsWith(".js")
+        );
+        const hasJsFile = jsFiles.length > 0;
+        const readmeFile = contents.find(
+          (file: any) => file.name.toLowerCase() === "readme.md"
+        );
+
+        if (!hasJsFile || !readmeFile) return null;
+        console.log(`Fetching README content for ${repoFullName}/${subDir}`);
+        const readmeContent = await fetchFileContent(
+          repoFullName,
+          branch,
+          `${subDir}/${readmeFile.name}`
+        );
+
+        const mainFile =
+          jsFiles.find((file: any) => file.name === "index.js") || jsFiles[0];
+        const mainFileUrl = mainFile
+          ? `https://raw.githubusercontent.com/${repoFullName}/${branch}/${subDir}/${mainFile.name}`
+          : undefined;
+
+        console.log(`Fetching latest release for ${repoFullName}`);
+
+        return {
+          name: subDir.split("/").pop() || repoData.name,
+          downloads: repoData.stargazers_count,
+          version: await fetchLatestRelease(repoFullName),
+          author: repoData.owner.login,
+          authorLink: repoData.owner.html_url,
+          repository: `${repoData.html_url}/tree/${branch}/${subDir}`,
+          lastUpdate: repoData.updated_at,
+          description: repoData.description,
+          fullDescription: readmeContent
+            ? convertHtmlToMarkdown(readmeContent)
+            : "",
+          mainFile: mainFileUrl,
+        };
+      } else {
+        console.log(`Fetching README for ${repoFullName}`);
+        const fullDescription = await fetchReadme(repoFullName);
+
+        console.log(`Fetching latest release for ${repoFullName}`);
+        const version = await fetchLatestRelease(repoFullName);
+
+        return {
+          name: repoData.name,
+          downloads: repoData.stargazers_count,
+          version,
+          author: repoData.owner.login,
+          authorLink: repoData.owner.html_url,
+          repository: repoData.html_url,
+          lastUpdate: repoData.updated_at,
+          description: repoData.description,
+          fullDescription,
+        };
+      }
+    } catch (error) {
+      console.error(`Error processing ${repoUrl}:`, error);
+      return null;
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -131,95 +221,7 @@ export const usePipes = (repoUrls: string[]) => {
       setError(null);
 
       try {
-        const pipePromises = repoUrls.map(async (repoUrl) => {
-          try {
-            const urlParts = repoUrl.split("/");
-            const isSubdir = urlParts.length > 5; // github.com/owner/repo/tree/branch/subdir
-            const repoOwner = urlParts[3];
-            const repoName = urlParts[4];
-            const repoFullName = `${repoOwner}/${repoName}`;
-            const branch = isSubdir ? urlParts[6] : "main"; // Assume 'main' if not specified
-            const subDir = isSubdir ? urlParts.slice(7).join("/") : "";
-
-            const repoData = await fetchWithCache(
-              `https://api.github.com/repos/${repoFullName}`
-            );
-
-            if (isSubdir) {
-              try {
-                const contents = await fetchSubdirContents(
-                  repoFullName,
-                  branch,
-                  subDir
-                );
-                if (!contents || !Array.isArray(contents)) return null;
-
-                const jsFiles = contents.filter((file: any) =>
-                  file.name.endsWith(".js")
-                );
-                const hasJsFile = jsFiles.length > 0;
-                const readmeFile = contents.find(
-                  (file: any) => file.name.toLowerCase() === "readme.md"
-                );
-
-                if (!hasJsFile || !readmeFile) return null;
-
-                const readmeContent = await fetchFileContent(
-                  repoFullName,
-                  branch,
-                  `${subDir}/${readmeFile.name}`
-                );
-
-                // Find the main JavaScript file (prefer index.js if it exists)
-                const mainFile =
-                  jsFiles.find((file: any) => file.name === "index.js") ||
-                  jsFiles[0];
-
-                const mainFileUrl = mainFile
-                  ? `https://raw.githubusercontent.com/${repoFullName}/${branch}/${subDir}/${mainFile.name}`
-                  : undefined;
-
-                return {
-                  name: subDir.split("/").pop() || repoData.name,
-                  downloads: repoData.stargazers_count,
-                  version: await fetchLatestRelease(repoFullName),
-                  author: repoData.owner.login,
-                  authorLink: repoData.owner.html_url,
-                  repository: `${repoData.html_url}/tree/${branch}/${subDir}`,
-                  lastUpdate: repoData.updated_at,
-                  description: repoData.description,
-                  fullDescription: readmeContent
-                    ? convertHtmlToMarkdown(readmeContent)
-                    : "",
-                  mainFile: mainFileUrl,
-                };
-              } catch (subdirError) {
-                console.error(
-                  `Error processing subdirectory ${repoUrl}:`,
-                  subdirError
-                );
-                return null; // Skip this subdirectory if there's an error
-              }
-            } else {
-              // Original behavior for root repos
-              return {
-                name: repoData.name,
-                downloads: repoData.stargazers_count,
-                version: await fetchLatestRelease(repoFullName),
-                author: repoData.owner.login,
-                authorLink: repoData.owner.html_url,
-                repository: repoData.html_url,
-                lastUpdate: repoData.updated_at,
-                description: repoData.description,
-                fullDescription: await fetchReadme(repoFullName),
-              };
-            }
-          } catch (error) {
-            console.error(`Error processing ${repoUrl}:`, error);
-            return null;
-          }
-        });
-
+        const pipePromises = repoUrls.map(fetchPipeData);
         const fetchedPipes = (await Promise.all(pipePromises)).filter(
           Boolean
         ) as Pipe[];
@@ -244,7 +246,38 @@ export const usePipes = (repoUrls: string[]) => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [repoUrls]);
 
-  return { pipes, loading, error };
+  const addCustomPipe = async (newRepoUrl: string) => {
+    setError(null);
+
+    // Check if the URL already exists
+    if (repoUrls.includes(newRepoUrl)) {
+      setError("This pipe is already in the list.");
+      return;
+    }
+
+    try {
+      const newPipe = await fetchPipeData(newRepoUrl);
+      if (newPipe) {
+        // Check if a pipe with the same name already exists
+        if (pipes.some((pipe) => pipe.name === newPipe.name)) {
+          setError("A pipe with this name already exists.");
+          return;
+        }
+
+        setRepoUrls((prevUrls) => [...prevUrls, newRepoUrl]);
+        setPipes((prevPipes) => [...prevPipes, newPipe]);
+      } else {
+        throw new Error("Failed to fetch pipe data");
+      }
+    } catch (error) {
+      console.error("Error adding custom pipe:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to add custom pipe"
+      );
+    }
+  };
+
+  return { pipes, loading, error, addCustomPipe };
 };

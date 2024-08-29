@@ -138,7 +138,6 @@ async function runActivityTracker() {
 (async () => {
     try {
         await runActivityTracker();
-        return "hi";
     } catch (error) {
         console.error("Fatal error in Activity Topic Tracker:");
         if (error instanceof Error) {
