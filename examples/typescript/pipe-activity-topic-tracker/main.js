@@ -29,7 +29,7 @@ async function queryScreenpipe(params) {
 async function getAIProvider() {
     // Default to OpenAI if no provider is specified
     const provider = "ollama";
-    const model = "mistral-nemo";
+    const model = "phi3.5";
 
     return { provider, model };
 }
