@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725028631183,
+  "lastUpdate": 1725028636129,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -329,6 +329,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1934301083,
             "range": "± 31998804",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "1c335a21ebee1facc4c3f8e1c5a46be11ff107c6",
+          "message": "fix: virtual devices not shown on mac + VAD too aggressive",
+          "timestamp": "2024-08-30T16:26:52+02:00",
+          "tree_id": "905b520f53ceacd46c8030ad95c08123b512620c",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/1c335a21ebee1facc4c3f8e1c5a46be11ff107c6"
+        },
+        "date": 1725028635618,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2066528479,
+            "range": "± 171464274",
             "unit": "ns/iter"
           }
         ]
