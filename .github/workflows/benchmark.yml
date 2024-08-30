@@ -60,7 +60,9 @@ jobs:
 
       - name: Run Windows OCR benchmarks
         run: |
-          cargo bench --bench ocr_benchmark -- --output-format criterion | Tee-Object -Append -FilePath ocr_output.txt
+          cargo bench --bench ocr_benchmark -- --output-format criterion 
+          # TODO broken
+          # | Tee-Object -Append -FilePath ocr_output.txt
 
       - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v3
@@ -68,8 +70,36 @@ jobs:
           name: ocr-benchmark-data
           path: ocr_output.txt
 
+  stt_benchmark:
+    name: Run STT benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Run STT benchmarks
+        run: |
+          cargo bench --bench stt_benchmark -- --output-format bencher | tee -a stt_output.txt
+
+      - name: Upload STT benchmark artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: stt-benchmark-data
+          path: stt_output.txt
+
   analyze_benchmarks:
-    needs: [apple_ocr_benchmark, tesseract_ocr_benchmark, windows_ocr_benchmark]
+    needs:
+      [
+        apple_ocr_benchmark,
+        tesseract_ocr_benchmark,
+        windows_ocr_benchmark,
+        stt_benchmark,
+      ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -78,17 +108,36 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: ocr-benchmark-data
-          path: ./cache
+          path: ./cache/ocr
+
+      - name: Download STT benchmark data
+        uses: actions/download-artifact@v3
+        with:
+          name: stt-benchmark-data
+          path: ./cache/stt
 
       - name: List contents of cache directory
         run: ls -R ./cache
 
-      - name: Analyze all OCR benchmarks
+      - name: Analyze OCR benchmarks
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmarks
           tool: "cargo"
-          output-file-path: ./cache/ocr_output.txt
+          output-file-path: ./cache/ocr/ocr_output.txt
+          github-token: ${{ secrets.GH_PAGES_TOKEN }}
+          auto-push: true
+          alert-threshold: "200%"
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-comment-cc-users: "@louis030195"
+
+      - name: Analyze STT benchmarks
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: STT Benchmarks
+          tool: "criterion"
+          output-file-path: ./cache/stt/stt_output.txt
           github-token: ${{ secrets.GH_PAGES_TOKEN }}
           auto-push: true
           alert-threshold: "200%"

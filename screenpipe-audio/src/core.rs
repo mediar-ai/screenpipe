@@ -121,17 +121,14 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
 async fn get_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
-    let host = match audio_device.device_type {
-        #[cfg(target_os = "macos")]
-        DeviceType::Output => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
-        _ => cpal::default_host(),
-    };
+    let host = cpal::default_host();
 
     info!("device: {:?}", audio_device.to_string());
 
     let is_output_device = audio_device.device_type == DeviceType::Output;
+    let is_display = audio_device.to_string().contains("Display");
 
-    let audio_device = if audio_device.to_string() == "default" {
+    let cpal_audio_device = if audio_device.to_string() == "default" {
         match audio_device.device_type {
             DeviceType::Input => host.default_input_device(),
             DeviceType::Output => host.default_output_device(),
@@ -144,7 +141,9 @@ async fn get_device_and_config(
 
         #[cfg(target_os = "macos")]
         {
-            if audio_device.device_type == DeviceType::Output {
+            // if the user intentionally selected the display capture device, use the screen capture kit host
+            // otherwise we will use the core audio output device (likely a virtual device that connect system audio)
+            if audio_device.device_type == DeviceType::Output && is_display {
                 let version = *MACOS_VERSION;
                 if version < 15.0 {
                     if let Ok(screen_capture_host) =
@@ -171,12 +170,12 @@ async fn get_device_and_config(
     .ok_or_else(|| anyhow!("Audio device not found"))?;
 
     // if output device and windows, using output config
-    let config = if is_output_device && cfg!(target_os = "windows") {
-        audio_device.default_output_config()?
+    let config = if is_output_device && !is_display {
+        cpal_audio_device.default_output_config()?
     } else {
-        audio_device.default_input_config()?
+        cpal_audio_device.default_input_config()?
     };
-    Ok((audio_device, config))
+    Ok((cpal_audio_device, config))
 }
 
 async fn run_ffmpeg(
@@ -404,6 +403,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
+    // macos hack using screen capture kit for output devices - does not work well
     #[cfg(target_os = "macos")]
     {
         // !HACK macos is suppoed to use special macos feature "display capture"
@@ -420,12 +420,10 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        for device in host.output_devices()? {
-            if let Ok(name) = device.name() {
-                devices.push(AudioDevice::new(name, DeviceType::Output));
-            }
+    // add default output device - on macos think of custom virtual devices
+    for device in host.output_devices()? {
+        if let Ok(name) = device.name() {
+            devices.push(AudioDevice::new(name, DeviceType::Output));
         }
     }
 

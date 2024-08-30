@@ -68,6 +68,7 @@ once_cell = "1.17.1"
 tempfile = "3.3.0"
 infer = "0.15"
 criterion = { workspace = true }
+memory-stats = "1.0"
 
 [features]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
@@ -86,3 +87,6 @@ harness = false
 name = "record_and_transcribe_benchmark"
 harness = false
 
+[[bench]]
+name = "stt_benchmark"
+harness = false

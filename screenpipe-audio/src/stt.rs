@@ -536,7 +536,7 @@ pub fn stt(
     // Initialize VAD
     debug!("VAD: Initializing VAD");
     let mut vad = Vad::new();
-    vad.set_mode(VadMode::VeryAggressive); // Set mode to very aggressive
+    vad.set_mode(VadMode::Quality); // Set mode to very aggressive
 
     // Filter out non-speech segments
     debug!("VAD: Filtering out non-speech segments");

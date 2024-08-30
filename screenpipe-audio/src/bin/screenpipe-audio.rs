@@ -38,7 +38,7 @@ fn print_devices(devices: &[AudioDevice]) {
     println!("On macOS, it's not intuitive but output devices are your displays");
 }
 
-// TODO - kinda bad cli here
+// ! usage - cargo run --bin screenpipe-audio -- --audio-device "Display 1 (output)"
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
     use log::LevelFilter;
 
     Builder::new()
-        .filter(None, LevelFilter::Info)
+        .filter(None, LevelFilter::Debug)
         .filter_module("tokenizers", LevelFilter::Error)
         .init();
 
@@ -76,10 +76,10 @@ async fn main() -> Result<()> {
     std::fs::remove_file("output_0.mp4").unwrap_or_default();
     std::fs::remove_file("output_1.mp4").unwrap_or_default();
 
-    let chunk_duration = Duration::from_secs(5);
+    let chunk_duration = Duration::from_secs(10);
     let output_path = PathBuf::from("output.mp4");
     let (whisper_sender, mut whisper_receiver) =
-        create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperTiny)).await?;
+        create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3)).await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()
