@@ -8,6 +8,8 @@ use candle::{Device, IndexOp, Tensor};
 use candle_nn::{ops::softmax, VarBuilder};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, error, info};
+#[cfg(target_os = "macos")]
+use objc::rc::autoreleasepool;
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -753,9 +755,6 @@ pub async fn create_whisper_channel(
                         .expect("Time went backwards")
                         .as_secs();
 
-                    #[cfg(target_os = "macos")]
-                    use objc::{rc::autoreleasepool};
-
                     let transcription_result = if cfg!(target_os = "macos") {
                         #[cfg(target_os = "macos")]
                         {
@@ -778,6 +777,11 @@ pub async fn create_whisper_channel(
                                     },
                                 }
                             })
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            // This will be used for non-macOS platforms when compiling for macOS
+                            unreachable!("This code should not be reached on non-macOS platforms")
                         }
                     } else {
                         match stt(&input.path, &whisper_model, audio_transcription_engine.clone()) {
