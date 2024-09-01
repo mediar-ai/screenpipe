@@ -1,3 +1,4 @@
+use crate::cli::CliVadEngine;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
@@ -32,6 +33,7 @@ pub async fn start_continuous_recording(
     friend_wearable_uid: Option<String>,
     monitor_id: u32,
     use_pii_removal: bool,
+    vad_engine: CliVadEngine,
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -43,7 +45,7 @@ pub async fn start_continuous_recording(
         ) = unbounded_channel();
         (input_sender, output_receiver)
     } else {
-        create_whisper_channel(audio_transcription_engine.clone()).await?
+        create_whisper_channel(audio_transcription_engine.clone(), vad_engine).await?
     };
     let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);

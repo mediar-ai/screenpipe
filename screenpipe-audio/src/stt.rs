@@ -17,7 +17,12 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
-use crate::{multilingual, pcm_decode::pcm_decode, AudioTranscriptionEngine};
+use crate::{
+    multilingual,
+    pcm_decode::pcm_decode,
+    vad_engine::{SileroVad, VadEngine, VadEngineEnum, WebRtcVad},
+    AudioTranscriptionEngine,
+};
 
 use webrtc_vad::{Vad, VadMode};
 
@@ -719,6 +724,7 @@ pub struct TranscriptionResult {
 }
 pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    vad_engine: VadEngineEnum,
 ) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
@@ -732,7 +738,10 @@ pub async fn create_whisper_channel(
         UnboundedSender<TranscriptionResult>,
         UnboundedReceiver<TranscriptionResult>,
     ) = unbounded_channel();
-
+    let mut vad_engine: Box<dyn VadEngine> = match vad_engine {
+        VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
+        VadEngineEnum::Silero => Box::new(SileroVad::new().unwrap()),
+    };
     tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -742,7 +751,7 @@ pub async fn create_whisper_channel(
                         .expect("Time went backwards")
                         .as_secs();
 
-                    let transcription_result = match stt(&input.path, &whisper_model, audio_transcription_engine.clone()) {
+                    let transcription_result = match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine) {
                         Ok(transcription) => TranscriptionResult {
                             input: input.clone(),
                             transcription: Some(transcription),
