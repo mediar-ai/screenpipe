@@ -78,7 +78,7 @@ async fn main() -> Result<()> {
 
     let chunk_duration = Duration::from_secs(10);
     let output_path = PathBuf::from("output.mp4");
-    let (whisper_sender, mut whisper_receiver) =
+    let (whisper_sender, mut whisper_receiver, _) =
         create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3)).await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices

@@ -276,7 +276,7 @@ pub async fn record_and_transcribe(
     );
 
     // TODO: consider a lock-free ring buffer like crossbeam_queue::ArrayQueue (ask AI why)
-    let (tx, rx) = mpsc::channel(1000); // For audio data
+    let (tx, rx) = mpsc::channel(100); // For audio data
     let is_running_clone = Arc::clone(&is_running);
     let is_running_clone_2 = is_running.clone();
     let is_running_clone_3 = is_running.clone();
@@ -294,7 +294,7 @@ pub async fn record_and_transcribe(
         }
     };
     // Spawn a thread to handle the non-Send stream
-    thread::spawn(move || {
+    let audio_handle = thread::spawn(move || {
         let stream = match config.sample_format() {
             cpal::SampleFormat::I8 => cpal_audio_device.build_input_stream(
                 &config.into(),
@@ -351,6 +351,8 @@ pub async fn record_and_transcribe(
                 while is_running_clone.load(Ordering::Relaxed) {
                     std::thread::sleep(Duration::from_millis(100));
                 }
+                s.pause().ok();
+                drop(s);
             }
             Err(e) => error!("Failed to build input stream: {}", e),
         }
@@ -380,6 +382,16 @@ pub async fn record_and_transcribe(
 
     // Signal the recording thread to stop
     is_running.store(false, Ordering::Relaxed); // TODO: could also just kill the trhead..
+
+    // Wait for the native thread to finish
+    if let Err(e) = audio_handle.join() {
+        error!("Error joining audio thread: {:?}", e);
+    }
+
+    tokio::fs::File::open(&output_path_clone_2.to_path_buf())
+        .await?
+        .sync_all()
+        .await?;
 
     debug!("Sending audio to audio model");
     if let Err(e) = whisper_sender.send(AudioInput {

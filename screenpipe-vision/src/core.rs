@@ -269,7 +269,8 @@ pub async fn process_ocr_task(
     Ok(())
 }
 
-fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
+fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> { 
+    // TODO: this function uses a TONN of memory and is not efficient and we should use binary serialization instead
     let parsed_output: Vec<HashMap<String, String>> = serde_json::from_str(json_output)
         .unwrap_or_else(|e| {
             error!("Failed to parse JSON output: {}", e);

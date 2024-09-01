@@ -539,7 +539,6 @@ impl Server {
             )
             .with_state(app_state);
 
-        info!("Starting server on {}", self.addr);
 
         match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
             Ok(_) => {
