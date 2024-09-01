@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725233652600,
+  "lastUpdate": 1725233746347,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -569,6 +569,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2356554062,
             "range": "± 249736618",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "a2fbc5d08aace57ae3bfa546636567c0f9297c8f",
+          "message": "fix: major performance progress (memory leak on Candle MacOS implementation)",
+          "timestamp": "2024-09-01T16:25:45-07:00",
+          "tree_id": "8c8f06ba4a510a8e485f91f9f6c7b08691045664",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/a2fbc5d08aace57ae3bfa546636567c0f9297c8f"
+        },
+        "date": 1725233745828,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1937934479,
+            "range": "± 13344670",
             "unit": "ns/iter"
           }
         ]
