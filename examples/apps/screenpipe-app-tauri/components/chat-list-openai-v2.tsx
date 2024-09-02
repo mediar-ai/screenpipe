@@ -265,9 +265,7 @@ export function ChatList({
 
             Rules:
             - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}. Adjust start/end times to match user intent.
-            - User timezone: ${
-              Intl.DateTimeFormat().resolvedOptions().timeZone
-            }
+            - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
             - User timezone offset (JavaScript Date.prototype.getTimezoneOffset): ${new Date().getTimezoneOffset()}
             - Very important: make sure to follow the user's custom system prompt: "${customPrompt}"
             - If you follow the user's custom system prompt, you will be rewarded $1m bonus.
@@ -303,13 +301,6 @@ export function ChatList({
 
       console.log("streamMessages", streamMessages);
       console.log("assistant system prompt");
-
-      const z = JSON.stringify(streamMessages[0].content);
-      // split z every 50 char and print to ocnsole
-      for (let i = 0; i < z.length; i += 50) {
-        console.log(z.slice(i, i + 50));
-      }
-
 
       const { textStream } = useOllama
         ? await streamText({
