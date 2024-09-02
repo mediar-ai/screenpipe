@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725307662542,
+  "lastUpdate": 1725307664743,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -997,6 +997,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 16887250171,
             "range": "± 33598088",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1cf6ffcc7e24f464a15a5a64eb5372d0cf2c6082",
+          "message": "Merge pull request #251 from ac3xx/enhance-datetime-handling\n\nEnhance app datetime handling across timezones",
+          "timestamp": "2024-09-02T12:52:49-07:00",
+          "tree_id": "8d4bd46d8fea920ecc1dcc65ed55e6fb2b6a663a",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/1cf6ffcc7e24f464a15a5a64eb5372d0cf2c6082"
+        },
+        "date": 1725307664121,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16988513702,
+            "range": "± 50985356",
             "unit": "ns/iter"
           }
         ]
