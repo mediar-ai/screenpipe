@@ -136,7 +136,7 @@ jobs:
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: STT Benchmarks
-          tool: "criterion"
+          tool: "cargo"
           output-file-path: ./cache/stt/stt_output.txt
           github-token: ${{ secrets.GH_PAGES_TOKEN }}
           auto-push: true
