@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725307240431,
+  "lastUpdate": 1725307242283,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -929,6 +929,44 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2482911937,
             "range": "± 447795710",
+            "unit": "ns/iter"
+          }
+        ]
+      }
+    ],
+    "STT Benchmarks": [
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "17959eda8f1737c2f9d5cb07cadeb330dff77d54",
+          "message": "fix bench",
+          "timestamp": "2024-09-02T12:46:25-07:00",
+          "tree_id": "99869e86ecd6bb776f04baea1f4ef6ce40808676",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/17959eda8f1737c2f9d5cb07cadeb330dff77d54"
+        },
+        "date": 1725307241712,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16887250171,
+            "range": "± 33598088",
             "unit": "ns/iter"
           }
         ]
