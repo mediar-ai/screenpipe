@@ -119,7 +119,7 @@ export function ChatList({
         "Intl.DateTimeFormat().resolvedOptions().timeZone",
         Intl.DateTimeFormat().resolvedOptions().timeZone
       );
-      console.log("new Date().toLocaleString()", new Date().toLocaleString());
+      console.log("new Date().toISOString()", new Date().toISOString());
       console.log("model", model);
 
       const hasFunctionCalls = messages.some(
@@ -142,17 +142,16 @@ export function ChatList({
               and you use his screenpipe recordings to answer him.
               Based on the user request, use tools to query screenpipe to best help the user. 
               Rules:
-              - Current time: ${new Date().toLocaleString()}. Adjust start/end times to match user intent.
-              - Convert user times to UTC. User timezone: ${
+              - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}. Adjust start/end times to match user intent.
+              - User timezone: ${
                 Intl.DateTimeFormat().resolvedOptions().timeZone
               }
-              - To convert to UTC: ${
-                new Date().getTimezoneOffset() / -60 > 0 ? "subtract" : "add"
-              } ${Math.abs(
-              new Date().getTimezoneOffset() / 60
-            )} hours from the user's local time.
+              - User timezone offset (JavaScript Date.prototype.getTimezoneOffset): ${new Date().getTimezoneOffset()}
               - Make sure to follow the user's custom system prompt: "${customPrompt}"
               - If you follow the user's custom system prompt, you will be rewarded $1m bonus.
+              - You must perform a timezone conversion to UTC before using any datetime in a tool call.
+              - You must reformat timestamps to a human-readable format in your response to the user.
+              - Never output UTC time unless explicitly asked by the user.
 
               examples of user queries and expected responses:
 
@@ -172,21 +171,29 @@ export function ChatList({
                 ]
               }
 
-              3. user: "show me what i was doing at 10:11 am today across all apps"
+              3. system: [...] Current Time (JavaScript Date.prototype.toString): Sun Sep 01 2024 12:34:56 GMT+0100 (British Summer Time).
+              - User timezone: Europe/London
+              - User timezone offset (JavaScript Date.prototype.getTimezoneOffset): -60
+              - [...]
+              user: "show me what i was doing at 10:11 am today across all apps"
               {
                 "queries": [
-                  { "content_type": "all", "start_time": "2024-03-15T10:11:00Z", "end_time": "2024-03-15T10:12:00Z" }
+                  { "content_type": "all", "start_time": "2024-03-15T09:11:00Z", "end_time": "2024-03-15T09:12:00Z" }
                 ]
               }
 
-              4. user: "what did i work on in the last hour in vscode, notion, and slack?"
+              4. system: [...] Current Time (JavaScript Date.prototype.toString): Sun Sep 01 2024 10:00:00 GMT-0700 (Mountain Standard Time).
+              - User timezone: America/Boise
+              - User timezone offset (JavaScript Date.prototype.getTimezoneOffset): 420
+              - [...]
+              user: "what did i work on in the last hour in vscode, notion, and slack?"
               {
                 "queries": [
-                  { "content_type": "ocr", "app_name": "vscode", "start_time": "2024-03-15T09:00:00Z", "end_time": "2024-03-15T10:00:00Z" },
-                  { "content_type": "ocr", "app_name": "notion", "start_time": "2024-03-15T09:00:00Z", "end_time": "2024-03-15T10:00:00Z" },
-                  { "content_type": "ocr", "app_name": "slack", "start_time": "2024-03-15T09:00:00Z", "end_time": "2024-03-15T10:00:00Z" }
+                  { "content_type": "ocr", "app_name": "vscode", "start_time": "2024-03-15T17:00:00Z", "end_time": "2024-03-15T18:00:00Z" },
+                  { "content_type": "ocr", "app_name": "notion", "start_time": "2024-03-15T17:00:00Z", "end_time": "2024-03-15T18:00:00Z" },
+                  { "content_type": "ocr", "app_name": "slack", "start_time": "2024-03-15T17:00:00Z", "end_time": "2024-03-15T18:00:00Z" }
                 ]
-              }            
+              }
 
               `,
           },
@@ -257,17 +264,16 @@ export function ChatList({
             and you use his screenpipe recordings to answer him.
 
             Rules:
-            - User's date & time now is ${new Date().toISOString()}. Adjust to properly match the user intent time range.
-            - User's local timezone is ${
+            - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}. Adjust start/end times to match user intent.
+            - User timezone: ${
               Intl.DateTimeFormat().resolvedOptions().timeZone
-            }.
-            - To convert to UTC: ${
-              new Date().getTimezoneOffset() / -60 > 0 ? "subtract" : "add"
-            } ${Math.abs(
-            new Date().getTimezoneOffset() / 60
-          )} hours from the user's local time.
+            }
+            - User timezone offset (JavaScript Date.prototype.getTimezoneOffset): ${new Date().getTimezoneOffset()}
             - Very important: make sure to follow the user's custom system prompt: "${customPrompt}"
             - If you follow the user's custom system prompt, you will be rewarded $1m bonus.
+            - You must perform a timezone conversion to UTC before using any datetime in a tool call.
+            - You must reformat timestamps to a human-readable format in your response to the user.
+            - Never output UTC time unless explicitly asked by the user.
             `,
         },
         // @ts-ignore
