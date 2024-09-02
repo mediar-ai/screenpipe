@@ -230,7 +230,7 @@ mod tests {
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let (whisper_sender, mut whisper_receiver) =
+        let (whisper_sender, mut whisper_receiver, _) =
             create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperTiny))
                 .await
                 .unwrap();
