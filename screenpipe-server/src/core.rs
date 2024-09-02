@@ -1,3 +1,4 @@
+use crate::cli::CliVadEngine;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
@@ -32,8 +33,9 @@ pub async fn start_continuous_recording(
     friend_wearable_uid: Option<String>,
     monitor_id: u32,
     use_pii_removal: bool,
+    vad_engine: CliVadEngine,
 ) -> Result<()> {
-    let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
+    let (whisper_sender, whisper_receiver) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
         let (input_sender, _): (UnboundedSender<AudioInput>, UnboundedReceiver<AudioInput>) =
             unbounded_channel();
@@ -41,19 +43,17 @@ pub async fn start_continuous_recording(
             UnboundedSender<TranscriptionResult>,
             UnboundedReceiver<TranscriptionResult>,
         ) = unbounded_channel();
-        (
-            input_sender,
-            output_receiver,
-            Arc::new(AtomicBool::new(false)),
-        )
+        (input_sender, output_receiver)
     } else {
-        create_whisper_channel(audio_transcription_engine.clone()).await?
+        match vad_engine {
+            CliVadEngine::WebRtc => create_whisper_channel(audio_transcription_engine.clone(), VADDetectionEngine::WebRtc).await?,
+            CliVadEngine::Silero => create_whisper_channel(audio_transcription_engine.clone(), VADDetectionEngine::Silero).await?,
+        }
     };
-    let whisper_sender_clone = whisper_sender.clone();
     let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);
 
-    let is_running_video = Arc::clone(&vision_control);
+    let is_running_video = Arc::clone(&vi   on_control);
 
     let output_path_video = Arc::clone(&output_path);
     let output_path_audio = Arc::clone(&output_path);
@@ -97,24 +97,15 @@ pub async fn start_continuous_recording(
         .await
     });
 
-    // Wait for both tasks to complete
-    let (video_result, audio_result) = tokio::join!(video_handle, audio_handle);
+    let video_result = video_handle.await;
+    let audio_result = audio_handle.await;
 
-    // Handle any errors from the tasks
     if let Err(e) = video_result {
         error!("Video recording error: {:?}", e);
     }
     if let Err(e) = audio_result {
         error!("Audio recording error: {:?}", e);
     }
-
-    // Shutdown the whisper channel
-    whisper_shutdown_flag.store(true, Ordering::Relaxed);
-    drop(whisper_sender_clone); // Close the sender channel
-
-    // TODO: process any remaining audio chunks
-    // TODO: wait a bit for whisper to finish processing
-    // TODO: any additional cleanup like device controls to release
 
     info!("Stopped recording");
     Ok(())

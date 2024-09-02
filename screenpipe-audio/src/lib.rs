@@ -2,6 +2,7 @@ mod core;
 mod multilingual;
 pub mod pcm_decode;
 pub mod stt;
+pub mod vad_engine;
 pub use core::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     record_and_transcribe, AudioDevice, AudioTranscriptionEngine, DeviceControl, DeviceType

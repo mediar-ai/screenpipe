@@ -1,11 +1,12 @@
 #[cfg(test)]
 mod tests {
+    use super::*;
     use chrono::Utc;
     use log::{debug, LevelFilter};
     use screenpipe_audio::{
         default_output_device, list_audio_devices, stt, AudioTranscriptionEngine, WhisperModel,
     };
-    use screenpipe_audio::{parse_audio_device, record_and_transcribe};
+    use screenpipe_audio::{parse_audio_device, record_and_transcribe,create_vad_engine, VadEngineEnum,VadEngine};
     use std::path::PathBuf;
     use std::process::Command;
     use std::str::FromStr;
@@ -24,6 +25,54 @@ mod tests {
             Ok(_) => (),
             Err(_) => (),
         };
+    }
+
+    #[tokio::test]
+    async fn test_webrtc_vad() {
+        setup();
+
+        let mut vad_engine = create_vad_engine(VadEngineEnum::WebRtc).unwrap();
+        let audio_chunk = vec![0; 16000]; // Example silent audio chunk
+        let is_voice = vad_engine.is_voice_segment(&audio_chunk)?;
+        assert!(!is_voice, "WebRtc VAD should not detect voice in silent audio");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_silero_vad() {
+        setup();
+
+        let mut vad_engine = create_vad_engine(VadEngineEnum::Silero).unwrap();
+        let audio_chunk = vec![0; 16000]; // Example silent audio chunk
+        let is_voice = vad_engine.is_voice_segment(&audio_chunk)?;
+        assert!(!is_voice, "Silero VAD should not detect voice in silent audio");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_webrtc_vad_with_voice() {
+        setup();
+
+        let mut vad_engine = create_vad_engine(VadEngineEnum::WebRtc).unwrap();
+        let audio_chunk = vec![1; 16000]; // Example non-silent audio chunk
+        let is_voice = vad_engine.is_voice_segment(&audio_chunk)?;
+        assert!(is_voice, "WebRtc VAD should detect voice in non-silent audio");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_silero_vad_with_voice() {
+        setup();
+
+        let mut vad_engine = create_vad_engine(VadEngineEnum::Silero).unwrap();
+        let audio_chunk = vec![1; 16000]; // Example non-silent audio chunk
+        let is_voice = vad_engine.is_voice_segment(&audio_chunk)?;
+        assert!(is_voice, "Silero VAD should detect voice in non-silent audio");
+
+        Ok(())
     }
 
     // ! what happen in github action?
