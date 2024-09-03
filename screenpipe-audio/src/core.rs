@@ -187,6 +187,7 @@ async fn run_ffmpeg(
     duration: Duration,
 ) -> Result<()> {
     debug!("Starting FFmpeg process");
+
     let mut command = Command::new(find_ffmpeg_path().unwrap());
     command
         .args(&[
@@ -200,10 +201,10 @@ async fn run_ffmpeg(
             "pipe:0",
             "-c:a",
             "aac",
+            "-strict",
+            "experimental",
             "-b:a",
-            "128k",
-            "-aac_coder",
-            "fast",
+            "384k",
             "-f",
             "mp4",
             output_path.to_str().unwrap(),
