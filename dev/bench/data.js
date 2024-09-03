@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725398838897,
+  "lastUpdate": 1725398840584,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1723,6 +1723,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 16752823562,
             "range": "± 51021822",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "60305d3554567efbcd256b52e865123f64e71145",
+          "message": "fix: issue when audio device has more than 3 channels",
+          "timestamp": "2024-09-03T14:13:28-07:00",
+          "tree_id": "5a8105a1feadafb2e5c0d549ba61ad3c65625397",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/60305d3554567efbcd256b52e865123f64e71145"
+        },
+        "date": 1725398840145,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16924250138,
+            "range": "± 125632146",
             "unit": "ns/iter"
           }
         ]
