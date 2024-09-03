@@ -412,10 +412,11 @@ pub async fn record_and_transcribe(
         error!("Error joining audio thread: {:?}", e);
     }
 
-    tokio::fs::File::open(&output_path_clone_2.to_path_buf())
-        .await?
-        .sync_all()
-        .await?;
+    // Commented to chekc if its the "Access is denied on windows" error
+    // tokio::fs::File::open(&output_path_clone_2.to_path_buf())
+    //     .await?
+    //     .sync_all()
+    //     .await?;
 
     debug!("Sending audio to audio model");
     if let Err(e) = whisper_sender.send(AudioInput {
