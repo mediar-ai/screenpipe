@@ -202,7 +202,11 @@ async fn run_ffmpeg(
             "-c:a",
             "aac",
             "-b:a",
-            "128k",
+            "64k", // Reduced bitrate for higher compression
+            "-profile:a",
+            "aac_low", // Use AAC-LC profile for better compatibility
+            "-movflags",
+            "+faststart", // Optimize for web streaming
             "-f",
             "mp4",
             output_path.to_str().unwrap(),
