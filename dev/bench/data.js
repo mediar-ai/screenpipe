@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725385750027,
+  "lastUpdate": 1725385751890,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1195,6 +1195,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 16718747406,
             "range": "± 52406866",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b1085f26b51d51d592311279b196448492c7f098",
+          "message": "Merge pull request #252 from ac3xx/update-chatbot-model\n\nUpdated vercel-ai-chatbot model to gpt-4o-mini",
+          "timestamp": "2024-09-03T10:35:13-07:00",
+          "tree_id": "d019182dc2893352a764ddce1cace8c0be33d48b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b1085f26b51d51d592311279b196448492c7f098"
+        },
+        "date": 1725385751433,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16820095331,
+            "range": "± 47290100",
             "unit": "ns/iter"
           }
         ]
