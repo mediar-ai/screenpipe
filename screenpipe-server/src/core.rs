@@ -212,6 +212,18 @@ async fn record_audio(
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
 
+    // fix path for audio device that contains slashes (esp. for windows crashes)
+    // e.g. Speakers/Headphones (Realtek High Definition Audio) should be
+    // Speakers_Headphones_(Realtek_High_Definition_Audio)
+    let output_path = PathBuf::from(output_path.as_ref())
+        .file_name()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default()
+        .replace('/', "_");
+
+    let output_path = Arc::new(PathBuf::from(&output_path).join(output_path));
+
     loop {
         while let Some((audio_device, device_control)) = audio_devices_control.pop() {
             debug!("Received audio device: {}", &audio_device);
