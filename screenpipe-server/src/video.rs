@@ -19,8 +19,6 @@ const MAX_QUEUE_SIZE: usize = 10;
 
 pub struct VideoCapture {
     #[allow(unused)]
-    frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
-    #[allow(unused)]
     video_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
     pub ocr_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
 }
@@ -35,13 +33,11 @@ impl VideoCapture {
         monitor_id: u32,
     ) -> Self {
         info!("Starting new video capture");
-        let frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let video_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let ocr_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let new_chunk_callback = Arc::new(new_chunk_callback);
         let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
 
-        let capture_frame_queue = frame_queue.clone();
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
@@ -88,7 +84,6 @@ impl VideoCapture {
 
                 let result = Arc::new(result);
 
-                // let frame_pushed = push_to_queue(&capture_frame_queue, &result, "Frame");
                 let video_pushed = push_to_queue(&capture_video_frame_queue, &result, "Video");
                 let ocr_pushed = push_to_queue(&capture_ocr_frame_queue, &result, "OCR");
 
@@ -101,9 +96,8 @@ impl VideoCapture {
                 }
 
                 debug!(
-                    "Frame {} pushed to queues. Queue lengths: {}, {}, {}",
+                    "Frame {} pushed to queues. Queue lengths: {}, {}",
                     frame_number,
-                    capture_frame_queue.len(),
                     capture_video_frame_queue.len(),
                     capture_ocr_frame_queue.len()
                 );
@@ -124,7 +118,6 @@ impl VideoCapture {
         });
 
         VideoCapture {
-            frame_queue,
             video_frame_queue,
             ocr_frame_queue,
         }
@@ -307,6 +300,8 @@ async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyh
         &fps_str,
         "-i",
         "-",
+        "-vf",
+        "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
     ];
 
     if env::consts::OS == "windows" {
