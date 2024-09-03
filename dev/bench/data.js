@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725400568851,
+  "lastUpdate": 1725400570574,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1987,6 +1987,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 16945422717,
             "range": "± 61540773",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "75619e6de6b6392db16da30aefa5214b38339df4",
+          "message": "release fix of windows mic issues and other things",
+          "timestamp": "2024-09-03T14:42:21-07:00",
+          "tree_id": "fba389c92f9c067f4d855b9f3942eab5a7a3eb5c",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/75619e6de6b6392db16da30aefa5214b38339df4"
+        },
+        "date": 1725400570142,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16937624640,
+            "range": "± 42765960",
             "unit": "ns/iter"
           }
         ]
