@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725400289471,
+  "lastUpdate": 1725400291310,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1921,6 +1921,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 16670301539,
             "range": "± 30796114",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "cc4e608e28c799ef7ad5394b3f960e40400e6c4a",
+          "message": "fix: audio devices with more than 2 channels",
+          "timestamp": "2024-09-03T14:37:37-07:00",
+          "tree_id": "d33e081294e1f88c4e6b77e0f5a970fa2aeb71a6",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/cc4e608e28c799ef7ad5394b3f960e40400e6c4a"
+        },
+        "date": 1725400290737,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16945422717,
+            "range": "± 61540773",
             "unit": "ns/iter"
           }
         ]
