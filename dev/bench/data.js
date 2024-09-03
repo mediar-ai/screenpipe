@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725386611203,
+  "lastUpdate": 1725386612929,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1327,6 +1327,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 16829262316,
             "range": "± 50842312",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "1152a96a6084bf48d411d9863b050d984ae80f01",
+          "message": "fix: uneven screen size fix ffmpeg",
+          "timestamp": "2024-09-03T10:49:11-07:00",
+          "tree_id": "2add8746435a8dfc6bb30e831dbf7e62f9438923",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/1152a96a6084bf48d411d9863b050d984ae80f01"
+        },
+        "date": 1725386612484,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16961374783,
+            "range": "± 606318730",
             "unit": "ns/iter"
           }
         ]
