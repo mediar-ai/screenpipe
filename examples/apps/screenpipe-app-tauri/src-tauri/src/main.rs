@@ -259,7 +259,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let restart_interval_str = restart_interval.to_string();
     if restart_interval > 0 {
         args.push("--restart-interval");
-        args.push(&restart_interval_str);
+        // args.push(&restart_interval_str);
+        args.push("0"); // HACK disabled for now bcs leaking
     }
 
     if !pipes.is_empty() {

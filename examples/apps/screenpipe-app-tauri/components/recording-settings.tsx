@@ -147,7 +147,7 @@ export function RecordingSettings({
         monitorId: localSettings.monitorId,
         audioDevices: localSettings.audioDevices,
         usePiiRemoval: localSettings.usePiiRemoval,
-        restartInterval: localSettings.restartInterval,
+        // restartInterval: localSettings.restartInterval,
         disableAudio: localSettings.disableAudio,
       };
       console.log("Settings to update:", settingsToUpdate);
@@ -410,7 +410,7 @@ export function RecordingSettings({
                 </Label>
               </div>
             </div>
-            <div className="flex flex-col space-y-2">
+            {/* <div className="flex flex-col space-y-2">
               <Label
                 htmlFor="restartInterval"
                 className="flex items-center space-x-2"
@@ -446,7 +446,7 @@ export function RecordingSettings({
                 className="w-full"
                 placeholder="Enter restart interval in minutes (0 to disable)"
               />
-            </div>
+            </div> */}
 
             <div className="flex flex-col space-y-2">
               <div className="flex items-center space-x-2">
