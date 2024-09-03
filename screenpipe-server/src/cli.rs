@@ -69,7 +69,7 @@ pub struct Cli {
     pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
-    #[arg(short = 'd', long, default_value_t = 30)]
+    #[arg(short = 'd', long, default_value_t = 120)]
     pub audio_chunk_duration: u64,
 
     /// Port to run the server on
@@ -148,7 +148,7 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub use_pii_removal: bool,
 
-    /// Restart recording process every X minutes (0 means no periodic restart)
+    /// Restart recording process every X minutes (0 means no periodic restart) - NOT RECOMMENDED
     #[arg(long, default_value_t = 0)]
     pub restart_interval: u64,
 }

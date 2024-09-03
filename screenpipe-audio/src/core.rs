@@ -187,6 +187,7 @@ async fn run_ffmpeg(
     duration: Duration,
 ) -> Result<()> {
     debug!("Starting FFmpeg process");
+
     let mut command = Command::new(find_ffmpeg_path().unwrap());
     command
         .args(&[
@@ -195,13 +196,17 @@ async fn run_ffmpeg(
             "-ar",
             &sample_rate.to_string(),
             "-ac",
-            &channels.to_string(),
+            &if channels > 2 { 2 } else { channels }.to_string(),
             "-i",
             "pipe:0",
             "-c:a",
             "aac",
             "-b:a",
-            "128k",
+            "64k", // Reduced bitrate for higher compression
+            "-profile:a",
+            "aac_low", // Use AAC-LC profile for better compatibility
+            "-movflags",
+            "+faststart", // Optimize for web streaming
             "-f",
             "mp4",
             output_path.to_str().unwrap(),
@@ -412,10 +417,11 @@ pub async fn record_and_transcribe(
         error!("Error joining audio thread: {:?}", e);
     }
 
-    tokio::fs::File::open(&output_path_clone_2.to_path_buf())
-        .await?
-        .sync_all()
-        .await?;
+    // Commented to chekc if its the "Access is denied on windows" error
+    // tokio::fs::File::open(&output_path_clone_2.to_path_buf())
+    //     .await?
+    //     .sync_all()
+    //     .await?;
 
     debug!("Sending audio to audio model");
     if let Err(e) = whisper_sender.send(AudioInput {

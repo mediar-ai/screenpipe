@@ -10,12 +10,11 @@ class Screenpipe < Formula
       sha256 "6b6b540d9565a13bbf52f8c14224dc7876f40861044313aa8c992b866e015973" # arm64
     else
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
-      sha256 "538fdeb9024a041d29b6647a47381ef701c0fe46841b5bced98038fffa816fd4" # x86_64
+      sha256 "8acabe46b935ac8ed6607a43a5d47e81b5647ee2c52193bcb3b646628a4ced9b" # x86_64
     end
   end
   
   depends_on "ffmpeg"
-  depends_on "tesseract"
 
   def install
     bin.install Dir["bin/*"]

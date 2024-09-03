@@ -255,8 +255,9 @@ async fn record_audio(
                     let device_control_clone = device_control_clone.clone();
 
                     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+                    let sanitized_device_name = audio_device_clone.to_string().replace(['/', '\\'], "_");
                     let file_path = PathBuf::from(&*output_path_clone)
-                        .join(format!("{}_{}.mp4", audio_device_clone, new_file_name))
+                        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
                         .to_str()
                         .expect("Failed to create valid path")
                         .to_string();
