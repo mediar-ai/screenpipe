@@ -8,7 +8,7 @@ use std::fs::{self, File};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use xcap::Monitor;
 
@@ -51,7 +51,7 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
 }
 
 pub async fn capture_screenshot(
-    monitor: Arc<Monitor>,
+    weak_monitor: Weak<Monitor>,
 ) -> Result<
     (
         DynamicImage,
@@ -61,6 +61,10 @@ pub async fn capture_screenshot(
     ),
     anyhow::Error,
 > {
+    let monitor = weak_monitor
+        .upgrade()
+        .ok_or("Monitor no longer exists")
+        .unwrap();
     // info!("Starting screenshot capture for monitor: {:?}", monitor);
     let capture_start = Instant::now();
     let buffer = monitor.capture_image().map_err(|e| {
@@ -76,9 +80,12 @@ pub async fn capture_screenshot(
         Ok(images) => {
             // info!("Successfully captured {} window images", images.len());
             images
-        },
+        }
         Err(e) => {
-            warn!("Failed to capture window images: {}. Continuing with empty result.", e);
+            warn!(
+                "Failed to capture window images: {}. Continuing with empty result.",
+                e
+            );
             Vec::new()
         }
     };
@@ -178,4 +185,3 @@ pub async fn save_text_files(
         }
     }
 }
-

@@ -4,7 +4,7 @@ use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde_json;
 use std::{
     collections::HashMap,
-    sync::Arc,
+    sync::{Arc, Weak},
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Sender;
@@ -63,11 +63,13 @@ pub async fn continuous_capture(
     let mut max_avg_value = 0.0;
 
     let monitor = get_monitor_by_id(monitor_id).await.unwrap();
-    let arc_monitor = Arc::new(monitor.clone());
+    let arc_monitor = Arc::new(monitor);
+    let weak_monitor = Arc::downgrade(&arc_monitor);
+    let weak_ocr_engine = Arc::downgrade(&ocr_engine);
 
     loop {
-        let arc_monitor = arc_monitor.clone();
-        let capture_result = match capture_screenshot(arc_monitor).await {
+        let weak_monitor = weak_monitor.clone();
+        let capture_result = match capture_screenshot(weak_monitor).await {
             Ok((image, window_images, image_hash, _capture_duration)) => {
                 Some((image, window_images, image_hash))
             }
@@ -136,7 +138,7 @@ pub async fn continuous_capture(
                     result_tx: max_avg_frame.result_tx.clone(),
                 };
 
-                let ocr_engine_clone = ocr_engine.clone();
+                let ocr_engine_clone = weak_ocr_engine.clone();
 
                 if let Err(e) = process_ocr_task(
                     ocr_task_data.image,
@@ -181,7 +183,7 @@ pub async fn process_ocr_task(
     timestamp: Instant,
     result_tx: Sender<CaptureResult>,
     save_text_files_flag: bool,
-    ocr_engine: Arc<OcrEngine>,
+    ocr_engine: Weak<OcrEngine>,
 ) -> Result<(), std::io::Error> {
     let start_time = Instant::now();
     debug!(
@@ -196,20 +198,30 @@ pub async fn process_ocr_task(
 
     for (window_image, window_app_name, window_name, focused) in window_images {
         let window_image_arc = Arc::new(window_image);
-        let (window_text, window_json_output, confidence) = match &*ocr_engine {
-            OcrEngine::Unstructured => perform_ocr_cloud(&window_image_arc)
-                .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-            OcrEngine::Tesseract => perform_ocr_tesseract(&window_image_arc),
-            #[cfg(target_os = "windows")]
-            OcrEngine::WindowsNative => perform_ocr_windows(&window_image_arc).await,
-            #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&window_image_arc)),
-            _ => {
+        let (window_text, window_json_output, confidence) = match ocr_engine.upgrade() {
+            Some(engine) => match &*engine {
+                OcrEngine::Unstructured => perform_ocr_cloud(&window_image_arc)
+                    .await
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
+                OcrEngine::Tesseract => perform_ocr_tesseract(&window_image_arc),
+                #[cfg(target_os = "windows")]
+                OcrEngine::WindowsNative => perform_ocr_windows(&window_image_arc).await,
+                #[cfg(target_os = "macos")]
+                OcrEngine::AppleNative => {
+                    parse_apple_ocr_result(&perform_ocr_apple(&window_image_arc))
+                }
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Unsupported OCR engine",
+                    ))
+                }
+            },
+            None => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "Unsupported OCR engine",
-                ))
+                    "OCR engine not found",
+                ));
             }
         };
 
@@ -258,7 +270,11 @@ pub async fn process_ocr_task(
     }
 
     let duration = start_time.elapsed();
-    let avg_confidence = if window_count > 0 { total_confidence / window_count as f64 } else { 0.0 };
+    let avg_confidence = if window_count > 0 {
+        total_confidence / window_count as f64
+    } else {
+        0.0
+    };
     debug!(
         "OCR task processed frame {} with {} windows in {:?}, average confidence: {:.2}",
         frame_number,
@@ -269,7 +285,7 @@ pub async fn process_ocr_task(
     Ok(())
 }
 
-fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> { 
+fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
     // TODO: this function uses a TONN of memory and is not efficient and we should use binary serialization instead
     let parsed_output: Vec<HashMap<String, String>> = serde_json::from_str(json_output)
         .unwrap_or_else(|e| {
