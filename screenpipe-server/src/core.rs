@@ -53,7 +53,7 @@ pub async fn start_continuous_recording(
     let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);
 
-    let is_running_video = Arc::clone(&vi   on_control);
+    let is_running_video = Arc::clone(&vision_control);
 
     let output_path_video = Arc::clone(&output_path);
     let output_path_audio = Arc::clone(&output_path);
@@ -96,7 +96,8 @@ pub async fn start_continuous_recording(
         )
         .await
     });
-
+    
+    // Wait for both tasks to complete
     let video_result = video_handle.await;
     let audio_result = audio_handle.await;
 
