@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725386988624,
+  "lastUpdate": 1725387018123,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1139,6 +1139,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1941847125,
             "range": "± 50054400",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "aebb9adbd09d50e29f009a6b56f7e45011e3d0c9",
+          "message": "fix: disable restart interval in app ui for now",
+          "timestamp": "2024-09-03T10:55:31-07:00",
+          "tree_id": "6113e72d366d35f03379b264294bc4df2c7c60df",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/aebb9adbd09d50e29f009a6b56f7e45011e3d0c9"
+        },
+        "date": 1725387017609,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2064829270,
+            "range": "± 71958479",
             "unit": "ns/iter"
           }
         ]
