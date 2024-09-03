@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725309906594,
+  "lastUpdate": 1725385750027,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1019,6 +1019,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2243576854,
             "range": "± 316552684",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b1085f26b51d51d592311279b196448492c7f098",
+          "message": "Merge pull request #252 from ac3xx/update-chatbot-model\n\nUpdated vercel-ai-chatbot model to gpt-4o-mini",
+          "timestamp": "2024-09-03T10:35:13-07:00",
+          "tree_id": "d019182dc2893352a764ddce1cace8c0be33d48b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b1085f26b51d51d592311279b196448492c7f098"
+        },
+        "date": 1725385749292,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1937708958,
+            "range": "± 24706222",
             "unit": "ns/iter"
           }
         ]
