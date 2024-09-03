@@ -58,8 +58,8 @@ const config = {
 		],
 	},
 	macos: {
-		// ffmpegName: 'ffmpeg-7.0-macOS-default',
-		// ffmpegUrl: 'https://master.dl.sourceforge.net/project/avbuild/macOS/ffmpeg-7.0-macOS-default.tar.xz?viasf=1',
+		ffmpegName: 'ffmpeg-7.0-macOS-default',
+		ffmpegUrl: 'https://master.dl.sourceforge.net/project/avbuild/macOS/ffmpeg-7.0-macOS-default.tar.xz?viasf=1',
 	},
 }
 
@@ -317,12 +317,12 @@ if (platform == 'macos') {
 
 
 	// Setup FFMPEG
-	// if (!(await fs.exists(config.ffmpegRealname))) {
-	// 	await $`wget -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
-	// 	await $`tar xf ${config.macos.ffmpegName}.tar.xz`
-	// 	await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-	// 	await $`rm ${config.macos.ffmpegName}.tar.xz`
-	// }
+	if (!(await fs.exists(config.ffmpegRealname))) {
+		await $`wget -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
+		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
+		await $`rm ${config.macos.ffmpegName}.tar.xz`
+	}
 }
 
 // Nvidia
