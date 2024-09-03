@@ -2,10 +2,11 @@ use log::{debug, error};
 use std::path::PathBuf;
 use which::which;
 use ffmpeg_sidecar::{
-    check_latest_version, download_ffmpeg_package, ffmpeg_download_url,
-    ffmpeg_is_installed, ffmpeg_version, sidecar_dir, unpack_ffmpeg
+    command::ffmpeg_is_installed,
+    download::{check_latest_version, download_ffmpeg_package, ffmpeg_download_url, unpack_ffmpeg},
+    paths::sidecar_dir,
+    version::ffmpeg_version,
 };
-
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
