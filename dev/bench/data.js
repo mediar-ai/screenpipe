@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725399663178,
+  "lastUpdate": 1725399665979,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1789,6 +1789,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 16924250138,
             "range": "± 125632146",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "2a2e2c23fcceac1e9437f455b5e86688b2d13b66",
+          "message": "fix issue where audio device on windows contains slashes",
+          "timestamp": "2024-09-03T14:27:10-07:00",
+          "tree_id": "9309dd6f506fac703ae2472f90fbce934b3a46f3",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/2a2e2c23fcceac1e9437f455b5e86688b2d13b66"
+        },
+        "date": 1725399664946,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16929985606,
+            "range": "± 46944693",
             "unit": "ns/iter"
           }
         ]
