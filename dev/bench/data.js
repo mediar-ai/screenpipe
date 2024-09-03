@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725398840584,
+  "lastUpdate": 1725399663178,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1289,6 +1289,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2141132812,
             "range": "± 237530115",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "2a2e2c23fcceac1e9437f455b5e86688b2d13b66",
+          "message": "fix issue where audio device on windows contains slashes",
+          "timestamp": "2024-09-03T14:27:10-07:00",
+          "tree_id": "9309dd6f506fac703ae2472f90fbce934b3a46f3",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/2a2e2c23fcceac1e9437f455b5e86688b2d13b66"
+        },
+        "date": 1725399662099,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2049338625,
+            "range": "± 349347347",
             "unit": "ns/iter"
           }
         ]
