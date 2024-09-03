@@ -202,6 +202,8 @@ async fn run_ffmpeg(
             "aac",
             "-b:a",
             "128k",
+            "-aac_coder",
+            "fast",
             "-f",
             "mp4",
             output_path.to_str().unwrap(),
