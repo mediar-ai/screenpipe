@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725396959674,
+  "lastUpdate": 1725398838897,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -1259,6 +1259,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2023057250,
             "range": "± 86704007",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "60305d3554567efbcd256b52e865123f64e71145",
+          "message": "fix: issue when audio device has more than 3 channels",
+          "timestamp": "2024-09-03T14:13:28-07:00",
+          "tree_id": "5a8105a1feadafb2e5c0d549ba61ad3c65625397",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/60305d3554567efbcd256b52e865123f64e71145"
+        },
+        "date": 1725398838232,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2141132812,
+            "range": "± 237530115",
             "unit": "ns/iter"
           }
         ]
