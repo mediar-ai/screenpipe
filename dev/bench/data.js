@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725482479537,
+  "lastUpdate": 1725482481561,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -3637,6 +3637,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 16675061319,
             "range": "± 45042285",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "9026883956d01c8c89a42e96ebc32ae3023888c1",
+          "message": "fix: properly apple sign ffmpeg bin",
+          "timestamp": "2024-09-04T13:26:29-07:00",
+          "tree_id": "1544869dd385d8af5c705a55716d30c89b9b47fe",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/9026883956d01c8c89a42e96ebc32ae3023888c1"
+        },
+        "date": 1725482480890,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 16888042787,
+            "range": "± 30330926",
             "unit": "ns/iter"
           }
         ]
