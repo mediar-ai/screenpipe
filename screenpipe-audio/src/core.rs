@@ -13,6 +13,8 @@ use std::{fmt, thread};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::sync::mpsc::{self, UnboundedSender};
+use crate::vad_engine::{VadEngineEnum, VadEngine, create_vad_engine};
+
 
 use crate::AudioInput;
 #[cfg(target_os = "macos")]
@@ -228,9 +230,12 @@ async fn run_ffmpeg(
                     debug!("Duration exceeded, breaking loop");
                     break;
                 }
-                if let Err(e) = stdin.write_all(&data).await {
-                    error!("Failed to write audio data to FFmpeg: {}", e);
-                    break;
+                // Apply VAD to the audio data
+                if vad.is_voice_segment(&data).await {
+                    if let Err(e) = stdin.write_all(&data).await {
+                        error!("Failed to write audio data to FFmpeg: {}", e);
+                        break;
+                    }
                 }
             }
             _ = tokio::time::sleep(Duration::from_millis(100)) => {
@@ -274,6 +279,8 @@ pub async fn record_and_transcribe(
     let (cpal_audio_device, config) = get_device_and_config(&audio_device).await?;
     let sample_rate = config.sample_rate().0;
     let channels = config.channels() as u16;
+    let vad = create_vad_engine(VadEngineEnum::SileroVad)?; // Create the VAD Engine Instance 
+
     debug!(
         "Audio device config: sample_rate={}, channels={}",
         sample_rate, channels
@@ -309,7 +316,9 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
+                        if vad.is_voice_segment(bytemuck::cast_slice(data)).await {
+                            let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
+                        }
                     }
                 },
                 error_callback,
