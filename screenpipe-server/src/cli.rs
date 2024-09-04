@@ -2,6 +2,7 @@ use clap::Parser;
 use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use clap::ValueEnum;
+use screenpipe_audio::vad_engine::VadEngineEnum;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
@@ -170,6 +171,6 @@ pub struct Cli {
     pub restart_interval: u64,
 
     /// VAD engine to use for speech detection
-    #[arg(long, value_enum, default_value_t = CliVadEngine::WebRtc)]
+    #[arg(long, value_enum, default_value_t = CliVadEngine::Silero)] // or WebRtc
     pub vad_engine: CliVadEngine,
 }

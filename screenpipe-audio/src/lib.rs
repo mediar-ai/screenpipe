@@ -9,3 +9,4 @@ pub use core::{
 };
 pub use pcm_decode::pcm_decode;
 pub use stt::{create_whisper_channel, stt, AudioInput, TranscriptionResult, WhisperModel};
+pub use vad_engine::VadEngineEnum;

@@ -24,8 +24,6 @@ use crate::{
     AudioTranscriptionEngine,
 };
 
-use webrtc_vad::{Vad, VadMode};
-
 use hound::{WavSpec, WavWriter};
 use std::io::Cursor;
 
@@ -512,6 +510,7 @@ pub fn stt(
     file_path: &str,
     whisper_model: &WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    vad_engine: &mut dyn VadEngine,
 ) -> Result<String> {
     debug!("Starting speech to text for file: {}", file_path);
     let model = &whisper_model.model;
@@ -538,19 +537,14 @@ pub fn stt(
         pcm_data = resample(pcm_data, sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
-    // Initialize VAD
-    debug!("VAD: Initializing VAD");
-    let mut vad = Vad::new();
-    vad.set_mode(VadMode::Quality); // Set mode to very aggressive
-
-    // Filter out non-speech segments
-    debug!("VAD: Filtering out non-speech segments");
+    // Filter out non-speech segments using Silero VAD
+    debug!("Filtering out non-speech segments with VAD");
     let frame_size = 160; // 10ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
     for (frame_index, chunk) in pcm_data.chunks(frame_size).enumerate() {
         // Convert f32 to i16
         let i16_chunk: Vec<i16> = chunk.iter().map(|&x| (x * 32767.0) as i16).collect();
-        match vad.is_voice_segment(&i16_chunk) {
+        match vad_engine.is_voice_segment(&i16_chunk) {
             Ok(is_voice) => {
                 if is_voice {
                     // debug!("VAD: Speech detected in frame {}", frame_index);
@@ -738,9 +732,9 @@ pub async fn create_whisper_channel(
         UnboundedSender<TranscriptionResult>,
         UnboundedReceiver<TranscriptionResult>,
     ) = unbounded_channel();
-    let mut vad_engine: Box<dyn VadEngine> = match vad_engine {
+    let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
-        VadEngineEnum::Silero => Box::new(SileroVad::new().unwrap()),
+        VadEngineEnum::Silero => Box::new(SileroVad::new()?),
     };
     tokio::spawn(async move {
         loop {

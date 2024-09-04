@@ -34,6 +34,8 @@ chrono = { version = "0.4.31", features = ["serde"] }
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
+onnxruntime = { version = "0.0.15", features = ["download-binaries"] }
+ndarray = "0.15.1"
 tokenizers = { workspace = true }
 anyhow = "1.0.86"
 byteorder = "1.5.0"
