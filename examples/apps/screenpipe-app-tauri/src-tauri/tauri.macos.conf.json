@@ -15,9 +15,9 @@
                 "../../../../screenpipe-vision/lib/libscreenpipe_arm64.dylib"
             ],
             "entitlements": "entitlements.plist",
-            "signingIdentity": "-",
-            "hardenedRuntime": false,
-            "exceptionDomain": "com.screenpi.pe"
+            "hardenedRuntime": true,
+            "exceptionDomain": "screenpi.pe",
+            "provisioningProfile": null
         },
         "resources": {
             "ffmpeg/bin/*": "./"
