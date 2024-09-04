@@ -12,8 +12,76 @@ mod pipes {
     use reqwest::header::HeaderMap;
     use reqwest::header::HeaderValue;
     use reqwest::header::CONTENT_TYPE;
+    use std::collections::HashMap;
     use std::env;
     use std::rc::Rc;
+
+    use reqwest::Client;
+    use serde_json::Value;
+
+    #[op2]
+    #[string]
+    fn op_get_env(#[string] key: String) -> Option<String> {
+        env::var(&key).ok()
+    }
+
+    #[op2(async)]
+    #[string]
+    async fn op_fetch(
+        #[string] url: String,
+        #[serde] options: Option<Value>,
+    ) -> anyhow::Result<String> {
+        let client = Client::new();
+        let mut request = client.get(&url);
+
+        if let Some(opts) = options {
+            if let Some(method) = opts.get("method").and_then(|m| m.as_str()) {
+                request = match method.to_uppercase().as_str() {
+                    "GET" => client.get(&url),
+                    "POST" => client.post(&url),
+                    "PUT" => client.put(&url),
+                    "DELETE" => client.delete(&url),
+                    // Add other methods as needed
+                    _ => return Err(anyhow::anyhow!("Unsupported HTTP method")),
+                };
+            }
+
+            if let Some(headers) = opts.get("headers").and_then(|h| h.as_object()) {
+                for (key, value) in headers {
+                    if let Some(value_str) = value.as_str() {
+                        request = request.header(key, value_str);
+                    }
+                }
+            }
+
+            if let Some(body) = opts.get("body").and_then(|b| b.as_str()) {
+                request = request.body(body.to_string());
+            }
+        }
+
+        let response = match request.send().await {
+            Ok(resp) => resp,
+            Err(e) => return Err(anyhow::anyhow!(e)),
+        };
+
+        let status = response.status();
+        let headers = response.headers().clone();
+        let text = match response.text().await {
+            Ok(t) => t,
+            Err(e) => return Err(anyhow::anyhow!(e)),
+        };
+
+        let result = serde_json::json!({
+            "status": status.as_u16(),
+            "statusText": status.to_string(),
+            "headers": headers.iter()
+                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                .collect::<HashMap<String, String>>(),
+            "text": text,
+        });
+
+        Ok(result.to_string())
+    }
 
     #[op2(async)]
     #[string]
@@ -177,6 +245,8 @@ mod pipes {
             op_fetch_get,
             op_fetch_post,
             op_set_timeout,
+            op_fetch,
+            op_get_env,
         ]
     }
 
@@ -188,6 +258,18 @@ mod pipes {
             extensions: vec![runjs::init_ops()],
             ..Default::default()
         });
+
+        // add all env var starting with SCREENPIPE_ to the global scope in process.env
+
+        // first init the process.env object
+        js_runtime.execute_script("main", "globalThis.process = { env: {} }")?;
+
+        for (key, value) in env::vars() {
+            if key.starts_with("SCREENPIPE_") {
+                js_runtime
+                    .execute_script("main", format!("process.env['{}'] = '{}'", key, value))?;
+            }
+        }
 
         let mod_id = js_runtime.load_main_es_module(&main_module).await?;
         let result = js_runtime.mod_evaluate(mod_id);
