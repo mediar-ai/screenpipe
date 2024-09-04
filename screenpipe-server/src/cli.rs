@@ -69,7 +69,7 @@ pub struct Cli {
     pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
-    #[arg(short = 'd', long, default_value_t = 120)]
+    #[arg(short = 'd', long, default_value_t = 30)]
     pub audio_chunk_duration: u64,
 
     /// Port to run the server on
