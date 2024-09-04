@@ -24,7 +24,6 @@ add this to `.vscode/settings.json`:
     "rust-analyzer.cargo.extraEnv": {
         "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
     },
-    // add env to integrated terminal
     "terminal.integrated.env.osx": {
         "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
     }
