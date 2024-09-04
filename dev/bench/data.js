@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725477608674,
+  "lastUpdate": 1725482479537,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -2129,6 +2129,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2306854646,
             "range": "± 312979132",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "9026883956d01c8c89a42e96ebc32ae3023888c1",
+          "message": "fix: properly apple sign ffmpeg bin",
+          "timestamp": "2024-09-04T13:26:29-07:00",
+          "tree_id": "1544869dd385d8af5c705a55716d30c89b9b47fe",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/9026883956d01c8c89a42e96ebc32ae3023888c1"
+        },
+        "date": 1725482478592,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1935849541,
+            "range": "± 120802328",
             "unit": "ns/iter"
           }
         ]
