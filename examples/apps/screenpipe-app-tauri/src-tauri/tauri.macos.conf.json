@@ -19,11 +19,9 @@
             "exceptionDomain": "screenpi.pe",
             "provisioningProfile": null
         },
-        "resources": {
-            "ffmpeg/bin/*": "./"
-        },
         "externalBin": [
-            "screenpipe"
+            "screenpipe",
+            "ffmpeg"
         ]
     }
 }

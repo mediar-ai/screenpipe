@@ -176,8 +176,8 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
         with:
-          tagName: v__VERSION__ # the action automatically replaces __VERSION__ with the app version.
-          releaseName: "v__VERSION__"
+          tagName: app-v__VERSION__ # the action automatically replaces __VERSION__ with the app version.
+          releaseName: "App v__VERSION__"
           releaseBody: "What's new? 🎉📣"
           releaseDraft: true
           prerelease: true
