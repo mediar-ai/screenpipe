@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use sidecar::SidecarManager;
 use tauri::Config;
 
 use serde_json::Value;
@@ -9,10 +10,7 @@ use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::time::Duration;
 use tauri::Manager;
-use tauri::State;
 use tauri::Wry;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
@@ -20,12 +18,10 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
-use tauri_plugin_shell::process::CommandChild;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
-use tokio::time::sleep;
+use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
@@ -36,304 +32,12 @@ mod analytics;
 use crate::analytics::start_analytics;
 
 mod commands;
-
-pub use commands::reset_screen_permissions;
+mod sidecar;
 pub use commands::open_screen_capture_preferences;
-struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
-
-#[tauri::command]
-async fn kill_all_sreenpipes(
-    state: State<'_, SidecarState>,
-    _app: tauri::AppHandle,
-) -> Result<(), String> {
-    debug!("Killing screenpipe");
-
-    const MAX_RETRIES: u32 = 3;
-    const RETRY_DELAY: Duration = Duration::from_secs(1);
-
-    for attempt in 1..=MAX_RETRIES {
-        if let Some(child) = state.0.lock().unwrap().take() {
-            if let Err(e) = child.kill() {
-                error!("Failed to kill child process (attempt {}): {}", attempt, e);
-            }
-        }
-
-        // Hard kill the sidecar
-        let kill_result = async {
-            #[cfg(not(target_os = "windows"))]
-            {
-                tokio::process::Command::new("pkill")
-                    .arg("-f")
-                    .arg("screenpipe")
-                    .output()
-                    .await
-            }
-            #[cfg(target_os = "windows")]
-            {
-                tokio::process::Command::new("taskkill")
-                    .args(&["/F", "/IM", "screenpipe.exe"])
-                    .output()
-                    .await
-            }
-        }
-        .await;
-
-        match kill_result {
-            Ok(_) => {
-                debug!("Successfully killed screenpipe processes");
-                return Ok(());
-            }
-            Err(e) => {
-                error!(
-                    "Failed to kill screenpipe processes (attempt {}): {}",
-                    attempt, e
-                );
-                if attempt < MAX_RETRIES {
-                    sleep(RETRY_DELAY).await;
-                }
-            }
-        }
-    }
-
-    Err("Failed to kill screenpipe processes after multiple attempts".to_string())
-}
-
-#[tauri::command]
-async fn spawn_screenpipe(
-    state: State<'_, SidecarState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let sidecar_running = state.0.lock().unwrap().is_some();
-    if !sidecar_running {
-        // Spawn the sidecar
-        match spawn_sidecar(&app) {
-            Ok(child) => {
-                // Update the state after spawning
-                state.0.lock().unwrap().replace(child);
-                debug!("Spawned sidecar through CLI");
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to spawn sidecar: {}", e);
-                Err(format!("Failed to spawn sidecar: {}", e))
-            }
-        }
-    } else {
-        debug!("Sidecar already running");
-        Ok(())
-    }
-}
-
-fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    let sidecar = app.shell().sidecar("screenpipe").unwrap();
-    // Get the current settings
-    let stores = app.state::<StoreCollection<Wry>>();
-    let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-
-    let path = base_dir.join("store.bin");
-
-    let audio_transcription_engine =
-        with_store(app.clone(), stores.clone(), path.clone(), |store| {
-            Ok(store
-                .get("audioTranscriptionEngine")
-                .and_then(|v| v.as_str().map(String::from)))
-        })
-        .map_err(|e| e.to_string())?
-        .unwrap_or(String::from("default"));
-
-    let ocr_engine = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("ocrEngine")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
-
-    let monitor_id = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("monitorId")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
-
-    let audio_devices = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("audioDevices")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or_default();
-
-    let use_pii_removal = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("usePiiRemoval")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
-    let restart_interval = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("restartInterval")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0))
-    })
-    .map_err(|e| e.to_string())?;
-    let pipes = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("installedPipes")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-.unwrap_or_default();
-
-    debug!("pipes: {:?}", pipes);
-    let port = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("port")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(3030))
-    })
-    .map_err(|e| e.to_string())?;
-
-    let data_dir = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("dataDir")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
-
-    let disable_audio = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("disableAudio")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
-
-    let port_str = port.to_string();
-    let mut args = vec!["--port", port_str.as_str()];
-    // if macos do --fps 0.2
-    if cfg!(target_os = "macos") {
-        args.push("--fps");
-        args.push("0.2");
-    }
-
-    if data_dir != "default" {
-        args.push("--data-dir");
-        let dir = data_dir.as_str();
-        args.push(dir);
-    }
-
-    if audio_transcription_engine != "default" {
-        args.push("--audio-transcription-engine");
-        let model = audio_transcription_engine.as_str();
-        args.push(model);
-    }
-
-    if ocr_engine != "default" {
-        args.push("--ocr-engine");
-        let model = ocr_engine.as_str();
-        args.push(model);
-    }
-    if monitor_id != "default" {
-        args.push("--monitor-id");
-        let id = monitor_id.as_str();
-        args.push(id);
-    }
-
-    if !audio_devices.is_empty() && audio_devices[0] != Value::String("default".to_string()) {
-        for device in &audio_devices {
-            args.push("--audio-device");
-            args.push(device.as_str().unwrap());
-        }
-    }
-
-    if use_pii_removal {
-        args.push("--use-pii-removal");
-    }
-
-    let restart_interval_str = restart_interval.to_string();
-    if restart_interval > 0 {
-        args.push("--restart-interval");
-        // args.push(&restart_interval_str);
-        args.push("0"); // HACK disabled for now bcs leaking
-    }
-
-    if !pipes.is_empty() {
-        info!("adding pipes: {:?}", pipes);
-        let mut added_pipes = std::collections::HashSet::new();
-        for pipe in &pipes {
-            if let Some(obj) = pipe.as_object() {
-                if let Some(main_file) = obj.get("mainFile").and_then(Value::as_str) {
-                    if added_pipes.insert(main_file) {
-                        args.push("--pipe");
-                        args.push(main_file);
-                        info!("adding pipe: {}", main_file);
-                    }
-                }
-            }
-        }
-    }
-
-    if disable_audio {
-        args.push("--disable-audio");
-    }
-
-    // hardcode TESSDATA_PREFIX for windows
-    if cfg!(windows) {
-        let exe_dir = env::current_exe()
-            .expect("Failed to get current executable path")
-            .parent()
-            .expect("Failed to get parent directory of executable")
-            .to_path_buf();
-        let tessdata_path = exe_dir.join("tessdata");
-        let c = sidecar.env("TESSDATA_PREFIX", tessdata_path).args(&args);
-
-        let (_, child) = c.spawn().map_err(|e| {
-            error!("Failed to spawn sidecar: {}", e);
-            e.to_string()
-        })?;
-
-        info!("Spawned sidecar with args: {:?}", args);
-
-        return Ok(child);
-    }
-
-    let command = sidecar.args(&args);
-
-
-    let result = command.spawn();
-    if let Err(e) = result {
-        error!("Failed to spawn sidecar: {}", e);
-        return Err(e.to_string());
-    }
-
-    #[allow(unused_mut, unused_variables)]
-    let (mut rx, child) = result.unwrap();
-
-    // only in production mode because it breaks the "bun tauri dev"
-    // #[cfg(not(debug_assertions))]
-    tauri::async_runtime::spawn(async move {
-        #[allow(unused_variables)]
-        let mut i = 0;
-        while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stdout(line) = event {
-                print!("{}", String::from_utf8(line).unwrap());
-                i += 1;
-            } else if let CommandEvent::Stderr(line) = event {
-                error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
-            }
-        }
-    });
-
-    info!("Spawned sidecar with args: {:?}", args);
-
-    Ok(child)
-}
+pub use commands::reset_screen_permissions;
+pub use sidecar::kill_all_sreenpipes;
+pub use sidecar::spawn_screenpipe;
+pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
@@ -348,7 +52,7 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
 async fn main() {
     let _ = fix_path_env::fix();
 
-    let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
+    let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
@@ -523,22 +227,35 @@ async fn main() {
             });
 
             // Dev mode check and sidecar spawn
-            let mut use_dev_mode = false;
-            let _ = with_store(app.handle().clone(), stores, path, |store| {
-                use_dev_mode = store
+
+            let use_dev_mode = with_store(app.handle().clone(), stores.clone(), path.clone(), |store| {
+                Ok(store
                     .get("devMode")
-                    .unwrap_or(&Value::Bool(false))
-                    .as_bool()
-                    .unwrap_or(false);
-                Ok(())
-            });
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false))
+            })
+            .unwrap_or(false);
+
+            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
+            app.manage(sidecar_manager.clone());
+
+            let app_handle = app.handle().clone();
 
             if !use_dev_mode {
-                let sidecar_state = app.state::<SidecarState>();
-                let app_handle = app.handle().clone();
-                let child = spawn_sidecar(&app_handle).unwrap();
-                let mut sidecar = sidecar_state.0.lock().unwrap();
-                *sidecar = Some(child);
+                tauri::async_runtime::spawn(async move {
+                    let mut manager = sidecar_manager.lock().await;
+                    if let Err(e) = manager.spawn(&app_handle).await {
+                        error!("Failed to spawn initial sidecar: {}", e);
+                    }
+
+                    // Spawn a background task to check and restart periodically
+                    let mut manager = sidecar_manager.lock().await;
+                    if let Err(e) = manager.check_and_restart(&app_handle).await {
+                        error!("Failed to restart sidecar: {}", e);
+                    }
+                });
+            } else {
+                debug!("Dev mode enabled, skipping sidecar spawn and restart");
             }
 
             Ok(())
