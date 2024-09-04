@@ -322,18 +322,20 @@ if (platform == 'macos') {
 		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.tar.xz`
-
-		// Move and rename ffmpeg and ffprobe binaries
-		const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
-
-		// For x86_64
-		await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
-
-		// For arm64
-		await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
-
-		console.log('Moved and renamed ffmpeg binary for externalBin');
+	} else {
+		console.log('FFMPEG already exists');
 	}
+
+	// Move and rename ffmpeg and ffprobe binaries
+	const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
+
+	// For x86_64
+	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
+
+	// For arm64
+	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
+
+	console.log('Moved and renamed ffmpeg binary for externalBin');
 }
 
 // Nvidia
