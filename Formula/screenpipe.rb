@@ -1,21 +1,20 @@
 class Screenpipe < Formula
   desc "Library to build personalized AI powered by what you've seen, said, or heard."
   homepage "https://github.com/mediar-ai/screenpipe"
-  url "https://github.com/mediar-ai/screenpipe/releases/download/v0.1.70/screenpipe-0.1.70-aarch64-apple-darwin.tar.gz"
-  version "0.1.70"
+  url "https://github.com/mediar-ai/screenpipe/releases/download/v0.1.75/screenpipe-0.1.75-aarch64-apple-darwin.tar.gz"
+  version "0.1.75"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
-      sha256 "8676a000b7bd63d1140d33565c4007e47e1af104f086ba5f4cfaba938e71c65a" # arm64
+      sha256 "676312b29923fd80a4b5ba6210364a899d56e17ddcd0a0924ccb11b592ae1bbb" # arm64
     else
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
-      sha256 "ab7058a7c288ee242c16c9c12a7886581303d224532c5676fe38b3a0457ee614" # x86_64
+      sha256 "3ba1c0421bff3c3b2aec8f3ea364f086bdca0574eb3057151253aa59c4a5a1dc" # x86_64
     end
   end
   
   depends_on "ffmpeg"
-  depends_on "tesseract"
 
   def install
     bin.install Dir["bin/*"]

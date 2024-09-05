@@ -21,6 +21,7 @@ pub fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(Vec<f32
 
     // Create a probe hint using the file's extension. [Optional]
     let hint = symphonia::core::probe::Hint::new();
+    // hint.with_extension("mp4");
 
     // Use the default options for metadata and format readers.
     let meta_opts: symphonia::core::meta::MetadataOptions = Default::default();
@@ -30,6 +31,12 @@ pub fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(Vec<f32
     let probed = symphonia::default::get_probe().format(&hint, mss, &fmt_opts, &meta_opts)?;
     // Get the instantiated format reader.
     let mut format = probed.format;
+
+    // Debug log the format information
+    debug!(
+        "Detected format: {:?}",
+        format.metadata().current().unwrap()
+    );
 
     // Find the first audio track with a known (decodeable) codec.
     let track = format

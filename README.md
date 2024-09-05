@@ -458,7 +458,7 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
     - [ ] Camera
     - [ ] Keyboard
     - [x] Browser
-    - [ ] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Deno Typescript engine within screenpipe on your computer
+    - [x] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Deno Typescript engine within screenpipe on your computer
 - [x] screenshots + OCR with different engines to optimise privacy, quality, or energy consumption
   - [x] tesseract
   - [x] Windows native OCR
@@ -466,10 +466,8 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
   - [x] unstructured.io
   - [ ] screenpipe screen/audio specialised LLM
 - [x] audio + STT (works with multi input devices, like your iPhone + mac mic, many STT engines)
-  - [x] Linux, MacOS, Windows input
-  - [x] Linux output
-  - [x] MacOS output 
-  - [ ] Windows output (shipping on 19 august)
+  - [x] Linux, MacOS, Windows input & output devices
+  - [x] iPhone microphone
 - [x] [remote capture](https://github.com/mediar-ai/screenpipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
@@ -480,12 +478,11 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
 - [ ] multimodal embeddings
 - [ ] cloud storage options (s3, pgsql, etc.)
 - [x] cloud computing options (deepgram for audio, unstructured for OCR)
-- [ ] bug-free & stable
 - [x] custom storage settings: customizable capture settings (fps, resolution)
 - [ ] security
   - [x] window specific capture (e.g. can decide to only capture specific tab of cursor, chrome, obsidian, or only specific app)
   - [ ] encryption
-  - [ ] PII removal
+  - [x] PII removal
 - [ ] fast, optimised, energy-efficient modes
 - [ ] webhooks/events (for automations)
 - [ ] abstractions for multiplayer usage (e.g. aggregate sales team data, company team data, partner, etc.)

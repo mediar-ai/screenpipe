@@ -42,7 +42,7 @@ mod tests {
             timestamp,
             tx,
             false,
-            ocr_engine,
+            Arc::downgrade(&ocr_engine),
         )
         .await;
 

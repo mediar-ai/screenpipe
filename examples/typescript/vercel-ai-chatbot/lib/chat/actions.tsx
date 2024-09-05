@@ -58,7 +58,7 @@ async function submitUserMessage(content: string) {
   let textNode: undefined | React.ReactNode
 
   const result = await streamUI({
-    model: openai('gpt-3.5-turbo'),
+    model: openai('gpt-4o-mini'),
     initial: <SpinnerMessage />,
     system: `\
     You are a personal assistant that has access to the history of the laptop screentime and audio of the user. 

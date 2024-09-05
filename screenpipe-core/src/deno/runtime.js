@@ -32,6 +32,33 @@ const pipe = {
         const response = await ops.op_fetch_post(url, body);
         return JSON.parse(response);
     },
+    fetch: async (url, options) => {
+        try {
+            const responseString = await ops.op_fetch(url, options);
+            const response = JSON.parse(responseString);
+            return {
+                ok: response.status >= 200 && response.status < 300,
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers, // Use the headers directly without wrapping in Headers object
+                text: async () => response.text,
+                json: async () => {
+                    try {
+                        return JSON.parse(response.text);
+                    } catch (error) {
+                        console.error("Error parsing JSON:", error);
+                        return response.text;
+                    }
+                },
+            };
+        } catch (error) {
+            console.error("Fetch error:", error);
+            throw error;
+        }
+    },
+    sendNotification: (title, body) => {
+        return pipe.post("http://localhost:11435/notify", { title, body });
+    },
 };
 
 globalThis.setTimeout = (callback, delay) => {
@@ -39,3 +66,6 @@ globalThis.setTimeout = (callback, delay) => {
 };
 globalThis.console = console;
 globalThis.pipe = pipe;
+globalThis.fetch = pipe.fetch;
+
+

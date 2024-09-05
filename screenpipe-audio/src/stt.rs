@@ -8,6 +8,8 @@ use candle::{Device, IndexOp, Tensor};
 use candle_nn::{ops::softmax, VarBuilder};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, error, info};
+#[cfg(target_os = "macos")]
+use objc::rc::autoreleasepool;
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -716,12 +718,15 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
+use std::sync::atomic::{AtomicBool, Ordering};
+
 pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     vad_engine: VadEngineEnum,
 ) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
+    Arc<AtomicBool>, // Shutdown flag
 )> {
     let whisper_model = WhisperModel::new(audio_transcription_engine.clone())?;
     let (input_sender, mut input_receiver): (
@@ -736,8 +741,17 @@ pub async fn create_whisper_channel(
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
         VadEngineEnum::Silero => Box::new(SileroVad::new()?),
     };
+
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let shutdown_flag_clone = shutdown_flag.clone();
+
     tokio::spawn(async move {
         loop {
+            if shutdown_flag_clone.load(Ordering::Relaxed) {
+                info!("Whisper channel shutting down");
+                break;
+            }
+
             tokio::select! {
                 Some(input) = input_receiver.recv() => {
                     let timestamp = SystemTime::now()
@@ -745,22 +759,51 @@ pub async fn create_whisper_channel(
                         .expect("Time went backwards")
                         .as_secs();
 
-                    let transcription_result = match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine) {
-                        Ok(transcription) => TranscriptionResult {
-                            input: input.clone(),
-                            transcription: Some(transcription),
-                            timestamp,
-                            error: None,
-                        },
-                        Err(e) => {
-                            error!("STT error for input {}: {:?}", input.path, e);
-                            TranscriptionResult {
+                    let transcription_result = if cfg!(target_os = "macos") {
+                        #[cfg(target_os = "macos")]
+                        {
+                            autoreleasepool(|| {
+                                match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine) {
+                                    Ok(transcription) => TranscriptionResult {
+                                        input: input.clone(),
+                                        transcription: Some(transcription),
+                                        timestamp,
+                                        error: None,
+                                    },
+                                    Err(e) => {
+                                        error!("STT error for input {}: {:?}", input.path, e);
+                                        TranscriptionResult {
+                                            input: input.clone(),
+                                            transcription: None,
+                                            timestamp,
+                                            error: Some(e.to_string()),
+                                        }
+                                    },
+                                }
+                            })
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            unreachable!("This code should not be reached on non-macOS platforms")
+                        }
+                    } else {
+                        match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine) {
+                            Ok(transcription) => TranscriptionResult {
                                 input: input.clone(),
-                                transcription: None,
+                                transcription: Some(transcription),
                                 timestamp,
-                                error: Some(e.to_string()),
-                            }
-                        },
+                                error: None,
+                            },
+                            Err(e) => {
+                                error!("STT error for input {}: {:?}", input.path, e);
+                                TranscriptionResult {
+                                    input: input.clone(),
+                                    transcription: None,
+                                    timestamp,
+                                    error: Some(e.to_string()),
+                                }
+                            },
+                        }
                     };
 
                     if output_sender.send(transcription_result).is_err() {
@@ -770,7 +813,8 @@ pub async fn create_whisper_channel(
                 else => break,
             }
         }
+        // Cleanup code here (if needed)
     });
 
-    Ok((input_sender, output_receiver))
+    Ok((input_sender, output_receiver, shutdown_flag))
 }

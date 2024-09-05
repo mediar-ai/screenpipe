@@ -80,7 +80,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg tesseract-ocr libtesseract-dev libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
 
       - name: Run STT benchmarks
         run: |
@@ -136,7 +136,7 @@ jobs:
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: STT Benchmarks
-          tool: "criterion"
+          tool: "cargo"
           output-file-path: ./cache/stt/stt_output.txt
           github-token: ${{ secrets.GH_PAGES_TOKEN }}
           auto-push: true

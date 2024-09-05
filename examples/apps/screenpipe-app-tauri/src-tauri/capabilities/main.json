@@ -6,6 +6,8 @@
     "main"
   ],
   "permissions": [
+    "core:event:allow-listen",
+    "core:event:default",
     "process:allow-restart",
     "process:allow-exit",
     "notification:default",

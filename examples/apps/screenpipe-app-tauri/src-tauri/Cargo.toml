@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.1.77"
+version = "0.1.85"
 description = ""
 authors = ["you"]
 license = ""
@@ -12,11 +12,11 @@ rust-version = "1.60"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "=2.0.0-rc.7", features = [] }
+tauri-build = { version = "=2.0.0-rc.8", features = [] }
 
 [dependencies]
 serde_json = "1.0"
-tauri = { version = "2.0.0-rc.8", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
+tauri = { version = "2.0.0-rc.9", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
 
 
 # Logging
@@ -54,6 +54,11 @@ sysinfo = "0.29.0"
 
 # hakc 
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
+
+# server
+axum = "0.6"
+serde = "1.0.160"
+
 
 tauri-plugin-fs = "2.0.0-beta"
 tauri-plugin-notification = "2.0.0-alpha.3"
