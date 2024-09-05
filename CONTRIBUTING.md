@@ -125,6 +125,8 @@ Then open the file in `target/release/instruments` using Xcode -> Open Developer
 cargo bench
 ```
 
+[Check benchmark visuals](https://mediar-ai.github.io/screenpipe/dev/bench/)
+
 ### Creating new migrations
 
 ```bash
