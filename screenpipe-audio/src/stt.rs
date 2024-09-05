@@ -544,15 +544,10 @@ pub fn stt(
     let frame_size = 160; // 10ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
     for (frame_index, chunk) in pcm_data.chunks(frame_size).enumerate() {
-        // Convert f32 to i16
-        let i16_chunk: Vec<i16> = chunk.iter().map(|&x| (x * 32767.0) as i16).collect();
-        match vad_engine.is_voice_segment(&i16_chunk) {
+        match vad_engine.is_voice_segment(chunk) {
             Ok(is_voice) => {
                 if is_voice {
-                    // debug!("VAD: Speech detected in frame {}", frame_index);
                     speech_frames.extend_from_slice(chunk);
-                } else {
-                    // debug!("VAD: Non-speech frame {} filtered out", frame_index);
                 }
             }
             Err(e) => {
