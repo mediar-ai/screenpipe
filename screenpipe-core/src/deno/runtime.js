@@ -56,6 +56,9 @@ const pipe = {
             throw error;
         }
     },
+    sendNotification: (title, body) => {
+        return pipe.post("http://localhost:11435/notify", { title, body });
+    },
 };
 
 globalThis.setTimeout = (callback, delay) => {
