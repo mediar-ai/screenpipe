@@ -171,6 +171,6 @@ pub struct Cli {
     pub restart_interval: u64,
 
     /// VAD engine to use for speech detection
-    #[arg(long, value_enum, default_value_t = CliVadEngine::Silero)] // or WebRtc
+    #[arg(long, value_enum, default_value_t = CliVadEngine::Silero)] // Silero or WebRtc
     pub vad_engine: CliVadEngine,
 }
