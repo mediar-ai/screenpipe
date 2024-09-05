@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725553739685,
+  "lastUpdate": 1725553811346,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -2549,6 +2549,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1933085354,
             "range": "± 18022017",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "82ccd0d0f9fcd48d573a2c3c8aea79c93b4eea0b",
+          "message": "Merge branch 'main' into update-formula-aarch64-apple-darwin-5fe73f32f075d9ef6fe6529abc283b396953dffc",
+          "timestamp": "2024-09-05T09:19:12-07:00",
+          "tree_id": "e13b7decee103f11381c330536407ca4d00e6f80",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/82ccd0d0f9fcd48d573a2c3c8aea79c93b4eea0b"
+        },
+        "date": 1725553810766,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2035744250,
+            "range": "± 136173636",
             "unit": "ns/iter"
           }
         ]
