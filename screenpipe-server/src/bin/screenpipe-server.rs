@@ -262,7 +262,6 @@ async fn main() -> anyhow::Result<()> {
     });
     let ocr_engine_clone = cli.ocr_engine.clone();
     let restart_interval = cli.restart_interval;
-    let vad_engine = cli.vad_engine.clone();
 
     // Function to start or restart the recording task
     let _start_recording = tokio::spawn(async move {
@@ -284,7 +283,6 @@ async fn main() -> anyhow::Result<()> {
             let vision_control = vision_control.clone();
             let audio_devices_control = audio_devices_control.clone();
             let friend_wearable_uid_clone = friend_wearable_uid.clone(); // Clone for each iteration
-            let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
 
             tokio::select! {
                 _ = &mut recording_task => {
@@ -321,10 +319,9 @@ async fn main() -> anyhow::Result<()> {
                     cli.save_text_files,
                     audio_transcription_engine,
                     ocr_engine,
-                    friend_wearable_uid_clone,
+                    friend_wearable_uid_clone, // Use the cloned version
                     monitor_id,
                     cli.use_pii_removal,
-                    vad_engine_clone,
                 )
                 .await;
 
