@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725557220411,
+  "lastUpdate": 1725557853511,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -2759,6 +2759,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1948419083,
             "range": "± 30127152",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "c0bd548e9afec04ef50f98dde434871b831b4b92",
+          "message": "Revert \"Merge pull request #273 from m13v/onnx_implementation-wip\"\n\nThis reverts commit 11040f54281ee5c6dfffc71b4236d5b34699fea3, reversing\nchanges made to 5fe73f32f075d9ef6fe6529abc283b396953dffc.",
+          "timestamp": "2024-09-05T10:26:48-07:00",
+          "tree_id": "f7a1d06c5e0bd48078fabe8590f7b015014b9e5b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/c0bd548e9afec04ef50f98dde434871b831b4b92"
+        },
+        "date": 1725557852934,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2432895000,
+            "range": "± 263433020",
             "unit": "ns/iter"
           }
         ]
