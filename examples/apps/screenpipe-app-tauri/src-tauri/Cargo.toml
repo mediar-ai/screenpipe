@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.1.84"
+version = "0.1.85"
 description = ""
 authors = ["you"]
 license = ""
@@ -54,6 +54,11 @@ sysinfo = "0.29.0"
 
 # hakc 
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
+
+# server
+axum = "0.6"
+serde = "1.0.160"
+
 
 tauri-plugin-fs = "2.0.0-beta"
 tauri-plugin-notification = "2.0.0-alpha.3"

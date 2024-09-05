@@ -3,7 +3,7 @@
 
 use sidecar::SidecarManager;
 use tauri::Config;
-
+use tokio::sync::mpsc;
 use serde_json::Value;
 use std::env;
 use std::fs;
@@ -16,6 +16,7 @@ use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState},
 };
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 #[allow(unused_imports)]
@@ -33,10 +34,13 @@ use crate::analytics::start_analytics;
 
 mod commands;
 mod sidecar;
+mod server;
 pub use commands::open_screen_capture_preferences;
 pub use commands::reset_screen_permissions;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+pub use server::spawn_server;
+
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
@@ -133,8 +137,6 @@ async fn main() {
                 autostart_manager.is_enabled().unwrap()
             );
 
-            let port = 3030;
-            app.manage(port);
 
             info!("Local data directory: {}", base_dir.display());
 
@@ -258,6 +260,12 @@ async fn main() {
                 debug!("Dev mode enabled, skipping sidecar spawn and restart");
             }
 
+            // Inside the main function, after the `app.manage(port);` line, add:
+            let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
+            app.manage(server_shutdown_tx);
+
+            
+
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -292,6 +300,10 @@ async fn main() {
                         error!("Failed to kill screenpipe processes: {}", e);
                     }
                 });
+            }
+            // Add this to shut down the server
+            if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
+                let _ = server_shutdown_tx.send(());
             }
         }
         _ => {}

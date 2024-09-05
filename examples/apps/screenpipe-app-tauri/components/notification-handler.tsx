@@ -6,6 +6,13 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 
+import { listen } from "@tauri-apps/api/event";
+
+type NotificationRequested = {
+  title: string;
+  body: string;
+};
+
 const NotificationHandler: React.FC = () => {
   useEffect(() => {
     const checkAndRequestPermission = async () => {
@@ -34,6 +41,16 @@ const NotificationHandler: React.FC = () => {
           localStorage.setItem("lastNotificationTime", currentTime.toString());
         }
       }
+
+      listen<NotificationRequested>("notification-requested", (event) => {
+        console.log(
+          `notification requested ${event.payload.title} ${event.payload.body}`
+        );
+        sendNotification({
+          title: event.payload.title,
+          body: event.payload.body,
+        });
+      });
     };
 
     checkAndRequestPermission();
