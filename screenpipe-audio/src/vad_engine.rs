@@ -1,7 +1,9 @@
 use std::path::PathBuf;
-use onnxruntime::{environment::Environment, session::Session, tensor::OrtOwnedTensor};
-use ndarray::Array2;
-use hf_hub::{api::sync::Api, Repo, RepoType};
+use vad_rs::{Vad, VadStatus};
+use anyhow;
+use std::io::Write;
+use log::debug;
+use ndarray::{Array3, ArrayBase, OwnedRepr, Ix3};
 
 pub enum VadEngineEnum {
     WebRtc,
@@ -9,7 +11,7 @@ pub enum VadEngineEnum {
 }
 
 pub trait VadEngine {
-    fn is_voice_segment(&mut self, audio_chunk: &[i16]) -> anyhow::Result<bool>;
+    fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool>;
 }
 
 pub struct WebRtcVad(webrtc_vad::Vad);
@@ -23,70 +25,83 @@ impl WebRtcVad {
 }
 
 impl VadEngine for WebRtcVad {
-    fn is_voice_segment(&mut self, audio_chunk: &[i16]) -> anyhow::Result<bool> {
-        self.0.is_voice_segment(audio_chunk)
-            .map_err(|e| anyhow::anyhow!("WebRTC VAD error: {:?}", e))
+    fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
+        // Convert f32 to i16
+        let i16_chunk: Vec<i16> = audio_chunk
+            .iter()
+            .map(|&x| (x * 32767.0) as i16)
+            .collect();
+
+        let result = self.0.is_voice_segment(&i16_chunk)
+            .map_err(|e| anyhow::anyhow!("WebRTC VAD error: {:?}", e))?;
+        
+        // debug!("WebRTC VAD result: is_voice_segment = {}", result);
+        
+        Ok(result)
     }
 }
 
 pub struct SileroVad {
-    session: Session,
-    sample_rate: i64,
-    frame_size: usize,
+    vad: Vad,
 }
 
 impl SileroVad {
     pub fn new() -> anyhow::Result<Self> {
-        let environment = Environment::builder().build()?;
-        let model_path = hf_hub::api::sync::Api::new()?
-            .model("snakers4/silero-vad".to_string())
-            .get("silero_vad.onnx")?;
-
-        let session = environment.new_session_builder()?
-            .with_model_from_file(model_path)?;
-        
-        let sample_rate = 16000;
-        let frame_size = 512;
-
-        Ok(Self {
-            session,
-            sample_rate,
-            frame_size,
-        })
+        debug!("Initializing SileroVad...");
+        let model_path = Self::download_model()?;
+        debug!("SileroVad Model downloaded to: {:?}", model_path);
+        let vad = Vad::new(model_path, 16000).map_err(|e| {
+            debug!("SileroVad Error creating Vad: {}", e);
+            anyhow::anyhow!("Vad creation error: {}", e)
+        })?;
+        debug!("SileroVad initialized successfully");
+        Ok(Self { vad })
     }
 
-    fn i16_to_f32(audio: &[i16]) -> Vec<f32> {
-        audio.iter().map(|&x| x as f32 / 32768.0).collect()
+    fn download_model() -> anyhow::Result<PathBuf> {
+        debug!("Downloading SileroVAD model...");
+        let url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
+        let response = reqwest::blocking::get(url)?;
+        let model_data = response.bytes()?;
+
+        let path = std::env::temp_dir().join("silero_vad.onnx");
+        let mut file = std::fs::File::create(&path)?;
+        file.write_all(&model_data)?;
+        debug!("SileroVad Model downloaded and saved to: {:?}", path);
+
+        Ok(path)
     }
 }
 
 impl VadEngine for SileroVad {
-    fn is_voice_segment(&mut self, audio_chunk: &[i16]) -> anyhow::Result<bool> {
-        if audio_chunk.len() < self.frame_size {
-            return Err(anyhow::anyhow!("Audio chunk too small"));
-        }
-
-        let chunk_data = Self::i16_to_f32(audio_chunk);
-        let input_tensor: Array2<f32> = Array2::from_shape_vec((1, chunk_data.len()), chunk_data)?;
-        let sr_tensor: Array2<f32> = Array2::from_elem((1, 1), self.sample_rate as f32);
-
-        let inputs = vec![
-            ("input", input_tensor.into()),
-            ("sr", sr_tensor.into()),
-        ];
-
-        let outputs: Vec<OrtOwnedTensor<f32, _>> = self.session.run(inputs)?;
-        let result = outputs[0].view();
+    fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
+        const CHUNK_SIZE: usize = 1600; // 100 milliseconds
         
-        const VOICE_THRESHOLD: f32 = 0.5;
-        Ok(result[[0, 1]] > VOICE_THRESHOLD)
+        for chunk in audio_chunk.chunks(CHUNK_SIZE) {
+            let mut chunk_data: Vec<f32> = chunk.to_vec();
+            chunk_data.resize(CHUNK_SIZE, 0.0);
+            
+            let result = self.vad.compute(&chunk_data).map_err(|e| {
+                debug!("SileroVad Error computing VAD: {}", e);
+                anyhow::anyhow!("Vad compute error: {}", e)
+            })?;
+            
+            if result.prob < 0.5 {
+                return Ok(true);
+            }
+        }
+        
+        Ok(false)
     }
 }
 
 pub fn create_vad_engine(engine: VadEngineEnum) -> anyhow::Result<Box<dyn VadEngine>> {
     match engine {
         VadEngineEnum::WebRtc => Ok(Box::new(WebRtcVad::new())),
-        VadEngineEnum::Silero => Ok(Box::new(SileroVad::new()?)),
+        VadEngineEnum::Silero => {
+            let silero_vad = SileroVad::new()?;
+            Ok(Box::new(silero_vad))
+        },
     }
 }
 
