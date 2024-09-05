@@ -34,31 +34,35 @@ jobs:
       - name: Set up virtual display
         run: |
           Xvfb :99 -ac &
-          export DISPLAY=:99
+          echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Set up virtual audio
         run: |
           pulseaudio --start
-          pactl load-module module-null-sink sink_name=virtual_speaker
-          pactl load-module module-virtual-source source_name=virtual_mic
+          pacmd load-module module-null-sink sink_name=virtual_speaker
+          pacmd load-module module-virtual-source source_name=virtual_mic
+          pacmd set-default-sink virtual_speaker
+          pacmd set-default-source virtual_mic
 
       - name: Build screenpipe
         run: cargo build --release
 
       - name: Run screenpipe and monitor memory
         run: |
+          export DISPLAY=:99
+          export PULSE_SERVER=unix:/tmp/pulse-socket
           ./target/release/screenpipe --debug &
           SCREENPIPE_PID=$!
-
+          
           echo "Timestamp,RSS (KB),VSZ (KB)" > memory_usage.csv
-
+          
           for i in {1..90}; do
             RSS=$(ps -o rss= -p $SCREENPIPE_PID)
             VSZ=$(ps -o vsz= -p $SCREENPIPE_PID)
             echo "$(date +%s),$RSS,$VSZ" >> memory_usage.csv
             sleep 10
           done
-
+          
           kill $SCREENPIPE_PID
 
       - name: Generate memory usage graph
@@ -90,7 +94,7 @@ jobs:
         run: |
           echo "Checking logs..."
           tail -n 100 ~/.screenpipe/logs/screenpipe.log
-
+          
           echo "Checking database..."
           sqlite3 ~/.screenpipe/db.sqlite ".tables"
           sqlite3 ~/.screenpipe/db.sqlite "SELECT COUNT(*) FROM ocr_text;"
