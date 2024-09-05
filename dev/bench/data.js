@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725498692901,
+  "lastUpdate": 1725502754749,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -2339,6 +2339,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2205313146,
             "range": "± 290845342",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "83d1fb3b037dd4e04719811581643c6b054dfa9d",
+          "message": "feat: phi3.5 looks at your screen and send notification when distracted",
+          "timestamp": "2024-09-04T19:08:39-07:00",
+          "tree_id": "81ff4f04f8a453738df508d48e3adb0c4a8059d5",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/83d1fb3b037dd4e04719811581643c6b054dfa9d"
+        },
+        "date": 1725502753604,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2807948708,
+            "range": "± 104848839",
             "unit": "ns/iter"
           }
         ]
