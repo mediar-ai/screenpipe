@@ -1,5 +1,9 @@
 
-https://github.com/user-attachments/assets/795dfd91-393a-4eef-a20b-5b2c35d594f9
+
+
+https://github.com/user-attachments/assets/f5695ba3-b37f-4bb9-be55-56d60144c7f3
+
+
 
 in screenpipe we have a plugin system called "pipe store" or "pipes"
 
