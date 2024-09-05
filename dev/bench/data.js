@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725555329538,
+  "lastUpdate": 1725555445912,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -2609,6 +2609,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1925502375,
             "range": "± 26654736",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "5116e572f6b18c3b072baa096bfba98eff29b1a7",
+          "message": "feat: new VAD model (silero)",
+          "timestamp": "2024-09-05T09:47:01-07:00",
+          "tree_id": "16a2e33fbbfeeb3613d86b02c5795e1f122128d9",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/5116e572f6b18c3b072baa096bfba98eff29b1a7"
+        },
+        "date": 1725555445147,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2255107375,
+            "range": "± 202388114",
             "unit": "ns/iter"
           }
         ]
