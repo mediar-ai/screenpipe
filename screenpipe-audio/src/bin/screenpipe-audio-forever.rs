@@ -1,0 +1,126 @@
+use anyhow::{anyhow, Result};
+use clap::Parser;
+use log::info;
+use screenpipe_audio::create_whisper_channel;
+use screenpipe_audio::default_input_device;
+use screenpipe_audio::default_output_device;
+use screenpipe_audio::list_audio_devices;
+use screenpipe_audio::parse_audio_device;
+use screenpipe_audio::record_and_transcribe;
+use screenpipe_audio::AudioDevice;
+use screenpipe_audio::AudioTranscriptionEngine;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::time::Duration;
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    #[clap(
+        short,
+        long,
+        help = "Audio device name (can be specified multiple times)"
+    )]
+    audio_device: Vec<String>,
+
+    #[clap(long, help = "List available audio devices")]
+    list_audio_devices: bool,
+}
+
+fn print_devices(devices: &[AudioDevice]) {
+    println!("Available audio devices:");
+    for (_, device) in devices.iter().enumerate() {
+        println!("  {}", device);
+    }
+
+    #[cfg(target_os = "macos")]
+    println!("On macOS, it's not intuitive but output devices are your displays");
+}
+
+// ! usage - cargo run --bin screenpipe-audio -- --audio-device "Display 1 (output)"
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    use env_logger::Builder;
+    use log::LevelFilter;
+
+    Builder::new()
+        .filter(None, LevelFilter::Debug)
+        .filter_module("tokenizers", LevelFilter::Error)
+        .init();
+
+    let args = Args::parse();
+
+    let devices = list_audio_devices().await?;
+
+    if args.list_audio_devices {
+        print_devices(&devices);
+        return Ok(());
+    }
+
+    let devices = if args.audio_device.is_empty() {
+        vec![default_input_device()?, default_output_device().await?]
+    } else {
+        args.audio_device
+            .iter()
+            .map(|d| parse_audio_device(d))
+            .collect::<Result<Vec<_>>>()?
+    };
+
+    if devices.is_empty() {
+        return Err(anyhow!("No audio input devices found"));
+    }
+
+    // delete .mp4 files (output*.mp4)
+    std::fs::remove_file("output_0.mp4").unwrap_or_default();
+    std::fs::remove_file("output_1.mp4").unwrap_or_default();
+
+    let chunk_duration = Duration::from_secs(10);
+    let output_path = PathBuf::from("output.mp4");
+    let (whisper_sender, mut whisper_receiver, _) =
+        create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3)).await?;
+
+    // Spawn threads for each device
+    let _recording_threads: Vec<_> = devices
+        .into_iter()
+        .enumerate()
+        .map(|(i, device)| {
+            let device = Arc::new(device);
+            let whisper_sender = whisper_sender.clone();
+            let output_path = output_path.with_file_name(format!("output_{}.mp4", i));
+            let device_control = Arc::new(AtomicBool::new(true));
+
+            tokio::spawn(async move {
+                loop {
+                    let result = record_and_transcribe(
+                        Arc::clone(&device),
+                        chunk_duration,
+                        output_path.clone(),
+                        whisper_sender.clone(),
+                        Arc::clone(&device_control),
+                    )
+                    .await;
+
+                    if let Err(e) = result {
+                        eprintln!("Error in recording thread {}: {:?}", i, e);
+                        // Optionally add a short delay before retrying
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            })
+        })
+        .collect();
+
+    // Main loop to receive and print transcriptions
+    loop {
+        match whisper_receiver.recv().await {
+            Some(result) => {
+                info!("Transcription: {:?}", result);
+            }
+            None => {
+                eprintln!("Error receiving transcription");
+            }
+        }
+    }
+}
