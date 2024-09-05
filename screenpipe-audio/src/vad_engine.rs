@@ -85,7 +85,7 @@ impl VadEngine for SileroVad {
                 anyhow::anyhow!("Vad compute error: {}", e)
             })?;
             
-            if result.prob < 0.5 {
+            if result.prob > 0.5 {
                 return Ok(true);
             }
         }
