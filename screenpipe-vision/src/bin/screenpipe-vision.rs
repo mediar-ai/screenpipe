@@ -13,6 +13,10 @@ struct Cli {
     /// Disable cloud OCR processing
     #[arg(long, default_value_t = false)]
     cloud_ocr_off: bool, // Add this flag
+
+    /// FPS
+    #[arg(long, default_value_t = 1.0)]
+    fps: f32,
 }
 
 #[tokio::main]
@@ -29,7 +33,7 @@ async fn main() {
     tokio::spawn(async move {
         continuous_capture(
             result_tx,
-            Duration::from_secs(1),
+            Duration::from_secs_f32(1.0 / cli.fps),
             save_text_files,
             Arc::new(if cfg!(target_os = "macos") {
                 OcrEngine::AppleNative
@@ -54,6 +58,6 @@ async fn main() {
             );
         }
 
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // tokio::time::sleep(Duration::from_secs_f32(1.0 / cli.fps)).await;
     }
 }

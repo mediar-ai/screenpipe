@@ -26,6 +26,9 @@ struct Args {
 
     #[clap(long, help = "List available audio devices")]
     list_audio_devices: bool,
+
+    #[clap(long, help = "Audio chunk duration in seconds")]
+    audio_chunk_duration: f32,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -76,7 +79,7 @@ async fn main() -> Result<()> {
     std::fs::remove_file("output_0.mp4").unwrap_or_default();
     std::fs::remove_file("output_1.mp4").unwrap_or_default();
 
-    let chunk_duration = Duration::from_secs(10);
+    let chunk_duration = Duration::from_secs_f32(args.audio_chunk_duration);
     let output_path = PathBuf::from("output.mp4");
     let (whisper_sender, mut whisper_receiver, _) =
         create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3)).await?;
