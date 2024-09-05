@@ -151,4 +151,8 @@ pub struct Cli {
     /// Restart recording process every X minutes (0 means no periodic restart) - NOT RECOMMENDED
     #[arg(long, default_value_t = 0)]
     pub restart_interval: u64,
+
+    /// Disable vision recording
+    #[arg(long, default_value_t = false)]
+    pub disable_vision: bool,
 }

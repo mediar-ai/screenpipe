@@ -32,6 +32,7 @@ pub async fn start_continuous_recording(
     friend_wearable_uid: Option<String>,
     monitor_id: u32,
     use_pii_removal: bool,
+    vision_disabled: bool,
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -68,20 +69,27 @@ pub async fn start_continuous_recording(
         ));
     }
 
-    let video_handle = tokio::spawn(async move {
-        record_video(
-            db_manager_video,
-            output_path_video,
-            fps,
-            is_running_video,
-            save_text_files,
-            ocr_engine,
-            friend_wearable_uid_video,
-            monitor_id,
-            use_pii_removal,
-        )
-        .await
-    });
+    let video_handle = if !vision_disabled {
+        tokio::spawn(async move {
+            record_video(
+                db_manager_video,
+                output_path_video,
+                fps,
+                is_running_video,
+                save_text_files,
+                ocr_engine,
+                friend_wearable_uid_video,
+                monitor_id,
+                use_pii_removal,
+            )
+            .await
+        })
+    } else {
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            Ok(())
+        })
+    };
 
     let audio_handle = tokio::spawn(async move {
         record_audio(
@@ -255,7 +263,8 @@ async fn record_audio(
                     let device_control_clone = device_control_clone.clone();
 
                     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-                    let sanitized_device_name = audio_device_clone.to_string().replace(['/', '\\'], "_");
+                    let sanitized_device_name =
+                        audio_device_clone.to_string().replace(['/', '\\'], "_");
                     let file_path = PathBuf::from(&*output_path_clone)
                         .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
                         .to_str()

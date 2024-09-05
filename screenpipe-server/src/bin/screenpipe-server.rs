@@ -322,6 +322,7 @@ async fn main() -> anyhow::Result<()> {
                     friend_wearable_uid_clone, // Use the cloned version
                     monitor_id,
                     cli.use_pii_removal,
+                    cli.disable_vision,
                 )
                 .await;
 
@@ -380,6 +381,7 @@ async fn main() -> anyhow::Result<()> {
     );
     println!("│ Port                │ {:<34} │", cli.port);
     println!("│ Audio Disabled      │ {:<34} │", cli.disable_audio);
+    println!("│ Vision Disabled     │ {:<34} │", cli.disable_vision);
     println!("│ Self Healing        │ {:<34} │", cli.self_healing);
     println!("│ Save Text Files     │ {:<34} │", cli.save_text_files);
     println!(
