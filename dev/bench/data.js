@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725557944836,
+  "lastUpdate": 1725557946316,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -4765,6 +4765,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 7214122388,
             "range": "± 26928896",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "531880689e9d2296c6688ce68d6f7629e55ecab0",
+          "message": "Merge pull request #281 from mediar-ai/revert-pr-273\n\nRevert \"Merge pull request #273 from m13v/onnx_implementation-wip\"",
+          "timestamp": "2024-09-05T10:28:10-07:00",
+          "tree_id": "f7a1d06c5e0bd48078fabe8590f7b015014b9e5b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/531880689e9d2296c6688ce68d6f7629e55ecab0"
+        },
+        "date": 1725557946100,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 6726359171,
+            "range": "± 15445013",
             "unit": "ns/iter"
           }
         ]
