@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725552899185,
+  "lastUpdate": 1725553221363,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -2489,6 +2489,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 3403665833,
             "range": "± 135792006",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "11040f54281ee5c6dfffc71b4236d5b34699fea3",
+          "message": "Merge pull request #273 from m13v/onnx_implementation-wip\n\nOnnx implementation wip",
+          "timestamp": "2024-09-05T09:09:37-07:00",
+          "tree_id": "9a3f79a4073432b2eccdf6b9826b3cdc213a4b58",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/11040f54281ee5c6dfffc71b4236d5b34699fea3"
+        },
+        "date": 1725553220746,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2948506542,
+            "range": "± 129053249",
             "unit": "ns/iter"
           }
         ]
