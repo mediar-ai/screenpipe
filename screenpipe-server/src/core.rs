@@ -91,19 +91,26 @@ pub async fn start_continuous_recording(
         })
     };
 
-    let audio_handle = tokio::spawn(async move {
-        record_audio(
-            db_manager_audio,
-            output_path_audio,
-            audio_chunk_duration,
-            whisper_sender,
-            whisper_receiver,
-            audio_devices_control,
-            friend_wearable_uid,
-            audio_transcription_engine,
-        )
-        .await
-    });
+    let audio_handle = if !audio_disabled {
+        tokio::spawn(async move {
+            record_audio(
+                db_manager_audio,
+                output_path_audio,
+                audio_chunk_duration,
+                whisper_sender,
+                whisper_receiver,
+                audio_devices_control,
+                friend_wearable_uid,
+                audio_transcription_engine,
+            )
+            .await
+        })
+    } else {
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            Ok(())
+        })
+    };
 
     // Wait for both tasks to complete
     let (video_result, audio_result) = tokio::join!(video_handle, audio_handle);
