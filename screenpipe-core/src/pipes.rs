@@ -259,9 +259,7 @@ mod pipes {
             ..Default::default()
         });
 
-        // add all env var starting with SCREENPIPE_ to the global scope in process.env
-
-        // first init the process.env object
+        // Initialize process.env
         js_runtime.execute_script("main", "globalThis.process = { env: {} }")?;
 
         for (key, value) in env::vars() {
@@ -272,9 +270,28 @@ mod pipes {
         }
 
         let mod_id = js_runtime.load_main_es_module(&main_module).await?;
-        let result = js_runtime.mod_evaluate(mod_id);
-        js_runtime.run_event_loop(Default::default()).await?;
-        result.await
+        let evaluate_future = js_runtime.mod_evaluate(mod_id);
+
+        // Run the event loop and handle potential errors
+        match js_runtime.run_event_loop(Default::default()).await {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Error in JavaScript runtime event loop: {}", e);
+                // ! avoid crashing screenpipe if pipes broken
+                // You can choose to return the error or handle it differently
+                // return Err(anyhow::anyhow!("JavaScript runtime error: {}", e));
+            }
+        }
+
+        // Evaluate the module and handle potential errors
+        match evaluate_future.await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!("Error evaluating JavaScript module: {}", e);
+                // You can choose to return the error or handle it differently
+                Err(anyhow::anyhow!("JavaScript module evaluation error: {}", e))
+            }
+        }
     }
 }
 

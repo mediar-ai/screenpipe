@@ -56,8 +56,16 @@ const pipe = {
             throw error;
         }
     },
-    sendNotification: (title, body) => {
-        return pipe.post("http://localhost:11435/notify", { title, body });
+    sendNotification: async ({ title, body }) => {
+        const response = await ops.op_fetch("http://localhost:11435/notify", {
+            headers: {
+                "Content-Type": "application/json",
+            },
+            method: "POST",
+            body: JSON.stringify({ title, body })
+        });
+        console.log("Notification sent:", response);
+        return JSON.parse(response);
     },
 };
 
