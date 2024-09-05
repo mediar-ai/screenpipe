@@ -29,7 +29,7 @@ screenpipe | logs daily
 
 basically it would read, process, annotate, analyse, summarize, send, your data customisable to your desire, effortlessly
 
-### pipe-sync-meetings-to-notion
+### pipe-focus-notification-buddy
 
 this is an experimental, but official pipe
 
