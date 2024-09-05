@@ -10,10 +10,6 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     save_text_files: bool,
 
-    /// Disable cloud OCR processing
-    #[arg(long, default_value_t = false)]
-    cloud_ocr_off: bool, // Add this flag
-
     /// FPS
     #[arg(long, default_value_t = 1.0)]
     fps: f32,
