@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725559121686,
+  "lastUpdate": 1725559123617,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -4831,6 +4831,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 6726359171,
             "range": "± 15445013",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "e5dcde7d8ae88cc8f1999061feac9ac3c8804c91",
+          "message": "feat: add cli arg to disable vision",
+          "timestamp": "2024-09-05T10:48:11-07:00",
+          "tree_id": "7a593b62e2ce1fb5537f20b05eafa39998cc7416",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e5dcde7d8ae88cc8f1999061feac9ac3c8804c91"
+        },
+        "date": 1725559123057,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 6614712716,
+            "range": "± 15231521",
             "unit": "ns/iter"
           }
         ]
