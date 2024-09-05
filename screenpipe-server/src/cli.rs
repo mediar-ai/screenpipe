@@ -2,6 +2,7 @@ use clap::Parser;
 use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use clap::ValueEnum;
+use screenpipe_audio::vad_engine::VadEngineEnum;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
@@ -46,6 +47,23 @@ impl From<CliOcrEngine> for CoreOcrEngine {
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
             #[cfg(target_os = "macos")]
             CliOcrEngine::AppleNative => CoreOcrEngine::AppleNative,
+        }
+    }
+}
+
+#[derive(Clone, Debug, ValueEnum, PartialEq)]
+pub enum CliVadEngine {
+    #[clap(name = "webrtc")]
+    WebRtc,
+    #[clap(name = "silero")]
+    Silero,
+}
+
+impl From<CliVadEngine> for VadEngineEnum {
+    fn from(cli_engine: CliVadEngine) -> Self {
+        match cli_engine {
+            CliVadEngine::WebRtc => VadEngineEnum::WebRtc,
+            CliVadEngine::Silero => VadEngineEnum::Silero,
         }
     }
 }
@@ -151,4 +169,8 @@ pub struct Cli {
     /// Restart recording process every X minutes (0 means no periodic restart) - NOT RECOMMENDED
     #[arg(long, default_value_t = 0)]
     pub restart_interval: u64,
+
+    /// VAD engine to use for speech detection
+    #[arg(long, value_enum, default_value_t = CliVadEngine::Silero)] // Silero or WebRtc
+    pub vad_engine: CliVadEngine,
 }
