@@ -11,6 +11,8 @@ on:
 jobs:
   test-ubuntu:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C link-arg=-Wl,--allow-multiple-definition"
     steps:
       - uses: actions/checkout@v3
       - uses: actions/cache@v3
@@ -114,3 +116,22 @@ jobs:
         env:
           DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr
+
+  check-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - name: Check dependencies
+        run: |
+          cargo tree > cargo_tree_output.txt
+          echo "Checking for esaxx and abseil-cpp usage:"
+          grep -E "esaxx|abseil-cpp" cargo_tree_output.txt || echo "No direct usage found"
+        
+      - uses: actions/upload-artifact@v2
+        with:
+          name: cargo-tree-output
+          path: cargo_tree_output.txt
