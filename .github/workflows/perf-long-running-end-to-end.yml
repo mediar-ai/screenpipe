@@ -1,0 +1,105 @@
+name: Linux Memory Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-ubuntu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr libtesseract-dev libavformat-dev libavfilter-dev libavdevice-dev ffmpeg libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev xvfb pulseaudio gnuplot
+
+      - name: Set up virtual display
+        run: |
+          Xvfb :99 -ac &
+          export DISPLAY=:99
+
+      - name: Set up virtual audio
+        run: |
+          pulseaudio --start
+          pactl load-module module-null-sink sink_name=virtual_speaker
+          pactl load-module module-virtual-source source_name=virtual_mic
+
+      - name: Build screenpipe
+        run: cargo build --release
+
+      - name: Run screenpipe and monitor memory
+        run: |
+          ./target/release/screenpipe --debug &
+          SCREENPIPE_PID=$!
+
+          echo "Timestamp,RSS (KB),VSZ (KB)" > memory_usage.csv
+
+          for i in {1..90}; do
+            RSS=$(ps -o rss= -p $SCREENPIPE_PID)
+            VSZ=$(ps -o vsz= -p $SCREENPIPE_PID)
+            echo "$(date +%s),$RSS,$VSZ" >> memory_usage.csv
+            sleep 10
+          done
+
+          kill $SCREENPIPE_PID
+
+      - name: Generate memory usage graph
+        run: |
+          gnuplot <<EOF
+          set terminal png size 800,600
+          set output 'memory_usage_graph.png'
+          set title 'Screenpipe Memory Usage Over Time'
+          set xlabel 'Time (seconds)'
+          set ylabel 'Memory Usage (KB)'
+          set key outside
+          plot 'memory_usage.csv' using 1:2 with lines title 'RSS', \
+               '' using 1:3 with lines title 'VSZ'
+          EOF
+
+      - name: Upload memory usage data
+        uses: actions/upload-artifact@v2
+        with:
+          name: memory-usage-data
+          path: memory_usage.csv
+
+      - name: Upload memory usage graph
+        uses: actions/upload-artifact@v2
+        with:
+          name: memory-usage-graph
+          path: memory_usage_graph.png
+
+      - name: Check logs and data
+        run: |
+          echo "Checking logs..."
+          tail -n 100 ~/.screenpipe/logs/screenpipe.log
+
+          echo "Checking database..."
+          sqlite3 ~/.screenpipe/db.sqlite ".tables"
+          sqlite3 ~/.screenpipe/db.sqlite "SELECT COUNT(*) FROM ocr_text;"
+          sqlite3 ~/.screenpipe/db.sqlite "SELECT COUNT(*) FROM audio_transcriptions;"
+
+      - name: Upload screenpipe data
+        uses: actions/upload-artifact@v2
+        with:
+          name: screenpipe-data
+          path: |
+            ~/.screenpipe/logs
+            ~/.screenpipe/db.sqlite
