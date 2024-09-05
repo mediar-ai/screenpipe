@@ -75,12 +75,7 @@ async fn main() -> Result<()> {
         return Err(anyhow!("No audio input devices found"));
     }
 
-    // delete .mp4 files (output*.mp4)
-    std::fs::remove_file("output_0.mp4").unwrap_or_default();
-    std::fs::remove_file("output_1.mp4").unwrap_or_default();
-
     let chunk_duration = Duration::from_secs_f32(args.audio_chunk_duration);
-    let output_path = PathBuf::from("output.mp4");
     let (whisper_sender, mut whisper_receiver, _) =
         create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3)).await?;
 
@@ -91,7 +86,11 @@ async fn main() -> Result<()> {
         .map(|(i, device)| {
             let device = Arc::new(device);
             let whisper_sender = whisper_sender.clone();
-            let output_path = output_path.with_file_name(format!("output_{}.mp4", i));
+            let output_path = PathBuf::from(format!(
+                "/tmp/output_{}.mp4",
+                chrono::Utc::now().timestamp()
+            ));
+
             let device_control = Arc::new(AtomicBool::new(true));
 
             tokio::spawn(async move {
