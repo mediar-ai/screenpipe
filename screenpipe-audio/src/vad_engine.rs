@@ -1,9 +1,8 @@
 use std::path::PathBuf;
-use vad_rs::{Vad, VadStatus};
+use vad_rs::{Vad};
 use anyhow;
 use std::io::Write;
 use log::debug;
-use ndarray::{Array3, ArrayBase, OwnedRepr, Ix3};
 
 pub enum VadEngineEnum {
     WebRtc,
@@ -19,7 +18,7 @@ pub struct WebRtcVad(webrtc_vad::Vad);
 impl WebRtcVad {
     pub fn new() -> Self {
         let mut vad = webrtc_vad::Vad::new();
-        vad.set_mode(webrtc_vad::VadMode::Quality);
+        vad.set_mode(webrtc_vad::VadMode::VeryAggressive);
         Self(vad)
     }
 }
