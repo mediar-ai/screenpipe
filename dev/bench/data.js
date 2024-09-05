@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725575021532,
+  "lastUpdate": 1725575023825,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5227,6 +5227,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 6806985787,
             "range": "± 20797124",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "4ed4419545db15a7f46bc1a24fb0986955e52221",
+          "message": "update cli",
+          "timestamp": "2024-09-05T15:12:44-07:00",
+          "tree_id": "8354ba859a81a3b0d3b94e67b65f24ce9b40f8ca",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/4ed4419545db15a7f46bc1a24fb0986955e52221"
+        },
+        "date": 1725575023124,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 6711097016,
+            "range": "± 19561193",
             "unit": "ns/iter"
           }
         ]
