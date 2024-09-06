@@ -8,11 +8,10 @@ use std::fs::{self, File};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use xcap::Monitor;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub enum OcrEngine {
     Unstructured,
     Tesseract,
@@ -51,7 +50,7 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
 }
 
 pub async fn capture_screenshot(
-    weak_monitor: Weak<Monitor>,
+    monitor: &Monitor,
 ) -> Result<
     (
         DynamicImage,
@@ -61,10 +60,6 @@ pub async fn capture_screenshot(
     ),
     anyhow::Error,
 > {
-    let monitor = weak_monitor
-        .upgrade()
-        .ok_or("Monitor no longer exists")
-        .unwrap();
     // info!("Starting screenshot capture for monitor: {:?}", monitor);
     let capture_start = Instant::now();
     let buffer = monitor.capture_image().map_err(|e| {
@@ -94,7 +89,7 @@ pub async fn capture_screenshot(
 }
 
 pub async fn compare_with_previous_image(
-    previous_image: &Option<Arc<DynamicImage>>,
+    previous_image: Option<&DynamicImage>,
     current_image: &DynamicImage,
     max_average: &mut Option<MaxAverageFrame>,
     frame_number: u64,

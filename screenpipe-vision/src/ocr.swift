@@ -9,105 +9,125 @@ import Vision
 @_cdecl("perform_ocr")
 public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int, height: Int)
   -> UnsafeMutablePointer<CChar>? {
+  return autoreleasepool {
 
-  guard let dataProvider = CGDataProvider(data: Data(bytes: imageData, count: length) as CFData),
-    let cgImage = CGImage(
-      width: width,
-      height: height,
-      bitsPerComponent: 8,
-      bitsPerPixel: 32,
-      bytesPerRow: width * 4,
-      space: CGColorSpaceCreateDeviceRGB(),
-      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-      provider: dataProvider,
-      decode: nil,
-      shouldInterpolate: false,
-      intent: .defaultIntent
-    )
-  else {
-    return strdup("Error: Failed to create CGImage")
-  }
-
-  // Preprocess the image
-  let ciImage = CIImage(cgImage: cgImage)
-  let context = CIContext(options: nil)
-
-  // Apply preprocessing filters (slightly reduced contrast compared to original)
-  let processed = ciImage
-    .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.08])
-    .applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 0.8, kCIInputIntensityKey: 0.4])
-
-  guard let preprocessedCGImage = context.createCGImage(processed, from: processed.extent) else {
-    return strdup("Error: Failed to create preprocessed image")
-  }
-
-  var ocrResult = ""
-  var textElements: [[String: Any]] = []
-  var totalConfidence: Float = 0.0
-  var observationCount: Int = 0
-
-  let textRequest = VNRecognizeTextRequest { request, error in
-    if let error = error {
-      print("Error: \(error.localizedDescription)")
-      return
+    guard let dataProvider = CGDataProvider(data: Data(bytes: imageData, count: length) as CFData),
+      let cgImage = CGImage(
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bitsPerPixel: 32,
+        bytesPerRow: width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+        provider: dataProvider,
+        decode: nil,
+        shouldInterpolate: false,
+        intent: .defaultIntent
+      )
+    else {
+      return strdup("Error: Failed to create CGImage")
     }
 
-    guard let observations = request.results as? [VNRecognizedTextObservation] else {
-      print("Error: Failed to process image or no text found")
-      return
+    // Preprocess the image
+    let ciImage = CIImage(cgImage: cgImage)
+    let context = CIContext(options: nil)
+
+    // Apply preprocessing filters (slightly reduced contrast compared to original)
+    let processed =
+      ciImage
+      .applyingFilter(
+        "CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.08]
+      )
+      .applyingFilter(
+        "CIUnsharpMask", parameters: [kCIInputRadiusKey: 0.8, kCIInputIntensityKey: 0.4])
+
+    guard let preprocessedCGImage = context.createCGImage(processed, from: processed.extent) else {
+      return strdup("Error: Failed to create preprocessed image")
     }
 
-    for observation in observations {
-      guard let topCandidate = observation.topCandidates(1).first else {
-        continue
+    var ocrResult = ""
+    var textElements: [[String: Any]] = []
+    var totalConfidence: Float = 0.0
+    var observationCount: Int = 0
+
+    let textRequest = VNRecognizeTextRequest { request, error in
+      if let error = error {
+        print("Error: \(error.localizedDescription)")
+        return
       }
-      let text = topCandidate.string
-      let confidence = topCandidate.confidence
 
-      // Reduced threshold for including results
-      if confidence < 0.2 {
-        continue  // Skip very low-confidence results
+      guard let observations = request.results as? [VNRecognizedTextObservation] else {
+        print("Error: Failed to process image or no text found")
+        return
       }
-      let boundingBox = observation.boundingBox
-      textElements.append([
-        "text": text,
-        "confidence": confidence,
-        "boundingBox": [
-          "x": boundingBox.origin.x,
-          "y": boundingBox.origin.y,
-          "width": boundingBox.size.width,
-          "height": boundingBox.size.height
-        ]
-      ])
 
-      ocrResult += "\(text)\n"
-      totalConfidence += confidence
-      observationCount += 1
+      for observation in observations {
+        guard let topCandidate = observation.topCandidates(1).first else {
+          continue
+        }
+        let text = topCandidate.string
+        let confidence = topCandidate.confidence
+
+        // Reduced threshold for including results
+        if confidence < 0.2 {
+          continue  // Skip very low-confidence results
+        }
+        let boundingBox = observation.boundingBox
+        textElements.append([
+          "text": text,
+          "confidence": confidence,
+          "boundingBox": [
+            "x": boundingBox.origin.x,
+            "y": boundingBox.origin.y,
+            "width": boundingBox.size.width,
+            "height": boundingBox.size.height
+          ]
+        ])
+
+        ocrResult += "\(text)\n"
+        totalConfidence += confidence
+        observationCount += 1
+      }
+    }
+
+    textRequest.recognitionLevel = .accurate  // Keep accurate recognition
+
+    let handler = VNImageRequestHandler(cgImage: preprocessedCGImage, options: [:])
+    do {
+      try handler.perform([textRequest])
+    } catch {
+      print("Error: Failed to perform OCR - \(error.localizedDescription)")
+    }
+
+    let overallConfidence = observationCount > 0 ? totalConfidence / Float(observationCount) : 0.0
+    // print("Overall confidence: \(overallConfidence)")
+    let result: [String: Any] = [
+      "ocrResult": ocrResult.isEmpty ? NSNull() : ocrResult,
+      "textElements": textElements,
+      "overallConfidence": overallConfidence
+    ]
+
+    if let jsonData = try? JSONSerialization.data(withJSONObject: result, options: []),
+      let jsonString = String(data: jsonData, encoding: .utf8) {
+      let cString = jsonString.cString(using: .utf8)
+      let buffer = UnsafeMutablePointer<Int8>.allocate(capacity: cString!.count)
+      buffer.initialize(from: cString!, count: cString!.count)
+      return buffer
+    } else {
+      let errorString = "Error: Failed to serialize result to JSON"
+      let cString = errorString.cString(using: .utf8)!
+      let buffer = UnsafeMutablePointer<Int8>.allocate(capacity: cString.count)
+      buffer.initialize(from: cString, count: cString.count)
+      return buffer
     }
   }
+}
 
-  textRequest.recognitionLevel = .accurate  // Keep accurate recognition
-
-  let handler = VNImageRequestHandler(cgImage: preprocessedCGImage, options: [:])
-  do {
-    try handler.perform([textRequest])
-  } catch {
-    print("Error: Failed to perform OCR - \(error.localizedDescription)")
-  }
-
-  let overallConfidence = observationCount > 0 ? totalConfidence / Float(observationCount) : 0.0
-  // print("Overall confidence: \(overallConfidence)")
-  let result: [String: Any] = [
-    "ocrResult": ocrResult.isEmpty ? NSNull() : ocrResult,
-    "textElements": textElements,
-    "overallConfidence": overallConfidence
-  ]
-
-  if let jsonData = try? JSONSerialization.data(withJSONObject: result, options: []),
-    let jsonString = String(data: jsonData, encoding: .utf8) {
-    return strdup(jsonString)
-  } else {
-    return strdup("Error: Failed to serialize result to JSON")
+@_cdecl("free_string")
+public func freeString(_ ptr: UnsafeMutablePointer<Int8>?) {
+  if let ptr = ptr {
+    ptr.deallocate()
   }
 }
 

@@ -46,7 +46,7 @@ impl VideoCapture {
                 result_sender,
                 Duration::from_secs_f64(1.0 / fps),
                 save_text_files,
-                ocr_engine,
+                *ocr_engine,
                 monitor_id,
             )
             .await;

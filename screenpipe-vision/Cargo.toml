@@ -35,6 +35,9 @@ clap = { version = "4.0", features = ["derive"] }
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
 
+tracing-subscriber = { workspace = true }
+tracing = { workspace = true }
+
 [dev-dependencies]
 tempfile = "3.3.0"
 criterion = { workspace = true }
@@ -42,6 +45,8 @@ assert_cmd = "2.0.14"
 predicates = "3.1.0"
 assert_fs = "1.1.1"
 strsim = "0.10.0"
+memory-stats = "1.2.0"
+
 
 [build-dependencies]
 cc = "1.0"
@@ -59,6 +64,10 @@ harness = false
 
 [[bench]]
 name = "ocr_benchmark"
+harness = false
+
+[[bench]]
+name = "apple_leak_bench"
 harness = false
 
 

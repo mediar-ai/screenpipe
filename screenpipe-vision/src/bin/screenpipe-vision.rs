@@ -1,7 +1,8 @@
 use clap::Parser;
 use screenpipe_vision::{continuous_capture, monitor::get_default_monitor, OcrEngine};
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 use tokio::sync::mpsc::channel;
+use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -17,6 +18,14 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive(tracing::Level::DEBUG.into())
+                .add_directive("tokenizers=error".parse().unwrap()),
+        )
+        .with_span_events(FmtSpan::CLOSE)
+        .init();
     let cli = Cli::parse();
 
     let (result_tx, mut result_rx) = channel(512);
@@ -31,11 +40,7 @@ async fn main() {
             result_tx,
             Duration::from_secs_f32(1.0 / cli.fps),
             save_text_files,
-            Arc::new(if cfg!(target_os = "macos") {
-                OcrEngine::AppleNative
-            } else {
-                OcrEngine::Tesseract
-            }),
+            OcrEngine::AppleNative,
             id,
         )
         .await
