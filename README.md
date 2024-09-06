@@ -182,8 +182,47 @@ Then run it
 
 <details>
   <summary>Windows</summary>
+
+
+> [!note]
+> This is experimental support for Windows build. This assumes you already have the CUDA Toolkit installed and the CUDA_PATH set to my CUDA v12.6 folder.
+> Replace `V:\projects` and `V:\packages` with your own folders.
+
+- Install chocolatey
+- Install git
+- Install CUDA Toolkit (if using NVIDIA and building with cuda)
+- Install MS Visual Studio Build Tools (below are the components I have installed)
+	- Desktop development with C++
+		- MSVC v143
+		- Windows 11 SDK
+		- C++ Cmake tools for Windows
+		- Testing tools core features - Build tools
+		- C++ AddressSanitizer
+		- C++ ATL for latest v143
+	- Individual components
+		- C++ ATL for latest v143 build tools (x86 & x64)
+		- MSBuild support for LLVM (clang-c) toolset
+		- C++ Clang Compiler for Windows
+
+```batch
+choco install pkgconfiglite rust
+cd V:\projects
+git clone https://github.com/louis030195/screen-pipe
+cd V:\packages
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+bootstrap-vcpkg.bat -disableMetrics
+vcpkg.exe integrate install --disable-metrics
+vcpkg.exe install ffmpeg
+
+SET PKG_CONFIG_PATH=V:\packages\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
+SET VCPKG_ROOT=V:\packages\vcpkg
+SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
+cd V:\projects\screen-pipe
+
+cargo build --release --features cuda
+```
    
-   Currently updating the instructions for Windows which are not straightforward, please feel free to help
 </details>
 
 <details>
