@@ -37,7 +37,6 @@ criterion = { version = "0.5.1", features = ["async_tokio"] }
 vcpkg = "0.2"
 
 [workspace.metadata.vcpkg]
-dependencies = ["onnxruntime"]
 git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true

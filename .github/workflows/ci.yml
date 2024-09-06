@@ -29,6 +29,7 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          override: true
 
       - name: Install dependencies
         run: |
@@ -95,6 +96,18 @@ jobs:
         env:
           RUSTFLAGS: ${{ env.RUSTFLAGS }}
 
+      - name: Install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          vcpkgGitCommitId: 'your-preferred-commit-id'
+          vcpkgTriplet: 'x64-windows'
+
+      - name: Install ONNX Runtime
+        run: vcpkg install onnxruntime:x64-windows
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
   test-macos:
     runs-on: macos-latest
     steps:
@@ -151,3 +164,12 @@ jobs:
         with:
           name: cargo-tree-output
           path: cargo_tree_output.txt
+
+  test-vcpkg:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cargo-vcpkg
+        run: cargo install cargo-vcpkg
+
+      - name: Build with vcpkg integration
+        run: cargo vcpkg build
