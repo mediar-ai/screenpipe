@@ -26,6 +26,7 @@ import { toast } from "./ui/use-toast";
 import { Input } from "./ui/input";
 import { Plus } from "lucide-react";
 import { FeatureRequestLink } from "./feature-request-link";
+import PipeLogger from "./pipe-logger";
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
@@ -288,6 +289,7 @@ const PipeDialog: React.FC = () => {
             {selectedPipe.fullDescription.replace(/Â/g, "")}
           </MemoizedReactMarkdown>
         </div>
+        <PipeLogger pipeId={selectedPipe.name} />
       </>
     );
   };

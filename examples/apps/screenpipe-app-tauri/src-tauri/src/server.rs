@@ -2,9 +2,18 @@ use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tauri::Emitter;
+#[allow(unused_imports)]
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::mpsc;
 use tracing::{error, info};
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct LogEntry {
+    pipe_id: String,
+    level: String,
+    message: String,
+    timestamp: String,
+}
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -28,6 +37,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
 
     let app = Router::new()
         .route("/notify", post(send_notification))
+        .route("/log", post(log_message))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -60,6 +70,29 @@ async fn send_notification(
         }
     }
 }
+
+async fn log_message(
+    State(state): State<ServerState>,
+    Json(log_entry): Json<LogEntry>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    match state.app_handle.emit("log-message", &log_entry) {
+        Ok(e) => {
+            info!("Log message sent: {:?}", e);
+            Ok(Json(ApiResponse {
+                success: true,
+                message: "Log message sent successfully".to_string(),
+            }))
+        }
+        Err(e) => {
+            error!("Failed to send log message: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to send log message: {}", e),
+            ))
+        }
+    }
+}
+
 
 pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()> {
     let (tx, mut rx) = mpsc::channel(1);

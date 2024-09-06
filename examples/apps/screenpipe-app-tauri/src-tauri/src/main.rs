@@ -16,7 +16,6 @@ use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState},
 };
-use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 #[allow(unused_imports)]

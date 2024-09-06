@@ -4,8 +4,6 @@ pub mod core;
 mod db;
 pub mod filtering;
 pub mod logs;
-#[cfg(feature = "pipes")]
-pub mod pipe_runner;
 mod plugin;
 mod resource_monitor;
 mod server;

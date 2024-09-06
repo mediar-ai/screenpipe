@@ -13,6 +13,7 @@ pub fn open_screen_capture_preferences() {
         .expect("failed to open system preferences");
 }
 
+#[allow(unused_imports)]
 #[tauri::command]
 pub fn open_mic_preferences() {
     #[cfg(target_os = "macos")]
@@ -22,6 +23,7 @@ pub fn open_mic_preferences() {
         .expect("failed to open system preferences");
 }
 
+#[allow(unused_imports)]
 #[tauri::command]
 pub fn reset_screen_permissions() {
     #[cfg(target_os = "macos")]

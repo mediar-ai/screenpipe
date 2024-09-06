@@ -42,6 +42,8 @@ async function runOCRTracker() {
 // Self-invoking async function to run the OCR tracker
 (async () => {
     try {
+        console.log(pipe);
+
         await runOCRTracker();
     } catch (error) {
         console.error("Fatal error in OCR Tracker:", error);

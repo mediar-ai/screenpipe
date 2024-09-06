@@ -19,6 +19,7 @@ use serde_json::json;
 use std::{
     collections::HashMap,
     net::SocketAddr,
+    path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
@@ -34,6 +35,14 @@ pub struct AppState {
     pub audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     pub devices_status: HashMap<AudioDevice, DeviceControl>,
     pub app_start_time: DateTime<Utc>,
+    pub screenpipe_dir: PathBuf,
+}
+
+#[cfg(feature = "pipes")]
+#[derive(Serialize)]
+struct PipeInfo {
+    name: String,
+    path: String,
 }
 
 // Update the SearchQuery struct
@@ -454,6 +463,37 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     })
 }
 
+// Add this function to list installed pipes
+async fn list_installed_pipes(screenpipe_dir: PathBuf) -> anyhow::Result<Vec<PipeInfo>> {
+    let pipes_dir = screenpipe_dir.join("pipes");
+    let mut pipes = Vec::new();
+
+    let mut entries = tokio::fs::read_dir(&pipes_dir).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        if entry.file_type().await?.is_dir() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let path = entry.path().to_string_lossy().into_owned();
+            pipes.push(PipeInfo { name, path });
+        }
+    }
+
+    Ok(pipes)
+}
+
+// Add this handler function
+async fn list_pipes(
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<Vec<PipeInfo>>, (StatusCode, String)> {
+    let screenpipe_dir = state.screenpipe_dir.clone();
+    match list_installed_pipes(screenpipe_dir).await {
+        Ok(pipes) => Ok(JsonResponse(pipes)),
+        Err(e) => {
+            error!("Failed to list installed pipes: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        }
+    }
+}
+
 // Helper functions
 fn into_content_item(result: SearchResult) -> ContentItem {
     match result {
@@ -494,6 +534,7 @@ pub struct Server {
     addr: SocketAddr,
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    screenpipe_dir: PathBuf,
 }
 
 impl Server {
@@ -502,12 +543,14 @@ impl Server {
         addr: SocketAddr,
         vision_control: Arc<AtomicBool>,
         audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+        screenpipe_dir: PathBuf,
     ) -> Self {
         Server {
             db,
             addr,
             vision_control,
             audio_devices_control,
+            screenpipe_dir,
         }
     }
 
@@ -526,6 +569,7 @@ impl Server {
             audio_devices_control: self.audio_devices_control,
             devices_status: device_status,
             app_start_time: Utc::now(),
+            screenpipe_dir: self.screenpipe_dir,
         });
 
         // https://github.com/tokio-rs/console
@@ -538,7 +582,6 @@ impl Server {
                     .make_span_with(DefaultMakeSpan::new().include_headers(true)),
             )
             .with_state(app_state);
-
 
         match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
             Ok(_) => {
@@ -562,6 +605,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
             "/tags/:content_type/:id",
             post(add_tags).delete(remove_tags),
         )
+        .route("/pipes/list", get(list_pipes))
         .route("/health", get(health_check))
 }
 

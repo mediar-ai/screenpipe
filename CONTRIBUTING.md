@@ -97,6 +97,43 @@ You can add env var to `.vscode/settings.json`:
 }
 ```
 
+This is @louis030195 whole `.vscode/settings.json` file:
+
+```json
+{
+    "rust-analyzer.server.extraEnv": {
+        "PKG_CONFIG_ALLOW_SYSTEM_LIBS": "1",
+        "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS": "1",
+        "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig",
+        "PATH": "/usr/bin:/opt/homebrew/bin:${env:PATH}",
+        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
+    },
+    "rust-analyzer.cargo.extraEnv": {
+        "PKG_CONFIG_ALLOW_SYSTEM_LIBS": "1",
+        "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS": "1",
+        "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig",
+        "PATH": "/usr/bin:/opt/homebrew/bin:${env:PATH}",
+        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
+    },
+    // add env to integrated terminal
+    "terminal.integrated.env.osx": {
+        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
+        "SCREENPIPE_APP_DEV": "true",
+    },
+    "rust-analyzer.cargo.features": [
+        "pipes"
+    ],
+    "rust-analyzer.cargo.runBuildScripts": true,
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.checkOnSave.extraArgs": [
+        "--features",
+        "pipes"
+    ],
+    "rust-analyzer.cargo.allFeatures": false,
+    "rust-analyzer.cargo.noDefaultFeatures": false
+}
+```
+
 
 ## Other hacks
 

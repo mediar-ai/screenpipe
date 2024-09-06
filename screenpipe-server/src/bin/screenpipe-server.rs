@@ -12,15 +12,13 @@ use std::{
 use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
+use futures::TryFutureExt;
 use log::{debug, error, info, LevelFilter};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,
 };
-use screenpipe_vision::{
-    monitor::{get_monitor_by_id, list_monitors},
-    OcrEngine,
-};
+use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use std::io::Write;
 
 use clap::Parser;
@@ -39,7 +37,7 @@ use tokio::{
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
-    for (_, device) in devices.iter().enumerate() {
+    for device in devices.iter() {
         println!("  {}", device);
     }
 
@@ -136,7 +134,7 @@ async fn main() -> anyhow::Result<()> {
     let all_monitors = list_monitors().await;
     if cli.list_monitors {
         println!("Available monitors:");
-        for (_, monitor) in all_monitors.iter().enumerate() {
+        for monitor in all_monitors.iter() {
             println!("  {}. {:?}", monitor.id(), monitor);
         }
         return Ok(());
@@ -206,7 +204,7 @@ async fn main() -> anyhow::Result<()> {
                 // send signal after everything started
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(15)).await;
-                    let _ = sender_clone.push((device_clone, device_control));
+                    sender_clone.push((device_clone, device_control));
                 });
             }
         }
@@ -302,7 +300,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             let core_ocr_engine: CoreOcrEngine = cli.ocr_engine.clone().into();
-            let ocr_engine = Arc::new(OcrEngine::from(core_ocr_engine));
+            let ocr_engine = Arc::new(core_ocr_engine);
             let core_audio_transcription_engine: CoreAudioTranscriptionEngine =
                 cli.audio_transcription_engine.clone().into();
             let audio_transcription_engine = Arc::new(core_audio_transcription_engine);
@@ -337,6 +335,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    let local_data_dir_clone_2 = local_data_dir_clone.clone();
     tokio::spawn(async move {
         let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
             // Custom plugin logic here
@@ -351,6 +350,7 @@ async fn main() -> anyhow::Result<()> {
             SocketAddr::from(([0, 0, 0, 0], cli.port)),
             vision_control_server_clone,
             audio_devices_control_server,
+            local_data_dir_clone_2,
         );
         server.start(devices_status, api_plugin).await.unwrap();
     });
@@ -428,18 +428,15 @@ async fn main() -> anyhow::Result<()> {
         println!("│ {:<19} │ {:<34} │", "", "No devices available");
     } else {
         let total_devices = audio_devices.len();
-        for (i, device) in audio_devices
+        for (_, device) in audio_devices
             .iter()
             .enumerate()
             .take(MAX_DEVICES_TO_DISPLAY)
         {
             let device_str = device.deref().to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
-            if i == 0 {
-                println!("│ {:<19} │ {:<34} │", "", formatted_device);
-            } else {
-                println!("│ {:<19} │ {:<34} │", "", formatted_device);
-            }
+
+            println!("│ {:<19} │ {:<34} │", "", formatted_device);
         }
         if total_devices > MAX_DEVICES_TO_DISPLAY {
             println!(
@@ -472,18 +469,23 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "pipes")]
     if !cli.pipe.is_empty() {
         use futures::stream::{FuturesUnordered, StreamExt};
-        use screenpipe_server::pipe_runner::run_pipe;
+        use screenpipe_core::run_pipe;
 
         let mut pipe_futures = FuturesUnordered::new();
-        for pipe in &cli.pipe {
-            pipe_futures.push(run_pipe(pipe));
+        for pipe in cli.pipe {
+            // dont crash on error
+            let f = run_pipe(pipe, local_data_dir_clone.clone()).map_err(|e| {
+                error!("Error running pipe runner: {:?}", e);
+            });
+
+            pipe_futures.push(f);
         }
 
         tokio::select! {
             _ = async {
                 while let Some(result) = pipe_futures.next().await {
                     if let Err(e) = result {
-                        error!("Error running pipe runner: {}", e);
+                        error!("Error running pipe runner: {:?}", e);
                     }
                 }
             } => {

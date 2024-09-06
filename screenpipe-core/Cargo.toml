@@ -23,12 +23,17 @@ hf-hub = { workspace = true, features = ["tokio"] }
 reqwest = { workspace = true }
 tokio = { workspace = true }
 
-deno_core = { version = "0.283.0", optional = true }
+deno_core = { version = "0.307.0", optional = true }
 deno_ast = { version = "0.38.2", features = ["transpiling"], optional = true }
-
+futures = "0.3.17"
 # Security
 regex = { version = "1.10.6", features = ["std"], optional = true }
 lazy_static = { version = "1.4.0", optional = true }
+tempfile = "3.3.0"
+url = "2.4.0"
+
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [features]
 pipes = ["dep:deno_core", "dep:deno_ast"]
@@ -37,4 +42,4 @@ security = ["dep:regex", "dep:lazy_static"]
 
 [build-dependencies]
 # Move this under the same feature flag
-deno_core = { version = "0.283.0", optional = true }
+deno_core = { version = "0.307.0", optional = true }

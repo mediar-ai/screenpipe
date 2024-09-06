@@ -1,3 +1,4 @@
+#[allow(clippy::module_inception)]
 #[cfg(feature = "pipes")]
 mod pipes {
     use deno_ast::MediaType;
@@ -8,16 +9,21 @@ mod pipes {
     use deno_core::op2;
     use deno_core::ModuleLoadResponse;
     use deno_core::ModuleSourceCode;
-    use log::error;
     use reqwest::header::HeaderMap;
     use reqwest::header::HeaderValue;
     use reqwest::header::CONTENT_TYPE;
     use std::collections::HashMap;
     use std::env;
+    use std::path::PathBuf;
     use std::rc::Rc;
 
     use reqwest::Client;
     use serde_json::Value;
+
+    use reqwest;
+    use std::path::Path;
+    use tracing::{error, info};
+    use url::Url;
 
     #[op2]
     #[string]
@@ -86,8 +92,10 @@ mod pipes {
     #[op2(async)]
     #[string]
     async fn op_read_file(#[string] path: String) -> anyhow::Result<String> {
-        tokio::fs::read_to_string(&path).await.map_err(|e| {
-            error!("Failed to read file '{}': {}", path, e);
+        let current_dir = std::env::current_dir()?;
+        let full_path = current_dir.join(path);
+        tokio::fs::read_to_string(&full_path).await.map_err(|e| {
+            error!("Failed to read file '{}': {}", full_path.display(), e);
             AnyError::from(e)
         })
     }
@@ -250,7 +258,7 @@ mod pipes {
         ]
     }
 
-    pub async fn run_js(file_path: &str) -> anyhow::Result<()> {
+    pub async fn run_js(pipe: &str, file_path: &str) -> anyhow::Result<()> {
         let main_module = deno_core::resolve_path(file_path, env::current_dir()?.as_path())?;
         let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(TsModuleLoader)),
@@ -258,6 +266,11 @@ mod pipes {
             extensions: vec![runjs::init_ops()],
             ..Default::default()
         });
+
+        // Set some metadata on the runtime
+        js_runtime.execute_script("main", "globalThis.metadata = { }")?;
+        // Set the pipe id
+        js_runtime.execute_script("main", format!("globalThis.metadata.id = '{}'", pipe))?;
 
         // Initialize process.env
         js_runtime.execute_script("main", "globalThis.process = { env: {} }")?;
@@ -292,6 +305,177 @@ mod pipes {
                 Err(anyhow::anyhow!("JavaScript module evaluation error: {}", e))
             }
         }
+    }
+
+    #[allow(clippy::manual_async_fn)]
+    pub async fn run_pipe(pipe: String, screenpipe_dir: PathBuf) -> anyhow::Result<()> {
+        let pipe_dir = match Url::parse(&pipe) {
+            Ok(_) => {
+                info!("Input appears to be a URL. Attempting to download...");
+                match download_pipe(&pipe, screenpipe_dir).await {
+                    Ok(path) => path,
+                    Err(e) => {
+                        error!("Failed to download pipe: {}", e);
+                        anyhow::bail!("Failed to download pipe: {}", e);
+                    }
+                }
+            }
+            Err(_) => {
+                info!("Input appears to be a local path. Attempting to canonicalize...");
+                match Path::new(&pipe).canonicalize() {
+                    Ok(path) => path,
+                    Err(e) => {
+                        error!("Failed to canonicalize path: {}", e);
+                        anyhow::bail!("Failed to canonicalize path: {}", e);
+                    }
+                }
+            }
+        };
+
+        info!("Pipe directory: {:?}", pipe_dir);
+
+        let main_module = find_pipe_file(&pipe_dir)?;
+
+        match run_js(&pipe, &main_module.to_string_lossy()).await {
+            Ok(_) => info!("JS execution completed successfully"),
+            Err(error) => {
+                error!("Error during JS execution: {}", error);
+                anyhow::bail!("Error during JS execution: {}", error);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn download_pipe(url: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
+        info!("Downloading pipe from URL: {}", url);
+
+        let client = Client::new();
+        let parsed_url = Url::parse(url)?;
+
+        match parsed_url.host_str() {
+            Some("github.com") => {
+                let api_url = get_raw_github_url(url)?;
+                download_github_folder(&client, &api_url, screenpipe_dir).await
+            }
+            Some("raw.githubusercontent.com") => {
+                download_single_file(&client, url, screenpipe_dir).await
+            }
+            _ => anyhow::bail!("Unsupported URL format"),
+        }
+    }
+
+    async fn download_github_folder(
+        client: &Client,
+        api_url: &str,
+        screenpipe_dir: PathBuf,
+    ) -> anyhow::Result<PathBuf> {
+        let response = client
+            .get(api_url)
+            .header("Accept", "application/vnd.github.v3+json")
+            .header("User-Agent", "screenpipe")
+            .send()
+            .await?;
+
+        let contents: Value = response.json().await?;
+
+        if !contents.is_array() {
+            anyhow::bail!("Invalid response from GitHub API");
+        }
+
+        let pipe_name = Path::new(api_url)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown_pipe")
+            .to_string();
+
+        let pipe_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+        tokio::fs::create_dir_all(&pipe_dir).await?;
+
+        for item in contents.as_array().unwrap() {
+            let file_name = item["name"].as_str().unwrap();
+            if file_name.ends_with(".ts") || file_name.ends_with(".js") {
+                if file_name.starts_with("main") || file_name.starts_with("pipe") {
+                    let download_url = item["download_url"].as_str().unwrap();
+                    let file_content = client.get(download_url).send().await?.bytes().await?;
+                    let file_path = pipe_dir.join(file_name);
+                    tokio::fs::write(&file_path, &file_content).await?;
+                    info!("Downloaded: {:?}", file_path);
+                }
+            }
+        }
+
+        info!("Pipe downloaded successfully to: {:?}", pipe_dir);
+        Ok(pipe_dir)
+    }
+
+    async fn download_single_file(
+        client: &Client,
+        url: &str,
+        screenpipe_dir: PathBuf,
+    ) -> anyhow::Result<PathBuf> {
+        let response = client.get(url).send().await?;
+        let content = response.bytes().await?;
+
+        let file_name = Path::new(url)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("pipe.js")
+            .to_string();
+
+        let pipe_name = Path::new(url)
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown_pipe")
+            .to_string();
+
+        let pipe_dir = screenpipe_dir.join("pipes").join(pipe_name);
+        tokio::fs::create_dir_all(&pipe_dir).await?;
+
+        let file_path = pipe_dir.join(file_name);
+        tokio::fs::write(&file_path, &content).await?;
+
+        info!("Downloaded single file: {:?}", file_path);
+        Ok(pipe_dir)
+    }
+
+    fn get_raw_github_url(url: &str) -> anyhow::Result<String> {
+        info!("Attempting to get raw GitHub URL for: {}", url);
+        let parsed_url = Url::parse(url)?;
+        if parsed_url.host_str() == Some("github.com") {
+            let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
+            if path_segments.len() >= 5 && path_segments[2] == "tree" {
+                let (owner, repo, _, branch) = (
+                    path_segments[0],
+                    path_segments[1],
+                    path_segments[2],
+                    path_segments[3],
+                );
+                let raw_path = path_segments[4..].join("/");
+                let raw_url = format!(
+                    "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+                    owner, repo, raw_path, branch
+                );
+                info!("Converted to GitHub API URL: {}", raw_url);
+                return Ok(raw_url);
+            }
+        }
+        anyhow::bail!("Invalid GitHub URL format")
+    }
+
+    fn find_pipe_file(pipe_dir: &Path) -> anyhow::Result<PathBuf> {
+        for entry in std::fs::read_dir(pipe_dir)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_name_str = file_name.to_str().unwrap();
+            if (file_name_str.starts_with("pipe") || file_name_str.starts_with("main"))
+                && (file_name_str.ends_with(".ts") || file_name_str.ends_with(".js"))
+            {
+                return Ok(entry.path());
+            }
+        }
+        anyhow::bail!("No pipe.ts, pipe.js, main.ts, or main.js found in the pipe directory")
     }
 }
 
