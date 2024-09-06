@@ -67,6 +67,7 @@ tauri-plugin-dialog = "2.0.0-alpha.2"
 tauri-plugin-os = "2.0.0-alpha.2"
 tauri-plugin-process = "2.0.0-alpha.2"
 
+dirs = "5.0.1"
 
 # M series MacOS
 [target.'cfg(target_os = "macos")'.dependencies]

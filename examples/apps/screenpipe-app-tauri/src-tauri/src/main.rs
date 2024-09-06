@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use commands::load_pipe_config;
+use commands::save_pipe_config;
 use sidecar::SidecarManager;
 use tauri::Config;
 use tokio::sync::mpsc;
@@ -76,6 +78,8 @@ async fn main() {
             kill_all_sreenpipes,
             reset_screen_permissions,
             open_screen_capture_preferences,
+            load_pipe_config,
+            save_pipe_config
         ])
         .setup(|app| {
             // Logging setup

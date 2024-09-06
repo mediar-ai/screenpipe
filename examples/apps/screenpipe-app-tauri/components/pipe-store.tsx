@@ -27,6 +27,7 @@ import { Input } from "./ui/input";
 import { Plus } from "lucide-react";
 import { FeatureRequestLink } from "./feature-request-link";
 import PipeLogger from "./pipe-logger";
+import { PipeConfigForm } from "./pipe-config-form";
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
@@ -67,6 +68,21 @@ const PipeDialog: React.FC = () => {
           variant: "destructive",
         });
       }
+    }
+  };
+
+  const handleConfigSave = async (config: Record<string, any>) => {
+    if (selectedPipe) {
+      const updatedPipe = { ...selectedPipe, config };
+      const updatedInstalledPipes = settings.installedPipes.map((p) =>
+        p.name === selectedPipe.name ? updatedPipe : p
+      );
+      await updateSettings({ installedPipes: updatedInstalledPipes });
+      setSelectedPipe(updatedPipe);
+      toast({
+        title: "Configuration saved",
+        description: "The pipe configuration has been updated.",
+      });
     }
   };
 
@@ -236,6 +252,12 @@ const PipeDialog: React.FC = () => {
         </div>
         <Separator className="my-4" />
 
+        {isInstalled && (
+          <PipeConfigForm pipe={selectedPipe} onConfigSave={handleConfigSave} />
+        )}
+
+        <Separator className="my-4" />
+
         <div className="mt-4">
           <h3 className="text-xl font-semibold mb-2">About this pipe</h3>
           <MemoizedReactMarkdown
@@ -289,7 +311,8 @@ const PipeDialog: React.FC = () => {
             {selectedPipe.fullDescription.replace(/Â/g, "")}
           </MemoizedReactMarkdown>
         </div>
-        <PipeLogger pipeId={selectedPipe.name} />
+        {/* https://github.com/denoland/deno_core/issues/898 */}
+        {/* <PipeLogger pipeId={selectedPipe.name} /> */}
       </>
     );
   };

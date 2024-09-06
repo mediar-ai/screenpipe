@@ -11,6 +11,7 @@ export type Pipe = {
   description: string;
   fullDescription: string;
   mainFile?: string;
+  config?: Record<string, any>;
 };
 
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
@@ -116,6 +117,25 @@ const fetchFileContent = async (
   }
 };
 
+const fetchPipeConfig = async (
+  repoFullName: string,
+  branch: string,
+  subDir: string
+): Promise<Record<string, any> | undefined> => {
+  try {
+    const configPath = subDir ? `${subDir}/pipe.json` : "pipe.json";
+    const configContent = await fetchFileContent(
+      repoFullName,
+      branch,
+      configPath
+    );
+    return JSON.parse(configContent);
+  } catch (error) {
+    console.error("Error fetching pipe config:", error);
+    return undefined;
+  }
+};
+
 export const usePipes = (initialRepoUrls: string[]) => {
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +156,8 @@ export const usePipes = (initialRepoUrls: string[]) => {
       const repoData = await fetchWithCache(
         `https://api.github.com/repos/${repoFullName}`
       );
+
+      let pipeConfig: Record<string, any> | undefined;
 
       if (isSubdir) {
         console.log(
@@ -172,6 +194,9 @@ export const usePipes = (initialRepoUrls: string[]) => {
 
         console.log(`Fetching latest release for ${repoFullName}`);
 
+        console.log(`Fetching pipe config for ${repoFullName}/${subDir}`);
+        pipeConfig = await fetchPipeConfig(repoFullName, branch, subDir);
+
         return {
           name: subDir.split("/").pop() || repoData.name,
           downloads: repoData.stargazers_count,
@@ -185,6 +210,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
             ? convertHtmlToMarkdown(readmeContent)
             : "",
           mainFile: mainFileUrl,
+          config: pipeConfig,
         };
       } else {
         console.log(`Fetching README for ${repoFullName}`);
@@ -192,6 +218,9 @@ export const usePipes = (initialRepoUrls: string[]) => {
 
         console.log(`Fetching latest release for ${repoFullName}`);
         const version = await fetchLatestRelease(repoFullName);
+
+        console.log(`Fetching pipe config for ${repoFullName}`);
+        pipeConfig = await fetchPipeConfig(repoFullName, branch, "");
 
         return {
           name: repoData.name,
@@ -203,6 +232,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
           lastUpdate: repoData.updated_at,
           description: repoData.description,
           fullDescription,
+          config: pipeConfig,
         };
       }
     } catch (error) {

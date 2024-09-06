@@ -390,12 +390,23 @@ mod pipes {
             .to_string();
 
         let pipe_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+
+        // Check if the pipe directory already exists
+        if pipe_dir.exists() {
+            info!("Pipe already exists: {:?}", pipe_dir);
+            return Ok(pipe_dir);
+        }
+
         tokio::fs::create_dir_all(&pipe_dir).await?;
 
         for item in contents.as_array().unwrap() {
             let file_name = item["name"].as_str().unwrap();
-            if file_name.ends_with(".ts") || file_name.ends_with(".js") {
-                if file_name.starts_with("main") || file_name.starts_with("pipe") {
+            if file_name.ends_with(".ts") || file_name.ends_with(".js") || file_name == "pipe.json"
+            {
+                if file_name.starts_with("main")
+                    || file_name.starts_with("pipe")
+                    || file_name == "pipe.json"
+                {
                     let download_url = item["download_url"].as_str().unwrap();
                     let file_content = client.get(download_url).send().await?.bytes().await?;
                     let file_path = pipe_dir.join(file_name);
@@ -431,6 +442,13 @@ mod pipes {
             .to_string();
 
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe_name);
+
+        // Check if the pipe directory already exists
+        if pipe_dir.exists() {
+            info!("Pipe already exists: {:?}", pipe_dir);
+            return Ok(pipe_dir);
+        }
+
         tokio::fs::create_dir_all(&pipe_dir).await?;
 
         let file_path = pipe_dir.join(file_name);

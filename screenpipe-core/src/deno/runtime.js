@@ -31,11 +31,11 @@ const sendLog = async (level, ...args) => {
 const console = {
     log: (...args) => {
         core.print(`[js][info]: ${argsToMessage(...args)}\n`, false);
-        sendLog("info", ...args);
+        // sendLog("info", ...args);
     },
     error: (...args) => {
         core.print(`[js][error]: ${argsToMessage(...args)}\n`, true);
-        sendLog("error", ...args);
+        // sendLog("error", ...args);
     },
 };
 
