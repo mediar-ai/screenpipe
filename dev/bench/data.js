@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725660778615,
+  "lastUpdate": 1725660780995,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6151,6 +6151,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 6722475668,
             "range": "± 12658428",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "87b24d3408e4af40c85387312187447c2ccba892",
+          "message": "fix: deno crash + stuff",
+          "timestamp": "2024-09-06T15:02:36-07:00",
+          "tree_id": "079d79324f6c73460d2b54eb0674701256935ee8",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/87b24d3408e4af40c85387312187447c2ccba892"
+        },
+        "date": 1725660780197,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 6588112440,
+            "range": "± 11828438",
             "unit": "ns/iter"
           }
         ]
