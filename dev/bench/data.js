@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725575169697,
+  "lastUpdate": 1725584253152,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -3089,6 +3089,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 3051993354,
             "range": "± 285011880",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "b0c023f9f730a259115e8974164a8233705f1049",
+          "message": "fix: memory leak on apple native OCR #278",
+          "timestamp": "2024-09-05T17:47:13-07:00",
+          "tree_id": "2fd88289df60c295b085575c28230f457d13bbca",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b0c023f9f730a259115e8974164a8233705f1049"
+        },
+        "date": 1725584251895,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1994870979,
+            "range": "± 54769723",
             "unit": "ns/iter"
           }
         ]
