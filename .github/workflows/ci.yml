@@ -168,8 +168,12 @@ jobs:
   test-vcpkg:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
       - name: Install cargo-vcpkg
         run: cargo install cargo-vcpkg
 
       - name: Build with vcpkg integration
         run: cargo vcpkg build
+        working-directory: ./screen-pipe
