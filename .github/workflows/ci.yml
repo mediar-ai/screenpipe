@@ -79,6 +79,22 @@ jobs:
       - name: Run specific Windows OCR test
         run: cargo test test_process_ocr_task_windows
 
+      - name: Identify esaxx usage (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cargo tree > cargo_tree_output.txt
+          findstr /i "esaxx" cargo_tree_output.txt
+        continue-on-error: true
+
+      - name: Set RUSTFLAGS for Linux
+        if: runner.os == 'Linux'
+        run: echo "RUSTFLAGS=-C link-arg=-Wl,--allow-multiple-definition" >> $GITHUB_ENV
+
+      - name: Run tests with modified environment
+        run: cargo test
+        env:
+          RUSTFLAGS: ${{ env.RUSTFLAGS }}
+
   test-macos:
     runs-on: macos-latest
     steps:
