@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725584253152,
+  "lastUpdate": 1725584255604,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5425,6 +5425,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 6865283788,
             "range": "± 19845810",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "b0c023f9f730a259115e8974164a8233705f1049",
+          "message": "fix: memory leak on apple native OCR #278",
+          "timestamp": "2024-09-05T17:47:13-07:00",
+          "tree_id": "2fd88289df60c295b085575c28230f457d13bbca",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b0c023f9f730a259115e8974164a8233705f1049"
+        },
+        "date": 1725584254680,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 6621244921,
+            "range": "± 49153786",
             "unit": "ns/iter"
           }
         ]
