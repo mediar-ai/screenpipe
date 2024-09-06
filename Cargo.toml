@@ -40,7 +40,7 @@ vcpkg = "0.2"
 dependencies = ["onnxruntime"]
 git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
-
+dynamic = true
 
 
 
