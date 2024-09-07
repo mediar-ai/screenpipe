@@ -27,6 +27,7 @@ pub struct CaptureResult {
 }
 
 pub struct WindowOcrResult {
+    pub image: DynamicImage,
     pub window_name: String,
     pub app_name: String,
     pub text: String,
@@ -204,6 +205,7 @@ pub async fn process_ocr_task(
         }
 
         window_ocr_results.push(WindowOcrResult {
+            image: window_image,
             window_name,
             app_name: window_app_name,
             text: window_text,

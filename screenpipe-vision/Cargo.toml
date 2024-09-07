@@ -47,6 +47,11 @@ assert_fs = "1.1.1"
 strsim = "0.10.0"
 memory-stats = "1.2.0"
 
+# websocket example
+futures-util = "0.3"
+tokio-tungstenite = "0.20"
+serde = "1.0.200"
+base64 = "0.22.1"
 
 [build-dependencies]
 cc = "1.0"
@@ -69,6 +74,10 @@ harness = false
 [[bench]]
 name = "apple_leak_bench"
 harness = false
+
+[[example]]
+name = "screenpipe-vision-websocket"
+path = "examples/websocket.rs"
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
