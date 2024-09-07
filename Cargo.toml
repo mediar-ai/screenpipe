@@ -5,9 +5,11 @@ members = [
     "screenpipe-audio",
     "screenpipe-server", 
     "screenpipe-integrations",
+
 ]
 exclude = [
     "examples/apps/screenpipe-app-tauri/src-tauri",
+
 ]
 resolver = "2"
 

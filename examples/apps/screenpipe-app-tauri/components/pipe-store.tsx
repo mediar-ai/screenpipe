@@ -41,10 +41,56 @@ const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const { pipes, loading, error, addCustomPipe } = usePipes([
     // "https://github.com/different-ai/file-organizer-2000",
-    "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity",
+    // "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity",
   ]);
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const { settings, updateSettings } = useSettings();
+
+  const handleToggleEnabled = async (pipe: Pipe) => {
+    try {
+      if (!pipe.enabled) {
+        pipe.enabled = true;
+        const updatedInstalledPipes = [...settings.installedPipes, pipe];
+        console.log("updated installed pipes", updatedInstalledPipes);
+        await updateSettings({ installedPipes: updatedInstalledPipes });
+
+        toast({
+          title: "Enabling pipe",
+          description: "This may take a few moments...",
+        });
+
+        // Kill existing screenpipe processes
+        await invoke("kill_all_sreenpipes");
+
+        // Spawn new screenpipe process with the pipe
+        await invoke("spawn_screenpipe");
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        toast({
+          title: "Pipe enabled successfully",
+          description: "Screenpipe has been restarted with the new pipe.",
+        });
+      } else {
+        pipe.enabled = false;
+        const updatedInstalledPipes = [...settings.installedPipes, pipe];
+        console.log("updated installed pipes", updatedInstalledPipes);
+        await updateSettings({ installedPipes: updatedInstalledPipes });
+
+        toast({
+          title: "Pipe disabled",
+          description: "The pipe has been disabled.",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to toggle pipe:", error);
+      toast({
+        title: "Error toggling pipe",
+        description: "Please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleAddOwnPipe = async () => {
     if (newRepoUrl) {
@@ -114,10 +160,10 @@ const PipeDialog: React.FC = () => {
       await updateSettings({ installedPipes: updatedInstalledPipes });
 
       // Kill existing screenpipe processes
-      await invoke("kill_all_sreenpipes");
+      // await invoke("kill_all_sreenpipes");
 
       // Spawn new screenpipe process with the pipe
-      await invoke("spawn_screenpipe");
+      // await invoke("spawn_screenpipe");
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -231,9 +277,17 @@ const PipeDialog: React.FC = () => {
         <p className="mb-4">{selectedPipe.description}</p>
         <div className="flex space-x-2 mb-4">
           {isInstalled ? (
-            <Button onClick={() => handleUninstall(selectedPipe)}>
-              Uninstall
-            </Button>
+            <>
+              <Button onClick={() => handleUninstall(selectedPipe)}>
+                Uninstall
+              </Button>
+              <Button
+                onClick={() => handleToggleEnabled(selectedPipe)}
+                variant={selectedPipe.enabled ? "default" : "outline"}
+              >
+                {selectedPipe.enabled ? "Disable" : "Enable"}
+              </Button>
+            </>
           ) : (
             <Button onClick={() => handleInstall(selectedPipe)}>Install</Button>
           )}

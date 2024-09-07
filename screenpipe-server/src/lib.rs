@@ -20,4 +20,5 @@ pub use server::ContentItem;
 pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
 pub use server::Server;
+pub use server::PipeManager;
 pub use video::VideoCapture;

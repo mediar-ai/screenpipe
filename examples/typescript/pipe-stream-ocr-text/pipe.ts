@@ -35,6 +35,13 @@ async function writeToMarkdown(data) {
 
 async function runOCRTracker() {
   console.log("Starting OCR Tracker");
+  // wait 2 seocnds
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  console.log(pipe);
+  await pipe.loadConfig();
+  INTERVAL = pipe.config.interval * 1000;
+  console.log("INTERVAL", INTERVAL);
 
   while (true) {
     try {
@@ -43,16 +50,19 @@ async function runOCRTracker() {
     } catch (error) {
       console.error("Error in OCR tracking:", error);
     }
+
     await new Promise((resolve) => setTimeout(resolve, INTERVAL));
+    // const isEnabled = await pipe.isEnabled();
+    // if (!isEnabled) {
+    //   console.log("pipe is disabled");
+    //   break;
+    // }
   }
 }
 
 // Self-invoking async function to run the OCR tracker
 (async () => {
   try {
-    console.log(pipe);
-    await pipe.loadConfig();
-    INTERVAL = pipe.config.interval * 1000;
     await runOCRTracker();
   } catch (error) {
     console.error("Fatal error in OCR Tracker:", error);

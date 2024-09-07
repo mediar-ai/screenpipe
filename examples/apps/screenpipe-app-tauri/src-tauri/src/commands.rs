@@ -4,6 +4,7 @@
 // }
 
 use serde_json::Value;
+use tracing::info;
 
 #[tauri::command]
 pub fn open_screen_capture_preferences() {
@@ -50,9 +51,11 @@ pub fn reset_microphone_permissions() {
 
 #[tauri::command]
 pub async fn load_pipe_config(pipe_name: String) -> Result<Value, String> {
+    info!("Loading pipe config for {}", pipe_name);
     let default_path = dirs::home_dir().unwrap().join(".screenpipe").join("pipes");
 
-    let config_path = default_path.join(pipe_name);
+    let config_path = default_path.join(pipe_name).join("pipe.json");
+    info!("Config path: {}", config_path.to_string_lossy());
     let config_content = tokio::fs::read_to_string(config_path)
         .await
         .map_err(|e| format!("Failed to read pipe config: {}", e))?;
@@ -63,8 +66,10 @@ pub async fn load_pipe_config(pipe_name: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn save_pipe_config(pipe_name: String, config: Value) -> Result<(), String> {
+    info!("Saving pipe config for {}", pipe_name);
     let default_path = dirs::home_dir().unwrap().join(".screenpipe").join("pipes");
-    let config_path = default_path.join(pipe_name);
+    let config_path = default_path.join(pipe_name).join("pipe.json");
+    info!("Config path: {}", config_path.to_string_lossy());
     let config_content = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize pipe config: {}", e))?;
     tokio::fs::write(config_path, config_content)

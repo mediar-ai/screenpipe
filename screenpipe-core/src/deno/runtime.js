@@ -110,18 +110,29 @@ const pipe = {
     loadConfig: async () => {
         try {
             console.log("Attempting to load pipe.json");
-            const configContent = await ops.op_read_file("pipe.json");
+            const configContent = await ops.op_read_file(process.env.SCREENPIPE_DIR + "/pipes/" + globalThis.metadata.id + "/pipe.json");
             console.log("pipe.json content:", configContent);
             const parsedConfig = JSON.parse(configContent);
             console.log("Parsed config:", parsedConfig);
-            pipe.config = parsedConfig; // Set the config property
-            return parsedConfig;
+
+            // Process the fields and set the config values
+            const config = {};
+            parsedConfig.fields.forEach(field => {
+                config[field.name] = field.value !== undefined ? field.value : field.default;
+            });
+
+            pipe.config = config; // Set the processed config
+            console.log("Processed config:", config);
+            return config;
         } catch (error) {
             console.error("Error loading pipe.json:", error);
             pipe.config = {}; // Set an empty object if loading fails
             return {};
         }
     },
+    // isEnabled: async () => {
+    //     return ops.op_is_enabled();
+    // }
 };
 
 globalThis.setTimeout = (callback, delay) => {

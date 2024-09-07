@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{self, File},
+    fs,
     net::SocketAddr,
     ops::Deref,
     path::PathBuf,
@@ -8,32 +8,35 @@ use std::{
     time::Duration,
 };
 
+use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
-use futures::TryFutureExt;
-use log::{debug, error, info, LevelFilter};
+use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
+use log::{debug, error, info};
+use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,
 };
-use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
-use std::io::Write;
-
-use clap::Parser;
-use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine},
-    logs::MultiWriter,
-    start_continuous_recording, DatabaseManager, ResourceMonitor, Server,
+    start_continuous_recording, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
+use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use tokio::{
+    signal,
     sync::mpsc::channel,
     time::{interval_at, Instant},
 };
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Layer;
+use tracing_subscriber::{fmt, EnvFilter};
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
@@ -70,44 +73,49 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let local_data_dir = get_base_dir(cli.data_dir)?;
+    let local_data_dir_clone = local_data_dir.clone();
 
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. Please install ffmpeg and ensure it is in your PATH.");
         std::process::exit(1);
     }
 
-    // Initialize logging
-    let mut builder = env_logger::Builder::new();
-    builder
-        .filter(None, LevelFilter::Info)
-        .filter_module("tokenizers", LevelFilter::Error)
-        .filter_module("rusty_tesseract", LevelFilter::Error)
-        .filter_module("symphonia", LevelFilter::Error)
-        .filter_module("external_cloud_integrations", LevelFilter::Debug); // Add this line
+    // Set up file appender
+    let file_appender =
+        RollingFileAppender::new(Rotation::NEVER, local_data_dir.clone(), "screenpipe.log");
 
-    if cli.debug {
-        builder.filter_module("screenpipe", LevelFilter::Debug);
-    }
-    // Example usage of the new flag
-    if cli.save_text_files {
-        debug!("Text files will be saved.");
-    }
+    // Create a custom layer for file logging
+    let file_layer = fmt::layer()
+        .with_writer(file_appender)
+        .with_ansi(false)
+        .with_filter(EnvFilter::new("info"));
 
-    let local_data_dir = get_base_dir(cli.data_dir)?;
-    let local_data_dir_clone = local_data_dir.clone();
+    // Create a custom layer for console logging
+    let console_layer = fmt::layer()
+        .with_writer(std::io::stdout)
+        .with_filter(EnvFilter::new("debug"));
 
-    let log_file = File::create(format!(
-        "{}/screenpipe.log",
-        local_data_dir.to_string_lossy()
-    ))
-    .unwrap();
-    let multi_writer = MultiWriter::new(vec![
-        Box::new(log_file) as Box<dyn Write + Send>,
-        Box::new(std::io::stdout()) as Box<dyn Write + Send>,
-    ]);
+    // Build the EnvFilter
+    let env_filter = EnvFilter::from_default_env()
+        .add_directive("info".parse().unwrap())
+        .add_directive("tokenizers=error".parse().unwrap())
+        .add_directive("rusty_tesseract=error".parse().unwrap())
+        .add_directive("symphonia=error".parse().unwrap())
+        .add_directive("external_cloud_integrations=debug".parse().unwrap());
 
-    builder.target(env_logger::Target::Pipe(Box::new(multi_writer)));
-    builder.format_timestamp_secs().init();
+    let env_filter = if cli.debug {
+        env_filter.add_directive("screenpipe=debug".parse().unwrap())
+    } else {
+        env_filter
+    };
+
+    // Initialize the tracing subscriber with both layers and the EnvFilter
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(file_layer)
+        .with(console_layer)
+        .init();
 
     // Add warning for Linux and Windows users
     #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -336,27 +344,26 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
-    tokio::spawn(async move {
-        let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
-            // Custom plugin logic here
-            // For example, using PostHog for tracking:
-            if req.uri().path() == "/search" {
-                // Track search requests
-                // posthog.capture("search_request", {...})
-            }
-        };
-        let server = Server::new(
-            db_server,
-            SocketAddr::from(([0, 0, 0, 0], cli.port)),
-            vision_control_server_clone,
-            audio_devices_control_server,
-            local_data_dir_clone_2,
-        );
-        server.start(devices_status, api_plugin).await.unwrap();
-    });
+    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
-    // Wait for the server to start
-    info!("Server started on http://localhost:{}", cli.port);
+    let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
+        // Custom plugin logic here
+        // For example, using PostHog for tracking:
+        if req.uri().path() == "/search" {
+            // Track search requests
+            // posthog.capture("search_request", {...})
+        }
+    };
+    let server = Server::new(
+        db_server,
+        SocketAddr::from(([0, 0, 0, 0], cli.port)),
+        vision_control_server_clone,
+        audio_devices_control_server,
+        local_data_dir_clone_2,
+        pipe_manager.clone(),
+    );
+
+    let mut pipe_futures = FuturesUnordered::new();
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -466,41 +473,54 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    #[cfg(feature = "pipes")]
-    if !cli.pipe.is_empty() {
-        use futures::stream::{FuturesUnordered, StreamExt};
-        use screenpipe_core::run_pipe;
-
-        let mut pipe_futures = FuturesUnordered::new();
-        for pipe in cli.pipe {
-            // dont crash on error
-            let f = run_pipe(pipe, local_data_dir_clone.clone()).map_err(|e| {
-                error!("Error running pipe runner: {:?}", e);
-            });
-
-            pipe_futures.push(f);
+    // Start pipes
+    debug!("Starting pipes");
+    let pipes = pipe_manager.list_pipes().await;
+    for pipe in pipes {
+        debug!("Pipe: {:?}", pipe.id);
+        if !pipe.enabled {
+            debug!("Pipe {} is disabled, skipping", pipe.id);
+            continue;
         }
-
-        tokio::select! {
-            _ = async {
-                while let Some(result) = pipe_futures.next().await {
-                    if let Err(e) = result {
-                        error!("Error running pipe runner: {:?}", e);
-                    }
-                }
-            } => {
-                info!("All pipe runners completed");
-            }
-            _ = tokio::signal::ctrl_c() => {
-                info!("Received Ctrl+C, shutting down...");
-            }
+        match pipe_manager.start_pipe(&pipe.id).await {
+            Ok(future) => pipe_futures.push(future),
+            Err(e) => eprintln!("Failed to start pipe {}: {}", pipe.id, e),
         }
-
-        return Ok(());
     }
 
-    // Keep the main thread running
-    loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+    let server_future = server.start(devices_status, api_plugin);
+    pin_mut!(server_future);
+
+    let pipes_future = async {
+        loop {
+            if let Some(result) = pipe_futures.next().await {
+                info!("Pipe completed: {:?}", result);
+            } else {
+                // Sleep for a while before checking again
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        }
+    };
+    pin_mut!(pipes_future);
+
+    let ctrl_c_future = signal::ctrl_c();
+    pin_mut!(ctrl_c_future);
+
+    tokio::select! {
+        result = &mut server_future => {
+            match result {
+                Ok(_) => info!("Server stopped normally"),
+                Err(e) => error!("Server stopped with error: {:?}", e),
+            }
+        }
+        _ = &mut pipes_future => {
+            info!("All pipes completed, but server is still running");
+        }
+        _ = &mut ctrl_c_future => {
+            info!("Received Ctrl+C, shutting down...");
+        }
     }
+
+    info!("Shutdown complete");
+    Ok(())
 }

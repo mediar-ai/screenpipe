@@ -139,11 +139,6 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub monitor_id: Option<u32>,
 
-    #[cfg(feature = "pipes")]
-    /// File path for the pipe
-    #[arg(long)]
-    pub pipe: Vec<String>,
-
     /// Enable PII removal from OCR text property that is saved to db and returned in search results
     #[arg(long, default_value_t = false)]
     pub use_pii_removal: bool,
