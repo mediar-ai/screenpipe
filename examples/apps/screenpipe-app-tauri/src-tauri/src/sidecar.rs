@@ -124,22 +124,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             .unwrap_or(false))
     })
     .map_err(|e| e.to_string())?;
-
-    let pipes = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("installedPipes")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or_default();
-
-    debug!("pipes: {:?}", pipes);
     let port = with_store(app.clone(), stores.clone(), path.clone(), |store| {
         Ok(store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030))
     })
     .map_err(|e| e.to_string())?;
-
     let data_dir = with_store(app.clone(), stores.clone(), path.clone(), |store| {
         Ok(store
             .get("dataDir")
@@ -195,22 +183,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if use_pii_removal {
         args.push("--use-pii-removal");
-    }
-
-    if !pipes.is_empty() {
-        info!("adding pipes: {:?}", pipes);
-        let mut added_pipes = std::collections::HashSet::new();
-        for pipe in &pipes {
-            if let Some(obj) = pipe.as_object() {
-                if let Some(main_file) = obj.get("mainFile").and_then(Value::as_str) {
-                    if added_pipes.insert(main_file) {
-                        args.push("--pipe");
-                        args.push(main_file);
-                        info!("adding pipe: {}", main_file);
-                    }
-                }
-            }
-        }
     }
 
     if disable_audio {

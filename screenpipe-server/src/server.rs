@@ -601,19 +601,36 @@ async fn download_pipe_handler(
     }
 }
 
-// async fn run_pipe_handler(
-//     State(state): State<Arc<AppState>>,
-//     JsonResponse(payload): JsonResponse<RunPipeRequest>,
-// ) -> Result<JsonResponse<Value>, (StatusCode, String)> {
-//     debug!("Starting pipe: {}", payload.pipe_id);
-//     match state.pipe_manager.start_pipe(&payload.pipe_id).await {
-//         Ok(_) => Ok(JsonResponse(json!({
-//             "message": format!("Pipe {} started", payload.pipe_id),
-//             "pipe_id": payload.pipe_id
-//         }))),
-//         Err(e) => Err((StatusCode::BAD_REQUEST, e)),
-//     }
-// }
+async fn run_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<RunPipeRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, String)> {
+    debug!("Starting pipe: {}", payload.pipe_id);
+    // match state.pipe_manager.start_pipe(&payload.pipe_id).await {
+    //     Ok(_) => Ok(JsonResponse(json!({
+    //         "message": format!("Pipe {} started", payload.pipe_id),
+    //         "pipe_id": payload.pipe_id
+    //     }))),
+    //     Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+    // }
+
+    match state
+        .pipe_manager
+        .update_config(
+            &payload.pipe_id,
+            serde_json::json!({
+                "enabled": true,
+            }),
+        )
+        .await
+    {
+        Ok(_) => Ok(JsonResponse(json!({
+            "message": format!("Pipe {} started", payload.pipe_id),
+            "pipe_id": payload.pipe_id
+        }))),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+    }
+}
 
 async fn stop_pipe_handler(
     State(state): State<Arc<AppState>>,
@@ -792,7 +809,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
         .route("/pipes/list", get(list_pipes_handler))
         .route("/pipes/download", post(download_pipe_handler))
-        // .route("/pipes/enable", post(run_pipe_handler)) // TODO ?
+        .route("/pipes/enable", post(run_pipe_handler)) // TODO ?
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/health", get(health_check))
@@ -943,6 +960,11 @@ curl -X POST "http://localhost:3030/pipes/download" \
 
 # Get info for a specific pipe
 curl "http://localhost:3030/pipes/info/pipe-stream-ocr-text" | jq
+
+# Run a pipe
+curl -X POST "http://localhost:3030/pipes/enable" \
+     -H "Content-Type: application/json" \
+     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
 
 # Stop a pipe
 curl -X POST "http://localhost:3030/pipes/disable" \

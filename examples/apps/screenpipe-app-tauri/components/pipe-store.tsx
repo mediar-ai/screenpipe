@@ -49,39 +49,55 @@ const PipeDialog: React.FC = () => {
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
       if (!pipe.enabled) {
-        pipe.enabled = true;
-        const updatedInstalledPipes = [...settings.installedPipes, pipe];
-        console.log("updated installed pipes", updatedInstalledPipes);
-        await updateSettings({ installedPipes: updatedInstalledPipes });
+        // Enable the pipe through API
+        await fetch(`http://localhost:3030/pipes/enable`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ pipe_id: pipe.name }),
+        });
 
         toast({
           title: "Enabling pipe",
           description: "This may take a few moments...",
         });
-
-        // Kill existing screenpipe processes
-        await invoke("kill_all_sreenpipes");
-
-        // Spawn new screenpipe process with the pipe
-        await invoke("spawn_screenpipe");
-
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        toast({
-          title: "Pipe enabled successfully",
-          description: "Screenpipe has been restarted with the new pipe.",
-        });
       } else {
-        pipe.enabled = false;
-        const updatedInstalledPipes = [...settings.installedPipes, pipe];
-        console.log("updated installed pipes", updatedInstalledPipes);
-        await updateSettings({ installedPipes: updatedInstalledPipes });
+        // Disable the pipe through API
+        await fetch(`http://localhost:3030/pipes/disable`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ pipe_id: pipe.name }),
+        });
 
         toast({
-          title: "Pipe disabled",
-          description: "The pipe has been disabled.",
+          title: "Disabling pipe",
+          description: "This may take a few moments...",
         });
       }
+
+      // Kill existing screenpipe processes
+      await invoke("kill_all_sreenpipes");
+
+      // Spawn new screenpipe process
+      await invoke("spawn_screenpipe");
+
+      // Update local state
+      const updatedPipe = { ...pipe, enabled: !pipe.enabled };
+      const updatedInstalledPipes = settings.installedPipes.map((p) =>
+        p.name === pipe.name ? updatedPipe : p
+      );
+      await updateSettings({ installedPipes: updatedInstalledPipes });
+
+      setSelectedPipe(updatedPipe);
+
+      toast({
+        title: pipe.enabled ? "Pipe disabled" : "Pipe enabled",
+        description:
+          "Screenpipe has been restarted with the updated configuration.",
+      });
     } catch (error) {
       console.error("Failed to toggle pipe:", error);
       toast({
@@ -276,20 +292,15 @@ const PipeDialog: React.FC = () => {
         </div>
         <p className="mb-4">{selectedPipe.description}</p>
         <div className="flex space-x-2 mb-4">
-          {isInstalled ? (
+          {isInstalled && (
             <>
-              <Button onClick={() => handleUninstall(selectedPipe)}>
-                Uninstall
-              </Button>
               <Button
                 onClick={() => handleToggleEnabled(selectedPipe)}
                 variant={selectedPipe.enabled ? "default" : "outline"}
               >
-                {selectedPipe.enabled ? "Disable" : "Enable"}
+                {selectedPipe.enabled ? "disable" : "enable"}
               </Button>
             </>
-          ) : (
-            <Button onClick={() => handleInstall(selectedPipe)}>Install</Button>
           )}
           <Button disabled variant="outline">
             copy share link
