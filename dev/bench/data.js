@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725765700225,
+  "lastUpdate": 1725765702070,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6679,6 +6679,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 6600592547,
             "range": "± 13500893",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "1ab3ee455737910acba48a9344c59ab70502dd45",
+          "message": "feat: add pipe management as CLI subcommand",
+          "timestamp": "2024-09-07T20:10:45-07:00",
+          "tree_id": "bf013f09f7b702ca99c1606c0ce5c07fd46d637f",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/1ab3ee455737910acba48a9344c59ab70502dd45"
+        },
+        "date": 1725765701570,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 6599894942,
+            "range": "± 12887173",
             "unit": "ns/iter"
           }
         ]
