@@ -71,6 +71,7 @@ pub async fn continuous_capture(
     loop {
         let capture_result = match capture_screenshot(&monitor).await {
             Ok((image, window_images, image_hash, _capture_duration)) => {
+                debug!("Captured screenshot on monitor {} with hash: {}", monitor_id, image_hash);
                 Some((image, window_images, image_hash))
             }
             Err(e) => {

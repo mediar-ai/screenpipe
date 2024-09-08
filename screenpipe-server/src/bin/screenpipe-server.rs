@@ -301,23 +301,32 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let vision_handle = vision_runtime.spawn(async move {
-        start_continuous_recording(
-            db_clone,
-            output_path_clone,
-            fps,
-            Duration::from_secs(cli.audio_chunk_duration),
-            vision_control_clone,
-            Arc::new(SegQueue::new()),  // Empty audio devices for vision-only
-            true,  // Disable audio for vision worker
-            cli.save_text_files,
-            Arc::new(CoreAudioTranscriptionEngine::WhisperTiny),  // Dummy value, not used
-            Arc::new(cli.ocr_engine.clone().into()),
-            friend_wearable_uid_clone,  // Use the cloned version
-            monitor_id,
-            cli.use_pii_removal,
-            cli.disable_vision,
-        )
-        .await
+        let mut shutdown_rx = shutdown_tx_clone.subscribe();
+        tokio::select! {
+            result = start_continuous_recording(
+                db_clone,
+                output_path_clone,
+                fps,
+                Duration::from_secs(cli.audio_chunk_duration),
+                vision_control_clone,
+                Arc::new(SegQueue::new()),
+                true,
+                cli.save_text_files,
+                Arc::new(CoreAudioTranscriptionEngine::WhisperTiny),
+                Arc::new(cli.ocr_engine.clone().into()),
+                friend_wearable_uid_clone,
+                monitor_id,
+                cli.use_pii_removal,
+                cli.disable_vision,
+            ) => {
+                if let Err(e) = result {
+                    error!("Vision recording error: {:?}", e);
+                }
+            }
+            _ = shutdown_rx.recv() => {
+                info!("Received shutdown signal for vision recording");
+            }
+        }
     });
 
     let db_clone = Arc::clone(&db);
@@ -327,23 +336,32 @@ async fn main() -> anyhow::Result<()> {
     let friend_wearable_uid_clone = friend_wearable_uid.clone();  // Clone again for audio
 
     let audio_handle = audio_runtime.spawn(async move {
-        start_continuous_recording(
-            db_clone,
-            output_path_clone,
-            1.0,  // FPS not relevant for audio
-            Duration::from_secs(cli.audio_chunk_duration),
-            Arc::new(AtomicBool::new(true)),  // Dummy vision control
-            audio_devices_control_clone,
-            cli.disable_audio,
-            false,  // Don't save text files for audio
-            Arc::new(cli.audio_transcription_engine.clone().into()),
-            Arc::new(CoreOcrEngine::Tesseract),  // Dummy value, not used
-            friend_wearable_uid_clone,  // Use the cloned version
-            0,  // Monitor ID not relevant for audio
-            false,  // PII removal not relevant for audio
-            false,  // Don't disable audio
-        )
-        .await
+        let mut shutdown_rx = shutdown_tx_clone.subscribe();
+        tokio::select! {
+            result = start_continuous_recording(
+                db_clone,
+                output_path_clone,
+                1.0,
+                Duration::from_secs(cli.audio_chunk_duration),
+                Arc::new(AtomicBool::new(true)),
+                audio_devices_control_clone,
+                cli.disable_audio,
+                false,
+                Arc::new(cli.audio_transcription_engine.clone().into()),
+                Arc::new(CoreOcrEngine::Tesseract),
+                friend_wearable_uid_clone,
+                0,
+                false,
+                false,
+            ) => {
+                if let Err(e) = result {
+                    error!("Audio recording error: {:?}", e);
+                }
+            }
+            _ = shutdown_rx.recv() => {
+                info!("Received shutdown signal for audio recording");
+            }
+        }
     });
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
