@@ -285,6 +285,19 @@ export const usePipes = (initialRepoUrls: string[]) => {
           setLoading(false);
         }
       }
+
+      // get pipes from local api /pipes/list and add them to the list
+      const localPipes = await fetch(`http://localhost:3030/pipes/list`).then(
+        (res) => res.json()
+      );
+      console.log("localPipes", localPipes);
+      setPipes([
+        ...pipes,
+        ...localPipes.map((pipe: any) => ({
+          ...pipe,
+          name: pipe.id,
+        })),
+      ]);
     };
 
     fetchPipes();

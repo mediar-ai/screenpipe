@@ -27,7 +27,9 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
-use tokio::net::TcpListener;
+use tokio::io::AsyncWriteExt;
+
+use tokio::{fs::File, net::TcpListener};
 use tower_http::trace::TraceLayer;
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -503,23 +505,44 @@ impl PipeManager {
     }
 
     async fn update_config(&self, id: &str, new_config: Value) -> Result<(), String> {
-        let mut pipes = self.list_pipes().await;
-        if let Some(pipe_info) = pipes.iter_mut().find(|pipe| pipe.id == id) {
-            if let Value::Object(existing_config) = &mut pipe_info.config {
-                if let Value::Object(updates) = new_config {
-                    for (key, value) in updates {
-                        existing_config.insert(key, value);
-                    }
-                    Ok(())
-                } else {
-                    Err("New configuration must be an object".to_string())
+        info!("Updating config for pipe: {}", id);
+        let pipe_dir = self.screenpipe_dir.join("pipes").join(id);
+        let config_path = pipe_dir.join("pipe.json");
+
+        // Read the existing config
+        let config_str = tokio::fs::read_to_string(&config_path)
+            .await
+            .map_err(|e| format!("Failed to read pipe config: {}", e))?;
+
+        let mut config: Value = serde_json::from_str(&config_str)
+            .map_err(|e| format!("Failed to parse pipe config: {}", e))?;
+
+        // Update the config
+        if let Value::Object(existing_config) = &mut config {
+            if let Value::Object(updates) = new_config {
+                for (key, value) in updates {
+                    existing_config.insert(key, value);
                 }
             } else {
-                Err("Existing configuration is not an object".to_string())
+                return Err("New configuration must be an object".to_string());
             }
         } else {
-            Err("Pipe not found".to_string())
+            return Err("Existing configuration is not an object".to_string());
         }
+
+        // Write the updated config back to the file
+        let updated_config_str = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize updated config: {}", e))?;
+
+        let mut file = File::create(&config_path)
+            .await
+            .map_err(|e| format!("Failed to open pipe config file for writing: {}", e))?;
+
+        file.write_all(updated_config_str.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write updated config: {}", e))?;
+
+        Ok(())
     }
 
     async fn get_pipe_info(&self, id: &str) -> Option<PipeInfo> {

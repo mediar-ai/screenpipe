@@ -381,7 +381,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
         className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
         onClick={() => setIsDialogOpen(true)}
       >
-        Status{" "}
+        status{" "}
         <span
           className={`ml-1 w-2 h-2 rounded-full ${getStatusColor(
             health.status

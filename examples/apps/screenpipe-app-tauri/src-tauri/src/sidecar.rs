@@ -189,6 +189,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--disable-audio");
     }
 
+    // args.push("--debug");
+
     if cfg!(windows) {
         let exe_dir = env::current_exe()
             .expect("Failed to get current executable path")

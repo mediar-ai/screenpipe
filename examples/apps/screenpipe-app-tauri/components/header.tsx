@@ -98,7 +98,7 @@ export default function Header() {
           variant="outline"
           href="mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
         >
-          <span className="mr-2">Send feedback</span>
+          <span className="mr-2">send feedback</span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="16"

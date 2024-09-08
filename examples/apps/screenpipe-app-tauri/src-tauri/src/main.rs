@@ -38,6 +38,7 @@ mod sidecar;
 mod server;
 pub use commands::open_screen_capture_preferences;
 pub use commands::reset_screen_permissions;
+pub use commands::reset_all_pipes;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
 pub use server::spawn_server;
@@ -79,7 +80,8 @@ async fn main() {
             reset_screen_permissions,
             open_screen_capture_preferences,
             load_pipe_config,
-            save_pipe_config
+            save_pipe_config,
+            reset_all_pipes
         ])
         .setup(|app| {
             // Logging setup

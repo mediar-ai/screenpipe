@@ -77,3 +77,26 @@ pub async fn save_pipe_config(pipe_name: String, config: Value) -> Result<(), St
         .map_err(|e| format!("Failed to write pipe config: {}", e))?;
     Ok(())
 }
+
+
+#[tauri::command]
+pub async fn reset_all_pipes() -> Result<(), String> {
+    info!("Resetting all pipes");
+    let pipes_path = dirs::home_dir()
+        .ok_or_else(|| "Failed to get home directory".to_string())?
+        .join(".screenpipe")
+        .join("pipes");
+
+    if pipes_path.exists() {
+        tokio::fs::remove_dir_all(&pipes_path)
+            .await
+            .map_err(|e| format!("Failed to remove pipes directory: {}", e))?;
+    }
+
+    tokio::fs::create_dir_all(&pipes_path)
+        .await
+        .map_err(|e| format!("Failed to recreate pipes directory: {}", e))?;
+
+    Ok(())
+}
+

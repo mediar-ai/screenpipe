@@ -49,9 +49,10 @@ async function runOCRTracker() {
       await writeToMarkdown(screenData);
     } catch (error) {
       console.error("Error in OCR tracking:", error);
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, INTERVAL));
     }
 
-    await new Promise((resolve) => setTimeout(resolve, INTERVAL));
     // const isEnabled = await pipe.isEnabled();
     // if (!isEnabled) {
     //   console.log("pipe is disabled");
