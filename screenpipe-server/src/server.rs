@@ -6,8 +6,11 @@ use axum::{
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
+use futures::future::try_join_all;
+use screenpipe_core::{download_pipe, run_pipe};
 use screenpipe_vision::monitor::list_monitors;
 
+use crate::plugin::ApiPluginLayer;
 use crate::{db::TagContentType, ContentType, DatabaseManager, SearchResult};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
@@ -15,18 +18,20 @@ use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
+    future::Future,
     net::SocketAddr,
+    path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
-use tokio::net::TcpListener;
+use tokio::io::AsyncWriteExt;
+
+use tokio::{fs::File, net::TcpListener};
 use tower_http::trace::TraceLayer;
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
-
-use crate::plugin::ApiPluginLayer;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
@@ -34,6 +39,8 @@ pub struct AppState {
     pub audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     pub devices_status: HashMap<AudioDevice, DeviceControl>,
     pub app_start_time: DateTime<Utc>,
+    pub screenpipe_dir: PathBuf,
+    pub pipe_manager: Arc<PipeManager>,
 }
 
 // Update the SearchQuery struct
@@ -454,6 +461,257 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     })
 }
 
+// New structs for pipe management
+#[derive(Clone, Serialize)]
+pub struct PipeInfo {
+    pub id: String,
+    pub enabled: bool,
+    pub config: serde_json::Value,
+}
+
+pub struct PipeManager {
+    screenpipe_dir: PathBuf,
+}
+
+impl PipeManager {
+    pub fn new(screenpipe_dir: PathBuf) -> Self {
+        PipeManager { screenpipe_dir }
+    }
+
+    pub async fn start_pipe(
+        &self,
+        id: &str,
+    ) -> Result<impl Future<Output = Result<(), anyhow::Error>>, String> {
+        let pipes = self.list_pipes().await;
+
+        if let Some(_) = pipes.iter().find(|pipe| pipe.id == id) {
+            let pipe_id = id.to_string();
+            let screenpipe_dir = self.screenpipe_dir.clone();
+
+            let future = run_pipe(pipe_id.clone(), screenpipe_dir);
+
+            self.update_config(
+                id,
+                serde_json::json!({
+                    "enabled": true,
+                }),
+            )
+            .await?;
+
+            Ok(future)
+        } else {
+            Err("Pipe not found".to_string())
+        }
+    }
+
+    async fn update_config(&self, id: &str, new_config: Value) -> Result<(), String> {
+        info!("Updating config for pipe: {}", id);
+        let pipe_dir = self.screenpipe_dir.join("pipes").join(id);
+        let config_path = pipe_dir.join("pipe.json");
+
+        // Read the existing config
+        let config_str = tokio::fs::read_to_string(&config_path)
+            .await
+            .map_err(|e| format!("Failed to read pipe config: {}", e))?;
+
+        let mut config: Value = serde_json::from_str(&config_str)
+            .map_err(|e| format!("Failed to parse pipe config: {}", e))?;
+
+        // Update the config
+        if let Value::Object(existing_config) = &mut config {
+            if let Value::Object(updates) = new_config {
+                for (key, value) in updates {
+                    existing_config.insert(key, value);
+                }
+            } else {
+                return Err("New configuration must be an object".to_string());
+            }
+        } else {
+            return Err("Existing configuration is not an object".to_string());
+        }
+
+        // Write the updated config back to the file
+        let updated_config_str = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize updated config: {}", e))?;
+
+        let mut file = File::create(&config_path)
+            .await
+            .map_err(|e| format!("Failed to open pipe config file for writing: {}", e))?;
+
+        file.write_all(updated_config_str.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write updated config: {}", e))?;
+
+        Ok(())
+    }
+
+    async fn get_pipe_info(&self, id: &str) -> Option<PipeInfo> {
+        let pipes = self.list_pipes().await;
+        pipes.iter().find(|pipe| pipe.id == id).cloned()
+    }
+
+    pub async fn list_pipes(&self) -> Vec<PipeInfo> {
+        let pipe_dir = self.screenpipe_dir.join("pipes");
+        let mut pipe_infos = Vec::new();
+
+        if let Ok(mut entries) = tokio::fs::read_dir(pipe_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let pipe_id = entry.file_name().to_string_lossy().into_owned();
+                let config_path = entry.path().join("pipe.json");
+                pipe_infos.push(async move {
+                    let config = tokio::fs::read_to_string(config_path).await?;
+                    let config: Value = serde_json::from_str(&config)?;
+                    debug!("Pipe config: {:?}", config);
+                    Ok::<_, anyhow::Error>(PipeInfo {
+                        id: pipe_id,
+                        enabled: config
+                            .get("enabled")
+                            .unwrap_or(&Value::Bool(false))
+                            .as_bool()
+                            .unwrap_or(false),
+                        config,
+                    })
+                });
+            }
+        }
+
+        match try_join_all(pipe_infos).await {
+            Ok(infos) => infos,
+            Err(e) => {
+                error!("Error listing pipes: {}", e);
+                Vec::new()
+            }
+        }
+    }
+}
+
+// Request and response structs
+#[derive(Deserialize)]
+struct DownloadPipeRequest {
+    url: String,
+}
+
+#[derive(Deserialize)]
+struct RunPipeRequest {
+    pipe_id: String,
+}
+
+#[derive(Deserialize)]
+struct UpdatePipeConfigRequest {
+    pipe_id: String,
+    config: serde_json::Value,
+}
+
+// Handler functions
+async fn download_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<DownloadPipeRequest>,
+) -> Result<JsonResponse<serde_json::Value>, (StatusCode, String)> {
+    debug!("Downloading pipe: {}", payload.url);
+    match download_pipe(&payload.url, state.screenpipe_dir.clone()).await {
+        Ok(pipe_dir) => {
+            let pipe_id = pipe_dir.file_name().unwrap().to_string_lossy().into_owned();
+
+            Ok(JsonResponse(json!({
+                "message": format!("Pipe {} downloaded successfully", pipe_id),
+                "pipe_id": pipe_id
+            })))
+        }
+        Err(e) => {
+            error!("Failed to download pipe: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        }
+    }
+}
+
+async fn run_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<RunPipeRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, String)> {
+    debug!("Starting pipe: {}", payload.pipe_id);
+    // match state.pipe_manager.start_pipe(&payload.pipe_id).await {
+    //     Ok(_) => Ok(JsonResponse(json!({
+    //         "message": format!("Pipe {} started", payload.pipe_id),
+    //         "pipe_id": payload.pipe_id
+    //     }))),
+    //     Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+    // }
+
+    match state
+        .pipe_manager
+        .update_config(
+            &payload.pipe_id,
+            serde_json::json!({
+                "enabled": true,
+            }),
+        )
+        .await
+    {
+        Ok(_) => Ok(JsonResponse(json!({
+            "message": format!("Pipe {} started", payload.pipe_id),
+            "pipe_id": payload.pipe_id
+        }))),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+    }
+}
+
+async fn stop_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<RunPipeRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, String)> {
+    debug!("Stopping pipe: {}", payload.pipe_id);
+    match state
+        .pipe_manager
+        .update_config(
+            &payload.pipe_id,
+            serde_json::json!({
+                "enabled": false,
+            }),
+        )
+        .await
+    {
+        Ok(_) => Ok(JsonResponse(json!({
+            "message": format!("Pipe {} stopped", payload.pipe_id),
+            "pipe_id": payload.pipe_id
+        }))),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+    }
+}
+
+async fn update_pipe_config_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<UpdatePipeConfigRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, String)> {
+    debug!("Updating pipe config for: {}", payload.pipe_id);
+    match state
+        .pipe_manager
+        .update_config(&payload.pipe_id, payload.config)
+        .await
+    {
+        Ok(_) => Ok(JsonResponse(json!({
+            "message": format!("Pipe {} config updated", payload.pipe_id),
+            "pipe_id": payload.pipe_id
+        }))),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+    }
+}
+
+async fn get_pipe_info_handler(
+    State(state): State<Arc<AppState>>,
+    Path(pipe_id): Path<String>,
+) -> Result<JsonResponse<PipeInfo>, (StatusCode, String)> {
+    debug!("Getting pipe info for: {}", pipe_id);
+    match state.pipe_manager.get_pipe_info(&pipe_id).await {
+        Some(info) => Ok(JsonResponse(info)),
+        None => Err((StatusCode::NOT_FOUND, "Pipe not found".to_string())),
+    }
+}
+
+async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Vec<PipeInfo>> {
+    debug!("Listing pipes");
+    JsonResponse(state.pipe_manager.list_pipes().await)
+}
+
 // Helper functions
 fn into_content_item(result: SearchResult) -> ContentItem {
     match result {
@@ -494,6 +752,8 @@ pub struct Server {
     addr: SocketAddr,
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    screenpipe_dir: PathBuf,
+    pipe_manager: Arc<PipeManager>,
 }
 
 impl Server {
@@ -502,12 +762,16 @@ impl Server {
         addr: SocketAddr,
         vision_control: Arc<AtomicBool>,
         audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+        screenpipe_dir: PathBuf,
+        pipe_manager: Arc<PipeManager>,
     ) -> Self {
         Server {
             db,
             addr,
             vision_control,
             audio_devices_control,
+            screenpipe_dir,
+            pipe_manager,
         }
     }
 
@@ -526,6 +790,8 @@ impl Server {
             audio_devices_control: self.audio_devices_control,
             devices_status: device_status,
             app_start_time: Utc::now(),
+            screenpipe_dir: self.screenpipe_dir.clone(),
+            pipe_manager: self.pipe_manager,
         });
 
         // https://github.com/tokio-rs/console
@@ -539,6 +805,7 @@ impl Server {
             )
             .with_state(app_state);
 
+        info!("Server starting on {}", self.addr);
 
         match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
             Ok(_) => {
@@ -562,6 +829,12 @@ pub fn create_router() -> Router<Arc<AppState>> {
             "/tags/:content_type/:id",
             post(add_tags).delete(remove_tags),
         )
+        .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
+        .route("/pipes/list", get(list_pipes_handler))
+        .route("/pipes/download", post(download_pipe_handler))
+        .route("/pipes/enable", post(run_pipe_handler)) // TODO ?
+        .route("/pipes/disable", post(stop_pipe_handler))
+        .route("/pipes/update", post(update_pipe_config_handler))
         .route("/health", get(health_check))
 }
 
@@ -699,5 +972,37 @@ curl -X POST "http://localhost:3030/tags/vision/626" \
      -H "Content-Type: application/json" \
      -d '{"tags": ["debug"]}'
 
+
+# List all pipes
+curl "http://localhost:3030/pipes/list" | jq
+
+# Download a new pipe
+curl -X POST "http://localhost:3030/pipes/download" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "./examples/typescript/pipe-stream-ocr-text"}' | jq
+
+# Get info for a specific pipe
+curl "http://localhost:3030/pipes/info/pipe-stream-ocr-text" | jq
+
+# Run a pipe
+curl -X POST "http://localhost:3030/pipes/enable" \
+     -H "Content-Type: application/json" \
+     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
+
+# Stop a pipe
+curl -X POST "http://localhost:3030/pipes/disable" \
+     -H "Content-Type: application/json" \
+     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
+
+# Update pipe configuration
+curl -X POST "http://localhost:3030/pipes/update" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "pipe_id": "pipe-stream-ocr-text",
+       "config": {
+         "key": "value",
+         "another_key": "another_value"
+       }
+     }' | jq
 
 */

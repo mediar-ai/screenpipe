@@ -44,7 +44,9 @@ tower-http = { version = "0.5.2", features = ["cors", "trace"] }
 # Log
 log = { workspace = true }
 env_logger = "0.10"
-
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = "0.2.3"
 # Cli ! shouldn't be required if using as lib
 clap = { version = "4.3", features = ["derive"] }
 

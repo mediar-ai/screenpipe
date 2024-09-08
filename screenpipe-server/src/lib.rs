@@ -4,8 +4,6 @@ pub mod core;
 mod db;
 pub mod filtering;
 pub mod logs;
-#[cfg(feature = "pipes")]
-pub mod pipe_runner;
 mod plugin;
 mod resource_monitor;
 mod server;
@@ -22,4 +20,5 @@ pub use server::ContentItem;
 pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
 pub use server::Server;
+pub use server::PipeManager;
 pub use video::VideoCapture;
