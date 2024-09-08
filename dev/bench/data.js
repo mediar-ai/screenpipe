@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725762369542,
+  "lastUpdate": 1725765700225,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -3659,6 +3659,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2145139125,
             "range": "± 75283185",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "1ab3ee455737910acba48a9344c59ab70502dd45",
+          "message": "feat: add pipe management as CLI subcommand",
+          "timestamp": "2024-09-07T20:10:45-07:00",
+          "tree_id": "bf013f09f7b702ca99c1606c0ce5c07fd46d637f",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/1ab3ee455737910acba48a9344c59ab70502dd45"
+        },
+        "date": 1725765699621,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1959061354,
+            "range": "± 52109113",
             "unit": "ns/iter"
           }
         ]
