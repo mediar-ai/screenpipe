@@ -6,7 +6,7 @@ mod tests {
     use std::{path::PathBuf, sync::Once};
     use tempfile::TempDir;
     use tokio::{
-        fs::{create_dir_all, remove_file, File},
+        fs::{create_dir_all, File},
         io::AsyncWriteExt,
     };
     use tracing::subscriber::set_global_default;
@@ -42,11 +42,14 @@ mod tests {
         file.write_all(code.as_bytes()).await.unwrap();
         file.flush().await.unwrap();
         // Test a simple JavaScript function
-        let result = run_js("", file_path).await;
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        let result = run_js("", file_path, screenpipe_dir).await;
 
         assert!(result.is_ok());
         println!("result: {:?}", result);
-        remove_file(file_path).await.unwrap();
+        // remove_file(file_path).await.unwrap();
     }
 
     async fn setup_test_pipe(temp_dir: &TempDir, pipe_name: &str, code: &str) -> PathBuf {
@@ -186,6 +189,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Github said NO
     async fn test_download_pipe_github_folder() {
         init();
         let temp_dir = TempDir::new().unwrap();

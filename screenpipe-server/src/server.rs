@@ -10,8 +10,8 @@ use futures::future::try_join_all;
 use screenpipe_core::{download_pipe, run_pipe};
 use screenpipe_vision::monitor::list_monitors;
 
-use crate::plugin::ApiPluginLayer;
 use crate::{db::TagContentType, ContentType, DatabaseManager, SearchResult};
+use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
@@ -59,6 +59,8 @@ pub(crate) struct SearchQuery {
     app_name: Option<String>, // Add this line
     #[serde(default)]
     window_name: Option<String>, // Add this line
+    #[serde(default)]
+    include_frames: bool,
 }
 
 #[derive(Deserialize)]
@@ -111,6 +113,7 @@ pub struct OCRContent {
     pub app_name: String,
     pub window_name: String,
     pub tags: Vec<String>,
+    pub frame: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -258,9 +261,70 @@ pub(crate) async fn search(
             )
         })?;
 
+    let mut content_items: Vec<ContentItem> = results
+        .iter()
+        .map(|result| match result {
+            SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
+                frame_id: ocr.frame_id,
+                text: ocr.ocr_text.clone(),
+                timestamp: ocr.timestamp,
+                file_path: ocr.file_path.clone(),
+                offset_index: ocr.offset_index,
+                app_name: ocr.app_name.clone(),
+                window_name: ocr.window_name.clone(),
+                tags: ocr.tags.clone(),
+                frame: None,
+            }),
+            SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
+                chunk_id: audio.audio_chunk_id,
+                transcription: audio.transcription.clone(),
+                timestamp: audio.timestamp,
+                file_path: audio.file_path.clone(),
+                offset_index: audio.offset_index,
+                tags: audio.tags.clone(),
+            }),
+            SearchResult::FTS(fts) => ContentItem::FTS(FTSContent {
+                text_id: fts.text_id,
+                matched_text: fts.matched_text.clone(),
+                frame_id: fts.frame_id,
+                timestamp: fts.frame_timestamp,
+                app_name: fts.app_name.clone(),
+                window_name: fts.window_name.clone(),
+                file_path: fts.video_file_path.clone(),
+                original_frame_text: fts.original_frame_text.clone(),
+                tags: fts.tags.clone(),
+            }),
+        })
+        .collect();
+
+    if query.include_frames {
+        debug!("Extracting frames for OCR content");
+        let frame_futures: Vec<_> = content_items
+            .iter()
+            .filter_map(|item| {
+                if let ContentItem::OCR(ocr_content) = item {
+                    Some(extract_frame(
+                        &ocr_content.file_path,
+                        ocr_content.offset_index,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let frames = try_join_all(frame_futures).await.unwrap(); // TODO: handle error
+
+        for (item, frame) in content_items.iter_mut().zip(frames.into_iter()) {
+            if let ContentItem::OCR(ref mut ocr_content) = item {
+                ocr_content.frame = Some(frame);
+            }
+        }
+    }
+
     info!("Search completed: found {} results", total);
     Ok(JsonResponse(PaginatedResponse {
-        data: results.into_iter().map(into_content_item).collect(),
+        data: content_items,
         pagination: PaginationInfo {
             limit: query.pagination.limit,
             offset: query.pagination.offset,
@@ -712,41 +776,6 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
     JsonResponse(state.pipe_manager.list_pipes().await)
 }
 
-// Helper functions
-fn into_content_item(result: SearchResult) -> ContentItem {
-    match result {
-        SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
-            frame_id: ocr.frame_id,
-            text: ocr.ocr_text,
-            timestamp: ocr.timestamp,
-            file_path: ocr.file_path,
-            offset_index: ocr.offset_index,
-            app_name: ocr.app_name,
-            window_name: ocr.window_name,
-            tags: ocr.tags,
-        }),
-        SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
-            chunk_id: audio.audio_chunk_id,
-            transcription: audio.transcription,
-            timestamp: audio.timestamp,
-            file_path: audio.file_path,
-            offset_index: audio.offset_index,
-            tags: audio.tags,
-        }),
-        SearchResult::FTS(fts) => ContentItem::FTS(FTSContent {
-            text_id: fts.text_id,
-            matched_text: fts.matched_text,
-            frame_id: fts.frame_id,
-            timestamp: fts.frame_timestamp,
-            app_name: fts.app_name,
-            window_name: fts.window_name, // Ensure this field is included
-            file_path: fts.video_file_path,
-            original_frame_text: fts.original_frame_text,
-            tags: fts.tags,
-        }),
-    }
-}
-
 pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
@@ -854,75 +883,26 @@ pub fn create_router() -> Router<Arc<AppState>> {
 // # 6. Search with no query (should return all results)
 // # curl "http://localhost:3030/search?limit=5&offset=0"
 
-// # 7. Start a device
-// # curl -X POST "http://localhost:3030/audio/start" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
-
-// # 8. Stop a device
-// # curl -X POST "http://localhost:3030/audio/stop" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
-
-// # 9. Get device status
-// # curl "http://localhost:3030/audio/status" -H "Content-Type: application/json" -d '{"device_id": "device1"}'
-
 // list devices
 // # curl "http://localhost:3030/audio/list" | jq
-
-// start the first device in the list that has "Microphone (input)"" in the id
-// 1. list
-// 2. start the first device in the list that has "Microphone (input)"" in the id
-// DEVICE=$(curl "http://localhost:3030/audio/list" | grep "Microphone (input)" | jq -r '.[0].id')
-// curl -X POST "http://localhost:3030/audio/start" -H "Content-Type: application/json" -d '{"device_id": "$DEVICE"}' | jq
-// curl -X POST "http://localhost:3030/audio/stop" -H "Content-Type: application/json" -d '{"device_id": "$DEVICE"}' | jq
-
-// # 10. Start recording
-// # curl -X POST "http://localhost:3030/vision/start"
-
-// # 11. Stop recording
-// # curl -X POST "http://localhost:3030/vision/stop"
-
-// # 12. Get recording status
-// # curl "http://localhost:3030/vision/status"
 
 /*
 
 echo "Listing audio devices:"
 curl "http://localhost:3030/audio/list" | jq
 
-echo "Starting vision recording:"
-curl -X POST "http://localhost:3030/vision/start" | jq
-
-echo "Stopping all audio devices:"
-DEVICES=$(curl "http://localhost:3030/audio/list" | jq -r '.[].id')
-echo "$DEVICES" | while IFS= read -r DEVICE; do
-    echo "Stopping device: $DEVICE"
-    curl -X POST "http://localhost:3030/audio/stop" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
-done
-
-echo "Checking statuses:"
-curl "http://localhost:3030/vision/status" | jq
-echo "$DEVICES" | while IFS= read -r DEVICE; do
-    echo "Checking status of device: $DEVICE"
-    curl -X POST "http://localhost:3030/audio/status" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
-done
-
-echo "Stopping vision recording:"
-curl -X POST "http://localhost:3030/vision/stop" | jq
-
-echo "Checking statuses again:"
-curl "http://localhost:3030/vision/status" | jq
-curl -X POST "http://localhost:3030/audio/status" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
-
-echo "Stopping audio device:"
-curl -X POST "http://localhost:3030/audio/stop" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
-
-echo "Final status check:"
-curl "http://localhost:3030/vision/status" | jq
-curl -X POST "http://localhost:3030/audio/status" -H "Content-Type: application/json" -d "{\"device_id\": \"$DEVICE\"}" | jq
 
 echo "Searching for content:"
 curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all" | jq
 curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr" | jq
 
 curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=all" | jq
+
+# last 5 w frames
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# 30 min to 25 min ago
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 
 # Search for content from the last 30 minutes
