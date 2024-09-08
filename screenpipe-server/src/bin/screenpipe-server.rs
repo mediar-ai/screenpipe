@@ -29,8 +29,9 @@ use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use serde_json::{json, Value};
 use tokio::{
+    runtime::Runtime,
     signal,
-    sync::mpsc::channel,
+    sync::{broadcast, mpsc::channel},
     time::{interval_at, Instant},
 };
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -281,88 +282,75 @@ async fn main() -> anyhow::Result<()> {
     let ocr_engine_clone = cli.ocr_engine.clone();
     let restart_interval = cli.restart_interval;
 
-    // Function to start or restart the recording task
-    let _start_recording = tokio::spawn(async move {
-        // hack
-        let mut recording_task = tokio::spawn(async move {});
-        let mut restart_timer = if restart_interval > 0 {
-            // Calculate the first restart time
-            let first_restart = Instant::now() + Duration::from_secs(restart_interval * 60);
-            Some(interval_at(
-                first_restart,
-                Duration::from_secs(restart_interval * 60),
-            ))
-        } else {
-            None
-        };
-        loop {
-            let db_clone = db.clone();
-            let local_data_dir = local_data_dir.clone();
-            let vision_control = vision_control.clone();
-            let audio_devices_control = audio_devices_control.clone();
-            let friend_wearable_uid_clone = friend_wearable_uid.clone(); // Clone for each iteration
+    let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-            tokio::select! {
-                _ = &mut recording_task => {
-                    debug!("Recording task ended. Restarting...");
-                }
-                Some(_) = restart_receiver.recv() => {
-                    info!("Received restart signal. Restarting recording task...");
-                    recording_task.abort();
-                }
-                _ = async { if let Some(timer) = &mut restart_timer {
-                    timer.tick().await
-                } else {
-                    std::future::pending().await
-                }}, if restart_interval > 0 => {
-                    info!("Periodic restart interval reached. Restarting recording task...");
-                    recording_task.abort();
-                }
-            }
-            let core_ocr_engine: CoreOcrEngine = cli.ocr_engine.clone().into();
-            let ocr_engine = Arc::new(core_ocr_engine);
-            let core_audio_transcription_engine: CoreAudioTranscriptionEngine =
-                cli.audio_transcription_engine.clone().into();
-            let audio_transcription_engine = Arc::new(core_audio_transcription_engine);
+    let audio_runtime = Runtime::new().unwrap();
+    let vision_runtime = Runtime::new().unwrap();
 
-            recording_task = tokio::spawn(async move {
-                let result = start_continuous_recording(
-                    db_clone,
-                    Arc::new(local_data_dir.join("data").to_string_lossy().into_owned()),
-                    cli.fps,
-                    Duration::from_secs(cli.audio_chunk_duration),
-                    vision_control,
-                    audio_devices_control,
-                    cli.disable_audio,
-                    cli.save_text_files,
-                    audio_transcription_engine,
-                    ocr_engine,
-                    friend_wearable_uid_clone, // Use the cloned version
-                    monitor_id,
-                    cli.use_pii_removal,
-                    cli.disable_vision,
-                )
-                .await;
+    let db_clone = Arc::clone(&db);
+    let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
+    let vision_control_clone = Arc::clone(&vision_control);
+    let shutdown_tx_clone = shutdown_tx.clone();
+    let friend_wearable_uid_clone = friend_wearable_uid.clone();  // Clone here
 
-                if let Err(e) = result {
-                    error!("Continuous recording error: {:?}", e);
-                }
-            });
-            debug!("Recording task started");
+    let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
+        cli.fps
+    } else {
+        eprintln!("Invalid FPS value: {}. Using default of 1.0", cli.fps);
+        1.0
+    };
 
-            // Short delay before restarting to avoid rapid restarts
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
+    let vision_handle = vision_runtime.spawn(async move {
+        start_continuous_recording(
+            db_clone,
+            output_path_clone,
+            fps,
+            Duration::from_secs(cli.audio_chunk_duration),
+            vision_control_clone,
+            Arc::new(SegQueue::new()),  // Empty audio devices for vision-only
+            true,  // Disable audio for vision worker
+            cli.save_text_files,
+            Arc::new(CoreAudioTranscriptionEngine::WhisperTiny),  // Dummy value, not used
+            Arc::new(cli.ocr_engine.clone().into()),
+            friend_wearable_uid_clone,  // Use the cloned version
+            monitor_id,
+            cli.use_pii_removal,
+            cli.disable_vision,
+        )
+        .await
+    });
+
+    let db_clone = Arc::clone(&db);
+    let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
+    let audio_devices_control_clone = Arc::clone(&audio_devices_control);
+    let shutdown_tx_clone = shutdown_tx.clone();
+    let friend_wearable_uid_clone = friend_wearable_uid.clone();  // Clone again for audio
+
+    let audio_handle = audio_runtime.spawn(async move {
+        start_continuous_recording(
+            db_clone,
+            output_path_clone,
+            1.0,  // FPS not relevant for audio
+            Duration::from_secs(cli.audio_chunk_duration),
+            Arc::new(AtomicBool::new(true)),  // Dummy vision control
+            audio_devices_control_clone,
+            cli.disable_audio,
+            false,  // Don't save text files for audio
+            Arc::new(cli.audio_transcription_engine.clone().into()),
+            Arc::new(CoreOcrEngine::Tesseract),  // Dummy value, not used
+            friend_wearable_uid_clone,  // Use the cloned version
+            0,  // Monitor ID not relevant for audio
+            false,  // PII removal not relevant for audio
+            false,  // Don't disable audio
+        )
+        .await
     });
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
 
     let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
-        // Custom plugin logic here
-        // For example, using PostHog for tracking:
         if req.uri().path() == "/search" {
             // Track search requests
-            // posthog.capture("search_request", {...})
         }
     };
     let server = Server::new(
@@ -507,7 +495,6 @@ async fn main() -> anyhow::Result<()> {
             if let Some(result) = pipe_futures.next().await {
                 info!("Pipe completed: {:?}", result);
             } else {
-                // Sleep for a while before checking again
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         }
@@ -518,6 +505,8 @@ async fn main() -> anyhow::Result<()> {
     pin_mut!(ctrl_c_future);
 
     tokio::select! {
+        _ = vision_handle => info!("Vision recording completed"),
+        _ = audio_handle => info!("Audio recording completed"),
         result = &mut server_future => {
             match result {
                 Ok(_) => info!("Server stopped normally"),
@@ -527,10 +516,15 @@ async fn main() -> anyhow::Result<()> {
         _ = &mut pipes_future => {
             info!("All pipes completed, but server is still running");
         }
-        _ = &mut ctrl_c_future => {
-            info!("Received Ctrl+C, shutting down...");
+        _ = ctrl_c_future => {
+            info!("Received Ctrl+C, initiating shutdown");
+            let _ = shutdown_tx.send(());
         }
     }
+
+    // Ensure both runtimes are shut down
+    drop(vision_runtime);
+    drop(audio_runtime);
 
     info!("Shutdown complete");
     Ok(())
@@ -581,5 +575,5 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
             }
         }
     }
-    return Ok(());
+    Ok(())
 }

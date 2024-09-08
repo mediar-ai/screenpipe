@@ -60,7 +60,13 @@ pub async fn continuous_capture(
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
-    let monitor = get_monitor_by_id(monitor_id).await.unwrap();
+    let monitor = match get_monitor_by_id(monitor_id).await {
+        Some(m) => m,
+        None => {
+            error!("Failed to get monitor with id: {}. Exiting continuous_capture.", monitor_id);
+            return;
+        }
+    };
 
     loop {
         let capture_result = match capture_screenshot(&monitor).await {
