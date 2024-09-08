@@ -981,6 +981,12 @@ curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
      -d '{"url": "./examples/typescript/pipe-stream-ocr-text"}' | jq
 
+
+curl -X POST "http://localhost:3030/pipes/download" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"}' | jq
+
+
 # Get info for a specific pipe
 curl "http://localhost:3030/pipes/info/pipe-stream-ocr-text" | jq
 

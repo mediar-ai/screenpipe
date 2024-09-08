@@ -14,9 +14,9 @@ Below is a table of the available examples:
 
 | Example | Description | Type | Link |
 |---------|-------------|------|------|
-| TypeScript Pipe Tagging Activity | Automatically tag activities using AI | Pipe | [Pipe Tagging Activity](./pipe-tagging-activity) |
-| TypeScript Pipe Stream OCR Text | Stream OCR text from screen data | Pipe | [Pipe Stream OCR Text](./pipe-stream-ocr-text) |
-| TypeScript Pipe Activity Topic Tracker | Track and summarize activities | Pipe | [Pipe Activity Topic Tracker](./pipe-activity-topic-tracker) |
+| TypeScript Pipe Tagging Activity | Automatically tag activities using AI | Pipe v1 | [Pipe Tagging Activity](./pipe-tagging-activity) |
+| TypeScript Pipe Stream OCR Text | Stream OCR text from screen data | Pipe v2 | [Pipe Stream OCR Text](./pipe-stream-ocr-text) |
+| TypeScript Pipe Activity Topic Tracker | Track and summarize activities | Pipe v1 | [Pipe Activity Topic Tracker](./pipe-activity-topic-tracker) |
 | TypeScript Daily Log | A daily activity logger using screenpipe | Standalone Script | [Daily Log](./daily-log) |
 | TypeScript Daily Tracker | An AI-powered daily activity tracker | Standalone Script | [Daily Tracker](./daily-tracker) |
 | TypeScript RAG Over Your Life in Obsidian | Retrieval-Augmented Generation for personal knowledge management | Standalone Script | [RAG in Obsidian](./rag-over-your-life-in-obsidian) |
