@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use clap::ValueEnum;
@@ -150,4 +150,51 @@ pub struct Cli {
     /// Disable vision recording
     #[arg(long, default_value_t = false)]
     pub disable_vision: bool,
+
+    #[command(subcommand)]
+    pub command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+pub enum Command {
+    /// Pipe management commands
+    Pipe {
+        #[command(subcommand)]
+        subcommand: PipeCommand,
+    },
+    // ... (other top-level commands if any)
+}
+
+
+#[derive(Subcommand)]
+pub enum PipeCommand {
+    /// List all pipes
+    List,
+    /// Download a new pipe
+    Download {
+        /// URL of the pipe to download
+        url: String,
+    },
+    /// Get info for a specific pipe
+    Info {
+        /// ID of the pipe
+        id: String,
+    },
+    /// Enable a pipe
+    Enable {
+        /// ID of the pipe to enable
+        id: String,
+    },
+    /// Disable a pipe
+    Disable {
+        /// ID of the pipe to disable
+        id: String,
+    },
+    /// Update pipe configuration
+    Update {
+        /// ID of the pipe to update
+        id: String,
+        /// New configuration as a JSON string
+        config: String,
+    },
 }

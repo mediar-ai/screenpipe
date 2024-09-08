@@ -22,11 +22,12 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine},
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand},
     start_continuous_recording, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
+use serde_json::{json, Value};
 use tokio::{
     signal,
     sync::mpsc::channel,
@@ -75,6 +76,17 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let local_data_dir = get_base_dir(cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
+
+    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
+
+    if let Some(pipe_command) = cli.command {
+        match pipe_command {
+            Command::Pipe { subcommand } => {
+                handle_pipe_command(subcommand, &pipe_manager).await?;
+                return Ok(());
+            }
+        }
+    }
 
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. Please install ffmpeg and ensure it is in your PATH.");
@@ -344,7 +356,6 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
-    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
     let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
         // Custom plugin logic here
@@ -523,4 +534,52 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Shutdown complete");
     Ok(())
+}
+
+async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> anyhow::Result<()> {
+    // Handle pipe subcommands
+    match pipe {
+        PipeCommand::List => {
+            let pipes = pipe_manager.list_pipes().await;
+            println!("Available pipes:");
+            for pipe in pipes {
+                println!("  ID: {}, Enabled: {}", pipe.id, pipe.enabled);
+            }
+        }
+        PipeCommand::Download { url } => match pipe_manager.download_pipe(&url).await {
+            Ok(pipe_id) => println!("Pipe downloaded successfully. ID: {}", pipe_id),
+            Err(e) => eprintln!("Failed to download pipe: {}", e),
+        },
+        PipeCommand::Info { id } => match pipe_manager.get_pipe_info(&id).await {
+            Some(info) => println!("Pipe info: {:?}", info),
+            None => eprintln!("Pipe not found"),
+        },
+        PipeCommand::Enable { id } => {
+            match pipe_manager
+                .update_config(&id, json!({"enabled": true}))
+                .await
+            {
+                Ok(_) => println!("Pipe {} enabled", id),
+                Err(e) => eprintln!("Failed to enable pipe: {}", e),
+            }
+        }
+        PipeCommand::Disable { id } => {
+            match pipe_manager
+                .update_config(&id, json!({"enabled": false}))
+                .await
+            {
+                Ok(_) => println!("Pipe {} disabled", id),
+                Err(e) => eprintln!("Failed to disable pipe: {}", e),
+            }
+        }
+        PipeCommand::Update { id, config } => {
+            let config: Value = serde_json::from_str(&config)
+                .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+            match pipe_manager.update_config(&id, config).await {
+                Ok(_) => println!("Pipe {} config updated", id),
+                Err(e) => eprintln!("Failed to update pipe config: {}", e),
+            }
+        }
+    }
+    return Ok(());
 }

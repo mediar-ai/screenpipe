@@ -7,10 +7,14 @@ use axum::{
 };
 use crossbeam::queue::SegQueue;
 use futures::future::try_join_all;
-use screenpipe_core::{download_pipe, run_pipe};
+use screenpipe_core::download_pipe;
 use screenpipe_vision::monitor::list_monitors;
 
-use crate::{db::TagContentType, ContentType, DatabaseManager, SearchResult};
+use crate::{
+    db::TagContentType,
+    pipe_manager::{PipeInfo, PipeManager},
+    ContentType, DatabaseManager, SearchResult,
+};
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
@@ -21,15 +25,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
-    future::Future,
     net::SocketAddr,
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
-use tokio::io::AsyncWriteExt;
 
-use tokio::{fs::File, net::TcpListener};
+use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -525,130 +527,6 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     })
 }
 
-// New structs for pipe management
-#[derive(Clone, Serialize)]
-pub struct PipeInfo {
-    pub id: String,
-    pub enabled: bool,
-    pub config: serde_json::Value,
-}
-
-pub struct PipeManager {
-    screenpipe_dir: PathBuf,
-}
-
-impl PipeManager {
-    pub fn new(screenpipe_dir: PathBuf) -> Self {
-        PipeManager { screenpipe_dir }
-    }
-
-    pub async fn start_pipe(
-        &self,
-        id: &str,
-    ) -> Result<impl Future<Output = Result<(), anyhow::Error>>, String> {
-        let pipes = self.list_pipes().await;
-
-        if let Some(_) = pipes.iter().find(|pipe| pipe.id == id) {
-            let pipe_id = id.to_string();
-            let screenpipe_dir = self.screenpipe_dir.clone();
-
-            let future = run_pipe(pipe_id.clone(), screenpipe_dir);
-
-            self.update_config(
-                id,
-                serde_json::json!({
-                    "enabled": true,
-                }),
-            )
-            .await?;
-
-            Ok(future)
-        } else {
-            Err("Pipe not found".to_string())
-        }
-    }
-
-    async fn update_config(&self, id: &str, new_config: Value) -> Result<(), String> {
-        info!("Updating config for pipe: {}", id);
-        let pipe_dir = self.screenpipe_dir.join("pipes").join(id);
-        let config_path = pipe_dir.join("pipe.json");
-
-        // Read the existing config
-        let config_str = tokio::fs::read_to_string(&config_path)
-            .await
-            .map_err(|e| format!("Failed to read pipe config: {}", e))?;
-
-        let mut config: Value = serde_json::from_str(&config_str)
-            .map_err(|e| format!("Failed to parse pipe config: {}", e))?;
-
-        // Update the config
-        if let Value::Object(existing_config) = &mut config {
-            if let Value::Object(updates) = new_config {
-                for (key, value) in updates {
-                    existing_config.insert(key, value);
-                }
-            } else {
-                return Err("New configuration must be an object".to_string());
-            }
-        } else {
-            return Err("Existing configuration is not an object".to_string());
-        }
-
-        // Write the updated config back to the file
-        let updated_config_str = serde_json::to_string_pretty(&config)
-            .map_err(|e| format!("Failed to serialize updated config: {}", e))?;
-
-        let mut file = File::create(&config_path)
-            .await
-            .map_err(|e| format!("Failed to open pipe config file for writing: {}", e))?;
-
-        file.write_all(updated_config_str.as_bytes())
-            .await
-            .map_err(|e| format!("Failed to write updated config: {}", e))?;
-
-        Ok(())
-    }
-
-    async fn get_pipe_info(&self, id: &str) -> Option<PipeInfo> {
-        let pipes = self.list_pipes().await;
-        pipes.iter().find(|pipe| pipe.id == id).cloned()
-    }
-
-    pub async fn list_pipes(&self) -> Vec<PipeInfo> {
-        let pipe_dir = self.screenpipe_dir.join("pipes");
-        let mut pipe_infos = Vec::new();
-
-        if let Ok(mut entries) = tokio::fs::read_dir(pipe_dir).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let pipe_id = entry.file_name().to_string_lossy().into_owned();
-                let config_path = entry.path().join("pipe.json");
-                pipe_infos.push(async move {
-                    let config = tokio::fs::read_to_string(config_path).await?;
-                    let config: Value = serde_json::from_str(&config)?;
-                    debug!("Pipe config: {:?}", config);
-                    Ok::<_, anyhow::Error>(PipeInfo {
-                        id: pipe_id,
-                        enabled: config
-                            .get("enabled")
-                            .unwrap_or(&Value::Bool(false))
-                            .as_bool()
-                            .unwrap_or(false),
-                        config,
-                    })
-                });
-            }
-        }
-
-        match try_join_all(pipe_infos).await {
-            Ok(infos) => infos,
-            Err(e) => {
-                error!("Error listing pipes: {}", e);
-                Vec::new()
-            }
-        }
-    }
-}
-
 // Request and response structs
 #[derive(Deserialize)]
 struct DownloadPipeRequest {
@@ -715,7 +593,7 @@ async fn run_pipe_handler(
             "message": format!("Pipe {} started", payload.pipe_id),
             "pipe_id": payload.pipe_id
         }))),
-        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
     }
 }
 
@@ -738,7 +616,7 @@ async fn stop_pipe_handler(
             "message": format!("Pipe {} stopped", payload.pipe_id),
             "pipe_id": payload.pipe_id
         }))),
-        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
     }
 }
 
@@ -756,7 +634,7 @@ async fn update_pipe_config_handler(
             "message": format!("Pipe {} config updated", payload.pipe_id),
             "pipe_id": payload.pipe_id
         }))),
-        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
     }
 }
 
