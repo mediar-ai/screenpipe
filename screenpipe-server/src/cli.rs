@@ -151,6 +151,18 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub disable_vision: bool,
 
+    /// List of windows to ignore (by title) for screen recording - we use contains to match, example:
+    /// --ignored-windows "Spotify" --ignored-windows "Bit" will ignore both "Bitwarden" and "Bittorrent"
+    /// --ignored-windows "porn" will ignore "pornhub" and "youporn"
+    #[arg(long)]
+    pub ignored_windows: Vec<String>,
+
+    /// List of windows to include (by title) for screen recording - we use contains to match, example:
+    /// --included-windows "Chrome" will include "Google Chrome"
+    /// --included-windows "WhatsApp" will include "WhatsApp"
+    #[arg(long)]
+    pub included_windows: Vec<String>,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }

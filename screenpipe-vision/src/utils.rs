@@ -51,6 +51,8 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
 
 pub async fn capture_screenshot(
     monitor: &Monitor,
+    ignore_list: &[String],
+    include_list: &[String],
 ) -> Result<
     (
         DynamicImage,
@@ -71,7 +73,7 @@ pub async fn capture_screenshot(
     let capture_duration = capture_start.elapsed();
 
     // info!("Attempting to capture all visible windows");
-    let window_images = match capture_all_visible_windows().await {
+    let window_images = match capture_all_visible_windows(ignore_list, include_list).await {
         Ok(images) => {
             // info!("Successfully captured {} window images", images.len());
             images

@@ -234,7 +234,7 @@ async fn main() -> anyhow::Result<()> {
         cli.self_healing,
         Duration::from_secs(60),
         3,
-        restart_sender, // TODO: remove self healing its dead code atm 
+        restart_sender, // TODO: remove self healing its dead code atm
         cli.port,
     );
     resource_monitor.start_monitoring(Duration::from_secs(10));
@@ -293,7 +293,7 @@ async fn main() -> anyhow::Result<()> {
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
     let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
-    let friend_wearable_uid_clone = friend_wearable_uid.clone();  // Clone here
+    let friend_wearable_uid_clone = friend_wearable_uid.clone(); // Clone here
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
@@ -333,6 +333,8 @@ async fn main() -> anyhow::Result<()> {
                     cli.disable_vision,
                     &vision_handle,
                     &audio_handle,
+                    &cli.ignored_windows,
+                    &cli.included_windows,
                 );
 
                 let result = tokio::select! {

@@ -21,6 +21,8 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
             false,
             Arc::new(OcrEngine::Tesseract),
             get_default_monitor().await.id(),
+            &[],
+            &[],
         )
         .await;
     });

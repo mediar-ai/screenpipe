@@ -36,6 +36,8 @@ pub async fn start_continuous_recording(
     vision_disabled: bool,
     vision_handle: &Handle,
     audio_handle: &Handle,
+    ignored_windows: &[String],
+    include_windows: &[String],
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -63,7 +65,8 @@ pub async fn start_continuous_recording(
     let output_path_audio = Arc::clone(&output_path);
 
     let friend_wearable_uid_video = friend_wearable_uid.clone();
-
+    let ignored_windows_video = ignored_windows.to_vec();
+    let include_windows_video = include_windows.to_vec();
     // Initialize friend wearable loop
     if let Some(uid) = &friend_wearable_uid {
         tokio::spawn(initialize_friend_wearable_loop(
@@ -84,6 +87,8 @@ pub async fn start_continuous_recording(
                 friend_wearable_uid_video,
                 monitor_id,
                 use_pii_removal,
+                &ignored_windows_video,
+                &include_windows_video,
             )
             .await
         })
@@ -148,6 +153,8 @@ async fn record_video(
     _friend_wearable_uid: Option<String>,
     monitor_id: u32,
     use_pii_removal: bool,
+    ignored_windows: &[String],
+    include_windows: &[String],
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -170,6 +177,8 @@ async fn record_video(
         save_text_files,
         Arc::clone(&ocr_engine),
         monitor_id,
+        ignored_windows,
+        include_windows,
     );
 
     while is_running.load(Ordering::SeqCst) {
