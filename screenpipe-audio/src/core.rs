@@ -196,7 +196,7 @@ async fn run_ffmpeg(
             "-ar",
             &sample_rate.to_string(),
             "-ac",
-            &if channels > 2 { 2 } else { channels }.to_string(),
+            &channels.to_string(),
             "-i",
             "pipe:0",
             "-c:a",
