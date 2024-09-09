@@ -193,6 +193,8 @@ Then run it
 > This is experimental support for Windows build. This assumes you already have the CUDA Toolkit installed and the CUDA_PATH set to my CUDA v12.6 folder.
 > Replace `V:\projects` and `V:\packages` with your own folders.
 
+If this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
+
 - Install chocolatey
 - Install git
 - Install CUDA Toolkit (if using NVIDIA and building with cuda)
@@ -212,7 +214,7 @@ Then run it
 ```batch
 choco install pkgconfiglite rust
 cd V:\projects
-git clone https://github.com/louis030195/screen-pipe
+git clone https://github.com/mediar-ai/screenpipe
 cd V:\packages
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
