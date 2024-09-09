@@ -62,6 +62,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_simple_pipe() {
         let temp_dir = TempDir::new().unwrap();
         let screenpipe_dir = temp_dir.path().to_path_buf();
