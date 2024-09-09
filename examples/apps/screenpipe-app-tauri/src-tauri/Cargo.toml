@@ -16,7 +16,7 @@ tauri-build = { version = "=2.0.0-rc.9", features = [] }
 
 [dependencies]
 serde_json = "1.0"
-tauri = { version = "2.0.0-rc.10", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
+tauri = { version = "2.0.0-rc.10", features = [ "macos-private-api", "tray-icon", "devtools", "image-png", "image-ico"] }
 
 
 # Logging

@@ -102,6 +102,7 @@
         "style-src": "'unsafe-inline' 'self' https://fonts.googleapis.com",
         "frame-src": "https://www.youtube.com"
       }
-    }
+    },
+    "macOSPrivateApi": true
   }
 }
