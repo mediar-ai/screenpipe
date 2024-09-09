@@ -152,9 +152,6 @@ Instructions to run this pipe:
    export SCREENPIPE_NOTION_API_KEY=your_notion_api_key
    export SCREENPIPE_NOTION_DATABASE_ID=your_notion_database_id # e.g. https://www.notion.so/83c75a51b3bd4a?something
 
-6. Run the pipe using the Screenpipe CLI:
-   screenpipe --pipe path/to/pipe.ts
-
 The pipe will run continuously, checking for engineering work every hour
 and logging it to your Notion database.
 */
