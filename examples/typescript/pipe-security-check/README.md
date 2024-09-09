@@ -1,6 +1,13 @@
 
 send a notification to the user when exposed to a security risk on your screen
 
+
+
+https://github.com/user-attachments/assets/a4ab0d24-996c-45f5-bffd-142f9757cca5
+
+
+
+
 ```bash
 ollama run mistral-nemo
 ```
