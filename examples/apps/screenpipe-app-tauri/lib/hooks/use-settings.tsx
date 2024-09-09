@@ -35,6 +35,8 @@ const defaultSettings: Settings = {
   port: 3030,
   dataDir: "default",
   disableAudio: false,
+  ignoredWindows: [],
+  includedWindows: [],
 };
 
 export interface Settings {
@@ -56,6 +58,8 @@ export interface Settings {
   port: number;
   dataDir: string;
   disableAudio: boolean;
+  ignoredWindows: string[];
+  includedWindows: string[];
 }
 
 let store: Store | null = null;
@@ -129,6 +133,10 @@ export function useSettings() {
         const savedDataDir = ((await store!.get("dataDir")) as string) || "";
         const savedDisableAudio =
           ((await store!.get("disableAudio")) as boolean) || false;
+        const savedIgnoredWindows =
+          ((await store!.get("ignoredWindows")) as string[]) || [];
+        const savedIncludedWindows =
+          ((await store!.get("includedWindows")) as string[]) || [];
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
@@ -148,6 +156,8 @@ export function useSettings() {
           port: savedPort,
           dataDir: savedDataDir,
           disableAudio: savedDisableAudio,
+          ignoredWindows: savedIgnoredWindows,
+          includedWindows: savedIncludedWindows,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);

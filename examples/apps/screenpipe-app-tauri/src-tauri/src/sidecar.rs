@@ -144,6 +144,26 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     })
     .map_err(|e| e.to_string())?;
 
+    let ignored_windows = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("ignoredWindows")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect::<Vec<_>>())
+            .unwrap_or_default())
+    })
+    .map_err(|e| e.to_string())?;
+
+    let included_windows = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("includedWindows")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect::<Vec<_>>())
+            .unwrap_or_default())
+    })
+    .map_err(|e| e.to_string())?;
+
+
+
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
     if cfg!(target_os = "macos") {
@@ -187,6 +207,20 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if disable_audio {
         args.push("--disable-audio");
+    }
+
+    if !ignored_windows.is_empty() {
+        for window in &ignored_windows {
+            args.push("--ignored-windows");
+            args.push(window);
+        }
+    }
+
+    if !included_windows.is_empty() {
+        for window in &included_windows {
+            args.push("--included-windows");
+            args.push(window);
+        }
     }
 
     // args.push("--debug");
