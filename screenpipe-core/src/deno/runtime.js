@@ -88,24 +88,19 @@ const pipe = {
         const notificationApiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:11435";
 
         try {
-            const response = await ops.op_fetch(notificationApiUrl)
-            if (!response.ok) {
-                throw new Error("Failed to send notification");
-            }
+            const response = await ops.op_fetch(notificationApiUrl + "/notify", {
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                method: "POST",
+                body: JSON.stringify({ title, body })
+            });
+            console.log("Notification sent:", response);
+            return JSON.parse(response);
         } catch (error) {
-            console.warn("Failed to send notification to server, is your notification server running?");
-            return
+            console.log("Failed to send notification to server, is your notification server running?");
+            return false;
         }
-
-        const response = await ops.op_fetch(notificationApiUrl + "/notify", {
-            headers: {
-                "Content-Type": "application/json",
-            },
-            method: "POST",
-            body: JSON.stringify({ title, body })
-        });
-        console.log("Notification sent:", response);
-        return JSON.parse(response);
     },
     loadConfig: async () => {
         try {

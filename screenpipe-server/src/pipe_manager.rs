@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{debug, error};
+use log::debug;
 use screenpipe_core::{download_pipe, run_pipe};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -7,6 +7,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tracing::warn;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipeInfo {
@@ -55,8 +56,16 @@ impl PipeManager {
         let pipe_dir = self.screenpipe_dir.join("pipes").join(id);
         let config_path = pipe_dir.join("pipe.json");
 
-        let config_str = tokio::fs::read_to_string(&config_path).await?;
-        let mut config: Value = serde_json::from_str(&config_str)?;
+        let mut config: Value = if config_path.exists() {
+            let config_str = tokio::fs::read_to_string(&config_path).await?;
+            serde_json::from_str(&config_str)?
+        } else {
+            tokio::fs::create_dir_all(&pipe_dir).await?;
+            serde_json::json!({
+                "id": id,
+                "enabled": false
+            })
+        };
 
         if let Value::Object(existing_config) = &mut config {
             if let Value::Object(updates) = new_config {
@@ -83,6 +92,24 @@ impl PipeManager {
         pipes.iter().find(|pipe| pipe.id == id).cloned()
     }
 
+    async fn load_pipe_info(pipe_id: String, config_path: PathBuf) -> PipeInfo {
+        let config = tokio::fs::read_to_string(&config_path)
+            .await
+            .and_then(|s| serde_json::from_str::<Value>(&s).map_err(Into::into))
+            .unwrap_or_else(|_| {
+                warn!("pipe {}: does not seem to have a config file", pipe_id);
+                Value::Null
+            });
+
+        PipeInfo {
+            id: pipe_id,
+            enabled: config
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            config,
+        }
+    }
     pub async fn list_pipes(&self) -> Vec<PipeInfo> {
         let pipe_dir = self.screenpipe_dir.join("pipes");
         let mut pipe_infos = Vec::new();
@@ -91,30 +118,11 @@ impl PipeManager {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let pipe_id = entry.file_name().to_string_lossy().into_owned();
                 let config_path = entry.path().join("pipe.json");
-                pipe_infos.push(async move {
-                    let config = tokio::fs::read_to_string(config_path).await?;
-                    let config: Value = serde_json::from_str(&config)?;
-                    debug!("Pipe config: {:?}", config);
-                    Ok::<_, anyhow::Error>(PipeInfo {
-                        id: pipe_id,
-                        enabled: config
-                            .get("enabled")
-                            .unwrap_or(&Value::Bool(false))
-                            .as_bool()
-                            .unwrap_or(false),
-                        config,
-                    })
-                });
+                pipe_infos.push(Self::load_pipe_info(pipe_id, config_path));
             }
         }
 
-        match futures::future::try_join_all(pipe_infos).await {
-            Ok(infos) => infos,
-            Err(e) => {
-                error!("Error listing pipes: {}", e);
-                Vec::new()
-            }
-        }
+        futures::future::join_all(pipe_infos).await
     }
 
     pub async fn download_pipe(&self, url: &str) -> Result<String> {
