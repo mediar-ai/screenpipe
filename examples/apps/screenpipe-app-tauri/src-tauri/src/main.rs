@@ -60,7 +60,13 @@ async fn main() {
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
 
-    let app = tauri::Builder::default()
+    let app = tauri::Builder::default().on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                window.hide().unwrap();
+                api.prevent_close();
+            }
+            _ => {}
+        })
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -73,6 +79,15 @@ async fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            let windows = app.webview_windows();
+            windows
+                .values()
+                .next()
+                .expect("Sorry, no window found")
+                .set_focus()
+                .expect("Can't focus window!");
+        }))
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -166,14 +181,18 @@ async fn main() {
                     }
                     _ => (),
                 });
-                main_tray.on_tray_icon_event(move |_tray, event| match event {
+                main_tray.on_tray_icon_event(move |tray, event| match event {
                     tauri::tray::TrayIconEvent::Click {
                         button,
                         button_state,
                         ..
                     } => {
-                        if button == MouseButton::Left && button_state == MouseButtonState::Down {
-                            // Handle left click if needed
+                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
                         }
                     }
                     _ => {}
