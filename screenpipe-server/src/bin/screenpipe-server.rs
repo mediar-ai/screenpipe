@@ -15,7 +15,6 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info};
-use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,
@@ -26,7 +25,6 @@ use screenpipe_server::{
     start_continuous_recording, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
-use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use serde_json::{json, Value};
 use tokio::{
     runtime::Runtime,
@@ -231,12 +229,12 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let (restart_sender, mut restart_receiver) = channel(10);
+    let (restart_sender, _restart_receiver) = channel(10);
     let resource_monitor = ResourceMonitor::new(
         cli.self_healing,
         Duration::from_secs(60),
         3,
-        restart_sender,
+        restart_sender, // TODO: remove self healing its dead code atm 
         cli.port,
     );
     resource_monitor.start_monitoring(Duration::from_secs(10));
