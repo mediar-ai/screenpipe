@@ -29,8 +29,9 @@ use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use serde_json::{json, Value};
 use tokio::{
+    runtime::Runtime,
     signal,
-    sync::mpsc::channel,
+    sync::{broadcast, mpsc::channel},
     time::{interval_at, Instant},
 };
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -278,91 +279,95 @@ async fn main() -> anyhow::Result<()> {
         );
         std::process::exit(1);
     });
+    debug!("Monitor with id {} found", monitor_id);
     let ocr_engine_clone = cli.ocr_engine.clone();
     let restart_interval = cli.restart_interval;
 
-    // Function to start or restart the recording task
-    let _start_recording = tokio::spawn(async move {
-        // hack
-        let mut recording_task = tokio::spawn(async move {});
-        let mut restart_timer = if restart_interval > 0 {
-            // Calculate the first restart time
-            let first_restart = Instant::now() + Duration::from_secs(restart_interval * 60);
-            Some(interval_at(
-                first_restart,
-                Duration::from_secs(restart_interval * 60),
-            ))
-        } else {
-            None
-        };
-        loop {
-            let db_clone = db.clone();
-            let local_data_dir = local_data_dir.clone();
-            let vision_control = vision_control.clone();
-            let audio_devices_control = audio_devices_control.clone();
-            let friend_wearable_uid_clone = friend_wearable_uid.clone(); // Clone for each iteration
+    let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-            tokio::select! {
-                _ = &mut recording_task => {
-                    debug!("Recording task ended. Restarting...");
-                }
-                Some(_) = restart_receiver.recv() => {
-                    info!("Received restart signal. Restarting recording task...");
-                    recording_task.abort();
-                }
-                _ = async { if let Some(timer) = &mut restart_timer {
-                    timer.tick().await
-                } else {
-                    std::future::pending().await
-                }}, if restart_interval > 0 => {
-                    info!("Periodic restart interval reached. Restarting recording task...");
-                    recording_task.abort();
-                }
-            }
-            let core_ocr_engine: CoreOcrEngine = cli.ocr_engine.clone().into();
-            let ocr_engine = Arc::new(core_ocr_engine);
-            let core_audio_transcription_engine: CoreAudioTranscriptionEngine =
-                cli.audio_transcription_engine.clone().into();
-            let audio_transcription_engine = Arc::new(core_audio_transcription_engine);
+    let audio_runtime = Runtime::new().unwrap();
+    let vision_runtime = Runtime::new().unwrap();
 
-            recording_task = tokio::spawn(async move {
-                let result = start_continuous_recording(
-                    db_clone,
-                    Arc::new(local_data_dir.join("data").to_string_lossy().into_owned()),
-                    cli.fps,
+    let audio_handle = audio_runtime.handle().clone();
+    let vision_handle = vision_runtime.handle().clone();
+
+    let db_clone = Arc::clone(&db);
+    let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
+    let vision_control_clone = Arc::clone(&vision_control);
+    let shutdown_tx_clone = shutdown_tx.clone();
+    let friend_wearable_uid_clone = friend_wearable_uid.clone();  // Clone here
+
+    let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
+        cli.fps
+    } else {
+        eprintln!("Invalid FPS value: {}. Using default of 1.0", cli.fps);
+        1.0
+    };
+
+    let handle = {
+        let runtime = &tokio::runtime::Handle::current();
+        runtime.spawn(async move {
+            let mut interval = if restart_interval > 0 {
+                Some(interval_at(
+                    Instant::now() + Duration::from_secs(restart_interval * 60),
+                    Duration::from_secs(restart_interval * 60),
+                ))
+            } else {
+                None
+            };
+
+            loop {
+                let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                let recording_future = start_continuous_recording(
+                    db_clone.clone(),
+                    output_path_clone.clone(),
+                    fps,
                     Duration::from_secs(cli.audio_chunk_duration),
-                    vision_control,
-                    audio_devices_control,
+                    vision_control_clone.clone(),
+                    audio_devices_control.clone(),
                     cli.disable_audio,
                     cli.save_text_files,
-                    audio_transcription_engine,
-                    ocr_engine,
-                    friend_wearable_uid_clone, // Use the cloned version
+                    Arc::new(cli.audio_transcription_engine.clone().into()),
+                    Arc::new(cli.ocr_engine.clone().into()),
+                    friend_wearable_uid_clone.clone(),
                     monitor_id,
                     cli.use_pii_removal,
                     cli.disable_vision,
-                )
-                .await;
+                    &vision_handle,
+                    &audio_handle,
+                );
+
+                let result = tokio::select! {
+                    result = recording_future => result,
+                    _ = shutdown_rx.recv() => {
+                        info!("Received shutdown signal for recording");
+                        break;
+                    }
+                    _ = async { if let Some(ref mut interval) = interval { interval.tick().await } else { std::future::pending().await } } => {
+                        info!("Restarting recording due to restart interval");
+                        continue;
+                    }
+                };
 
                 if let Err(e) = result {
                     error!("Continuous recording error: {:?}", e);
                 }
-            });
-            debug!("Recording task started");
 
-            // Short delay before restarting to avoid rapid restarts
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-    });
+                if interval.is_none() {
+                    break;
+                }
+            }
+
+            drop(vision_runtime);
+            drop(audio_runtime);
+        })
+    };
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
 
     let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
-        // Custom plugin logic here
-        // For example, using PostHog for tracking:
         if req.uri().path() == "/search" {
             // Track search requests
-            // posthog.capture("search_request", {...})
         }
     };
     let server = Server::new(
@@ -507,7 +512,6 @@ async fn main() -> anyhow::Result<()> {
             if let Some(result) = pipe_futures.next().await {
                 info!("Pipe completed: {:?}", result);
             } else {
-                // Sleep for a while before checking again
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         }
@@ -518,6 +522,7 @@ async fn main() -> anyhow::Result<()> {
     pin_mut!(ctrl_c_future);
 
     tokio::select! {
+        _ = handle => info!("Recording completed"),
         result = &mut server_future => {
             match result {
                 Ok(_) => info!("Server stopped normally"),
@@ -527,8 +532,9 @@ async fn main() -> anyhow::Result<()> {
         _ = &mut pipes_future => {
             info!("All pipes completed, but server is still running");
         }
-        _ = &mut ctrl_c_future => {
-            info!("Received Ctrl+C, shutting down...");
+        _ = ctrl_c_future => {
+            info!("Received Ctrl+C, initiating shutdown");
+            let _ = shutdown_tx.send(());
         }
     }
 
@@ -581,5 +587,5 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
             }
         }
     }
-    return Ok(());
+    Ok(())
 }

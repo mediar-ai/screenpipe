@@ -60,11 +60,18 @@ pub async fn continuous_capture(
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
-    let monitor = get_monitor_by_id(monitor_id).await.unwrap();
+    let monitor = match get_monitor_by_id(monitor_id).await {
+        Some(m) => m,
+        None => {
+            error!("Failed to get monitor with id: {}. Exiting continuous_capture.", monitor_id);
+            return;
+        }
+    };
 
     loop {
         let capture_result = match capture_screenshot(&monitor).await {
             Ok((image, window_images, image_hash, _capture_duration)) => {
+                debug!("Captured screenshot on monitor {} with hash: {}", monitor_id, image_hash);
                 Some((image, window_images, image_hash))
             }
             Err(e) => {
@@ -188,7 +195,9 @@ pub async fn process_ocr_task(
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             OcrEngine::Tesseract => perform_ocr_tesseract(&window_image),
             #[cfg(target_os = "windows")]
-            OcrEngine::WindowsNative => perform_ocr_windows(&window_image).await,
+            OcrEngine::WindowsNative => perform_ocr_windows(&window_image)
+                .await
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
             OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(&window_image)),
             _ => {
