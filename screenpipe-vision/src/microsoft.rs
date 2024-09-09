@@ -1,6 +1,8 @@
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView};
+use anyhow::Result;
+
 #[cfg(target_os = "windows")]
-pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String, Option<f64>) {
+pub async fn perform_ocr_windows(image: &DynamicImage) -> Result<(String, String, Option<f64>)> {
     use std::io::Cursor;
     use windows::{
         Graphics::Imaging::BitmapDecoder,
@@ -8,29 +10,34 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String, Optio
         Storage::Streams::{DataWriter, InMemoryRandomAccessStream},
     };
 
+    // Check image dimensions
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 {
+        // Return an empty result instead of panicking
+        return Ok(("".to_string(), "[]".to_string(), None));
+    }
+
     let mut buffer = Vec::new();
     image
         .write_to(&mut Cursor::new(&mut buffer), image::ImageFormat::Png)
-        .unwrap();
+        .map_err(|e| anyhow::anyhow!("Failed to write image to buffer: {}", e))?;
 
-    let stream = InMemoryRandomAccessStream::new().unwrap();
-    let writer = DataWriter::CreateDataWriter(&stream).unwrap();
-    writer.WriteBytes(&buffer).unwrap();
-    writer.StoreAsync().unwrap().get().unwrap();
-    writer.FlushAsync().unwrap().get().unwrap();
-    stream.Seek(0).unwrap();
+    let stream = InMemoryRandomAccessStream::new()?;
+    let writer = DataWriter::CreateDataWriter(&stream)?;
+    writer.WriteBytes(&buffer)?;
+    writer.StoreAsync()?.get()?;
+    writer.FlushAsync()?.get()?;
+    stream.Seek(0)?;
 
-    let decoder = BitmapDecoder::CreateWithIdAsync(BitmapDecoder::PngDecoderId().unwrap(), &stream)
-        .unwrap()
-        .get()
-        .unwrap();
+    let decoder = BitmapDecoder::CreateWithIdAsync(BitmapDecoder::PngDecoderId()?, &stream)?
+        .get()?;
 
-    let bitmap = decoder.GetSoftwareBitmapAsync().unwrap().get().unwrap();
+    let bitmap = decoder.GetSoftwareBitmapAsync()?.get()?;
 
-    let engine = WindowsOcrEngine::TryCreateFromUserProfileLanguages().unwrap();
-    let result = engine.RecognizeAsync(&bitmap).unwrap().get().unwrap();
+    let engine = WindowsOcrEngine::TryCreateFromUserProfileLanguages()?;
+    let result = engine.RecognizeAsync(&bitmap)?.get()?;
 
-    let text = result.Text().unwrap().to_string();
+    let text = result.Text()?.to_string();
 
     let json_output = serde_json::json!([{
         "text": text,
@@ -38,5 +45,5 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> (String, String, Optio
     }])
     .to_string();
 
-    (text, json_output, Some(1.0))
+    Ok((text, json_output, Some(1.0)))
 }
