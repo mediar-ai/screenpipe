@@ -54,13 +54,34 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     Ok(local_data_dir)
 }
 
+fn show_main_window(app_handle: &tauri::AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _ = tauri::WebviewWindowBuilder::new(
+            app_handle,
+            "main",
+            tauri::WebviewUrl::App("index.html".into())
+        )
+        .title("Screenpipe")
+        .build();
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
 
-    let app = tauri::Builder::default()
+    let app = tauri::Builder::default().on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                window.hide().unwrap();
+                api.prevent_close();
+            }
+            _ => {}
+        })
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -73,6 +94,15 @@ async fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let windows = app.webview_windows();
+            windows
+                .values()
+                .next()
+                .expect("Sorry, no window found")
+                .set_focus()
+                .expect("Can't focus window!");
+        }))
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -156,24 +186,34 @@ async fn main() {
 
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-                let toggle = MenuItemBuilder::with_id("quit", "Quit screenpipe").build(app)?;
-                let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
+                let show = MenuItemBuilder::with_id("show", "Show Screenpipe").build(app)?;
+                let quit = MenuItemBuilder::with_id("quit", "Quit Screenpipe").build(app)?;
+                let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
                 let _ = main_tray.set_menu(Some(menu));
-                main_tray.on_menu_event(move |app, event| match event.id().as_ref() {
+                main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
+                    "show" => {
+                        show_main_window(&app_handle);
+                    }
                     "quit" => {
                         println!("quit clicked");
-                        app.exit(0);
+                        app_handle.exit(0);
                     }
                     _ => (),
                 });
-                main_tray.on_tray_icon_event(move |_tray, event| match event {
+                main_tray.on_tray_icon_event(move |tray, event| match event {
                     tauri::tray::TrayIconEvent::Click {
                         button,
                         button_state,
                         ..
                     } => {
-                        if button == MouseButton::Left && button_state == MouseButtonState::Down {
-                            // Handle left click if needed
+                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            } else {
+                                show_main_window(&app);
+                            }
                         }
                     }
                     _ => {}
@@ -269,7 +309,9 @@ async fn main() {
             let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
             app.manage(server_shutdown_tx);
 
-            
+            // Add this custom activate handler
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
             Ok(())
         })
@@ -309,6 +351,23 @@ async fn main() {
             // Add this to shut down the server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
                 let _ = server_shutdown_tx.send(());
+            }
+        }
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Focused(focused),
+            ..
+        } => {
+            if label == "main" && focused {
+                let window = app_handle.get_webview_window("main").unwrap();
+                window.show().unwrap();
+                window.set_focus().unwrap();
+            }
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+            if !has_visible_windows {
+                show_main_window(&app_handle);
             }
         }
         _ => {}
