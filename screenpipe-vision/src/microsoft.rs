@@ -1,5 +1,5 @@
 use image::{DynamicImage, GenericImageView};
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 #[cfg(target_os = "windows")]
 pub async fn perform_ocr_windows(image: &DynamicImage) -> Result<(String, String, Option<f64>)> {
@@ -13,7 +13,8 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> Result<(String, String
     // Check image dimensions
     let (width, height) = image.dimensions();
     if width == 0 || height == 0 {
-        bail!("Invalid image dimensions: {}x{}", width, height);
+        // Return an empty result instead of panicking
+        return Ok(("".to_string(), "[]".to_string(), None));
     }
 
     let mut buffer = Vec::new();
