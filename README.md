@@ -16,7 +16,12 @@
     <a href="https://screenpi.pe" target="_blank">
         <img src="https://img.shields.io/badge/Download%20The-Desktop%20App-blue?style=for-the-badge" alt="Download the Desktop App">
     </a>
-    
+</p>
+
+<p align="center">
+    <a href="https://www.youtube.com/@mediar_ai" target="_blank">
+        <img src="https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fyoutube-channel-badge.ngoldack.vercel.app%2Fapi%2Fsubscriber" alt="Subs">
+    </a>
 </p>
 
 

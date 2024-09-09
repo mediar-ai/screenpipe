@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 
 export type Pipe = {
+  enabled: boolean;
   name: string;
   downloads: number;
   version: string;
@@ -11,6 +12,7 @@ export type Pipe = {
   description: string;
   fullDescription: string;
   mainFile?: string;
+  config?: Record<string, any>;
 };
 
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
@@ -116,6 +118,25 @@ const fetchFileContent = async (
   }
 };
 
+const fetchPipeConfig = async (
+  repoFullName: string,
+  branch: string,
+  subDir: string
+): Promise<Record<string, any> | undefined> => {
+  try {
+    const configPath = subDir ? `${subDir}/pipe.json` : "pipe.json";
+    const configContent = await fetchFileContent(
+      repoFullName,
+      branch,
+      configPath
+    );
+    return JSON.parse(configContent);
+  } catch (error) {
+    console.error("Error fetching pipe config:", error);
+    return undefined;
+  }
+};
+
 export const usePipes = (initialRepoUrls: string[]) => {
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +144,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
   const [repoUrls, setRepoUrls] = useState<string[]>(initialRepoUrls);
 
   const fetchPipeData = async (repoUrl: string): Promise<Pipe | null> => {
+    console.log("fetchPipeData", repoUrl);
     try {
       const urlParts = repoUrl.split("/");
       const isSubdir = urlParts.length > 5;
@@ -131,11 +153,19 @@ export const usePipes = (initialRepoUrls: string[]) => {
       const repoFullName = `${repoOwner}/${repoName}`;
       const branch = isSubdir ? urlParts[6] : "main";
       const subDir = isSubdir ? urlParts.slice(7).join("/") : "";
-
+      console.log("urlParts", urlParts);
+      console.log("isSubdir", isSubdir);
+      console.log("repoFullName", repoFullName);
+      console.log("branch", branch);
+      console.log("subDir", subDir);
+      console.log("repoOwner", repoOwner);
+      console.log("repoName", repoName);
       console.log(`Fetching repo data for ${repoFullName}`);
       const repoData = await fetchWithCache(
         `https://api.github.com/repos/${repoFullName}`
       );
+
+      let pipeConfig: Record<string, any> | undefined;
 
       if (isSubdir) {
         console.log(
@@ -146,10 +176,11 @@ export const usePipes = (initialRepoUrls: string[]) => {
           branch,
           subDir
         );
+        console.log("contents", contents);
         if (!contents || !Array.isArray(contents)) return null;
 
-        const jsFiles = contents.filter((file: any) =>
-          file.name.endsWith(".js")
+        const jsFiles = contents.filter(
+          (file: any) => file.name.endsWith(".js") || file.name.endsWith(".ts")
         );
         const hasJsFile = jsFiles.length > 0;
         const readmeFile = contents.find(
@@ -165,14 +196,23 @@ export const usePipes = (initialRepoUrls: string[]) => {
         );
 
         const mainFile =
-          jsFiles.find((file: any) => file.name === "index.js") || jsFiles[0];
+          jsFiles.find((file: any) => file.name === "pipe.ts") || jsFiles[0];
         const mainFileUrl = mainFile
           ? `https://raw.githubusercontent.com/${repoFullName}/${branch}/${subDir}/${mainFile.name}`
           : undefined;
 
         console.log(`Fetching latest release for ${repoFullName}`);
 
+        console.log(`Fetching pipe config for ${repoFullName}/${subDir}`);
+        pipeConfig = await fetchPipeConfig(repoFullName, branch, subDir).catch(
+          (error) => {
+            console.warn("Error fetching pipe config:", error);
+            return undefined;
+          }
+        );
+
         return {
+          enabled: false,
           name: subDir.split("/").pop() || repoData.name,
           downloads: repoData.stargazers_count,
           version: await fetchLatestRelease(repoFullName),
@@ -185,6 +225,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
             ? convertHtmlToMarkdown(readmeContent)
             : "",
           mainFile: mainFileUrl,
+          config: pipeConfig,
         };
       } else {
         console.log(`Fetching README for ${repoFullName}`);
@@ -193,7 +234,11 @@ export const usePipes = (initialRepoUrls: string[]) => {
         console.log(`Fetching latest release for ${repoFullName}`);
         const version = await fetchLatestRelease(repoFullName);
 
+        console.log(`Fetching pipe config for ${repoFullName}`);
+        pipeConfig = await fetchPipeConfig(repoFullName, branch, "");
+
         return {
+          enabled: false,
           name: repoData.name,
           downloads: repoData.stargazers_count,
           version,
@@ -203,6 +248,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
           lastUpdate: repoData.updated_at,
           description: repoData.description,
           fullDescription,
+          config: pipeConfig,
         };
       }
     } catch (error) {
@@ -239,6 +285,19 @@ export const usePipes = (initialRepoUrls: string[]) => {
           setLoading(false);
         }
       }
+
+      // get pipes from local api /pipes/list and add them to the list
+      const localPipes = await fetch(`http://localhost:3030/pipes/list`).then(
+        (res) => res.json()
+      );
+      console.log("localPipes", localPipes);
+      setPipes([
+        ...pipes,
+        ...localPipes.map((pipe: any) => ({
+          ...pipe,
+          name: pipe.id,
+        })),
+      ]);
     };
 
     fetchPipes();
@@ -259,6 +318,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
 
     try {
       const newPipe = await fetchPipeData(newRepoUrl);
+      console.log("newPipe", newPipe);
       if (newPipe) {
         // Check if a pipe with the same name already exists
         if (pipes.some((pipe) => pipe.name === newPipe.name)) {

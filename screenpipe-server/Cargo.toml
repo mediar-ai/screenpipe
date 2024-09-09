@@ -44,7 +44,9 @@ tower-http = { version = "0.5.2", features = ["cors", "trace"] }
 # Log
 log = { workspace = true }
 env_logger = "0.10"
-
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = "0.2.3"
 # Cli ! shouldn't be required if using as lib
 clap = { version = "4.3", features = ["derive"] }
 
@@ -74,6 +76,9 @@ async-trait = "0.1.68"
 # filtering
 ndarray = "0.15.6"
 rust-stemmers = "1.2.0"
+
+# base64
+base64 = "0.22.1"
 
 [dev-dependencies]
 tempfile = "3.3.0"

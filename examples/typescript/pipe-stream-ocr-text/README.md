@@ -1,5 +1,4 @@
 
-
 in screenpipe we have a plugin system called "pipe store" or "pipes"
 
 think of it like this:
@@ -30,11 +29,9 @@ this is an experimental, but official pipe, that will stream OCR text from your 
 
 this is how you run it through the app:
 
-add the url of this pipe in the input and click "add" and install
+add the url of this pipe
 
 `https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text`
-
-wait a few minutes then look at the markdown file
 
 ### tech details
 
@@ -45,22 +42,16 @@ we run deno runtime (a JS/TS engine) within the rust code, which host your pipes
 if you're in dev mode you can run the cli like this:
 
 ```bash
-screenpipe --pipe https://github.com/mediar-ai/screenpipe/edit/main/examples/typescript/pipe-stream-ocr-text/main.js
+curl -X POST "http://localhost:3030/pipes/download" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"}' | jq
 ```
 
-or dev your own pipe:
+this would download the pip in your local files 
 
-```bash
-screenpipe --pipe myPipe.js
-```
+check `server.rs` to see how it works (copy paste in AI and ask questions)
 
-please look at the code, it's 99% normal JS but there are limitations currently:
-- you cannot use dependencies (yet)
-- untested with typescript (but will make pipes TS first soon)
-
-i recommend you copy paste the current main.js file into AI and ask some changes for whatever you want to do, make sure to run an infinite loop also
-
-get featured in the pipe store:
+### get featured in the pipe store
 
 <img width="1312" alt="Screenshot 2024-08-27 at 17 06 45" src="https://github.com/user-attachments/assets/b6856bf4-2cfd-4888-be11-ee7baae6b84b">
 

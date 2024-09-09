@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{self, File},
+    fs,
     net::SocketAddr,
     ops::Deref,
     path::PathBuf,
@@ -8,38 +8,39 @@ use std::{
     time::Duration,
 };
 
+use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
-use log::{debug, error, info, LevelFilter};
+use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
+use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,
 };
-use screenpipe_vision::{
-    monitor::{get_monitor_by_id, list_monitors},
-    OcrEngine,
-};
-use std::io::Write;
-
-use clap::Parser;
-use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine},
-    logs::MultiWriter,
-    start_continuous_recording, DatabaseManager, ResourceMonitor, Server,
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand},
+    start_continuous_recording, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
-use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
+use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
+use serde_json::{json, Value};
 use tokio::{
-    sync::mpsc::channel,
+    runtime::Runtime,
+    signal,
+    sync::{broadcast, mpsc::channel},
     time::{interval_at, Instant},
 };
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Layer;
+use tracing_subscriber::{fmt, EnvFilter};
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
-    for (_, device) in devices.iter().enumerate() {
+    for device in devices.iter() {
         println!("  {}", device);
     }
 
@@ -72,44 +73,60 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let local_data_dir = get_base_dir(cli.data_dir)?;
+    let local_data_dir_clone = local_data_dir.clone();
+
+    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
+
+    if let Some(pipe_command) = cli.command {
+        match pipe_command {
+            Command::Pipe { subcommand } => {
+                handle_pipe_command(subcommand, &pipe_manager).await?;
+                return Ok(());
+            }
+        }
+    }
 
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. Please install ffmpeg and ensure it is in your PATH.");
         std::process::exit(1);
     }
 
-    // Initialize logging
-    let mut builder = env_logger::Builder::new();
-    builder
-        .filter(None, LevelFilter::Info)
-        .filter_module("tokenizers", LevelFilter::Error)
-        .filter_module("rusty_tesseract", LevelFilter::Error)
-        .filter_module("symphonia", LevelFilter::Error)
-        .filter_module("external_cloud_integrations", LevelFilter::Debug); // Add this line
+    // Set up file appender
+    let file_appender =
+        RollingFileAppender::new(Rotation::NEVER, local_data_dir.clone(), "screenpipe.log");
 
-    if cli.debug {
-        builder.filter_module("screenpipe", LevelFilter::Debug);
-    }
-    // Example usage of the new flag
-    if cli.save_text_files {
-        debug!("Text files will be saved.");
-    }
+    // Create a custom layer for file logging
+    let file_layer = fmt::layer()
+        .with_writer(file_appender)
+        .with_ansi(false)
+        .with_filter(EnvFilter::new("info"));
 
-    let local_data_dir = get_base_dir(cli.data_dir)?;
-    let local_data_dir_clone = local_data_dir.clone();
+    // Create a custom layer for console logging
+    let console_layer = fmt::layer()
+        .with_writer(std::io::stdout)
+        .with_filter(EnvFilter::new("debug"));
 
-    let log_file = File::create(format!(
-        "{}/screenpipe.log",
-        local_data_dir.to_string_lossy()
-    ))
-    .unwrap();
-    let multi_writer = MultiWriter::new(vec![
-        Box::new(log_file) as Box<dyn Write + Send>,
-        Box::new(std::io::stdout()) as Box<dyn Write + Send>,
-    ]);
+    // Build the EnvFilter
+    let env_filter = EnvFilter::from_default_env()
+        .add_directive("info".parse().unwrap())
+        .add_directive("tokenizers=error".parse().unwrap())
+        .add_directive("rusty_tesseract=error".parse().unwrap())
+        .add_directive("symphonia=error".parse().unwrap())
+        .add_directive("external_cloud_integrations=debug".parse().unwrap());
 
-    builder.target(env_logger::Target::Pipe(Box::new(multi_writer)));
-    builder.format_timestamp_secs().init();
+    let env_filter = if cli.debug {
+        env_filter.add_directive("screenpipe=debug".parse().unwrap())
+    } else {
+        env_filter
+    };
+
+    // Initialize the tracing subscriber with both layers and the EnvFilter
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(file_layer)
+        .with(console_layer)
+        .init();
 
     // Add warning for Linux and Windows users
     #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -136,7 +153,7 @@ async fn main() -> anyhow::Result<()> {
     let all_monitors = list_monitors().await;
     if cli.list_monitors {
         println!("Available monitors:");
-        for (_, monitor) in all_monitors.iter().enumerate() {
+        for monitor in all_monitors.iter() {
             println!("  {}. {:?}", monitor.id(), monitor);
         }
         return Ok(());
@@ -206,18 +223,18 @@ async fn main() -> anyhow::Result<()> {
                 // send signal after everything started
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(15)).await;
-                    let _ = sender_clone.push((device_clone, device_control));
+                    sender_clone.push((device_clone, device_control));
                 });
             }
         }
     }
 
-    let (restart_sender, mut restart_receiver) = channel(10);
+    let (restart_sender, _restart_receiver) = channel(10);
     let resource_monitor = ResourceMonitor::new(
         cli.self_healing,
         Duration::from_secs(60),
         3,
-        restart_sender,
+        restart_sender, // TODO: remove self healing its dead code atm 
         cli.port,
     );
     resource_monitor.start_monitoring(Duration::from_secs(10));
@@ -260,106 +277,110 @@ async fn main() -> anyhow::Result<()> {
         );
         std::process::exit(1);
     });
+    debug!("Monitor with id {} found", monitor_id);
     let ocr_engine_clone = cli.ocr_engine.clone();
     let restart_interval = cli.restart_interval;
     let vad_engine = cli.vad_engine.clone();
 
-    // Function to start or restart the recording task
-    let _start_recording = tokio::spawn(async move {
-        // hack
-        let mut recording_task = tokio::spawn(async move {});
-        let mut restart_timer = if restart_interval > 0 {
-            // Calculate the first restart time
-            let first_restart = Instant::now() + Duration::from_secs(restart_interval * 60);
-            Some(interval_at(
-                first_restart,
-                Duration::from_secs(restart_interval * 60),
-            ))
-        } else {
-            None
-        };
-        loop {
-            let db_clone = db.clone();
-            let local_data_dir = local_data_dir.clone();
-            let vision_control = vision_control.clone();
-            let audio_devices_control = audio_devices_control.clone();
-            let friend_wearable_uid_clone = friend_wearable_uid.clone(); // Clone for each iteration
-            let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
+    let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-            tokio::select! {
-                _ = &mut recording_task => {
-                    debug!("Recording task ended. Restarting...");
-                }
-                Some(_) = restart_receiver.recv() => {
-                    info!("Received restart signal. Restarting recording task...");
-                    recording_task.abort();
-                }
-                _ = async { if let Some(timer) = &mut restart_timer {
-                    timer.tick().await
-                } else {
-                    std::future::pending().await
-                }}, if restart_interval > 0 => {
-                    info!("Periodic restart interval reached. Restarting recording task...");
-                    recording_task.abort();
-                }
-            }
-            let core_ocr_engine: CoreOcrEngine = cli.ocr_engine.clone().into();
-            let ocr_engine = Arc::new(OcrEngine::from(core_ocr_engine));
-            let core_audio_transcription_engine: CoreAudioTranscriptionEngine =
-                cli.audio_transcription_engine.clone().into();
-            let audio_transcription_engine = Arc::new(core_audio_transcription_engine);
+    let audio_runtime = Runtime::new().unwrap();
+    let vision_runtime = Runtime::new().unwrap();
 
-            recording_task = tokio::spawn(async move {
-                let result = start_continuous_recording(
-                    db_clone,
-                    Arc::new(local_data_dir.join("data").to_string_lossy().into_owned()),
-                    cli.fps,
+    let audio_handle = audio_runtime.handle().clone();
+    let vision_handle = vision_runtime.handle().clone();
+
+    let db_clone = Arc::clone(&db);
+    let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
+    let vision_control_clone = Arc::clone(&vision_control);
+    let shutdown_tx_clone = shutdown_tx.clone();
+    let friend_wearable_uid_clone = friend_wearable_uid.clone();  // Clone here
+    let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
+
+    let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
+        cli.fps
+    } else {
+        eprintln!("Invalid FPS value: {}. Using default of 1.0", cli.fps);
+        1.0
+    };
+
+    let handle = {
+        let runtime = &tokio::runtime::Handle::current();
+        runtime.spawn(async move {
+            let mut interval = if restart_interval > 0 {
+                Some(interval_at(
+                    Instant::now() + Duration::from_secs(restart_interval * 60),
+                    Duration::from_secs(restart_interval * 60),
+                ))
+            } else {
+                None
+            };
+
+            loop {
+                let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                let recording_future = start_continuous_recording(
+                    db_clone.clone(),
+                    output_path_clone.clone(),
+                    fps,
                     Duration::from_secs(cli.audio_chunk_duration),
-                    vision_control,
-                    audio_devices_control,
+                    vision_control_clone.clone(),
+                    audio_devices_control.clone(),
                     cli.disable_audio,
                     cli.save_text_files,
-                    audio_transcription_engine,
-                    ocr_engine,
-                    friend_wearable_uid_clone, 
+                    Arc::new(cli.audio_transcription_engine.clone().into()),
+                    Arc::new(cli.ocr_engine.clone().into()),
+                    friend_wearable_uid_clone.clone(),
                     monitor_id,
                     cli.use_pii_removal,
                     cli.disable_vision,
                     vad_engine_clone,
-                )
-                .await;
+                    &vision_handle,
+                    &audio_handle,
+                );
+
+                let result = tokio::select! {
+                    result = recording_future => result,
+                    _ = shutdown_rx.recv() => {
+                        info!("Received shutdown signal for recording");
+                        break;
+                    }
+                    _ = async { if let Some(ref mut interval) = interval { interval.tick().await } else { std::future::pending().await } } => {
+                        info!("Restarting recording due to restart interval");
+                        continue;
+                    }
+                };
 
                 if let Err(e) = result {
                     error!("Continuous recording error: {:?}", e);
                 }
-            });
-            debug!("Recording task started");
 
-            // Short delay before restarting to avoid rapid restarts
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-    });
-
-    tokio::spawn(async move {
-        let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
-            // Custom plugin logic here
-            // For example, using PostHog for tracking:
-            if req.uri().path() == "/search" {
-                // Track search requests
-                // posthog.capture("search_request", {...})
+                if interval.is_none() {
+                    break;
+                }
             }
-        };
-        let server = Server::new(
-            db_server,
-            SocketAddr::from(([0, 0, 0, 0], cli.port)),
-            vision_control_server_clone,
-            audio_devices_control_server,
-        );
-        server.start(devices_status, api_plugin).await.unwrap();
-    });
 
-    // Wait for the server to start
-    info!("Server started on http://localhost:{}", cli.port);
+            drop(vision_runtime);
+            drop(audio_runtime);
+        })
+    };
+
+    let local_data_dir_clone_2 = local_data_dir_clone.clone();
+
+    let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
+        if req.uri().path() == "/search" {
+            // Track search requests
+        }
+    };
+    let server = Server::new(
+        db_server,
+        SocketAddr::from(([0, 0, 0, 0], cli.port)),
+        vision_control_server_clone,
+        audio_devices_control_server,
+        local_data_dir_clone_2,
+        pipe_manager.clone(),
+    );
+
+    let mut pipe_futures = FuturesUnordered::new();
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -431,18 +452,15 @@ async fn main() -> anyhow::Result<()> {
         println!("│ {:<19} │ {:<34} │", "", "No devices available");
     } else {
         let total_devices = audio_devices.len();
-        for (i, device) in audio_devices
+        for (_, device) in audio_devices
             .iter()
             .enumerate()
             .take(MAX_DEVICES_TO_DISPLAY)
         {
             let device_str = device.deref().to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
-            if i == 0 {
-                println!("│ {:<19} │ {:<34} │", "", formatted_device);
-            } else {
-                println!("│ {:<19} │ {:<34} │", "", formatted_device);
-            }
+
+            println!("│ {:<19} │ {:<34} │", "", formatted_device);
         }
         if total_devices > MAX_DEVICES_TO_DISPLAY {
             println!(
@@ -472,36 +490,103 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    #[cfg(feature = "pipes")]
-    if !cli.pipe.is_empty() {
-        use futures::stream::{FuturesUnordered, StreamExt};
-        use screenpipe_server::pipe_runner::run_pipe;
-
-        let mut pipe_futures = FuturesUnordered::new();
-        for pipe in &cli.pipe {
-            pipe_futures.push(run_pipe(pipe));
+    // Start pipes
+    debug!("Starting pipes");
+    let pipes = pipe_manager.list_pipes().await;
+    for pipe in pipes {
+        debug!("Pipe: {:?}", pipe.id);
+        if !pipe.enabled {
+            debug!("Pipe {} is disabled, skipping", pipe.id);
+            continue;
         }
-
-        tokio::select! {
-            _ = async {
-                while let Some(result) = pipe_futures.next().await {
-                    if let Err(e) = result {
-                        error!("Error running pipe runner: {}", e);
-                    }
-                }
-            } => {
-                info!("All pipe runners completed");
-            }
-            _ = tokio::signal::ctrl_c() => {
-                info!("Received Ctrl+C, shutting down...");
-            }
+        match pipe_manager.start_pipe(&pipe.id).await {
+            Ok(future) => pipe_futures.push(future),
+            Err(e) => eprintln!("Failed to start pipe {}: {}", pipe.id, e),
         }
-
-        return Ok(());
     }
 
-    // Keep the main thread running
-    loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+    let server_future = server.start(devices_status, api_plugin);
+    pin_mut!(server_future);
+
+    let pipes_future = async {
+        loop {
+            if let Some(result) = pipe_futures.next().await {
+                info!("Pipe completed: {:?}", result);
+            } else {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        }
+    };
+    pin_mut!(pipes_future);
+
+    let ctrl_c_future = signal::ctrl_c();
+    pin_mut!(ctrl_c_future);
+
+    tokio::select! {
+        _ = handle => info!("Recording completed"),
+        result = &mut server_future => {
+            match result {
+                Ok(_) => info!("Server stopped normally"),
+                Err(e) => error!("Server stopped with error: {:?}", e),
+            }
+        }
+        _ = &mut pipes_future => {
+            info!("All pipes completed, but server is still running");
+        }
+        _ = ctrl_c_future => {
+            info!("Received Ctrl+C, initiating shutdown");
+            let _ = shutdown_tx.send(());
+        }
     }
+
+    info!("Shutdown complete");
+    Ok(())
+}
+
+async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> anyhow::Result<()> {
+    // Handle pipe subcommands
+    match pipe {
+        PipeCommand::List => {
+            let pipes = pipe_manager.list_pipes().await;
+            println!("Available pipes:");
+            for pipe in pipes {
+                println!("  ID: {}, Enabled: {}", pipe.id, pipe.enabled);
+            }
+        }
+        PipeCommand::Download { url } => match pipe_manager.download_pipe(&url).await {
+            Ok(pipe_id) => println!("Pipe downloaded successfully. ID: {}", pipe_id),
+            Err(e) => eprintln!("Failed to download pipe: {}", e),
+        },
+        PipeCommand::Info { id } => match pipe_manager.get_pipe_info(&id).await {
+            Some(info) => println!("Pipe info: {:?}", info),
+            None => eprintln!("Pipe not found"),
+        },
+        PipeCommand::Enable { id } => {
+            match pipe_manager
+                .update_config(&id, json!({"enabled": true}))
+                .await
+            {
+                Ok(_) => println!("Pipe {} enabled", id),
+                Err(e) => eprintln!("Failed to enable pipe: {}", e),
+            }
+        }
+        PipeCommand::Disable { id } => {
+            match pipe_manager
+                .update_config(&id, json!({"enabled": false}))
+                .await
+            {
+                Ok(_) => println!("Pipe {} disabled", id),
+                Err(e) => eprintln!("Failed to disable pipe: {}", e),
+            }
+        }
+        PipeCommand::Update { id, config } => {
+            let config: Value = serde_json::from_str(&config)
+                .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+            match pipe_manager.update_config(&id, config).await {
+                Ok(_) => println!("Pipe {} config updated", id),
+                Err(e) => eprintln!("Failed to update pipe config: {}", e),
+            }
+        }
+    }
+    Ok(())
 }

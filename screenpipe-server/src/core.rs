@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::runtime::Handle;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
@@ -36,6 +37,8 @@ pub async fn start_continuous_recording(
     use_pii_removal: bool,
     vision_disabled: bool,
     vad_engine: CliVadEngine,
+    vision_handle: &Handle,
+    audio_handle: &Handle,
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -72,8 +75,8 @@ pub async fn start_continuous_recording(
         ));
     }
 
-    let video_handle = if !vision_disabled {
-        tokio::spawn(async move {
+    let video_task = if !vision_disabled {
+        vision_handle.spawn(async move {
             record_video(
                 db_manager_video,
                 output_path_video,
@@ -88,14 +91,14 @@ pub async fn start_continuous_recording(
             .await
         })
     } else {
-        tokio::spawn(async move {
+        vision_handle.spawn(async move {
             tokio::time::sleep(Duration::from_secs(60)).await;
             Ok(())
         })
     };
 
-    let audio_handle = if !audio_disabled {
-        tokio::spawn(async move {
+    let audio_task = if !audio_disabled {
+        audio_handle.spawn(async move {
             record_audio(
                 db_manager_audio,
                 output_path_audio,
@@ -109,14 +112,14 @@ pub async fn start_continuous_recording(
             .await
         })
     } else {
-        tokio::spawn(async move {
+        audio_handle.spawn(async move {
             tokio::time::sleep(Duration::from_secs(60)).await;
             Ok(())
         })
     };
 
     // Wait for both tasks to complete
-    let (video_result, audio_result) = tokio::join!(video_handle, audio_handle);
+    let (video_result, audio_result) = tokio::join!(video_task, audio_task);
 
     // Handle any errors from the tasks
     if let Err(e) = video_result {

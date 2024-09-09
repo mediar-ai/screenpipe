@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use commands::load_pipe_config;
+use commands::save_pipe_config;
 use sidecar::SidecarManager;
 use tauri::Config;
 use tokio::sync::mpsc;
@@ -16,7 +18,6 @@ use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState},
 };
-use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 #[allow(unused_imports)]
@@ -37,6 +38,7 @@ mod sidecar;
 mod server;
 pub use commands::open_screen_capture_preferences;
 pub use commands::reset_screen_permissions;
+pub use commands::reset_all_pipes;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
 pub use server::spawn_server;
@@ -77,6 +79,9 @@ async fn main() {
             kill_all_sreenpipes,
             reset_screen_permissions,
             open_screen_capture_preferences,
+            load_pipe_config,
+            save_pipe_config,
+            reset_all_pipes
         ])
         .setup(|app| {
             // Logging setup

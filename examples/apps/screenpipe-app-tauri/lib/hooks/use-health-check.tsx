@@ -33,7 +33,7 @@ export function useHealthCheck() {
       // console.log("setting health", data);
       setHealth(data);
     } catch (error) {
-      console.error("Failed to fetch health status:", error);
+      // console.error("Failed to fetch health status:", error);
       setHealth({
         last_frame_timestamp: null,
         last_audio_timestamp: null,
