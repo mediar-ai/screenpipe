@@ -526,7 +526,11 @@ export function RecordingSettings({
                     <TooltipContent>
                       <p>
                         windows to ignore during screen recording
-                        (case-insensitive)
+                        (case-insensitive), example:
+                        <br />
+                        - &quot;bit&quot; will ignore &quot;Bitwarden&quot; and &quot;bittorrent&quot;
+                        <br />
+                        - &quot;incognito&quot; will ignore tabs, windows that contains the word &quot;incognito&quot;
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -586,7 +590,11 @@ export function RecordingSettings({
                     <TooltipContent>
                       <p>
                         windows to include during screen recording
-                        (case-insensitive)
+                        (case-insensitive), example:
+                        <br />
+                        - &quot;chrome&quot; will match &quot;Google Chrome&quot;
+                        <br />
+                        - &quot;bitwarden&quot; will match &quot;Bitwarden&quot; and &quot;bittorrent&quot;
                       </p>
                     </TooltipContent>
                   </Tooltip>
