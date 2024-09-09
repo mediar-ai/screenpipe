@@ -279,6 +279,7 @@ async fn main() -> anyhow::Result<()> {
         );
         std::process::exit(1);
     });
+    debug!("Monitor with id {} found", monitor_id);
     let ocr_engine_clone = cli.ocr_engine.clone();
     let restart_interval = cli.restart_interval;
 
@@ -303,44 +304,62 @@ async fn main() -> anyhow::Result<()> {
         1.0
     };
 
-    let (shutdown_tx, _) = broadcast::channel::<()>(1);
-    let shutdown_tx_clone = shutdown_tx.clone();
-
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
-            let mut shutdown_rx = shutdown_tx_clone.subscribe();
-            let result = tokio::select! {
-                result = start_continuous_recording(
-                    db.clone(),
-                    Arc::new(local_data_dir.join("data").to_string_lossy().into_owned()),
+            let mut interval = if restart_interval > 0 {
+                Some(interval_at(
+                    Instant::now() + Duration::from_secs(restart_interval * 60),
+                    Duration::from_secs(restart_interval * 60),
+                ))
+            } else {
+                None
+            };
+
+            loop {
+                let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                let recording_future = start_continuous_recording(
+                    db_clone.clone(),
+                    output_path_clone.clone(),
                     fps,
                     Duration::from_secs(cli.audio_chunk_duration),
-                    vision_control,
-                    audio_devices_control,
+                    vision_control_clone.clone(),
+                    audio_devices_control.clone(),
                     cli.disable_audio,
                     cli.save_text_files,
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
-                    friend_wearable_uid,
+                    friend_wearable_uid_clone.clone(),
                     monitor_id,
                     cli.use_pii_removal,
                     cli.disable_vision,
                     &vision_handle,
                     &audio_handle,
-                ) => result,
-                _ = shutdown_rx.recv() => {
-                    info!("Received shutdown signal for recording");
-                    Ok(())
+                );
+
+                let result = tokio::select! {
+                    result = recording_future => result,
+                    _ = shutdown_rx.recv() => {
+                        info!("Received shutdown signal for recording");
+                        break;
+                    }
+                    _ = async { if let Some(ref mut interval) = interval { interval.tick().await } else { std::future::pending().await } } => {
+                        info!("Restarting recording due to restart interval");
+                        continue;
+                    }
+                };
+
+                if let Err(e) = result {
+                    error!("Continuous recording error: {:?}", e);
                 }
-            };
+
+                if interval.is_none() {
+                    break;
+                }
+            }
 
             drop(vision_runtime);
             drop(audio_runtime);
-
-            if let Err(e) = result {
-                error!("Continuous recording error: {:?}", e);
-            }
         })
     };
 
