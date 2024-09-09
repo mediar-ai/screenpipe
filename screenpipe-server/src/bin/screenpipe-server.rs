@@ -334,6 +334,7 @@ async fn main() -> anyhow::Result<()> {
                     &audio_handle,
                     &cli.ignored_windows,
                     &cli.included_windows,
+                    cli.deepgram_api_key.clone(),
                 );
 
                 let result = tokio::select! {

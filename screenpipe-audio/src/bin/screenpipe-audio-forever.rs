@@ -30,6 +30,9 @@ struct Args {
 
     #[clap(long, help = "Audio chunk duration in seconds")]
     audio_chunk_duration: f32,
+
+    #[clap(long, help = "Deepgram API key")]
+    deepgram_api_key: Option<String>,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -81,6 +84,7 @@ async fn main() -> Result<()> {
         create_whisper_channel(
             Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
             VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
+            args.deepgram_api_key,
         ).await?;
     // Spawn threads for each device
     let _recording_threads: Vec<_> = devices
