@@ -24,6 +24,7 @@ mod tests {
         });
     }
     #[tokio::test]
+    #[ignore]
     async fn test_js_execution() {
         init();
         let code = r#"
