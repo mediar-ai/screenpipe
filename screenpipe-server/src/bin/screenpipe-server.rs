@@ -284,8 +284,8 @@ async fn main() -> anyhow::Result<()> {
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
     let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
-    let friend_wearable_uid_clone = friend_wearable_uid.clone(); // Clone here
-    let monitor_ids_clone = cli.monitor_id.clone();
+    let friend_wearable_uid_clone: Option<String> = friend_wearable_uid.clone(); // Clone here
+    let monitor_ids_clone = monitor_ids.clone();
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps

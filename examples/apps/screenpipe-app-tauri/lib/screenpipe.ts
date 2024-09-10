@@ -23,9 +23,9 @@ export const screenpipeQuery = z.object({
     ),
   limit: z
     .number()
-    .default(20)
+    .default(50)
     .describe(
-      "Number of results to return (default: 20). Don't return more than 50 results as it will be fed to an LLM"
+      "Number of results to return (default: 50). Be mindful of the length of the response as it will be fed to an LLM"
     ),
   offset: z.number().default(0).describe("Offset for pagination (default: 0)"),
   start_time: z

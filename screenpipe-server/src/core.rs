@@ -67,6 +67,7 @@ pub async fn start_continuous_recording(
         ));
     }
 
+    debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
         monitor_ids
             .iter()
@@ -79,6 +80,7 @@ pub async fn start_continuous_recording(
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
 
+                debug!("Starting video recording for monitor {}", monitor_id);
                 vision_handle.spawn(async move {
                     record_video(
                         db_manager_video,

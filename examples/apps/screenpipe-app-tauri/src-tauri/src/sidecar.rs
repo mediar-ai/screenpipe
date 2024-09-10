@@ -100,13 +100,14 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     .map_err(|e| e.to_string())?
     .unwrap_or(String::from("default"));
 
-    let monitor_id = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+    let monitor_ids = with_store(app.clone(), stores.clone(), path.clone(), |store| {
         Ok(store
-            .get("monitorId")
-            .and_then(|v| v.as_str().map(String::from)))
+            .get("monitorIds")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.to_vec()))
     })
     .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
+    .unwrap_or_default();
 
     let audio_devices = with_store(app.clone(), stores.clone(), path.clone(), |store| {
         Ok(store
@@ -188,10 +189,17 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         let model = ocr_engine.as_str();
         args.push(model);
     }
-    if monitor_id != "default" {
-        args.push("--monitor-id");
-        let id = monitor_id.as_str();
-        args.push(id);
+    // if monitor_id != "default" {
+    //     args.push("--monitor-id");
+    //     let id = monitor_id.as_str();
+    //     args.push(id);
+    // }
+
+    if !monitor_ids.is_empty() && monitor_ids[0] != Value::String("default".to_string()) {
+        for monitor in &monitor_ids {
+            args.push("--monitor-id");
+            args.push(monitor.as_str().unwrap());
+        }
     }
 
     if !audio_devices.is_empty() && audio_devices[0] != Value::String("default".to_string()) {

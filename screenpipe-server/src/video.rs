@@ -13,6 +13,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::time::sleep;
 
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
@@ -126,6 +127,7 @@ impl VideoCapture {
                 &output_path,
                 fps,
                 new_chunk_callback_clone,
+                monitor_id,
             )
             .await;
         });
@@ -141,6 +143,7 @@ async fn save_frames_as_video(
     output_path: &str,
     fps: f64,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
+    monitor_id: u32,
 ) {
     debug!("Starting save_frames_as_video function");
     let frames_per_video = 30; // Adjust this value as needed
@@ -186,7 +189,7 @@ async fn save_frames_as_video(
             let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
             // Start new FFmpeg process with a new output file
             let output_file = PathBuf::from(output_path)
-                .join(format!("{}.mp4", formatted_time))
+                .join(format!("monitor_{}_{}.mp4", monitor_id, formatted_time))
                 .to_str()
                 .expect("Failed to create valid path")
                 .to_string();
@@ -260,12 +263,38 @@ async fn save_frames_as_video(
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
+        const MAX_RETRIES: usize = 3;
+        const RETRY_DELAY: Duration = Duration::from_millis(100);
+
         // Write encoded frames to FFmpeg
         while let Ok(buffer) = receiver.try_recv() {
             if let Some(stdin) = current_stdin.as_mut() {
-                if let Err(e) = stdin.write_all(buffer.as_slice()).await {
-                    error!("Failed to write frame to ffmpeg: {}", e);
-                    break;
+                let mut retries = 0;
+                while retries < MAX_RETRIES {
+                    match stdin.write_all(buffer.as_slice()).await {
+                        Ok(_) => {
+                            frame_count += 1;
+                            debug!("Wrote frame {} to FFmpeg", frame_count);
+                            break;
+                        }
+                        Err(e) => {
+                            retries += 1;
+                            if retries >= MAX_RETRIES {
+                                error!(
+                                    "Failed to write frame to ffmpeg after {} retries: {}",
+                                    MAX_RETRIES, e
+                                );
+                                // Consider breaking the outer loop or handling this failure
+                                break;
+                            } else {
+                                warn!(
+                                    "Failed to write frame to ffmpeg (attempt {}): {}. Retrying...",
+                                    retries, e
+                                );
+                                sleep(RETRY_DELAY).await;
+                            }
+                        }
+                    }
                 }
                 frame_count += 1;
                 debug!("Wrote frame {} to FFmpeg", frame_count);

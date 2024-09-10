@@ -66,6 +66,8 @@ export function RecordingSettings({
 }) {
   const { settings, updateSettings } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
+  const [openMonitors, setOpenMonitors] = React.useState(false);
+
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
   );
@@ -76,6 +78,9 @@ export function RecordingSettings({
   const [isUpdating, setIsUpdating] = useState(false);
   const { health } = useHealthCheck();
   const isDisabled = health?.status_code === 500;
+  console.log("localSettings", localSettings);
+  console.log("settings", settings);
+  console.log("availableMonitors", availableMonitors);
   useEffect(() => {
     const loadDevices = async () => {
       try {
@@ -106,10 +111,16 @@ export function RecordingSettings({
 
         console.log("localSettings", localSettings);
         // Update local settings if current values are default
-        if (localSettings.monitorId === "default" && monitors.length > 0) {
+        if (
+          localSettings.monitorIds.length === 1 &&
+          localSettings.monitorIds[0] === "default" &&
+          monitors.length > 0
+        ) {
           setLocalSettings({
             ...localSettings,
-            monitorId: monitors.find((monitor) => monitor.is_default)?.id!,
+            monitorIds: [
+              monitors.find((monitor) => monitor.is_default)!.id!.toString(),
+            ],
           });
         }
         if (
@@ -145,7 +156,7 @@ export function RecordingSettings({
       const settingsToUpdate = {
         audioTranscriptionEngine: localSettings.audioTranscriptionEngine,
         ocrEngine: localSettings.ocrEngine,
-        monitorId: localSettings.monitorId,
+        monitorIds: localSettings.monitorIds,
         audioDevices: localSettings.audioDevices,
         usePiiRemoval: localSettings.usePiiRemoval,
         restartInterval: localSettings.restartInterval,
@@ -218,8 +229,12 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, ocrEngine: value });
   };
 
-  const handleMonitorChange = (value: string) => {
-    setLocalSettings({ ...localSettings, monitorId: value });
+  const handleMonitorChange = (currentValue: string) => {
+    const updatedMonitors = localSettings.monitorIds.includes(currentValue)
+      ? localSettings.monitorIds.filter((id) => id !== currentValue)
+      : [...localSettings.monitorIds, currentValue];
+
+    setLocalSettings({ ...localSettings, monitorIds: updatedMonitors });
   };
 
   const handleAudioDeviceChange = (currentValue: string) => {
@@ -325,29 +340,72 @@ export function RecordingSettings({
 
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="monitorId"
+                htmlFor="monitorIds"
                 className="flex items-center space-x-2"
               >
                 <Monitor className="h-4 w-4" />
-                <span>monitor</span>
+                <span>monitors</span>
               </Label>
-              <Select
-                onValueChange={handleMonitorChange}
-                defaultValue={localSettings.monitorId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="select monitor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMonitors.map((monitor) => (
-                    <SelectItem key={monitor.id} value={monitor.id}>
-                      {monitor.id}. {monitor.name}{" "}
-                      {monitor.is_default ? "(default)" : ""} - {monitor.width}x
-                      {monitor.height}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openMonitors}
+                    className="w-full justify-between"
+                  >
+                    {localSettings.monitorIds.length > 0
+                      ? `${localSettings.monitorIds.length} monitor(s) selected`
+                      : "select monitors"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0">
+                  <Command>
+                    <CommandInput placeholder="search monitors..." />
+                    <CommandList>
+                      <CommandEmpty>no monitor found.</CommandEmpty>
+                      <CommandGroup>
+                        {availableMonitors.map((monitor) => (
+                          <CommandItem
+                            key={monitor.id}
+                            value={monitor.id}
+                            onSelect={() =>
+                              handleMonitorChange(monitor.id.toString())
+                            }
+                          >
+                            <div className="flex items-center">
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  localSettings.monitorIds.includes(
+                                    monitor.id.toString()
+                                  )
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              {/* not selectable */}
+                              <span
+                                style={{
+                                  userSelect: "none",
+                                  WebkitUserSelect: "none",
+                                  MozUserSelect: "none",
+                                  msUserSelect: "none",
+                                }}
+                              >
+                                {monitor.id}. {monitor.name}{" "}
+                                {monitor.is_default ? "(default)" : ""} -{" "}
+                                {monitor.width}x{monitor.height}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="flex flex-col space-y-2">
               <Label
@@ -397,7 +455,14 @@ export function RecordingSettings({
                                     : "opacity-0"
                                 )}
                               />
-                              <span>
+                              <span
+                                style={{
+                                  userSelect: "none",
+                                  WebkitUserSelect: "none",
+                                  MozUserSelect: "none",
+                                  msUserSelect: "none",
+                                }}
+                              >
                                 {device.name}{" "}
                                 {device.is_default ? "(default)" : ""}
                               </span>
@@ -523,14 +588,15 @@ export function RecordingSettings({
                     <TooltipTrigger>
                       <HelpCircle className="h-4 w-4" />
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent side="right">
                       <p>
                         windows to ignore during screen recording
                         (case-insensitive), example:
                         <br />
-                        - &quot;bit&quot; will ignore &quot;Bitwarden&quot; and &quot;bittorrent&quot;
-                        <br />
-                        - &quot;incognito&quot; will ignore tabs, windows that contains the word &quot;incognito&quot;
+                        - &quot;bit&quot; will ignore &quot;Bitwarden&quot; and
+                        &quot;bittorrent&quot;
+                        <br />- &quot;incognito&quot; will ignore tabs, windows
+                        that contains the word &quot;incognito&quot;
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -587,14 +653,15 @@ export function RecordingSettings({
                     <TooltipTrigger>
                       <HelpCircle className="h-4 w-4" />
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent side="right">
                       <p>
                         windows to include during screen recording
                         (case-insensitive), example:
                         <br />
-                        - &quot;chrome&quot; will match &quot;Google Chrome&quot;
-                        <br />
-                        - &quot;bitwarden&quot; will match &quot;Bitwarden&quot; and &quot;bittorrent&quot;
+                        - &quot;chrome&quot; will match &quot;Google
+                        Chrome&quot;
+                        <br />- &quot;bitwarden&quot; will match
+                        &quot;Bitwarden&quot; and &quot;bittorrent&quot;
                       </p>
                     </TooltipContent>
                   </Tooltip>

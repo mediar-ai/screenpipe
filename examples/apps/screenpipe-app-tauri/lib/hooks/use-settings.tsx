@@ -28,10 +28,10 @@ const defaultSettings: Settings = {
   devMode: false,
   audioTranscriptionEngine: "whisper-large",
   ocrEngine: "default",
-  monitorId: "default",
+  monitorIds: ["default"],
   audioDevices: ["default"],
   usePiiRemoval: false,
-  restartInterval: 60,
+  restartInterval: 0,
   port: 3030,
   dataDir: "default",
   disableAudio: false,
@@ -51,7 +51,7 @@ export interface Settings {
   devMode: boolean;
   audioTranscriptionEngine: string;
   ocrEngine: string;
-  monitorId: string;
+  monitorIds: string[];
   audioDevices: string[];
   usePiiRemoval: boolean;
   restartInterval: number;
@@ -120,8 +120,8 @@ export function useSettings() {
           "whisper-large";
         const savedOcrEngine =
           ((await store!.get("ocrEngine")) as string) || ocrModel;
-        const savedMonitorId =
-          ((await store!.get("monitorId")) as string) || "default";
+        const savedMonitorIds =
+          ((await store!.get("monitorIds")) as string[]) || ["default"];
         const savedAudioDevices = ((await store!.get(
           "audioDevices"
         )) as string[]) || ["default"];
@@ -149,7 +149,7 @@ export function useSettings() {
           devMode: savedDevMode,
           audioTranscriptionEngine: savedAudioTranscriptionEngine,
           ocrEngine: savedOcrEngine,
-          monitorId: savedMonitorId,
+          monitorIds: savedMonitorIds,
           audioDevices: savedAudioDevices,
           usePiiRemoval: savedUsePiiRemoval,
           restartInterval: savedRestartInterval,
