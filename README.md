@@ -440,6 +440,9 @@ curl "http://localhost:3030/search?q=QUERY_HERE&limit=10&offset=20"
 # 6. Search with no query (should return all results)
 curl "http://localhost:3030/search?limit=5&offset=0"
 
+# Display first frame from 30m to 25m ago (macos, translate to your OS with AI)
+curl "http://localhost:3030/search?limit=1&offset=0&content_type=ocr&include_frames=true&start_time=$(date -u -v-220M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-120M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
+
 # filter by app (wll only return OCR results)
 curl "http://localhost:3030/search?app_name=cursor"
   ```
@@ -483,6 +486,8 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 ## Status 
 
 Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop, 24/7.
+
+Uses 600 MB, 10% CPU.
 
 - [ ] Integrations
     - [x] ollama
