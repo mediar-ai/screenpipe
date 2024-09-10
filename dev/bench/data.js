@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725936480862,
+  "lastUpdate": 1725995749138,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -3959,6 +3959,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2155984562,
             "range": "± 308550830",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "d36e891fe1ddecda833d38e1fa2961d3f7353704",
+          "message": "fix cli monitor default, add monitor selection ui to app, improve empty screen prompt based on feedback, improve search",
+          "timestamp": "2024-09-10T12:04:49-07:00",
+          "tree_id": "e4b65ec02791e7c52c55ff4fe610b5d8a435c030",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/d36e891fe1ddecda833d38e1fa2961d3f7353704"
+        },
+        "date": 1725995748521,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2015346708,
+            "range": "± 85001086",
             "unit": "ns/iter"
           }
         ]
