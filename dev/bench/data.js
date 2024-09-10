@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725927622606,
+  "lastUpdate": 1725927624691,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -7009,6 +7009,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 6637466192,
             "range": "± 28605121",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9c2840510681ce33fd7167864100bdae2d504e75",
+          "message": "Merge branch 'main' into update-formula-aarch64-apple-darwin-8359d1b40aece31a887f763f7b0317224a8fc1be",
+          "timestamp": "2024-09-09T17:05:58-07:00",
+          "tree_id": "af2b43b44e369cbda90e6af095a0fb5956fa91a0",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/9c2840510681ce33fd7167864100bdae2d504e75"
+        },
+        "date": 1725927624020,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 6749696047,
+            "range": "± 26335490",
             "unit": "ns/iter"
           }
         ]
