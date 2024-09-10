@@ -135,9 +135,9 @@ pub struct Cli {
     #[arg(long)]
     pub list_monitors: bool,
 
-    /// Monitor ID to use, this will be used to select the monitor to record
+    /// Monitor IDs to use, these will be used to select the monitors to record
     #[arg(short = 'm', long)]
-    pub monitor_id: Option<u32>,
+    pub monitor_id: Vec<u32>,
 
     /// Enable PII removal from OCR text property that is saved to db and returned in search results
     #[arg(long, default_value_t = false)]

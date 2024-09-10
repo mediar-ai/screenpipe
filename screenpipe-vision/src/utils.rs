@@ -72,12 +72,9 @@ pub async fn capture_screenshot(
     let image_hash = calculate_hash(&image);
     let capture_duration = capture_start.elapsed();
 
-    // info!("Attempting to capture all visible windows");
-    let window_images = match capture_all_visible_windows(ignore_list, include_list).await {
-        Ok(images) => {
-            // info!("Successfully captured {} window images", images.len());
-            images
-        }
+    let window_images = match capture_all_visible_windows(monitor, ignore_list, include_list).await
+    {
+        Ok(images) => images,
         Err(e) => {
             warn!(
                 "Failed to capture window images: {}. Continuing with empty result.",

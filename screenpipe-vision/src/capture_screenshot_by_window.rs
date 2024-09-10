@@ -31,64 +31,62 @@ impl From<XCapError> for CaptureError {
 }
 
 pub async fn capture_all_visible_windows(
+    monitor: &Monitor,
     ignore_list: &[String],
     include_list: &[String],
 ) -> Result<Vec<(DynamicImage, String, String, bool)>, Box<dyn Error>> {
-    let monitors = Monitor::all()?;
-
     let mut all_captured_images = Vec::new();
 
-    for monitor in monitors {
-        let windows = retry_with_backoff(
-            || {
-                let windows = Window::all()?;
-                if windows.is_empty() {
-                    Err(CaptureError::NoWindows)
-                } else {
-                    Ok(windows)
+    let windows = retry_with_backoff(
+        || {
+            let windows = Window::all()?;
+            if windows.is_empty() {
+                Err(CaptureError::NoWindows)
+            } else {
+                Ok(windows)
+            }
+        },
+        3,
+        Duration::from_millis(500),
+    )
+    .await?;
+
+    let focused_window = windows
+        .iter()
+        .find(|&w| is_valid_window(w, monitor, ignore_list, include_list));
+
+    for window in &windows {
+        if is_valid_window(window, monitor, ignore_list, include_list) {
+            let app_name = window.app_name();
+            let window_name = window.title();
+            let is_focused = focused_window
+                .as_ref()
+                .map_or(false, |fw| fw.id() == window.id());
+
+            match window.capture_image() {
+                Ok(buffer) => {
+                    let image = DynamicImage::ImageRgba8(
+                        image::ImageBuffer::from_raw(
+                            buffer.width() as u32,
+                            buffer.height() as u32,
+                            buffer.into_raw(),
+                        )
+                        .unwrap(),
+                    );
+
+                    all_captured_images.push((
+                        image,
+                        app_name.to_string(),
+                        window_name.to_string(),
+                        is_focused,
+                    ));
                 }
-            },
-            3,
-            Duration::from_millis(500),
-        )
-        .await?;
-
-        // ! THIS is extremely inefficient 
-        let focused_window = get_focused_window(&monitor, ignore_list, include_list).await;
-
-        for (_index, window) in windows.into_iter().enumerate() {
-            if is_valid_window(&window, &monitor, ignore_list, include_list) {
-                let app_name = window.app_name();
-                let window_name = window.title();
-                let is_focused = focused_window
-                    .as_ref()
-                    .map_or(false, |fw| fw.id() == window.id());
-
-                match window.capture_image() {
-                    Ok(buffer) => {
-                        let image = DynamicImage::ImageRgba8(
-                            image::ImageBuffer::from_raw(
-                                buffer.width() as u32,
-                                buffer.height() as u32,
-                                buffer.into_raw(),
-                            )
-                            .unwrap(),
-                        );
-
-                        all_captured_images.push((
-                            image,
-                            app_name.to_string(),
-                            window_name.to_string(),
-                            is_focused,
-                        ));
-                    }
-                    Err(e) => error!(
-                        "Failed to capture image for window {} on monitor {}: {}",
-                        window_name,
-                        monitor.name(),
-                        e
-                    ),
-                }
+                Err(e) => error!(
+                    "Failed to capture image for window {} on monitor {}: {}",
+                    window_name,
+                    monitor.name(),
+                    e
+                ),
             }
         }
     }
@@ -167,24 +165,4 @@ where
         }
     }
     unreachable!()
-}
-
-async fn get_focused_window(
-    monitor: &Monitor,
-    ignore_list: &[String],
-    include_list: &[String],
-) -> Option<Window> {
-    retry_with_backoff(
-        || -> Result<Option<Window>, CaptureError> {
-            let windows = Window::all()?;
-            Ok(windows
-                .into_iter()
-                .find(|w| is_valid_window(w, &monitor, ignore_list, include_list)))
-        },
-        3,
-        Duration::from_millis(500),
-    )
-    .await
-    .ok()
-    .flatten()
 }

@@ -24,7 +24,7 @@ use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand},
     start_continuous_recording, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
-use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
+use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
 use tokio::{
     runtime::Runtime,
@@ -263,21 +263,12 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
-    let monitor_id = cli.monitor_id.unwrap_or(all_monitors.first().unwrap().id());
+    let monitor_ids = if cli.monitor_id.is_empty() {
+        all_monitors.iter().map(|m| m.id()).collect::<Vec<_>>()
+    } else {
+        cli.monitor_id.clone()
+    };
 
-    // try to use the monitor selected, if not available throw an error
-    get_monitor_by_id(monitor_id).await.unwrap_or_else(|| {
-        eprintln!(
-            "{}",
-            format!(
-                "Monitor with id {} not found. Try 'screenpipe --list-monitors'",
-                monitor_id
-            )
-            .red()
-        );
-        std::process::exit(1);
-    });
-    debug!("Monitor with id {} found", monitor_id);
     let ocr_engine_clone = cli.ocr_engine.clone();
     let restart_interval = cli.restart_interval;
 
@@ -294,6 +285,7 @@ async fn main() -> anyhow::Result<()> {
     let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
     let friend_wearable_uid_clone = friend_wearable_uid.clone(); // Clone here
+    let monitor_ids_clone = cli.monitor_id.clone();
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
@@ -328,7 +320,7 @@ async fn main() -> anyhow::Result<()> {
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
                     friend_wearable_uid_clone.clone(),
-                    monitor_id,
+                    monitor_ids_clone.clone(),
                     cli.use_pii_removal,
                     cli.disable_vision,
                     &vision_handle,
@@ -415,7 +407,10 @@ async fn main() -> anyhow::Result<()> {
         "│ OCR Engine          │ {:<34} │",
         format!("{:?}", ocr_engine_clone)
     );
-    println!("│ Monitor ID          │ {:<34} │", monitor_id);
+    println!(
+        "│ Monitor IDs         │ {:<34} │",
+        format_cell(&format!("{:?}", monitor_ids), VALUE_WIDTH)
+    );
     println!(
         "│ Data Directory      │ {:<34} │",
         local_data_dir_clone.display()
