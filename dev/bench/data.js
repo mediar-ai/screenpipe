@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725927390819,
+  "lastUpdate": 1725927392322,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6943,6 +6943,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 6596439987,
             "range": "± 5338403",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1fe8a01be05bfef048937bd6ba11906bf27d2e9b",
+          "message": "Merge pull request #298 from mediar-ai/update-formula-aarch64-apple-darwin-8359d1b40aece31a887f763f7b0317224a8fc1be\n\nUpdate Homebrew formula for aarch64-apple-darwin",
+          "timestamp": "2024-09-09T17:06:08-07:00",
+          "tree_id": "af2b43b44e369cbda90e6af095a0fb5956fa91a0",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/1fe8a01be05bfef048937bd6ba11906bf27d2e9b"
+        },
+        "date": 1725927392108,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 6637466192,
+            "range": "± 28605121",
             "unit": "ns/iter"
           }
         ]
