@@ -347,9 +347,8 @@ npm run dev
 
 You can use terminal commands to query and view your data as shown below. Also, we recommend Tableplus.com to view the database, it has a free tier.
 
-Here's a pseudo code to illustrate how to use screenpipe, after a meeting for example (automatically with our webhooks):
+Here's a pseudo code to illustrate how to use screenpipe, to summarize meetings:
 ```js
-
 // 1h ago
 const startDate = "<some time 1h ago..>"
 // 10m ago
@@ -365,10 +364,9 @@ const summary = fetchOllama("{results} create a summary from these transcription
 // add the meeting summary to your notes
 addToNotion(summary)
 // or your favourite note taking app
-
 ```
 
-Or thousands of other usages of all your screen & mic data!
+Or thousands of other usages of all your screen & mic data! [Check examples](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript), screenpipes makes it easy to write plugins in JS for example that runs directly in the Rust code through Deno engine.
 
 
 <details>
@@ -450,8 +448,6 @@ curl "http://localhost:3030/search?app_name=cursor"
 <br><br>
 Keep in mind that it's still experimental.
 <br><br>
-
-https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 
 ## Use cases:
 
