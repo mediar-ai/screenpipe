@@ -79,13 +79,13 @@ jobs:
           EOF
 
       - name: Upload memory usage data
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: memory-usage-data
           path: memory_usage.csv
 
       - name: Upload memory usage graph
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: memory-usage-graph
           path: memory_usage_graph.png
@@ -101,7 +101,7 @@ jobs:
           sqlite3 ~/.screenpipe/db.sqlite "SELECT COUNT(*) FROM audio_transcriptions;"
 
       - name: Upload screenpipe data
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: screenpipe-data
           path: |
