@@ -183,6 +183,7 @@ export function SearchChat() {
       });
 
       let fullResponse = "";
+      // @ts-ignore
       setChatMessages((prevMessages) => [
         ...prevMessages,
         { role: "assistant", content: "" },
@@ -191,6 +192,7 @@ export function SearchChat() {
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || "";
         fullResponse += content;
+        // @ts-ignore
         setChatMessages((prevMessages) => [
           ...prevMessages.slice(0, -1),
           { role: "assistant", content: fullResponse },
