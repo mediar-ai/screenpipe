@@ -94,7 +94,8 @@ tauri-plugin-single-instance = "2.0.0-rc.1"
 [features]
 # cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
 # metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
-
+cudart = []
+metal = [] # unused
 default = ["custom-protocol"]
 
 # TODOS one day
