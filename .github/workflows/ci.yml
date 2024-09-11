@@ -160,7 +160,7 @@ jobs:
           echo "Checking for esaxx and abseil-cpp usage:"
           grep -E "esaxx|abseil-cpp" cargo_tree_output.txt || echo "No direct usage found"
         
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: cargo-tree-output
           path: cargo_tree_output.txt
