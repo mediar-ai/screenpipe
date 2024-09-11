@@ -81,6 +81,8 @@ async fn main() -> Result<()> {
                 OcrEngine::Tesseract
             },
             id,
+            &[],
+            &[],
         )
         .await
     });

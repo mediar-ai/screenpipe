@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Mic,
   Monitor,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -65,6 +66,8 @@ export function RecordingSettings({
 }) {
   const { settings, updateSettings } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
+  const [openMonitors, setOpenMonitors] = React.useState(false);
+
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
   );
@@ -75,6 +78,9 @@ export function RecordingSettings({
   const [isUpdating, setIsUpdating] = useState(false);
   const { health } = useHealthCheck();
   const isDisabled = health?.status_code === 500;
+  console.log("localSettings", localSettings);
+  console.log("settings", settings);
+  console.log("availableMonitors", availableMonitors);
   useEffect(() => {
     const loadDevices = async () => {
       try {
@@ -105,10 +111,16 @@ export function RecordingSettings({
 
         console.log("localSettings", localSettings);
         // Update local settings if current values are default
-        if (localSettings.monitorId === "default" && monitors.length > 0) {
+        if (
+          localSettings.monitorIds.length === 1 &&
+          localSettings.monitorIds[0] === "default" &&
+          monitors.length > 0
+        ) {
           setLocalSettings({
             ...localSettings,
-            monitorId: monitors.find((monitor) => monitor.is_default)?.id!,
+            monitorIds: [
+              monitors.find((monitor) => monitor.is_default)!.id!.toString(),
+            ],
           });
         }
         if (
@@ -144,11 +156,13 @@ export function RecordingSettings({
       const settingsToUpdate = {
         audioTranscriptionEngine: localSettings.audioTranscriptionEngine,
         ocrEngine: localSettings.ocrEngine,
-        monitorId: localSettings.monitorId,
+        monitorIds: localSettings.monitorIds,
         audioDevices: localSettings.audioDevices,
         usePiiRemoval: localSettings.usePiiRemoval,
         restartInterval: localSettings.restartInterval,
         disableAudio: localSettings.disableAudio,
+        ignoredWindows: localSettings.ignoredWindows,
+        includedWindows: localSettings.includedWindows,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -175,6 +189,38 @@ export function RecordingSettings({
     }
   };
 
+  const handleAddIgnoredWindow = (value: string) => {
+    if (value && !localSettings.ignoredWindows.includes(value)) {
+      setLocalSettings({
+        ...localSettings,
+        ignoredWindows: [...localSettings.ignoredWindows, value],
+      });
+    }
+  };
+
+  const handleRemoveIgnoredWindow = (value: string) => {
+    setLocalSettings({
+      ...localSettings,
+      ignoredWindows: localSettings.ignoredWindows.filter((w) => w !== value),
+    });
+  };
+
+  const handleAddIncludedWindow = (value: string) => {
+    if (value && !localSettings.includedWindows.includes(value)) {
+      setLocalSettings({
+        ...localSettings,
+        includedWindows: [...localSettings.includedWindows, value],
+      });
+    }
+  };
+
+  const handleRemoveIncludedWindow = (value: string) => {
+    setLocalSettings({
+      ...localSettings,
+      includedWindows: localSettings.includedWindows.filter((w) => w !== value),
+    });
+  };
+
   const handleAudioTranscriptionModelChange = (value: string) => {
     setLocalSettings({ ...localSettings, audioTranscriptionEngine: value });
   };
@@ -183,8 +229,12 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, ocrEngine: value });
   };
 
-  const handleMonitorChange = (value: string) => {
-    setLocalSettings({ ...localSettings, monitorId: value });
+  const handleMonitorChange = (currentValue: string) => {
+    const updatedMonitors = localSettings.monitorIds.includes(currentValue)
+      ? localSettings.monitorIds.filter((id) => id !== currentValue)
+      : [...localSettings.monitorIds, currentValue];
+
+    setLocalSettings({ ...localSettings, monitorIds: updatedMonitors });
   };
 
   const handleAudioDeviceChange = (currentValue: string) => {
@@ -290,29 +340,72 @@ export function RecordingSettings({
 
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="monitorId"
+                htmlFor="monitorIds"
                 className="flex items-center space-x-2"
               >
                 <Monitor className="h-4 w-4" />
-                <span>monitor</span>
+                <span>monitors</span>
               </Label>
-              <Select
-                onValueChange={handleMonitorChange}
-                defaultValue={localSettings.monitorId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="select monitor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMonitors.map((monitor) => (
-                    <SelectItem key={monitor.id} value={monitor.id}>
-                      {monitor.id}. {monitor.name}{" "}
-                      {monitor.is_default ? "(default)" : ""} - {monitor.width}x
-                      {monitor.height}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openMonitors}
+                    className="w-full justify-between"
+                  >
+                    {localSettings.monitorIds.length > 0
+                      ? `${localSettings.monitorIds.length} monitor(s) selected`
+                      : "select monitors"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0">
+                  <Command>
+                    <CommandInput placeholder="search monitors..." />
+                    <CommandList>
+                      <CommandEmpty>no monitor found.</CommandEmpty>
+                      <CommandGroup>
+                        {availableMonitors.map((monitor) => (
+                          <CommandItem
+                            key={monitor.id}
+                            value={monitor.id}
+                            onSelect={() =>
+                              handleMonitorChange(monitor.id.toString())
+                            }
+                          >
+                            <div className="flex items-center">
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  localSettings.monitorIds.includes(
+                                    monitor.id.toString()
+                                  )
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              {/* not selectable */}
+                              <span
+                                style={{
+                                  userSelect: "none",
+                                  WebkitUserSelect: "none",
+                                  MozUserSelect: "none",
+                                  msUserSelect: "none",
+                                }}
+                              >
+                                {monitor.id}. {monitor.name}{" "}
+                                {monitor.is_default ? "(default)" : ""} -{" "}
+                                {monitor.width}x{monitor.height}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="flex flex-col space-y-2">
               <Label
@@ -362,7 +455,14 @@ export function RecordingSettings({
                                     : "opacity-0"
                                 )}
                               />
-                              <span>
+                              <span
+                                style={{
+                                  userSelect: "none",
+                                  WebkitUserSelect: "none",
+                                  MozUserSelect: "none",
+                                  msUserSelect: "none",
+                                }}
+                              >
                                 {device.name}{" "}
                                 {device.is_default ? "(default)" : ""}
                               </span>
@@ -474,6 +574,136 @@ export function RecordingSettings({
                     </Tooltip>
                   </TooltipProvider>
                 </Label>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="ignoredWindows"
+                className="flex items-center space-x-2"
+              >
+                <span>ignored windows</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        windows to ignore during screen recording
+                        (case-insensitive), example:
+                        <br />
+                        - &quot;bit&quot; will ignore &quot;Bitwarden&quot; and
+                        &quot;bittorrent&quot;
+                        <br />- &quot;incognito&quot; will ignore tabs, windows
+                        that contains the word &quot;incognito&quot;
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {localSettings.ignoredWindows.map((window) => (
+                  <Badge
+                    key={window}
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
+                    {window}
+                    <X
+                      className="h-3 w-3 cursor-pointer"
+                      onClick={() => handleRemoveIgnoredWindow(window)}
+                    />
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  id="ignoredWindows"
+                  placeholder="add window to ignore"
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter") {
+                      handleAddIgnoredWindow(e.currentTarget.value);
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+                <Button
+                  onClick={() => {
+                    const input = document.getElementById(
+                      "ignoredWindows"
+                    ) as HTMLInputElement;
+                    handleAddIgnoredWindow(input.value);
+                    input.value = "";
+                  }}
+                >
+                  add
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="includedWindows"
+                className="flex items-center space-x-2"
+              >
+                <span>included windows</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        windows to include during screen recording
+                        (case-insensitive), example:
+                        <br />
+                        - &quot;chrome&quot; will match &quot;Google
+                        Chrome&quot;
+                        <br />- &quot;bitwarden&quot; will match
+                        &quot;Bitwarden&quot; and &quot;bittorrent&quot;
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {localSettings.includedWindows.map((window) => (
+                  <Badge
+                    key={window}
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
+                    {window}
+                    <X
+                      className="h-3 w-3 cursor-pointer"
+                      onClick={() => handleRemoveIncludedWindow(window)}
+                    />
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  id="includedWindows"
+                  placeholder="add window to include"
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter") {
+                      handleAddIncludedWindow(e.currentTarget.value);
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+                <Button
+                  onClick={() => {
+                    const input = document.getElementById(
+                      "includedWindows"
+                    ) as HTMLInputElement;
+                    handleAddIncludedWindow(input.value);
+                    input.value = "";
+                  }}
+                >
+                  add
+                </Button>
               </div>
             </div>
 

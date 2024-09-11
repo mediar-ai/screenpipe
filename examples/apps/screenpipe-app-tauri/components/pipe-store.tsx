@@ -45,8 +45,8 @@ const PipeDialog: React.FC = () => {
     // "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity",
     // "https://github.com/mediar-ai/screenpipe/tree/pipe-logs/examples/typescript/pipe-stream-ocr-text",
   ]);
-  console.log("pipes", pipes);
-  console.log("newRepoUrl", newRepoUrl);
+  // console.log("pipes", pipes);
+  // console.log("newRepoUrl", newRepoUrl);
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const { settings, updateSettings } = useSettings();
   const [installedPipes, setInstalledPipes] = useState<string[]>([]);

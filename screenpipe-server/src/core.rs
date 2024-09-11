@@ -3,6 +3,7 @@ use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
 use crossbeam::queue::SegQueue;
+use futures::future::join_all;
 use log::{debug, error, info, warn};
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput,
@@ -33,12 +34,14 @@ pub async fn start_continuous_recording(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>,
-    monitor_id: u32,
+    monitor_ids: Vec<u32>,
     use_pii_removal: bool,
     vision_disabled: bool,
     vad_engine: CliVadEngine,
     vision_handle: &Handle,
     audio_handle: &Handle,
+    ignored_windows: &[String],
+    include_windows: &[String],
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -57,16 +60,8 @@ pub async fn start_continuous_recording(
         create_whisper_channel(audio_transcription_engine.clone(), VadEngineEnum::from(vad_engine)).await?
     };
     let whisper_sender_clone = whisper_sender.clone();
-    let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);
-
-    let is_running_video = Arc::clone(&vision_control);
-
-    let output_path_video = Arc::clone(&output_path);
     let output_path_audio = Arc::clone(&output_path);
-
-    let friend_wearable_uid_video = friend_wearable_uid.clone();
-
     // Initialize friend wearable loop
     if let Some(uid) = &friend_wearable_uid {
         tokio::spawn(initialize_friend_wearable_loop(
@@ -75,26 +70,43 @@ pub async fn start_continuous_recording(
         ));
     }
 
-    let video_task = if !vision_disabled {
-        vision_handle.spawn(async move {
-            record_video(
-                db_manager_video,
-                output_path_video,
-                fps,
-                is_running_video,
-                save_text_files,
-                ocr_engine,
-                friend_wearable_uid_video,
-                monitor_id,
-                use_pii_removal,
-            )
-            .await
-        })
+    debug!("Starting video recording for monitor {:?}", monitor_ids);
+    let video_tasks = if !vision_disabled {
+        monitor_ids
+            .iter()
+            .map(|&monitor_id| {
+                let db_manager_video = Arc::clone(&db);
+                let output_path_video = Arc::clone(&output_path);
+                let is_running_video = Arc::clone(&vision_control);
+                let ocr_engine = Arc::clone(&ocr_engine);
+                let friend_wearable_uid_video = friend_wearable_uid.clone();
+                let ignored_windows_video = ignored_windows.to_vec();
+                let include_windows_video = include_windows.to_vec();
+
+                debug!("Starting video recording for monitor {}", monitor_id);
+                vision_handle.spawn(async move {
+                    record_video(
+                        db_manager_video,
+                        output_path_video,
+                        fps,
+                        is_running_video,
+                        save_text_files,
+                        ocr_engine,
+                        friend_wearable_uid_video,
+                        monitor_id,
+                        use_pii_removal,
+                        &ignored_windows_video,
+                        &include_windows_video,
+                    )
+                    .await
+                })
+            })
+            .collect::<Vec<_>>()
     } else {
-        vision_handle.spawn(async move {
+        vec![vision_handle.spawn(async move {
             tokio::time::sleep(Duration::from_secs(60)).await;
             Ok(())
-        })
+        })]
     };
 
     let audio_task = if !audio_disabled {
@@ -118,14 +130,16 @@ pub async fn start_continuous_recording(
         })
     };
 
-    // Wait for both tasks to complete
-    let (video_result, audio_result) = tokio::join!(video_task, audio_task);
+    // Join all video tasks
+    let video_results = join_all(video_tasks);
 
     // Handle any errors from the tasks
-    if let Err(e) = video_result {
-        error!("Video recording error: {:?}", e);
+    for (i, result) in video_results.await.into_iter().enumerate() {
+        if let Err(e) = result {
+            error!("Video recording error for monitor {}: {:?}", i, e);
+        }
     }
-    if let Err(e) = audio_result {
+    if let Err(e) = audio_task.await {
         error!("Audio recording error: {:?}", e);
     }
 
@@ -151,6 +165,8 @@ async fn record_video(
     _friend_wearable_uid: Option<String>,
     monitor_id: u32,
     use_pii_removal: bool,
+    ignored_windows: &[String],
+    include_windows: &[String],
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -173,6 +189,8 @@ async fn record_video(
         save_text_files,
         Arc::clone(&ocr_engine),
         monitor_id,
+        ignored_windows,
+        include_windows,
     );
 
     while is_running.load(Ordering::SeqCst) {

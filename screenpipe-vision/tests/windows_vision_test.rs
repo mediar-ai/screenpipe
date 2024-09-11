@@ -73,6 +73,8 @@ mod tests {
             save_text_files_flag,
             ocr_engine,
             monitor,
+            &[],
+            &[],
         ));
 
         // Wait for a short duration to allow some captures to occur

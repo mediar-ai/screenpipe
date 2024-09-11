@@ -42,6 +42,8 @@ async fn main() {
             save_text_files,
             OcrEngine::AppleNative,
             id,
+            &[],
+            &[],
         )
         .await
     });

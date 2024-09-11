@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import NotificationHandler from "@/components/notification-handler";
 import ScreenpipeInstanceChecker from "@/components/screenpipe-instance-checker";
 import Header from "@/components/header";
@@ -22,12 +22,15 @@ import { usePostHog } from "posthog-js/react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { DevSettings } from "@/components/dev-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SearchPanel from "@/components/search-panel";
 
 export default function Home() {
   const { settings } = useSettings();
   const posthog = usePostHog();
-  // console.log("settings", settings);
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("search");
+
   useEffect(() => {
     checkForAppUpdates({ toast });
   }, [toast]);
@@ -59,11 +62,26 @@ export default function Home() {
           </div>
         </div>
       ) : settings.useOllama || settings.openaiApiKey ? (
-        <ChatList
-          apiKey={settings.openaiApiKey}
-          useOllama={settings.useOllama}
-          ollamaUrl={settings.ollamaUrl}
-        />
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="w-full max-w-4xl"
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="chat">chat</TabsTrigger>
+            <TabsTrigger value="search">search</TabsTrigger>
+          </TabsList>
+          <TabsContent value="chat">
+            <ChatList
+              apiKey={settings.openaiApiKey}
+              useOllama={settings.useOllama}
+              ollamaUrl={settings.ollamaUrl}
+            />
+          </TabsContent>
+          <TabsContent value="search">
+            <SearchPanel />
+          </TabsContent>
+        </Tabs>
       ) : (
         <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
           <Card className="w-[600px]">
@@ -74,15 +92,6 @@ export default function Home() {
                 about your data.
                 <br />
                 <br />
-                {/* <Link
-                  // open new tab
-                  href="https://youtu.be/WGnHmFFFJOc"
-                  target="_blank"
-                  // bold underline
-                  className="font-bold underline"
-                >
-                  Watch the onboarding video
-                </Link> */}
                 <div className="aspect-w-16 aspect-h-9">
                   <iframe
                     src="https://www.youtube.com/embed/u2GfjvEY6tk"

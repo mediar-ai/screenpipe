@@ -37,7 +37,7 @@ mod pipes {
     async fn op_fetch(
         #[string] url: String,
         #[serde] options: Option<Value>,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<String, AnyError> {
         let client = Client::new();
         let mut request = client.get(&url);
 
@@ -92,7 +92,7 @@ mod pipes {
 
     #[op2(async)]
     #[string]
-    async fn op_read_file(#[string] path: String) -> anyhow::Result<String> {
+    async fn op_read_file(#[string] path: String) -> anyhow::Result<String, AnyError> {
         let current_dir = std::env::current_dir()?;
         let full_path = current_dir.join(path);
         tokio::fs::read_to_string(&full_path).await.map_err(|e| {
@@ -106,7 +106,7 @@ mod pipes {
     async fn op_write_file(
         #[string] path: String,
         #[string] contents: String,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(), AnyError> {
         tokio::fs::write(&path, contents).await.map_err(|e| {
             error!("Failed to write file '{}': {}", path, e);
             AnyError::from(e)
@@ -115,7 +115,7 @@ mod pipes {
 
     #[op2(async)]
     #[string]
-    async fn op_fetch_get(#[string] url: String) -> anyhow::Result<String> {
+    async fn op_fetch_get(#[string] url: String) -> anyhow::Result<String, AnyError> {
         let response = reqwest::get(&url).await?;
         let status = response.status();
         let text = response.text().await?;
@@ -136,7 +136,7 @@ mod pipes {
     async fn op_fetch_post(
         #[string] url: String,
         #[string] body: String,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<String, AnyError> {
         let client = reqwest::Client::new();
 
         // Create a HeaderMap and add the Content-Type header
@@ -160,7 +160,7 @@ mod pipes {
     }
 
     #[op2(async)]
-    async fn op_set_timeout(delay: f64) -> anyhow::Result<()> {
+    async fn op_set_timeout(delay: f64) -> anyhow::Result<(), AnyError> {
         tokio::time::sleep(std::time::Duration::from_millis(delay as u64)).await;
         Ok(())
     }
@@ -425,10 +425,10 @@ mod pipes {
                 .unwrap_or("unknown_pipe");
             let dest_dir = screenpipe_dir.join("pipes").join(pipe_name);
 
-            if dest_dir.exists() {
-                info!("Pipe already exists: {:?}", dest_dir);
-                return Ok(dest_dir);
-            }
+            // if dest_dir.exists() {
+            //     info!("Pipe already exists: {:?}", dest_dir);
+            //     return Ok(dest_dir);
+            // }
 
             tokio::fs::create_dir_all(&dest_dir).await?;
             copy_local_folder(source_path, &dest_dir).await?;

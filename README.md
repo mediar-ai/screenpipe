@@ -197,6 +197,8 @@ Then run it
 > This is experimental support for Windows build. This assumes you already have the CUDA Toolkit installed and the CUDA_PATH set to my CUDA v12.6 folder.
 > Replace `V:\projects` and `V:\packages` with your own folders.
 
+If this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
+
 - Install chocolatey
 - Install git
 - Install CUDA Toolkit (if using NVIDIA and building with cuda)
@@ -216,7 +218,7 @@ Then run it
 ```batch
 choco install pkgconfiglite rust
 cd V:\projects
-git clone https://github.com/louis030195/screen-pipe
+git clone https://github.com/mediar-ai/screenpipe
 cd V:\packages
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
@@ -349,9 +351,8 @@ npm run dev
 
 You can use terminal commands to query and view your data as shown below. Also, we recommend Tableplus.com to view the database, it has a free tier.
 
-Here's a pseudo code to illustrate how to use screenpipe, after a meeting for example (automatically with our webhooks):
+Here's a pseudo code to illustrate how to use screenpipe, to summarize meetings:
 ```js
-
 // 1h ago
 const startDate = "<some time 1h ago..>"
 // 10m ago
@@ -367,10 +368,9 @@ const summary = fetchOllama("{results} create a summary from these transcription
 // add the meeting summary to your notes
 addToNotion(summary)
 // or your favourite note taking app
-
 ```
 
-Or thousands of other usages of all your screen & mic data!
+Or thousands of other usages of all your screen & mic data! [Check examples](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript), screenpipes makes it easy to write plugins in JS for example that runs directly in the Rust code through Deno engine.
 
 
 <details>
@@ -442,6 +442,9 @@ curl "http://localhost:3030/search?q=QUERY_HERE&limit=10&offset=20"
 # 6. Search with no query (should return all results)
 curl "http://localhost:3030/search?limit=5&offset=0"
 
+# Display first frame from 30m to 25m ago (macos, translate to your OS with AI)
+curl "http://localhost:3030/search?limit=1&offset=0&content_type=ocr&include_frames=true&start_time=$(date -u -v-220M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-120M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
+
 # filter by app (wll only return OCR results)
 curl "http://localhost:3030/search?app_name=cursor"
   ```
@@ -449,8 +452,6 @@ curl "http://localhost:3030/search?app_name=cursor"
 <br><br>
 Keep in mind that it's still experimental.
 <br><br>
-
-https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 
 ## Use cases:
 
@@ -485,6 +486,8 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 ## Status 
 
 Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop, 24/7.
+
+Uses 600 MB, 10% CPU.
 
 - [ ] Integrations
     - [x] ollama

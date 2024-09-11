@@ -28,13 +28,15 @@ const defaultSettings: Settings = {
   devMode: false,
   audioTranscriptionEngine: "whisper-large",
   ocrEngine: "default",
-  monitorId: "default",
+  monitorIds: ["default"],
   audioDevices: ["default"],
   usePiiRemoval: false,
-  restartInterval: 60,
+  restartInterval: 0,
   port: 3030,
   dataDir: "default",
   disableAudio: false,
+  ignoredWindows: [],
+  includedWindows: [],
 };
 
 export interface Settings {
@@ -49,13 +51,15 @@ export interface Settings {
   devMode: boolean;
   audioTranscriptionEngine: string;
   ocrEngine: string;
-  monitorId: string;
+  monitorIds: string[];
   audioDevices: string[];
   usePiiRemoval: boolean;
   restartInterval: number;
   port: number;
   dataDir: string;
   disableAudio: boolean;
+  ignoredWindows: string[];
+  includedWindows: string[];
 }
 
 let store: Store | null = null;
@@ -116,8 +120,8 @@ export function useSettings() {
           "whisper-large";
         const savedOcrEngine =
           ((await store!.get("ocrEngine")) as string) || ocrModel;
-        const savedMonitorId =
-          ((await store!.get("monitorId")) as string) || "default";
+        const savedMonitorIds =
+          ((await store!.get("monitorIds")) as string[]) || ["default"];
         const savedAudioDevices = ((await store!.get(
           "audioDevices"
         )) as string[]) || ["default"];
@@ -129,6 +133,10 @@ export function useSettings() {
         const savedDataDir = ((await store!.get("dataDir")) as string) || "";
         const savedDisableAudio =
           ((await store!.get("disableAudio")) as boolean) || false;
+        const savedIgnoredWindows =
+          ((await store!.get("ignoredWindows")) as string[]) || [];
+        const savedIncludedWindows =
+          ((await store!.get("includedWindows")) as string[]) || [];
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
@@ -141,13 +149,15 @@ export function useSettings() {
           devMode: savedDevMode,
           audioTranscriptionEngine: savedAudioTranscriptionEngine,
           ocrEngine: savedOcrEngine,
-          monitorId: savedMonitorId,
+          monitorIds: savedMonitorIds,
           audioDevices: savedAudioDevices,
           usePiiRemoval: savedUsePiiRemoval,
           restartInterval: savedRestartInterval,
           port: savedPort,
           dataDir: savedDataDir,
           disableAudio: savedDisableAudio,
+          ignoredWindows: savedIgnoredWindows,
+          includedWindows: savedIncludedWindows,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);

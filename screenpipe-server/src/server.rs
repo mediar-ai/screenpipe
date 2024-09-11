@@ -408,18 +408,26 @@ pub(crate) async fn add_tags(
     State(state): State<Arc<AppState>>,
     Path((content_type, id)): Path<(String, i64)>,
     JsonResponse(payload): JsonResponse<AddTagsRequest>,
-) -> Result<JsonResponse<AddTagsResponse>, (StatusCode, String)> {
+) -> Result<JsonResponse<AddTagsResponse>, (StatusCode, JsonResponse<Value>)> {
     let content_type = match content_type.as_str() {
         "vision" => TagContentType::Vision,
         "audio" => TagContentType::Audio,
-        _ => return Err((StatusCode::BAD_REQUEST, "Invalid content type".to_string())),
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({"error": "Invalid content type"})),
+            ))
+        }
     };
 
     match state.db.add_tags(id, content_type, payload.tags).await {
         Ok(_) => Ok(JsonResponse(AddTagsResponse { success: true })),
         Err(e) => {
             error!("Failed to add tags: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ))
         }
     }
 }
@@ -428,18 +436,26 @@ pub(crate) async fn remove_tags(
     State(state): State<Arc<AppState>>,
     Path((content_type, id)): Path<(String, i64)>,
     JsonResponse(payload): JsonResponse<RemoveTagsRequest>,
-) -> Result<JsonResponse<RemoveTagsResponse>, (StatusCode, String)> {
+) -> Result<JsonResponse<RemoveTagsResponse>, (StatusCode, JsonResponse<Value>)> {
     let content_type = match content_type.as_str() {
         "vision" => TagContentType::Vision,
         "audio" => TagContentType::Audio,
-        _ => return Err((StatusCode::BAD_REQUEST, "Invalid content type".to_string())),
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({"error": "Invalid content type"})),
+            ))
+        }
     };
 
     match state.db.remove_tags(id, content_type, payload.tags).await {
         Ok(_) => Ok(JsonResponse(RemoveTagsResponse { success: true })),
         Err(e) => {
             error!("Failed to remove tag: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ))
         }
     }
 }
@@ -548,7 +564,7 @@ struct UpdatePipeConfigRequest {
 async fn download_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<DownloadPipeRequest>,
-) -> Result<JsonResponse<serde_json::Value>, (StatusCode, String)> {
+) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Downloading pipe: {}", payload.url);
     match download_pipe(&payload.url, state.screenpipe_dir.clone()).await {
         Ok(pipe_dir) => {
@@ -561,7 +577,10 @@ async fn download_pipe_handler(
         }
         Err(e) => {
             error!("Failed to download pipe: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ))
         }
     }
 }
@@ -569,15 +588,9 @@ async fn download_pipe_handler(
 async fn run_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RunPipeRequest>,
-) -> Result<JsonResponse<Value>, (StatusCode, String)> {
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Starting pipe: {}", payload.pipe_id);
-    // match state.pipe_manager.start_pipe(&payload.pipe_id).await {
-    //     Ok(_) => Ok(JsonResponse(json!({
-    //         "message": format!("Pipe {} started", payload.pipe_id),
-    //         "pipe_id": payload.pipe_id
-    //     }))),
-    //     Err(e) => Err((StatusCode::BAD_REQUEST, e)),
-    // }
+
 
     match state
         .pipe_manager
@@ -593,14 +606,17 @@ async fn run_pipe_handler(
             "message": format!("Pipe {} started", payload.pipe_id),
             "pipe_id": payload.pipe_id
         }))),
-        Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": e.to_string()})),
+        )),
     }
 }
 
 async fn stop_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RunPipeRequest>,
-) -> Result<JsonResponse<Value>, (StatusCode, String)> {
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Stopping pipe: {}", payload.pipe_id);
     match state
         .pipe_manager
@@ -616,14 +632,17 @@ async fn stop_pipe_handler(
             "message": format!("Pipe {} stopped", payload.pipe_id),
             "pipe_id": payload.pipe_id
         }))),
-        Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": e.to_string()})),
+        )),
     }
 }
 
 async fn update_pipe_config_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<UpdatePipeConfigRequest>,
-) -> Result<JsonResponse<Value>, (StatusCode, String)> {
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Updating pipe config for: {}", payload.pipe_id);
     match state
         .pipe_manager
@@ -634,18 +653,24 @@ async fn update_pipe_config_handler(
             "message": format!("Pipe {} config updated", payload.pipe_id),
             "pipe_id": payload.pipe_id
         }))),
-        Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": e.to_string()})),
+        )),
     }
 }
 
 async fn get_pipe_info_handler(
     State(state): State<Arc<AppState>>,
     Path(pipe_id): Path<String>,
-) -> Result<JsonResponse<PipeInfo>, (StatusCode, String)> {
+) -> Result<JsonResponse<PipeInfo>, (StatusCode, JsonResponse<Value>)> {
     debug!("Getting pipe info for: {}", pipe_id);
     match state.pipe_manager.get_pipe_info(&pipe_id).await {
         Some(info) => Ok(JsonResponse(info)),
-        None => Err((StatusCode::NOT_FOUND, "Pipe not found".to_string())),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": "Pipe not found"})),
+        )),
     }
 }
 
@@ -843,6 +868,10 @@ curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
      -d '{"url": "./examples/typescript/pipe-stream-ocr-text"}' | jq
 
+curl -X POST "http://localhost:3030/pipes/download" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "./examples/typescript/pipe-security-check"}' | jq
+
 
 curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
@@ -856,6 +885,11 @@ curl "http://localhost:3030/pipes/info/pipe-stream-ocr-text" | jq
 curl -X POST "http://localhost:3030/pipes/enable" \
      -H "Content-Type: application/json" \
      -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
+
+
+     curl -X POST "http://localhost:3030/pipes/enable" \
+     -H "Content-Type: application/json" \
+     -d '{"pipe_id": "pipe-security-check"}' | jq
 
 # Stop a pipe
 curl -X POST "http://localhost:3030/pipes/disable" \

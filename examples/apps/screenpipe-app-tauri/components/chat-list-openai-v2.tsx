@@ -220,6 +220,7 @@ export function ChatList({
         const results = await queryScreenpipeNtimes(
           generateObjectResult.object
         );
+
         const toolCallId = generateToolCallId();
         const toolCallArgs = generateObjectResult.object;
 
@@ -272,6 +273,7 @@ export function ChatList({
             - You must perform a timezone conversion to UTC before using any datetime in a tool call.
             - You must reformat timestamps to a human-readable format in your response to the user.
             - Never output UTC time unless explicitly asked by the user.
+            - Do not try to embed videos in table (would crash the app)
             `,
         },
         // @ts-ignore

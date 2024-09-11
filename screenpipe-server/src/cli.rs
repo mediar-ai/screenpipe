@@ -152,9 +152,9 @@ pub struct Cli {
     #[arg(long)]
     pub list_monitors: bool,
 
-    /// Monitor ID to use, this will be used to select the monitor to record
+    /// Monitor IDs to use, these will be used to select the monitors to record
     #[arg(short = 'm', long)]
-    pub monitor_id: Option<u32>,
+    pub monitor_id: Vec<u32>,
 
     /// Enable PII removal from OCR text property that is saved to db and returned in search results
     #[arg(long, default_value_t = false)]
@@ -171,6 +171,18 @@ pub struct Cli {
     /// VAD engine to use for speech detection
     #[arg(long, value_enum, default_value_t = CliVadEngine::Silero)] // Silero or WebRtc
     pub vad_engine: CliVadEngine,
+
+    /// List of windows to ignore (by title) for screen recording - we use contains to match, example:
+    /// --ignored-windows "Spotify" --ignored-windows "Bit" will ignore both "Bitwarden" and "Bittorrent"
+    /// --ignored-windows "porn" will ignore "pornhub" and "youporn"
+    #[arg(long)]
+    pub ignored_windows: Vec<String>,
+
+    /// List of windows to include (by title) for screen recording - we use contains to match, example:
+    /// --included-windows "Chrome" will include "Google Chrome"
+    /// --included-windows "WhatsApp" will include "WhatsApp"
+    #[arg(long)]
+    pub included_windows: Vec<String>,
 
     #[command(subcommand)]
     pub command: Option<Command>,

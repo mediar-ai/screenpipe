@@ -39,4 +39,4 @@ this is how you run it through the app:
 
 then drop the url of this folder in the pipe store and it works 
 
-works also with CLI using `--pipe path/to/pipe.js`
+works also with CLI 

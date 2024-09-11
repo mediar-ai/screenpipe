@@ -1,13 +1,13 @@
 [package]
 name = "screenpipe-app"
-version = "0.1.88"
+version = "0.1.912"
 description = ""
 authors = ["you"]
 license = ""
 repository = ""
 default-run = "screenpipe-app"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.75"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,7 +16,7 @@ tauri-build = { version = "=2.0.0-rc.9", features = [] }
 
 [dependencies]
 serde_json = "1.0"
-tauri = { version = "2.0.0-rc.10", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
+tauri = { version = "2.0.0-rc.10", features = [ "macos-private-api", "tray-icon", "devtools", "image-png", "image-ico"] }
 
 
 # Logging
@@ -86,6 +86,9 @@ screenpipe-audio = { path = "../../../../screenpipe-audio", features = [] }
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-cli = "2.0.0-alpha.2"
+
+[target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
+tauri-plugin-single-instance = "2.0.0-rc.1"
 # tauri-plugin-updater = "2.0.0-alpha.2"
 
 [features]

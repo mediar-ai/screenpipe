@@ -50,6 +50,8 @@ pub async fn continuous_capture(
     save_text_files_flag: bool,
     ocr_engine: OcrEngine,
     monitor_id: u32,
+    ignore_list: &[String],
+    include_list: &[String],
 ) {
     debug!(
         "continuous_capture: Starting using monitor: {:?}",
@@ -63,15 +65,21 @@ pub async fn continuous_capture(
     let monitor = match get_monitor_by_id(monitor_id).await {
         Some(m) => m,
         None => {
-            error!("Failed to get monitor with id: {}. Exiting continuous_capture.", monitor_id);
+            error!(
+                "Failed to get monitor with id: {}. Exiting continuous_capture.",
+                monitor_id
+            );
             return;
         }
     };
 
     loop {
-        let capture_result = match capture_screenshot(&monitor).await {
+        let capture_result = match capture_screenshot(&monitor, &ignore_list, &include_list).await {
             Ok((image, window_images, image_hash, _capture_duration)) => {
-                debug!("Captured screenshot on monitor {} with hash: {}", monitor_id, image_hash);
+                debug!(
+                    "Captured screenshot on monitor {} with hash: {}",
+                    monitor_id, image_hash
+                );
                 Some((image, window_images, image_hash))
             }
             Err(e) => {
