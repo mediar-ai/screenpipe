@@ -310,6 +310,7 @@ async fn main() -> anyhow::Result<()> {
             };
 
             loop {
+                let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
