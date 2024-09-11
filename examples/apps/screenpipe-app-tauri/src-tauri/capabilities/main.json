@@ -21,6 +21,7 @@
     "store:allow-load",
     "shell:allow-open",
     "fs:allow-watch",
+    "fs:allow-open",
     "fs:default",
     "fs:allow-read-file",
     "fs:allow-read-dir",

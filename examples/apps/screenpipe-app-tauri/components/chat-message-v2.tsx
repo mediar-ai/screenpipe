@@ -1,8 +1,6 @@
 import { Message } from "ai";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { useState, useEffect, useCallback, memo } from "react";
-import { readFile } from "@tauri-apps/plugin-fs";
 
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "@/components/ui/codeblock";
@@ -10,6 +8,7 @@ import { MemoizedReactMarkdown } from "@/components/markdown";
 import { IconOpenAI, IconUser, IconOllama } from "@/components/ui/icons";
 import { ChatMessageActions } from "@/components/chat-message-actions";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { VideoComponent } from "./video";
 
 export interface ChatMessageProps {
   message: Message;
@@ -105,62 +104,3 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
     </div>
   );
 }
-
-const VideoComponent = memo(function VideoComponent({
-  filePath,
-}: {
-  filePath: string;
-}) {
-  const [videoSrc, setVideoSrc] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const sanitizeFilePath = useCallback((path: string): string => {
-    // just extract the .mp4 file
-    return (
-      path.match(/[^"'()\[\]]+\.mp4/i)?.[0]?.trim() ||
-      "i failed to show the video 😭"
-    );
-  }, []);
-
-  useEffect(() => {
-    async function loadVideo() {
-      try {
-        const sanitizedPath = sanitizeFilePath(filePath);
-        const videoData = await readFile(sanitizedPath);
-        const blob = new Blob([videoData], { type: "video/mp4" });
-        setVideoSrc(URL.createObjectURL(blob));
-      } catch (error) {
-        console.error("Failed to load video:", error);
-        setError(`Failed to load video: ${sanitizeFilePath(filePath)}`);
-      }
-    }
-
-    loadVideo();
-    return () => {
-      if (videoSrc) URL.revokeObjectURL(videoSrc);
-    };
-  }, [filePath, sanitizeFilePath]);
-
-  if (error) {
-    return (
-      <div className="w-full p-4 bg-red-100 border border-red-300 rounded-md">
-        <p className="text-red-700">{error}</p>
-      </div>
-    );
-  }
-
-  if (!videoSrc) {
-    return (
-      <div className="w-full h-48 bg-gray-200 animate-pulse rounded-md flex items-center justify-center">
-        <span className="text-gray-500">Loading video...</span>
-      </div>
-    );
-  }
-
-  return (
-    <video controls className="w-full max-w-2xl">
-      <source src={videoSrc} type="video/mp4" />
-      Your browser does not support the video tag.
-    </video>
-  );
-});

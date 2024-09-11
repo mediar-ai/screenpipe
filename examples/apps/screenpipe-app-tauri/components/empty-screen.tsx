@@ -6,11 +6,11 @@ interface EmptyScreenProps {
 }
 
 const suggestions = [
-  "Summarize last hour audio conversation with action items",
-  "Read my data from last 60 mins and list apps i spent the most time on, with duration, list of topics, etc. (be creative), as a table",
-  "Look at my data from last hour and tell me how i can become a better programmer",
-  "Create a table of everything I did in the last hour",
-  "Create a bullet list of everything I did in the last hour with timestamps and path to the video",
+  "Summarize last 15 mins audio conversation with action items",
+  "Write instructions to reproduce my engineering work from last 15 mins",
+  "Look at my data from last 15 mins and tell me how i can become a better programmer",
+  "Create a table of everything I did in the last 15 mins",
+  "Create a bullet list of everything I did in the last 15 mins with timestamps and path to the video",
   "Show me a video of what i was doing at 8.11 am (take file_path and put it in an inline code block)",
 ];
 

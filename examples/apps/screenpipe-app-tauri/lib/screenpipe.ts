@@ -1,5 +1,55 @@
 import { z } from "zod";
 
+// Define types based on the server's schema
+export type OCRContent = {
+  frame_id: number;
+  text: string;
+  timestamp: string;
+  file_path: string;
+  offset_index: number;
+  app_name: string;
+  window_name: string;
+  tags: string[];
+  frame?: string;
+};
+
+export type AudioContent = {
+  chunk_id: number;
+  transcription: string;
+  timestamp: string;
+  file_path: string;
+  offset_index: number;
+  tags: string[];
+};
+
+export type FTSContent = {
+  text_id: number;
+  matched_text: string;
+  frame_id: number;
+  timestamp: string;
+  app_name: string;
+  window_name: string;
+  file_path: string;
+  original_frame_text?: string;
+  tags: string[];
+};
+
+export type ContentItem =
+  | { type: "OCR"; content: OCRContent }
+  | { type: "Audio"; content: AudioContent }
+  | { type: "FTS"; content: FTSContent };
+
+export type PaginationInfo = {
+  limit: number;
+  offset: number;
+  total: number;
+};
+
+export type ScreenpipeResponse = {
+  data: ContentItem[];
+  pagination: PaginationInfo;
+};
+
 export const screenpipeQuery = z.object({
   q: z
     .string()
@@ -25,7 +75,7 @@ export const screenpipeQuery = z.object({
     .number()
     .default(50)
     .describe(
-      "Number of results to return (default: 50). Be mindful of the length of the response as it will be fed to an LLM"
+      "Number of results to return. Be mindful of the length of the response as it will be fed to an LLM"
     ),
   offset: z.number().default(0).describe("Offset for pagination (default: 0)"),
   start_time: z
@@ -59,6 +109,10 @@ export const screenpipeQuery = z.object({
       `
     )
     .optional(), // Add window_name with description
+  include_frames: z
+    .boolean()
+    .default(false)
+    .describe("Include frames in the response"),
 });
 
 export const screenpipeMultiQuery = z.object({
@@ -67,13 +121,18 @@ export const screenpipeMultiQuery = z.object({
 
 export async function queryScreenpipeNtimes(
   params: z.infer<typeof screenpipeMultiQuery>
-) {
+): Promise<ScreenpipeResponse[]> {
   console.log("queryScreenpipeNtimes", params);
-  return Promise.all(params.queries.map(queryScreenpipe));
+  const results = await Promise.all(params.queries.map(queryScreenpipe));
+  return results.filter(
+    (result): result is ScreenpipeResponse => result !== null
+  );
 }
 
 // Add this new function to handle screenpipe requests
-export async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
+export async function queryScreenpipe(
+  params: z.infer<typeof screenpipeQuery>
+): Promise<ScreenpipeResponse | null> {
   try {
     console.log("params", params);
     const queryParams = new URLSearchParams(
@@ -95,8 +154,23 @@ export async function queryScreenpipe(params: z.infer<typeof screenpipeQuery>) {
       throw new Error(`HTTP error! status: ${response.status} ${text}`);
     }
     const result = await response.json();
-    console.log("result", result);
-    return result;
+    // remove all elements with empty text
+    const resultWithNoEmptyText = {
+      ...result,
+      data: result.data.filter(
+        (element: any) =>
+          (element.content?.text !== undefined &&
+            element.content?.text !== null &&
+            element.content?.text?.length > 100) ||
+          // same for .transcription
+          (element.content?.transcription !== undefined &&
+            element.content?.transcription !== null &&
+            element.content?.transcription?.length > 10)
+      ),
+    };
+    console.log("result", resultWithNoEmptyText);
+    console.log("result", resultWithNoEmptyText.data.length);
+    return resultWithNoEmptyText;
   } catch (error) {
     console.error("Error querying screenpipe:", error);
     return null;
