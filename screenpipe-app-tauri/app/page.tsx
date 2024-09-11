@@ -24,6 +24,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { DevSettings } from "@/components/dev-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SearchPanel from "@/components/search-panel";
+import { SearchChat } from "@/components/search-chat";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -62,27 +63,28 @@ export default function Home() {
           </div>
         </div>
       ) : settings.useOllama || settings.openaiApiKey ? (
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="w-full max-w-4xl"
-        >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="chat">chat</TabsTrigger>
-            <TabsTrigger value="search">search</TabsTrigger>
-          </TabsList>
-          <TabsContent value="chat">
-            <ChatList
-              apiKey={settings.openaiApiKey}
-              useOllama={settings.useOllama}
-              ollamaUrl={settings.ollamaUrl}
-            />
-          </TabsContent>
-          <TabsContent value="search">
-            <SearchPanel />
-          </TabsContent>
-        </Tabs>
+        <SearchChat />
       ) : (
+        // <Tabs
+        //   value={activeTab}
+        //   onValueChange={setActiveTab}
+        //   className="w-full max-w-4xl"
+        // >
+        //   <TabsList className="grid w-full grid-cols-2">
+        //     <TabsTrigger value="chat">chat</TabsTrigger>
+        //     <TabsTrigger value="search">search</TabsTrigger>
+        //   </TabsList>
+        //   <TabsContent value="chat">
+        //     <ChatList
+        //       apiKey={settings.openaiApiKey}
+        //       useOllama={settings.useOllama}
+        //       ollamaUrl={settings.ollamaUrl}
+        //     />
+        //   </TabsContent>
+        //   <TabsContent value="search">
+        //     <SearchPanel />
+        //   </TabsContent>
+        // </Tabs>
         <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
           <Card className="w-[600px]">
             <CardHeader>

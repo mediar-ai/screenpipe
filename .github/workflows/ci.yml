@@ -66,7 +66,7 @@ jobs:
       - name: Run pre_build.js on
         shell: bash
         run: bun ./scripts/pre_build.js
-        working-directory: ./examples/apps/screenpipe-app-tauri
+        working-directory: ./screenpipe-app-tauri
 
       - name: Copy test image
         shell: bash
@@ -101,7 +101,7 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
         run: bun ./scripts/pre_build.js
-        working-directory: ./examples/apps/screenpipe-app-tauri
+        working-directory: ./screenpipe-app-tauri
 
       - name: Copy test image
         shell: bash

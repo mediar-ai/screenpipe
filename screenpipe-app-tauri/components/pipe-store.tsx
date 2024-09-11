@@ -259,11 +259,13 @@ const PipeDialog: React.FC = () => {
         <div className="flex flex-col items-center justify-center h-full">
           <p className="text-lg mb-4">no pipe selected</p>
           <FeatureRequestLink />
-          <p className="mt-4 text-sm text-gray-500 text-center">
-            screenpipe is not running.
-            <br />
-            please start screenpipe to use the pipe store.
-          </p>
+          {!health || health?.status === "error" && (
+            <p className="mt-4 text-sm text-gray-500 text-center">
+              screenpipe is not running.
+              <br />
+              please start screenpipe to use the pipe store.
+            </p>
+          )}
         </div>
       );
     }

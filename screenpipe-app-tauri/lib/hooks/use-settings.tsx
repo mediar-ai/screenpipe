@@ -37,6 +37,7 @@ const defaultSettings: Settings = {
   disableAudio: false,
   ignoredWindows: [],
   includedWindows: [],
+  aiUrl: "https://api.openai.com/v1",
 };
 
 export interface Settings {
@@ -60,6 +61,7 @@ export interface Settings {
   disableAudio: boolean;
   ignoredWindows: string[];
   includedWindows: string[];
+  aiUrl: string;
 }
 
 let store: Store | null = null;
@@ -137,6 +139,8 @@ export function useSettings() {
           ((await store!.get("ignoredWindows")) as string[]) || [];
         const savedIncludedWindows =
           ((await store!.get("includedWindows")) as string[]) || [];
+        const savedAiUrl =
+          ((await store!.get("aiUrl")) as string) || "https://api.openai.com/v1";
         setSettings({
           openaiApiKey: savedKey,
           useOllama: savedUseOllama,
@@ -158,6 +162,7 @@ export function useSettings() {
           disableAudio: savedDisableAudio,
           ignoredWindows: savedIgnoredWindows,
           includedWindows: savedIncludedWindows,
+          aiUrl: savedAiUrl,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);

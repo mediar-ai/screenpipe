@@ -35,4 +35,4 @@ jobs:
         with:
           command: release publish ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
-          path: ./examples/apps/screenpipe-app-tauri/src-tauri
+          path: ./screenpipe-app-tauri/src-tauri

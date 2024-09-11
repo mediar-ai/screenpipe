@@ -15,9 +15,11 @@ import { Input } from "./ui/input";
 export function DateTimePicker({
   date,
   setDate,
+  className,
 }: {
   date: Date;
   setDate: (date: Date) => void;
+  className?: string;
 }) {
   const [selectedDateTime, setSelectedDateTime] = React.useState<Date>(date);
 
@@ -54,11 +56,14 @@ export function DateTimePicker({
           variant={"outline"}
           className={cn("w-full justify-start text-left font-normal")}
         >
-          <CalendarIcon className="mr-2 h-4 w-4" />
+          <CalendarIcon
+            className="mr-2 h-4 w-4 text-gray-400"
+            size={18}
+          />
           {format(date, "PPP HH:mm")}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0">
+      <PopoverContent className={cn("w-auto p-0", className)}>
         <Calendar
           mode="single"
           selected={selectedDateTime}

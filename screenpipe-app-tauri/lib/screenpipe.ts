@@ -155,22 +155,22 @@ export async function queryScreenpipe(
     }
     const result = await response.json();
     // remove all elements with empty text
-    const resultWithNoEmptyText = {
-      ...result,
-      data: result.data.filter(
-        (element: any) =>
-          (element.content?.text !== undefined &&
-            element.content?.text !== null &&
-            element.content?.text?.length > 100) ||
-          // same for .transcription
-          (element.content?.transcription !== undefined &&
-            element.content?.transcription !== null &&
-            element.content?.transcription?.length > 10)
-      ),
-    };
-    console.log("result", resultWithNoEmptyText);
-    console.log("result", resultWithNoEmptyText.data.length);
-    return resultWithNoEmptyText;
+    // const resultWithNoEmptyText = {
+    //   ...result,
+    //   data: result.data.filter(
+    //     (element: any) =>
+    //       (element.content?.text !== undefined &&
+    //         element.content?.text !== null &&
+    //         element.content?.text?.length > 100) ||
+    //       // same for .transcription
+    //       (element.content?.transcription !== undefined &&
+    //         element.content?.transcription !== null &&
+    //         element.content?.transcription?.length > 10)
+    //   ),
+    // };
+    console.log("result", result);
+    console.log("result", result.data.length);
+    return result;
   } catch (error) {
     console.error("Error querying screenpipe:", error);
     return null;

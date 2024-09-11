@@ -69,20 +69,20 @@ tauri-plugin-process = "2.0.0-alpha.2"
 
 dirs = "5.0.1"
 
-# M series MacOS
-[target.'cfg(target_os = "macos")'.dependencies]
-screenpipe-server = { path = "../../../../screenpipe-server", features = ["metal"] }
-screenpipe-audio = { path = "../../../../screenpipe-audio", features = ["metal"] }
+# # M series MacOS
+# [target.'cfg(target_os = "macos")'.dependencies]
+# screenpipe-server = { path = "../../../../screenpipe-server", features = ["metal"] }
+# screenpipe-audio = { path = "../../../../screenpipe-audio", features = ["metal"] }
 
-# Linux
-[target.'cfg(target_os = "linux")'.dependencies]
-screenpipe-server = { path = "../../../../screenpipe-server", features = [] }
-screenpipe-audio = { path = "../../../../screenpipe-audio", features = [] }
+# # Linux
+# [target.'cfg(target_os = "linux")'.dependencies]
+# screenpipe-server = { path = "../../../../screenpipe-server", features = [] }
+# screenpipe-audio = { path = "../../../../screenpipe-audio", features = [] }
 
-# Windows
-[target.'cfg(target_os = "windows")'.dependencies]
-screenpipe-server = { path = "../../../../screenpipe-server", features = [] }
-screenpipe-audio = { path = "../../../../screenpipe-audio", features = [] }
+# # Windows
+# [target.'cfg(target_os = "windows")'.dependencies]
+# screenpipe-server = { path = "../../../../screenpipe-server", features = [] }
+# screenpipe-audio = { path = "../../../../screenpipe-audio", features = [] }
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-cli = "2.0.0-alpha.2"
@@ -92,16 +92,16 @@ tauri-plugin-single-instance = "2.0.0-rc.1"
 # tauri-plugin-updater = "2.0.0-alpha.2"
 
 [features]
-cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
-metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
+# cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
+# metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
 
 default = ["custom-protocol"]
 
 # TODOS one day
-coreml = []
-openblas = []
-opencl = []
-rocm = []
+# coreml = []
+# openblas = []
+# opencl = []
+# rocm = []
 
 # DO NOT REMOVE!!
 custom-protocol = [ "tauri/custom-protocol" ]
