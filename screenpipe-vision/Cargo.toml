@@ -91,3 +91,6 @@ xcap = "0.0.13" # memory leak fix, also for some reason 0.0.13 doesn't work on w
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 xcap = "0.0.12"
+
+[target.'cfg(target_env = "msvc")'.dependencies.vcpkg]
+version = "0.2"
