@@ -17,7 +17,10 @@
             "entitlements": "entitlements.plist",
             "hardenedRuntime": true,
             "exceptionDomain": "screenpi.pe",
-            "provisioningProfile": null
+            "provisioningProfile": null,
+            "dmg": {
+                "background": "assets/dmg-background.png"
+            }
         },
         "externalBin": [
             "screenpipe",

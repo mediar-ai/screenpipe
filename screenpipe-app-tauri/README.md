@@ -3,11 +3,14 @@
 getting started locally:
 
 ```
+# Build the Rust backend first
 cargo build --release 
 cd screenpipe-app-tauri
-bun i
+# Install dependencies using Bun
+bun i 
 bun scripts/pre_build.js
-bun tauri build # or bun tauri dev 
+bun tauri build 
+# or bun tauri dev for development environment
 ```
 
 can be more complex on windows

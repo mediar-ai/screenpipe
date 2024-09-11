@@ -29,7 +29,9 @@
       "icons/icon.ico"
     ],
     "longDescription": "",
-    "resources": [],
+    "resources": [
+      "assets/*"
+    ],
     "shortDescription": "",
     "fileAssociations": [
       {
