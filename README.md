@@ -453,6 +453,9 @@ curl "http://localhost:3030/search?app_name=cursor"
 Keep in mind that it's still experimental.
 <br><br>
 
+![0910244](https://github.com/user-attachments/assets/6025ef71-43b9-4151-a34c-155c30236a57)
+
+
 ## Use cases:
 
 - Search
