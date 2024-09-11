@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726088557792,
+  "lastUpdate": 1726089813355,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -4589,6 +4589,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2154142104,
             "range": "± 64648256",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "24cd130efb462dfc9b30eaed899dbe0b8636e5cd",
+          "message": "Merge pull request #305 from m13v/dmg-background-png\n\nDmg background png",
+          "timestamp": "2024-09-11T14:14:18-07:00",
+          "tree_id": "e0580734ac3412c09e8d2915884ba21c29114e8f",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/24cd130efb462dfc9b30eaed899dbe0b8636e5cd"
+        },
+        "date": 1726089812750,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1968734646,
+            "range": "± 57469310",
             "unit": "ns/iter"
           }
         ]
