@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726074493982,
+  "lastUpdate": 1726074953347,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -4259,6 +4259,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2021608562,
             "range": "± 12947119",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "dc4d7d5958465bdfb70d6d2255b2b78d95d30c2b",
+          "message": "fix: macos silero",
+          "timestamp": "2024-09-11T10:07:09-07:00",
+          "tree_id": "ac281ea407bcd36a008c487b606e7160c117f09e",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/dc4d7d5958465bdfb70d6d2255b2b78d95d30c2b"
+        },
+        "date": 1726074952714,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 3517168125,
+            "range": "± 586245354",
             "unit": "ns/iter"
           }
         ]
