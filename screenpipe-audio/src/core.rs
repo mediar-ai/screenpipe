@@ -15,19 +15,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::AudioInput;
-#[cfg(target_os = "macos")]
-use once_cell::sync::Lazy;
-#[cfg(target_os = "macos")]
-static MACOS_VERSION: Lazy<f32> = Lazy::new(|| get_macos_version().unwrap_or(0.0));
-#[cfg(target_os = "macos")]
-fn get_macos_version() -> Option<f32> {
-    let output = std::process::Command::new("sw_vers")
-        .arg("-productVersion")
-        .output()
-        .ok()?;
-    let version = String::from_utf8(output.stdout).ok()?;
-    version.split('.').next()?.parse().ok()
-}
+
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
@@ -141,16 +129,10 @@ async fn get_device_and_config(
 
         #[cfg(target_os = "macos")]
         {
-            // if the user intentionally selected the display capture device, use the screen capture kit host
-            // otherwise we will use the core audio output device (likely a virtual device that connect system audio)
-            if audio_device.device_type == DeviceType::Output && is_display {
-                let version = *MACOS_VERSION;
-                if version < 15.0 {
-                    if let Ok(screen_capture_host) =
-                        cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
-                    {
-                        devices = screen_capture_host.input_devices()?;
-                    }
+            if audio_device.device_type == DeviceType::Output {
+                if let Ok(screen_capture_host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
+                {
+                    devices = screen_capture_host.input_devices()?;
                 }
             }
         }
@@ -450,13 +432,10 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     {
         // !HACK macos is suppoed to use special macos feature "display capture"
         // ! see https://github.com/RustAudio/cpal/pull/894
-        let version = *MACOS_VERSION;
-        if version < 15.0 {
-            if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-                for device in host.input_devices()? {
-                    if let Ok(name) = device.name() {
-                        devices.push(AudioDevice::new(name, DeviceType::Output));
-                    }
+        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+            for device in host.input_devices()? {
+                if let Ok(name) = device.name() {
+                    devices.push(AudioDevice::new(name, DeviceType::Output));
                 }
             }
         }
@@ -483,12 +462,10 @@ pub async fn default_output_device() -> Result<AudioDevice> {
     {
         let version = *MACOS_VERSION;
         // ! see https://github.com/RustAudio/cpal/pull/894
-        if version < 15.0 {
-            if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-                if let Some(device) = host.default_input_device() {
-                    if let Ok(name) = device.name() {
-                        return Ok(AudioDevice::new(name, DeviceType::Output));
-                    }
+        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+            if let Some(device) = host.default_input_device() {
+                if let Ok(name) = device.name() {
+                    return Ok(AudioDevice::new(name, DeviceType::Output));
                 }
             }
         }
