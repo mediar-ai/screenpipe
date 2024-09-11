@@ -16,7 +16,6 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::AudioInput;
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
     Deepgram,
@@ -427,6 +426,11 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
+    // Filter function to exclude macOS speakers and AirPods for output devices
+    fn should_include_output_device(name: &str) -> bool {
+        !name.to_lowercase().contains("speakers") && !name.to_lowercase().contains("airpods")
+    }
+
     // macos hack using screen capture kit for output devices - does not work well
     #[cfg(target_os = "macos")]
     {
@@ -435,7 +439,9 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
             for device in host.input_devices()? {
                 if let Ok(name) = device.name() {
-                    devices.push(AudioDevice::new(name, DeviceType::Output));
+                    if should_include_output_device(&name) {
+                        devices.push(AudioDevice::new(name, DeviceType::Output));
+                    }
                 }
             }
         }
@@ -444,7 +450,9 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     // add default output device - on macos think of custom virtual devices
     for device in host.output_devices()? {
         if let Ok(name) = device.name() {
-            devices.push(AudioDevice::new(name, DeviceType::Output));
+            if should_include_output_device(&name) {
+                devices.push(AudioDevice::new(name, DeviceType::Output));
+            }
         }
     }
 
@@ -460,7 +468,6 @@ pub fn default_input_device() -> Result<AudioDevice> {
 pub async fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
-        let version = *MACOS_VERSION;
         // ! see https://github.com/RustAudio/cpal/pull/894
         if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
             if let Some(device) = host.default_input_device() {
