@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726016461283,
+  "lastUpdate": 1726027105810,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -4049,6 +4049,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1980156000,
             "range": "± 22497931",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5ba0aaff6a7e9dd50379e8a9fc281ab2efaa0d5b",
+          "message": "Merge pull request #303 from joegoldin/m13v-manual-silero-vad-implementation\n\nm13v manual silero vad implementation & fix: windows compilation with new vad library (#289 and #301)",
+          "timestamp": "2024-09-10T20:49:58-07:00",
+          "tree_id": "9065b1602335676f7f938b722ed9090fa7eb5245",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/5ba0aaff6a7e9dd50379e8a9fc281ab2efaa0d5b"
+        },
+        "date": 1726027104980,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1963246854,
+            "range": "± 105406050",
             "unit": "ns/iter"
           }
         ]
