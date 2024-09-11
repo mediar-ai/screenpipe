@@ -180,9 +180,14 @@ jobs:
       #   if: matrix.platform == 'windows-latest'
       #   run: vcpkg install onnxruntime:x64-windows
 
-      - name: Set up MSVC
-        if: matrix.platform == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
+      # - name: Set up MSVC
+      #   if: matrix.platform == 'windows-latest'
+      #   uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
