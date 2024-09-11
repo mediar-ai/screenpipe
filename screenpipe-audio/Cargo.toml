@@ -34,6 +34,8 @@ chrono = { version = "0.4.31", features = ["serde"] }
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
+ndarray = "0.15.6"
+vad-rs = "0.1.3"
 tokenizers = { workspace = true }
 anyhow = "1.0.86"
 byteorder = "1.5.0"
@@ -42,6 +44,9 @@ hf-hub = "0.3.2"
 symphonia = { version = "0.5.4", features = ["aac", "isomp4", "opt-simd"] }
 rand = "0.8.5"
 rubato = "0.15.0"
+
+ort = { version = "2.0.0-rc.5", features = ["load-dynamic"], default-features = false }
+esaxx-rs = "0.1.10"
 
 # Log 
 log = { workspace = true }
@@ -91,3 +96,4 @@ harness = false
 [[bench]]
 name = "stt_benchmark"
 harness = false
+

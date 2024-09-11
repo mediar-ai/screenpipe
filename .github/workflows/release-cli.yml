@@ -123,7 +123,7 @@ jobs:
           gh pr create --base main --head update-formula-${{ matrix.target }}-${{ github.sha }} --title "Update Homebrew formula for ${{ matrix.target }}" --body "Automated PR to update Homebrew formula for ${{ matrix.target }}"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: screenpipe-macos-${{ matrix.target }}
           path: screenpipe-*.tar.gz
@@ -172,7 +172,7 @@ jobs:
   #         tar -czvf screenpipe-linux.tar.gz screenpipe-linux
 
   #     - name: Upload Artifact
-  #       uses: actions/upload-artifact@v2
+  #       uses: actions/upload-artifact@v3
   #       with:
   #         name: screenpipe-linux
   #         path: screenpipe-linux.tar.gz
@@ -243,7 +243,7 @@ jobs:
           echo "Set version to: $VERSION"
 
       - name: Download macOS Artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           path: artifacts
 

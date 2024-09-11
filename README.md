@@ -125,9 +125,13 @@ if you want to run screenpipe in debug mode to show more logs in terminal:
 ```bash
 screenpipe --debug
 ```
-by default screenpipe is using whisper-tiny that runs LOCALLY to get better quality or lower compute you can use cloud model (we use Deepgram) via cloud api:
+by default screenpipe is using Silero-VAD to identify speech and non-speech tokens to improve audio transcription, bu you can use WebRTC if needed by passing the following command:
 ```bash
-screenpipe -audio-transcription-engine deepgram
+screenpipe --vad-engine webrtc
+```
+by default screenpipe is using whisper-large that runs LOCALLY to get better quality or lower compute you can use cloud model (we use Deepgram) via cloud api:
+```bash
+screenpipe --audio-transcription-engine deepgram
 ```
 by default screenpipe is using a local model for screen capture OCR processing to use the cloud (through unstructured.io) for better performance use this flag:
 ```bash

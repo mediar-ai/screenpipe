@@ -271,6 +271,7 @@ async fn main() -> anyhow::Result<()> {
 
     let ocr_engine_clone = cli.ocr_engine.clone();
     let restart_interval = cli.restart_interval;
+    let vad_engine = cli.vad_engine.clone();
 
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
@@ -284,6 +285,8 @@ async fn main() -> anyhow::Result<()> {
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
     let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
+    let friend_wearable_uid_clone = friend_wearable_uid.clone();  // Clone here
+    let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
     let friend_wearable_uid_clone: Option<String> = friend_wearable_uid.clone(); // Clone here
     let monitor_ids_clone = monitor_ids.clone();
 
@@ -307,6 +310,7 @@ async fn main() -> anyhow::Result<()> {
             };
 
             loop {
+                let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
@@ -323,6 +327,7 @@ async fn main() -> anyhow::Result<()> {
                     monitor_ids_clone.clone(),
                     cli.use_pii_removal,
                     cli.disable_vision,
+                    vad_engine_clone,
                     &vision_handle,
                     &audio_handle,
                     &cli.ignored_windows,

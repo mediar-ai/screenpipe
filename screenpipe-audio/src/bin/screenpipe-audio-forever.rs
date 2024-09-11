@@ -9,6 +9,7 @@ use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioTranscriptionEngine;
+use screenpipe_audio::VadEngineEnum; 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -77,8 +78,10 @@ async fn main() -> Result<()> {
 
     let chunk_duration = Duration::from_secs_f32(args.audio_chunk_duration);
     let (whisper_sender, mut whisper_receiver, _) =
-        create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3)).await?;
-
+        create_whisper_channel(
+            Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
+            VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
+        ).await?;
     // Spawn threads for each device
     let _recording_threads: Vec<_> = devices
         .into_iter()

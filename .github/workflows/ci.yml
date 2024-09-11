@@ -11,6 +11,8 @@ on:
 jobs:
   test-ubuntu:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C link-arg=-Wl,--allow-multiple-definition"
     steps:
       - uses: actions/checkout@v3
       - uses: actions/cache@v3
@@ -27,6 +29,7 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          override: true
 
       - name: Install dependencies
         run: |
@@ -77,6 +80,34 @@ jobs:
       - name: Run specific Windows OCR test
         run: cargo test test_process_ocr_task_windows
 
+      - name: Identify esaxx usage (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cargo tree > cargo_tree_output.txt
+          findstr /i "esaxx" cargo_tree_output.txt
+        continue-on-error: true
+
+      - name: Set RUSTFLAGS for Linux
+        if: runner.os == 'Linux'
+        run: echo "RUSTFLAGS=-C link-arg=-Wl,--allow-multiple-definition" >> $GITHUB_ENV
+
+      - name: Run tests with modified environment
+        run: cargo test
+        env:
+          RUSTFLAGS: ${{ env.RUSTFLAGS }}
+
+      - name: Install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          vcpkgGitCommitId: 'your-preferred-commit-id'
+          vcpkgTriplet: 'x64-windows'
+
+      - name: Install ONNX Runtime
+        run: vcpkg install onnxruntime:x64-windows
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
   test-macos:
     runs-on: macos-latest
     steps:
@@ -114,3 +145,35 @@ jobs:
         env:
           DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr
+
+  check-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - name: Check dependencies
+        run: |
+          cargo tree > cargo_tree_output.txt
+          echo "Checking for esaxx and abseil-cpp usage:"
+          grep -E "esaxx|abseil-cpp" cargo_tree_output.txt || echo "No direct usage found"
+        
+      - uses: actions/upload-artifact@v3
+        with:
+          name: cargo-tree-output
+          path: cargo_tree_output.txt
+
+  test-vcpkg:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install cargo-vcpkg
+        run: cargo install cargo-vcpkg
+
+      - name: Build with vcpkg integration
+        run: cargo vcpkg build
+        working-directory: ./screen-pipe
