@@ -464,7 +464,7 @@ pub fn default_input_device() -> Result<AudioDevice> {
     let device = host.default_input_device().unwrap();
     Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
-
+// this should be optional ?
 pub async fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {

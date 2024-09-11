@@ -66,6 +66,8 @@ screenpipe-core = { path = "../screenpipe-core" }
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "2.0.0-rc.5", features = ["load-dynamic"], default-features = false }
 esaxx-rs = "0.1.10"
+samplerate = { version = "0.2.4" }
+libsamplerate-sys = "0.1.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 once_cell = "1.17.1"
