@@ -163,6 +163,32 @@ jobs:
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./examples/apps/screenpipe-app-tauri
 
+
+
+
+
+      - name: Identify esaxx usage (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          cargo tree > cargo_tree_output.txt
+          findstr /i "esaxx" cargo_tree_output.txt
+        continue-on-error: true
+
+      - name: Install vcpkg
+        if: matrix.platform == 'windows-latest'
+        uses: lukka/run-vcpkg@v7
+        with:
+          vcpkgGitCommitId: 'your-preferred-commit-id'
+          vcpkgTriplet: 'x64-windows'
+
+      - name: Install ONNX Runtime
+        if: matrix.platform == 'windows-latest'
+        run: vcpkg install onnxruntime:x64-windows
+
+      - name: Set up MSVC
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
