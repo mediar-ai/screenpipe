@@ -290,7 +290,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
       const localPipes = await fetch(`http://localhost:3030/pipes/list`).then(
         (res) => res.json()
       );
-      console.log("localPipes", localPipes);
+      // console.log("localPipes", localPipes);
       setPipes([
         ...pipes,
         ...localPipes.map((pipe: any) => ({

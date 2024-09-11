@@ -19,8 +19,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { DateTimePicker } from "./date-time-picker";
 import { Badge } from "./ui/badge";
 import {
+  AlertCircle,
   AlignLeft,
   Calendar,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Laptop,
@@ -28,6 +30,7 @@ import {
   Layout,
   Loader2,
   Search,
+  Send,
 } from "lucide-react";
 import { useToast } from "./ui/use-toast";
 import posthog from "posthog-js";
@@ -38,7 +41,21 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { OpenAI } from "openai";
 import { ChatMessage } from "./chat-message-v2";
 import { spinner } from "./spinner";
-
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./ui/accordion";
+import { VideoComponent } from "./video";
+import { Dialog, DialogContent, DialogTrigger } from "./ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
 // Add this constant at the top of the file
 const MAX_CONTENT_LENGTH = 30000; // Adjust as needed
 
@@ -52,7 +69,7 @@ export function SearchChat() {
   );
   const [endDate, setEndDate] = useState<Date>(new Date());
   const [includeFrames, setIncludeFrames] = useState(false);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(30);
   const [appName, setAppName] = useState("");
   const [windowName, setWindowName] = useState("");
   const [contentType, setContentType] = useState("all");
@@ -74,7 +91,40 @@ export function SearchChat() {
   const [isFloatingInputVisible, setIsFloatingInputVisible] = useState(false);
 
   const floatingInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const componentRef = useRef<HTMLDivElement>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
+  useEffect(() => {
+    const container = componentRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const scrollPercentage =
+        (scrollTop / (scrollHeight - clientHeight)) * 100;
+      const shouldShow = scrollPercentage < 90; // Show when scrolled up more than 10%
+
+      setShowScrollButton(shouldShow);
+    };
+
+    container.addEventListener("scroll", handleScroll);
+
+    // Trigger initial check
+    handleScroll();
+
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToBottom = () => {
+    const container = componentRef.current;
+    if (container) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  };
   // Add this function to calculate total content length
   const calculateTotalContentLength = (results: ContentItem[]): number => {
     return results.reduce((total, item) => {
@@ -306,13 +356,65 @@ export function SearchChat() {
     return results.map((item, index) => (
       <Card key={index}>
         <CardContent className="p-4">
-          <p className="text-sm text-gray-500">{item.type}</p>
-          {/* Render content based on item type */}
-          <div className="mt-2">
-            {item.type === "OCR" && <p>{item.content.text}</p>}
-            {item.type === "Audio" && <p>{item.content.transcription}</p>}
-            {item.type === "FTS" && <p>{item.content.matched_text}</p>}
-          </div>
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value={`item-${index}`}>
+              <AccordionTrigger className="flex items-center">
+                <div className="flex items-center w-full">
+                  <Badge className="mr-2">{item.type}</Badge>
+                </div>
+                <span className="flex-grow text-center truncate">
+                  {item.type === "OCR" && item.content.text.substring(0, 50)}
+                  {item.type === "Audio" &&
+                    item.content.transcription.substring(0, 50)}
+                  {item.type === "FTS" &&
+                    item.content.matched_text.substring(0, 50)}
+                  ...
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                {item.type === "OCR" && (
+                  <>
+                    <p className="mt-2">{item.content.text}</p>
+                    <VideoComponent filePath={item.content.file_path} />
+                    {includeFrames && item.content.frame && (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <img
+                            src={`data:image/jpeg;base64,${item.content.frame}`}
+                            alt="Frame"
+                            className="mt-2 w-24 h-auto cursor-pointer"
+                          />
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[80vw]">
+                          <img
+                            src={`data:image/jpeg;base64,${item.content.frame}`}
+                            alt="Frame"
+                            className="w-full h-auto"
+                          />
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </>
+                )}
+                {item.type === "Audio" && (
+                  <>
+                    <p className="mt-2">{item.content.transcription}</p>
+                    <VideoComponent filePath={item.content.file_path} />
+                  </>
+                )}
+                {item.type === "FTS" && (
+                  <>
+                    <p className="mt-2">{item.content.matched_text}</p>
+                    {item.content.original_frame_text && (
+                      <p className="mt-2 text-sm text-gray-600">
+                        Original: {item.content.original_frame_text}
+                      </p>
+                    )}
+                  </>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <p className="text-xs text-gray-400">
               {new Date(item.content.timestamp).toLocaleString()}
@@ -336,7 +438,10 @@ export function SearchChat() {
   };
 
   return (
-    <div className="space-y-4 w-full max-w-4xl relative">
+    <div
+      ref={componentRef}
+      className="space-y-4 w-full max-w-4xl relative overflow-y-auto max-h-[calc(100vh-100px)]"
+    >
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="search-query">Search Query</Label>
@@ -359,7 +464,7 @@ export function SearchChat() {
         <div className="space-y-2">
           <Label htmlFor="content-type">Content Type</Label>
           <Select value={contentType} onValueChange={setContentType}>
-            <SelectTrigger id="content-type" className="pl-8">
+            <SelectTrigger id="content-type" className="relative">
               <Layers
                 className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
                 size={18}
@@ -367,9 +472,15 @@ export function SearchChat() {
               <SelectValue placeholder="Content Type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="ocr">OCR</SelectItem>
-              <SelectItem value="audio">Audio</SelectItem>
+              <SelectItem value="all">
+                <span className="pl-6">All</span>
+              </SelectItem>
+              <SelectItem value="ocr">
+                <span className="pl-6">OCR</span>
+              </SelectItem>
+              <SelectItem value="audio">
+                <span className="pl-6">Audio</span>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -563,28 +674,41 @@ export function SearchChat() {
                   calculateTotalContentLength(results) > MAX_CONTENT_LENGTH
                 }
               >
-                Ask
+                <Send className="h-4 w-4" />
+                {calculateTotalContentLength(results) > MAX_CONTENT_LENGTH && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <AlertCircle className="h-4 w-4" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Content too long!</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </Button>
             </form>
-            {calculateTotalContentLength(results) > MAX_CONTENT_LENGTH && (
-              <p className="text-xs text-red-500 mt-1">
-                Content too large. Refine your search to reduce content.
-              </p>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Display chat messages */}
-      <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
+      <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto overflow-y-auto max-h-[600px]">
         {chatMessages.map((msg, index) => (
           <ChatMessage key={index} message={msg} />
         ))}
         {isAiLoading && spinner}
       </div>
-
+      {showScrollButton && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed bottom-24 right-8 bg-white rounded-full p-2 shadow-md hover:bg-gray-100 transition-colors duration-200"
+        >
+          <ChevronDown size={24} />
+        </button>
+      )}
       <div className="h-24" />
-
     </div>
   );
 }
