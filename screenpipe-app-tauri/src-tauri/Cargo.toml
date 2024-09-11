@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.2.1"
+version = "0.2.2"
 description = ""
 authors = ["you"]
 license = ""
@@ -96,6 +96,7 @@ tauri-plugin-single-instance = "2.0.0-rc.1"
 # metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
 cudart = []
 metal = [] # unused
+mkl = []
 default = ["custom-protocol"]
 
 # TODOS one day

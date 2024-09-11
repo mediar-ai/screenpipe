@@ -40,9 +40,9 @@ jobs:
             args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "" # TODO CUDA
+            args: "--features mkl" # TODO CUDA
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA?  --features "openblas"
             pre-build-args: "" # --openblas
             # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
 
@@ -180,15 +180,15 @@ jobs:
       #   if: matrix.platform == 'windows-latest'
       #   run: vcpkg install onnxruntime:x64-windows
 
-      - name: Set up MSVC
-        if: matrix.platform == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      # - name: Install LLVM and Clang
+      # - name: Set up MSVC
       #   if: matrix.platform == 'windows-latest'
-      #   uses: KyleMayes/install-llvm-action@v2
-      #   with:
-      #     version: "10.0"
+      #   uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install LLVM and Clang
+        if: matrix.platform == 'windows-latest'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
