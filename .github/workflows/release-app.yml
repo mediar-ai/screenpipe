@@ -177,6 +177,8 @@ jobs:
       - name: Install vcpkg
         if: matrix.platform == 'windows-latest'
         uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '5b1214315250939257ef5d62ecdcbca18cf4fb1c'
 
       - name: Install ONNX Runtime
         if: matrix.platform == 'windows-latest'
