@@ -6,6 +6,8 @@
     "main"
   ],
   "permissions": [
+    "core:event:allow-listen",
+    "core:event:default",
     "process:allow-restart",
     "process:allow-exit",
     "notification:default",
@@ -19,6 +21,7 @@
     "store:allow-load",
     "shell:allow-open",
     "fs:allow-watch",
+    "fs:allow-open",
     "fs:default",
     "fs:allow-read-file",
     "fs:allow-read-dir",

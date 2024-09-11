@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::env;
 use std::io::Cursor;
 use std::io::Write;
-use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use reqwest::blocking::Client;
 use serde_json::Value;
@@ -13,7 +12,7 @@ use tempfile::NamedTempFile;
 use anyhow::{Result, anyhow};
 use log::error;
 
-pub async fn perform_ocr_cloud(image: &Arc<DynamicImage>) -> Result<(String, String, Option<f64>)> {
+pub async fn perform_ocr_cloud(image: &DynamicImage) -> Result<(String, String, Option<f64>)> {
     let api_key = match env::var("UNSTRUCTURED_API_KEY") {
         Ok(key) => key,
         Err(_) => {

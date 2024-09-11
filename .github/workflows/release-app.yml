@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: create draft release
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0
         with:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
@@ -163,15 +163,48 @@ jobs:
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./examples/apps/screenpipe-app-tauri
 
+      - name: Identify esaxx usage (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          cargo tree > cargo_tree_output.txt
+          findstr /i "esaxx" cargo_tree_output.txt
+        continue-on-error: true
+
+      - name: Install vcpkg
+        if: matrix.platform == 'windows-latest'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "5b1214315250939257ef5d62ecdcbca18cf4fb1c"
+
+      # - name: Install ONNX Runtime
+      #   if: matrix.platform == 'windows-latest'
+      #   run: vcpkg install onnxruntime:x64-windows
+
+      - name: Set up MSVC
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          # for release
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # for macos signing
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # https://tauri.app/v1/guides/distribution/sign-macos
+          CI: true
+          # RUSTFLAGS: "-C link-arg=-Wl,--allow-multiple-definition"
         with:
-          tagName: v__VERSION__ # the action automatically replaces __VERSION__ with the app version.
-          releaseName: "v__VERSION__"
+          tagName: app-v__VERSION__ # the action automatically replaces __VERSION__ with the app version.
+          releaseName: "App v__VERSION__"
           releaseBody: "What's new? 🎉📣"
           releaseDraft: true
           prerelease: true
@@ -180,7 +213,7 @@ jobs:
           tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}

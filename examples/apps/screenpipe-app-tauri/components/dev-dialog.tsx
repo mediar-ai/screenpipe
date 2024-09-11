@@ -20,7 +20,7 @@ export function DevSettings() {
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
+  React.useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
 
@@ -36,13 +36,32 @@ export function DevSettings() {
     });
 
     try {
-      await updateSettings(localSettings);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Create an object to store only the changed settings
+      const changedSettings = Object.entries(localSettings).reduce(
+        (acc, [key, value]) => {
+          if (value !== settings[key as keyof typeof settings]) {
+            acc[key as keyof typeof settings] = value;
+          }
+          return acc;
+        },
+        {} as Partial<typeof settings>
+      );
 
-      toast({
-        title: "dev settings updated successfully",
-        description: "your changes have been saved.",
-      });
+      // Only update if there are changes
+      if (Object.keys(changedSettings).length > 0) {
+        await updateSettings(changedSettings);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        toast({
+          title: "dev settings updated successfully",
+          description: "your changes have been saved.",
+        });
+      } else {
+        toast({
+          title: "no changes detected",
+          description: "no settings were updated.",
+        });
+      }
     } catch (error) {
       console.error("failed to update dev settings:", error);
       toast({

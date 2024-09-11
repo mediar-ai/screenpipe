@@ -16,7 +16,12 @@
     <a href="https://screenpi.pe" target="_blank">
         <img src="https://img.shields.io/badge/Download%20The-Desktop%20App-blue?style=for-the-badge" alt="Download the Desktop App">
     </a>
-    
+</p>
+
+<p align="center">
+    <a href="https://www.youtube.com/@mediar_ai" target="_blank">
+        <img src="https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fyoutube-channel-badge.ngoldack.vercel.app%2Fapi%2Fsubscriber" alt="Subs">
+    </a>
 </p>
 
 
@@ -43,6 +48,7 @@
 ---
 
 *Latest News* 🔥
+- [2024/08] Anyone can now [create, share, install pipes](https://youtu.be/iCqHgZgQHyA?si=DjKJir7HfZoQKItK) (plugins) from the app interface based on a github repo/dir
 - [2024/08] We're running bounties! Contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
 - [2024/08] Audio input & output now works perfect on Windows, Linux, MacOS (<15.0). We also support multi monitor capture and defaulting STT to Whisper Distil large v3
 - [2024/08] We released video embedding. AI gives you links to your video recording in the chat!
@@ -119,9 +125,13 @@ if you want to run screenpipe in debug mode to show more logs in terminal:
 ```bash
 screenpipe --debug
 ```
-by default screenpipe is using whisper-tiny that runs LOCALLY to get better quality or lower compute you can use cloud model (we use Deepgram) via cloud api:
+by default screenpipe is using Silero-VAD to identify speech and non-speech tokens to improve audio transcription, bu you can use WebRTC if needed by passing the following command:
 ```bash
-screenpipe -audio-transcription-engine deepgram
+screenpipe --vad-engine webrtc
+```
+by default screenpipe is using whisper-large that runs LOCALLY to get better quality or lower compute you can use cloud model (we use Deepgram) via cloud api:
+```bash
+screenpipe --audio-transcription-engine deepgram
 ```
 by default screenpipe is using a local model for screen capture OCR processing to use the cloud (through unstructured.io) for better performance use this flag:
 ```bash
@@ -162,7 +172,7 @@ Build the project, takes 5-10 minutes depending on your hardware
 ```bash
 # necessary to use apple native OCR
 export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../../screenpipe-vision/bin -C link-arg=-Wl,-rpath,@loader_path/../../screenpipe-vision/lib"
-cargo build --release --no-default-features --features metal # takes 3 minuttes
+cargo build --release --features metal # takes 3 minuttes
 ```
 
 Then run it
@@ -181,8 +191,49 @@ Then run it
 
 <details>
   <summary>Windows</summary>
+
+
+> [!note]
+> This is experimental support for Windows build. This assumes you already have the CUDA Toolkit installed and the CUDA_PATH set to my CUDA v12.6 folder.
+> Replace `V:\projects` and `V:\packages` with your own folders.
+
+If this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
+
+- Install chocolatey
+- Install git
+- Install CUDA Toolkit (if using NVIDIA and building with cuda)
+- Install MS Visual Studio Build Tools (below are the components I have installed)
+	- Desktop development with C++
+		- MSVC v143
+		- Windows 11 SDK
+		- C++ Cmake tools for Windows
+		- Testing tools core features - Build tools
+		- C++ AddressSanitizer
+		- C++ ATL for latest v143
+	- Individual components
+		- C++ ATL for latest v143 build tools (x86 & x64)
+		- MSBuild support for LLVM (clang-c) toolset
+		- C++ Clang Compiler for Windows
+
+```batch
+choco install pkgconfiglite rust
+cd V:\projects
+git clone https://github.com/mediar-ai/screenpipe
+cd V:\packages
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+bootstrap-vcpkg.bat -disableMetrics
+vcpkg.exe integrate install --disable-metrics
+vcpkg.exe install ffmpeg
+
+SET PKG_CONFIG_PATH=V:\packages\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
+SET VCPKG_ROOT=V:\packages\vcpkg
+SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
+cd V:\projects\screen-pipe
+
+cargo build --release --features cuda
+```
    
-   Currently updating the instructions for Windows which are not straightforward, please feel free to help
 </details>
 
 <details>
@@ -211,7 +262,7 @@ cd screenpipe
 3. Build and run:
 
 ```bash
-cargo build --release --no-default-features --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
+cargo build --release --features cuda # remove "--features cuda" if you do not have a NVIDIA GPU
 
 # then run it
 ./target/release/screenpipe
@@ -300,9 +351,8 @@ npm run dev
 
 You can use terminal commands to query and view your data as shown below. Also, we recommend Tableplus.com to view the database, it has a free tier.
 
-Here's a pseudo code to illustrate how to use screenpipe, after a meeting for example (automatically with our webhooks):
+Here's a pseudo code to illustrate how to use screenpipe, to summarize meetings:
 ```js
-
 // 1h ago
 const startDate = "<some time 1h ago..>"
 // 10m ago
@@ -318,10 +368,9 @@ const summary = fetchOllama("{results} create a summary from these transcription
 // add the meeting summary to your notes
 addToNotion(summary)
 // or your favourite note taking app
-
 ```
 
-Or thousands of other usages of all your screen & mic data!
+Or thousands of other usages of all your screen & mic data! [Check examples](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript), screenpipes makes it easy to write plugins in JS for example that runs directly in the Rust code through Deno engine.
 
 
 <details>
@@ -393,6 +442,9 @@ curl "http://localhost:3030/search?q=QUERY_HERE&limit=10&offset=20"
 # 6. Search with no query (should return all results)
 curl "http://localhost:3030/search?limit=5&offset=0"
 
+# Display first frame from 30m to 25m ago (macos, translate to your OS with AI)
+curl "http://localhost:3030/search?limit=1&offset=0&content_type=ocr&include_frames=true&start_time=$(date -u -v-220M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-120M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
+
 # filter by app (wll only return OCR results)
 curl "http://localhost:3030/search?app_name=cursor"
   ```
@@ -401,7 +453,8 @@ curl "http://localhost:3030/search?app_name=cursor"
 Keep in mind that it's still experimental.
 <br><br>
 
-https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
+![0910244](https://github.com/user-attachments/assets/6025ef71-43b9-4151-a34c-155c30236a57)
+
 
 ## Use cases:
 
@@ -437,6 +490,8 @@ https://github.com/user-attachments/assets/edb503d4-6531-4527-9b05-0397fd8b5976
 
 Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop, 24/7.
 
+Uses 600 MB, 10% CPU.
+
 - [ ] Integrations
     - [x] ollama
     - [x] openai
@@ -457,7 +512,7 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
     - [ ] Camera
     - [ ] Keyboard
     - [x] Browser
-    - [ ] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Deno Typescript engine within screenpipe on your computer
+    - [x] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Deno Typescript engine within screenpipe on your computer
 - [x] screenshots + OCR with different engines to optimise privacy, quality, or energy consumption
   - [x] tesseract
   - [x] Windows native OCR
@@ -465,10 +520,8 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
   - [x] unstructured.io
   - [ ] screenpipe screen/audio specialised LLM
 - [x] audio + STT (works with multi input devices, like your iPhone + mac mic, many STT engines)
-  - [x] Linux, MacOS, Windows input
-  - [x] Linux output
-  - [x] MacOS output 
-  - [ ] Windows output (shipping on 19 august)
+  - [x] Linux, MacOS, Windows input & output devices
+  - [x] iPhone microphone
 - [x] [remote capture](https://github.com/mediar-ai/screenpipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
@@ -479,12 +532,11 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
 - [ ] multimodal embeddings
 - [ ] cloud storage options (s3, pgsql, etc.)
 - [x] cloud computing options (deepgram for audio, unstructured for OCR)
-- [ ] bug-free & stable
 - [x] custom storage settings: customizable capture settings (fps, resolution)
 - [ ] security
   - [x] window specific capture (e.g. can decide to only capture specific tab of cursor, chrome, obsidian, or only specific app)
   - [ ] encryption
-  - [ ] PII removal
+  - [x] PII removal
 - [ ] fast, optimised, energy-efficient modes
 - [ ] webhooks/events (for automations)
 - [ ] abstractions for multiplayer usage (e.g. aggregate sales team data, company team data, partner, etc.)

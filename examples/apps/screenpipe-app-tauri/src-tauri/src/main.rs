@@ -1,18 +1,18 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use commands::load_pipe_config;
+use commands::save_pipe_config;
+use sidecar::SidecarManager;
 use tauri::Config;
-
+use tokio::sync::mpsc;
 use serde_json::Value;
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::time::Duration;
 use tauri::Manager;
-use tauri::State;
 use tauri::Wry;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
@@ -20,12 +20,10 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
-use tauri_plugin_shell::process::CommandChild;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::{with_store, StoreCollection};
-use tokio::time::sleep;
+use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
@@ -36,292 +34,16 @@ mod analytics;
 use crate::analytics::start_analytics;
 
 mod commands;
-
-pub use commands::reset_screen_permissions;
+mod sidecar;
+mod server;
 pub use commands::open_screen_capture_preferences;
-struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
+pub use commands::reset_screen_permissions;
+pub use commands::reset_all_pipes;
+pub use sidecar::kill_all_sreenpipes;
+pub use sidecar::spawn_screenpipe;
+pub use server::spawn_server;
 
-#[tauri::command]
-async fn kill_all_sreenpipes(
-    state: State<'_, SidecarState>,
-    _app: tauri::AppHandle,
-) -> Result<(), String> {
-    debug!("Killing screenpipe");
-
-    const MAX_RETRIES: u32 = 3;
-    const RETRY_DELAY: Duration = Duration::from_secs(1);
-
-    for attempt in 1..=MAX_RETRIES {
-        if let Some(child) = state.0.lock().unwrap().take() {
-            if let Err(e) = child.kill() {
-                error!("Failed to kill child process (attempt {}): {}", attempt, e);
-            }
-        }
-
-        // Hard kill the sidecar
-        let kill_result = async {
-            #[cfg(not(target_os = "windows"))]
-            {
-                tokio::process::Command::new("pkill")
-                    .arg("-f")
-                    .arg("screenpipe")
-                    .output()
-                    .await
-            }
-            #[cfg(target_os = "windows")]
-            {
-                tokio::process::Command::new("taskkill")
-                    .args(&["/F", "/IM", "screenpipe.exe"])
-                    .output()
-                    .await
-            }
-        }
-        .await;
-
-        match kill_result {
-            Ok(_) => {
-                debug!("Successfully killed screenpipe processes");
-                return Ok(());
-            }
-            Err(e) => {
-                error!(
-                    "Failed to kill screenpipe processes (attempt {}): {}",
-                    attempt, e
-                );
-                if attempt < MAX_RETRIES {
-                    sleep(RETRY_DELAY).await;
-                }
-            }
-        }
-    }
-
-    Err("Failed to kill screenpipe processes after multiple attempts".to_string())
-}
-
-#[tauri::command]
-async fn spawn_screenpipe(
-    state: State<'_, SidecarState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let sidecar_running = state.0.lock().unwrap().is_some();
-    if !sidecar_running {
-        // Spawn the sidecar
-        match spawn_sidecar(&app) {
-            Ok(child) => {
-                // Update the state after spawning
-                state.0.lock().unwrap().replace(child);
-                debug!("Spawned sidecar through CLI");
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to spawn sidecar: {}", e);
-                Err(format!("Failed to spawn sidecar: {}", e))
-            }
-        }
-    } else {
-        debug!("Sidecar already running");
-        Ok(())
-    }
-}
-
-fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    let sidecar = app.shell().sidecar("screenpipe").unwrap();
-    // Get the current settings
-    let stores = app.state::<StoreCollection<Wry>>();
-    let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-
-    let path = base_dir.join("store.bin");
-
-    let audio_transcription_engine =
-        with_store(app.clone(), stores.clone(), path.clone(), |store| {
-            Ok(store
-                .get("audioTranscriptionEngine")
-                .and_then(|v| v.as_str().map(String::from)))
-        })
-        .map_err(|e| e.to_string())?
-        .unwrap_or(String::from("default"));
-
-    let ocr_engine = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("ocrEngine")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
-
-    let monitor_id = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("monitorId")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
-
-    let audio_devices = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("audioDevices")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or_default();
-
-    let use_pii_removal = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("usePiiRemoval")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
-    let restart_interval = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("restartInterval")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0))
-    })
-    .map_err(|e| e.to_string())?;
-    let pipes = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("installedPipes")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-.unwrap_or_default();
-
-    debug!("pipes: {:?}", pipes);
-    let port = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("port")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(3030))
-    })
-    .map_err(|e| e.to_string())?;
-
-    let data_dir = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("dataDir")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
-
-
-    let port_str = port.to_string();
-    let mut args = vec!["--port", port_str.as_str()];
-    // if macos do --fps 0.2
-    if cfg!(target_os = "macos") {
-        args.push("--fps");
-        args.push("0.2");
-    }
-
-    if data_dir != "default" {
-        args.push("--data-dir");
-        let dir = data_dir.as_str();
-        args.push(dir);
-    }
-
-    if audio_transcription_engine != "default" {
-        args.push("--audio-transcription-engine");
-        let model = audio_transcription_engine.as_str();
-        args.push(model);
-    }
-
-    if ocr_engine != "default" {
-        args.push("--ocr-engine");
-        let model = ocr_engine.as_str();
-        args.push(model);
-    }
-    if monitor_id != "default" {
-        args.push("--monitor-id");
-        let id = monitor_id.as_str();
-        args.push(id);
-    }
-
-    if !audio_devices.is_empty() && audio_devices[0] != Value::String("default".to_string()) {
-        for device in &audio_devices {
-            args.push("--audio-device");
-            args.push(device.as_str().unwrap());
-        }
-    }
-
-    if use_pii_removal {
-        args.push("--use-pii-removal");
-    }
-
-    let restart_interval_str = restart_interval.to_string();
-    if restart_interval > 0 {
-        args.push("--restart-interval");
-        args.push(&restart_interval_str);
-    }
-
-    if !pipes.is_empty() {
-        info!("adding pipes: {:?}", pipes);
-        let mut added_pipes = std::collections::HashSet::new();
-        for pipe in &pipes {
-            if let Some(obj) = pipe.as_object() {
-                if let Some(main_file) = obj.get("mainFile").and_then(Value::as_str) {
-                    if added_pipes.insert(main_file) {
-                        args.push("--pipe");
-                        args.push(main_file);
-                        info!("adding pipe: {}", main_file);
-                    }
-                }
-            }
-        }
-    }
-
-    // hardcode TESSDATA_PREFIX for windows
-    if cfg!(windows) {
-        let exe_dir = env::current_exe()
-            .expect("Failed to get current executable path")
-            .parent()
-            .expect("Failed to get parent directory of executable")
-            .to_path_buf();
-        let tessdata_path = exe_dir.join("tessdata");
-        let c = sidecar.env("TESSDATA_PREFIX", tessdata_path).args(&args);
-
-        let (_, child) = c.spawn().map_err(|e| {
-            error!("Failed to spawn sidecar: {}", e);
-            e.to_string()
-        })?;
-
-        info!("Spawned sidecar with args: {:?}", args);
-
-        return Ok(child);
-    }
-
-    let command = sidecar.args(&args);
-
-
-    let result = command.spawn();
-    if let Err(e) = result {
-        error!("Failed to spawn sidecar: {}", e);
-        return Err(e.to_string());
-    }
-
-    #[allow(unused_mut, unused_variables)]
-    let (mut rx, child) = result.unwrap();
-
-    // only in production mode because it breaks the "bun tauri dev"
-    // #[cfg(not(debug_assertions))]
-    tauri::async_runtime::spawn(async move {
-        #[allow(unused_variables)]
-        let mut i = 0;
-        while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stdout(line) = event {
-                print!("{}", String::from_utf8(line).unwrap());
-                i += 1;
-            } else if let CommandEvent::Stderr(line) = event {
-                error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
-            }
-        }
-    });
-
-    info!("Spawned sidecar with args: {:?}", args);
-
-    Ok(child)
-}
+pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
@@ -332,13 +54,34 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     Ok(local_data_dir)
 }
 
+fn show_main_window(app_handle: &tauri::AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _ = tauri::WebviewWindowBuilder::new(
+            app_handle,
+            "main",
+            tauri::WebviewUrl::App("index.html".into())
+        )
+        .title("Screenpipe")
+        .build();
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
 
-    let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
+    let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
 
-    let app = tauri::Builder::default()
+    let app = tauri::Builder::default().on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                window.hide().unwrap();
+                api.prevent_close();
+            }
+            _ => {}
+        })
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -351,12 +94,24 @@ async fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let windows = app.webview_windows();
+            windows
+                .values()
+                .next()
+                .expect("Sorry, no window found")
+                .set_focus()
+                .expect("Can't focus window!");
+        }))
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             kill_all_sreenpipes,
             reset_screen_permissions,
             open_screen_capture_preferences,
+            load_pipe_config,
+            save_pipe_config,
+            reset_all_pipes
         ])
         .setup(|app| {
             // Logging setup
@@ -417,8 +172,6 @@ async fn main() {
                 autostart_manager.is_enabled().unwrap()
             );
 
-            let port = 3030;
-            app.manage(port);
 
             info!("Local data directory: {}", base_dir.display());
 
@@ -433,24 +186,34 @@ async fn main() {
 
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-                let toggle = MenuItemBuilder::with_id("quit", "Quit screenpipe").build(app)?;
-                let menu = MenuBuilder::new(app).items(&[&toggle]).build()?;
+                let show = MenuItemBuilder::with_id("show", "Show Screenpipe").build(app)?;
+                let quit = MenuItemBuilder::with_id("quit", "Quit Screenpipe").build(app)?;
+                let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
                 let _ = main_tray.set_menu(Some(menu));
-                main_tray.on_menu_event(move |app, event| match event.id().as_ref() {
+                main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
+                    "show" => {
+                        show_main_window(&app_handle);
+                    }
                     "quit" => {
                         println!("quit clicked");
-                        app.exit(0);
+                        app_handle.exit(0);
                     }
                     _ => (),
                 });
-                main_tray.on_tray_icon_event(move |_tray, event| match event {
+                main_tray.on_tray_icon_event(move |tray, event| match event {
                     tauri::tray::TrayIconEvent::Click {
                         button,
                         button_state,
                         ..
                     } => {
-                        if button == MouseButton::Left && button_state == MouseButtonState::Down {
-                            // Handle left click if needed
+                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            } else {
+                                show_main_window(&app);
+                            }
                         }
                     }
                     _ => {}
@@ -511,23 +274,44 @@ async fn main() {
             });
 
             // Dev mode check and sidecar spawn
-            let mut use_dev_mode = false;
-            let _ = with_store(app.handle().clone(), stores, path, |store| {
-                use_dev_mode = store
+
+            let use_dev_mode = with_store(app.handle().clone(), stores.clone(), path.clone(), |store| {
+                Ok(store
                     .get("devMode")
-                    .unwrap_or(&Value::Bool(false))
-                    .as_bool()
-                    .unwrap_or(false);
-                Ok(())
-            });
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false))
+            })
+            .unwrap_or(false);
+
+            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
+            app.manage(sidecar_manager.clone());
+
+            let app_handle = app.handle().clone();
 
             if !use_dev_mode {
-                let sidecar_state = app.state::<SidecarState>();
-                let app_handle = app.handle().clone();
-                let child = spawn_sidecar(&app_handle).unwrap();
-                let mut sidecar = sidecar_state.0.lock().unwrap();
-                *sidecar = Some(child);
+                tauri::async_runtime::spawn(async move {
+                    let mut manager = sidecar_manager.lock().await;
+                    if let Err(e) = manager.spawn(&app_handle).await {
+                        error!("Failed to spawn initial sidecar: {}", e);
+                    }
+
+                    // Spawn a background task to check and restart periodically
+                    let mut manager = sidecar_manager.lock().await;
+                    if let Err(e) = manager.check_and_restart(&app_handle).await {
+                        error!("Failed to restart sidecar: {}", e);
+                    }
+                });
+            } else {
+                debug!("Dev mode enabled, skipping sidecar spawn and restart");
             }
+
+            // Inside the main function, after the `app.manage(port);` line, add:
+            let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
+            app.manage(server_shutdown_tx);
+
+            // Add this custom activate handler
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
             Ok(())
         })
@@ -563,6 +347,27 @@ async fn main() {
                         error!("Failed to kill screenpipe processes: {}", e);
                     }
                 });
+            }
+            // Add this to shut down the server
+            if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
+                let _ = server_shutdown_tx.send(());
+            }
+        }
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Focused(focused),
+            ..
+        } => {
+            if label == "main" && focused {
+                let window = app_handle.get_webview_window("main").unwrap();
+                window.show().unwrap();
+                window.set_focus().unwrap();
+            }
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+            if !has_visible_windows {
+                show_main_window(&app_handle);
             }
         }
         _ => {}

@@ -8,6 +8,8 @@ use candle::{Device, IndexOp, Tensor};
 use candle_nn::{ops::softmax, VarBuilder};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, error, info};
+#[cfg(target_os = "macos")]
+use objc::rc::autoreleasepool;
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -17,9 +19,12 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
-use crate::{multilingual, pcm_decode::pcm_decode, AudioTranscriptionEngine};
-
-use webrtc_vad::{Vad, VadMode};
+use crate::{
+    multilingual,
+    pcm_decode::pcm_decode,
+    vad_engine::{SileroVad, VadEngine, VadEngineEnum, WebRtcVad},
+    AudioTranscriptionEngine,
+};
 
 use hound::{WavSpec, WavWriter};
 use std::io::Cursor;
@@ -507,6 +512,7 @@ pub fn stt(
     file_path: &str,
     whisper_model: &WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    vad_engine: &mut dyn VadEngine,
 ) -> Result<String> {
     debug!("Starting speech to text for file: {}", file_path);
     let model = &whisper_model.model;
@@ -533,25 +539,15 @@ pub fn stt(
         pcm_data = resample(pcm_data, sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
-    // Initialize VAD
-    debug!("VAD: Initializing VAD");
-    let mut vad = Vad::new();
-    vad.set_mode(VadMode::VeryAggressive); // Set mode to very aggressive
-
-    // Filter out non-speech segments
-    debug!("VAD: Filtering out non-speech segments");
+    // Filter out non-speech segments using Silero VAD
+    debug!("Filtering out non-speech segments with VAD");
     let frame_size = 160; // 10ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
     for (frame_index, chunk) in pcm_data.chunks(frame_size).enumerate() {
-        // Convert f32 to i16
-        let i16_chunk: Vec<i16> = chunk.iter().map(|&x| (x * 32767.0) as i16).collect();
-        match vad.is_voice_segment(&i16_chunk) {
+        match vad_engine.is_voice_segment(chunk) {
             Ok(is_voice) => {
                 if is_voice {
-                    // debug!("VAD: Speech detected in frame {}", frame_index);
                     speech_frames.extend_from_slice(chunk);
-                } else {
-                    // debug!("VAD: Non-speech frame {} filtered out", frame_index);
                 }
             }
             Err(e) => {
@@ -717,11 +713,15 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
+use std::sync::atomic::{AtomicBool, Ordering};
+
 pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    vad_engine: VadEngineEnum,
 ) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
+    Arc<AtomicBool>, // Shutdown flag
 )> {
     let whisper_model = WhisperModel::new(audio_transcription_engine.clone())?;
     let (input_sender, mut input_receiver): (
@@ -732,9 +732,21 @@ pub async fn create_whisper_channel(
         UnboundedSender<TranscriptionResult>,
         UnboundedReceiver<TranscriptionResult>,
     ) = unbounded_channel();
+    let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
+        VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
+        VadEngineEnum::Silero => Box::new(SileroVad::new()?),
+    };
+    
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let shutdown_flag_clone = shutdown_flag.clone();
 
     tokio::spawn(async move {
         loop {
+            if shutdown_flag_clone.load(Ordering::Relaxed) {
+                info!("Whisper channel shutting down");
+                break;
+            }
+
             tokio::select! {
                 Some(input) = input_receiver.recv() => {
                     let timestamp = SystemTime::now()
@@ -742,22 +754,51 @@ pub async fn create_whisper_channel(
                         .expect("Time went backwards")
                         .as_secs();
 
-                    let transcription_result = match stt(&input.path, &whisper_model, audio_transcription_engine.clone()) {
-                        Ok(transcription) => TranscriptionResult {
-                            input: input.clone(),
-                            transcription: Some(transcription),
-                            timestamp,
-                            error: None,
-                        },
-                        Err(e) => {
-                            error!("STT error for input {}: {:?}", input.path, e);
-                            TranscriptionResult {
+                    let transcription_result = if cfg!(target_os = "macos") {
+                        #[cfg(target_os = "macos")]
+                        {
+                            autoreleasepool(|| {
+                                match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine) {
+                                    Ok(transcription) => TranscriptionResult {
+                                        input: input.clone(),
+                                        transcription: Some(transcription),
+                                        timestamp,
+                                        error: None,
+                                    },
+                                    Err(e) => {
+                                        error!("STT error for input {}: {:?}", input.path, e);
+                                        TranscriptionResult {
+                                            input: input.clone(),
+                                            transcription: None,
+                                            timestamp,
+                                            error: Some(e.to_string()),
+                                        }
+                                    },
+                                }
+                            })
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            unreachable!("This code should not be reached on non-macOS platforms")
+                        }
+                    } else {
+                        match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine) {
+                            Ok(transcription) => TranscriptionResult {
                                 input: input.clone(),
-                                transcription: None,
+                                transcription: Some(transcription),
                                 timestamp,
-                                error: Some(e.to_string()),
-                            }
-                        },
+                                error: None,
+                            },
+                            Err(e) => {
+                                error!("STT error for input {}: {:?}", input.path, e);
+                                TranscriptionResult {
+                                    input: input.clone(),
+                                    transcription: None,
+                                    timestamp,
+                                    error: Some(e.to_string()),
+                                }
+                            },
+                        }
                     };
 
                     if output_sender.send(transcription_result).is_err() {
@@ -767,7 +808,8 @@ pub async fn create_whisper_channel(
                 else => break,
             }
         }
+        // Cleanup code here (if needed)
     });
 
-    Ok((input_sender, output_receiver))
+    Ok((input_sender, output_receiver, shutdown_flag))
 }

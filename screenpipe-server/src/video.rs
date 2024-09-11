@@ -13,13 +13,12 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::time::sleep;
 
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
 
 pub struct VideoCapture {
-    #[allow(unused)]
-    frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
     #[allow(unused)]
     video_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
     pub ocr_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
@@ -33,25 +32,36 @@ impl VideoCapture {
         save_text_files: bool,
         ocr_engine: Arc<OcrEngine>,
         monitor_id: u32,
+        ignore_list: &[String],
+        include_list: &[String],
     ) -> Self {
         info!("Starting new video capture");
-        let frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
+        let fps = if fps.is_finite() && fps > 0.0 {
+            fps
+        } else {
+            warn!("Invalid FPS value: {}. Using default of 1.0", fps);
+            1.0
+        };
+        let interval = Duration::from_secs_f64(1.0 / fps);
         let video_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let ocr_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let new_chunk_callback = Arc::new(new_chunk_callback);
         let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
 
-        let capture_frame_queue = frame_queue.clone();
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
+        let ignore_list_clone = ignore_list.to_vec();
+        let include_list_clone = include_list.to_vec();
         let _capture_thread = tokio::spawn(async move {
             continuous_capture(
                 result_sender,
-                Duration::from_secs_f64(1.0 / fps),
+                interval,
                 save_text_files,
-                ocr_engine,
+                *ocr_engine,
                 monitor_id,
+                &ignore_list_clone,
+                &include_list_clone,
             )
             .await;
         });
@@ -88,7 +98,6 @@ impl VideoCapture {
 
                 let result = Arc::new(result);
 
-                // let frame_pushed = push_to_queue(&capture_frame_queue, &result, "Frame");
                 let video_pushed = push_to_queue(&capture_video_frame_queue, &result, "Video");
                 let ocr_pushed = push_to_queue(&capture_ocr_frame_queue, &result, "OCR");
 
@@ -101,9 +110,8 @@ impl VideoCapture {
                 }
 
                 debug!(
-                    "Frame {} pushed to queues. Queue lengths: {}, {}, {}",
+                    "Frame {} pushed to queues. Queue lengths: {}, {}",
                     frame_number,
-                    capture_frame_queue.len(),
                     capture_video_frame_queue.len(),
                     capture_ocr_frame_queue.len()
                 );
@@ -119,12 +127,12 @@ impl VideoCapture {
                 &output_path,
                 fps,
                 new_chunk_callback_clone,
+                monitor_id,
             )
             .await;
         });
 
         VideoCapture {
-            frame_queue,
             video_frame_queue,
             ocr_frame_queue,
         }
@@ -135,6 +143,7 @@ async fn save_frames_as_video(
     output_path: &str,
     fps: f64,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
+    monitor_id: u32,
 ) {
     debug!("Starting save_frames_as_video function");
     let frames_per_video = 30; // Adjust this value as needed
@@ -180,7 +189,7 @@ async fn save_frames_as_video(
             let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
             // Start new FFmpeg process with a new output file
             let output_file = PathBuf::from(output_path)
-                .join(format!("{}.mp4", formatted_time))
+                .join(format!("monitor_{}_{}.mp4", monitor_id, formatted_time))
                 .to_str()
                 .expect("Failed to create valid path")
                 .to_string();
@@ -254,12 +263,38 @@ async fn save_frames_as_video(
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
+        const MAX_RETRIES: usize = 3;
+        const RETRY_DELAY: Duration = Duration::from_millis(100);
+
         // Write encoded frames to FFmpeg
         while let Ok(buffer) = receiver.try_recv() {
             if let Some(stdin) = current_stdin.as_mut() {
-                if let Err(e) = stdin.write_all(buffer.as_slice()).await {
-                    error!("Failed to write frame to ffmpeg: {}", e);
-                    break;
+                let mut retries = 0;
+                while retries < MAX_RETRIES {
+                    match stdin.write_all(buffer.as_slice()).await {
+                        Ok(_) => {
+                            frame_count += 1;
+                            debug!("Wrote frame {} to FFmpeg", frame_count);
+                            break;
+                        }
+                        Err(e) => {
+                            retries += 1;
+                            if retries >= MAX_RETRIES {
+                                error!(
+                                    "Failed to write frame to ffmpeg after {} retries: {}",
+                                    MAX_RETRIES, e
+                                );
+                                // Consider breaking the outer loop or handling this failure
+                                break;
+                            } else {
+                                warn!(
+                                    "Failed to write frame to ffmpeg (attempt {}): {}. Retrying...",
+                                    retries, e
+                                );
+                                sleep(RETRY_DELAY).await;
+                            }
+                        }
+                    }
                 }
                 frame_count += 1;
                 debug!("Wrote frame {} to FFmpeg", frame_count);
@@ -307,6 +342,8 @@ async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyh
         &fps_str,
         "-i",
         "-",
+        "-vf",
+        "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
     ];
 
     if env::consts::OS == "windows" {

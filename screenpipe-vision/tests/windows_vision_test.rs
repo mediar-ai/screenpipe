@@ -1,9 +1,9 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
+    use screenpipe_vision::core::OcrTaskData;
     use screenpipe_vision::monitor::get_default_monitor;
     use screenpipe_vision::{process_ocr_task, OcrEngine};
-    use std::sync::Arc;
     use std::{path::PathBuf, time::Instant};
     use tokio::sync::mpsc;
 
@@ -21,11 +21,11 @@ mod tests {
         println!("Path to testing_OCR.png: {:?}", path);
         let image = image::open(&path).expect("Failed to open image");
 
-        let image_arc = Arc::new(image.clone());
+        let image_arc = image.clone();
         let frame_number = 1;
         let timestamp = Instant::now();
         let (tx, _rx) = mpsc::channel(1);
-        let ocr_engine = Arc::new(OcrEngine::WindowsNative);
+        let ocr_engine = OcrEngine::WindowsNative;
         let app_name = "test_app".to_string();
 
         let window_images = vec![(
@@ -36,13 +36,15 @@ mod tests {
         )];
 
         let result = process_ocr_task(
-            image_arc,
-            window_images,
-            frame_number,
-            timestamp,
-            tx,
+            OcrTaskData {
+                image: image_arc,
+                window_images,
+                frame_number,
+                timestamp,
+                result_tx: tx,
+            },
             false,
-            ocr_engine,
+            &ocr_engine,
         )
         .await;
 
@@ -62,7 +64,7 @@ mod tests {
         // Set up test parameters
         let interval = Duration::from_millis(1000);
         let save_text_files_flag = false;
-        let ocr_engine = Arc::new(OcrEngine::WindowsNative);
+        let ocr_engine = OcrEngine::WindowsNative;
 
         // Spawn the continuous_capture function
         let capture_handle = tokio::spawn(continuous_capture(
@@ -71,13 +73,15 @@ mod tests {
             save_text_files_flag,
             ocr_engine,
             monitor,
+            &[],
+            &[],
         ));
 
         // Wait for a short duration to allow some captures to occur
         let timeout_duration = Duration::from_secs(5);
         let _result = timeout(timeout_duration, async {
             let mut capture_count = 0;
-            while let Some(capture_result) = result_rx.recv().await {
+            while let Some(_capture_result) = result_rx.recv().await {
                 capture_count += 1;
                 // assert!(
                 //     capture_result.image.width() == 100 && capture_result.image.height() == 100

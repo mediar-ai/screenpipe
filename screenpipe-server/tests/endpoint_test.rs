@@ -6,10 +6,11 @@ mod tests {
     use axum::{body::to_bytes, routing::get};
     use chrono::{Duration, Utc};
     use crossbeam::queue::SegQueue;
-    use screenpipe_server::HealthCheckResponse;
     use screenpipe_server::{health_check, AppState, DatabaseManager};
+    use screenpipe_server::{HealthCheckResponse, PipeManager};
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
     use tower::ServiceExt; // for `oneshot` and `ready`
@@ -22,6 +23,8 @@ mod tests {
             audio_devices_control: Arc::new(SegQueue::new()),
             devices_status: HashMap::new(),
             app_start_time: Utc::now(),
+            screenpipe_dir: PathBuf::from(""),
+            pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
         });
 
         let app = Router::new()

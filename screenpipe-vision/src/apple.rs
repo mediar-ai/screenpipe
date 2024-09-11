@@ -3,6 +3,20 @@ use log::error;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar};
 
+use std::ops::Drop;
+
+struct OcrResultGuard(*mut c_char);
+
+impl Drop for OcrResultGuard {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.0.is_null() {
+                free_string(self.0);
+            }
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 #[link(name = "screenpipe")]
 extern "C" {
@@ -12,6 +26,7 @@ extern "C" {
         width: i32,
         height: i32,
     ) -> *mut c_char;
+    fn free_string(ptr: *mut c_char);
 }
 #[cfg(target_os = "macos")]
 pub fn perform_ocr_apple(image: &DynamicImage) -> String {
@@ -26,8 +41,8 @@ pub fn perform_ocr_apple(image: &DynamicImage) -> String {
             width as i32,
             height as i32,
         );
+        let _guard = OcrResultGuard(result_ptr);
         let result = CStr::from_ptr(result_ptr).to_string_lossy().into_owned();
-        libc::free(result_ptr as *mut libc::c_void);
         result
     }
 }
@@ -51,8 +66,7 @@ pub fn parse_apple_ocr_result(json_result: &str) -> (String, String, Option<f64>
         .as_array()
         .unwrap_or(&vec![])
         .clone();
-    let overall_confidence = parsed_result["overallConfidence"]
-        .as_f64();
+    let overall_confidence = parsed_result["overallConfidence"].as_f64();
 
     let json_output: Vec<serde_json::Value> = text_elements
         .iter()

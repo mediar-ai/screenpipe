@@ -1,0 +1,109 @@
+import { memo, useCallback, useEffect, useState } from "react";
+import { readFile, open } from "@tauri-apps/plugin-fs";
+import { Button } from "./ui/button";
+import { Link } from "lucide-react";
+
+export const VideoComponent = memo(function VideoComponent({
+  filePath,
+}: {
+  filePath: string;
+}) {
+  const [mediaSrc, setMediaSrc] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isAudio, setIsAudio] = useState(false);
+
+  const sanitizeFilePath = useCallback((path: string): string => {
+    // Keep the full path, just remove any surrounding quotes
+    return path.replace(/^["']|["']$/g, "").trim();
+  }, []);
+  const openFileLocation = useCallback(async () => {
+    try {
+      await open(sanitizeFilePath(filePath));
+    } catch (error) {
+      console.error("Failed to open file location:", error);
+    }
+  }, [filePath, sanitizeFilePath]);
+  const renderFileLink = () => (
+    // <Button
+    //   variant="outline"
+    //   size="sm"
+    //   className="mt-2 text-xs"
+    //   onClick={openFileLocation}
+    // >
+    //   <Link className="w-4 h-4 mr-2" />
+    //   Open file location
+    // </Button>
+    // just a link
+    <p className="mt-2 text-center text-xs text-gray-500">{filePath}</p>
+  );
+  useEffect(() => {
+    async function loadMedia() {
+      try {
+        const sanitizedPath = sanitizeFilePath(filePath);
+        if (!sanitizedPath) {
+          throw new Error("Invalid file path");
+        }
+
+        setIsAudio(
+          sanitizedPath.toLowerCase().includes("input") ||
+            sanitizedPath.toLowerCase().includes("output")
+        );
+
+        const mediaData = await readFile(sanitizedPath);
+        const blob = new Blob([mediaData], {
+          type: isAudio ? "audio/mpeg" : "video/mp4",
+        });
+        setMediaSrc(URL.createObjectURL(blob));
+      } catch (error) {
+        console.error("Failed to load media:", error);
+        setError(
+          `Failed to load media: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
+      }
+    }
+
+    loadMedia();
+    return () => {
+      if (mediaSrc) URL.revokeObjectURL(mediaSrc);
+    };
+  }, [filePath, sanitizeFilePath]);
+
+  if (error) {
+    return (
+      <div className="w-full p-4 bg-red-100 border border-red-300 rounded-md">
+        <p className="text-red-700">{error}</p>
+        {renderFileLink()}
+      </div>
+    );
+  }
+
+  if (!mediaSrc) {
+    return (
+      <div className="w-full h-48 bg-gray-200 animate-pulse rounded-md flex items-center justify-center">
+        <span className="text-gray-500">Loading media...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-2xl text-center">
+      {isAudio ? (
+        <div className="bg-gray-100 p-4 rounded-md">
+          <p className="mb-2 text-gray-700">Audio Device Recording</p>
+          <audio controls className="w-full">
+            <source src={mediaSrc} type="audio/mpeg" />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      ) : (
+        <video controls className="w-full rounded-md">
+          <source src={mediaSrc} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      )}
+      {renderFileLink()}
+    </div>
+  );
+});

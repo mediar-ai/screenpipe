@@ -7,13 +7,14 @@ use chrono::Utc;
 use crossbeam::queue::SegQueue;
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
-use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::{collections::HashMap, path::PathBuf};
 use tower::ServiceExt;
 
 use screenpipe_server::{
     create_router, AppState, ContentItem, ContentSource, DatabaseManager, PaginatedResponse,
+    PipeManager,
 };
 
 // Add this function to initialize the logger
@@ -29,6 +30,8 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         audio_devices_control: Arc::new(SegQueue::new()),
         devices_status: HashMap::new(),
         app_start_time: Utc::now(),
+        screenpipe_dir: PathBuf::from(""),
+        pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
     });
 
     let app = create_router().with_state(app_state.clone());

@@ -85,7 +85,7 @@ export function Settings({ className }: { className?: string }) {
     >
       <DialogTrigger asChild>
         <Button variant="ghost" className={className}>
-          Settings
+          settings
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">

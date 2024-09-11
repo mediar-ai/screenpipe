@@ -33,7 +33,11 @@ async fn setup_test() -> (
 }
 
 fn bench_record_and_transcribe(c: &mut Criterion) {
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+    .worker_threads(4)  // Adjust based on your system
+    .enable_all()
+    .build()
+    .unwrap();
 
     let mut group = c.benchmark_group("Record and Transcribe");
     group.sample_size(10);

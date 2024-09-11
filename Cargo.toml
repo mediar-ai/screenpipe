@@ -10,12 +10,13 @@ members = [
 exclude = [
     "examples/apps/screenpipe-app-tauri/src-tauri",
 
+
 ]
 resolver = "2"
 
 
 [workspace.package]
-version = "0.1.69"
+version = "0.1.81"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"
@@ -29,16 +30,19 @@ candle-nn = { package = "candle-nn", version = "0.6.0" }
 candle-transformers = { package = "candle-transformers", version = "0.6.0" }
 tokenizers = "0.19.1"
 tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tokio = { version = "1.15", features = ["full", "tracing"] }
 hf-hub = "0.3.0"
 crossbeam = "0.8.4"
 image = "0.25"
 reqwest = { version = "0.11", features = ["blocking", "multipart", "json"] }
-
-# dev
 criterion = { version = "0.5.1", features = ["async_tokio"] }
+vcpkg = "0.2"
 
+[workspace.metadata.vcpkg]
+git = "https://github.com/microsoft/vcpkg"
+rev = "2023.04.15"
+dynamic = true
 
 
 

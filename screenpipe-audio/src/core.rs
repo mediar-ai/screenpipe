@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use std::{fmt, thread};
 use tokio::io::AsyncWriteExt;
@@ -15,6 +15,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::AudioInput;
+
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
@@ -108,17 +109,14 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
 async fn get_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
-    let host = match audio_device.device_type {
-        #[cfg(target_os = "macos")]
-        DeviceType::Output => cpal::host_from_id(cpal::HostId::ScreenCaptureKit)?,
-        _ => cpal::default_host(),
-    };
+    let host = cpal::default_host();
 
     info!("device: {:?}", audio_device.to_string());
 
     let is_output_device = audio_device.device_type == DeviceType::Output;
+    let is_display = audio_device.to_string().contains("Display");
 
-    let audio_device = if audio_device.to_string() == "default" {
+    let cpal_audio_device = if audio_device.to_string() == "default" {
         match audio_device.device_type {
             DeviceType::Input => host.default_input_device(),
             DeviceType::Output => host.default_output_device(),
@@ -154,12 +152,12 @@ async fn get_device_and_config(
     .ok_or_else(|| anyhow!("Audio device not found"))?;
 
     // if output device and windows, using output config
-    let config = if is_output_device && cfg!(target_os = "windows") {
-        audio_device.default_output_config()?
+    let config = if is_output_device && !is_display {
+        cpal_audio_device.default_output_config()?
     } else {
-        audio_device.default_input_config()?
+        cpal_audio_device.default_input_config()?
     };
-    Ok((audio_device, config))
+    Ok((cpal_audio_device, config))
 }
 
 async fn run_ffmpeg(
@@ -167,10 +165,11 @@ async fn run_ffmpeg(
     sample_rate: u32,
     channels: u16,
     output_path: &PathBuf,
-    is_running: Arc<AtomicBool>,
+    is_running: Weak<AtomicBool>,
     duration: Duration,
 ) -> Result<()> {
     debug!("Starting FFmpeg process");
+
     let mut command = Command::new(find_ffmpeg_path().unwrap());
     command
         .args(&[
@@ -185,7 +184,11 @@ async fn run_ffmpeg(
             "-c:a",
             "aac",
             "-b:a",
-            "128k",
+            "64k", // Reduced bitrate for higher compression
+            "-profile:a",
+            "aac_low", // Use AAC-LC profile for better compatibility
+            "-movflags",
+            "+faststart", // Optimize for web streaming
             "-f",
             "mp4",
             output_path.to_str().unwrap(),
@@ -202,7 +205,10 @@ async fn run_ffmpeg(
     let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
     let start_time = std::time::Instant::now();
 
-    while is_running.load(Ordering::Relaxed) {
+    while is_running
+        .upgrade()
+        .map_or(false, |arc| arc.load(Ordering::Relaxed))
+    {
         tokio::select! {
             Some(data) = rx.recv() => {
                 if start_time.elapsed() >= duration {
@@ -238,6 +244,7 @@ async fn run_ffmpeg(
     if !status.success() {
         error!("FFmpeg process failed with status: {}", status);
         error!("FFmpeg stderr: {}", stderr);
+        // ? ffmpeg.kill().await?;
         return Err(anyhow!("FFmpeg process failed"));
     }
 
@@ -260,11 +267,11 @@ pub async fn record_and_transcribe(
     );
 
     // TODO: consider a lock-free ring buffer like crossbeam_queue::ArrayQueue (ask AI why)
-    let (tx, rx) = mpsc::channel(1000); // For audio data
-    let is_running_clone = Arc::clone(&is_running);
-    let is_running_clone_2 = is_running.clone();
-    let is_running_clone_3 = is_running.clone();
-    let is_running_clone_4 = is_running.clone();
+    let (tx, rx) = mpsc::channel(100); // For audio data
+    let is_running_weak = Arc::downgrade(&is_running);
+    let is_running_weak_2 = Arc::downgrade(&is_running);
+    let is_running_weak_3 = Arc::downgrade(&is_running);
+    let is_running_weak_4 = Arc::downgrade(&is_running);
 
     let output_path_clone = Arc::new(output_path);
     let output_path_clone_2 = Arc::clone(&output_path_clone);
@@ -274,16 +281,21 @@ pub async fn record_and_transcribe(
         error!("An error occurred on the audio stream: {}", err);
         if err.to_string().contains("device is no longer valid") {
             warn!("Audio device disconnected. Stopping recording.");
-            is_running_clone_2.store(false, Ordering::Relaxed);
+            if let Some(arc) = is_running_weak_2.upgrade() {
+                arc.store(false, Ordering::Relaxed);
+            }
         }
     };
     // Spawn a thread to handle the non-Send stream
-    thread::spawn(move || {
+    let audio_handle = thread::spawn(move || {
         let stream = match config.sample_format() {
             cpal::SampleFormat::I8 => cpal_audio_device.build_input_stream(
                 &config.into(),
                 move |data: &[i8], _: &_| {
-                    if is_running_clone_3.load(Ordering::Relaxed) {
+                    if is_running_weak_3
+                        .upgrade()
+                        .map_or(false, |arc| arc.load(Ordering::Relaxed))
+                    {
                         let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
                     }
                 },
@@ -293,7 +305,10 @@ pub async fn record_and_transcribe(
             cpal::SampleFormat::I16 => cpal_audio_device.build_input_stream(
                 &config.into(),
                 move |data: &[i16], _: &_| {
-                    if is_running_clone_3.load(Ordering::Relaxed) {
+                    if is_running_weak_3
+                        .upgrade()
+                        .map_or(false, |arc| arc.load(Ordering::Relaxed))
+                    {
                         let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
                     }
                 },
@@ -303,7 +318,10 @@ pub async fn record_and_transcribe(
             cpal::SampleFormat::I32 => cpal_audio_device.build_input_stream(
                 &config.into(),
                 move |data: &[i32], _: &_| {
-                    if is_running_clone_3.load(Ordering::Relaxed) {
+                    if is_running_weak_3
+                        .upgrade()
+                        .map_or(false, |arc| arc.load(Ordering::Relaxed))
+                    {
                         let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
                     }
                 },
@@ -313,7 +331,10 @@ pub async fn record_and_transcribe(
             cpal::SampleFormat::F32 => cpal_audio_device.build_input_stream(
                 &config.into(),
                 move |data: &[f32], _: &_| {
-                    if is_running_clone_3.load(Ordering::Relaxed) {
+                    if is_running_weak_3
+                        .upgrade()
+                        .map_or(false, |arc| arc.load(Ordering::Relaxed))
+                    {
                         let _ = tx.blocking_send(bytemuck::cast_slice(data).to_vec());
                     }
                 },
@@ -326,15 +347,22 @@ pub async fn record_and_transcribe(
             }
         };
 
+        // ? drop(tx);
+
         match stream {
             Ok(s) => {
                 if let Err(e) = s.play() {
                     error!("Failed to play stream: {}", e);
                 }
                 // Keep the stream alive until the recording is done
-                while is_running_clone.load(Ordering::Relaxed) {
+                while is_running_weak
+                    .upgrade()
+                    .map_or(false, |arc| arc.load(Ordering::Relaxed))
+                {
                     std::thread::sleep(Duration::from_millis(100));
                 }
+                s.pause().ok();
+                drop(s);
             }
             Err(e) => error!("Failed to build input stream: {}", e),
         }
@@ -347,15 +375,16 @@ pub async fn record_and_transcribe(
     );
 
     // Run FFmpeg in a separate task
-    let _ = run_ffmpeg(
+    let ffmpeg_handle = run_ffmpeg(
         rx,
         sample_rate,
         channels,
         &output_path_clone,
-        is_running_clone_4,
+        is_running_weak_4,
         duration,
-    )
-    .await;
+    );
+
+    ffmpeg_handle.await?;
 
     info!(
         "Recording stopped, wrote to {}. Now triggering transcription",
@@ -364,6 +393,17 @@ pub async fn record_and_transcribe(
 
     // Signal the recording thread to stop
     is_running.store(false, Ordering::Relaxed); // TODO: could also just kill the trhead..
+
+    // Wait for the native thread to finish
+    if let Err(e) = audio_handle.join() {
+        error!("Error joining audio thread: {:?}", e);
+    }
+
+    // Commented to chekc if its the "Access is denied on windows" error
+    // tokio::fs::File::open(&output_path_clone_2.to_path_buf())
+    //     .await?
+    //     .sync_all()
+    //     .await?;
 
     debug!("Sending audio to audio model");
     if let Err(e) = whisper_sender.send(AudioInput {
@@ -387,6 +427,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
+    // macos hack using screen capture kit for output devices - does not work well
     #[cfg(target_os = "macos")]
     {
         // !HACK macos is suppoed to use special macos feature "display capture"
@@ -400,12 +441,10 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        for device in host.output_devices()? {
-            if let Ok(name) = device.name() {
-                devices.push(AudioDevice::new(name, DeviceType::Output));
-            }
+    // add default output device - on macos think of custom virtual devices
+    for device in host.output_devices()? {
+        if let Ok(name) = device.name() {
+            devices.push(AudioDevice::new(name, DeviceType::Output));
         }
     }
 
@@ -421,6 +460,7 @@ pub fn default_input_device() -> Result<AudioDevice> {
 pub async fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
+        let version = *MACOS_VERSION;
         // ! see https://github.com/RustAudio/cpal/pull/894
         if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
             if let Some(device) = host.default_input_device() {
