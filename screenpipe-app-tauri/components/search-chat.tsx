@@ -420,10 +420,20 @@ export function SearchChat() {
               {new Date(item.content.timestamp).toLocaleString()}
             </p>
             {item.type === "OCR" && item.content.app_name && (
-              <Badge className="text-xs">{item.content.app_name}</Badge>
+              <Badge
+                className="text-xs cursor-pointer"
+                onClick={() => setAppName(item.content.app_name)}
+              >
+                {item.content.app_name}
+              </Badge>
             )}
             {item.type === "FTS" && item.content.window_name && (
-              <Badge className="text-xs">{item.content.window_name}</Badge>
+              <Badge
+                className="text-xs cursor-pointer"
+                onClick={() => setWindowName(item.content.window_name)}
+              >
+                {item.content.window_name}
+              </Badge>
             )}
             {item.content.tags &&
               item.content.tags.map((tag, index) => (
@@ -440,7 +450,7 @@ export function SearchChat() {
   return (
     <div
       ref={componentRef}
-      className="space-y-4 w-full max-w-4xl relative overflow-y-auto max-h-[calc(100vh-100px)]"
+      className="space-y-4 w-full max-w-4xl relative overflow-y-auto max-h-[calc(100vh-100px)] p-4"
     >
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -658,35 +668,43 @@ export function SearchChat() {
               onSubmit={handleFloatingInputSubmit}
               className="flex space-x-2 bg-white shadow-lg rounded-lg overflow-hidden p-4 items-center"
             >
-              <Input
-                ref={floatingInputRef}
-                type="text"
-                placeholder="Ask a question about the results..."
-                value={floatingInput}
-                onChange={(e) => setFloatingInput(e.target.value)}
-                className="w-full h-16 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border transition-all duration-200"
-              />
+              <div className="relative flex-grow">
+                <Input
+                  ref={floatingInputRef}
+                  type="text"
+                  placeholder="Ask a question about the results..."
+                  value={floatingInput}
+                  disabled={isAiLoading}
+                  onChange={(e) => setFloatingInput(e.target.value)}
+                  className="w-full h-12 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border transition-all duration-200 pr-10"
+                />
+                {calculateTotalContentLength(results) > MAX_CONTENT_LENGTH && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <AlertCircle className="h-5 w-5 text-yellow-500" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          Content exceeds 30k tokens. Refine your search for
+                          better results.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
               <Button
                 type="submit"
-                className="mb-2 w-12"
+                className="w-12"
                 disabled={
                   isAiLoading ||
                   calculateTotalContentLength(results) > MAX_CONTENT_LENGTH
                 }
               >
                 <Send className="h-4 w-4" />
-                {calculateTotalContentLength(results) > MAX_CONTENT_LENGTH && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <AlertCircle className="h-4 w-4" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Content too long!</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
               </Button>
             </form>
           </motion.div>
