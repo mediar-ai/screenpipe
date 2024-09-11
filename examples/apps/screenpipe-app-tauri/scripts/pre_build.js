@@ -452,8 +452,7 @@ if (!process.env.GITHUB_ENV) {
 		}
 	}
 	if (!process.env.GITHUB_ENV) {
-		console.log('bunx tauri build'
-			+ (platform === 'macos' ? ' -- --features metal' : ''))
+		console.log('bun tauri build')
 	}
 }
 
