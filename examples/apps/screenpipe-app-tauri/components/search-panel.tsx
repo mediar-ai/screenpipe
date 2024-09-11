@@ -43,6 +43,7 @@ import {
 } from "./ui/accordion";
 import { useToast } from "./ui/use-toast";
 import { Badge } from "./ui/badge";
+import posthog from "posthog-js";
 
 export default function Search() {
   const [query, setQuery] = useState("");
@@ -82,6 +83,7 @@ export default function Search() {
 ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
   };
   const handleSearch = async (newOffset = 0) => {
+    posthog.capture("search");
     setIsLoading(true);
     setOffset(newOffset);
     const response = await queryScreenpipe({

@@ -29,6 +29,7 @@ import { FeatureRequestLink } from "./feature-request-link";
 import PipeLogger from "./pipe-logger";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import posthog from "posthog-js";
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
@@ -96,6 +97,9 @@ const PipeDialog: React.FC = () => {
   };
   const handleDownloadPipe = async (url: string) => {
     try {
+      posthog.capture("download_pipe", {
+        pipe_id: url,
+      });
       toast({
         title: "downloading pipe",
         description: "please wait...",
@@ -130,6 +134,10 @@ const PipeDialog: React.FC = () => {
 
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
+      posthog.capture("toggle_pipe", {
+        pipe_id: pipe.name,
+        enabled: !pipe.enabled,
+      });
       if (!pipe.enabled) {
         // Enable the pipe through API
         await fetch(`http://localhost:3030/pipes/enable`, {
@@ -195,6 +203,9 @@ const PipeDialog: React.FC = () => {
   };
 
   const handleAddOwnPipe = async () => {
+    posthog.capture("add_own_pipe", {
+      newRepoUrl,
+    });
     if (newRepoUrl) {
       try {
         toast({
