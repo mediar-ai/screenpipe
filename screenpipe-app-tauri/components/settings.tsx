@@ -214,6 +214,60 @@ export function Settings({ className }: { className?: string }) {
               </p>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">deepgram</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <div className="w-full ">
+                <div className="flex items-center gap-4 mb-4">
+                  <Label htmlFor="apiKey" className="min-w-[80px] text-right">
+                    api key
+                  </Label>
+                  <div className="flex-grow relative">
+                    <Input
+                      id="apiKey"
+                      type={showApiKey ? "text" : "password"}
+                      value={settings.deepgramApiKey}
+                      onChange={handleDeepgramApiKeyChange}
+                      className="pr-10"
+                      placeholder="Enter your Deepgram API Key"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground text-center">
+                deepgram&apos;s transcription models are currently the most
+                reliable for this application.
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground text-center">
+                don&apos;t have an API key? Get one from{" "}
+                <a
+                  href="https://console.deepgram.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  deepgram&apos;s website
+                </a>
+                .
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </DialogContent>
     </Dialog>
