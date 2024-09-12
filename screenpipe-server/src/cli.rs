@@ -188,9 +188,13 @@ pub struct Cli {
     #[arg(long)]
     pub included_windows: Vec<String>,
 
-     /// Video chunk duration in seconds
-     #[arg(long, default_value_t = 30)]
-     pub video_chunk_duration: u64,
+    /// Video chunk duration in seconds
+    #[arg(long, default_value_t = 30)]
+    pub video_chunk_duration: u64,
+
+    /// Deepgram API Key for audio transcription
+    #[arg(long = "deepgram-api-key")]
+    pub deepgram_api_key: Option<String>,
 
     #[command(subcommand)]
     pub command: Option<Command>,

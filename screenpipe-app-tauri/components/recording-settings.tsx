@@ -163,6 +163,7 @@ export function RecordingSettings({
         disableAudio: localSettings.disableAudio,
         ignoredWindows: localSettings.ignoredWindows,
         includedWindows: localSettings.includedWindows,
+        deepgramApiKey: localSettings.deepgramApiKey,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);

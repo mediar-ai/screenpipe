@@ -30,6 +30,9 @@ struct Args {
 
     #[clap(long, help = "Audio chunk duration in seconds")]
     audio_chunk_duration: f32,
+
+    #[clap(long, help = "Deepgram API key")]
+    deepgram_api_key: Option<String>,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -85,6 +88,7 @@ async fn main() -> Result<()> {
             VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
             #[cfg(target_os = "windows")]
             VadEngineEnum::WebRtc,
+            args.deepgram_api_key,
         ).await?;
     // Spawn threads for each device
     let _recording_threads: Vec<_> = devices

@@ -27,6 +27,9 @@ struct Args {
 
     #[clap(long, help = "List available audio devices")]
     list_audio_devices: bool,
+
+    #[clap(long, help = "Deepgram API key")]
+    deepgram_api_key: Option<String>,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -60,6 +63,8 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    let deepgram_api_key = args.deepgram_api_key;
+
     let devices = if args.audio_device.is_empty() {
         vec![default_input_device()?, default_output_device().await?]
     } else {
@@ -83,6 +88,7 @@ async fn main() -> Result<()> {
         create_whisper_channel(
             Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
             VadEngineEnum::WebRtc, // Or VadEngineEnum::WebRtc, hardcoded for now
+            deepgram_api_key
         ).await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
