@@ -2,6 +2,7 @@
 mod tests {
     use chrono::Utc;
     use log::{debug, LevelFilter};
+    use screenpipe_audio::vad_engine::{VadEngineEnum, WebRtcVad};
     use screenpipe_audio::{
         default_output_device, list_audio_devices, stt, AudioTranscriptionEngine, WhisperModel,
     };
@@ -13,8 +14,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
     use tokio::sync::mpsc::unbounded_channel;
-    use screenpipe_audio::vad_engine::{VadEngineEnum, WebRtcVad};
-    
+
     fn setup() {
         // Initialize the logger with an info level filter
         match env_logger::builder()
@@ -56,7 +56,8 @@ mod tests {
             "./test_data/selah.mp4",
             &whisper_model,
             Arc::new(AudioTranscriptionEngine::WhisperTiny),
-            &mut vad_engine            
+            &mut vad_engine,
+            None,
         )
         .unwrap();
         let duration = start.elapsed();
@@ -233,13 +234,13 @@ mod tests {
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let (whisper_sender, mut whisper_receiver, _) =
-            create_whisper_channel(
-                Arc::new(AudioTranscriptionEngine::WhisperTiny),
-                VadEngineEnum::WebRtc
-            )
-            .await
-            .unwrap();
+        let (whisper_sender, mut whisper_receiver, _) = create_whisper_channel(
+            Arc::new(AudioTranscriptionEngine::WhisperTiny),
+            VadEngineEnum::WebRtc,
+            None,
+        )
+        .await
+        .unwrap();
         let is_running = Arc::new(AtomicBool::new(true));
         // Start recording in a separate thread
         let recording_thread = tokio::spawn(async move {

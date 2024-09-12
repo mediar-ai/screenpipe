@@ -1,6 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use memory_stats::memory_stats;
-use screenpipe_audio::{create_whisper_channel, stt, AudioTranscriptionEngine, WhisperModel};
+use screenpipe_audio::vad_engine::SileroVad;
+use screenpipe_audio::{
+    create_whisper_channel, stt, AudioTranscriptionEngine, VadEngineEnum, WhisperModel,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,16 +21,23 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_function("create_whisper_channel", |b| {
         b.iter(|| {
-            let _ = create_whisper_channel(black_box(audio_transcription_engine.clone()));
+            let _ = create_whisper_channel(
+                black_box(audio_transcription_engine.clone()),
+                black_box(VadEngineEnum::Silero),
+                None,
+            );
         })
     });
 
     group.bench_function("stt", |b| {
         b.iter(|| {
+            let mut vad_engine = Box::new(SileroVad::new().unwrap());
             let _ = stt(
                 black_box(test_file_path.to_string_lossy().as_ref()),
                 black_box(&whisper_model),
                 black_box(audio_transcription_engine.clone()),
+                &mut *vad_engine,
+                None,
             );
         })
     });
@@ -38,10 +48,13 @@ fn criterion_benchmark(c: &mut Criterion) {
             for _ in 0..iters {
                 let start = std::time::Instant::now();
                 let before = memory_stats().unwrap().physical_mem;
+                let mut vad_engine = Box::new(SileroVad::new().unwrap());
                 let _ = stt(
                     test_file_path.to_string_lossy().as_ref(),
                     &whisper_model,
                     audio_transcription_engine.clone(),
+                    &mut *vad_engine,
+                    None,
                 );
                 let after = memory_stats().unwrap().physical_mem;
                 let duration = start.elapsed();

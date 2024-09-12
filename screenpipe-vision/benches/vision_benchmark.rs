@@ -3,8 +3,6 @@
 // cargo bench --bench vision_benchmark
 // ! not very useful bench
 
-use std::sync::Arc;
-
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use screenpipe_vision::monitor::get_default_monitor;
 use screenpipe_vision::{continuous_capture, OcrEngine};
@@ -19,7 +17,7 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
             result_tx,
             Duration::from_millis(100),
             false,
-            Arc::new(OcrEngine::Tesseract),
+            OcrEngine::Tesseract,
             get_default_monitor().await.id(),
             &[],
             &[],

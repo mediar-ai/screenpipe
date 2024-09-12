@@ -18,10 +18,13 @@ async fn setup_test() -> (
     let audio_device = default_input_device().unwrap(); // TODO feed voice in automatically somehow
     let output_path = PathBuf::from("/tmp/test_audio.mp4");
     // let (whisper_sender, _) = mpsc::unbounded_channel();
-    let (whisper_sender, _) =
-        create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3))
-            .await
-            .unwrap();
+    let (whisper_sender, _, _) = create_whisper_channel(
+        Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
+        screenpipe_audio::VadEngineEnum::Silero,
+        None,
+    )
+    .await
+    .unwrap();
     let is_running = Arc::new(AtomicBool::new(true));
 
     (
@@ -34,17 +37,17 @@ async fn setup_test() -> (
 
 fn bench_record_and_transcribe(c: &mut Criterion) {
     let runtime = tokio::runtime::Builder::new_multi_thread()
-    .worker_threads(4)  // Adjust based on your system
-    .enable_all()
-    .build()
-    .unwrap();
+        .worker_threads(4) // Adjust based on your system
+        .enable_all()
+        .build()
+        .unwrap();
 
     let mut group = c.benchmark_group("Record and Transcribe");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(90)); // Increased from 30 to 60 seconds
 
     group.bench_function(BenchmarkId::new("Performance", ""), |b| {
-        b.to_async(&rt).iter_custom(|iters| async move {
+        b.to_async(&runtime).iter_custom(|iters| async move {
             let mut total_duration = Duration::new(0, 0);
 
             for _ in 0..iters {
