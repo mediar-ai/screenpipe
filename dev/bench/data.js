@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726107941295,
+  "lastUpdate": 1726107947350,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -4979,6 +4979,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1954962874,
             "range": "± 10265633",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3aeb5f6f3f42931114644181d8f6d570e745cb9c",
+          "message": "Merge pull request #307 from joegoldin/fix-compilation-static-link-msvc\n\nfix: static link msvc to fix linking on windows",
+          "timestamp": "2024-09-11T19:16:24-07:00",
+          "tree_id": "f59b64a9bc7342b9022724b587618a731db09788",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/3aeb5f6f3f42931114644181d8f6d570e745cb9c"
+        },
+        "date": 1726107945978,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1956876729,
+            "range": "± 12178409",
             "unit": "ns/iter"
           }
         ]
