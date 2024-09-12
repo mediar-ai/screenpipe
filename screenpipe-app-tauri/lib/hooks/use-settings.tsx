@@ -7,7 +7,7 @@ import { Pipe } from "./use-pipes";
 
 const defaultSettings: Settings = {
   openaiApiKey: "",
-  deepgramApiKey: "",
+  deepgramApiKey: "7ed2a159a094337b01fd8178b914b7ae0e77822d", // for now we hardcode our key (dw about using it, we have bunch of credits)
   useOllama: false,
   ollamaUrl: "http://localhost:11434",
   isLoading: true,
