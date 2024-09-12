@@ -184,6 +184,10 @@ pub struct Cli {
     #[arg(long)]
     pub included_windows: Vec<String>,
 
+     /// Video chunk duration in seconds
+     #[arg(long, default_value_t = 30)]
+     pub video_chunk_duration: u64,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }

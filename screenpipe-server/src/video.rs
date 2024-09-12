@@ -28,6 +28,7 @@ impl VideoCapture {
     pub fn new(
         output_path: &str,
         fps: f64,
+        video_chunk_duration: Duration,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         save_text_files: bool,
         ocr_engine: Arc<OcrEngine>,
@@ -128,6 +129,7 @@ impl VideoCapture {
                 fps,
                 new_chunk_callback_clone,
                 monitor_id,
+                video_chunk_duration,
             )
             .await;
         });
@@ -144,9 +146,10 @@ async fn save_frames_as_video(
     fps: f64,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
     monitor_id: u32,
+    video_chunk_duration: Duration,
 ) {
     debug!("Starting save_frames_as_video function");
-    let frames_per_video = (fps * 30.0).round() as usize; // 30 seconds of video
+    let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).round() as usize;
     let mut frame_count = 0;
     let (sender, mut receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel(512);
     let sender = Arc::new(sender);

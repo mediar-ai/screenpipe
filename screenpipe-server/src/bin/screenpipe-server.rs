@@ -288,6 +288,8 @@ async fn main() -> anyhow::Result<()> {
     let shutdown_tx_clone = shutdown_tx.clone();
     let friend_wearable_uid_clone: Option<String> = friend_wearable_uid.clone(); // Clone here
     let monitor_ids_clone = monitor_ids.clone();
+    let ignored_windows_clone = cli.ignored_windows.clone();
+    let included_windows_clone = cli.included_windows.clone();
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
@@ -316,6 +318,7 @@ async fn main() -> anyhow::Result<()> {
                     output_path_clone.clone(),
                     fps,
                     Duration::from_secs(cli.audio_chunk_duration),
+                    Duration::from_secs(cli.video_chunk_duration),
                     vision_control_clone.clone(),
                     audio_devices_control.clone(),
                     cli.disable_audio,
@@ -398,6 +401,10 @@ async fn main() -> anyhow::Result<()> {
         "│ Audio Chunk Duration│ {:<34} │",
         format!("{} seconds", cli.audio_chunk_duration)
     );
+    println!(
+        "│ Video Chunk Duration│ {:<34} │",
+        format!("{} seconds", cli.video_chunk_duration)
+    );
     println!("│ Port                │ {:<34} │", cli.port);
     println!("│ Audio Disabled      │ {:<34} │", cli.disable_audio);
     println!("│ Vision Disabled     │ {:<34} │", cli.disable_vision);
@@ -431,6 +438,19 @@ async fn main() -> anyhow::Result<()> {
         } else {
             "Disabled".to_string()
         }
+    );
+    println!("│ Use PII Removal     │ {:<34} │", cli.use_pii_removal);
+    println!(
+        "│ Ignored Windows     │ {:<34} │",
+        format_cell(&format!("{:?}", &ignored_windows_clone), VALUE_WIDTH)
+    );
+    println!(
+        "│ Included Windows    │ {:<34} │",
+        format_cell(&format!("{:?}", &included_windows_clone), VALUE_WIDTH)
+    );
+    println!(
+        "│ Friend Wearable UID │ {:<34} │",
+        cli.friend_wearable_uid.as_deref().unwrap_or("Not set")
     );
     const VALUE_WIDTH: usize = 34;
 

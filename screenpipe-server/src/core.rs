@@ -27,6 +27,7 @@ pub async fn start_continuous_recording(
     output_path: Arc<String>,
     fps: f64,
     audio_chunk_duration: Duration,
+    video_chunk_duration: Duration,
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     audio_disabled: bool,
@@ -97,6 +98,7 @@ pub async fn start_continuous_recording(
                         use_pii_removal,
                         &ignored_windows_video,
                         &include_windows_video,
+                        video_chunk_duration,
                     )
                     .await
                 })
@@ -167,6 +169,7 @@ async fn record_video(
     use_pii_removal: bool,
     ignored_windows: &[String],
     include_windows: &[String],
+    video_chunk_duration: Duration,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -185,6 +188,7 @@ async fn record_video(
     let video_capture = VideoCapture::new(
         &output_path,
         fps,
+        video_chunk_duration,
         new_chunk_callback,
         save_text_files,
         Arc::clone(&ocr_engine),
