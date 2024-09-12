@@ -187,6 +187,7 @@ export function SearchChat() {
         baseURL: settings.aiUrl,
         dangerouslyAllowBrowser: true,
       });
+      console.log("openai", settings.openaiApiKey, settings.aiUrl);
 
       const model = settings.aiModel;
       const customPrompt = settings.customPrompt || "";
@@ -855,7 +856,7 @@ export function SearchChat() {
       <Separator className="my-8" />
 
       {/* Display chat messages */}
-      <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto overflow-y-auto max-h-[600px]">
+      <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto ">
         {chatMessages.map((msg, index) => (
           <ChatMessage key={index} message={msg} />
         ))}
