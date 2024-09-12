@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726112685699,
+  "lastUpdate": 1726154527078,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5099,6 +5099,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1961329416,
             "range": "± 61374064",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "b7290dd793bc7da214b258b6dfeddcb7695cd22e",
+          "message": "chore: disable silero on windows",
+          "timestamp": "2024-09-12T08:12:19-07:00",
+          "tree_id": "0ea6088efbbe41f4ac31bd47b0a618682bd8841f",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b7290dd793bc7da214b258b6dfeddcb7695cd22e"
+        },
+        "date": 1726154525694,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1992518292,
+            "range": "± 94749364",
             "unit": "ns/iter"
           }
         ]
