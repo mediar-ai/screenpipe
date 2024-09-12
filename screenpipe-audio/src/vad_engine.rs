@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-use vad_rs::{Vad};
 use anyhow;
-use std::io::Write;
 use log::debug;
+use std::io::Write;
+use std::path::PathBuf;
+use vad_rs::Vad;
 
 pub enum VadEngineEnum {
     WebRtc,
@@ -26,12 +26,11 @@ impl WebRtcVad {
 impl VadEngine for WebRtcVad {
     fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
         // Convert f32 to i16
-        let i16_chunk: Vec<i16> = audio_chunk
-            .iter()
-            .map(|&x| (x * 32767.0) as i16)
-            .collect();
+        let i16_chunk: Vec<i16> = audio_chunk.iter().map(|&x| (x * 32767.0) as i16).collect();
 
-        let result = self.0.is_voice_segment(&i16_chunk)
+        let result = self
+            .0
+            .is_voice_segment(&i16_chunk)
             .map_err(|e| anyhow::anyhow!("WebRTC VAD error: {:?}", e))?;
 
         // debug!("WebRTC VAD result: is_voice_segment = {}", result);
@@ -59,7 +58,8 @@ impl SileroVad {
 
     fn download_model() -> anyhow::Result<PathBuf> {
         debug!("Downloading SileroVAD model...");
-        let url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
+        let url =
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
         let response = reqwest::blocking::get(url)?;
         let model_data = response.bytes()?;
 
@@ -72,7 +72,6 @@ impl SileroVad {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 impl VadEngine for SileroVad {
     fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
         const CHUNK_SIZE: usize = 1600; // 100 milliseconds
@@ -101,7 +100,7 @@ pub fn create_vad_engine(engine: VadEngineEnum) -> anyhow::Result<Box<dyn VadEng
         VadEngineEnum::Silero => {
             let silero_vad = SileroVad::new()?;
             Ok(Box::new(silero_vad))
-        },
+        }
     }
 }
 

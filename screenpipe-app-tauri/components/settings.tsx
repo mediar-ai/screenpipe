@@ -139,7 +139,7 @@ export function Settings({ className }: { className?: string }) {
                             openai: <pre className="bg-gray-100 p-1 rounded-md">https://api.openai.com/v1</pre>
                             <br />
                             for local providers like ollama usually it&apos;s
-                            <pre className="bg-gray-100 p-1 rounded-md">http://localhost:11434</pre>
+                            <pre className="bg-gray-100 p-1 rounded-md">http://localhost:11434/v1</pre>
                           </p>
                         </TooltipContent>
                       </Tooltip>
