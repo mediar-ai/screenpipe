@@ -77,6 +77,7 @@ impl SileroVad {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 impl VadEngine for SileroVad {
     fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
         const CHUNK_SIZE: usize = 1600; // 100 milliseconds
