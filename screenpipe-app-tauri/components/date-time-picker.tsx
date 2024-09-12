@@ -56,11 +56,8 @@ export function DateTimePicker({
           variant={"outline"}
           className={cn("w-full justify-start text-left font-normal")}
         >
-          <CalendarIcon
-            className="mr-2 h-4 w-4 text-gray-400"
-            size={18}
-          />
-          {format(date, "PPP HH:mm")}
+          <CalendarIcon className="mr-2 h-4 w-4 text-gray-400" size={18} />
+          {format(date, "PPP HH:mm").toLowerCase()}
         </Button>
       </PopoverTrigger>
       <PopoverContent className={cn("w-auto p-0", className)}>

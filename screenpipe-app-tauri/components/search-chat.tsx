@@ -25,6 +25,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  HelpCircle,
   Laptop,
   Layers,
   Layout,
@@ -56,6 +57,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
+import { Separator } from "./ui/separator";
+import { useInputHistory } from "@/lib/hooks/use-input-history";
 // Add this constant at the top of the file
 const MAX_CONTENT_LENGTH = 30000; // Adjust as needed
 
@@ -81,7 +84,6 @@ export function SearchChat() {
   const [maxLength, setMaxLength] = useState(10000);
 
   // Chat state
-  const [isChatEnabled, setIsChatEnabled] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<Message>>([]);
 
   const { toast } = useToast();
@@ -91,39 +93,35 @@ export function SearchChat() {
   const [isFloatingInputVisible, setIsFloatingInputVisible] = useState(false);
 
   const floatingInputRef = useRef<HTMLInputElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const componentRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const queryHistory = useInputHistory("search_query");
+  const appNameHistory = useInputHistory("app_name");
+  const windowNameHistory = useInputHistory("window_name");
 
   useEffect(() => {
-    const container = componentRef.current;
-    if (!container) return;
-
     const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
       const scrollPercentage =
-        (scrollTop / (scrollHeight - clientHeight)) * 100;
+        (window.scrollY /
+          (document.documentElement.scrollHeight - window.innerHeight)) *
+        100;
       const shouldShow = scrollPercentage < 90; // Show when scrolled up more than 10%
 
       setShowScrollButton(shouldShow);
     };
 
-    container.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll);
 
     // Trigger initial check
     handleScroll();
 
-    return () => container.removeEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const scrollToBottom = () => {
-    const container = componentRef.current;
-    if (container) {
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: "smooth",
-      });
-    }
+    window.scrollTo({
+      top: document.documentElement.scrollHeight,
+      behavior: "smooth",
+    });
   };
   // Add this function to calculate total content length
   const calculateTotalContentLength = (results: ContentItem[]): number => {
@@ -239,6 +237,7 @@ export function SearchChat() {
         { role: "assistant", content: "" },
       ]);
 
+      scrollToBottom();
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || "";
         fullResponse += content;
@@ -247,6 +246,7 @@ export function SearchChat() {
           ...prevMessages.slice(0, -1),
           { role: "assistant", content: fullResponse },
         ]);
+        scrollToBottom();
       }
     } catch (error) {
       console.error("Error generating AI response:", error);
@@ -258,14 +258,23 @@ export function SearchChat() {
     } finally {
       setIsAiLoading(false);
       setIsFloatingInputVisible(false);
+      // Scroll to bottom again after the response is complete
+      scrollToBottom();
     }
   };
 
   const handleSearch = async (newOffset = 0) => {
+    queryHistory.saveToHistory();
+    appNameHistory.saveToHistory();
+    windowNameHistory.saveToHistory();
+
     posthog.capture("search");
     setIsLoading(true);
     setOffset(newOffset);
     setProgress(0);
+    setChatMessages([]);
+    scrollToBottom();
+    setResults([]);
     let allFilteredResults: ContentItem[] = [];
     let currentOffset = newOffset;
     let totalUnfilteredResults = 0;
@@ -317,7 +326,6 @@ export function SearchChat() {
 
     setResults(allFilteredResults.slice(0, limit));
     setTotalResults(allFilteredResults.length);
-    setIsChatEnabled(true);
     setIsLoading(false);
   };
 
@@ -375,7 +383,9 @@ export function SearchChat() {
                 {item.type === "OCR" && (
                   <>
                     <p className="mt-2">{item.content.text}</p>
-                    <VideoComponent filePath={item.content.file_path} />
+                    <div className="flex justify-center mt-4">
+                      <VideoComponent filePath={item.content.file_path} />
+                    </div>
                     {includeFrames && item.content.frame && (
                       <Dialog>
                         <DialogTrigger asChild>
@@ -399,7 +409,9 @@ export function SearchChat() {
                 {item.type === "Audio" && (
                   <>
                     <p className="mt-2">{item.content.transcription}</p>
-                    <VideoComponent filePath={item.content.file_path} />
+                    <div className="flex justify-center mt-4">
+                      <VideoComponent filePath={item.content.file_path} />
+                    </div>
                   </>
                 )}
                 {item.type === "FTS" && (
@@ -427,7 +439,7 @@ export function SearchChat() {
                 {item.content.app_name}
               </Badge>
             )}
-            {item.type === "FTS" && item.content.window_name && (
+            {item.type === "OCR" && item.content.window_name && (
               <Badge
                 className="text-xs cursor-pointer"
                 onClick={() => setWindowName(item.content.window_name)}
@@ -448,13 +460,25 @@ export function SearchChat() {
   };
 
   return (
-    <div
-      ref={componentRef}
-      className="space-y-4 w-full max-w-4xl relative overflow-y-auto max-h-[calc(100vh-100px)] p-4"
-    >
-      <div className="grid grid-cols-2 gap-4">
+    <div className="w-full max-w-4xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4 text-center mb-12">
+        where pixels become magic
+      </h1>
+      <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="space-y-2">
-          <Label htmlFor="search-query">Search Query</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="search-query">search query</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>enter keywords to search your recorded data</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="relative">
             <Search
               className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
@@ -463,7 +487,7 @@ export function SearchChat() {
             <Input
               id="search-query"
               type="text"
-              placeholder="Search your data..."
+              placeholder="search your data..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoCorrect="off"
@@ -472,30 +496,54 @@ export function SearchChat() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="content-type">Content Type</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="content-type">content type</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>select the type of content to search.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <Select value={contentType} onValueChange={setContentType}>
             <SelectTrigger id="content-type" className="relative">
               <Layers
                 className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
                 size={18}
               />
-              <SelectValue placeholder="Content Type" />
+              <SelectValue placeholder="content type" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">
-                <span className="pl-6">All</span>
+                <span className="pl-6">all</span>
               </SelectItem>
               <SelectItem value="ocr">
-                <span className="pl-6">OCR</span>
+                <span className="pl-6">ocr</span>
               </SelectItem>
               <SelectItem value="audio">
-                <span className="pl-6">Audio</span>
+                <span className="pl-6">audio</span>
               </SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="start-date">Start Date</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="start-date">start date</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>select the start date to search for content.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="relative">
             <DateTimePicker
               date={startDate}
@@ -505,7 +553,19 @@ export function SearchChat() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="end-date">End Date</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="end-date">end date</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>select the end date to search for content.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="relative">
             <DateTimePicker
               date={endDate}
@@ -515,7 +575,22 @@ export function SearchChat() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="app-name">App Name</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="app-name">app name</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    enter the name of the app to search for content for example
+                    zoom, notion, etc. only works for ocr.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="relative">
             <Laptop
               className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
@@ -524,7 +599,7 @@ export function SearchChat() {
             <Input
               id="app-name"
               type="text"
-              placeholder="App Name"
+              placeholder="app name"
               value={appName}
               onChange={(e) => setAppName(e.target.value)}
               autoCorrect="off"
@@ -533,7 +608,23 @@ export function SearchChat() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="window-name">Window Name</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="window-name">window name</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    enter the name of the window or tab to search for content.
+                    can be a browser tab name, app tab name, etc. only works for
+                    ocr.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="relative">
             <Layout
               className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
@@ -542,7 +633,7 @@ export function SearchChat() {
             <Input
               id="window-name"
               type="text"
-              placeholder="Window Name"
+              placeholder="window name"
               value={windowName}
               onChange={(e) => setWindowName(e.target.value)}
               autoCorrect="off"
@@ -556,10 +647,39 @@ export function SearchChat() {
             checked={includeFrames}
             onCheckedChange={setIncludeFrames}
           />
-          <Label htmlFor="include-frames">Include Frames</Label>
+          <Label htmlFor="include-frames">include frames</Label>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-4 w-4 text-gray-400" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  include frames in the search results. this will only show
+                  frames for ocr. this slows down the search.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
         <div className="flex flex-col space-y-2">
-          <Label htmlFor="limit-slider">Limit: {limit}</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="limit-slider">page size: {limit}</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    select the number of results to display. usually ai cannot
+                    ingest more than 30 results at a time.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <Slider
             id="limit-slider"
             value={[limit]}
@@ -570,7 +690,19 @@ export function SearchChat() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="min-length">Min Length</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="min-length">min length</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>enter the minimum length of the content to search for.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="relative">
             <AlignLeft
               className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
@@ -579,7 +711,7 @@ export function SearchChat() {
             <Input
               id="min-length"
               type="number"
-              placeholder="Min Length"
+              placeholder="min length"
               value={minLength}
               onChange={(e) => setMinLength(Number(e.target.value))}
               min={0}
@@ -588,7 +720,19 @@ export function SearchChat() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="max-length">Max Length</Label>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="max-length">max length</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>enter the maximum length of the content to search for.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="relative">
             <AlignLeft
               className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
@@ -597,7 +741,7 @@ export function SearchChat() {
             <Input
               id="max-length"
               type="number"
-              placeholder="Max Length"
+              placeholder="max length"
               value={maxLength}
               onChange={(e) => setMaxLength(Number(e.target.value))}
               min={0}
@@ -609,23 +753,20 @@ export function SearchChat() {
       <Button
         onClick={() => handleSearch(0)}
         disabled={isLoading}
-        className="w-full"
+        className="w-full mb-4"
       >
         {isLoading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Searching... {progress.toFixed(0)}%
+            searching... {progress.toFixed(0)}%
           </>
         ) : (
-          "Search"
+          "search"
         )}
       </Button>
       {isLoading && (
         <div className="mt-2">
           <Progress value={progress} className="w-full" />
-          <p className="text-sm text-gray-500 mt-1 text-center">
-            Fetched {results.length} results
-          </p>
         </div>
       )}
       <div className="space-y-4">
@@ -718,13 +859,15 @@ export function SearchChat() {
         ))}
         {isAiLoading && spinner}
       </div>
+
+      {/* Scroll to Bottom Button */}
       {showScrollButton && (
-        <button
+        <Button
+          className="fixed bottom-4 right-4 rounded-full p-2"
           onClick={scrollToBottom}
-          className="fixed bottom-24 right-8 bg-white rounded-full p-2 shadow-md hover:bg-gray-100 transition-colors duration-200"
         >
-          <ChevronDown size={24} />
-        </button>
+          <ChevronDown className="h-6 w-6" />
+        </Button>
       )}
       <div className="h-24" />
     </div>
