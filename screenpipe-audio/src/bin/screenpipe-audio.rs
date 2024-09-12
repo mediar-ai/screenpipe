@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
     let (whisper_sender, mut whisper_receiver, _) =
         create_whisper_channel(
             Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
-            VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
+            VadEngineEnum::WebRtc, // Or VadEngineEnum::WebRtc, hardcoded for now
         ).await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
