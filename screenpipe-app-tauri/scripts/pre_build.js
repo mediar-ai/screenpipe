@@ -210,7 +210,7 @@ if (platform == 'windows') {
 	if (!(await fs.exists(onnxRuntimeName))) {
 		console.log('Setting up ONNX Runtime libraries for Windows...')
 		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
-		await $`tar -xf ${onnxRuntimeLibs}`
+		await $`Expand-Archive -Path ${onnxRuntimeLibs}`
 		await $`rm ${onnxRuntimeLibs} -Recurse -Force`;
 		console.log('ONNX Runtime libraries for Windows set up successfully.')
 	} else {
