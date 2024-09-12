@@ -54,7 +54,6 @@ impl From<CliOcrEngine> for CoreOcrEngine {
 pub enum CliVadEngine {
     #[clap(name = "webrtc")]
     WebRtc,
-    #[cfg(not(target_os = "windows"))]
     #[clap(name = "silero")]
     Silero,
 }
@@ -63,7 +62,6 @@ impl From<CliVadEngine> for VadEngineEnum {
     fn from(cli_engine: CliVadEngine) -> Self {
         match cli_engine {
             CliVadEngine::WebRtc => VadEngineEnum::WebRtc,
-            #[cfg(not(target_os = "windows"))]
             CliVadEngine::Silero => VadEngineEnum::Silero,
         }
     }
@@ -171,10 +169,8 @@ pub struct Cli {
     pub disable_vision: bool,
 
     /// VAD engine to use for speech detection
-    #[cfg_attr(not(target_os = "windows"), arg(long, value_enum, default_value_t = CliVadEngine::Silero))]
-    #[cfg_attr(target_os = "windows", arg(long, value_enum, default_value_t = CliVadEngine::WebRtc))]
+    #[arg(long, value_enum, default_value_t = CliVadEngine::Silero)] // Silero or WebRtc
     pub vad_engine: CliVadEngine,
-
 
     /// List of windows to ignore (by title) for screen recording - we use contains to match, example:
     /// --ignored-windows "Spotify" --ignored-windows "Bit" will ignore both "Bitwarden" and "Bittorrent"

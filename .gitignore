@@ -35,3 +35,6 @@ tauri_key_louis.key
 pnpm-lock.yaml
 
 .DS_Store
+
+# Ignore onnxruntime-win-x64-gpu libraries
+onnxruntime-win-x64-gpu*/

@@ -33,7 +33,7 @@ const config = {
 		clblastName: 'CLBlast-1.6.2-windows-x64',
 		clblastUrl: 'https://github.com/CNugteren/CLBlast/releases/download/1.6.2/CLBlast-1.6.2-windows-x64.zip',
 
-		vcpkgPackages: ['opencl'],
+		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
 	linux: {
 		aptPackages: [
@@ -203,6 +203,20 @@ if (platform == 'windows') {
 	// Add Tesseract to PATH
 	process.env.PATH = `${process.cwd()}\\tesseract;${process.env.PATH}`
 
+	// Setup ONNX Runtime
+	const onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
+	const onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
+	const onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`
+	if (!(await fs.exists(onnxRuntimeName))) {
+		console.log('Setting up ONNX Runtime libraries for Windows...')
+		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
+		await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
+		await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
+		console.log('ONNX Runtime libraries for Windows set up successfully.')
+	} else {
+		console.log('ONNX Runtime libraries for Windows already exists.')
+	}
+
 	// Setup OpenBlas
 	if (!(await fs.exists(config.openblasRealname)) && hasFeature('openblas')) {
 		await $`${wgetPath} -nc --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
@@ -368,6 +382,7 @@ if (hasFeature('cuda')) {
 					[`${cudaPath}\\bin\\cublas64_*`]: './',
 					[`${cudaPath}\\bin\\cublasLt64_*`]: './',
 					'tesseract\\*': './',
+					'onnxruntime*\\lib\\*.dll': './',
 				},
 				externalBin: [
 					'screenpipe'
