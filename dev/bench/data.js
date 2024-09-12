@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726155529715,
+  "lastUpdate": 1726155625062,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5189,6 +5189,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1982249458,
             "range": "± 22909900",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2edbbebd5f4bfe2a656c881a9a1049ae27044eb4",
+          "message": "Merge pull request #308 from joegoldin/feat-deepgram-api-key-ui\n\nfeat: configure deepgram api key in ui",
+          "timestamp": "2024-09-12T08:31:00-07:00",
+          "tree_id": "60f71fc4501bde9114277058a74976d033372f24",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/2edbbebd5f4bfe2a656c881a9a1049ae27044eb4"
+        },
+        "date": 1726155624354,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2001131667,
+            "range": "± 79051626",
             "unit": "ns/iter"
           }
         ]
