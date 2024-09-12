@@ -342,7 +342,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let server = Server::new(
         db_server,
-        SocketAddr::from(([0, 0, 0, 0], cli.port)),
+        SocketAddr::from(([127, 0, 0, 1], cli.port)),
         vision_control_server_clone,
         audio_devices_control_server,
         local_data_dir_clone_2,
