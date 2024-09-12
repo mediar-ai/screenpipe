@@ -180,9 +180,9 @@ jobs:
       #   if: matrix.platform == 'windows-latest'
       #   run: vcpkg install onnxruntime:x64-windows
 
-      # - name: Set up MSVC
-      #   if: matrix.platform == 'windows-latest'
-      #   uses: ilammy/msvc-dev-cmd@v1
+      - name: Set up MSVC
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
         if: matrix.platform == 'windows-latest'
