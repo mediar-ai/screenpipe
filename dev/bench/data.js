@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726156763918,
+  "lastUpdate": 1726156788740,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5249,6 +5249,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1989356062,
             "range": "± 299884505",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "b91ef6c1d7ee13291aa434d2a3ffd404d1832ba1",
+          "message": "chore: set default deepgram api key for now",
+          "timestamp": "2024-09-12T08:51:22-07:00",
+          "tree_id": "21340c368d19573b7a31c454ed11ee8fc9d42342",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b91ef6c1d7ee13291aa434d2a3ffd404d1832ba1"
+        },
+        "date": 1726156787973,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2016523208,
+            "range": "± 85106415",
             "unit": "ns/iter"
           }
         ]
