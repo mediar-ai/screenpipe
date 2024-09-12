@@ -25,7 +25,6 @@ tokio = { workspace = true }
 
 deno_core = { version = "0.307.0", optional = true }
 deno_ast = { version = "0.38.2", features = ["transpiling"], optional = true }
-futures = "0.3.17"
 # Security
 regex = { version = "1.10.6", features = ["std"], optional = true }
 lazy_static = { version = "1.4.0", optional = true }
@@ -35,7 +34,6 @@ url = "2.4.0"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-dirs = "5.0.1" 
 
 [features]
 pipes = ["dep:deno_core", "dep:deno_ast"]

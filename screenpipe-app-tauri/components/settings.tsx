@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 
 import { platform } from "@tauri-apps/plugin-os";
-import { Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, HelpCircle, RefreshCw } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 
 export function Settings({ className }: { className?: string }) {
@@ -117,14 +117,34 @@ export function Settings({ className }: { className?: string }) {
                   <Label htmlFor="aiUrl" className="min-w-[80px] text-right">
                     ai url
                   </Label>
-                  <Input
-                    id="aiUrl"
-                    value={localSettings.aiUrl}
-                    onChange={handleApiUrlChange}
-                    className="flex-grow"
-                    placeholder="enter ai url"
-                    type="url"
-                  />
+                  <div className="flex-grow flex items-center">
+                    <Input
+                      id="aiUrl"
+                      value={localSettings.aiUrl}
+                      onChange={handleApiUrlChange}
+                      className="flex-grow"
+                      placeholder="enter ai url"
+                      type="url"
+                    />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" className="ml-2">
+                            <HelpCircle className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          <p>
+                            the url of your ai provider&apos;s api endpoint. for
+                            openai: <pre className="bg-gray-100 p-1 rounded-md">https://api.openai.com/v1</pre>
+                            <br />
+                            for local providers like ollama usually it&apos;s
+                            <pre className="bg-gray-100 p-1 rounded-md">http://localhost:11434</pre>
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                 </div>
               </div>
               <div className="w-full">
@@ -264,7 +284,7 @@ export function Settings({ className }: { className?: string }) {
                 reliable for this application.
               </p>
               <p className="mt-1 text-sm text-muted-foreground text-center">
-                don&apos;t have an API key? Get one from{" "}
+                don&apos;t have an API key? get one from{" "}
                 <a
                   href="https://console.deepgram.com/"
                   target="_blank"
@@ -273,7 +293,7 @@ export function Settings({ className }: { className?: string }) {
                 >
                   deepgram&apos;s website
                 </a>
-                .
+                {" "} or DM us on discord, it&apos;s on us!
               </p>
             </CardContent>
           </Card>

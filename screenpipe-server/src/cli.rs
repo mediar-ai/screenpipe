@@ -97,11 +97,6 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub disable_audio: bool,
 
-    /// EXPERIMENTAL: Enable self healing when detecting unhealthy state based on /health endpoint.
-    /// This feature will automatically restart the recording tasks while keeping the API alive.
-    #[arg(long, default_value_t = false)]
-    pub self_healing: bool,
-
     /// Audio devices to use (can be specified multiple times)
     #[arg(short = 'i', long)]
     pub audio_device: Vec<String>,
@@ -139,7 +134,11 @@ pub struct Cli {
         arg(short = 'o', long, value_enum, default_value_t = CliOcrEngine::AppleNative)
     )]
     #[cfg_attr(
-        not(target_os = "macos"),
+        target_os = "windows",
+        arg(short = 'o', long, value_enum, default_value_t = CliOcrEngine::WindowsNative)
+    )]
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "windows")),
         arg(short = 'o', long, value_enum, default_value_t = CliOcrEngine::Tesseract)
     )]
     pub ocr_engine: CliOcrEngine,
@@ -159,10 +158,6 @@ pub struct Cli {
     /// Enable PII removal from OCR text property that is saved to db and returned in search results
     #[arg(long, default_value_t = false)]
     pub use_pii_removal: bool,
-
-    /// Restart recording process every X minutes (0 means no periodic restart) - NOT RECOMMENDED
-    #[arg(long, default_value_t = 0)]
-    pub restart_interval: u64,
 
     /// Disable vision recording
     #[arg(long, default_value_t = false)]

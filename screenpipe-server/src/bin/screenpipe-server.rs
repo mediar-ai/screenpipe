@@ -26,12 +26,7 @@ use screenpipe_server::{
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
-use tokio::{
-    runtime::Runtime,
-    signal,
-    sync::{broadcast, mpsc::channel},
-    time::{interval_at, Instant},
-};
+use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -229,14 +224,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let (restart_sender, _restart_receiver) = channel(10);
-    let resource_monitor = ResourceMonitor::new(
-        cli.self_healing,
-        Duration::from_secs(60),
-        3,
-        restart_sender, // TODO: remove self healing its dead code atm
-        cli.port,
-    );
+    let resource_monitor = ResourceMonitor::new();
     resource_monitor.start_monitoring(Duration::from_secs(10));
 
     let db = Arc::new(
@@ -270,7 +258,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let ocr_engine_clone = cli.ocr_engine.clone();
-    let restart_interval = cli.restart_interval;
     let vad_engine = cli.vad_engine.clone();
     let vad_engine_clone = vad_engine.clone();
 
@@ -301,15 +288,6 @@ async fn main() -> anyhow::Result<()> {
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
-            let mut interval = if restart_interval > 0 {
-                Some(interval_at(
-                    Instant::now() + Duration::from_secs(restart_interval * 60),
-                    Duration::from_secs(restart_interval * 60),
-                ))
-            } else {
-                None
-            };
-
             loop {
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
@@ -343,18 +321,10 @@ async fn main() -> anyhow::Result<()> {
                         info!("Received shutdown signal for recording");
                         break;
                     }
-                    _ = async { if let Some(ref mut interval) = interval { interval.tick().await } else { std::future::pending().await } } => {
-                        info!("Restarting recording due to restart interval");
-                        continue;
-                    }
                 };
 
                 if let Err(e) = result {
                     error!("Continuous recording error: {:?}", e);
-                }
-
-                if interval.is_none() {
-                    break;
                 }
             }
 
@@ -409,7 +379,6 @@ async fn main() -> anyhow::Result<()> {
     println!("│ Port                │ {:<34} │", cli.port);
     println!("│ Audio Disabled      │ {:<34} │", cli.disable_audio);
     println!("│ Vision Disabled     │ {:<34} │", cli.disable_vision);
-    println!("│ Self Healing        │ {:<34} │", cli.self_healing);
     println!("│ Save Text Files     │ {:<34} │", cli.save_text_files);
     println!(
         "│ Audio Engine        │ {:<34} │",
@@ -432,14 +401,7 @@ async fn main() -> anyhow::Result<()> {
         local_data_dir_clone.display()
     );
     println!("│ Debug Mode          │ {:<34} │", cli.debug);
-    println!(
-        "│ Restart Interval    │ {:<34} │",
-        if cli.restart_interval > 0 {
-            format!("Every {} minutes", cli.restart_interval)
-        } else {
-            "Disabled".to_string()
-        }
-    );
+
     println!("│ Use PII Removal     │ {:<34} │", cli.use_pii_removal);
     println!(
         "│ Ignored Windows     │ {:<34} │",

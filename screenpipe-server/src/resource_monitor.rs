@@ -1,5 +1,4 @@
 use chrono::Local;
-use log::{debug, error, info, warn};
 use serde_json::json;
 use serde_json::Value;
 use std::env;
@@ -13,18 +12,11 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
-use tokio::sync::mpsc::Sender;
-use tokio::sync::Mutex;
+use tracing::{error, info};
 
 pub struct ResourceMonitor {
     start_time: Instant,
-    self_healing_enabled: bool,
-    health_check_interval: Duration,
-    health_check_failures: Mutex<u32>,
-    max_health_check_failures: u32,
-    restart_sender: Sender<RestartSignal>,
     resource_log_file: Option<String>, // analyse output here: https://colab.research.google.com/drive/1zELlGdzGdjChWKikSqZTHekm5XRxY-1r?usp=sharing
-    port: u16,
 }
 
 pub enum RestartSignal {
@@ -32,13 +24,7 @@ pub enum RestartSignal {
 }
 
 impl ResourceMonitor {
-    pub fn new(
-        self_healing_enabled: bool,
-        health_check_interval: Duration,
-        max_health_check_failures: u32,
-        restart_sender: Sender<RestartSignal>,
-        port: u16,
-    ) -> Arc<Self> {
+    pub fn new() -> Arc<Self> {
         let resource_log_file = if env::var("SAVE_RESOURCE_USAGE").is_ok() {
             let now = Local::now();
             let filename = format!("resource_usage_{}.json", now.format("%Y%m%d_%H%M%S"));
@@ -60,13 +46,7 @@ impl ResourceMonitor {
 
         Arc::new(Self {
             start_time: Instant::now(),
-            self_healing_enabled,
-            health_check_interval,
-            health_check_failures: Mutex::new(0),
-            max_health_check_failures,
-            restart_sender,
             resource_log_file,
-            port,
         })
     }
 
@@ -165,57 +145,15 @@ impl ResourceMonitor {
         let monitor = Arc::clone(self);
         tokio::spawn(async move {
             let mut sys = System::new_all();
-            let mut health_check_interval = tokio::time::interval(monitor.health_check_interval);
             loop {
                 tokio::select! {
                     _ = tokio::time::sleep(interval) => {
                         sys.refresh_all();
                         monitor.log_status(&sys);
                     }
-                    _ = health_check_interval.tick() => {
-                        monitor.check_health().await;
-                    }
                 }
             }
         });
-    }
-    async fn check_health(&self) {
-        let client = reqwest::Client::new();
-        match client.get(format!("http://localhost:{}/health", self.port)).send().await {
-            Ok(response) => {
-                debug!("Health check response: {:?}", response);
-                if response.status().is_success() {
-                    *self.health_check_failures.lock().await = 0;
-                } else {
-                    self.handle_health_check_failure().await;
-                }
-            }
-            Err(_) => {
-                self.handle_health_check_failure().await;
-            }
-        }
-    }
-
-    async fn handle_health_check_failure(&self) {
-        let mut failures = self.health_check_failures.lock().await;
-        *failures += 1;
-        warn!("Health check failed. Consecutive failures: {}", *failures);
-
-        if !self.self_healing_enabled {
-            return;
-        }
-
-        if *failures >= self.max_health_check_failures {
-            warn!("Max health check failures reached. Restarting recording tasks...");
-            if let Err(e) = self
-                .restart_sender
-                .send(RestartSignal::RecordingTasks)
-                .await
-            {
-                error!("Failed to send restart signal: {}", e);
-            }
-            *self.health_check_failures.lock().await = 0;
-        }
     }
 
     #[cfg(target_os = "macos")]
