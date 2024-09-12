@@ -283,7 +283,7 @@ export function SearchChat() {
       const response = await queryScreenpipe({
         q: query || undefined,
         content_type: contentType as "all" | "ocr" | "audio",
-        limit: limit * 3, // TODO huge hack
+        limit: limit * 1.5, // TODO huge hack
         offset: currentOffset,
         start_time: startDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
         end_time: endDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
