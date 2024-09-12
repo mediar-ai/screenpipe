@@ -283,7 +283,7 @@ export function SearchChat() {
       const response = await queryScreenpipe({
         q: query || undefined,
         content_type: contentType as "all" | "ocr" | "audio",
-        limit,
+        limit: limit * 3, // TODO huge hack
         offset: currentOffset,
         start_time: startDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
         end_time: endDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
@@ -851,6 +851,8 @@ export function SearchChat() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <Separator className="my-8" />
 
       {/* Display chat messages */}
       <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto overflow-y-auto max-h-[600px]">

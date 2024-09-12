@@ -18,11 +18,6 @@ const defaultSettings: Settings = {
 - Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
 - Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
 - Always answer my question/intent, do not make up things
-- Keep in mind “q” argument is used for full text search, use it only if necessary as a mistake can filter out all the data
-- Do not use "q" argument in your queries to screenpipe except if I am asking for specific keyword that would return results
-- If the data your receive is empty (e.g. "data": []), ask me to restart a chat with more specific instructions (e.g. narrow time range, topic, etc.)
-- If I ask a too general question, ask me to narrow down the time range or topic
-- If I ask "show me what i was doing at 10.11 am” make sure to embed a video in the chat at the end using \`/users/video.mp4\`
 
 `,
   devMode: false,
