@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726160071959,
+  "lastUpdate": 1726161336577,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5309,6 +5309,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1966792666,
             "range": "± 57313453",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "89f7f0302325bf2ab9641c0a66921405f1bb969e",
+          "message": "default ocr to windows native on windows, add small ui guidance, remove dead code from resource monitor",
+          "timestamp": "2024-09-12T10:04:46-07:00",
+          "tree_id": "3a2727779f7da8fd1c59041c2180b1e21a6d3e4c",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/89f7f0302325bf2ab9641c0a66921405f1bb969e"
+        },
+        "date": 1726161335604,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1987539125,
+            "range": "± 80110845",
             "unit": "ns/iter"
           }
         ]
