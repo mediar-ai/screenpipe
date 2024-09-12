@@ -22,12 +22,9 @@ use rubato::{
 use crate::{
     multilingual,
     pcm_decode::pcm_decode,
-    vad_engine::{VadEngine, VadEngineEnum, WebRtcVad},
+    vad_engine::{SileroVad, VadEngine, VadEngineEnum, WebRtcVad},
     AudioTranscriptionEngine,
 };
-
-#[cfg(not(target_os = "windows"))]
-use crate::vad_engine::SileroVad;
 
 use hound::{WavSpec, WavWriter};
 use std::io::Cursor;
@@ -737,10 +734,9 @@ pub async fn create_whisper_channel(
     ) = unbounded_channel();
     let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
-        #[cfg(not(target_os = "windows"))]
         VadEngineEnum::Silero => Box::new(SileroVad::new()?),
     };
-
+    
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
 
