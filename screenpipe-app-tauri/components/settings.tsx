@@ -40,10 +40,19 @@ export function Settings({ className }: { className?: string }) {
     setLocalSettings((prev) => ({ ...prev, aiUrl: newValue }));
     updateSettings({ aiUrl: newValue });
   };
+
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setLocalSettings((prev) => ({ ...prev, openaiApiKey: newValue }));
     updateSettings({ openaiApiKey: newValue });
+  };
+
+  const handleDeepgramApiKeyChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const newValue = e.target.value;
+    setLocalSettings((prev) => ({ ...prev, deepgramApiKey: newValue }));
+    updateSettings({ deepgramApiKey: newValue });
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
