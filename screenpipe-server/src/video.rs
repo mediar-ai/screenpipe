@@ -13,7 +13,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
@@ -146,7 +146,7 @@ async fn save_frames_as_video(
     monitor_id: u32,
 ) {
     debug!("Starting save_frames_as_video function");
-    let frames_per_video = 30; // Adjust this value as needed
+    let frames_per_video = (fps * 30.0).round() as usize; // 30 seconds of video
     let mut frame_count = 0;
     let (sender, mut receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel(512);
     let sender = Arc::new(sender);
@@ -154,7 +154,7 @@ async fn save_frames_as_video(
     let mut current_stdin: Option<ChildStdin> = None;
 
     loop {
-        if frame_count % frames_per_video == 0 || current_ffmpeg.is_none() {
+        if frame_count >= frames_per_video || current_ffmpeg.is_none() {
             debug!("Starting new FFmpeg process");
             // Close previous FFmpeg process if exists
             if let Some(child) = current_ffmpeg.take() {
@@ -168,6 +168,8 @@ async fn save_frames_as_video(
                     error!("FFmpeg stderr: {}", String::from_utf8_lossy(&output.stderr));
                 }
             }
+            // Reset frame count
+            frame_count = 0;
 
             // Wait for at least one frame before starting a new FFmpeg process
             let first_frame = loop {
@@ -267,11 +269,12 @@ async fn save_frames_as_video(
         const RETRY_DELAY: Duration = Duration::from_millis(100);
 
         // Write encoded frames to FFmpeg
-        while let Ok(buffer) = receiver.try_recv() {
+        let write_timeout = Duration::from_secs_f64(1.0 / fps);
+        while let Ok(Some(buffer)) = timeout(write_timeout, receiver.recv()).await {
             if let Some(stdin) = current_stdin.as_mut() {
                 let mut retries = 0;
                 while retries < MAX_RETRIES {
-                    match stdin.write_all(buffer.as_slice()).await {
+                    match stdin.write_all(&buffer).await {
                         Ok(_) => {
                             frame_count += 1;
                             debug!("Wrote frame {} to FFmpeg", frame_count);
@@ -309,13 +312,16 @@ async fn save_frames_as_video(
                         error!("Failed to flush FFmpeg input: {}", e);
                     }
                 }
+                // Break the loop if we've written enough frames for this chunk
+                if frame_count >= frames_per_video {
+                    debug!("finished writing frames for this chunk");
+                    break;
+                }
             }
         }
 
         // Yield to other tasks periodically
-        if frame_count % 100 == 0 {
-            tokio::task::yield_now().await;
-        }
+        tokio::task::yield_now().await;
     }
 }
 
