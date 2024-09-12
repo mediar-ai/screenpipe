@@ -1,5 +1,9 @@
 [target.x86_64-pc-windows-msvc]
 rustflags = [
-    "-C", "target-feature=-crt-static",
-    "-C", "link-args=/NODEFAULTLIB:libcmt.lib"
+    "-C", "target-feature=+crt-static",
+    "-C", "link-args=/DEFAULTLIB:ucrt.lib /DEFAULTLIB:libvcruntime.lib libcmt.lib",
+	"-C", "link-args=/NODEFAULTLIB:libvcruntimed.lib /NODEFAULTLIB:vcruntime.lib /NODEFAULTLIB:vcruntimed.lib",
+	"-C", "link-args=/NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcrtd.lib",
+	"-C", "link-args=/NODEFAULTLIB:libucrt.lib /NODEFAULTLIB:libucrtd.lib /NODEFAULTLIB:ucrtd.lib",
+
 ]
