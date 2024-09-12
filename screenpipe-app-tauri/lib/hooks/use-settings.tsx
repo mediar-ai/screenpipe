@@ -4,6 +4,7 @@ import { localDataDir } from "@tauri-apps/api/path";
 import { join } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
+import posthog from "posthog-js";
 
 const defaultSettings: Settings = {
   openaiApiKey: "",
@@ -66,6 +67,10 @@ let store: Store | null = null;
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
 
+  useEffect(() => {
+    posthog.identify(settings.userId);
+  }, [settings.userId]);
+
   // console.log("settings", settings);
   const resetSetting = async (key: keyof Settings) => {
     if (!store) {
@@ -121,8 +126,9 @@ export function useSettings() {
           "whisper-large";
         const savedOcrEngine =
           ((await store!.get("ocrEngine")) as string) || ocrModel;
-        const savedMonitorIds =
-          ((await store!.get("monitorIds")) as string[]) || ["default"];
+        const savedMonitorIds = ((await store!.get(
+          "monitorIds"
+        )) as string[]) || ["default"];
         const savedAudioDevices = ((await store!.get(
           "audioDevices"
         )) as string[]) || ["default"];
@@ -139,7 +145,8 @@ export function useSettings() {
         const savedIncludedWindows =
           ((await store!.get("includedWindows")) as string[]) || [];
         const savedAiUrl =
-          ((await store!.get("aiUrl")) as string) || "https://api.openai.com/v1";
+          ((await store!.get("aiUrl")) as string) ||
+          "https://api.openai.com/v1";
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
