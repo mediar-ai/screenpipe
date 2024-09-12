@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726156788740,
+  "lastUpdate": 1726160071959,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5279,6 +5279,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2016523208,
             "range": "± 85106415",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "11ca216b80da3e09ef4c8fea1cc159b91008d894",
+          "message": "Merge pull request #309 from joegoldin/fix-ort-dep-copying\n\nfix: distribute onnx runtime libraries with build, re-enable silero vad on windows",
+          "timestamp": "2024-09-12T09:43:08-07:00",
+          "tree_id": "866983b202bd5c39e0a72b4ee47030ca33dfd9fd",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/11ca216b80da3e09ef4c8fea1cc159b91008d894"
+        },
+        "date": 1726160071150,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1966792666,
+            "range": "± 57313453",
             "unit": "ns/iter"
           }
         ]
