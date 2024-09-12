@@ -583,7 +583,10 @@ pub fn stt(
     if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
         // Deepgram implementation
         //check if key is set or empty or no chars in it
-        let api_key = if deepgram_api_key.clone().is_some() && !deepgram_api_key.clone().unwrap().is_empty() && deepgram_api_key.clone().unwrap().chars().count() > 0 {
+        let api_key = if deepgram_api_key.clone().is_some()
+            && !deepgram_api_key.clone().unwrap().is_empty()
+            && deepgram_api_key.clone().unwrap().chars().count() > 0
+        {
             deepgram_api_key.clone().unwrap()
         } else {
             get_deepgram_api_key()
@@ -770,7 +773,7 @@ pub async fn create_whisper_channel(
                         #[cfg(target_os = "macos")]
                         {
                             autoreleasepool(|| {
-                                match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key) {
+                                match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone()) {
                                     Ok(transcription) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),
@@ -794,7 +797,7 @@ pub async fn create_whisper_channel(
                             unreachable!("This code should not be reached on non-macOS platforms")
                         }
                     } else {
-                        match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), deepgram_api_key) {
+                        match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone()) {
                             Ok(transcription) => TranscriptionResult {
                                 input: input.clone(),
                                 transcription: Some(transcription),
