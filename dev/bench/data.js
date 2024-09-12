@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726155502932,
+  "lastUpdate": 1726155529715,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5159,6 +5159,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2685680749,
             "range": "± 354154505",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d7106df5cce2d248e188f1c6909dc3ac082feb8",
+          "message": "Merge pull request #310 from sabrehagen/fix-broken-build\n\n(fix): fix type error causing broken build",
+          "timestamp": "2024-09-12T08:28:16-07:00",
+          "tree_id": "ffacd3fd39a2f669cd66728ff656a7913ece6281",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/6d7106df5cce2d248e188f1c6909dc3ac082feb8"
+        },
+        "date": 1726155528853,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1982249458,
+            "range": "± 22909900",
             "unit": "ns/iter"
           }
         ]
