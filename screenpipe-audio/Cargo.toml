@@ -35,7 +35,6 @@ candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
 ndarray = "0.15.6"
-vad-rs = "0.1.3"
 tokenizers = { workspace = true }
 anyhow = "1.0.86"
 byteorder = "1.5.0"
@@ -63,11 +62,15 @@ reqwest = { workspace = true }
 
 screenpipe-core = { path = "../screenpipe-core" }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-ort = { version = "2.0.0-rc.5", features = ["load-dynamic"], default-features = false }
-esaxx-rs = "0.1.10"
-samplerate = { version = "0.2.4" }
-libsamplerate-sys = "0.1.10"
+# [target.'cfg(target_os = "windows")'.dependencies]
+# ort = { version = "2.0.0-rc.5", features = ["load-dynamic"], default-features = false }
+# esaxx-rs = "0.1.10"
+# samplerate = { version = "0.2.4" }
+# libsamplerate-sys = "0.1.10"
+
+# not windows
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+vad-rs = "0.1.3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 once_cell = "1.17.1"
