@@ -6,7 +6,8 @@
         "resources": {
             "ffmpeg\\bin\\x64\\*": "./",
             "ffmpeg\\lib\\*": "./",
-            "tesseract\\*": "./"
+            "tesseract\\*": "./",
+            "onnxruntime*\\lib\\*.dll": "./"
         }
     }
 }
