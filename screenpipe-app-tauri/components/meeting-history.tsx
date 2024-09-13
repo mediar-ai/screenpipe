@@ -485,7 +485,7 @@ export default function MeetingHistory() {
             {sortedMeetings.map((meeting, index) => (
               <div key={index} className="p-4 border rounded relative">
                 {isLiveMeeting(meeting) && (
-                  <div className="absolute top-2 right-2 flex items-center text-green-500">
+                  <div className="absolute top-2 right-2 flex items-center text-black">
                     <Activity size={16} className="mr-1" />
                     <span className="text-sm font-semibold">Live</span>
                   </div>
