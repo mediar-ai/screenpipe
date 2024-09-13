@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726193310440,
+  "lastUpdate": 1726193429240,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5699,6 +5699,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1965540792,
             "range": "± 43177324",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85a6b14c3cc0d4ea1920e1ded96de1dbc22852af",
+          "message": "Merge pull request #315 from mediar-ai/fix-#277\n\nfix #277",
+          "timestamp": "2024-09-12T18:59:00-07:00",
+          "tree_id": "4714cc037be7d32c612e2b107ddbfd8cc491d717",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/85a6b14c3cc0d4ea1920e1ded96de1dbc22852af"
+        },
+        "date": 1726193428285,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2264255729,
+            "range": "± 119895074",
             "unit": "ns/iter"
           }
         ]
