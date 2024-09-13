@@ -143,7 +143,7 @@ export default function MeetingHistory() {
             newLiveMeetings.add(newMeeting.meeting_group);
           }
         } else if (liveMeetings.has(newMeeting.meeting_group)) {
-          sendNotification("Meeting Ended", `The meeting that started at ${new Date(newMeeting.meeting_start).toLocaleTimeString()} has ended`);
+          sendNotification("Meeting Ended", `The meeting has ended`);
           newLiveMeetings.delete(newMeeting.meeting_group);
         }
       });
