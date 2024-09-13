@@ -25,7 +25,8 @@
       "@/*": [
         "./*"
       ]
-    }
+    },
+    "types": ["@tauri-apps/api"]
   },
   "include": [
     "next-env.d.ts",

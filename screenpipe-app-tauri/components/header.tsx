@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/tooltip";
 import React from "react";
 import PipeDialog from "@/components/pipe-store";
+import MeetingHistory from "@/components/meeting-history";
 
 function IconNewChat() {
   return (
@@ -74,6 +75,7 @@ export default function Header() {
         {/* Added margin-top for spacing */}
         <HealthStatus className="mt-3" />
         <Settings />
+        <MeetingHistory />
         <PipeDialog />
         {/* <LogViewer /> */}
         {/* <PrettyLink href="https://github.com/mediar-ai/screenpipe/tree/main/examples/ts">
