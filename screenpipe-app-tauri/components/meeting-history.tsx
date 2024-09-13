@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +13,8 @@ import { useToast } from "./ui/use-toast";
 import ReactMarkdown from 'react-markdown';
 import { X, Activity } from "lucide-react"; // Import the X icon and Activity icon for live meetings
 import { useInterval } from "@/lib/hooks/use-interval"; // Add this import
+import { usePostHog } from "posthog-js/react";
+import debounce from 'lodash/debounce';
 
 function setItem(key: string, value: any): void {
   if (typeof window !== 'undefined') {
@@ -58,24 +60,48 @@ interface AudioTranscription {
 }
 
 export default function MeetingHistory() {
-  console.log("MeetingHistory component rendered");
+  const posthog = usePostHog();
+  const { settings } = useSettings();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isIdentifying, setIsIdentifying] = useState(false);
-  const { settings } = useSettings();
   const { toast } = useToast();
   const [showError, setShowError] = useState(false);
   const [liveMeetings, setLiveMeetings] = useState<Set<number>>(new Set());
+
+  const debouncedCapture = useCallback(
+    debounce((eventName: string, properties: any) => {
+      posthog?.capture(eventName, properties);
+    }, 300),
+    [posthog]
+  );
+
+  useEffect(() => {
+    if (posthog) {
+      posthog.identify(settings.userId);
+      posthog.people.set({
+        userId: settings.userId,
+        // Add any other relevant user properties
+      });
+    }
+  }, [posthog, settings.userId]);
 
   useEffect(() => {
     console.log("useEffect running, isOpen:", isOpen);
     if (isOpen) {
       loadMeetings();
+      debouncedCapture("meeting_history_opened", {
+        userId: settings.userId,
+      });
+    } else {
+      debouncedCapture("meeting_history_closed", {
+        userId: settings.userId,
+      });
     }
-  }, [isOpen]);
+  }, [isOpen, settings.userId, debouncedCapture]);
 
   useEffect(() => {
     setShowError(!!error);
@@ -110,6 +136,14 @@ export default function MeetingHistory() {
         startTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       }
       console.log("Searching from:", startTime);
+
+      debouncedCapture("meeting_history_search", {
+        userId: settings.userId,
+        startTime: startTime,
+        contentType: "audio",
+        limit: 1000,
+      });
+
       const response = await fetch(`http://localhost:3030/search?content_type=audio&start_time=${startTime}&limit=1000`);
       if (!response.ok) {
         throw new Error("Failed to fetch meeting history");
@@ -118,6 +152,11 @@ export default function MeetingHistory() {
       console.log("Fetch result:", result);
       const newMeetings = processMeetings(result.data);
       console.log("Processed new meetings:", newMeetings);
+
+      debouncedCapture("meeting_history_results", {
+        userId: settings.userId,
+        resultCount: newMeetings.length,
+      });
 
       const newLiveMeetings = new Set(liveMeetings);
 
@@ -141,10 +180,21 @@ export default function MeetingHistory() {
           if (!liveMeetings.has(newMeeting.meeting_group)) {
             sendNotification("Live Meeting Started", `A live meeting started at ${new Date(newMeeting.meeting_start).toLocaleTimeString()}`);
             newLiveMeetings.add(newMeeting.meeting_group);
+            debouncedCapture("live_meeting_detected", {
+              userId: settings.userId,
+              meetingId: newMeeting.meeting_group,
+              startTime: newMeeting.meeting_start,
+            });
           }
         } else if (liveMeetings.has(newMeeting.meeting_group)) {
           sendNotification("Meeting Ended", `The meeting has ended`);
           newLiveMeetings.delete(newMeeting.meeting_group);
+          debouncedCapture("live_meeting_ended", {
+            userId: settings.userId,
+            meetingId: newMeeting.meeting_group,
+            endTime: newMeeting.meeting_end,
+            duration: (new Date(newMeeting.meeting_end).getTime() - new Date(newMeeting.meeting_start).getTime()) / 1000, // duration in seconds
+          });
         }
       });
 
@@ -157,6 +207,10 @@ export default function MeetingHistory() {
     } catch (err) {
       setError("Some trouble fetching new meetings. Please check health status.");
       console.error("Fetch error:", err);
+      debouncedCapture("meeting_history_fetch_error", {
+        userId: settings.userId,
+        error: String(err),
+      });
     } finally {
       console.log("Fetch completed");
       setLoading(false);
@@ -186,6 +240,10 @@ export default function MeetingHistory() {
 
   async function generateSummary(meeting: Meeting) {
     setIsSummarizing(true);
+    debouncedCapture("summary_generation_started", {
+      userId: settings.userId,
+      meetingId: meeting.meeting_group,
+    });
     try {
       const openai = new OpenAI({
         apiKey: settings.openaiApiKey,
@@ -224,12 +282,29 @@ export default function MeetingHistory() {
         title: "Summary Generated",
         description: "The meeting summary has been created successfully.",
       });
+
+      debouncedCapture("summary_generation_completed", {
+        userId: settings.userId,
+        meetingId: meeting.meeting_group,
+      });
+
+      debouncedCapture("meeting_summary_generated", {
+        userId: settings.userId,
+        meetingId: meeting.meeting_group,
+        summaryLength: summary.length,
+      });
     } catch (error) {
       console.error("Error generating summary:", error);
       toast({
         title: "Error",
         description: "Failed to generate meeting summary. Please try again.",
         variant: "destructive",
+      });
+
+      debouncedCapture("summary_generation_failed", {
+        userId: settings.userId,
+        meetingId: meeting.meeting_group,
+        error: String(error),
       });
     } finally {
       setIsSummarizing(false);
@@ -238,6 +313,10 @@ export default function MeetingHistory() {
 
   async function identifyParticipants(meeting: Meeting) {
     setIsIdentifying(true);
+    debouncedCapture("participant_identification_started", {
+      userId: settings.userId,
+      meetingId: meeting.meeting_group,
+    });
     try {
       const openai = new OpenAI({
         apiKey: settings.openaiApiKey,
@@ -275,12 +354,29 @@ export default function MeetingHistory() {
         title: "Participants Identified",
         description: "The meeting participants have been identified successfully.",
       });
+
+      debouncedCapture("participant_identification_completed", {
+        userId: settings.userId,
+        meetingId: meeting.meeting_group,
+      });
+
+      debouncedCapture("meeting_participants_identified", {
+        userId: settings.userId,
+        meetingId: meeting.meeting_group,
+        participantCount: participants.split(',').length,
+      });
     } catch (error) {
       console.error("Error identifying participants:", error);
       toast({
         title: "Error",
         description: "Failed to identify meeting participants. Please try again.",
         variant: "destructive",
+      });
+
+      debouncedCapture("participant_identification_failed", {
+        userId: settings.userId,
+        meetingId: meeting.meeting_group,
+        error: String(error),
       });
     } finally {
       setIsIdentifying(false);
@@ -299,7 +395,7 @@ export default function MeetingHistory() {
       const currentTime = new Date(trans.content.timestamp);
       const prevTime = index > 0 ? new Date(transcriptions[index - 1].content.timestamp) : null;
 
-      if (!currentMeeting || (prevTime && (currentTime.getTime() - prevTime.getTime()) >= 5 * 60 * 1000)) {
+      if (!currentMeeting || (prevTime && (currentTime.getTime() - prevTime.getTime()) >= 1 * 60 * 1000)) {
         if (currentMeeting) {
           meetings.push(currentMeeting);
         }
@@ -328,7 +424,7 @@ export default function MeetingHistory() {
       const lastMeeting = acc[acc.length - 1];
       if (lastMeeting) {
         const timeDiff = new Date(meeting.meeting_start).getTime() - new Date(lastMeeting.meeting_end).getTime();
-        if (timeDiff < 5 * 60 * 1000) { // If less than 5 minutes apart, merge
+        if (timeDiff < 1 * 60 * 1000) { // If less than 1 minute apart, merge
           lastMeeting.meeting_end = meeting.meeting_end;
           lastMeeting.full_transcription += meeting.full_transcription;
           return acc;
@@ -352,7 +448,7 @@ export default function MeetingHistory() {
   const isLiveMeeting = (meeting: Meeting) => {
     const lastTranscriptionTime = new Date(meeting.meeting_end);
     const now = new Date();
-    return now.getTime() - lastTranscriptionTime.getTime() < 5 * 60 * 1000;
+    return now.getTime() - lastTranscriptionTime.getTime() < 1 * 60 * 1000;
   };
 
   // Add this useInterval hook
