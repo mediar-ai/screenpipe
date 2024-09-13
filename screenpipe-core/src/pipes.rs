@@ -9,6 +9,7 @@ mod pipes {
     use deno_core::op2;
     use deno_core::ModuleLoadResponse;
     use deno_core::ModuleSourceCode;
+    use regex::Regex;
     use reqwest::header::HeaderMap;
     use reqwest::header::HeaderValue;
     use reqwest::header::CONTENT_TYPE;
@@ -25,6 +26,12 @@ mod pipes {
     use std::path::Path;
     use tracing::{error, info};
     use url::Url;
+
+    // Add this function near the top of the file, after the imports
+    fn sanitize_pipe_name(name: &str) -> String {
+        let re = Regex::new(r"[^a-zA-Z0-9_-]").unwrap();
+        re.replace_all(name, "-").to_string()
+    }
 
     #[op2]
     #[string]
@@ -357,13 +364,7 @@ mod pipes {
         let pipe_dir = match Url::parse(&pipe) {
             Ok(_) => {
                 info!("Input appears to be a URL. Attempting to download...");
-                // match download_pipe(&pipe, screenpipe_dir).await {
-                //     Ok(path) => path,
-                //     Err(e) => {
-                //         error!("Failed to download pipe: {}", e);
-                //         anyhow::bail!("Failed to download pipe: {}", e);
-                //     }
-                // }
+
                 PathBuf::from(&pipe)
             }
             Err(_) => {
@@ -403,10 +404,12 @@ mod pipes {
                 Some("github.com") => {
                     let api_url = get_raw_github_url(source)
                         .map_err(|e| anyhow::anyhow!("Failed to parse GitHub URL: {}", e))?;
-                    download_github_folder(&client, &api_url, screenpipe_dir).await
+                    let pipe_name = sanitize_pipe_name(Path::new(&api_url).file_name().unwrap().to_str().unwrap());
+                    download_github_folder(&client, &api_url, screenpipe_dir, &pipe_name).await
                 }
                 Some("raw.githubusercontent.com") => {
-                    download_single_file(&client, source, screenpipe_dir).await
+                    let pipe_name = sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
+                    download_single_file(&client, source, screenpipe_dir, &pipe_name).await
                 }
                 _ => anyhow::bail!("Unsupported URL format"),
             }
@@ -420,16 +423,11 @@ mod pipes {
                 anyhow::bail!("Local source is not a directory");
             }
 
-            let pipe_name = source_path
+            let pipe_name = sanitize_pipe_name(source_path
                 .file_name()
                 .and_then(|name| name.to_str())
-                .unwrap_or("unknown_pipe");
-            let dest_dir = screenpipe_dir.join("pipes").join(pipe_name);
-
-            // if dest_dir.exists() {
-            //     info!("Pipe already exists: {:?}", dest_dir);
-            //     return Ok(dest_dir);
-            // }
+                .unwrap_or("unknown_pipe"));
+            let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
 
             tokio::fs::create_dir_all(&dest_dir).await?;
             copy_local_folder(source_path, &dest_dir).await?;
@@ -467,6 +465,7 @@ mod pipes {
         client: &Client,
         api_url: &str,
         screenpipe_dir: PathBuf,
+        pipe_name: &str,
     ) -> anyhow::Result<PathBuf> {
         let response = client
             .get(api_url)
@@ -481,13 +480,7 @@ mod pipes {
             anyhow::bail!("Invalid response from GitHub API");
         }
 
-        let pipe_name = Path::new(api_url)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("unknown_pipe")
-            .to_string();
-
-        let pipe_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+        let pipe_dir = screenpipe_dir.join("pipes").join(pipe_name);
 
         // Check if the pipe directory already exists
         if pipe_dir.exists() {
@@ -522,22 +515,10 @@ mod pipes {
         client: &Client,
         url: &str,
         screenpipe_dir: PathBuf,
+        pipe_name: &str,
     ) -> anyhow::Result<PathBuf> {
         let response = client.get(url).send().await?;
         let content = response.bytes().await?;
-
-        let file_name = Path::new(url)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("pipe.js")
-            .to_string();
-
-        let pipe_name = Path::new(url)
-            .parent()
-            .and_then(|p| p.file_name())
-            .and_then(|name| name.to_str())
-            .unwrap_or("unknown_pipe")
-            .to_string();
 
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe_name);
 
@@ -549,7 +530,7 @@ mod pipes {
 
         tokio::fs::create_dir_all(&pipe_dir).await?;
 
-        let file_path = pipe_dir.join(file_name);
+        let file_path = pipe_dir.join(pipe_name);
         tokio::fs::write(&file_path, &content).await?;
 
         info!("Downloaded single file: {:?}", file_path);

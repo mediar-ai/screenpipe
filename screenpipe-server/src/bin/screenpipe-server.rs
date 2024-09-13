@@ -393,10 +393,6 @@ async fn main() -> anyhow::Result<()> {
         format!("{:?}", vad_engine_clone)
     );
     println!(
-        "│ Monitor IDs         │ {:<34} │",
-        format_cell(&format!("{:?}", monitor_ids), VALUE_WIDTH)
-    );
-    println!(
         "│ Data Directory      │ {:<34} │",
         local_data_dir_clone.display()
     );
@@ -426,10 +422,34 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // In the main function, replace the audio devices section with:
+    // Add monitors section
+    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("│ Monitors            │                                    │");
+    const MAX_ITEMS_TO_DISPLAY: usize = 5;
+
+    if cli.disable_vision {
+        println!("│ {:<19} │ {:<34} │", "", "Vision disabled");
+    } else if all_monitors.is_empty() {
+        println!("│ {:<19} │ {:<34} │", "", "No monitors available");
+    } else {
+        let total_monitors = all_monitors.len();
+        for (_, monitor) in all_monitors.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+            let monitor_str = format!("ID: {}, {:?}", monitor.id(), monitor);
+            let formatted_monitor = format_cell(&monitor_str, VALUE_WIDTH);
+            println!("│ {:<19} │ {:<34} │", "", formatted_monitor);
+        }
+        if total_monitors > MAX_ITEMS_TO_DISPLAY {
+            println!(
+                "│ {:<19} │ {:<34} │",
+                "",
+                format!("... and {} more", total_monitors - MAX_ITEMS_TO_DISPLAY)
+            );
+        }
+    }
+
+    // Audio devices section
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ Audio Devices       │                                    │");
-    const MAX_DEVICES_TO_DISPLAY: usize = 5;
 
     if cli.disable_audio {
         println!("│ {:<19} │ {:<34} │", "", "Disabled");
@@ -437,21 +457,43 @@ async fn main() -> anyhow::Result<()> {
         println!("│ {:<19} │ {:<34} │", "", "No devices available");
     } else {
         let total_devices = audio_devices.len();
-        for (_, device) in audio_devices
-            .iter()
-            .enumerate()
-            .take(MAX_DEVICES_TO_DISPLAY)
-        {
+        for (_, device) in audio_devices.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let device_str = device.deref().to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
 
             println!("│ {:<19} │ {:<34} │", "", formatted_device);
         }
-        if total_devices > MAX_DEVICES_TO_DISPLAY {
+        if total_devices > MAX_ITEMS_TO_DISPLAY {
             println!(
                 "│ {:<19} │ {:<34} │",
                 "",
-                format!("... and {} more", total_devices - MAX_DEVICES_TO_DISPLAY)
+                format!("... and {} more", total_devices - MAX_ITEMS_TO_DISPLAY)
+            );
+        }
+    }
+
+    // Pipes section
+    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("│ Pipes               │                                    │");
+    let pipes = pipe_manager.list_pipes().await;
+    if pipes.is_empty() {
+        println!("│ {:<19} │ {:<34} │", "", "No pipes available");
+    } else {
+        let total_pipes = pipes.len();
+        for (_, pipe) in pipes.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+            let pipe_str = format!(
+                "{} ({})",
+                pipe.id,
+                if pipe.enabled { "Enabled" } else { "Disabled" }
+            );
+            let formatted_pipe = format_cell(&pipe_str, VALUE_WIDTH);
+            println!("│ {:<19} │ {:<34} │", "", formatted_pipe);
+        }
+        if total_pipes > MAX_ITEMS_TO_DISPLAY {
+            println!(
+                "│ {:<19} │ {:<34} │",
+                "",
+                format!("... and {} more", total_pipes - MAX_ITEMS_TO_DISPLAY)
             );
         }
     }

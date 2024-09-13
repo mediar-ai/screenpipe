@@ -258,20 +258,21 @@ const PipeDialog: React.FC = () => {
       return (
         <div className="flex flex-col items-center justify-center h-full">
           <p className="text-lg mb-4">no pipe selected</p>
-          <FeatureRequestLink />
-          {!health || health?.status === "error" && (
-            <p className="mt-4 text-sm text-gray-500 text-center">
-              screenpipe is not running.
-              <br />
-              please start screenpipe to use the pipe store.
-            </p>
-          )}
+          {/* <FeatureRequestLink /> */}
+          {!health ||
+            (health?.status === "error" && (
+              <p className="mt-4 text-sm text-gray-500 text-center">
+                screenpipe is not running.
+                <br />
+                please start screenpipe to use the pipe store.
+              </p>
+            ))}
         </div>
       );
     }
 
     const isInstalled = installedPipes.includes(selectedPipe.name);
-    console.log("installedPipes", installedPipes);
+    // console.log("installedPipes", installedPipes);
 
     return (
       <>
@@ -430,7 +431,7 @@ const PipeDialog: React.FC = () => {
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
         <DialogHeader>
-          <div className=" flex flex-col items-start">
+          {/* <div className=" flex flex-col items-start">
             <Button size="sm" onClick={handleResetAllPipes}>
               <Trash2 className="mr-2 h-4 w-4" />
               reset all pipes
@@ -438,7 +439,7 @@ const PipeDialog: React.FC = () => {
             <span className="text-xs text-gray-500 mt-1">
               use this if running into issues with the pipe store
             </span>
-          </div>
+          </div> */}
           <DialogTitle>
             pipe store
             <Badge variant="secondary" className="ml-2">
@@ -454,18 +455,37 @@ const PipeDialog: React.FC = () => {
             screenpipe&apos;s data, or anything else you can imagine that help
             you get more out of your recordings.
             <br />
-            <a
+            {/* <a
               href="https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript"
               className="text-blue-500 hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >
               check out more examples on github
-            </a>
+            </a> */}
           </DialogDescription>
 
-          {selectedPipe && <FeatureRequestLink className="w-80" />}
+          {/* {selectedPipe && <FeatureRequestLink className="w-80" />} */}
         </DialogHeader>
+        {/* center message in big */}
+        <div className="flex flex-col justify-center items-center h-[500px]">
+          <p className="text-center">
+            currently you need to enable pipes through `screenpipe pipe`
+            commands or `/pipes` api
+            <br />
+            we&apos;re going to make this nontechnical next week.
+          </p>
+          <br />
+          <a
+            href="https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript"
+            className="text-blue-500 hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            check out more examples on github
+          </a>
+        </div>
+
         <div className="flex h-[500px]">
           <div className="w-1/3 pr-4 overflow-y-auto">
             {/* {pipes.length === 0 &&
@@ -476,7 +496,7 @@ const PipeDialog: React.FC = () => {
                     <Skeleton className="h-24 w-full" />
                   </div>
                 ))} */}
-            {pipes.map((pipe: Pipe) => (
+            {/* {pipes.map((pipe: Pipe) => (
               <Card
                 key={pipe.name}
                 className="cursor-pointer hover:bg-gray-100 mb-2 p-2"
@@ -520,8 +540,8 @@ const PipeDialog: React.FC = () => {
                   </p>
                 )}
               </Card>
-            ))}
-            <Card className="mb-2 p-2">
+            ))} */}
+            {/* <Card className="mb-2 p-2">
               <Input
                 placeholder="Enter repo URL"
                 value={newRepoUrl}
@@ -535,11 +555,11 @@ const PipeDialog: React.FC = () => {
                 <Plus className="mr-2" size={16} />
                 Add Your Own Pipe
               </Button>
-            </Card>
+            </Card> */}
           </div>
-          <div className="w-full pl-4 border-l overflow-y-auto">
+          {/* <div className="w-full pl-4 border-l overflow-y-auto">
             {renderPipeContent()}
-          </div>
+          </div> */}
         </div>
       </DialogContent>
     </Dialog>
