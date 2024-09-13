@@ -1,7 +1,5 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { readFile, open } from "@tauri-apps/plugin-fs";
-import { Button } from "./ui/button";
-import { Link } from "lucide-react";
 
 export const VideoComponent = memo(function VideoComponent({
   filePath,
@@ -13,9 +11,12 @@ export const VideoComponent = memo(function VideoComponent({
   const [isAudio, setIsAudio] = useState(false);
 
   const sanitizeFilePath = useCallback((path: string): string => {
-    // Keep the full path, just remove any surrounding quotes
-    return path.replace(/^["']|["']$/g, "").trim();
+    return path
+      .replace(/^["']|["']$/g, "")
+      .trim()
+      .replace(/\\/g, "/");
   }, []);
+
   const openFileLocation = useCallback(async () => {
     try {
       await open(sanitizeFilePath(filePath));
@@ -36,6 +37,25 @@ export const VideoComponent = memo(function VideoComponent({
     // just a link
     <p className="mt-2 text-center text-xs text-gray-500">{filePath}</p>
   );
+
+  const getMimeType = (path: string): string => {
+    const ext = path.split(".").pop()?.toLowerCase();
+    switch (ext) {
+      case "mp4":
+        return "video/mp4";
+      case "webm":
+        return "video/webm";
+      case "ogg":
+        return "video/ogg";
+      case "mp3":
+        return "audio/mpeg";
+      case "wav":
+        return "audio/wav";
+      default:
+        return isAudio ? "audio/mpeg" : "video/mp4";
+    }
+  };
+
   useEffect(() => {
     async function loadMedia() {
       try {
@@ -50,9 +70,8 @@ export const VideoComponent = memo(function VideoComponent({
         );
 
         const mediaData = await readFile(sanitizedPath);
-        const blob = new Blob([mediaData], {
-          type: isAudio ? "audio/mpeg" : "video/mp4",
-        });
+        const mimeType = getMimeType(sanitizedPath);
+        const blob = new Blob([mediaData], { type: mimeType });
         setMediaSrc(URL.createObjectURL(blob));
       } catch (error) {
         console.error("Failed to load media:", error);

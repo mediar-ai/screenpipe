@@ -532,13 +532,10 @@ impl DatabaseManager {
             }
 
             if content_type == ContentType::All || content_type == ContentType::Audio {
-                println!("Searching for audio");
                 let audio_results = self
                     .search_audio(query, limit, offset, start_time, end_time)
                     .await?;
-                println!("Found {} audio results", audio_results.len());
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
-                println!("Combined results length: {}", results.len());
             }
         }
 
