@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "typeRoots": [
+            "./node_modules/@types",
+            "./types"
+        ],
+        "types": [
+            "screenpipe"
+        ],
+        "lib": ["ES2015", "DOM"],
+        "target": "ES2015"
+    },
+    "include": [
+        "**/*.ts",
+        "screenpipe.d.ts"
+    ]
+}

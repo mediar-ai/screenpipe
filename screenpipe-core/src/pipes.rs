@@ -178,31 +178,6 @@ mod pipes {
         Ok(())
     }
 
-    // #[op2(async)]
-    // async fn op_is_enabled(#[string] pipe_id: String) -> anyhow::Result<bool> {
-    //     // read $HOME/.screenpipe/pipe-id/pipe.json and check if enabled is true
-    //     let home = dirs::home_dir().unwrap();
-    //     let path = home
-    //         .join(".screenpipe")
-    //         .join("pipes")
-    //         .join(pipe_id)
-    //         .join("pipe.json");
-    //     // if file not exist return false
-    //     if !path.exists() {
-    //         return Ok(false);
-    //     }
-    //     let file = tokio::fs::File::open(path).await.unwrap();
-    //     let mut reader = tokio::io::BufReader::new(file);
-    //     let mut contents = String::new();
-    //     reader.read_to_string(&mut contents).await?;
-    //     let config: Value = serde_json::from_str(&contents)?;
-    //     Ok(config
-    //         .get("enabled")
-    //         .unwrap_or(&Value::Bool(false))
-    //         .as_bool()
-    //         .unwrap_or(false))
-    // }
-
     struct TsModuleLoader;
 
     impl deno_core::ModuleLoader for TsModuleLoader {
@@ -319,12 +294,28 @@ mod pipes {
             }
         }
 
-        // Set the screenpipe directory
+        // Set additional environment variables
+        let home_dir = dirs::home_dir().unwrap_or_default();
+        let current_dir = env::current_dir()?;
+        let temp_dir = env::temp_dir();
+
         js_runtime.execute_script(
             "main",
             format!(
-                "globalThis.process.env.SCREENPIPE_DIR = '{}'",
-                screenpipe_dir.to_string_lossy()
+                r#"
+            globalThis.process.env.SCREENPIPE_DIR = '{}';
+            globalThis.process.env.HOME = '{}';
+            globalThis.process.env.CURRENT_DIR = '{}';
+            globalThis.process.env.TEMP_DIR = '{}';
+            globalThis.process.env.PIPE_ID = '{}';
+            globalThis.process.env.PIPE_FILE = '{}';
+            "#,
+                screenpipe_dir.to_string_lossy(),
+                home_dir.to_string_lossy(),
+                current_dir.to_string_lossy(),
+                temp_dir.to_string_lossy(),
+                pipe,
+                file_path
             ),
         )?;
 
@@ -336,7 +327,7 @@ mod pipes {
             Ok(_) => (),
             Err(e) => {
                 error!("Error in JavaScript runtime event loop: {}", e);
-                // ! avoid crashing screenpipe if pipes broken
+                // ! avoid crashing screenpipe if pipes broken - maybe disable it
                 // You can choose to return the error or handle it differently
                 // return Err(anyhow::anyhow!("JavaScript runtime error: {}", e));
             }
@@ -404,11 +395,15 @@ mod pipes {
                 Some("github.com") => {
                     let api_url = get_raw_github_url(source)
                         .map_err(|e| anyhow::anyhow!("Failed to parse GitHub URL: {}", e))?;
-                    let pipe_name = sanitize_pipe_name(Path::new(&api_url).file_name().unwrap().to_str().unwrap());
+                    let pipe_name = sanitize_pipe_name(
+                        Path::new(&api_url).file_name().unwrap().to_str().unwrap(),
+                    );
                     download_github_folder(&client, &api_url, screenpipe_dir, &pipe_name).await
                 }
                 Some("raw.githubusercontent.com") => {
-                    let pipe_name = sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
+                    let pipe_name = sanitize_pipe_name(
+                        Path::new(source).file_name().unwrap().to_str().unwrap(),
+                    );
                     download_single_file(&client, source, screenpipe_dir, &pipe_name).await
                 }
                 _ => anyhow::bail!("Unsupported URL format"),
@@ -423,10 +418,12 @@ mod pipes {
                 anyhow::bail!("Local source is not a directory");
             }
 
-            let pipe_name = sanitize_pipe_name(source_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("unknown_pipe"));
+            let pipe_name = sanitize_pipe_name(
+                source_path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("unknown_pipe"),
+            );
             let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
 
             tokio::fs::create_dir_all(&dest_dir).await?;

@@ -59,6 +59,7 @@ i use cursor with this prompt to help me with the code:
 
 ```
 Rules:
+- Coding: always use lower case for logging stuff or UI
 - Coding: Rust: always use anyhow error, tokio instead of std stuff, avoid mutex if you can, prefer channels, write code easy to read for humans, fast for machines
 - Coding: when i ask to give me the full code it means FULL, no fucking // rest of the code comments GIVE ME THE FULL CODE
 - Coding: if it seems like you lack some context about a niche lib just ask me to provide the source code and i will (instead of providing a bad answer)

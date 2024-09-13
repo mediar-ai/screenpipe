@@ -1,12 +1,7 @@
 use std::{
-    collections::HashMap,
-    fs,
-    net::SocketAddr,
-    ops::Deref,
-    path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
-    time::Duration,
+    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration
 };
+use std::io::Write;
 
 use clap::Parser;
 #[allow(unused_imports)]
@@ -34,13 +29,13 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
 
 fn print_devices(devices: &[AudioDevice]) {
-    println!("Available audio devices:");
+    println!("available audio devices:");
     for device in devices.iter() {
         println!("  {}", device);
     }
 
     #[cfg(target_os = "macos")]
-    println!("On macOS, it's not intuitive but output devices are your displays");
+    println!("on macos, it's not intuitive but output devices are your displays");
 }
 
 const DISPLAY: &str = r"
@@ -55,7 +50,7 @@ const DISPLAY: &str = r"
 
 fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = home_dir()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get home directory"))?
+        .ok_or_else(|| anyhow::anyhow!("failed to get home directory"))?
         .join(".screenpipe");
 
     let base_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
@@ -83,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if find_ffmpeg_path().is_none() {
-        eprintln!("ffmpeg not found. Please install ffmpeg and ensure it is in your PATH.");
+        eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
         std::process::exit(1);
     }
 
@@ -127,10 +122,10 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
         use log::warn;
-        warn!("Screenpipe hasn't been extensively tested on this OS. We'd love your feedback!");
+        warn!("screenpipe hasn't been extensively tested on this os. we'd love your feedback!");
         println!(
             "{}",
-            "Would love your feedback on the UX, let's a 15 min call soon:".bright_yellow()
+            "would love your feedback on the ux, let's a 15 min call soon:".bright_yellow()
         );
         println!(
             "{}",
@@ -147,7 +142,7 @@ async fn main() -> anyhow::Result<()> {
     }
     let all_monitors = list_monitors().await;
     if cli.list_monitors {
-        println!("Available monitors:");
+        println!("available monitors:");
         for monitor in all_monitors.iter() {
             println!("  {}. {:?}", monitor.id(), monitor);
         }
@@ -193,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
         } else {
             // Use specified devices
             for d in &cli.audio_device {
-                let device = parse_audio_device(d).expect("Failed to parse audio device");
+                let device = parse_audio_device(d).expect("failed to parse audio device");
                 audio_devices.push(Arc::new(device.clone()));
                 let device_control = DeviceControl {
                     is_running: true,
@@ -204,7 +199,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         if audio_devices.is_empty() {
-            eprintln!("No audio devices available. Audio recording will be disabled.");
+            eprintln!("no audio devices available. audio recording will be disabled.");
         } else {
             for device in &audio_devices {
                 info!("  {}", device);
@@ -231,12 +226,12 @@ async fn main() -> anyhow::Result<()> {
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))
             .await
             .map_err(|e| {
-                eprintln!("Failed to initialize database: {:?}", e);
+                eprintln!("failed to initialize database: {:?}", e);
                 e
             })?,
     );
     info!(
-        "Database initialized, will store files in {}",
+        "database initialized, will store files in {}",
         local_data_dir.to_string_lossy()
     );
     let db_server = db.clone();
@@ -281,7 +276,7 @@ async fn main() -> anyhow::Result<()> {
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
     } else {
-        eprintln!("Invalid FPS value: {}. Using default of 1.0", cli.fps);
+        eprintln!("invalid fps value: {}. using default of 1.0", cli.fps);
         1.0
     };
 
@@ -318,13 +313,13 @@ async fn main() -> anyhow::Result<()> {
                 let result = tokio::select! {
                     result = recording_future => result,
                     _ = shutdown_rx.recv() => {
-                        info!("Received shutdown signal for recording");
+                        info!("received shutdown signal for recording");
                         break;
                     }
                 };
 
                 if let Err(e) = result {
-                    error!("Continuous recording error: {:?}", e);
+                    error!("continuous recording error: {:?}", e);
                 }
             }
 
@@ -355,61 +350,61 @@ async fn main() -> anyhow::Result<()> {
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
     println!(
         "\n{}",
-        "Build AI apps that have the full context"
+        "build ai apps that have the full context"
             .bright_yellow()
             .italic()
     );
     println!(
         "{}\n\n",
-        "Open source | Runs locally | Developer friendly".bright_green()
+        "open source | runs locally | developer friendly".bright_green()
     );
 
     println!("┌─────────────────────┬────────────────────────────────────┐");
-    println!("│ Setting             │ Value                              │");
+    println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ FPS                 │ {:<34} │", cli.fps);
+    println!("│ fps                 │ {:<34} │", cli.fps);
     println!(
-        "│ Audio Chunk Duration│ {:<34} │",
+        "│ audio chunk duration│ {:<34} │",
         format!("{} seconds", cli.audio_chunk_duration)
     );
     println!(
-        "│ Video Chunk Duration│ {:<34} │",
+        "│ video chunk duration│ {:<34} │",
         format!("{} seconds", cli.video_chunk_duration)
     );
-    println!("│ Port                │ {:<34} │", cli.port);
-    println!("│ Audio Disabled      │ {:<34} │", cli.disable_audio);
-    println!("│ Vision Disabled     │ {:<34} │", cli.disable_vision);
-    println!("│ Save Text Files     │ {:<34} │", cli.save_text_files);
+    println!("│ port                │ {:<34} │", cli.port);
+    println!("│ audio disabled      │ {:<34} │", cli.disable_audio);
+    println!("│ vision disabled     │ {:<34} │", cli.disable_vision);
+    println!("│ save text files     │ {:<34} │", cli.save_text_files);
     println!(
-        "│ Audio Engine        │ {:<34} │",
+        "│ audio engine        │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)
     );
     println!(
-        "│ OCR Engine          │ {:<34} │",
+        "│ ocr engine          │ {:<34} │",
         format!("{:?}", ocr_engine_clone)
     );
     println!(
-        "│ VAD Engine          │ {:<34} │",
+        "│ vad engine          │ {:<34} │",
         format!("{:?}", vad_engine_clone)
     );
     println!(
-        "│ Data Directory      │ {:<34} │",
+        "│ data directory      │ {:<34} │",
         local_data_dir_clone.display()
     );
-    println!("│ Debug Mode          │ {:<34} │", cli.debug);
+    println!("│ debug mode          │ {:<34} │", cli.debug);
 
-    println!("│ Use PII Removal     │ {:<34} │", cli.use_pii_removal);
+    println!("│ use pii removal     │ {:<34} │", cli.use_pii_removal);
     println!(
-        "│ Ignored Windows     │ {:<34} │",
+        "│ ignored windows     │ {:<34} │",
         format_cell(&format!("{:?}", &ignored_windows_clone), VALUE_WIDTH)
     );
     println!(
-        "│ Included Windows    │ {:<34} │",
+        "│ included windows    │ {:<34} │",
         format_cell(&format!("{:?}", &included_windows_clone), VALUE_WIDTH)
     );
     println!(
-        "│ Friend Wearable UID │ {:<34} │",
-        cli.friend_wearable_uid.as_deref().unwrap_or("Not set")
+        "│ friend wearable uid │ {:<34} │",
+        cli.friend_wearable_uid.as_deref().unwrap_or("not set")
     );
     const VALUE_WIDTH: usize = 34;
 
@@ -424,17 +419,17 @@ async fn main() -> anyhow::Result<()> {
 
     // Add monitors section
     println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ Monitors            │                                    │");
+    println!("│ monitors            │                                    │");
     const MAX_ITEMS_TO_DISPLAY: usize = 5;
 
     if cli.disable_vision {
-        println!("│ {:<19} │ {:<34} │", "", "Vision disabled");
+        println!("│ {:<19} │ {:<34} │", "", "vision disabled");
     } else if all_monitors.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "No monitors available");
+        println!("│ {:<19} │ {:<34} │", "", "no monitors available");
     } else {
         let total_monitors = all_monitors.len();
         for (_, monitor) in all_monitors.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
-            let monitor_str = format!("ID: {}, {:?}", monitor.id(), monitor);
+            let monitor_str = format!("id: {}, {:?}", monitor.id(), monitor);
             let formatted_monitor = format_cell(&monitor_str, VALUE_WIDTH);
             println!("│ {:<19} │ {:<34} │", "", formatted_monitor);
         }
@@ -449,12 +444,12 @@ async fn main() -> anyhow::Result<()> {
 
     // Audio devices section
     println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ Audio Devices       │                                    │");
+    println!("│ audio devices       │                                    │");
 
     if cli.disable_audio {
-        println!("│ {:<19} │ {:<34} │", "", "Disabled");
+        println!("│ {:<19} │ {:<34} │", "", "disabled");
     } else if audio_devices.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "No devices available");
+        println!("│ {:<19} │ {:<34} │", "", "no devices available");
     } else {
         let total_devices = audio_devices.len();
         for (_, device) in audio_devices.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
@@ -474,17 +469,17 @@ async fn main() -> anyhow::Result<()> {
 
     // Pipes section
     println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ Pipes               │                                    │");
+    println!("│ pipes               │                                    │");
     let pipes = pipe_manager.list_pipes().await;
     if pipes.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "No pipes available");
+        println!("│ {:<19} │ {:<34} │", "", "no pipes available");
     } else {
         let total_pipes = pipes.len();
         for (_, pipe) in pipes.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let pipe_str = format!(
                 "{} ({})",
                 pipe.id,
-                if pipe.enabled { "Enabled" } else { "Disabled" }
+                if pipe.enabled { "enabled" } else { "disabled" }
             );
             let formatted_pipe = format_cell(&pipe_str, VALUE_WIDTH);
             println!("│ {:<19} │ {:<34} │", "", formatted_pipe);
@@ -506,29 +501,29 @@ async fn main() -> anyhow::Result<()> {
     {
         println!(
             "{}",
-            "WARNING: You are using cloud now. Make sure to understand the data privacy risks."
+            "warning: you are using cloud now. make sure to understand the data privacy risks."
                 .bright_yellow()
         );
     } else {
         println!(
             "{}",
-            "You are using local processing. All your data stays on your computer.\n"
+            "you are using local processing. all your data stays on your computer.\n"
                 .bright_yellow()
         );
     }
 
     // Start pipes
-    debug!("Starting pipes");
+    debug!("starting pipes");
     let pipes = pipe_manager.list_pipes().await;
     for pipe in pipes {
-        debug!("Pipe: {:?}", pipe.id);
+        debug!("pipe: {:?}", pipe.id);
         if !pipe.enabled {
-            debug!("Pipe {} is disabled, skipping", pipe.id);
+            debug!("pipe {} is disabled, skipping", pipe.id);
             continue;
         }
         match pipe_manager.start_pipe(&pipe.id).await {
             Ok(future) => pipe_futures.push(future),
-            Err(e) => eprintln!("Failed to start pipe {}: {}", pipe.id, e),
+            Err(e) => eprintln!("failed to start pipe {}: {}", pipe.id, e),
         }
     }
 
@@ -538,7 +533,7 @@ async fn main() -> anyhow::Result<()> {
     let pipes_future = async {
         loop {
             if let Some(result) = pipe_futures.next().await {
-                info!("Pipe completed: {:?}", result);
+                info!("pipe completed: {:?}", result);
             } else {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
@@ -550,23 +545,23 @@ async fn main() -> anyhow::Result<()> {
     pin_mut!(ctrl_c_future);
 
     tokio::select! {
-        _ = handle => info!("Recording completed"),
+        _ = handle => info!("recording completed"),
         result = &mut server_future => {
             match result {
-                Ok(_) => info!("Server stopped normally"),
-                Err(e) => error!("Server stopped with error: {:?}", e),
+                Ok(_) => info!("server stopped normally"),
+                Err(e) => error!("server stopped with error: {:?}", e),
             }
         }
         _ = &mut pipes_future => {
-            info!("All pipes completed, but server is still running");
+            info!("all pipes completed, but server is still running");
         }
         _ = ctrl_c_future => {
-            info!("Received Ctrl+C, initiating shutdown");
+            info!("received ctrl+c, initiating shutdown");
             let _ = shutdown_tx.send(());
         }
     }
 
-    info!("Shutdown complete");
+    info!("shutdown complete");
     Ok(())
 }
 
@@ -575,26 +570,26 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
     match pipe {
         PipeCommand::List => {
             let pipes = pipe_manager.list_pipes().await;
-            println!("Available pipes:");
+            println!("available pipes:");
             for pipe in pipes {
-                println!("  ID: {}, Enabled: {}", pipe.id, pipe.enabled);
+                println!("  id: {}, enabled: {}", pipe.id, pipe.enabled);
             }
         }
         PipeCommand::Download { url } => match pipe_manager.download_pipe(&url).await {
-            Ok(pipe_id) => println!("Pipe downloaded successfully. ID: {}", pipe_id),
-            Err(e) => eprintln!("Failed to download pipe: {}", e),
+            Ok(pipe_id) => println!("pipe downloaded successfully. id: {}. now enable it with `screenpipe pipe enable {}`", pipe_id, pipe_id),
+            Err(e) => eprintln!("failed to download pipe: {}", e),
         },
         PipeCommand::Info { id } => match pipe_manager.get_pipe_info(&id).await {
-            Some(info) => println!("Pipe info: {:?}", info),
-            None => eprintln!("Pipe not found"),
+            Some(info) => println!("pipe info: {:?}", info),
+            None => eprintln!("pipe not found"),
         },
         PipeCommand::Enable { id } => {
             match pipe_manager
                 .update_config(&id, json!({"enabled": true}))
                 .await
             {
-                Ok(_) => println!("Pipe {} enabled", id),
-                Err(e) => eprintln!("Failed to enable pipe: {}", e),
+                Ok(_) => println!("pipe {} enabled. now restart screenpipe with `screenpipe`", id),
+                Err(e) => eprintln!("failed to enable pipe: {}", e),
             }
         }
         PipeCommand::Disable { id } => {
@@ -602,18 +597,34 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
                 .update_config(&id, json!({"enabled": false}))
                 .await
             {
-                Ok(_) => println!("Pipe {} disabled", id),
-                Err(e) => eprintln!("Failed to disable pipe: {}", e),
+                Ok(_) => println!("pipe {} disabled", id),
+                Err(e) => eprintln!("failed to disable pipe: {}", e),
             }
         }
         PipeCommand::Update { id, config } => {
             let config: Value = serde_json::from_str(&config)
-                .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("invalid json: {}", e))?;
             match pipe_manager.update_config(&id, config).await {
-                Ok(_) => println!("Pipe {} config updated", id),
-                Err(e) => eprintln!("Failed to update pipe config: {}", e),
+                Ok(_) => println!("pipe {} config updated", id),
+                Err(e) => eprintln!("failed to update pipe config: {}", e),
             }
         }
+        PipeCommand::Purge => {
+            print!("are you sure you want to purge all pipes? this action cannot be undone. (y/N): ");
+            io::stdout().flush()?;
+            
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+            
+            if input.trim().to_lowercase() == "y" {
+                match pipe_manager.purge_pipes().await {
+                    Ok(_) => println!("all pipes purged successfully."),
+                    Err(e) => eprintln!("failed to purge pipes: {}", e),
+                }
+            } else {
+                println!("pipe purge cancelled.");
+            }
+        },
     }
     Ok(())
 }

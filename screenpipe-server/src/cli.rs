@@ -233,4 +233,6 @@ pub enum PipeCommand {
         /// New configuration as a JSON string
         config: String,
     },
+    /// Purge all pipes
+    Purge,
 }

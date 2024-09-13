@@ -47,13 +47,18 @@ impl PipeManager {
 
             Ok(future)
         } else {
-            Err(anyhow::anyhow!("Pipe not found"))
+            Err(anyhow::anyhow!("pipe not found"))
         }
     }
 
     pub async fn update_config(&self, id: &str, new_config: Value) -> Result<()> {
         debug!("Updating config for pipe: {}", id);
         let pipe_dir = self.screenpipe_dir.join("pipes").join(id);
+
+        if !pipe_dir.exists() {
+            return Err(anyhow::anyhow!("pipe '{}' does not exist", id));
+        }
+
         let config_path = pipe_dir.join("pipe.json");
 
         let mut config: Value = if config_path.exists() {
@@ -73,10 +78,10 @@ impl PipeManager {
                     existing_config.insert(key, value);
                 }
             } else {
-                return Err(anyhow::anyhow!("New configuration must be an object"));
+                return Err(anyhow::anyhow!("new configuration must be an object"));
             }
         } else {
-            return Err(anyhow::anyhow!("Existing configuration is not an object"));
+            return Err(anyhow::anyhow!("existing configuration is not an object"));
         }
 
         let updated_config_str = serde_json::to_string_pretty(&config)?;
@@ -131,5 +136,11 @@ impl PipeManager {
 
         let pipe_dir = download_pipe(&normalized_url, self.screenpipe_dir.clone()).await?;
         Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
+    }
+
+    pub async fn purge_pipes(&self) -> Result<()> {
+        let pipe_dir = self.screenpipe_dir.join("pipes");
+        tokio::fs::remove_dir_all(pipe_dir).await?;
+        Ok(())
     }
 }
