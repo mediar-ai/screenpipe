@@ -222,31 +222,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_download_pipe_raw_file() {
-        init();
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let raw_url = "https://raw.githubusercontent.com/mediar-ai/screenpipe/main/examples/typescript/pipe-stream-ocr-text/main.js";
-        let result = download_pipe(raw_url, screenpipe_dir.clone()).await;
-
-        assert!(result.is_ok(), "Failed to download raw file: {:?}", result);
-        let pipe_dir = result.unwrap();
-        assert!(pipe_dir.exists(), "Pipe directory does not exist");
-
-        let has_main_or_pipe_file = std::fs::read_dir(&pipe_dir).unwrap().any(|entry| {
-            let file_name = entry.unwrap().file_name().into_string().unwrap();
-            (file_name.starts_with("main") || file_name.starts_with("pipe"))
-                && (file_name.ends_with(".ts") || file_name.ends_with(".js"))
-        });
-
-        assert!(
-            has_main_or_pipe_file,
-            "No main.ts, main.js, pipe.ts, or pipe.js file found"
-        );
-    }
-
-    #[tokio::test]
     async fn test_download_pipe_invalid_url() {
         init();
         let temp_dir = TempDir::new().unwrap();

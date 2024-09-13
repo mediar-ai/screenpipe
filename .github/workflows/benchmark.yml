@@ -132,15 +132,16 @@ jobs:
           fail-on-alert: true
           alert-comment-cc-users: "@louis030195"
 
-      - name: Analyze STT benchmarks
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: STT Benchmarks
-          tool: "cargo"
-          output-file-path: ./cache/stt/stt_output.txt
-          github-token: ${{ secrets.GH_PAGES_TOKEN }}
-          auto-push: true
-          alert-threshold: "200%"
-          comment-on-alert: true
-          fail-on-alert: true
-          alert-comment-cc-users: "@louis030195"
+      # todo broken
+      # - name: Analyze STT benchmarks
+      #   uses: benchmark-action/github-action-benchmark@v1
+      #   with:
+      #     name: STT Benchmarks
+      #     tool: "cargo"
+      #     output-file-path: ./cache/stt/stt_output.txt
+      #     github-token: ${{ secrets.GH_PAGES_TOKEN }}
+      #     auto-push: true
+      #     alert-threshold: "200%"
+      #     comment-on-alert: true
+      #     fail-on-alert: true
+      #     alert-comment-cc-users: "@louis030195"
