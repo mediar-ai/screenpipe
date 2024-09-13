@@ -11,6 +11,8 @@ import { OpenAI } from "openai";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "./ui/use-toast";
 import ReactMarkdown from 'react-markdown';
+import { X, Activity } from "lucide-react"; // Import the X icon and Activity icon for live meetings
+import { useInterval } from "@/lib/hooks/use-interval"; // Add this import
 
 function setItem(key: string, value: any): void {
   if (typeof window !== 'undefined') {
@@ -65,6 +67,8 @@ export default function MeetingHistory() {
   const [isIdentifying, setIsIdentifying] = useState(false);
   const { settings } = useSettings();
   const { toast } = useToast();
+  const [showError, setShowError] = useState(false);
+  const [liveMeetings, setLiveMeetings] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     console.log("useEffect running, isOpen:", isOpen);
@@ -72,6 +76,10 @@ export default function MeetingHistory() {
       loadMeetings();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    setShowError(!!error);
+  }, [error]);
 
   async function loadMeetings() {
     setLoading(true);
@@ -94,9 +102,9 @@ export default function MeetingHistory() {
       let startTime;
       const storedMeetings = getItem('meetings') || [];
       if (storedMeetings.length > 0) {
-        // Get the end time of the last stored meeting
+        // Get the start time of the last stored meeting
         const lastMeeting = storedMeetings[storedMeetings.length - 1];
-        startTime = new Date(lastMeeting.meeting_end).toISOString();
+        startTime = new Date(lastMeeting.meeting_start).toISOString();
       } else {
         // If no stored meetings, search from 7 days ago
         startTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -110,17 +118,69 @@ export default function MeetingHistory() {
       console.log("Fetch result:", result);
       const newMeetings = processMeetings(result.data);
       console.log("Processed new meetings:", newMeetings);
-      
-      // Combine new meetings with stored meetings
-      const updatedMeetings = [...storedMeetings, ...newMeetings];
+
+      const newLiveMeetings = new Set(liveMeetings);
+
+      // Merge new meetings with stored meetings, updating the last meeting if necessary
+      let updatedMeetings = [...storedMeetings];
+      newMeetings.forEach(newMeeting => {
+        const existingMeetingIndex = updatedMeetings.findIndex(m => m.meeting_group === newMeeting.meeting_group);
+        if (existingMeetingIndex !== -1) {
+          // Update existing meeting
+          updatedMeetings[existingMeetingIndex] = {
+            ...updatedMeetings[existingMeetingIndex],
+            ...newMeeting,
+            full_transcription: updatedMeetings[existingMeetingIndex].full_transcription + newMeeting.full_transcription,
+          };
+        } else {
+          // Add new meeting
+          updatedMeetings.push(newMeeting);
+        }
+
+        if (isLiveMeeting(newMeeting)) {
+          if (!liveMeetings.has(newMeeting.meeting_group)) {
+            sendNotification("Live Meeting Started", `A live meeting started at ${new Date(newMeeting.meeting_start).toLocaleTimeString()}`);
+            newLiveMeetings.add(newMeeting.meeting_group);
+          }
+        } else if (liveMeetings.has(newMeeting.meeting_group)) {
+          sendNotification("Meeting Ended", `The meeting that started at ${new Date(newMeeting.meeting_start).toLocaleTimeString()} has ended`);
+          newLiveMeetings.delete(newMeeting.meeting_group);
+        }
+      });
+
+      setLiveMeetings(newLiveMeetings);
       setMeetings(updatedMeetings);
-      setItem('meetings', updatedMeetings);
+      
+      // Only store completed meetings
+      const completedMeetings = updatedMeetings.filter(meeting => !isLiveMeeting(meeting));
+      setItem('meetings', completedMeetings);
     } catch (err) {
-      setError("Failed to fetch meeting history");
+      setError("Some trouble fetching new meetings. Please check health status.");
       console.error("Fetch error:", err);
     } finally {
       console.log("Fetch completed");
       setLoading(false);
+    }
+  }
+
+  async function sendNotification(title: string, body: string) {
+    try {
+      const response = await fetch("http://localhost:11435/notify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title, body }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log("Notification sent successfully:", result);
+    } catch (error) {
+      console.error("Failed to send notification:", error);
     }
   }
 
@@ -263,6 +323,21 @@ export default function MeetingHistory() {
       meetings.push(currentMeeting);
     }
 
+    // Merge overlapping or close meetings
+    meetings = meetings.reduce((acc, meeting) => {
+      const lastMeeting = acc[acc.length - 1];
+      if (lastMeeting) {
+        const timeDiff = new Date(meeting.meeting_start).getTime() - new Date(lastMeeting.meeting_end).getTime();
+        if (timeDiff < 5 * 60 * 1000) { // If less than 5 minutes apart, merge
+          lastMeeting.meeting_end = meeting.meeting_end;
+          lastMeeting.full_transcription += meeting.full_transcription;
+          return acc;
+        }
+      }
+      acc.push(meeting);
+      return acc;
+    }, [] as Meeting[]);
+
     console.log("Processed meetings:", meetings);
     return meetings.filter(m => m.full_transcription.replace(/\n/g, '').length >= 200);
   }
@@ -273,6 +348,19 @@ export default function MeetingHistory() {
   const sortedMeetings = [...meetings].sort((a, b) => 
     new Date(b.meeting_start).getTime() - new Date(a.meeting_start).getTime()
   );
+
+  const isLiveMeeting = (meeting: Meeting) => {
+    const lastTranscriptionTime = new Date(meeting.meeting_end);
+    const now = new Date();
+    return now.getTime() - lastTranscriptionTime.getTime() < 5 * 60 * 1000;
+  };
+
+  // Add this useInterval hook
+  useInterval(() => {
+    if (isOpen) {
+      fetchMeetings();
+    }
+  }, 30000); // 30 seconds
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -285,11 +373,27 @@ export default function MeetingHistory() {
         </DialogHeader>
         <div className="flex-grow overflow-auto p-4">
           {loading && <p>Loading meeting history...</p>}
-          {error && <p className="text-red-500">{error}</p>}
+          {showError && error && (
+            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4 flex justify-between items-center" role="alert">
+              <div>
+                <p className="font-bold">Warning</p>
+                <p>{error}</p>
+              </div>
+              <button onClick={() => setShowError(false)} className="text-yellow-700 hover:text-yellow-900">
+                <X size={18} />
+              </button>
+            </div>
+          )}
           {meetings.length === 0 && !loading && !error && <p>No meetings found.</p>}
           <div className="space-y-4">
             {sortedMeetings.map((meeting, index) => (
-              <div key={index} className="p-4 border rounded">
+              <div key={index} className="p-4 border rounded relative">
+                {isLiveMeeting(meeting) && (
+                  <div className="absolute top-2 right-2 flex items-center text-green-500">
+                    <Activity size={16} className="mr-1" />
+                    <span className="text-sm font-semibold">Live</span>
+                  </div>
+                )}
                 <h3 className="font-bold">
                   {`Meeting ${new Date(meeting.meeting_start).toLocaleDateString()}, ${new Date(meeting.meeting_start).toLocaleTimeString()} - ${new Date(meeting.meeting_end).toLocaleTimeString()}`}
                 </h3>
@@ -305,7 +409,9 @@ export default function MeetingHistory() {
                     </Button>
                   )}
                 </p>
-                {meeting.summary ? (
+                {isLiveMeeting(meeting) ? (
+                  <p className="mt-2 text-sm text-gray-500 italic">Summary not available for live meetings</p>
+                ) : meeting.summary ? (
                   <div>
                     <h4 className="font-semibold mt-2">Summary:</h4>
                     <ReactMarkdown className="prose max-w-none">
