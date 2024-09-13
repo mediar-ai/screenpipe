@@ -63,7 +63,12 @@ export default function Home() {
           </div>
         </div>
       ) : settings.useOllama || settings.openaiApiKey ? (
-        <SearchChat />
+        <>
+          <h1 className="text-2xl font-bold mb-8 text-center mb-12">
+            where pixels become magic
+          </h1>
+          <SearchChat />
+        </>
       ) : (
         // <Tabs
         //   value={activeTab}

@@ -462,9 +462,7 @@ export function SearchChat() {
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4 text-center mb-12">
-        where pixels become magic
-      </h1>
+      
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
@@ -814,7 +812,7 @@ export function SearchChat() {
                 <Input
                   ref={floatingInputRef}
                   type="text"
-                  placeholder="Ask a question about the results..."
+                  placeholder="ask a question about the results..."
                   value={floatingInput}
                   disabled={isAiLoading}
                   onChange={(e) => setFloatingInput(e.target.value)}
@@ -830,7 +828,7 @@ export function SearchChat() {
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>
-                          Content exceeds 30k tokens. Refine your search for
+                          content exceeds 30k tokens. refine your search for
                           better results.
                         </p>
                       </TooltipContent>
