@@ -17,7 +17,8 @@ tauri-build = { version = "=2.0.0-rc.9", features = [] }
 [dependencies]
 serde_json = "1.0"
 tauri = { version = "2.0.0-rc.10", features = [ "macos-private-api", "tray-icon", "devtools", "image-png", "image-ico"] }
-
+tower-http = { version = "0.4.0", features = ["cors", "trace"] }
+http = "0.2"
 
 # Logging
 log = "0.4.17"
@@ -56,7 +57,7 @@ sysinfo = "0.29.0"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
-axum = "0.6"
+axum = "0.6.0"  # or your current version
 serde = "1.0.160"
 
 
