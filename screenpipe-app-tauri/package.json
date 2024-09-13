@@ -47,6 +47,7 @@
     "cmdk": "1.0.0",
     "date-fns": "^3.6.0",
     "framer-motion": "^11.5.4",
+    "lodash": "^4.17.21",
     "lucide-react": "^0.414.0",
     "next": "14.2.4",
     "ollama-ai-provider": "^0.11.0",
@@ -67,6 +68,7 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.13",
     "@tauri-apps/cli": "2.0.0-beta.22",
+    "@types/lodash": "^4.17.7",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
