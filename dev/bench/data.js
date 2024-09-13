@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726191364437,
+  "lastUpdate": 1726191366985,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -9115,6 +9115,42 @@ window.BENCHMARK_DATA = {
             "name": "whisper_benchmarks/stt",
             "value": 12473771189,
             "range": "± 55128602",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cf2de863358d1b6a992b14221e4114745db2954e",
+          "message": "Merge pull request #314 from m13v/meetings-feature\n\nMeetings feature",
+          "timestamp": "2024-09-12T18:22:27-07:00",
+          "tree_id": "61a965c508f88978e3293991a4406507f66d6825",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/cf2de863358d1b6a992b14221e4114745db2954e"
+        },
+        "date": 1726191366075,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "whisper_benchmarks/create_whisper_channel",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "whisper_benchmarks/stt",
+            "value": 12612094334,
+            "range": "± 131293281",
             "unit": "ns/iter"
           }
         ]
