@@ -1,14 +1,12 @@
 use crate::cli::CliVadEngine;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
-use chrono::Utc;
 use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
 use screenpipe_audio::{
-    create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput,
-    AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
-    vad_engine::VadEngineEnum,
+    create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
+    AudioInput, AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
 };
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
@@ -59,11 +57,16 @@ pub async fn start_continuous_recording(
             Arc::new(AtomicBool::new(false)),
         )
     } else {
-        create_whisper_channel(audio_transcription_engine.clone(), VadEngineEnum::from(vad_engine), deepgram_api_key).await?
+        create_whisper_channel(
+            audio_transcription_engine.clone(),
+            VadEngineEnum::from(vad_engine),
+            deepgram_api_key,
+            &PathBuf::from(output_path.as_ref()),
+        )
+        .await?
     };
     let whisper_sender_clone = whisper_sender.clone();
     let db_manager_audio = Arc::clone(&db);
-    let output_path_audio = Arc::clone(&output_path);
     // Initialize friend wearable loop
     if let Some(uid) = &friend_wearable_uid {
         tokio::spawn(initialize_friend_wearable_loop(
@@ -116,7 +119,6 @@ pub async fn start_continuous_recording(
         audio_handle.spawn(async move {
             record_audio(
                 db_manager_audio,
-                output_path_audio,
                 audio_chunk_duration,
                 whisper_sender,
                 whisper_receiver,
@@ -246,7 +248,6 @@ async fn record_video(
 
 async fn record_audio(
     db: Arc<DatabaseManager>,
-    output_path: Arc<String>,
     chunk_duration: Duration,
     whisper_sender: UnboundedSender<AudioInput>,
     mut whisper_receiver: UnboundedReceiver<TranscriptionResult>,
@@ -270,7 +271,6 @@ async fn record_audio(
                 continue;
             }
 
-            let output_path_clone = Arc::clone(&output_path);
             let whisper_sender_clone = whisper_sender.clone();
 
             let audio_device = Arc::new(audio_device);
@@ -292,20 +292,11 @@ async fn record_audio(
                         iteration, audio_device_clone
                     );
 
-                    let output_path_clone = Arc::clone(&output_path_clone);
                     let whisper_sender = whisper_sender_clone.clone();
                     let audio_device_clone = audio_device_clone.clone();
                     let audio_device_clone_2 = audio_device_clone.clone();
                     let device_control_clone = device_control_clone.clone();
 
-                    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-                    let sanitized_device_name =
-                        audio_device_clone.to_string().replace(['/', '\\'], "_");
-                    let file_path = PathBuf::from(&*output_path_clone)
-                        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
-                        .to_str()
-                        .expect("Failed to create valid path")
-                        .to_string();
                     debug!(
                         "Starting record_and_transcribe for device {} (iteration {})",
                         audio_device_clone, iteration
@@ -313,7 +304,6 @@ async fn record_audio(
                     let result = record_and_transcribe(
                         audio_device_clone,
                         chunk_duration,
-                        file_path.into(),
                         whisper_sender,
                         Arc::new(AtomicBool::new(device_control_clone.is_running)),
                     )
@@ -396,8 +386,8 @@ async fn process_audio_result(
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
 
-    info!("Inserting audio chunk: {:?}", result.input.path);
-    match db.insert_audio_chunk(&result.input.path).await {
+    info!("Inserting audio chunk: {:?}", result.path);
+    match db.insert_audio_chunk(&result.path).await {
         Ok(audio_chunk_id) => {
             if transcription.is_empty() {
                 return Ok(());

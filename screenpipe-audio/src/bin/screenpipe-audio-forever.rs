@@ -9,7 +9,7 @@ use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioTranscriptionEngine;
-use screenpipe_audio::VadEngineEnum; 
+use screenpipe_audio::VadEngineEnum;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -80,16 +80,13 @@ async fn main() -> Result<()> {
     }
 
     let chunk_duration = Duration::from_secs_f32(args.audio_chunk_duration);
-    let (whisper_sender, mut whisper_receiver, _) =
-        create_whisper_channel(
-            Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
-            // non windows use silero
-            #[cfg(not(target_os = "windows"))]
-            VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
-            #[cfg(target_os = "windows")]
-            VadEngineEnum::WebRtc,
-            args.deepgram_api_key,
-        ).await?;
+    let (whisper_sender, mut whisper_receiver, _) = create_whisper_channel(
+        Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
+        VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
+        args.deepgram_api_key,
+        &PathBuf::from("output.mp4"),
+    )
+    .await?;
     // Spawn threads for each device
     let _recording_threads: Vec<_> = devices
         .into_iter()
@@ -97,10 +94,7 @@ async fn main() -> Result<()> {
         .map(|(i, device)| {
             let device = Arc::new(device);
             let whisper_sender = whisper_sender.clone();
-            let output_path = PathBuf::from(format!(
-                "/tmp/output_{}.mp4",
-                chrono::Utc::now().timestamp()
-            ));
+            
 
             let device_control = Arc::new(AtomicBool::new(true));
 
@@ -109,7 +103,6 @@ async fn main() -> Result<()> {
                     let result = record_and_transcribe(
                         Arc::clone(&device),
                         chunk_duration,
-                        output_path.clone(),
                         whisper_sender.clone(),
                         Arc::clone(&device_control),
                     )

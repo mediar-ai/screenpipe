@@ -1,4 +1,5 @@
 use std::{
+    path::PathBuf,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -6,6 +7,7 @@ use std::{
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::{ops::softmax, VarBuilder};
+use chrono::Utc;
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, error, info};
 #[cfg(target_os = "macos")]
@@ -20,8 +22,7 @@ use rubato::{
 };
 
 use crate::{
-    multilingual,
-    pcm_decode::pcm_decode,
+    encode_single_audio, multilingual,
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, WebRtcVad},
     AudioTranscriptionEngine,
 };
@@ -509,13 +510,13 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String>
 }
 
 pub fn stt(
-    file_path: &str,
+    audio_input: &AudioInput,
     whisper_model: &WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     vad_engine: &mut dyn VadEngine,
     deepgram_api_key: Option<String>,
-) -> Result<String> {
-    debug!("Starting speech to text for file: {}", file_path);
+    output_path: &PathBuf,
+) -> Result<(String, String)> {
     let model = &whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
     let device = &whisper_model.device;
@@ -529,22 +530,21 @@ pub fn stt(
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
-    debug!("Decoding PCM data");
-    let (mut pcm_data, sample_rate) = pcm_decode(file_path)?;
-    if sample_rate != m::SAMPLE_RATE as u32 {
+    let mut audio_data = audio_input.data.clone();
+    if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
         info!(
             "Resampling from {} Hz to {} Hz",
-            sample_rate,
+            audio_input.sample_rate,
             m::SAMPLE_RATE
         );
-        pcm_data = resample(pcm_data, sample_rate, m::SAMPLE_RATE as u32)?;
+        audio_data = resample(audio_data, audio_input.sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
     // Filter out non-speech segments using Silero VAD
     debug!("Filtering out non-speech segments with VAD");
     let frame_size = 160; // 10ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
-    for (frame_index, chunk) in pcm_data.chunks(frame_size).enumerate() {
+    for (frame_index, chunk) in audio_data.chunks(frame_size).enumerate() {
         match vad_engine.is_voice_segment(chunk) {
             Ok(is_voice) => {
                 if is_voice {
@@ -553,136 +553,152 @@ pub fn stt(
             }
             Err(e) => {
                 debug!("VAD failed for frame {}: {:?}", frame_index, e);
-                // Optionally, you can choose to include the frame if VAD fails
-                // speech_frames.extend_from_slice(chunk);
             }
         }
     }
 
     info!(
         "Total audio_frames processed: {}, frames that include speech: {}",
-        pcm_data.len() / frame_size,
+        audio_data.len() / frame_size,
         speech_frames.len() / frame_size
     );
 
     // If no speech frames detected, skip processing
     if speech_frames.is_empty() {
         debug!("No speech detected using VAD, skipping audio processing");
-        return Ok("".to_string()); // Return an empty string or consider a more specific "no speech" indicator
+        return Ok(("".to_string(), "".to_string())); // Return an empty string or consider a more specific "no speech" indicator
     }
 
     debug!(
         "Using {} speech frames out of {} total frames",
         speech_frames.len() / frame_size,
-        pcm_data.len() / frame_size
+        audio_data.len() / frame_size
     );
 
-    if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
-        // Deepgram implementation
-        //check if key is set or empty or no chars in it
-        let api_key = if deepgram_api_key.clone().is_some()
-            && !deepgram_api_key.clone().unwrap().is_empty()
-            && deepgram_api_key.clone().unwrap().chars().count() > 0
-        {
-            deepgram_api_key.clone().unwrap()
-        } else {
-            get_deepgram_api_key()
-        };
-        info!("Using Deepgram API key: {}...", &api_key[..8]);
-        match transcribe_with_deepgram(&api_key, &speech_frames) {
-            Ok(transcription) => Ok(transcription),
-            Err(e) => {
-                error!(
-                    "Deepgram transcription failed, falling back to Whisper: {:?}",
-                    e
-                );
-                // Existing Whisper implementation
-                debug!("Converting PCM to mel spectrogram");
-                let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
-                let mel_len = mel.len();
-                debug!("Creating tensor from mel spectrogram");
-                let mel = Tensor::from_vec(
-                    mel,
-                    (
-                        1,
-                        model.config().num_mel_bins,
-                        mel_len / model.config().num_mel_bins,
-                    ),
-                    &device,
-                )?;
+    let transcription: Result<String> =
+        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
+            // Deepgram implementation
+            //check if key is set or empty or no chars in it
+            let api_key = if deepgram_api_key.clone().is_some()
+                && !deepgram_api_key.clone().unwrap().is_empty()
+                && deepgram_api_key.clone().unwrap().chars().count() > 0
+            {
+                deepgram_api_key.clone().unwrap()
+            } else {
+                get_deepgram_api_key()
+            };
+            info!("Using Deepgram API key: {}...", &api_key[..8]);
+            match transcribe_with_deepgram(&api_key, &speech_frames) {
+                Ok(transcription) => Ok(transcription),
+                Err(e) => {
+                    error!(
+                        "Deepgram transcription failed, falling back to Whisper: {:?}",
+                        e
+                    );
+                    // Existing Whisper implementation
+                    debug!("Converting PCM to mel spectrogram");
+                    let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
+                    let mel_len = mel.len();
+                    debug!("Creating tensor from mel spectrogram");
+                    let mel = Tensor::from_vec(
+                        mel,
+                        (
+                            1,
+                            model.config().num_mel_bins,
+                            mel_len / model.config().num_mel_bins,
+                        ),
+                        &device,
+                    )?;
 
-                debug!("Detecting language");
-                let language_token = Some(multilingual::detect_language(
-                    &mut model.clone(),
-                    &tokenizer,
-                    &mel,
-                )?);
-                let mut model = model.clone();
-                debug!("Initializing decoder");
-                let mut dc = Decoder::new(
-                    &mut model,
-                    tokenizer,
-                    42,
-                    &device,
-                    language_token,
-                    Some(Task::Transcribe),
-                    true,
-                    false,
-                )?;
-                debug!("Starting decoding process");
-                let segments = dc.run(&mel)?;
-                debug!("Decoding complete");
-                Ok(segments
-                    .iter()
-                    .map(|s| s.dr.text.clone())
-                    .collect::<Vec<String>>()
-                    .join("\n"))
+                    debug!("Detecting language");
+                    let language_token = Some(multilingual::detect_language(
+                        &mut model.clone(),
+                        &tokenizer,
+                        &mel,
+                    )?);
+                    let mut model = model.clone();
+                    debug!("Initializing decoder");
+                    let mut dc = Decoder::new(
+                        &mut model,
+                        tokenizer,
+                        42,
+                        &device,
+                        language_token,
+                        Some(Task::Transcribe),
+                        true,
+                        false,
+                    )?;
+                    debug!("Starting decoding process");
+                    let segments = dc.run(&mel)?;
+                    debug!("Decoding complete");
+                    Ok(segments
+                        .iter()
+                        .map(|s| s.dr.text.clone())
+                        .collect::<Vec<String>>()
+                        .join("\n"))
+                }
             }
-        }
-    } else {
-        // Existing Whisper implementation
-        debug!("Starting Whisper transcription");
-        debug!("Converting PCM to mel spectrogram");
-        let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
-        let mel_len = mel.len();
-        debug!("Creating tensor from mel spectrogram");
-        let mel = Tensor::from_vec(
-            mel,
-            (
-                1,
-                model.config().num_mel_bins,
-                mel_len / model.config().num_mel_bins,
-            ),
-            &device,
-        )?;
+        } else {
+            // Existing Whisper implementation
+            debug!("Starting Whisper transcription");
+            debug!("Converting PCM to mel spectrogram");
+            let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
+            let mel_len = mel.len();
+            debug!("Creating tensor from mel spectrogram");
+            let mel = Tensor::from_vec(
+                mel,
+                (
+                    1,
+                    model.config().num_mel_bins,
+                    mel_len / model.config().num_mel_bins,
+                ),
+                &device,
+            )?;
 
-        debug!("Detecting language");
-        let language_token = Some(multilingual::detect_language(
-            &mut model.clone(),
-            &tokenizer,
-            &mel,
-        )?);
-        let mut model = model.clone();
-        debug!("Initializing decoder");
-        let mut dc = Decoder::new(
-            &mut model,
-            tokenizer,
-            42,
-            &device,
-            language_token,
-            Some(Task::Transcribe),
-            true,
-            false,
-        )?;
-        debug!("Starting decoding process");
-        let segments = dc.run(&mel)?;
-        debug!("Decoding complete");
-        Ok(segments
-            .iter()
-            .map(|s| s.dr.text.clone())
-            .collect::<Vec<String>>()
-            .join("\n"))
-    }
+            debug!("Detecting language");
+            let language_token = Some(multilingual::detect_language(
+                &mut model.clone(),
+                &tokenizer,
+                &mel,
+            )?);
+            let mut model = model.clone();
+            debug!("Initializing decoder");
+            let mut dc = Decoder::new(
+                &mut model,
+                tokenizer,
+                42,
+                &device,
+                language_token,
+                Some(Task::Transcribe),
+                true,
+                false,
+            )?;
+            debug!("Starting decoding process");
+            let segments = dc.run(&mel)?;
+            debug!("Decoding complete");
+            Ok(segments
+                .iter()
+                .map(|s| s.dr.text.clone())
+                .collect::<Vec<String>>()
+                .join("\n"))
+        };
+    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let sanitized_device_name = audio_input.device.to_string().replace(['/', '\\'], "_");
+    let file_path = PathBuf::from(output_path)
+        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
+        .to_str()
+        .expect("Failed to create valid path")
+        .to_string();
+    let file_path_clone = file_path.clone();
+    // Run FFmpeg in a separate task
+    encode_single_audio(
+        bytemuck::cast_slice(&audio_input.data),
+        audio_input.sample_rate,
+        audio_input.channels,
+        &file_path.into(),
+    )?;
+
+    Ok((transcription?, file_path_clone))
 }
 
 fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
@@ -712,12 +728,16 @@ fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Resu
 
 #[derive(Debug, Clone)]
 pub struct AudioInput {
-    pub path: String,
+    pub data: Vec<f32>,
+
+    pub sample_rate: u32,
+    pub channels: u16,
     pub device: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct TranscriptionResult {
+    pub path: String,
     pub input: AudioInput,
     pub transcription: Option<String>,
     pub timestamp: u64,
@@ -729,6 +749,7 @@ pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     vad_engine: VadEngineEnum,
     deepgram_api_key: Option<String>,
+    output_path: &PathBuf,
 ) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
@@ -747,9 +768,10 @@ pub async fn create_whisper_channel(
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
         VadEngineEnum::Silero => Box::new(SileroVad::new()?),
     };
-    
+
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
+    let output_path = output_path.clone();
 
     tokio::spawn(async move {
         loop {
@@ -757,9 +779,11 @@ pub async fn create_whisper_channel(
                 info!("Whisper channel shutting down");
                 break;
             }
+            debug!("Waiting for input from input_receiver");
 
             tokio::select! {
                 Some(input) = input_receiver.recv() => {
+                    debug!("Received input from input_receiver");
                     let timestamp = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .expect("Time went backwards")
@@ -769,18 +793,20 @@ pub async fn create_whisper_channel(
                         #[cfg(target_os = "macos")]
                         {
                             autoreleasepool(|| {
-                                match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone()) {
-                                    Ok(transcription) => TranscriptionResult {
+                                match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path) {
+                                    Ok((transcription, path)) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),
+                                        path,
                                         timestamp,
                                         error: None,
                                     },
                                     Err(e) => {
-                                        error!("STT error for input {}: {:?}", input.path, e);
+                                        error!("STT error for input {}: {:?}", input.device, e);
                                         TranscriptionResult {
                                             input: input.clone(),
                                             transcription: None,
+                                            path: "".to_string(),
                                             timestamp,
                                             error: Some(e.to_string()),
                                         }
@@ -793,18 +819,20 @@ pub async fn create_whisper_channel(
                             unreachable!("This code should not be reached on non-macOS platforms")
                         }
                     } else {
-                        match stt(&input.path, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone()) {
-                            Ok(transcription) => TranscriptionResult {
+                        match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path) {
+                            Ok((transcription, path)) => TranscriptionResult {
                                 input: input.clone(),
                                 transcription: Some(transcription),
+                                path,
                                 timestamp,
                                 error: None,
                             },
                             Err(e) => {
-                                error!("STT error for input {}: {:?}", input.path, e);
+                                error!("STT error for input {}: {:?}", input.device, e);
                                 TranscriptionResult {
                                     input: input.clone(),
                                     transcription: None,
+                                    path: "".to_string(),
                                     timestamp,
                                     error: Some(e.to_string()),
                                 }

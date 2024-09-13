@@ -105,7 +105,7 @@ export function useSettings() {
         await store!.load();
         const savedKey = ((await store!.get("openaiApiKey")) as string) || "";
         const savedDeepgramKey =
-          ((await store!.get("deepgramApiKey")) as string) || "";
+          ((await store!.get("deepgramApiKey")) as string) || "7ed2a159a094337b01fd8178b914b7ae0e77822d";
         const savedUseOllama =
           ((await store!.get("useOllama")) as boolean) || false;
         const savedOllamaUrl =

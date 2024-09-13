@@ -126,7 +126,10 @@ impl PipeManager {
     }
 
     pub async fn download_pipe(&self, url: &str) -> Result<String> {
-        let pipe_dir = download_pipe(url, self.screenpipe_dir.clone()).await?;
+        // Remove any surrounding quotes and normalize backslashes
+        let normalized_url = url.trim_matches('"').replace("\\", "/");
+
+        let pipe_dir = download_pipe(&normalized_url, self.screenpipe_dir.clone()).await?;
         Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
     }
 }

@@ -401,7 +401,8 @@ mod pipes {
             let client = Client::new();
             match parsed_url.host_str() {
                 Some("github.com") => {
-                    let api_url = get_raw_github_url(source)?;
+                    let api_url = get_raw_github_url(source)
+                        .map_err(|e| anyhow::anyhow!("Failed to parse GitHub URL: {}", e))?;
                     download_github_folder(&client, &api_url, screenpipe_dir).await
                 }
                 Some("raw.githubusercontent.com") => {
