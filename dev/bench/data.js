@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726264636337,
+  "lastUpdate": 1726264857309,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -5879,6 +5879,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1954557916,
             "range": "± 38880437",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f8484b767ea0e0991c6864857718e3436b54d522",
+          "message": "Merge pull request #323 from m13v/meetings-feature-3\n\nMeetings feature 3",
+          "timestamp": "2024-09-13T14:49:36-07:00",
+          "tree_id": "66d74aa9d6796a0a8bc21158d270d98efd26eede",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/f8484b767ea0e0991c6864857718e3436b54d522"
+        },
+        "date": 1726264855881,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1981978021,
+            "range": "± 60549257",
             "unit": "ns/iter"
           }
         ]
