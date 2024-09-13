@@ -1,4 +1,10 @@
-use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
+use axum::{
+    extract::State,
+    http::{Method, StatusCode},
+    Json, Router,
+};
+use tower_http::cors::{CorsLayer, Any};
+use tower_http::trace::{TraceLayer, DefaultMakeSpan};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tauri::Emitter;
@@ -6,6 +12,7 @@ use tauri::Emitter;
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::mpsc;
 use tracing::{error, info};
+use http::header::HeaderValue;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
@@ -20,7 +27,7 @@ pub struct ServerState {
     app_handle: tauri::AppHandle,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct NotificationPayload {
     title: String,
     body: String,
@@ -35,9 +42,20 @@ struct ApiResponse {
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let state = ServerState { app_handle };
 
+    let cors = CorsLayer::new()
+        .allow_origin("*".parse::<HeaderValue>().unwrap())
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers(Any)
+        .allow_credentials(false);
+
     let app = Router::new()
-        .route("/notify", post(send_notification))
-        .route("/log", post(log_message))
+        .route("/notify", axum::routing::post(send_notification))
+        .route("/log", axum::routing::post(log_message))
+        .layer(cors)
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().include_headers(true)),
+        )
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -53,6 +71,7 @@ async fn send_notification(
     State(state): State<ServerState>,
     Json(payload): Json<NotificationPayload>,
 ) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("Received notification request: {:?}", payload);
     match state.app_handle.emit("notification-requested", &payload) {
         Ok(e) => {
             info!("Notification sent: {:?}", e);
@@ -92,7 +111,6 @@ async fn log_message(
         }
     }
 }
-
 
 pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()> {
     let (tx, mut rx) = mpsc::channel(1);
