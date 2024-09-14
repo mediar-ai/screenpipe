@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration
+    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env
 };
 use std::io::Write;
 
@@ -102,8 +102,25 @@ async fn main() -> anyhow::Result<()> {
         .add_directive("info".parse().unwrap())
         .add_directive("tokenizers=error".parse().unwrap())
         .add_directive("rusty_tesseract=error".parse().unwrap())
-        .add_directive("symphonia=error".parse().unwrap())
-        .add_directive("external_cloud_integrations=debug".parse().unwrap());
+        .add_directive("symphonia=error".parse().unwrap());
+
+    // Add custom log levels for specific modules based on environment variables
+    let env_filter = env::var("SCREENPIPE_LOG")
+    .unwrap_or_default()
+    .split(',')
+    .fold(env_filter, |filter, module_directive| {
+        match module_directive.parse() {
+            Ok(directive) => filter.add_directive(directive),
+            Err(e) => {
+                eprintln!("warning: invalid log directive '{}': {}", module_directive, e);
+                filter
+            }
+        }
+    });
+
+    // Usage:
+    //  SCREENPIPE_LOG=screenpipe_audio=debug ./screenpipe
+    //  SCREENPIPE_LOG=screenpipe_audio=debug,screenpipe_vision=trace ./screenpipe
 
     let env_filter = if cli.debug {
         env_filter.add_directive("screenpipe=debug".parse().unwrap())
