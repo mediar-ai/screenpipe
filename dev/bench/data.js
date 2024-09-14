@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726325938356,
+  "lastUpdate": 1726348123403,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6149,6 +6149,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1959244500,
             "range": "± 24058981",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "e210a37312505b34a58d508fb5b545dc36c82c93",
+          "message": "chore: improve audio logging",
+          "timestamp": "2024-09-14T14:00:26-07:00",
+          "tree_id": "d8d00fdceff083197be0ec62c7a04e9e3912d074",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e210a37312505b34a58d508fb5b545dc36c82c93"
+        },
+        "date": 1726348122708,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2481108500,
+            "range": "± 218558492",
             "unit": "ns/iter"
           }
         ]
