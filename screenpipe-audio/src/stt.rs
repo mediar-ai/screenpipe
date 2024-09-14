@@ -40,8 +40,8 @@ pub struct WhisperModel {
 impl WhisperModel {
     pub fn new(engine: Arc<AudioTranscriptionEngine>) -> Result<Self> {
         debug!("Initializing WhisperModel");
-        let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
-        info!("device = {:?}", device);
+        let device = Self::get_optimal_device()?;
+        info!("Using device: {:?}", device);
 
         debug!("Fetching model files");
         let (config_filename, tokenizer_filename, weights_filename) = {
@@ -86,6 +86,20 @@ impl WhisperModel {
             device,
         })
     }
+
+    fn get_optimal_device() -> Result<Device> {
+        #[cfg(feature = "mkl")]
+        {
+            info!("Using MKL-accelerated CPU");
+            Ok(Device::Cpu)
+        }
+        #[cfg(not(feature = "mkl"))]
+        {
+            info!("Using standard CPU");
+            Ok(Device::Cpu)
+        }
+    }
+
 }
 
 #[derive(Debug, Clone)]
