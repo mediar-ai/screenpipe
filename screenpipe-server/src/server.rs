@@ -58,11 +58,15 @@ pub(crate) struct SearchQuery {
     #[serde(default)]
     end_time: Option<DateTime<Utc>>,
     #[serde(default)]
-    app_name: Option<String>, // Add this line
+    app_name: Option<String>,
     #[serde(default)]
-    window_name: Option<String>, // Add this line
+    window_name: Option<String>,
     #[serde(default)]
     include_frames: bool,
+    #[serde(default)]
+    min_length: Option<usize>,
+    #[serde(default)]
+    max_length: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -135,7 +139,7 @@ pub struct FTSContent {
     pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
     pub app_name: String,
-    pub window_name: String, // Add this field
+    pub window_name: String,
     pub file_path: String,
     pub original_frame_text: Option<String>,
     pub tags: Vec<String>,
@@ -192,6 +196,7 @@ pub struct HealthCheckResponse {
     pub verbose_instructions: Option<String>,
 }
 
+// Update the search function
 pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
@@ -200,7 +205,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}",
+        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -208,7 +213,9 @@ pub(crate) async fn search(
         query.start_time,
         query.end_time,
         query.app_name,
-        query.window_name // Log window_name
+        query.window_name,
+        query.min_length,
+        query.max_length
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -231,6 +238,8 @@ pub(crate) async fn search(
             query.end_time,
             query.app_name.as_deref(),
             query.window_name.as_deref(),
+            query.min_length,
+            query.max_length,
         )
         .await
     {
@@ -252,7 +261,9 @@ pub(crate) async fn search(
             query.start_time,
             query.end_time,
             query.app_name.as_deref(),
-            query.window_name.as_deref(), // Add window_name parameter
+            query.window_name.as_deref(),
+            query.min_length,
+            query.max_length,
         )
         .await
         .map_err(|e| {
@@ -906,5 +917,30 @@ curl -X POST "http://localhost:3030/pipes/update" \
          "another_key": "another_value"
        }
      }' | jq
+
+
+# Basic search with min_length and max_length
+curl "http://localhost:3030/search?q=test&limit=10&offset=0&min_length=5&max_length=50" | jq
+
+# Search for OCR content with length constraints
+curl "http://localhost:3030/search?q=code&content_type=ocr&limit=5&offset=0&min_length=20&max_length=100" | jq
+
+# Search for audio content with length constraints
+curl "http://localhost:3030/search?q=meeting&content_type=audio&limit=5&offset=0&min_length=50&max_length=200" | jq
+
+# Search with time range and length constraints
+curl "http://localhost:3030/search?q=project&limit=10&offset=0&min_length=10&max_length=100&start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search with app_name and length constraints
+curl "http://localhost:3030/search?app_name=vscode&limit=5&offset=0&min_length=15&max_length=150" | jq
+
+# Search with window_name and length constraints
+curl "http://localhost:3030/search?window_name=alacritty&limit=5&offset=0&min_length=5&max_length=50" | jq
+
+# Search for very short content
+curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
+
+# Search for very long content
+curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
 
 */
