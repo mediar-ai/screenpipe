@@ -14,6 +14,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Manager;
 use tauri::Wry;
+use anyhow::Result;
+use tokio::process::Command;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState},
@@ -70,10 +72,28 @@ fn show_main_window(app_handle: &tauri::AppHandle) {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let _ = fix_path_env::fix();
+    let model = "whisper-tiny"; // Change to "whisper-large" if needed
+    let audio_file = "path/to/audio/file.wav"; // Specify your audio file path
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
+
+    // Run the STT command with the -a argument to suppress unnecessary phrases
+    let output = Command::new("whisper")
+        .arg(audio_file)
+        .arg("-a") // Suppress unnecessary phrases
+        .arg(model)
+        .output()
+        .await?;
+
+    // Handle the output
+    if output.status.success() {
+        let result = String::from_utf8_lossy(&output.stdout);
+        println!("STT Result: {}", result);
+    } else {
+        eprintln!("Error: {}", String::from_utf8_lossy(&output.stderr));
+    }
 
     let app = tauri::Builder::default().on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -372,4 +392,5 @@ async fn main() {
         }
         _ => {}
     });
+    Ok(())
 }
