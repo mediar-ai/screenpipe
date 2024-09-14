@@ -443,7 +443,7 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String>
     {
         let spec = WavSpec {
             channels: 1,
-            sample_rate: 16000,
+            sample_rate: 32000,
             bits_per_sample: 32,
             sample_format: hound::SampleFormat::Float,
         };
