@@ -1,3 +1,4 @@
+use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -10,8 +11,6 @@ use std::time::Duration;
 use std::{fmt, thread};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex;
-
-use crate::AudioInput;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
@@ -213,7 +212,7 @@ pub async fn record_and_transcribe(
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
                         let mut audio_data = audio_data_clone.blocking_lock();
-                        audio_data.extend_from_slice(bytemuck::cast_slice(data));
+                        audio_data.extend_from_slice(bytemuck::cast_slice::<i16, f32>(data));
                     }
                 },
                 error_callback,
@@ -227,7 +226,7 @@ pub async fn record_and_transcribe(
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
                         let mut audio_data = audio_data_clone.blocking_lock();
-                        audio_data.extend_from_slice(bytemuck::cast_slice(data));
+                        audio_data.extend_from_slice(bytemuck::cast_slice::<i32, f32>(data));
                     }
                 },
                 error_callback,
@@ -241,7 +240,7 @@ pub async fn record_and_transcribe(
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
                         let mut audio_data = audio_data_clone.blocking_lock();
-                        audio_data.extend_from_slice(bytemuck::cast_slice(data));
+                        audio_data.extend_from_slice(data);
                     }
                 },
                 error_callback,
