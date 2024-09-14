@@ -207,6 +207,9 @@ const DevModeSettings = () => {
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
                   on = use CLI for more control
+                  <br />
+                  in dev mode, backend won&apos;t <br />auto start when starting the
+                  app
                 </p>
               </div>
             </CardContent>

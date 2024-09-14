@@ -664,7 +664,7 @@ impl DatabaseManager {
         if let Some(_) = app_name {
             param_count += 1;
             sql.push_str(&format!(
-                " AND ocr_text.app_name = ?{} COLLATE NOCASE",
+                " AND ocr_text.app_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
                 param_count
             ));
         }
@@ -672,7 +672,7 @@ impl DatabaseManager {
         if let Some(_) = window_name {
             param_count += 1;
             sql.push_str(&format!(
-                " AND ocr_text.window_name = ?{} COLLATE NOCASE",
+                " AND ocr_text.window_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
                 param_count
             ));
         }
@@ -897,7 +897,7 @@ impl DatabaseManager {
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
-        window_name: Option<&str>, // Add window_name parameter
+        window_name: Option<&str>,
     ) -> Result<usize, sqlx::Error> {
         let mut sql = r#"
             SELECT COUNT(*)
@@ -910,11 +910,11 @@ impl DatabaseManager {
         .to_string();
 
         if app_name.is_some() {
-            sql.push_str(" AND ocr_text.app_name = ?6 COLLATE NOCASE");
+            sql.push_str(" AND ocr_text.app_name LIKE '%' || ?4 || '%' COLLATE NOCASE");
         }
 
         if window_name.is_some() {
-            sql.push_str(" AND ocr_text.window_name = ?7 COLLATE NOCASE");
+            sql.push_str(" AND ocr_text.window_name LIKE '%' || ?5 || '%' COLLATE NOCASE");
         }
 
         let mut query = sqlx::query_as::<_, (i64,)>(&sql)
