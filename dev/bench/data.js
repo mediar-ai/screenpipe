@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726367249811,
+  "lastUpdate": 1726367363481,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6239,6 +6239,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1984102625,
             "range": "± 18877993",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ec408a0b8e1b9c96a5d84f2bac7307e3ebfb4877",
+          "message": "Merge pull request #329 from kerosina/patch-1\n\nDont panic if host has no default input device",
+          "timestamp": "2024-09-14T19:19:27-07:00",
+          "tree_id": "4fbc2828dcfb8e749ca69eb30f86cb13b8cc34f5",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/ec408a0b8e1b9c96a5d84f2bac7307e3ebfb4877"
+        },
+        "date": 1726367362078,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1972165583,
+            "range": "± 19675750",
             "unit": "ns/iter"
           }
         ]
