@@ -1,0 +1,176 @@
+import MotionDiv from '../motionDiv'
+
+# Integrations
+
+<MotionDiv>
+
+Screenpipe integrates with various third-party services, AI tools, and OCR/STT engines to provide flexible and powerful data processing capabilities. Whether you need advanced transcription, screen capture, or seamless automation, Screenpipe’s integrations extend its functionality significantly.
+
+</MotionDiv>
+
+---
+
+### Screenshots + OCR Engines
+
+<MotionDiv delay={0.3}>
+
+Screenpipe offers multiple OCR (Optical Character Recognition) engines to capture and analyze text from your screen recordings. Each engine is tailored for different needs such as privacy, quality, or energy efficiency.
+
+- **Tesseract**: An open-source OCR engine that works on multiple platforms (Linux, macOS, Windows). It provides a balance between accuracy and resource consumption.
+  
+- **Windows Native OCR**: Leverages the native OCR capabilities built into Windows for improved performance and deeper system integration.
+
+- **Apple Native OCR**: Utilizes the native OCR engine in macOS to provide high-quality text extraction from screen captures, optimized for Apple hardware.
+
+- **Unstructured.io**: A more advanced engine for extracting structured data from documents, images, and PDFs.
+
+- **Screenpipe Screen/Audio Specialized LLM** (coming soon): A custom AI model tailored to optimize the extraction and analysis of screen and audio data.
+
+**How to use**: You can choose the OCR engine using the `--ocr-engine` flag when running Screenpipe:
+```bash
+screenpipe --ocr-engine tesseract
+screenpipe --ocr-engine apple-native
+screenpipe --ocr-engine windows-native
+screenpipe --ocr-engine unstructured
+```
+
+</MotionDiv>
+
+---
+
+### Audio + STT Engines
+
+<MotionDiv delay={0.5}>
+
+Screenpipe supports various **Speech-to-Text (STT)** engines to transcribe audio captured from multiple devices, offering flexibility depending on your platform and performance requirements.
+
+- **Whisper Distil large v3** (default): Provides high-accuracy transcription for audio data, running locally for privacy and security.
+  
+- **Deepgram**: Cloud-based STT engine offering faster transcription for large datasets or low-power devices.
+
+- **Linux, MacOS, Windows Input/Output Devices**: Screenpipe supports a wide variety of audio input and output devices, allowing you to capture audio from microphones, speakers, and even external devices.
+
+- **iPhone Microphone Support**: You can capture audio directly from an iPhone when it is connected to your Mac or Windows machine.
+
+**How to use**: Select your STT engine and configure device options through the CLI:
+```bash
+screenpipe --audio-transcription-engine whisper
+screenpipe --audio-transcription-engine deepgram --deepgram-api-key <your-deepgram-api-key>
+```
+
+</MotionDiv>
+
+---
+
+### Ollama
+
+<MotionDiv delay={0.7}>
+
+**Ollama** is a powerful AI language model integration within Screenpipe, allowing you to process captured screen and audio data through advanced natural language tasks like summarization and Q&A.
+
+**How to use**: After capturing data with Screenpipe, send it to Ollama via an API request:
+```bash
+curl "http://localhost:3030/search?q=meeting&content_type=ocr" | \
+curl -X POST "https://api.ollama.ai/summary" -H "Content-Type: application/json" \
+-d '{"data": <OCR results>}'
+```
+
+</MotionDiv>
+
+---
+
+### OpenAI
+
+<MotionDiv delay={0.9}>
+
+**OpenAI** offers powerful AI capabilities that can be integrated into Screenpipe to process transcriptions, summarize content, and even provide conversational responses.
+
+**How to use**: Integrate your **OpenAI API key** and send captured data for processing:
+```bash
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=audio" | \
+curl -X POST "https://api.openai.com/v1/completions" -H "Authorization: Bearer <OPENAI_API_KEY>" \
+-d '{"model": "text-davinci-003", "prompt": <Audio transcription data>}'
+```
+
+</MotionDiv>
+
+---
+
+### Deepgram
+
+<MotionDiv delay={1.1}>
+
+**Deepgram** provides a cloud-based **STT solution** for transcribing audio from meetings or conversations. It’s particularly useful when working with large volumes of audio data.
+
+**How to use**: To use Deepgram, configure the API key and set the audio transcription engine:
+```bash
+screenpipe --audio-transcription-engine deepgram --deepgram-api-key <your-deepgram-api-key>
+```
+
+</MotionDiv>
+
+---
+
+### Unstructured.io
+
+<MotionDiv delay={1.3}>
+
+**Unstructured.io** offers advanced **OCR processing**, capable of extracting structured data from images and documents for enhanced workflows, such as contract analysis or automated data entry.
+
+**How to use**: Configure Screenpipe to use Unstructured.io for OCR:
+```bash
+screenpipe --ocr-engine unstructured
+```
+
+</MotionDiv>
+
+---
+
+### Obsidian
+
+<MotionDiv delay={1.5}>
+
+Screenpipe integrates with **Obsidian**, a note-taking app, to allow you to seamlessly store meeting summaries, transcriptions, or important points from your recordings into your Obsidian vault.
+
+**How to use**: Use a custom pipe that listens for Screenpipe data and sends it to Obsidian:
+```bash
+screenpipe --pipe-id obsidian-sync
+```
+
+</MotionDiv>
+
+---
+
+### Vercel AI SDK
+
+<MotionDiv delay={1.7}>
+
+**Vercel AI SDK** integration allows you to build custom chatbots and assistants powered by AI, providing real-time insights from your Screenpipe data.
+
+**How to use**: Build and link the chatbot to your captured data:
+```bash
+curl "http://localhost:3030/search?q=meeting&content_type=ocr" | \
+curl -X POST "https://api.vercel.ai/bot" -H "Content-Type: application/json" -d '{"data": <OCR results>}'
+```
+
+</MotionDiv>
+
+---
+
+### Apple Shortcuts
+
+<MotionDiv delay={1.9}>
+
+**Apple Shortcuts** integration lets you create automations triggered by events in Screenpipe. You can link captured screen and audio data to various shortcuts to trigger emails, notes, or reminders.
+
+**How to use**: Create shortcuts and bind them to Screenpipe triggers.
+
+</MotionDiv>
+
+---
+
+<MotionDiv delay={2.1}>
+
+With these powerful integrations, Screenpipe can fit into virtually any workflow, whether it's enhancing productivity, improving collaboration, or simply managing personal data more efficiently. Explore the possibilities by configuring these tools to best fit your use case.
+
+</MotionDiv>

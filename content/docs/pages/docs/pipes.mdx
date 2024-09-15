@@ -1,0 +1,176 @@
+import MotionDiv from '../motionDiv';
+
+# Pipes and Plugins
+
+<MotionDiv>
+  Pipes are an essential part of Screenpipe, providing powerful extensibility through custom workflows that interact with captured screen and audio data. Whether you need to tag activities, generate summaries, or send data to third-party services, pipes allow you to tailor Screenpipe to your specific needs.
+</MotionDiv>
+
+## 1. Overview of Pipes
+
+<MotionDiv delay={0.3}>
+  Pipes in Screenpipe are plugins designed to process data captured from your screen and audio feeds. They automate workflows such as tagging, summarizing, and integrating data with external platforms like Notion, Salesforce, or Slack.
+
+  ### Key Features of Pipes:
+  - **Custom Workflows**: Automate repetitive tasks such as tagging screen activity or summarizing audio transcriptions.
+  - **Real-Time Processing**: Pipes can process captured data in real-time.
+  - **Integration Capabilities**: Extend the functionality by sending processed data to third-party apps.
+
+  **Example Use Cases**:
+  - **AI Activity Tagging**: Automatically tag screen or audio activities based on AI models.
+  - **Meeting Summaries**: Generate summaries of meeting discussions using combined screen and audio data.
+  - **CRM Integration**: Automatically log interactions or captured data into a CRM like Salesforce.
+</MotionDiv>
+
+---
+
+## 2. Available Pipes and Standalone Scripts
+
+<MotionDiv delay={0.5}>
+  Screenpipe provides a variety of pipes and standalone scripts that allow users to extend the platform’s functionality with minimal effort. Below is a table summarizing the available examples:
+
+| **Example**                         | **Description**                                 | **Type**             | **Link**                         |
+| ------------------------------------ | ------------------------------------------------ | -------------------- | --------------------------------- |
+| **Pipe Tagging Activity**            | Automatically tag activities using AI            | Pipe v1              | [Link](#)                         |
+| **Pipe Stream OCR Text**             | Stream OCR text from screen data                 | Pipe v2              | [Link](#)                         |
+| **Pipe Activity Topic Tracker**      | Track and summarize activities                   | Pipe v1              | [Link](#)                         |
+| **Daily Log**                        | Daily activity logger using screenpipe           | Standalone Script    | [Link](#)                         |
+| **Daily Tracker**                    | AI-powered daily activity tracker                | Standalone Script    | [Link](#)                         |
+| **RAG in Obsidian**                  | RAG for personal knowledge management            | Standalone Script    | [Link](#)                         |
+| **Meeting Summaries in Obsidian**    | Automated meeting summary generation             | Standalone Script    | [Link](#)                         |
+| **Apple Shortcut**                   | Integration with Apple Shortcuts                 | Standalone Script    | [Link](#)                         |
+| **Agent Multi-Turn RAG**             | Multi-turn Retrieval-Augmented Generation agent  | Standalone Script    | [Link](#)                         |
+| **Vercel AI Chatbot**                | AI-powered chatbot using Vercel AI SDK           | Standalone Script    | [Link](#)                         |
+| **Perplexity RAG Agent**             | RAG agent with user confirmation, inspired by Perplexity | Standalone Script    | [Link](#)                         |
+</MotionDiv>
+
+---
+
+## 3. Developing Pipes in Screenpipe
+
+<MotionDiv delay={0.7}>
+  Screenpipe’s plugin system, known as the **Pipe Store**, enables you to create customized pipes that automate workflows. Pipes can process, annotate, analyze, summarize, or integrate your screen and audio data with other tools.
+
+  **Key Concepts**:
+  - **Pipe Example**: screenpipe | AI tag | Notion update
+  - **Pipe Example**: screenpipe | AI tag | Slack report
+  - **Pipe Example**: screenpipe | Log daily activities
+
+  This makes it possible to create countless workflows based on specific needs, helping automate tedious or complex tasks.
+</MotionDiv>
+
+---
+
+## 4. Running Pipes in Development Mode
+
+<MotionDiv delay={0.9}>
+  Developers can test their custom pipes by using the following command to download and run them locally:
+
+  ```bash
+  curl -X POST "http://localhost:3030/pipes/download" \
+       -H "Content-Type: application/json" \
+       -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"}'
+  ```
+
+  This command downloads the pipe from the specified URL and installs it for local development and testing.
+</MotionDiv>
+
+---
+
+## 5. Getting Featured in the Pipe Store
+
+<MotionDiv delay={1.1}>
+  Want to share your custom pipes? You can submit them to the **Pipe Store**, where they can be shared or monetized. Get in touch with **@louis030195** or submit your pipe through a pull request.
+</MotionDiv>
+
+---
+
+## 6. What’s Next for Pipes?
+
+<MotionDiv delay={1.3}>
+  Screenpipe’s pipe ecosystem is growing rapidly. Here’s what’s coming next for pipes:
+  
+  - **Dependency Support**: Soon, developers will be able to include third-party libraries in their pipes (e.g., Vercel AI SDK).
+  - **Desktop API Access**: Developers will have access to desktop-specific APIs, allowing customization of notifications and app interactions.
+  - **Seamless Publishing**: Pipes will soon be easier to publish, similar to the Obsidian store, allowing frictionless sharing and discovery.
+</MotionDiv>
+
+---
+# Standalone Scripts
+
+<MotionDiv>
+
+Screenpipe provides a variety of **Standalone Scripts** that help automate and extend functionality for users who prefer to run scripts separately from the core app. These scripts offer flexibility in how users can interact with their captured data without needing to modify or install pipes within the core system.
+
+## Available Standalone Scripts
+
+### Daily Log
+Automatically logs and stores daily activity data such as screen captures and audio transcriptions for future reference. 
+
+**Type**: Standalone Script  
+**Use Case**: Activity Logging  
+[Daily Log](#)
+
+### Daily Tracker
+A more advanced version of the Daily Log, this script uses AI-powered processing to track your daily activities, offering detailed summaries, productivity insights, and more.
+
+**Type**: Standalone Script  
+**Use Case**: AI-Powered Tracking  
+[Daily Tracker](#)
+
+### RAG Over Your Life in Obsidian
+This script integrates with Obsidian to enable **Retrieval-Augmented Generation (RAG)**, using captured screen and audio data to populate personal knowledge management systems.
+
+**Type**: Standalone Script  
+**Use Case**: Personal Knowledge Management  
+[RAG in Obsidian](#)
+
+### Meeting Summaries in Obsidian
+Automatically generates detailed summaries from meetings and imports them directly into Obsidian, simplifying the process of reviewing and organizing important information.
+
+**Type**: Standalone Script  
+**Use Case**: Meeting Summaries  
+[Meeting Summaries](#)
+
+### Apple Shortcut Integration
+This script links Screenpipe with **Apple Shortcuts**, enabling custom workflows that interact with other apps on macOS, like sending captured data to Notes, Reminders, and more.
+
+**Type**: Standalone Script  
+**Use Case**: MacOS Automation  
+[Apple Shortcut](#)
+
+### Multi-Turn Retrieval-Augmented Generation (RAG) Agent
+A **multi-turn RAG agent** designed to handle complex tasks through continuous conversation with AI. It provides dynamic feedback and improves its responses based on user inputs.
+
+**Type**: Standalone Script  
+**Use Case**: AI Agent  
+[Agent Multi-Turn RAG](#)
+
+### Perplexity RAG Agent
+Inspired by Perplexity, this script is designed to simulate an AI-driven agent that performs complex retrieval tasks and confirms actions based on your captured data.
+
+**Type**: Standalone Script  
+**Use Case**: RAG Agent  
+[Perplexity RAG Agent](#)
+
+### Vercel AI Chatbot
+An AI-powered chatbot built using the **Vercel AI SDK** that interacts with your captured data to answer questions, provide summaries, and assist with automated workflows.
+
+**Type**: Standalone Script  
+**Use Case**: AI Chatbot  
+[Vercel AI Chatbot](#)
+
+## How to Use Standalone Scripts
+
+To get started with these standalone scripts:
+
+1. Navigate to the folder for the script you want to use.
+2. Install the dependencies using `pnpm install` or `npm install`.
+3. Set up any environment variables as required (refer to each script’s documentation).
+4. Run the script using the commands provided in the documentation.
+
+## Contributing to Standalone Scripts
+
+If you have ideas for improving or adding new standalone scripts, feel free to contribute! Open a pull request on GitHub or contact the Screenpipe team to share your thoughts.
+
+</MotionDiv>

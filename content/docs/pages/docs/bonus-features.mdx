@@ -1,0 +1,169 @@
+import MotionDiv from '../motionDiv'
+
+# Bonus Features
+
+<MotionDiv>
+
+Screenpipe comes packed with additional **Bonus Features** that take your productivity and data management to the next level. These features complement the core functionality of Screenpipe, enhancing the overall experience and offering even more control over your captured data.
+
+</MotionDiv>
+
+---
+
+### Semantic Search
+
+<MotionDiv delay={0.3}>
+
+**What it is**:  
+Screenpipe offers a powerful **semantic search** feature that allows you to query your captured data using natural language. Instead of relying on exact keywords, semantic search understands the context and meaning behind your search terms, making it easier to find relevant information.
+
+**How to use**:  
+You can use semantic search via the CLI or the API. For example, to search for all meeting transcriptions related to "project updates":
+```bash
+screenpipe --search "project updates"
+```
+
+</MotionDiv>
+
+---
+
+### Personalized AI Models
+
+<MotionDiv delay={0.5}>
+
+**What it is**:  
+With Screenpipe, you can integrate **personalized AI models** powered by your own screen and audio data. These models can be tailored to your unique workflows, whether for summarizing meetings, auto-tagging important activities, or generating documentation.
+
+**How to use**:  
+Easily integrate your own AI model by adding it to the pipeline:
+```bash
+screenpipe --model /path-to-your-model
+```
+
+You can also use **Ollama** or **OpenAI** models directly through the Screenpipe API.
+
+</MotionDiv>
+
+---
+
+### Multi-Monitor Support
+
+<MotionDiv delay={0.7}>
+
+**What it is**:  
+Screenpipe can handle data capture from multiple monitors, ensuring that no important information is missed when you're working on several screens at once.
+
+**How to use**:  
+To enable multi-monitor support, simply pass the following flag when running the command:
+```bash
+screenpipe --multi-monitor
+```
+
+You can specify which monitor to capture or let Screenpipe capture all available monitors.
+
+</MotionDiv>
+
+---
+
+### Apple & Windows Native OCR
+
+<MotionDiv delay={0.9}>
+
+**What it is**:  
+Screenpipe includes native OCR support for both macOS and Windows. These engines are optimized to handle text recognition on your system, making it fast and efficient to capture text from screenshots.
+
+**How to use**:  
+To use the native OCR engine, pass the following command:
+```bash
+screenpipe --ocr-engine apple-native  # for macOS
+screenpipe --ocr-engine windows-native  # for Windows
+```
+
+For systems without native OCR, Tesseract or other OCR engines can be used.
+
+</MotionDiv>
+
+---
+
+### Data Encryption & Privacy
+
+<MotionDiv delay={1.1}>
+
+**What it is**:  
+Data security is a core priority for Screenpipe. All captured data stays on your local machine, but you also have the option to enable **encryption** for even greater security.
+
+**How to use**:  
+To enable encryption, configure it in the settings or use the following command:
+```bash
+screenpipe --enable-encryption
+```
+
+Encryption ensures that your captured data is protected against unauthorized access.
+
+</MotionDiv>
+
+---
+
+### Audio Transcription Engine Options
+
+<MotionDiv delay={1.3}>
+
+**What it is**:  
+Screenpipe supports multiple **audio transcription engines**, including the high-quality **Whisper** engine (default) and the lighter **WebRTC** engine. This allows you to choose between high accuracy or reduced resource consumption depending on your needs.
+
+**How to use**:  
+Switch between engines with:
+```bash
+screenpipe --audio-transcription-engine whisper
+screenpipe --audio-transcription-engine webrtc
+```
+
+</MotionDiv>
+
+---
+
+### Webhooks for Automation
+
+<MotionDiv delay={1.5}>
+
+**What it is**:  
+You can set up **webhooks** to automate tasks based on the captured data. Whether it's generating reports, sending alerts, or updating third-party systems, Screenpipe integrates seamlessly into your automation workflows.
+
+**How to use**:  
+To configure a webhook, use the following command:
+```bash
+screenpipe --add-webhook "http://your-webhook-url"
+```
+
+You can trigger the webhook on specific events, like new data capture or after processing a pipe.
+
+</MotionDiv>
+
+---
+
+### Scheduled Summaries
+
+<MotionDiv delay={1.7}>
+
+**What it is**:  
+With **scheduled summaries**, you can automate the generation of daily or weekly reports that summarize your screen and audio data. This is especially useful for tracking meetings, tasks, or productivity trends over time.
+
+**How to use**:  
+Set up a scheduled summary like this:
+```bash
+screenpipe --schedule-summary daily --output /path-to-save-summary
+```
+
+These summaries can be customized to include specific content, like meeting notes or work-related keywords.
+
+</MotionDiv>
+
+---
+
+<MotionDiv delay={1.9}>
+
+These **Bonus Features** make Screenpipe not just a data capture tool but a fully integrated personal productivity platform. Stay ahead with powerful automation, advanced search, and tailored AI models—all designed to give you maximum control over your screen and audio data.
+
+Explore more in the [API Reference](./api-reference.mdx) to take full advantage of these features.
+
+</MotionDiv>

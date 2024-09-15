@@ -1,0 +1,90 @@
+import MotionDiv from '../motionDiv'
+
+# Architecture Overview
+
+<MotionDiv>
+
+The architecture of Screenpipe is designed to handle continuous screen and audio capture, local data storage, and real-time processing. Below is a breakdown of the key components and their roles in the system.
+</MotionDiv>
+
+<MotionDiv delay={0.1}>
+## Diagram Overview
+
+A visual diagram shows the architecture's flow:
+
+![Screenpipe Diagram](https://raw.githubusercontent.com/mediar-ai/screenpipe/main/content/diagram2.png)
+
+1. **Input**: Screen and audio data.
+2. **Processing**: OCR, STT, transcription, multimodal integration.
+3. **Storage**: SQLite database.
+4. **Plugins**: Custom pipes.
+5. **Integrations**: Cloud, AI services.
+
+This modular architecture makes Screenpipe highly adaptable to different use cases, ranging from personal productivity tracking to more advanced business intelligence and analytics.
+
+</MotionDiv>
+
+<MotionDiv delay={0.3}>
+
+## 1. Data Capture Layer
+
+- **Screen Capture**: Captures video frames from the screen in real-time and stores them in the local filesystem for processing. Supports multi-monitor setups, allowing multiple screen captures simultaneously.
+- **Audio Capture**: Captures audio from input (e.g., microphone) and output (e.g., speakers). The captured audio is stored locally and can be transcribed using STT engines like Whisper Distil.
+- **24/7 Operation**: Screenpipe is designed to capture data continuously, ensuring no important screen or audio events are missed during active sessions.
+
+</MotionDiv>
+
+<MotionDiv delay={0.5}>
+
+## 2. Data Processing Layer
+
+- **OCR (Optical Character Recognition)**: Applies OCR to captured video frames to extract text. This allows for searching and retrieving specific information from screenshots.
+- **Speech-to-Text (STT)**: Converts captured audio into transcriptions. The transcriptions can be used for generating meeting summaries, live captions, or language translations.
+- **Multimodal Processing**: Combines screen and audio data to generate rich insights, enabling advanced use cases like summarizing entire meetings, combining both visuals and transcribed audio.
+
+</MotionDiv>
+
+<MotionDiv delay={0.7}>
+
+## 3. Database Layer
+
+- **SQLite Database**: All captured data is stored in a local SQLite database. This includes audio, video frames, transcriptions, and OCR results. The database is structured into different tables to keep audio transcriptions, frame captures, and OCR texts well-organized.
+- **API Access**: Screenpipe provides an API to interact with the stored data. Users can query the database, extract data, and manage content using the API via terminal commands or automated scripts.
+
+</MotionDiv>
+
+<MotionDiv delay={0.9}>
+
+## 4. Plugin Management Layer
+
+- **Pipe Store**: The **Pipe Store** acts as a marketplace for plugins (pipes), allowing users to download, install, and share pipes that extend Screenpipe's functionality.
+- **Deno Typescript Engine**: Runs custom pipes written in TypeScript directly within the Screenpipe environment. This allows developers to build workflows that process captured data (e.g., custom OCR processing, audio transcription enhancements, etc.).
+
+</MotionDiv>
+
+<MotionDiv delay={1.1}>
+
+## 5. Integration Layer
+
+- **Third-Party Services**: Integrates with various AI tools and services like Ollama, OpenAI, and Deepgram for advanced data processing capabilities. This allows Screenpipe to summarize meetings, improve transcriptions, and perform complex language tasks.
+- **Custom Storage & Cloud Options**: Supports integrations with cloud storage options (like AWS S3) for larger datasets or enterprise use cases. Users can offload data to external storage for long-term retention or higher capacity.
+
+</MotionDiv>
+
+<MotionDiv delay={1.3}>
+
+## 6. Security & Privacy Layer
+
+- **Local Data Storage**: By default, Screenpipe stores all data locally, ensuring that users maintain complete control over their content.
+- **Encryption**: Provides encryption features to secure captured data, especially sensitive information from screen captures and audio transcriptions.
+- **PII Removal**: Automatically filters personal identifiable information (PII) when processing and storing data, especially in cases where the data might be shared externally.
+
+</MotionDiv>
+
+<MotionDiv delay={1.5}>
+
+## 7. Cross-Platform Support
+
+Screenpipe is compatible with macOS, Windows, and Linux. Each platform has native features for optimal performance, such as native OCR integration for macOS and Windows, as well as multi-input device support.
+
+</MotionDiv>

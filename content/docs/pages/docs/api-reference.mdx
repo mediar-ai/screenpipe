@@ -1,0 +1,254 @@
+import MotionDiv from '../motionDiv'
+
+# API Reference for Screenpipe
+
+<MotionDiv>
+
+Below is a detailed explanation of the core APIs used in the Screenpipe project along with sample implementations.
+
+</MotionDiv>
+
+<MotionDiv delay={0.3}>
+
+## 1. Search API
+
+- **Endpoint**: `/search`
+- **Method**: `GET`
+- **Description**: Searches captured data (OCR, audio transcriptions, etc.) stored in Screenpipe’s local database based on filters such as content type, timestamps, app name, and window name.
+
+### Query Parameters:
+
+- `q` (string, optional): Search term.
+- `content_type` (enum): Type of content to search (OCR, Audio, etc.).
+- `limit` (int): Max number of results per page (default: 20).
+- `offset` (int): Pagination offset.
+- `start_time` (timestamp, optional): Filter by start timestamp.
+- `end_time` (timestamp, optional): Filter by end timestamp.
+- `app_name` (string, optional): Filter results based on application name.
+- `window_name` (string, optional): Filter results based on window name.
+- `include_frames` (bool, optional): If true, fetch frame data for OCR content.
+
+### Sample Request:
+
+```bash
+curl "http://localhost:3030/search?q=meeting&content_type=ocr&limit=5&offset=0"
+```
+
+### Sample Response:
+
+```json
+{
+  "data": [
+    {
+      "type": "OCR",
+      "content": {
+        "frame_id": 123,
+        "text": "Meeting notes",
+        "timestamp": "2024-09-10T12:00:00Z",
+        "file_path": "/frames/frame123.png",
+        "app_name": "Google Chrome",
+        "window_name": "Meeting Room",
+        "tags": ["meeting", "important"]
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 5,
+    "offset": 0,
+    "total": 100
+  }
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.5}>
+
+## 2. List Audio Devices API
+
+- **Endpoint**: `/audio/list`
+- **Method**: `GET`
+- **Description**: Lists all audio input and output devices available on the machine, including default devices.
+
+### Sample Request:
+
+```bash
+curl "http://localhost:3030/audio/list"
+```
+
+### Sample Response:
+
+```json
+[
+  {
+    "name": "Built-in Microphone",
+    "is_default": true
+  },
+  {
+    "name": "External Speaker",
+    "is_default": false
+  }
+]
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.7}>
+
+## 3. Add Tags to Content API
+
+- **Endpoint**: `/tags/:content_type/:id`
+- **Method**: `POST`
+- **Description**: Adds custom tags to content items based on the content type (audio or vision).
+
+### Request Body:
+
+```json
+{
+  "tags": ["important", "review"]
+}
+```
+
+### Sample Request:
+
+```bash
+curl -X POST "http://localhost:3030/tags/vision/123" -H "Content-Type: application/json" -d '{"tags": ["meeting", "important"]}'
+```
+
+### Sample Response:
+
+```json
+{
+  "success": true
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.9}>
+
+## 4. Download Pipe API
+
+- **Endpoint**: `/pipes/download`
+- **Method**: `POST`
+- **Description**: Downloads a pipe (plugin) from a specified URL and stores it locally.
+
+### Request Body:
+
+```json
+{
+  "url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"
+}
+```
+
+### Sample Request:
+
+```bash
+curl -X POST "http://localhost:3030/pipes/download" -H "Content-Type: application/json" -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"}'
+```
+
+### Sample Response:
+
+```json
+{
+  "message": "Pipe pipe-stream-ocr-text downloaded successfully",
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={1.1}>
+
+## 5. Run Pipe API
+
+- **Endpoint**: `/pipes/enable`
+- **Method**: `POST`
+- **Description**: Enables a pipe (plugin) to start processing data.
+
+### Request Body:
+
+```json
+{
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+### Sample Request:
+
+```bash
+curl -X POST "http://localhost:3030/pipes/enable" -H "Content-Type: application/json" -d '{"pipe_id": "pipe-stream-ocr-text"}'
+```
+
+### Sample Response:
+
+```json
+{
+  "message": "Pipe pipe-stream-ocr-text started",
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={1.3}>
+
+## 6. Stop Pipe API
+
+- **Endpoint**: `/pipes/disable`
+- **Method**: `POST`
+- **Description**: Disables a pipe to stop processing data.
+
+### Request Body:
+
+```json
+{
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+### Sample Request:
+
+```bash
+curl -X POST "http://localhost:3030/pipes/disable" -H "Content-Type: application/json" -d '{"pipe_id": "pipe-stream-ocr-text"}'
+```
+
+### Sample Response:
+
+```json
+{
+  "message": "Pipe pipe-stream-ocr-text stopped",
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={1.5}>
+
+## 7. Health Check API
+
+- **Endpoint**: `/health`
+- **Method**: `GET`
+- **Description**: Returns the health status of the system, including the timestamps of the last frame and audio captures, and the overall system status.
+
+### Sample Request:
+
+```bash
+curl "http://localhost:3030/health"
+```
+
+### Sample Response:
+
+```json
+{
+  "status": "Healthy",
+  "last_frame_timestamp": "2024-09-10T10:00:00Z",
+  "last_audio_timestamp": "2024-09-10T10:00:00Z",
+  "frame_status": "OK",
+  "audio_status": "OK",
+  "message": "All systems are functioning normally."
+}
+```
+
+</MotionDiv>

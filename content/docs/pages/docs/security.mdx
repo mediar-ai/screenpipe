@@ -1,0 +1,111 @@
+import MotionDiv from '../motionDiv'
+
+# Security and Privacy
+
+<MotionDiv>
+
+Screenpipe is built with privacy and security at its core, ensuring that users maintain full control over their data while protecting sensitive information. This page explains the various security features and how Screenpipe manages user data securely.
+
+</MotionDiv>
+
+<MotionDiv delay={0.3}>
+
+## 1. Data Ownership
+
+One of the key principles of Screenpipe is that **all captured data stays on your local machine by default**. This means:
+
+- **Full Control**: You control where the data is stored and who has access to it.
+- **No Cloud Dependency**: Your data is not sent to any cloud service unless you explicitly choose to do so, ensuring maximum privacy.
+- **Local Access**: You can query, process, or delete your data directly from your local machine.
+
+This approach ensures that your screen captures, audio recordings, and transcriptions are not shared with third-party services unless you decide to share them.
+
+</MotionDiv>
+
+<MotionDiv delay={0.5}>
+
+## 2. Encryption
+
+Screenpipe offers **encryption** to secure sensitive data:
+
+- **Local Data Encryption**: All data captured and stored on your local machine can be encrypted to prevent unauthorized access.
+- **API Encryption**: Communications with the Screenpipe API are secured using HTTPS, ensuring that any data transmitted is encrypted.
+- **Customizable Security**: Users can enable or disable encryption based on their needs, giving flexibility for development environments where encryption might not be necessary.
+
+Encryption ensures that even if your local data is compromised, the content will remain protected and inaccessible without the proper decryption keys.
+
+</MotionDiv>
+
+<MotionDiv delay={0.7}>
+
+## 3. Data Masking and PII Removal
+
+Screenpipe includes **data masking** and **Personally Identifiable Information (PII) removal** features to further enhance security:
+
+- **PII Detection**: Screenpipe automatically detects and masks sensitive information such as email addresses, phone numbers, or credit card numbers from screen captures and transcriptions.
+- **Customizable Filters**: You can customize what types of information are masked, allowing you to fine-tune the balance between data utility and privacy.
+- **PII Removal**: For certain workflows (e.g., sharing screen captures or transcripts with third parties), you can automatically remove all PII before exporting or processing the data.
+
+These features make it easier to share or process data without compromising sensitive information.
+
+</MotionDiv>
+
+<MotionDiv delay={0.9}>
+
+## 4. Access Controls
+
+Screenpipe provides **role-based access controls (RBAC)** to ensure that only authorized users can access or modify certain types of data:
+
+- **User Roles**: You can define roles for users, such as administrators, developers, or viewers, each with different levels of access.
+- **Granular Permissions**: Control what actions each user role can perform, from accessing specific datasets to installing or managing pipes.
+- **Audit Logs**: Track who accessed or modified data and when, ensuring full accountability.
+
+These access controls help safeguard your data by limiting who can view, modify, or share your captured content.
+
+</MotionDiv>
+
+<MotionDiv delay={1.1}>
+
+## 5. Secure Integrations
+
+Screenpipe integrates with various external services, such as **AI tools** or **cloud storage**, in a secure manner:
+
+- **OAuth 2.0**: External integrations such as sending data to Notion, Salesforce, or Slack use OAuth 2.0 to securely manage authentication and permissions.
+- **Tokenized Access**: When connecting to cloud services like AWS S3 or third-party APIs, tokenized access is used to limit exposure of sensitive credentials.
+- **Encryption at Rest**: For cloud storage, Screenpipe can ensure that data is encrypted both at rest and in transit.
+
+These security measures ensure that when you use third-party services with Screenpipe, your data is handled securely.
+
+</MotionDiv>
+
+<MotionDiv delay={1.3}>
+
+## 6. Local Database Security
+
+Screenpipe uses a local **SQLite** database to store captured data, and this database is protected by several security features:
+
+- **Database Encryption**: Optionally encrypt the entire database to secure your data.
+- **Access Control**: The local database can be secured with role-based access controls (RBAC), allowing only authorized users to query, modify, or delete data.
+- **Backup and Recovery**: Secure and encrypted backups ensure that your data remains safe even in the event of a system failure.
+
+</MotionDiv>
+
+<MotionDiv delay={1.5}>
+
+## 7. Privacy and Compliance
+
+Screenpipe is designed to comply with privacy regulations like **GDPR** and **CCPA**:
+
+- **Data Portability**: Users can easily export their data and move it to another system if needed, ensuring compliance with data portability regulations.
+- **Right to Delete**: Users have full control to delete their captured data permanently, ensuring compliance with data deletion requirements.
+- **Anonymization**: Data can be anonymized before sharing or exporting, making it impossible to trace back to individual users.
+
+These features ensure that Screenpipe aligns with modern privacy standards and gives users confidence in how their data is managed.
+
+</MotionDiv>
+
+<MotionDiv delay={1.7}>
+
+By building privacy and security into every layer of the system, Screenpipe ensures that your data remains private, secure, and under your control. Whether you're a developer, business, or individual user, these features make Screenpipe a reliable and secure solution for managing your screen and audio data.
+
+</MotionDiv>
