@@ -434,8 +434,8 @@ fn get_deepgram_api_key() -> String {
 }
 
 // TODO: this should use async reqwest not blocking, cause crash issue because all our code is async
-fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String> {
-    debug!("Starting Deepgram transcription");
+fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32], device: &str) -> Result<String> {
+    debug!("starting deepgram transcription");
     let client = Client::new();
 
     // Create a WAV file in memory
@@ -443,7 +443,7 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String>
     {
         let spec = WavSpec {
             channels: 1,
-            sample_rate: 16000,
+            sample_rate: 32000,
             bits_per_sample: 32,
             sample_format: hound::SampleFormat::Float,
         };
@@ -466,13 +466,13 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String>
 
     match response {
         Ok(resp) => {
-            debug!("Received response from Deepgram API");
+            debug!("received response from deepgram api");
             match resp.json::<Value>() {
                 Ok(result) => {
-                    debug!("Successfully parsed JSON response");
+                    debug!("successfully parsed json response");
                     if let Some(err_code) = result.get("err_code") {
                         error!(
-                            "Deepgram API error code: {:?}, result: {:?}",
+                            "deepgram api error code: {:?}, result: {:?}",
                             err_code, result
                         );
                         return Err(anyhow::anyhow!("Deepgram API error: {:?}", result));
@@ -483,10 +483,14 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32]) -> Result<String>
                         .unwrap_or("");
 
                     if transcription.is_empty() {
-                        info!("Transcription is empty. Full response: {:?}", result);
+                        info!(
+                            "device: {}, transcription is empty. full response: {:?}",
+                            device, result
+                        );
                     } else {
                         info!(
-                            "Transcription successful. Length: {} characters",
+                            "device: {}, transcription successful. length: {} characters",
+                            device,
                             transcription.len()
                         );
                     }
@@ -533,7 +537,8 @@ pub fn stt(
     let mut audio_data = audio_input.data.clone();
     if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
         info!(
-            "Resampling from {} Hz to {} Hz",
+            "device: {}, resampling from {} Hz to {} Hz",
+            audio_input.device,
             audio_input.sample_rate,
             m::SAMPLE_RATE
         );
@@ -541,7 +546,10 @@ pub fn stt(
     }
 
     // Filter out non-speech segments using Silero VAD
-    debug!("Filtering out non-speech segments with VAD");
+    debug!(
+        "device: {}, filtering out non-speech segments with VAD",
+        audio_input.device
+    );
     let frame_size = 160; // 10ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
     for (frame_index, chunk) in audio_data.chunks(frame_size).enumerate() {
@@ -558,19 +566,24 @@ pub fn stt(
     }
 
     info!(
-        "Total audio_frames processed: {}, frames that include speech: {}",
+        "device: {}, total audio frames processed: {}, frames that include speech: {}",
+        audio_input.device,
         audio_data.len() / frame_size,
         speech_frames.len() / frame_size
     );
 
     // If no speech frames detected, skip processing
     if speech_frames.is_empty() {
-        debug!("No speech detected using VAD, skipping audio processing");
+        debug!(
+            "device: {}, no speech detected using VAD, skipping audio processing",
+            audio_input.device
+        );
         return Ok(("".to_string(), "".to_string())); // Return an empty string or consider a more specific "no speech" indicator
     }
 
     debug!(
-        "Using {} speech frames out of {} total frames",
+        "device: {}, using {} speech frames out of {} total frames",
+        audio_input.device,
         speech_frames.len() / frame_size,
         audio_data.len() / frame_size
     );
@@ -587,19 +600,29 @@ pub fn stt(
             } else {
                 get_deepgram_api_key()
             };
-            info!("Using Deepgram API key: {}...", &api_key[..8]);
-            match transcribe_with_deepgram(&api_key, &speech_frames) {
+            info!(
+                "device: {}, using deepgram api key: {}...",
+                audio_input.device,
+                &api_key[..8]
+            );
+            match transcribe_with_deepgram(&api_key, &speech_frames, &audio_input.device) {
                 Ok(transcription) => Ok(transcription),
                 Err(e) => {
                     error!(
-                        "Deepgram transcription failed, falling back to Whisper: {:?}",
-                        e
+                        "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
+                        audio_input.device, e
                     );
                     // Existing Whisper implementation
-                    debug!("Converting PCM to mel spectrogram");
+                    debug!(
+                        "device: {}, converting pcm to mel spectrogram",
+                        audio_input.device
+                    );
                     let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
                     let mel_len = mel.len();
-                    debug!("Creating tensor from mel spectrogram");
+                    debug!(
+                        "device: {}, creating tensor from mel spectrogram",
+                        audio_input.device
+                    );
                     let mel = Tensor::from_vec(
                         mel,
                         (
@@ -610,14 +633,14 @@ pub fn stt(
                         &device,
                     )?;
 
-                    debug!("Detecting language");
+                    debug!("device: {}, detecting language", audio_input.device);
                     let language_token = Some(multilingual::detect_language(
                         &mut model.clone(),
                         &tokenizer,
                         &mel,
                     )?);
                     let mut model = model.clone();
-                    debug!("Initializing decoder");
+                    debug!("device: {}, initializing decoder", audio_input.device);
                     let mut dc = Decoder::new(
                         &mut model,
                         tokenizer,
@@ -628,9 +651,9 @@ pub fn stt(
                         true,
                         false,
                     )?;
-                    debug!("Starting decoding process");
+                    debug!("device: {}, starting decoding process", audio_input.device);
                     let segments = dc.run(&mel)?;
-                    debug!("Decoding complete");
+                    debug!("device: {}, decoding complete", audio_input.device);
                     Ok(segments
                         .iter()
                         .map(|s| s.dr.text.clone())
@@ -640,11 +663,20 @@ pub fn stt(
             }
         } else {
             // Existing Whisper implementation
-            debug!("Starting Whisper transcription");
-            debug!("Converting PCM to mel spectrogram");
+            debug!(
+                "device: {}, starting whisper transcription",
+                audio_input.device
+            );
+            debug!(
+                "device: {}, converting pcm to mel spectrogram",
+                audio_input.device
+            );
             let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
             let mel_len = mel.len();
-            debug!("Creating tensor from mel spectrogram");
+            debug!(
+                "device: {}, creating tensor from mel spectrogram",
+                audio_input.device
+            );
             let mel = Tensor::from_vec(
                 mel,
                 (
@@ -655,14 +687,14 @@ pub fn stt(
                 &device,
             )?;
 
-            debug!("Detecting language");
+            debug!("device: {}, detecting language", audio_input.device);
             let language_token = Some(multilingual::detect_language(
                 &mut model.clone(),
                 &tokenizer,
                 &mel,
             )?);
             let mut model = model.clone();
-            debug!("Initializing decoder");
+            debug!("device: {}, initializing decoder", audio_input.device);
             let mut dc = Decoder::new(
                 &mut model,
                 tokenizer,
@@ -673,9 +705,9 @@ pub fn stt(
                 true,
                 false,
             )?;
-            debug!("Starting decoding process");
+            debug!("device: {}, starting decoding process", audio_input.device);
             let segments = dc.run(&mel)?;
-            debug!("Decoding complete");
+            debug!("device: {}, decoding complete", audio_input.device);
             Ok(segments
                 .iter()
                 .map(|s| s.dr.text.clone())
@@ -729,7 +761,6 @@ fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Resu
 #[derive(Debug, Clone)]
 pub struct AudioInput {
     pub data: Vec<f32>,
-
     pub sample_rate: u32,
     pub channels: u16,
     pub device: String,

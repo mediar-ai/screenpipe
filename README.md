@@ -111,11 +111,8 @@ brew install screenpipe
 ```bash
 screenpipe 
 ```
-we just released experimental apple native OCR, to use it:
-```bash
-screenpipe --ocr-engine apple-native
-```
-or if you don't want audio to be recorded
+
+if you don't want audio to be recorded
 ```bash
 screenpipe --disable-audio
 ```
@@ -135,10 +132,7 @@ by default screenpipe is using whisper-large that runs LOCALLY to get better qua
 ```bash
 screenpipe --audio-transcription-engine deepgram
 ```
-by default screenpipe is using a local model for screen capture OCR processing to use the cloud (through unstructured.io) for better performance use this flag:
-```bash
-screenpipe --ocr-engine unstructured
-```
+
 friend wearable integration, in order to link your wearable you need to pass user ID from friend app:
 ```bash
 screenpipe --friend-wearable-uid AC...........................F3

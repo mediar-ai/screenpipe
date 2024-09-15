@@ -9,6 +9,7 @@ mod plugin;
 mod resource_monitor;
 mod server;
 mod video;
+mod video_db;
 mod video_utils;
 pub use cli::Cli;
 pub use core::start_continuous_recording;
