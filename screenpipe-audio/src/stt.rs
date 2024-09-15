@@ -846,7 +846,7 @@ pub async fn create_whisper_channel(
                                         }
                                     },
                                 }
-                            })
+                            }).await
                         }
                         #[cfg(not(target_os = "macos"))]
                         {
