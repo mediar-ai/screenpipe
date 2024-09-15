@@ -355,7 +355,9 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
 
 pub fn default_input_device() -> Result<AudioDevice> {
     let host = cpal::default_host();
-    let device = host.default_input_device().unwrap();
+    let device = host
+        .default_input_device()
+        .ok_or(anyhow!("No default input device detected"))?;
     Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
 // this should be optional ?
