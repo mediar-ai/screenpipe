@@ -827,7 +827,7 @@ pub async fn create_whisper_channel(
                         #[cfg(target_os = "macos")]
                         {
                             autoreleasepool(|| {
-                                match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path) {
+                                match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path).await {
                                     Ok((transcription, path)) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),
