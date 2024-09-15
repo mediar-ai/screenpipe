@@ -9,7 +9,7 @@ pub enum VadEngineEnum {
     Silero,
 }
 
-pub trait VadEngine {
+pub trait VadEngine: Send {
     fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool>;
 }
 
@@ -44,9 +44,9 @@ pub struct SileroVad {
 }
 
 impl SileroVad {
-    pub fn new() -> anyhow::Result<Self> {
+    pub async fn new() -> anyhow::Result<Self> {
         debug!("Initializing SileroVad...");
-        let model_path = Self::download_model()?;
+        let model_path = Self::download_model().await?;
         debug!("SileroVad Model downloaded to: {:?}", model_path);
         let vad = Vad::new(model_path, 16000).map_err(|e| {
             debug!("SileroVad Error creating Vad: {}", e);
@@ -56,12 +56,12 @@ impl SileroVad {
         Ok(Self { vad })
     }
 
-    fn download_model() -> anyhow::Result<PathBuf> {
+    async fn download_model() -> anyhow::Result<PathBuf> {
         debug!("Downloading SileroVAD model...");
         let url =
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
-        let response = reqwest::blocking::get(url)?;
-        let model_data = response.bytes()?;
+        let response = reqwest::get(url).await?;
+        let model_data = response.bytes().await?;
 
         let path = std::env::temp_dir().join("silero_vad.onnx");
         let mut file = std::fs::File::create(&path)?;
@@ -94,11 +94,11 @@ impl VadEngine for SileroVad {
     }
 }
 
-pub fn create_vad_engine(engine: VadEngineEnum) -> anyhow::Result<Box<dyn VadEngine>> {
+pub async fn create_vad_engine(engine: VadEngineEnum) -> anyhow::Result<Box<dyn VadEngine>> {
     match engine {
         VadEngineEnum::WebRtc => Ok(Box::new(WebRtcVad::new())),
         VadEngineEnum::Silero => {
-            let silero_vad = SileroVad::new()?;
+            let silero_vad = SileroVad::new().await?;
             Ok(Box::new(silero_vad))
         }
     }
