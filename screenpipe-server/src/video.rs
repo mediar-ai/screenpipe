@@ -149,7 +149,7 @@ async fn save_frames_as_video(
     video_chunk_duration: Duration,
 ) {
     debug!("Starting save_frames_as_video function");
-    let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).round() as usize;
+    let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).ceil() as usize;
     let mut frame_count = 0;
     let (sender, mut receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel(512);
     let sender = Arc::new(sender);

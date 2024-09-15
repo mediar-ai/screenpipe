@@ -13,6 +13,7 @@ use screenpipe_vision::monitor::list_monitors;
 use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
+    video_utils::{merge_frames_from_video, MergeFramesRequest, MergeFramesResponse},
     ContentType, DatabaseManager, SearchResult,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
@@ -591,7 +592,6 @@ async fn run_pipe_handler(
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Starting pipe: {}", payload.pipe_id);
 
-
     match state
         .pipe_manager
         .update_config(
@@ -752,6 +752,24 @@ impl Server {
     }
 }
 
+async fn merge_frames_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<MergeFramesRequest>,
+) -> Result<JsonResponse<MergeFramesResponse>, (StatusCode, JsonResponse<Value>)> {
+    let output_dir = state.screenpipe_dir.join("videos");
+
+    match merge_frames_from_video(payload, output_dir, &state.db).await {
+        Ok(response) => Ok(JsonResponse(response)),
+        Err(e) => {
+            error!("Failed to merge frames: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ))
+        }
+    }
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/search", get(search))
@@ -767,6 +785,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/enable", post(run_pipe_handler)) // TODO ?
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
+        .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
 }
 
@@ -907,4 +926,43 @@ curl -X POST "http://localhost:3030/pipes/update" \
        }
      }' | jq
 
+
+# read random data and generate a clip using the merge endpoint
+
+
+# Perform the search and store the response
+
+# get frames from 20 min ago to 30 min ago
+SEARCH_RESPONSE=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-60M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-55M +%Y-%m-%dT%H:%M:%SZ)")
+# Extract the file_path and frame_id from the first OCR result
+FILE_PATH=$(echo "$SEARCH_RESPONSE" | jq -r '.data[0].content.file_path')
+OFFSET_INDEX=$(echo "$SEARCH_RESPONSE" | jq -r '.data[0].content.offset_index')
+
+echo "File Path: $FILE_PATH"
+echo "Offset Index: $OFFSET_INDEX"
+
+# Define the number of surrounding frames and output format
+SURROUNDING_FRAMES=300
+OUTPUT_FORMAT="mp4"
+
+# Create the JSON payload for merging frames
+MERGE_PAYLOAD=$(jq -n \
+  --arg video_path "$FILE_PATH" \
+  --argjson frame_indexes "[$OFFSET_INDEX]" \
+  --argjson surrounding_frames "$SURROUNDING_FRAMES" \
+  --arg output_format "$OUTPUT_FORMAT" \
+  '{
+    video_path: $video_path,
+    frame_indexes: $frame_indexes,
+    surrounding_frames: $surrounding_frames,
+    output_format: $output_format
+  }')
+
+
+# Send the merge request and store the response
+MERGE_RESPONSE=$(curl -s -X POST "http://localhost:3030/experimental/frames/merge" \
+  -H "Content-Type: application/json" \
+  -d "$MERGE_PAYLOAD")
+
+echo "Merge Response: $MERGE_RESPONSE"
 */

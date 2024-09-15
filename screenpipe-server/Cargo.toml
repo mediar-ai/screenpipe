@@ -80,6 +80,8 @@ rust-stemmers = "1.2.0"
 # base64
 base64 = "0.22.1"
 
+uuid = "1.5.0"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 

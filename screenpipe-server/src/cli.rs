@@ -82,7 +82,7 @@ pub struct Cli {
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
-    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))] 
     pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
@@ -180,7 +180,7 @@ pub struct Cli {
     pub included_windows: Vec<String>,
 
     /// Video chunk duration in seconds
-    #[arg(long, default_value_t = 30)]
+    #[arg(long, default_value_t = 60)]
     pub video_chunk_duration: u64,
 
     /// Deepgram API Key for audio transcription
