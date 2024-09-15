@@ -13,7 +13,7 @@ use screenpipe_vision::monitor::list_monitors;
 use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
-    video_utils::{merge_frames_from_video, MergeFramesRequest, MergeFramesResponse},
+    video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
     ContentType, DatabaseManager, SearchResult,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
@@ -754,11 +754,11 @@ impl Server {
 
 async fn merge_frames_handler(
     State(state): State<Arc<AppState>>,
-    JsonResponse(payload): JsonResponse<MergeFramesRequest>,
-) -> Result<JsonResponse<MergeFramesResponse>, (StatusCode, JsonResponse<Value>)> {
+    JsonResponse(payload): JsonResponse<MergeVideosRequest>,
+) -> Result<JsonResponse<MergeVideosResponse>, (StatusCode, JsonResponse<Value>)> {
     let output_dir = state.screenpipe_dir.join("videos");
 
-    match merge_frames_from_video(payload, output_dir, &state.db).await {
+    match merge_videos(payload, output_dir).await {
         Ok(response) => Ok(JsonResponse(response)),
         Err(e) => {
             error!("Failed to merge frames: {}", e);
@@ -932,32 +932,27 @@ curl -X POST "http://localhost:3030/pipes/update" \
 
 # Perform the search and store the response
 
-# get frames from 20 min ago to 30 min ago
-SEARCH_RESPONSE=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-60M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-55M +%Y-%m-%dT%H:%M:%SZ)")
-# Extract the file_path and frame_id from the first OCR result
-FILE_PATH=$(echo "$SEARCH_RESPONSE" | jq -r '.data[0].content.file_path')
-OFFSET_INDEX=$(echo "$SEARCH_RESPONSE" | jq -r '.data[0].content.offset_index')
+# First, let's search for some recent video content
+SEARCH_RESPONSE1=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)")
+SEARCH_RESPONSE2=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-40M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-35M +%Y-%m-%dT%H:%M:%SZ)")
+SEARCH_RESPONSE3=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-50M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-45M +%Y-%m-%dT%H:%M:%SZ)")
 
-echo "File Path: $FILE_PATH"
-echo "Offset Index: $OFFSET_INDEX"
+# Extract the file paths from the search results without creating JSON arrays
+VIDEO_PATHS1=$(echo "$SEARCH_RESPONSE1" | jq -r '.data[].content.file_path' | sort -u)
+VIDEO_PATHS2=$(echo "$SEARCH_RESPONSE2" | jq -r '.data[].content.file_path' | sort -u)
+VIDEO_PATHS3=$(echo "$SEARCH_RESPONSE3" | jq -r '.data[].content.file_path' | sort -u)
 
-# Define the number of surrounding frames and output format
-SURROUNDING_FRAMES=300
-OUTPUT_FORMAT="mp4"
+# Merge the video paths and create a single JSON array
+MERGED_VIDEO_PATHS=$(echo "$VIDEO_PATHS1"$'\n'"$VIDEO_PATHS2"$'\n'"$VIDEO_PATHS3" | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
 
-# Create the JSON payload for merging frames
+# Create the JSON payload for merging videos
 MERGE_PAYLOAD=$(jq -n \
-  --arg video_path "$FILE_PATH" \
-  --argjson frame_indexes "[$OFFSET_INDEX]" \
-  --argjson surrounding_frames "$SURROUNDING_FRAMES" \
-  --arg output_format "$OUTPUT_FORMAT" \
+  --argjson video_paths "$MERGED_VIDEO_PATHS" \
   '{
-    video_path: $video_path,
-    frame_indexes: $frame_indexes,
-    surrounding_frames: $surrounding_frames,
-    output_format: $output_format
+    video_paths: $video_paths
   }')
 
+echo "Merge Payload: $MERGE_PAYLOAD"
 
 # Send the merge request and store the response
 MERGE_RESPONSE=$(curl -s -X POST "http://localhost:3030/experimental/frames/merge" \
@@ -965,4 +960,10 @@ MERGE_RESPONSE=$(curl -s -X POST "http://localhost:3030/experimental/frames/merg
   -d "$MERGE_PAYLOAD")
 
 echo "Merge Response: $MERGE_RESPONSE"
+
+# Extract the merged video path from the response
+MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
+
+echo "Merged Video Path: $MERGED_VIDEO_PATH"
+
 */
