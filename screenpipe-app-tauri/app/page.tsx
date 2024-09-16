@@ -23,7 +23,6 @@ import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { DevSettings } from "@/components/dev-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import SearchPanel from "@/components/search-panel";
 import { SearchChat } from "@/components/search-chat";
 
 export default function Home() {
