@@ -1,13 +1,13 @@
 class Screenpipe < Formula
   desc "Library to build personalized AI powered by what you've seen, said, or heard."
   homepage "https://github.com/mediar-ai/screenpipe"
-  url "https://github.com/mediar-ai/screenpipe/releases/download/v0.1.82/screenpipe-0.1.82-aarch64-apple-darwin.tar.gz"
-  version "0.1.82"
+  url "https://github.com/mediar-ai/screenpipe/releases/download/v0.1.84/screenpipe-0.1.84-aarch64-apple-darwin.tar.gz"
+  version "0.1.84"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
-      sha256 "90e9b699b54c3b38840acb5f6c90b12f9923df575099d3e9a3574a7ed46f0db3" # arm64
+      sha256 "fbfb6f20dc2a0ea9cab8dddc37261f6803fa55b013c4378cfe6c3975edddb3bb" # arm64
     else
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
       sha256 "36bca4157bc6655d3e4f0f186f6da272ecae2128f0c128ec3f7dc3d174fdef16" # x86_64
