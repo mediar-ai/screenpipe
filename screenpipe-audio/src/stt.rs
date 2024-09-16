@@ -434,7 +434,12 @@ fn get_deepgram_api_key() -> String {
 }
 
 // TODO: this should use async reqwest not blocking, cause crash issue because all our code is async
-fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32], device: &str) -> Result<String> {
+fn transcribe_with_deepgram(
+    api_key: &str,
+    audio_data: &[f32],
+    device: &str,
+    sample_rate: u32,
+) -> Result<String> {
     debug!("starting deepgram transcription");
     let client = Client::new();
 
@@ -443,7 +448,7 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32], device: &str) -> 
     {
         let spec = WavSpec {
             channels: 1,
-            sample_rate: 32000,
+            sample_rate: sample_rate / 3, // for some reason 96khz device need 32 and 48khz need 16 (be mindful resampling)
             bits_per_sample: 32,
             sample_format: hound::SampleFormat::Float,
         };
@@ -605,7 +610,12 @@ pub fn stt(
                 audio_input.device,
                 &api_key[..8]
             );
-            match transcribe_with_deepgram(&api_key, &speech_frames, &audio_input.device) {
+            match transcribe_with_deepgram(
+                &api_key,
+                &speech_frames,
+                &audio_input.device,
+                audio_input.sample_rate,
+            ) {
                 Ok(transcription) => Ok(transcription),
                 Err(e) => {
                     error!(
