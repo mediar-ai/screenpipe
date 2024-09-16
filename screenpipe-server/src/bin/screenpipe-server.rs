@@ -441,12 +441,12 @@ async fn main() -> anyhow::Result<()> {
 
     if cli.disable_vision {
         println!("│ {:<19} │ {:<34} │", "", "vision disabled");
-    } else if all_monitors.is_empty() {
+    } else if monitor_ids.is_empty() {
         println!("│ {:<19} │ {:<34} │", "", "no monitors available");
     } else {
-        let total_monitors = all_monitors.len();
-        for (_, monitor) in all_monitors.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
-            let monitor_str = format!("id: {}, {:?}", monitor.id(), monitor);
+        let total_monitors = monitor_ids.len();
+        for (_, monitor) in monitor_ids.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+            let monitor_str = format!("id: {}", monitor);
             let formatted_monitor = format_cell(&monitor_str, VALUE_WIDTH);
             println!("│ {:<19} │ {:<34} │", "", formatted_monitor);
         }
@@ -494,9 +494,9 @@ async fn main() -> anyhow::Result<()> {
         let total_pipes = pipes.len();
         for (_, pipe) in pipes.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let pipe_str = format!(
-                "{} ({})",
+                "({}) {}",
+                if pipe.enabled { "enabled" } else { "disabled" },
                 pipe.id,
-                if pipe.enabled { "enabled" } else { "disabled" }
             );
             let formatted_pipe = format_cell(&pipe_str, VALUE_WIDTH);
             println!("│ {:<19} │ {:<34} │", "", formatted_pipe);

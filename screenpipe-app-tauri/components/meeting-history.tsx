@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -10,20 +11,21 @@ import {
 import { OpenAI } from "openai";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "./ui/use-toast";
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown from "react-markdown";
 import { X, Activity } from "lucide-react"; // Import the X icon and Activity icon for live meetings
 import { useInterval } from "@/lib/hooks/use-interval"; // Add this import
 import { usePostHog } from "posthog-js/react";
-import debounce from 'lodash/debounce';
+import debounce from "lodash/debounce";
+import { Badge } from "./ui/badge";
 
 function setItem(key: string, value: any): void {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     localStorage.setItem(key, JSON.stringify(value));
   }
 }
 
 function getItem(key: string): any {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : null;
   }
@@ -110,66 +112,64 @@ export default function MeetingHistory() {
   async function loadMeetings() {
     setLoading(true);
     try {
-      const storedMeetings = getItem('meetings') || [];
+      const storedMeetings = getItem("meetings") || [];
       setMeetings(storedMeetings);
-      
+
       await fetchMeetings();
     } catch (err) {
-      setError("Failed to load meetings");
+      setError("failed to load meetings");
     } finally {
       setLoading(false);
     }
   }
 
   async function fetchMeetings() {
-    console.log("Fetching meetings...");
+    console.log("fetching meetings...");
     setLoading(true);
     try {
       let startTime;
-      const storedMeetings = getItem('meetings') || [];
+      const storedMeetings = getItem("meetings") || [];
       if (storedMeetings.length > 0) {
         // Get the start time of the last stored meeting
         const lastMeeting = storedMeetings[storedMeetings.length - 1];
         startTime = new Date(lastMeeting.meeting_start).toISOString();
       } else {
         // If no stored meetings, search from 7 days ago
-        startTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        startTime = new Date(
+          Date.now() - 7 * 24 * 60 * 60 * 1000
+        ).toISOString();
       }
-      console.log("Searching from:", startTime);
+      console.log("searching from:", startTime);
 
-      debouncedCapture("meeting_history_search", {
-        userId: settings.userId,
-        startTime: startTime,
-        contentType: "audio",
-        limit: 1000,
-      });
 
-      const response = await fetch(`http://localhost:3030/search?content_type=audio&start_time=${startTime}&limit=1000`);
+      const response = await fetch(
+        `http://localhost:3030/search?content_type=audio&start_time=${startTime}&limit=1000`
+      );
       if (!response.ok) {
-        throw new Error("Failed to fetch meeting history");
+        throw new Error("failed to fetch meeting history");
       }
       const result = await response.json();
-      console.log("Fetch result:", result);
+      console.log("fetch result:", result);
       const newMeetings = processMeetings(result.data);
-      console.log("Processed new meetings:", newMeetings);
+      console.log("processed new meetings:", newMeetings);
 
-      debouncedCapture("meeting_history_results", {
-        userId: settings.userId,
-        resultCount: newMeetings.length,
-      });
 
       const newLiveMeetings = new Set(liveMeetings);
 
       // Merge new meetings with stored meetings, updating the last meeting if necessary
       let updatedMeetings = [...storedMeetings];
-      newMeetings.forEach(newMeeting => {
-        const existingMeetingIndex = updatedMeetings.findIndex(m => m.meeting_group === newMeeting.meeting_group);
+      newMeetings.forEach((newMeeting) => {
+        const existingMeetingIndex = updatedMeetings.findIndex(
+          (m) => m.meeting_group === newMeeting.meeting_group
+        );
         if (existingMeetingIndex !== -1) {
           // Update existing meeting
           updatedMeetings[existingMeetingIndex] = {
             ...updatedMeetings[existingMeetingIndex],
             ...newMeeting,
-            full_transcription: updatedMeetings[existingMeetingIndex].full_transcription + newMeeting.full_transcription,
+            full_transcription:
+              updatedMeetings[existingMeetingIndex].full_transcription +
+              newMeeting.full_transcription,
           };
         } else {
           // Add new meeting
@@ -178,41 +178,38 @@ export default function MeetingHistory() {
 
         if (isLiveMeeting(newMeeting)) {
           if (!liveMeetings.has(newMeeting.meeting_group)) {
-            sendNotification("Live Meeting Started", `A live meeting started at ${new Date(newMeeting.meeting_start).toLocaleTimeString()}`);
+            sendNotification(
+              "live meeting started",
+              `a live meeting started at ${new Date(
+                newMeeting.meeting_start
+              ).toLocaleTimeString()}`
+            );
             newLiveMeetings.add(newMeeting.meeting_group);
-            debouncedCapture("live_meeting_detected", {
-              userId: settings.userId,
-              meetingId: newMeeting.meeting_group,
-              startTime: newMeeting.meeting_start,
-            });
+
           }
         } else if (liveMeetings.has(newMeeting.meeting_group)) {
-          sendNotification("Meeting Ended", `The meeting has ended`);
+          sendNotification("meeting ended", `the meeting has ended`);
           newLiveMeetings.delete(newMeeting.meeting_group);
-          debouncedCapture("live_meeting_ended", {
-            userId: settings.userId,
-            meetingId: newMeeting.meeting_group,
-            endTime: newMeeting.meeting_end,
-            duration: (new Date(newMeeting.meeting_end).getTime() - new Date(newMeeting.meeting_start).getTime()) / 1000, // duration in seconds
-          });
+          
         }
       });
 
       setLiveMeetings(newLiveMeetings);
       setMeetings(updatedMeetings);
-      
+
       // Only store completed meetings
-      const completedMeetings = updatedMeetings.filter(meeting => !isLiveMeeting(meeting));
-      setItem('meetings', completedMeetings);
+      const completedMeetings = updatedMeetings.filter(
+        (meeting) => !isLiveMeeting(meeting)
+      );
+      setItem("meetings", completedMeetings);
     } catch (err) {
-      setError("Some trouble fetching new meetings. Please check health status.");
-      console.error("Fetch error:", err);
-      debouncedCapture("meeting_history_fetch_error", {
-        userId: settings.userId,
-        error: String(err),
-      });
+      setError(
+        "some trouble fetching new meetings. please check health status."
+      );
+      console.error("fetch error:", err);
+
     } finally {
-      console.log("Fetch completed");
+      console.log("fetch completed");
       setLoading(false);
     }
   }
@@ -226,15 +223,15 @@ export default function MeetingHistory() {
         },
         body: JSON.stringify({ title, body }),
       });
-      
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`http error! status: ${response.status}`);
       }
-      
+
       const result = await response.json();
-      console.log("Notification sent successfully:", result);
+      console.log("notification sent successfully:", result);
     } catch (error) {
-      console.error("Failed to send notification:", error);
+      console.error("failed to send notification:", error);
     }
   }
 
@@ -257,11 +254,11 @@ export default function MeetingHistory() {
       const messages = [
         {
           role: "system" as const,
-          content: `You are a helpful assistant that summarizes meetings. ${customPrompt}`,
+          content: `you are a helpful assistant that summarizes meetings. ${customPrompt}`,
         },
         {
           role: "user" as const,
-          content: `Please provide a concise summary of the following meeting transcript:\n\n${meeting.full_transcription}`,
+          content: `please provide a concise summary of the following meeting transcript:\n\n${meeting.full_transcription}`,
         },
       ];
 
@@ -270,42 +267,34 @@ export default function MeetingHistory() {
         messages: messages,
       });
 
-      const summary = response.choices[0]?.message?.content || "No summary generated.";
+      const summary =
+        response.choices[0]?.message?.content || "no summary generated.";
 
       // Update the meeting with the new summary
       const updatedMeeting = { ...meeting, summary };
-      const updatedMeetings = meetings.map(m => m.meeting_group === meeting.meeting_group ? updatedMeeting : m);
+      const updatedMeetings = meetings.map((m) =>
+        m.meeting_group === meeting.meeting_group ? updatedMeeting : m
+      );
       setMeetings(updatedMeetings);
-      setItem('meetings', updatedMeetings);
+      setItem("meetings", updatedMeetings);
 
       toast({
-        title: "Summary Generated",
-        description: "The meeting summary has been created successfully.",
+        title: "summary generated",
+        description: "the meeting summary has been created successfully.",
       });
 
-      debouncedCapture("summary_generation_completed", {
-        userId: settings.userId,
-        meetingId: meeting.meeting_group,
-      });
+ 
 
-      debouncedCapture("meeting_summary_generated", {
-        userId: settings.userId,
-        meetingId: meeting.meeting_group,
-        summaryLength: summary.length,
-      });
+  
     } catch (error) {
-      console.error("Error generating summary:", error);
+      console.error("error generating summary:", error);
       toast({
-        title: "Error",
-        description: "Failed to generate meeting summary. Please try again.",
+        title: "error",
+        description: "failed to generate meeting summary. please try again.",
         variant: "destructive",
       });
 
-      debouncedCapture("summary_generation_failed", {
-        userId: settings.userId,
-        meetingId: meeting.meeting_group,
-        error: String(error),
-      });
+
     } finally {
       setIsSummarizing(false);
     }
@@ -329,11 +318,12 @@ export default function MeetingHistory() {
       const messages = [
         {
           role: "system" as const,
-          content: "You are an assistant that identifies participants in meeting transcripts.",
+          content:
+            "you are an assistant that identifies participants in meeting transcripts.",
         },
         {
           role: "user" as const,
-          content: `Please identify the participants in this meeting transcript. Try to understand if there are multiple people or the person is talking to themselves, or if the transcript is just a youtube video or similar. Provide a comma-separated list of one or two word names or roles or characteristics. If it is not possible to identify then respond with N/A, Transcriptions: :\n\n${meeting.full_transcription}`,
+          content: `please identify the participants in this meeting transcript. try to understand if there are multiple people or the person is talking to themselves, or if the transcript is just a youtube video or similar. provide a comma-separated list of one or two word names or roles or characteristics. if it is not possible to identify then respond with n/a, transcriptions: :\n\n${meeting.full_transcription}`,
         },
       ];
 
@@ -342,60 +332,63 @@ export default function MeetingHistory() {
         messages: messages,
       });
 
-      const participants = response.choices[0]?.message?.content || "No participants identified.";
+      const participants =
+        response.choices[0]?.message?.content || "no participants identified.";
 
       // Update the meeting with the identified participants
       const updatedMeeting = { ...meeting, participants };
-      const updatedMeetings = meetings.map(m => m.meeting_group === meeting.meeting_group ? updatedMeeting : m);
+      const updatedMeetings = meetings.map((m) =>
+        m.meeting_group === meeting.meeting_group ? updatedMeeting : m
+      );
       setMeetings(updatedMeetings);
-      setItem('meetings', updatedMeetings);
+      setItem("meetings", updatedMeetings);
 
       toast({
-        title: "Participants Identified",
-        description: "The meeting participants have been identified successfully.",
+        title: "participants identified",
+        description:
+          "the meeting participants have been identified successfully.",
       });
 
-      debouncedCapture("participant_identification_completed", {
-        userId: settings.userId,
-        meetingId: meeting.meeting_group,
-      });
 
-      debouncedCapture("meeting_participants_identified", {
-        userId: settings.userId,
-        meetingId: meeting.meeting_group,
-        participantCount: participants.split(',').length,
-      });
     } catch (error) {
-      console.error("Error identifying participants:", error);
+      console.error("error identifying participants:", error);
       toast({
-        title: "Error",
-        description: "Failed to identify meeting participants. Please try again.",
+        title: "error",
+        description:
+          "failed to identify meeting participants. please try again.",
         variant: "destructive",
       });
 
-      debouncedCapture("participant_identification_failed", {
-        userId: settings.userId,
-        meetingId: meeting.meeting_group,
-        error: String(error),
-      });
+ 
     } finally {
       setIsIdentifying(false);
     }
   }
 
   function processMeetings(transcriptions: AudioTranscription[]): Meeting[] {
-    console.log("Processing transcriptions:", transcriptions);
+    console.log("processing transcriptions:", transcriptions);
     let meetings: Meeting[] = [];
     let currentMeeting: Meeting | null = null;
     let meetingGroup = 0;
 
-    transcriptions.sort((a, b) => new Date(a.content.timestamp).getTime() - new Date(b.content.timestamp).getTime());
+    transcriptions.sort(
+      (a, b) =>
+        new Date(a.content.timestamp).getTime() -
+        new Date(b.content.timestamp).getTime()
+    );
 
     transcriptions.forEach((trans, index) => {
       const currentTime = new Date(trans.content.timestamp);
-      const prevTime = index > 0 ? new Date(transcriptions[index - 1].content.timestamp) : null;
+      const prevTime =
+        index > 0
+          ? new Date(transcriptions[index - 1].content.timestamp)
+          : null;
 
-      if (!currentMeeting || (prevTime && (currentTime.getTime() - prevTime.getTime()) >= 1 * 60 * 1000)) {
+      if (
+        !currentMeeting ||
+        (prevTime &&
+          currentTime.getTime() - prevTime.getTime() >= 1 * 60 * 1000)
+      ) {
         if (currentMeeting) {
           meetings.push(currentMeeting);
         }
@@ -423,8 +416,11 @@ export default function MeetingHistory() {
     meetings = meetings.reduce((acc, meeting) => {
       const lastMeeting = acc[acc.length - 1];
       if (lastMeeting) {
-        const timeDiff = new Date(meeting.meeting_start).getTime() - new Date(lastMeeting.meeting_end).getTime();
-        if (timeDiff < 1 * 60 * 1000) { // If less than 1 minute apart, merge
+        const timeDiff =
+          new Date(meeting.meeting_start).getTime() -
+          new Date(lastMeeting.meeting_end).getTime();
+        if (timeDiff < 1 * 60 * 1000) {
+          // If less than 1 minute apart, merge
           lastMeeting.meeting_end = meeting.meeting_end;
           lastMeeting.full_transcription += meeting.full_transcription;
           return acc;
@@ -434,16 +430,22 @@ export default function MeetingHistory() {
       return acc;
     }, [] as Meeting[]);
 
-    console.log("Processed meetings:", meetings);
-    return meetings.filter(m => m.full_transcription.replace(/\n/g, '').length >= 200);
+    console.log("processed meetings:", meetings);
+    return meetings.filter(
+      (m) => m.full_transcription.replace(/\n/g, "").length >= 200
+    );
   }
 
-  console.log("Rendering meetings:", meetings);
+  console.log("rendering meetings:", meetings);
 
-  // Sort meetings in reverse chronological order
-  const sortedMeetings = [...meetings].sort((a, b) => 
-    new Date(b.meeting_start).getTime() - new Date(a.meeting_start).getTime()
-  );
+  // Memoize expensive computations
+  const sortedMeetings = useMemo(() => {
+    return [...meetings].sort(
+      (a, b) =>
+        new Date(b.meeting_start).getTime() -
+        new Date(a.meeting_start).getTime()
+    );
+  }, [meetings]);
 
   const isLiveMeeting = (meeting: Meeting) => {
     const lastTranscriptionTime = new Date(meeting.meeting_end);
@@ -461,77 +463,130 @@ export default function MeetingHistory() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" onClick={() => setIsOpen(true)}>meetings</Button>
+        <Button variant="ghost" onClick={() => setIsOpen(true)}>
+          meetings
+        </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-full w-full max-h-full h-full p-0 border-none">
-        <DialogHeader className="px-4 py-2 border-b flex-shrink-0">
-          <DialogTitle>Meeting and conversation history</DialogTitle>
+      <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
+        <DialogHeader className="py-4">
+          <DialogTitle>
+            meeting and conversation history
+            <Badge variant="secondary" className="ml-2">
+              experimental
+            </Badge>
+          </DialogTitle>
         </DialogHeader>
+        <DialogDescription>
+          <p className="text-sm text-gray-600 mb-4">
+            this page provides transcriptions and summaries of your daily
+            meetings. it uses your ai settings and custom prompt to generate
+            summaries. note: phrases like &quot;thank you&quot; or &quot;you
+            know&quot; might be transcription errors. for better accuracy,
+            consider using deepgram as the engine or adjust your custom prompt
+            to ignore these.
+            <br />
+            <br />
+            <strong>make sure to setup your ai settings</strong>
+          </p>
+        </DialogDescription>
         <div className="flex-grow overflow-auto p-4">
-          {loading && <p>Loading meeting history...</p>}
-          {showError && error && (
-            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4 flex justify-between items-center" role="alert">
-              <div>
-                <p className="font-bold">Warning</p>
-                <p>{error}</p>
-              </div>
-              <button onClick={() => setShowError(false)} className="text-yellow-700 hover:text-yellow-900">
-                <X size={18} />
-              </button>
-            </div>
-          )}
-          {meetings.length === 0 && !loading && !error && <p>No meetings found.</p>}
-          <div className="space-y-4">
-            {sortedMeetings.map((meeting, index) => (
-              <div key={index} className="p-4 border rounded relative">
-                {isLiveMeeting(meeting) && (
-                  <div className="absolute top-2 right-2 flex items-center text-black">
-                    <Activity size={16} className="mr-1" />
-                    <span className="text-sm font-semibold">Live</span>
-                  </div>
-                )}
-                <h3 className="font-bold">
-                  {`Meeting ${new Date(meeting.meeting_start).toLocaleDateString()}, ${new Date(meeting.meeting_start).toLocaleTimeString()} - ${new Date(meeting.meeting_end).toLocaleTimeString()}`}
-                </h3>
-                <p className="flex items-center">
-                  Participants: {meeting.participants || ''}
-                  {!meeting.participants && (
-                    <Button
-                    onClick={() => identifyParticipants(meeting)}
-                    disabled={isIdentifying}
-                    className="ml-2 px-2 py-0.5 text-[10px] bg-black text-white hover:bg-gray-800 h-5 min-h-0"
-                    >
-                    {isIdentifying ? "Identifying..." : "Identify"}
-                    </Button>
-                  )}
-                </p>
-                {isLiveMeeting(meeting) ? (
-                  <p className="mt-2 text-sm text-gray-500 italic">Summary not available for live meetings</p>
-                ) : meeting.summary ? (
-                  <div>
-                    <h4 className="font-semibold mt-2">Summary:</h4>
-                    <ReactMarkdown className="prose max-w-none">
-                      {meeting.summary}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <Button
-                    onClick={() => generateSummary(meeting)}
-                    disabled={isSummarizing}
-                    className="mt-2"
-                  >
-                    {isSummarizing ? "Generating Summary..." : "Generate Summary"}
-                  </Button>
-                )}
-                <div className="mt-4">
-                  <h4 className="font-semibold">Full Transcription:</h4>
-                  <pre className="whitespace-pre-wrap bg-gray-100 p-2 rounded mt-2 text-sm max-h-40 overflow-y-auto">
-                    {meeting.full_transcription}
-                  </pre>
+          {loading ? (
+            <div className="space-y-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-4 border rounded animate-pulse">
+                  <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
+                  <div className="h-20 bg-gray-200 rounded mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/3"></div>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              {showError && error && (
+                <div
+                  className="bg-gray-100 border-l-4 border-black text-gray-700 p-4 mb-4 flex justify-between items-center"
+                  role="alert"
+                >
+                  <div>
+                    <p className="font-bold">warning</p>
+                    <p>{error}</p>
+                  </div>
+                  <button
+                    onClick={() => setShowError(false)}
+                    className="text-gray-700 hover:text-black"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              )}
+              {meetings.length === 0 && !loading && !error && (
+                <p className="text-center">no meetings found.</p>
+              )}
+              <div className="space-y-6">
+                {sortedMeetings.map((meeting, index) => (
+                  <div key={index} className="p-4 border rounded relative">
+                    {isLiveMeeting(meeting) && (
+                      <div className="absolute top-2 right-2 flex items-center text-black">
+                        <Activity size={16} className="mr-1" />
+                        <span className="text-sm font-semibold">live</span>
+                      </div>
+                    )}
+                    <h3 className="font-bold">
+                      {`meeting ${new Date(
+                        meeting.meeting_start
+                      ).toLocaleDateString()}, ${new Date(
+                        meeting.meeting_start
+                      ).toLocaleTimeString()} - ${new Date(
+                        meeting.meeting_end
+                      ).toLocaleTimeString()}`}
+                    </h3>
+                    <p className="flex items-center">
+                      participants: {meeting.participants || ""}
+                      {!meeting.participants && (
+                        <Button
+                          onClick={() => identifyParticipants(meeting)}
+                          disabled={isIdentifying}
+                          className="ml-2 px-2 py-0.5 text-[10px] bg-black text-white hover:bg-gray-800 h-5 min-h-0"
+                        >
+                          {isIdentifying ? "identifying..." : "identify"}
+                        </Button>
+                      )}
+                    </p>
+                    {isLiveMeeting(meeting) ? (
+                      <p className="mt-2 text-sm text-gray-500 italic">
+                        summary not available for live meetings
+                      </p>
+                    ) : meeting.summary ? (
+                      <div>
+                        <h4 className="font-semibold mt-2">summary:</h4>
+                        <ReactMarkdown className="prose max-w-none">
+                          {meeting.summary}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={() => generateSummary(meeting)}
+                        disabled={isSummarizing}
+                        className="mt-2"
+                      >
+                        {isSummarizing
+                          ? "generating summary..."
+                          : "generate summary"}
+                      </Button>
+                    )}
+                    <div className="mt-4">
+                      <h4 className="font-semibold">full transcription:</h4>
+                      <pre className="whitespace-pre-wrap bg-gray-100 p-2 rounded mt-2 text-sm max-h-40 overflow-y-auto">
+                        {meeting.full_transcription}
+                      </pre>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

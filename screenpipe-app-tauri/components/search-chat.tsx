@@ -97,31 +97,42 @@ export function SearchChat() {
   const appNameHistory = useInputHistory("app_name");
   const windowNameHistory = useInputHistory("window_name");
 
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const lastScrollPosition = useRef(0);
+
   useEffect(() => {
     const handleScroll = () => {
+      const currentScrollPosition = window.scrollY;
       const scrollPercentage =
-        (window.scrollY /
+        (currentScrollPosition /
           (document.documentElement.scrollHeight - window.innerHeight)) *
         100;
       const shouldShow = scrollPercentage < 90; // Show when scrolled up more than 10%
 
       setShowScrollButton(shouldShow);
+
+      // Check if user is scrolling up while AI is loading
+      if (isAiLoading && currentScrollPosition < lastScrollPosition.current) {
+        setIsUserScrolling(true);
+      }
+
+      lastScrollPosition.current = currentScrollPosition;
     };
 
     window.addEventListener("scroll", handleScroll);
 
-    // Trigger initial check
-    handleScroll();
-
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [isAiLoading]);
 
   const scrollToBottom = () => {
-    window.scrollTo({
-      top: document.documentElement.scrollHeight,
-      behavior: "smooth",
-    });
+    if (!isUserScrolling) {
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: "smooth",
+      });
+    }
   };
+
   // Add this function to calculate total content length
   const calculateTotalContentLength = (results: ContentItem[]): number => {
     return results.reduce((total, item) => {
@@ -160,6 +171,8 @@ export function SearchChat() {
   const handleFloatingInputSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!floatingInput.trim()) return;
+
+    scrollToBottom();
 
     const totalContentLength = calculateTotalContentLength(results);
     if (totalContentLength > MAX_CONTENT_LENGTH) {
@@ -237,7 +250,10 @@ export function SearchChat() {
         { role: "assistant", content: "" },
       ]);
 
+      setIsUserScrolling(false);
+      lastScrollPosition.current = window.scrollY;
       scrollToBottom();
+
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || "";
         fullResponse += content;
@@ -258,8 +274,9 @@ export function SearchChat() {
     } finally {
       setIsAiLoading(false);
       setIsFloatingInputVisible(false);
-      // Scroll to bottom again after the response is complete
-      scrollToBottom();
+      if (!isUserScrolling) {
+        scrollToBottom();
+      }
     }
   };
 
@@ -488,7 +505,10 @@ export function SearchChat() {
                   <HelpCircle className="h-4 w-4 text-gray-400" />
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>select the type of content to search.</p>
+                  <p>
+                    select the type of content to search. ocr is the text found
+                    on your screen.
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -752,7 +772,7 @@ export function SearchChat() {
         </Button>
       </div>
       {isLoading && (
-        <div className="mt-2">
+        <div className="my-2">
           <Progress value={progress} className="w-full" />
         </div>
       )}
