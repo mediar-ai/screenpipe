@@ -15,7 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
 import { DateTimePicker } from "./date-time-picker";
 import { Badge } from "./ui/badge";
 import {
@@ -38,7 +37,6 @@ import posthog from "posthog-js";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { convertToCoreMessages, generateId, Message, streamText } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
 import { OpenAI } from "openai";
 import { ChatMessage } from "./chat-message-v2";
 import { spinner } from "./spinner";
@@ -50,7 +48,6 @@ import {
 } from "./ui/accordion";
 import { VideoComponent } from "./video";
 import { Dialog, DialogContent, DialogTrigger } from "./ui/dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Tooltip,
   TooltipContent,
@@ -80,7 +77,7 @@ export function SearchChat() {
   const [totalResults, setTotalResults] = useState(0);
   const { settings } = useSettings();
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [minLength, setMinLength] = useState(100);
+  const [minLength, setMinLength] = useState(50);
   const [maxLength, setMaxLength] = useState(10000);
 
   // Chat state
@@ -276,57 +273,32 @@ export function SearchChat() {
     setChatMessages([]);
     scrollToBottom();
     setResults([]);
-    let allFilteredResults: ContentItem[] = [];
-    let currentOffset = newOffset;
-    let totalUnfilteredResults = 0;
 
-    while (allFilteredResults.length < limit) {
-      const response = await queryScreenpipe({
-        q: query || undefined,
-        content_type: contentType as "all" | "ocr" | "audio",
-        limit: limit * 1.5, // TODO huge hack
-        offset: currentOffset,
-        start_time: startDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
-        end_time: endDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
-        app_name: appName || undefined,
-        window_name: windowName || undefined,
-        include_frames: includeFrames,
+    const response = await queryScreenpipe({
+      q: query || undefined,
+      content_type: contentType as "all" | "ocr" | "audio",
+      limit: limit,
+      offset: newOffset,
+      start_time: startDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
+      end_time: endDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
+      app_name: appName || undefined,
+      window_name: windowName || undefined,
+      include_frames: includeFrames,
+      min_length: minLength,
+      max_length: maxLength,
+    });
+
+    if (!response) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch search results. Please try again.",
+        variant: "destructive",
       });
-
-      if (response && response.data.length > 0) {
-        console.log("response", response);
-        const filteredResults = response.data.filter((item) => {
-          const contentLength =
-            item.type === "OCR"
-              ? item.content.text.length
-              : item.type === "Audio"
-              ? item.content.transcription.length
-              : item.type === "FTS"
-              ? item.content.matched_text.length
-              : 0;
-          return contentLength >= minLength && contentLength <= maxLength;
-        });
-        allFilteredResults = [...allFilteredResults, ...filteredResults];
-        // Update progress based on fetched results
-        const currentProgress = Math.min(
-          (allFilteredResults.length / limit) * 100,
-          100
-        );
-        setProgress(currentProgress);
-
-        currentOffset += response.data.length;
-        totalUnfilteredResults = response.pagination.total;
-      } else {
-        break; // No more results to fetch
-      }
-
-      if (currentOffset >= totalUnfilteredResults) {
-        break; // We've fetched all available results
-      }
+      return;
     }
 
-    setResults(allFilteredResults.slice(0, limit));
-    setTotalResults(allFilteredResults.length);
+    setResults(response.data);
+    setTotalResults(response.pagination.total);
     setIsLoading(false);
   };
 
@@ -462,7 +434,6 @@ export function SearchChat() {
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4">
-      
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="space-y-2">
           <div className="flex items-center space-x-2">

@@ -113,6 +113,14 @@ export const screenpipeQuery = z.object({
     .boolean()
     .default(false)
     .describe("Include frames in the response"),
+  min_length: z
+    .number()
+    .default(50)
+    .describe("Minimum length of the text to include in the response"),
+  max_length: z
+    .number()
+    .default(10000)
+    .describe("Maximum length of the text to include in the response"),
 });
 
 export const screenpipeMultiQuery = z.object({
@@ -145,6 +153,8 @@ export async function queryScreenpipe(
         content_type: params.content_type,
         app_name: params.app_name,
         window_name: params.window_name, // Add window_name to query parameters
+        min_length: params.min_length.toString(),
+        max_length: params.max_length.toString(),
       }).filter(([_, v]) => v != null) as [string, string][]
     );
     console.log("calling screenpipe", JSON.stringify(params));
@@ -154,20 +164,6 @@ export async function queryScreenpipe(
       throw new Error(`HTTP error! status: ${response.status} ${text}`);
     }
     const result = await response.json();
-    // remove all elements with empty text
-    // const resultWithNoEmptyText = {
-    //   ...result,
-    //   data: result.data.filter(
-    //     (element: any) =>
-    //       (element.content?.text !== undefined &&
-    //         element.content?.text !== null &&
-    //         element.content?.text?.length > 100) ||
-    //       // same for .transcription
-    //       (element.content?.transcription !== undefined &&
-    //         element.content?.transcription !== null &&
-    //         element.content?.transcription?.length > 10)
-    //   ),
-    // };
     console.log("result", result);
     console.log("result", result.data.length);
     return result;
