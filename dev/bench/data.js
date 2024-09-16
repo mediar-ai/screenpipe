@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726511435869,
+  "lastUpdate": 1726511591077,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6479,6 +6479,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 3674691542,
             "range": "± 277748301",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad01105f04dda401c94b6409fb14a372cd5b9ce0",
+          "message": "Merge pull request #335 from jandremarais/c-bindings-conflict-fix\n\nfix: broken linux app builds",
+          "timestamp": "2024-09-16T11:23:21-07:00",
+          "tree_id": "2aaaf2d16d1a42fa2ae31d7299447399d8e1485d",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/ad01105f04dda401c94b6409fb14a372cd5b9ce0"
+        },
+        "date": 1726511590275,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2344646437,
+            "range": "± 126883385",
             "unit": "ns/iter"
           }
         ]
