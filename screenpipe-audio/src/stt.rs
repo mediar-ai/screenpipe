@@ -88,14 +88,11 @@ impl WhisperModel {
     }
 
     fn get_optimal_device() -> Result<Device> {
-        #[cfg(feature = "mkl")]
-        {
-            info!("Using MKL-accelerated CPU");
-            Ok(Device::Cpu)
-        }
-        #[cfg(not(feature = "mkl"))]
-        {
-            info!("Using standard CPU");
+        if let Ok(device) = Device::new_metal(0) {
+            info!("Using Metal GPU");
+            Ok(device)
+        } else {
+            info!("Metal not available, falling back to CPU");
             Ok(Device::Cpu)
         }
     }

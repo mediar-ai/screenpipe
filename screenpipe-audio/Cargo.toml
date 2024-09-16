@@ -31,9 +31,9 @@ chrono = { version = "0.4.31", features = ["serde"] }
 
 # Local Embeddings + STT
 # TODO: feature metal, cuda, etc. see https://github.com/huggingface/candle/blob/main/candle-core/Cargo.toml
-candle = { workspace = true, features = ["mkl"] }
-candle-nn = { workspace = true, features = ["mkl"] }
-candle-transformers = { workspace = true, features = ["mkl"] }
+candle = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
 vad-rs = "0.1.3"
 tokenizers = { workspace = true }
 anyhow = "1.0.86"
@@ -80,10 +80,11 @@ criterion = { workspace = true }
 memory-stats = "1.0"
 
 [features]
-default = ["mkl"]
+default = ["metal"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
-cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
+
+
 
 [[bin]]
 name = "screenpipe-audio"

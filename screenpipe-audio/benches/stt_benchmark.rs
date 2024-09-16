@@ -1,12 +1,12 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use memory_stats::memory_stats;
+use screenpipe_audio::vad_engine::SileroVad;
 use screenpipe_audio::{
-    stt, AudioInput, AudioTranscriptionEngine, WhisperModel, vad_engine::SileroVad
+    create_whisper_channel, stt, AudioTranscriptionEngine, VadEngineEnum, WhisperModel,
 };
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use std::path::PathBuf;
-use std::fs::File;
-use std::io::Read;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let audio_transcription_engine = Arc::new(AudioTranscriptionEngine::WhisperTiny);
@@ -14,30 +14,54 @@ fn criterion_benchmark(c: &mut Criterion) {
     let test_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("test_data")
         .join("selah.mp4");
-    let mut audio_data = Vec::new();
-    File::open(&test_file_path).unwrap().read_to_end(&mut audio_data).unwrap();
 
     let mut group = c.benchmark_group("whisper_benchmarks");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(60));
 
-    group.bench_function("stt_mkl", |b| {
+    group.bench_function("create_whisper_channel", |b| {
+        b.iter(|| {
+            let _ = create_whisper_channel(
+                black_box(audio_transcription_engine.clone()),
+                black_box(VadEngineEnum::Silero),
+                None,
+            );
+        })
+    });
+
+    group.bench_function("stt", |b| {
         b.iter(|| {
             let mut vad_engine = Box::new(SileroVad::new().unwrap());
-            let audio_input = AudioInput {
-                data: audio_data.clone().into_iter().map(|x| x as f32).collect(),
-                sample_rate: 16000,
-                channels: 1,
-                device: "test".to_string(),
-            };
             let _ = stt(
-                black_box(&audio_input),
+                black_box(test_file_path.to_string_lossy().as_ref()),
                 black_box(&whisper_model),
                 black_box(audio_transcription_engine.clone()),
-                black_box(&mut *vad_engine),
-                black_box(None),
-                black_box(&PathBuf::from("test_output")),
+                &mut *vad_engine,
+                None,
             );
+        })
+    });
+
+    group.bench_function("memory_usage_stt", |b| {
+        b.iter_custom(|iters| {
+            let mut total_duration = Duration::new(0, 0);
+            for _ in 0..iters {
+                let start = std::time::Instant::now();
+                let before = memory_stats().unwrap().physical_mem;
+                let mut vad_engine = Box::new(SileroVad::new().unwrap());
+                let _ = stt(
+                    test_file_path.to_string_lossy().as_ref(),
+                    &whisper_model,
+                    audio_transcription_engine.clone(),
+                    &mut *vad_engine,
+                    None,
+                );
+                let after = memory_stats().unwrap().physical_mem;
+                let duration = start.elapsed();
+                total_duration += duration;
+                println!("Memory used: {} bytes", after - before);
+            }
+            total_duration
         })
     });
 
