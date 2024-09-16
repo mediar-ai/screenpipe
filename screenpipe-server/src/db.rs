@@ -685,7 +685,7 @@ impl DatabaseManager {
         if let Some(_) = app_name {
             param_count += 1;
             sql.push_str(&format!(
-                " AND ocr_text.app_name = ?{} COLLATE NOCASE",
+                " AND ocr_text.app_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
                 param_count
             ));
         }
@@ -693,7 +693,7 @@ impl DatabaseManager {
         if let Some(_) = window_name {
             param_count += 1;
             sql.push_str(&format!(
-                " AND ocr_text.window_name = ?{} COLLATE NOCASE",
+                " AND ocr_text.window_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
                 param_count
             ));
         }
@@ -1001,7 +1001,7 @@ impl DatabaseManager {
         if app_name.is_some() {
             param_count += 1;
             sql.push_str(&format!(
-                " AND ocr_text.app_name = ?{} COLLATE NOCASE",
+                " AND ocr_text.app_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
                 param_count
             ));
         }
@@ -1009,7 +1009,7 @@ impl DatabaseManager {
         if window_name.is_some() {
             param_count += 1;
             sql.push_str(&format!(
-                " AND ocr_text.window_name = ?{} COLLATE NOCASE",
+                " AND ocr_text.window_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
                 param_count
             ));
         }

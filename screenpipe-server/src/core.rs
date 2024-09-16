@@ -351,7 +351,10 @@ async fn record_audio(
         });
 
         while let Ok(transcription) = whisper_receiver.try_recv() {
-            info!("Received transcription");
+            info!(
+                "device {} received transcription {:?}",
+                transcription.input.device, transcription.transcription
+            );
             // avoiding crashing the audio processing if one fails
             if let Err(e) = process_audio_result(
                 &db,
@@ -386,7 +389,10 @@ async fn process_audio_result(
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
 
-    info!("Inserting audio chunk: {:?}", result.path);
+    info!(
+        "device {} inserting audio chunk: {:?}",
+        result.input.device, result.path
+    );
     match db.insert_audio_chunk(&result.path).await {
         Ok(audio_chunk_id) => {
             if transcription.is_empty() {

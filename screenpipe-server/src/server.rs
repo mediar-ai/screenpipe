@@ -13,6 +13,7 @@ use screenpipe_vision::monitor::list_monitors;
 use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
+    video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
     ContentType, DatabaseManager, SearchResult,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
@@ -748,6 +749,24 @@ impl Server {
     }
 }
 
+async fn merge_frames_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<MergeVideosRequest>,
+) -> Result<JsonResponse<MergeVideosResponse>, (StatusCode, JsonResponse<Value>)> {
+    let output_dir = state.screenpipe_dir.join("videos");
+
+    match merge_videos(payload, output_dir).await {
+        Ok(response) => Ok(JsonResponse(response)),
+        Err(e) => {
+            error!("Failed to merge frames: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ))
+        }
+    }
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/search", get(search))
@@ -763,6 +782,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/enable", post(run_pipe_handler)) // TODO ?
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
+        .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
 }
 
@@ -905,6 +925,7 @@ curl -X POST "http://localhost:3030/pipes/update" \
      }' | jq
 
 
+
 # Basic search with min_length and max_length
 curl "http://localhost:3030/search?q=test&limit=10&offset=0&min_length=5&max_length=50" | jq
 
@@ -928,5 +949,46 @@ curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
 
 # Search for very long content
 curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
+
+
+# read random data and generate a clip using the merge endpoint
+
+
+# Perform the search and store the response
+
+# First, let's search for some recent video content
+SEARCH_RESPONSE1=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)")
+SEARCH_RESPONSE2=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-40M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-35M +%Y-%m-%dT%H:%M:%SZ)")
+SEARCH_RESPONSE3=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-50M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-45M +%Y-%m-%dT%H:%M:%SZ)")
+
+# Extract the file paths from the search results without creating JSON arrays
+VIDEO_PATHS1=$(echo "$SEARCH_RESPONSE1" | jq -r '.data[].content.file_path' | sort -u)
+VIDEO_PATHS2=$(echo "$SEARCH_RESPONSE2" | jq -r '.data[].content.file_path' | sort -u)
+VIDEO_PATHS3=$(echo "$SEARCH_RESPONSE3" | jq -r '.data[].content.file_path' | sort -u)
+
+# Merge the video paths and create a single JSON array
+MERGED_VIDEO_PATHS=$(echo "$VIDEO_PATHS1"$'\n'"$VIDEO_PATHS2"$'\n'"$VIDEO_PATHS3" | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+# Create the JSON payload for merging videos
+MERGE_PAYLOAD=$(jq -n \
+  --argjson video_paths "$MERGED_VIDEO_PATHS" \
+  '{
+    video_paths: $video_paths
+  }')
+
+echo "Merge Payload: $MERGE_PAYLOAD"
+
+# Send the merge request and store the response
+MERGE_RESPONSE=$(curl -s -X POST "http://localhost:3030/experimental/frames/merge" \
+  -H "Content-Type: application/json" \
+  -d "$MERGE_PAYLOAD")
+
+echo "Merge Response: $MERGE_RESPONSE"
+
+# Extract the merged video path from the response
+MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
+
+echo "Merged Video Path: $MERGED_VIDEO_PATH"
+
 
 */
