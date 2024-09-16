@@ -26,7 +26,9 @@ import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { DevSettings } from "./dev-dialog";
-import { Lock } from "lucide-react";
+import { Lock, Folder } from "lucide-react";
+import { open } from "@tauri-apps/plugin-shell";
+import { homeDir } from "@tauri-apps/api/path";
 
 const getDebuggingCommands = (os: string | null) => {
   let cliInstructions = "";
@@ -50,7 +52,7 @@ ${cliInstructions}
 # 3. Run: screenpipe -h
 # 4. Choose your preferred setup and start Screenpipe:
 #    (Replace [YOUR_ARGS] with your chosen arguments)
-#    Example: screenpipe --data-dir `;
+#    Example: screenpipe --fps 1 `;
 
   const dataDir =
     os === "windows" ? "%USERPROFILE%\\.screenpipe" : "$HOME/.screenpipe";
@@ -208,8 +210,8 @@ const DevModeSettings = () => {
                 <p className="text-sm text-muted-foreground mb-4">
                   on = use CLI for more control
                   <br />
-                  in dev mode, backend won&apos;t <br />auto start when starting the
-                  app
+                  in dev mode, backend won&apos;t <br />
+                  auto start when starting the app
                 </p>
               </div>
             </CardContent>
@@ -357,6 +359,26 @@ const HealthStatus = ({ className }: { className?: string }) => {
     }
   };
 
+  const handleOpenDataDir = async () => {
+    try {
+      const homeDirPath = await homeDir();
+
+      const dataDir =
+        platform() === "macos" || platform() === "linux"
+          ? `${homeDirPath}/.screenpipe`
+          : `${homeDirPath}\\.screenpipe`;
+      await open(dataDir as string);
+    } catch (error) {
+      console.error("failed to open data directory:", error);
+      toast({
+        title: "error",
+        description: "failed to open data directory.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Healthy":
@@ -397,11 +419,21 @@ const HealthStatus = ({ className }: { className?: string }) => {
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent
-          className="max-w-3xl max-h-[80vh] flex flex-col"
+          className="max-w-3xl max-h-[80vh] flex flex-col p-8"
           aria-describedby="status-dialog-description"
         >
-          <DialogHeader>
+          <DialogHeader className="flex flex-row items-center justify-between">
             <DialogTitle>{health.status.toLowerCase()} status</DialogTitle>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenDataDir}
+              className="flex-shrink-0"
+            >
+              <Folder className="h-4 w-4 mr-2" />
+              open data dir
+            </Button>
           </DialogHeader>
           <div className="flex-grow overflow-auto">
             <p className="text-sm mb-2">

@@ -360,22 +360,34 @@ export function SearchChat() {
                       <VideoComponent filePath={item.content.file_path} />
                     </div>
                     {includeFrames && item.content.frame && (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <img
-                            src={`data:image/jpeg;base64,${item.content.frame}`}
-                            alt="Frame"
-                            className="mt-2 w-24 h-auto cursor-pointer"
-                          />
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[80vw]">
-                          <img
-                            src={`data:image/jpeg;base64,${item.content.frame}`}
-                            alt="Frame"
-                            className="w-full h-auto"
-                          />
-                        </DialogContent>
-                      </Dialog>
+                      <div className="mt-2 flex items-center">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <img
+                              src={`data:image/jpeg;base64,${item.content.frame}`}
+                              alt="Frame"
+                              className="w-24 h-auto cursor-pointer"
+                            />
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[80vw]">
+                            <img
+                              src={`data:image/jpeg;base64,${item.content.frame}`}
+                              alt="Frame"
+                              className="w-full h-auto"
+                            />
+                          </DialogContent>
+                        </Dialog>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>this is the frame where the text appeared</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                     )}
                   </>
                 )}
@@ -626,8 +638,9 @@ export function SearchChat() {
               </TooltipTrigger>
               <TooltipContent>
                 <p>
-                  include frames in the search results. this will only show
-                  frames for ocr. this slows down the search.
+                  include frames in the search results. this shows the frame
+                  where the text appeared. only works for ocr. this may slow
+                  down the search.
                 </p>
               </TooltipContent>
             </Tooltip>

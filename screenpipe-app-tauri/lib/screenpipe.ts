@@ -153,6 +153,7 @@ export async function queryScreenpipe(
         content_type: params.content_type,
         app_name: params.app_name,
         window_name: params.window_name, // Add window_name to query parameters
+        include_frames: params.include_frames.toString(),
         min_length: params.min_length.toString(),
         max_length: params.max_length.toString(),
       }).filter(([_, v]) => v != null) as [string, string][]
