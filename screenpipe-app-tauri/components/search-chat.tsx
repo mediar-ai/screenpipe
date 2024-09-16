@@ -56,6 +56,8 @@ import {
 } from "./ui/tooltip";
 import { Separator } from "./ui/separator";
 import { useInputHistory } from "@/lib/hooks/use-input-history";
+import { ContextUsageIndicator } from "./context-usage-indicator";
+
 // Add this constant at the top of the file
 const MAX_CONTENT_LENGTH = 30000; // Adjust as needed
 
@@ -733,20 +735,22 @@ export function SearchChat() {
           </div>
         </div>
       </div>
-      <Button
-        onClick={() => handleSearch(0)}
-        disabled={isLoading}
-        className="w-full mb-4"
-      >
-        {isLoading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            searching... {progress.toFixed(0)}%
-          </>
-        ) : (
-          "search"
-        )}
-      </Button>
+      <div className="flex justify-between items-center mb-4">
+        <Button
+          onClick={() => handleSearch(0)}
+          disabled={isLoading}
+          className="w-full mr-4"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              searching... {progress.toFixed(0)}%
+            </>
+          ) : (
+            "search"
+          )}
+        </Button>
+      </div>
       {isLoading && (
         <div className="mt-2">
           <Progress value={progress} className="w-full" />
@@ -798,27 +802,37 @@ export function SearchChat() {
                   type="text"
                   placeholder="ask a question about the results..."
                   value={floatingInput}
-                  disabled={isAiLoading}
+                  disabled={
+                    isAiLoading ||
+                    calculateTotalContentLength(results) > MAX_CONTENT_LENGTH
+                  }
                   onChange={(e) => setFloatingInput(e.target.value)}
                   className="w-full h-12 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border transition-all duration-200 pr-10"
                 />
-                {calculateTotalContentLength(results) > MAX_CONTENT_LENGTH && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <AlertCircle className="h-5 w-5 text-yellow-500" />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          content exceeds 30k tokens. refine your search for
-                          better results.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <ContextUsageIndicator
+                          currentSize={calculateTotalContentLength(results)}
+                          maxSize={MAX_CONTENT_LENGTH}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        {calculateTotalContentLength(results) >
+                        MAX_CONTENT_LENGTH
+                          ? `content exceeds maximum allowed: ${calculateTotalContentLength(
+                              results
+                            )} / ${MAX_CONTENT_LENGTH} characters. refine your search to use AI.`
+                          : `${calculateTotalContentLength(
+                              results
+                            )} / ${MAX_CONTENT_LENGTH} characters used`}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
               <Button
                 type="submit"
