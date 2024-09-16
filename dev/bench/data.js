@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726524136660,
+  "lastUpdate": 1726527504582,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6689,6 +6689,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1970864291,
             "range": "± 31984851",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "88dfcbe0088257ace5bb1f368b6b1befe58e393e",
+          "message": "fix: monitor cli render, better tooltip, spacing, more UX feedback and explanations",
+          "timestamp": "2024-09-16T15:50:18-07:00",
+          "tree_id": "e069a1e6742f543c0c20e6b082de080d7ddaf99d",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/88dfcbe0088257ace5bb1f368b6b1befe58e393e"
+        },
+        "date": 1726527503510,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2344963395,
+            "range": "± 76508781",
             "unit": "ns/iter"
           }
         ]
