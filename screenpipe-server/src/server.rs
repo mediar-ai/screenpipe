@@ -6,7 +6,7 @@ use axum::{
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
-use futures::future::try_join_all;
+use futures::future::{try_join, try_join_all};
 use screenpipe_core::download_pipe;
 use screenpipe_vision::monitor::list_monitors;
 
@@ -227,9 +227,8 @@ pub(crate) async fn search(
         query.content_type
     };
 
-    let results = match state
-        .db
-        .search(
+    let (results, total) = try_join(
+        state.db.search(
             query_str,
             content_type,
             query.pagination.limit,
@@ -240,22 +239,8 @@ pub(crate) async fn search(
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
-        )
-        .await
-    {
-        Ok(results) => results,
-        Err(e) => {
-            error!("Failed to search for content: {}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Failed to search for content: {}", e)})),
-            ));
-        }
-    };
-
-    let total = state
-        .db
-        .count_search_results(
+        ),
+        state.db.count_search_results(
             query_str,
             content_type,
             query.start_time,
@@ -264,15 +249,16 @@ pub(crate) async fn search(
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
+        ),
+    )
+    .await
+    .map_err(|e| {
+        error!("Failed to perform search operations: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to perform search operations: {}", e)})),
         )
-        .await
-        .map_err(|e| {
-            error!("Failed to count search results: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Failed to count search results: {}", e)})),
-            )
-        })?;
+    })?;
 
     let mut content_items: Vec<ContentItem> = results
         .iter()
@@ -602,7 +588,6 @@ async fn run_pipe_handler(
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Starting pipe: {}", payload.pipe_id);
 
-
     match state
         .pipe_manager
         .update_config(
@@ -781,26 +766,27 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/health", get(health_check))
 }
 
-// Curl commands for reference:
-// # 1. Basic search query
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0"
+/*
 
-// # 2. Search with content type filter (OCR)
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
+Curl commands for reference:
+# 1. Basic search query
+curl "http://localhost:3030/search?q=test&limit=5&offset=0" | jq
 
-// # 3. Search with content type filter (Audio)
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
+# 2. Search with content type filter (OCR)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr" | jq
 
-// # 4. Search with pagination
-// # curl "http://localhost:3030/search?q=test&limit=10&offset=20"
+# 3. Search with content type filter (Audio)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio" | jq
 
-// # 6. Search with no query (should return all results)
-// # curl "http://localhost:3030/search?limit=5&offset=0"
+# 4. Search with pagination
+curl "http://localhost:3030/search?q=test&limit=10&offset=20" | jq
+
+# 6. Search with no query (should return all results)
+curl "http://localhost:3030/search?limit=5&offset=0"
 
 // list devices
 // # curl "http://localhost:3030/audio/list" | jq
 
-/*
 
 echo "Listing audio devices:"
 curl "http://localhost:3030/audio/list" | jq
@@ -932,10 +918,10 @@ curl "http://localhost:3030/search?q=meeting&content_type=audio&limit=5&offset=0
 curl "http://localhost:3030/search?q=project&limit=10&offset=0&min_length=10&max_length=100&start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search with app_name and length constraints
-curl "http://localhost:3030/search?app_name=vscode&limit=5&offset=0&min_length=15&max_length=150" | jq
+curl "http://localhost:3030/search?app_name=cursor&limit=5&offset=0&min_length=15&max_length=150" | jq
 
 # Search with window_name and length constraints
-curl "http://localhost:3030/search?window_name=alacritty&limit=5&offset=0&min_length=5&max_length=50" | jq
+curl "http://localhost:3030/search?window_name=alacritty&min_length=5&max_length=50" | jq
 
 # Search for very short content
 curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq

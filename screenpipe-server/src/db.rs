@@ -159,6 +159,16 @@ impl DatabaseManager {
             .execute(&pool)
             .await?;
 
+        // Enable SQLite's query result caching
+        // PRAGMA cache_size = -2000; -- Set cache size to 2MB
+        // PRAGMA temp_store = MEMORY; -- Store temporary tables and indices in memory
+        sqlx::query("PRAGMA cache_size = -2000;")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA temp_store = MEMORY;")
+            .execute(&pool)
+            .await?;
+
         let db_manager = DatabaseManager { pool };
 
         // Run migrations after establishing the connection
@@ -986,20 +996,32 @@ impl DatabaseManager {
         "#
         .to_string();
 
+        let mut param_count = 3;
+
         if app_name.is_some() {
-            sql.push_str(" AND ocr_text.app_name = ?6 COLLATE NOCASE");
+            param_count += 1;
+            sql.push_str(&format!(
+                " AND ocr_text.app_name = ?{} COLLATE NOCASE",
+                param_count
+            ));
         }
 
         if window_name.is_some() {
-            sql.push_str(" AND ocr_text.window_name = ?7 COLLATE NOCASE");
+            param_count += 1;
+            sql.push_str(&format!(
+                " AND ocr_text.window_name = ?{} COLLATE NOCASE",
+                param_count
+            ));
         }
 
         if min_length.is_some() {
-            sql.push_str(" AND LENGTH(ocr_text.text) >= ?4");
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(ocr_text.text) >= ?{}", param_count));
         }
 
         if max_length.is_some() {
-            sql.push_str(" AND LENGTH(ocr_text.text) <= ?5");
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(ocr_text.text) <= ?{}", param_count));
         }
 
         let mut query = sqlx::query_as::<_, (i64,)>(&sql)
@@ -1034,25 +1056,41 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
     ) -> Result<usize, sqlx::Error> {
-        let (count,): (i64,) = sqlx::query_as(
-            r#"
+        let mut sql = r#"
             SELECT COUNT(*)
             FROM audio_transcriptions
             WHERE transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
                 AND (?2 IS NULL OR timestamp >= ?2)
                 AND (?3 IS NULL OR timestamp <= ?3)
-                AND (?4 IS NULL OR LENGTH(transcription) >= ?4)
-                AND (?5 IS NULL OR LENGTH(transcription) <= ?5)
-        "#,
-        )
-        .bind(query)
-        .bind(start_time)
-        .bind(end_time)
-        .bind(min_length.map(|len| len as i64))
-        .bind(max_length.map(|len| len as i64))
-        .fetch_one(&self.pool)
-        .await?;
+        "#
+        .to_string();
 
+        let mut param_count = 3;
+
+        if min_length.is_some() {
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(transcription) >= ?{}", param_count));
+        }
+
+        if max_length.is_some() {
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(transcription) <= ?{}", param_count));
+        }
+
+        let mut query = sqlx::query_as::<_, (i64,)>(&sql)
+            .bind(query)
+            .bind(start_time)
+            .bind(end_time);
+
+        if let Some(min) = min_length {
+            query = query.bind(min as i64);
+        }
+
+        if let Some(max) = max_length {
+            query = query.bind(max as i64);
+        }
+
+        let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count as usize)
     }
     pub async fn get_latest_timestamps(
