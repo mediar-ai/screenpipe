@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726514462554,
+  "lastUpdate": 1726514464432,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6569,6 +6569,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2099908145,
             "range": "± 146537462",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "14717c43bc6127ab9b4d6ac242f934ea4f3d2eed",
+          "message": "Merge pull request #325 from mediar-ai/min-max-size-in-api\n\nmin size search to reduce results noise",
+          "timestamp": "2024-09-16T12:10:21-07:00",
+          "tree_id": "bb51ecda8e1df3c4d88fb57e2583e6927509a5bb",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/14717c43bc6127ab9b4d6ac242f934ea4f3d2eed"
+        },
+        "date": 1726514463415,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 3565954042,
+            "range": "± 151592254",
             "unit": "ns/iter"
           }
         ]
