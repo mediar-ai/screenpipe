@@ -159,6 +159,16 @@ impl DatabaseManager {
             .execute(&pool)
             .await?;
 
+        // Enable SQLite's query result caching
+        // PRAGMA cache_size = -2000; -- Set cache size to 2MB
+        // PRAGMA temp_store = MEMORY; -- Store temporary tables and indices in memory
+        sqlx::query("PRAGMA cache_size = -2000;")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA temp_store = MEMORY;")
+            .execute(&pool)
+            .await?;
+
         let db_manager = DatabaseManager { pool };
 
         // Run migrations after establishing the connection
@@ -506,6 +516,8 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
         window_name: Option<&str>,
+        min_length: Option<usize>,
+        max_length: Option<usize>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
@@ -520,20 +532,27 @@ impl DatabaseManager {
                     end_time,
                     app_name,
                     window_name,
-                ) // Add window_name parameter
+                    min_length,
+                    max_length,
+                )
                 .await?;
             results.extend(ocr_results.into_iter().map(SearchResult::OCR));
         } else {
             if content_type == ContentType::All || content_type == ContentType::OCR {
                 let ocr_results = self
-                    .search_ocr(query, limit, offset, start_time, end_time, None, None)
+                    .search_ocr(
+                        query, limit, offset, start_time, end_time, None, None, min_length,
+                        max_length,
+                    )
                     .await?;
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
             }
 
             if content_type == ContentType::All || content_type == ContentType::Audio {
                 let audio_results = self
-                    .search_audio(query, limit, offset, start_time, end_time)
+                    .search_audio(
+                        query, limit, offset, start_time, end_time, min_length, max_length,
+                    )
                     .await?;
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
             }
@@ -628,6 +647,8 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
         window_name: Option<&str>,
+        min_length: Option<usize>,
+        max_length: Option<usize>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let mut sql = r#"
             SELECT 
@@ -677,6 +698,16 @@ impl DatabaseManager {
             ));
         }
 
+        if let Some(_) = min_length {
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(ocr_text.text) >= ?{}", param_count));
+        }
+
+        if let Some(_) = max_length {
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(ocr_text.text) <= ?{}", param_count));
+        }
+
         sql.push_str(
             r#"
             GROUP BY 
@@ -700,6 +731,14 @@ impl DatabaseManager {
 
         if let Some(window_name) = window_name {
             query = query.bind(window_name);
+        }
+
+        if let Some(min) = min_length {
+            query = query.bind(min as i64);
+        }
+
+        if let Some(max) = max_length {
+            query = query.bind(max as i64);
         }
 
         let ocr_results_raw = query.fetch_all(&self.pool).await?;
@@ -733,8 +772,10 @@ impl DatabaseManager {
         offset: u32,
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
+        min_length: Option<usize>,
+        max_length: Option<usize>,
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
-        let sql = r#"
+        let mut sql = r#"
         SELECT 
             audio_transcriptions.audio_chunk_id,
             audio_transcriptions.transcription,
@@ -755,24 +796,56 @@ impl DatabaseManager {
             audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
             AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
             AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-        GROUP BY
-            audio_transcriptions.audio_chunk_id,
-            audio_transcriptions.transcription,
-            audio_transcriptions.timestamp,
-            audio_transcriptions.offset_index
-        ORDER BY 
-            audio_transcriptions.timestamp DESC
-        LIMIT ?4 OFFSET ?5
-    "#;
+        "#
+        .to_string();
 
-        let audio_results_raw = sqlx::query_as::<_, AudioResultRaw>(sql)
+        let mut param_count = 4; // We already have 4 parameters
+
+        if let Some(_) = min_length {
+            param_count += 1;
+            sql.push_str(&format!(
+                " AND LENGTH(audio_transcriptions.transcription) >= ?{}",
+                param_count
+            ));
+        }
+
+        if let Some(_) = max_length {
+            param_count += 1;
+            sql.push_str(&format!(
+                " AND LENGTH(audio_transcriptions.transcription) <= ?{}",
+                param_count
+            ));
+        }
+
+        sql.push_str(
+            r#"
+            GROUP BY
+                audio_transcriptions.audio_chunk_id,
+                audio_transcriptions.transcription,
+                audio_transcriptions.timestamp,
+                audio_transcriptions.offset_index
+            ORDER BY 
+                audio_transcriptions.timestamp DESC
+            LIMIT ?4 OFFSET ?5
+            "#,
+        );
+
+        let mut query = sqlx::query_as::<_, AudioResultRaw>(&sql)
             .bind(query)
             .bind(start_time)
             .bind(end_time)
             .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?;
+            .bind(offset);
+
+        if let Some(min) = min_length {
+            query = query.bind(min as i64);
+        }
+
+        if let Some(max) = max_length {
+            query = query.bind(max as i64);
+        }
+
+        let audio_results_raw = query.fetch_all(&self.pool).await?;
 
         // Parse the tags string into a Vec<String>
         let audio_results = audio_results_raw
@@ -820,28 +893,40 @@ impl DatabaseManager {
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
-        window_name: Option<&str>, // Add window_name parameter
+        window_name: Option<&str>,
+        min_length: Option<usize>,
+        max_length: Option<usize>,
     ) -> Result<usize, sqlx::Error> {
         let mut total_count = 0;
 
         // If app_name is specified, only count OCR results
         if app_name.is_some() || window_name.is_some() {
             let ocr_count = self
-                .count_ocr_results(query, start_time, end_time, app_name, window_name) // Add window_name parameter
+                .count_ocr_results(
+                    query,
+                    start_time,
+                    end_time,
+                    app_name,
+                    window_name,
+                    min_length,
+                    max_length,
+                )
                 .await?;
             total_count += ocr_count;
         } else {
             // If no app_name is specified, proceed with normal counting
             if content_type == ContentType::All || content_type == ContentType::OCR {
                 let ocr_count = self
-                    .count_ocr_results(query, start_time, end_time, None, None) // Add window_name parameter
+                    .count_ocr_results(
+                        query, start_time, end_time, None, None, min_length, max_length,
+                    )
                     .await?;
                 total_count += ocr_count;
             }
 
             if content_type == ContentType::All || content_type == ContentType::Audio {
                 let audio_count = self
-                    .count_audio_results(query, start_time, end_time)
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
                     .await?;
                 total_count += audio_count;
             }
@@ -898,6 +983,8 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
         window_name: Option<&str>,
+        min_length: Option<usize>,
+        max_length: Option<usize>,
     ) -> Result<usize, sqlx::Error> {
         let mut sql = r#"
             SELECT COUNT(*)
@@ -909,12 +996,32 @@ impl DatabaseManager {
         "#
         .to_string();
 
+        let mut param_count = 3;
+
         if app_name.is_some() {
-            sql.push_str(" AND ocr_text.app_name LIKE '%' || ?4 || '%' COLLATE NOCASE");
+            param_count += 1;
+            sql.push_str(&format!(
+                " AND ocr_text.app_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
+                param_count
+            ));
         }
 
         if window_name.is_some() {
-            sql.push_str(" AND ocr_text.window_name LIKE '%' || ?5 || '%' COLLATE NOCASE");
+            param_count += 1;
+            sql.push_str(&format!(
+                " AND ocr_text.window_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
+                param_count
+            ));
+        }
+
+        if min_length.is_some() {
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(ocr_text.text) >= ?{}", param_count));
+        }
+
+        if max_length.is_some() {
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(ocr_text.text) <= ?{}", param_count));
         }
 
         let mut query = sqlx::query_as::<_, (i64,)>(&sql)
@@ -930,6 +1037,14 @@ impl DatabaseManager {
             query = query.bind(window_name);
         }
 
+        if let Some(min) = min_length {
+            query = query.bind(min as i64);
+        }
+
+        if let Some(max) = max_length {
+            query = query.bind(max as i64);
+        }
+
         let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count as usize)
     }
@@ -938,22 +1053,44 @@ impl DatabaseManager {
         query: &str,
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
+        min_length: Option<usize>,
+        max_length: Option<usize>,
     ) -> Result<usize, sqlx::Error> {
-        let (count,): (i64,) = sqlx::query_as(
-            r#"
+        let mut sql = r#"
             SELECT COUNT(*)
             FROM audio_transcriptions
             WHERE transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
                 AND (?2 IS NULL OR timestamp >= ?2)
                 AND (?3 IS NULL OR timestamp <= ?3)
-            "#,
-        )
-        .bind(query)
-        .bind(start_time)
-        .bind(end_time)
-        .fetch_one(&self.pool)
-        .await?;
+        "#
+        .to_string();
 
+        let mut param_count = 3;
+
+        if min_length.is_some() {
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(transcription) >= ?{}", param_count));
+        }
+
+        if max_length.is_some() {
+            param_count += 1;
+            sql.push_str(&format!(" AND LENGTH(transcription) <= ?{}", param_count));
+        }
+
+        let mut query = sqlx::query_as::<_, (i64,)>(&sql)
+            .bind(query)
+            .bind(start_time)
+            .bind(end_time);
+
+        if let Some(min) = min_length {
+            query = query.bind(min as i64);
+        }
+
+        if let Some(max) = max_length {
+            query = query.bind(max as i64);
+        }
+
+        let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count as usize)
     }
     pub async fn get_latest_timestamps(

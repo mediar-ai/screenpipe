@@ -6,7 +6,7 @@ use axum::{
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
-use futures::future::try_join_all;
+use futures::future::{try_join, try_join_all};
 use screenpipe_core::download_pipe;
 use screenpipe_vision::monitor::list_monitors;
 
@@ -59,11 +59,15 @@ pub(crate) struct SearchQuery {
     #[serde(default)]
     end_time: Option<DateTime<Utc>>,
     #[serde(default)]
-    app_name: Option<String>, // Add this line
+    app_name: Option<String>,
     #[serde(default)]
-    window_name: Option<String>, // Add this line
+    window_name: Option<String>,
     #[serde(default)]
     include_frames: bool,
+    #[serde(default)]
+    min_length: Option<usize>,
+    #[serde(default)]
+    max_length: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -136,7 +140,7 @@ pub struct FTSContent {
     pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
     pub app_name: String,
-    pub window_name: String, // Add this field
+    pub window_name: String,
     pub file_path: String,
     pub original_frame_text: Option<String>,
     pub tags: Vec<String>,
@@ -193,6 +197,7 @@ pub struct HealthCheckResponse {
     pub verbose_instructions: Option<String>,
 }
 
+// Update the search function
 pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
@@ -201,7 +206,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}",
+        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -209,7 +214,9 @@ pub(crate) async fn search(
         query.start_time,
         query.end_time,
         query.app_name,
-        query.window_name // Log window_name
+        query.window_name,
+        query.min_length,
+        query.max_length
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -221,9 +228,8 @@ pub(crate) async fn search(
         query.content_type
     };
 
-    let results = match state
-        .db
-        .search(
+    let (results, total) = try_join(
+        state.db.search(
             query_str,
             content_type,
             query.pagination.limit,
@@ -232,37 +238,28 @@ pub(crate) async fn search(
             query.end_time,
             query.app_name.as_deref(),
             query.window_name.as_deref(),
-        )
-        .await
-    {
-        Ok(results) => results,
-        Err(e) => {
-            error!("Failed to search for content: {}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Failed to search for content: {}", e)})),
-            ));
-        }
-    };
-
-    let total = state
-        .db
-        .count_search_results(
+            query.min_length,
+            query.max_length,
+        ),
+        state.db.count_search_results(
             query_str,
             content_type,
             query.start_time,
             query.end_time,
             query.app_name.as_deref(),
-            query.window_name.as_deref(), // Add window_name parameter
+            query.window_name.as_deref(),
+            query.min_length,
+            query.max_length,
+        ),
+    )
+    .await
+    .map_err(|e| {
+        error!("Failed to perform search operations: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to perform search operations: {}", e)})),
         )
-        .await
-        .map_err(|e| {
-            error!("Failed to count search results: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Failed to count search results: {}", e)})),
-            )
-        })?;
+    })?;
 
     let mut content_items: Vec<ContentItem> = results
         .iter()
@@ -789,26 +786,27 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/health", get(health_check))
 }
 
-// Curl commands for reference:
-// # 1. Basic search query
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0"
+/*
 
-// # 2. Search with content type filter (OCR)
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
+Curl commands for reference:
+# 1. Basic search query
+curl "http://localhost:3030/search?q=test&limit=5&offset=0" | jq
 
-// # 3. Search with content type filter (Audio)
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
+# 2. Search with content type filter (OCR)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr" | jq
 
-// # 4. Search with pagination
-// # curl "http://localhost:3030/search?q=test&limit=10&offset=20"
+# 3. Search with content type filter (Audio)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio" | jq
 
-// # 6. Search with no query (should return all results)
-// # curl "http://localhost:3030/search?limit=5&offset=0"
+# 4. Search with pagination
+curl "http://localhost:3030/search?q=test&limit=10&offset=20" | jq
+
+# 6. Search with no query (should return all results)
+curl "http://localhost:3030/search?limit=5&offset=0"
 
 // list devices
 // # curl "http://localhost:3030/audio/list" | jq
 
-/*
 
 echo "Listing audio devices:"
 curl "http://localhost:3030/audio/list" | jq
@@ -927,6 +925,32 @@ curl -X POST "http://localhost:3030/pipes/update" \
      }' | jq
 
 
+
+# Basic search with min_length and max_length
+curl "http://localhost:3030/search?q=test&limit=10&offset=0&min_length=5&max_length=50" | jq
+
+# Search for OCR content with length constraints
+curl "http://localhost:3030/search?q=code&content_type=ocr&limit=5&offset=0&min_length=20&max_length=100" | jq
+
+# Search for audio content with length constraints
+curl "http://localhost:3030/search?q=meeting&content_type=audio&limit=5&offset=0&min_length=50&max_length=200" | jq
+
+# Search with time range and length constraints
+curl "http://localhost:3030/search?q=project&limit=10&offset=0&min_length=10&max_length=100&start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search with app_name and length constraints
+curl "http://localhost:3030/search?app_name=cursor&limit=5&offset=0&min_length=15&max_length=150" | jq
+
+# Search with window_name and length constraints
+curl "http://localhost:3030/search?window_name=alacritty&min_length=5&max_length=50" | jq
+
+# Search for very short content
+curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
+
+# Search for very long content
+curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
+
+
 # read random data and generate a clip using the merge endpoint
 
 
@@ -965,5 +989,6 @@ echo "Merge Response: $MERGE_RESPONSE"
 MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
+
 
 */
