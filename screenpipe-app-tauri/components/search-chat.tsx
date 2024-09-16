@@ -57,9 +57,7 @@ import {
 import { Separator } from "./ui/separator";
 import { useInputHistory } from "@/lib/hooks/use-input-history";
 import { ContextUsageIndicator } from "./context-usage-indicator";
-
-// Add this constant at the top of the file
-const MAX_CONTENT_LENGTH = 30000; // Adjust as needed
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function SearchChat() {
   // Search state
@@ -99,6 +97,19 @@ export function SearchChat() {
 
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const lastScrollPosition = useRef(0);
+
+  const MAX_CONTENT_LENGTH = settings.aiMaxContextChars;
+
+  const [selectedResults, setSelectedResults] = useState<Set<number>>(
+    new Set()
+  );
+  const [hoveredResult, setHoveredResult] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (results.length > 0) {
+      setSelectedResults(new Set(results.map((_, index) => index)));
+    }
+  }, [results]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -168,17 +179,44 @@ export function SearchChat() {
     }
   }, [isFloatingInputVisible]);
 
+  const handleResultSelection = (index: number) => {
+    setSelectedResults((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
+  const calculateSelectedContentLength = () => {
+    return Array.from(selectedResults).reduce((total, index) => {
+      const item = results[index];
+      const contentLength =
+        item.type === "OCR"
+          ? item.content.text.length
+          : item.type === "Audio"
+          ? item.content.transcription.length
+          : item.type === "FTS"
+          ? item.content.matched_text.length
+          : 0;
+      return total + contentLength;
+    }, 0);
+  };
+
   const handleFloatingInputSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!floatingInput.trim()) return;
 
     scrollToBottom();
 
-    const totalContentLength = calculateTotalContentLength(results);
-    if (totalContentLength > MAX_CONTENT_LENGTH) {
+    const selectedContentLength = calculateSelectedContentLength();
+    if (selectedContentLength > MAX_CONTENT_LENGTH) {
       toast({
         title: "Content too large",
-        description: `The total content length (${totalContentLength} characters) exceeds the maximum allowed (${MAX_CONTENT_LENGTH} characters). Please refine your search to reduce the amount of content.`,
+        description: `The selected content length (${selectedContentLength} characters) exceeds the maximum allowed (${MAX_CONTENT_LENGTH} characters). Please unselect some items to reduce the amount of content.`,
         variant: "destructive",
       });
       return;
@@ -223,8 +261,10 @@ export function SearchChat() {
             - Never output UTC time unless explicitly asked by the user.
             - Do not try to embed videos in table (would crash the app)
             
-            Based on the following search results:
-            ${JSON.stringify(results)}
+            Based on the following selected search results:
+            ${JSON.stringify(
+              results.filter((_, index) => selectedResults.has(index))
+            )}
             `,
         },
         ...chatMessages.map((msg) => ({
@@ -354,112 +394,135 @@ export function SearchChat() {
     }
 
     return results.map((item, index) => (
-      <Card key={index}>
-        <CardContent className="p-4">
-          <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value={`item-${index}`}>
-              <AccordionTrigger className="flex items-center">
-                <div className="flex items-center w-full">
-                  <Badge className="mr-2">{item.type}</Badge>
-                </div>
-                <span className="flex-grow text-center truncate">
-                  {item.type === "OCR" && item.content.text.substring(0, 50)}
-                  {item.type === "Audio" &&
-                    item.content.transcription.substring(0, 50)}
-                  {item.type === "FTS" &&
-                    item.content.matched_text.substring(0, 50)}
-                  ...
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                {item.type === "OCR" && (
-                  <>
-                    <p className="mt-2">{item.content.text}</p>
-                    <div className="flex justify-center mt-4">
-                      <VideoComponent filePath={item.content.file_path} />
-                    </div>
-                    {includeFrames && item.content.frame && (
-                      <div className="mt-2 flex items-center">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <img
-                              src={`data:image/jpeg;base64,${item.content.frame}`}
-                              alt="Frame"
-                              className="w-24 h-auto cursor-pointer"
-                            />
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[80vw]">
-                            <img
-                              src={`data:image/jpeg;base64,${item.content.frame}`}
-                              alt="Frame"
-                              className="w-full h-auto"
-                            />
-                          </DialogContent>
-                        </Dialog>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>this is the frame where the text appeared</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+      <motion.div
+        key={index}
+        className="flex items-center mb-4 relative pl-8"
+        onHoverStart={() => setHoveredResult(index)}
+        onHoverEnd={() => setHoveredResult(null)}
+      >
+        <AnimatePresence>
+          {hoveredResult === index && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute left-0 top-1/2 transform -translate-y-1/2"
+            >
+              <Checkbox
+                checked={selectedResults.has(index)}
+                onCheckedChange={() => handleResultSelection(index)}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <Card className="w-full">
+          <CardContent className="p-4">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value={`item-${index}`}>
+                <AccordionTrigger className="flex items-center">
+                  <div className="flex items-center w-full">
+                    <Badge className="mr-2">{item.type}</Badge>
+                  </div>
+                  <span className="flex-grow text-center truncate">
+                    {item.type === "OCR" && item.content.text.substring(0, 50)}
+                    {item.type === "Audio" &&
+                      item.content.transcription.substring(0, 50)}
+                    {item.type === "FTS" &&
+                      item.content.matched_text.substring(0, 50)}
+                    ...
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {item.type === "OCR" && (
+                    <>
+                      <p className="mt-2">{item.content.text}</p>
+                      <div className="flex justify-center mt-4">
+                        <VideoComponent filePath={item.content.file_path} />
                       </div>
-                    )}
-                  </>
-                )}
-                {item.type === "Audio" && (
-                  <>
-                    <p className="mt-2">{item.content.transcription}</p>
-                    <div className="flex justify-center mt-4">
-                      <VideoComponent filePath={item.content.file_path} />
-                    </div>
-                  </>
-                )}
-                {item.type === "FTS" && (
-                  <>
-                    <p className="mt-2">{item.content.matched_text}</p>
-                    {item.content.original_frame_text && (
-                      <p className="mt-2 text-sm text-gray-600">
-                        Original: {item.content.original_frame_text}
-                      </p>
-                    )}
-                  </>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <p className="text-xs text-gray-400">
-              {new Date(item.content.timestamp).toLocaleString()}
-            </p>
-            {item.type === "OCR" && item.content.app_name && (
-              <Badge
-                className="text-xs cursor-pointer"
-                onClick={() => setAppName(item.content.app_name)}
-              >
-                {item.content.app_name}
-              </Badge>
-            )}
-            {item.type === "OCR" && item.content.window_name && (
-              <Badge
-                className="text-xs cursor-pointer"
-                onClick={() => setWindowName(item.content.window_name)}
-              >
-                {item.content.window_name}
-              </Badge>
-            )}
-            {item.content.tags &&
-              item.content.tags.map((tag, index) => (
-                <Badge key={index} className="text-xs">
-                  {tag}
+                      {includeFrames && item.content.frame && (
+                        <div className="mt-2 flex items-center">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <img
+                                src={`data:image/jpeg;base64,${item.content.frame}`}
+                                alt="Frame"
+                                className="w-24 h-auto cursor-pointer"
+                              />
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[80vw]">
+                              <img
+                                src={`data:image/jpeg;base64,${item.content.frame}`}
+                                alt="Frame"
+                                className="w-full h-auto"
+                              />
+                            </DialogContent>
+                          </Dialog>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>this is the frame where the text appeared</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {item.type === "Audio" && (
+                    <>
+                      <p className="mt-2">{item.content.transcription}</p>
+                      <div className="flex justify-center mt-4">
+                        <VideoComponent filePath={item.content.file_path} />
+                      </div>
+                    </>
+                  )}
+                  {item.type === "FTS" && (
+                    <>
+                      <p className="mt-2">{item.content.matched_text}</p>
+                      {item.content.original_frame_text && (
+                        <p className="mt-2 text-sm text-gray-600">
+                          Original: {item.content.original_frame_text}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <p className="text-xs text-gray-400">
+                {new Date(item.content.timestamp).toLocaleString()}
+              </p>
+              {item.type === "OCR" && item.content.app_name && (
+                <Badge
+                  className="text-xs cursor-pointer"
+                  onClick={() => setAppName(item.content.app_name)}
+                >
+                  {item.content.app_name}
                 </Badge>
-              ))}
-          </div>
-        </CardContent>
-      </Card>
+              )}
+              {item.type === "OCR" && item.content.window_name && (
+                <Badge
+                  className="text-xs cursor-pointer"
+                  onClick={() => setWindowName(item.content.window_name)}
+                >
+                  {item.content.window_name}
+                </Badge>
+              )}
+              {item.content.tags &&
+                item.content.tags.map((tag, index) => (
+                  <Badge key={index} className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
     ));
   };
 
@@ -824,7 +887,7 @@ export function SearchChat() {
                   value={floatingInput}
                   disabled={
                     isAiLoading ||
-                    calculateTotalContentLength(results) > MAX_CONTENT_LENGTH
+                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
                   }
                   onChange={(e) => setFloatingInput(e.target.value)}
                   className="w-full h-12 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border transition-all duration-200 pr-10"
@@ -834,21 +897,16 @@ export function SearchChat() {
                     <TooltipTrigger asChild>
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
                         <ContextUsageIndicator
-                          currentSize={calculateTotalContentLength(results)}
+                          currentSize={calculateSelectedContentLength()}
                           maxSize={MAX_CONTENT_LENGTH}
                         />
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
-                        {calculateTotalContentLength(results) >
-                        MAX_CONTENT_LENGTH
-                          ? `content exceeds maximum allowed: ${calculateTotalContentLength(
-                              results
-                            )} / ${MAX_CONTENT_LENGTH} characters. refine your search to use AI.`
-                          : `${calculateTotalContentLength(
-                              results
-                            )} / ${MAX_CONTENT_LENGTH} characters used`}
+                        {calculateSelectedContentLength() > MAX_CONTENT_LENGTH
+                          ? `selected content exceeds maximum allowed: ${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters. unselect some items to use AI.`
+                          : `${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters used for AI message`}
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -859,7 +917,7 @@ export function SearchChat() {
                 className="w-12"
                 disabled={
                   isAiLoading ||
-                  calculateTotalContentLength(results) > MAX_CONTENT_LENGTH
+                  calculateSelectedContentLength() > MAX_CONTENT_LENGTH
                 }
               >
                 <Send className="h-4 w-4" />

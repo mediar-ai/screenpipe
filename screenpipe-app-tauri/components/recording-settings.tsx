@@ -264,14 +264,14 @@ export function RecordingSettings({
   return (
     <>
       <div className="relative">
-        {!isUpdating && isDisabled && (
+        {settings.devMode || (!isUpdating && isDisabled) ? (
           <Card className="p-16 shadow-lg w-fit absolute bottom-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 text-center font-bold text-xl mb-4 ">
             <CardTitle>
               make sure to turn off dev mode and start screenpipe recorder first
               (go to status)
             </CardTitle>
           </Card>
-        )}
+        ) : <></>}
         <Card className={cn(isDisabled && "opacity-50 pointer-events-none")}>
           <CardHeader>
             <CardTitle className="text-center">recording settings</CardTitle>

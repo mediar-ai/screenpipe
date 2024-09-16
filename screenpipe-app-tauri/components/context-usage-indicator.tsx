@@ -1,5 +1,5 @@
 import React from "react";
-import { Progress } from "@/components/ui/progress";
+import { motion } from "framer-motion";
 import { AlertTriangle } from "lucide-react";
 
 interface ContextUsageIndicatorProps {
@@ -12,28 +12,35 @@ export function ContextUsageIndicator({
   maxSize,
 }: ContextUsageIndicatorProps) {
   const percentage = Math.min((currentSize / maxSize) * 100, 100);
+  const circumference = 2 * Math.PI * 14;
 
   return (
-    <div className="w-5 h-5 relative">
-      {/* <svg className="w-full h-full" viewBox="0 0 36 36">
-        <path
-          className="text-gray-300"
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+    <div className="w-8 h-8 relative">
+      <svg width="32" height="32" viewBox="0 0 32 32">
+        <circle
+          cx="16"
+          cy="16"
+          r="14"
           fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
+          stroke="#e2e8f0"
+          strokeWidth="2"
         />
-        <path
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+        <motion.circle
+          cx="16"
+          cy="16"
+          r="14"
           fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
-          strokeDasharray="100"
-          strokeDashoffset={100 - percentage}
+          stroke="black"
+          strokeWidth="2"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: circumference - (percentage / 100) * circumference }}
+          transition={{ duration: 0.5 }}
         />
-        
-      </svg> */}
-      {percentage > 90 && <AlertTriangle className="w-6 h-6 " />}
+      </svg>
+      {percentage > 90 && (
+        <AlertTriangle className="w-5 h-5 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-black" />
+      )}
     </div>
   );
 }

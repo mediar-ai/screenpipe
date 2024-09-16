@@ -35,6 +35,7 @@ const defaultSettings: Settings = {
   ignoredWindows: [],
   includedWindows: [],
   aiUrl: "https://api.openai.com/v1",
+  aiMaxContextChars: 30000,
 };
 
 export interface Settings {
@@ -60,6 +61,7 @@ export interface Settings {
   ignoredWindows: string[];
   includedWindows: string[];
   aiUrl: string;
+  aiMaxContextChars: number;
 }
 
 let store: Store | null = null;
@@ -147,6 +149,8 @@ export function useSettings() {
         const savedAiUrl =
           ((await store!.get("aiUrl")) as string) ||
           "https://api.openai.com/v1";
+        const savedAiMaxContextChars =
+          ((await store!.get("aiMaxContextChars")) as number) || 30000;
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -170,6 +174,7 @@ export function useSettings() {
           ignoredWindows: savedIgnoredWindows,
           includedWindows: savedIncludedWindows,
           aiUrl: savedAiUrl,
+          aiMaxContextChars: savedAiMaxContextChars,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);
