@@ -24,7 +24,7 @@ use rubato::{
 use crate::{
     encode_single_audio, multilingual,
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, WebRtcVad},
-    AudioTranscriptionEngine,
+    AudioDevice, AudioTranscriptionEngine,
 };
 
 use hound::{WavSpec, WavWriter};
@@ -555,13 +555,46 @@ pub fn stt(
         "device: {}, filtering out non-speech segments with VAD",
         audio_input.device
     );
-    let frame_size = 160; // 10ms frame size for 16kHz audio
+    let frame_size = 1600; // 10ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
+    let mut is_speech = false;
+    let mut speech_duration = 0.0;
+    let mut silence_duration = 0.0;
+    let min_speech_dur = 0.3; // Minimum speech duration in seconds
+    let min_silence_dur = 0.5; // Minimum silence duration in seconds
+    let sample_rate = m::SAMPLE_RATE as f32;
+
     for (frame_index, chunk) in audio_data.chunks(frame_size).enumerate() {
         match vad_engine.is_voice_segment(chunk) {
             Ok(is_voice) => {
                 if is_voice {
+                    if is_speech {
+                        speech_duration += frame_size as f32 / sample_rate;
+                    } else {
+                        if silence_duration >= min_silence_dur {
+                            silence_duration = 0.0;
+                        }
+                        speech_duration = frame_size as f32 / sample_rate;
+                        is_speech = true;
+                    }
                     speech_frames.extend_from_slice(chunk);
+                } else {
+                    if is_speech {
+                        if speech_duration >= min_speech_dur {
+                            // Keep the speech segment
+                            silence_duration = frame_size as f32 / sample_rate;
+                        } else {
+                            // Discard short speech segment
+                            speech_frames.truncate(
+                                speech_frames.len() - speech_duration as usize * frame_size,
+                            );
+                            silence_duration += speech_duration + frame_size as f32 / sample_rate;
+                        }
+                        speech_duration = 0.0;
+                        is_speech = false;
+                    } else {
+                        silence_duration += frame_size as f32 / sample_rate;
+                    }
                 }
             }
             Err(e) => {
@@ -613,7 +646,7 @@ pub fn stt(
             match transcribe_with_deepgram(
                 &api_key,
                 &speech_frames,
-                &audio_input.device,
+                &audio_input.device.name,
                 audio_input.sample_rate,
             ) {
                 Ok(transcription) => Ok(transcription),
@@ -773,7 +806,7 @@ pub struct AudioInput {
     pub data: Vec<f32>,
     pub sample_rate: u32,
     pub channels: u16,
-    pub device: String,
+    pub device: Arc<AudioDevice>,
 }
 
 #[derive(Debug, Clone)]

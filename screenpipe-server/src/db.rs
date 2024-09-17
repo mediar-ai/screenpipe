@@ -2,6 +2,7 @@ use crate::filtering::filter_texts;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
+use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_integrations::friend_wearable::FriendWearableDatabase;
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Serialize};
@@ -204,79 +205,26 @@ impl DatabaseManager {
         transcription: &str,
         offset_index: i64,
         transcription_engine: &str,
+        device: &AudioDevice,
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
         sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
         .bind(offset_index)
         .bind(Utc::now())
         .bind(transcription_engine)
+        .bind(&device.name)
+        .bind(device.device_type == DeviceType::Input)
         .execute(&mut *tx)
         .await?;
 
         // Commit the transaction for the full transcription
         tx.commit().await?;
-
-        // // Now, let's chunk the transcription and insert into chunk tables
-        // const CHUNKING_ENGINE: &str = "local_simple";
-
-        // let chunks = match CHUNKING_ENGINE {
-        //     "local_simple" => text_chunking_simple(transcription),
-        //     "candle_jina_bert" => text_chunking_by_similarity(transcription).await,
-        //     "unstructured" => unstructured_chunking(transcription)
-        //         .map_err(|e| anyhow::anyhow!(e))
-        //         .and_then(|chunks| Ok(chunks)),
-        //     _ => text_chunking_simple(transcription), // Default to simple chunking for unknown engines
-        // };
-
-        // match chunks {
-        //     Ok(chunks) => {
-        //         info!(
-        //             "Successfully chunked audio transcription into {} chunks",
-        //             chunks.len()
-        //         );
-        //         for chunk in chunks.iter() {
-        //             if let Err(e) = self
-        //                 .insert_chunked_text(
-        //                     audio_chunk_id,
-        //                     chunk,
-        //                     Utc::now(),
-        //                     transcription_engine,
-        //                     CHUNKING_ENGINE,
-        //                     ContentSource::Audio,
-        //                 )
-        //                 .await
-        //             {
-        //                 error!("Failed to insert chunk into chunked text index: {}", e);
-        //             }
-        //         }
-        //     }
-        //     Err(e) => {
-        //         error!("Failed to chunk audio transcription: {}", e);
-        //         // Fallback to inserting the whole transcription as a single chunk
-        //         if let Err(e) = self
-        //             .insert_chunked_text(
-        //                 audio_chunk_id,
-        //                 transcription,
-        //                 Utc::now(),
-        //                 transcription_engine,
-        //                 "No_Chunking",
-        //                 ContentSource::Audio,
-        //             )
-        //             .await
-        //         {
-        //             error!(
-        //                 "Failed to insert whole audio transcription into chunked text index: {}",
-        //                 e
-        //             );
-        //         }
-        //     }
-        // }
 
         Ok(())
     }
@@ -538,8 +486,10 @@ impl DatabaseManager {
             results.extend(ocr_results.into_iter().map(SearchResult::OCR));
         }
 
-        if (content_type == ContentType::All || content_type == ContentType::Audio) 
-           && app_name.is_none() && window_name.is_none() {
+        if (content_type == ContentType::All || content_type == ContentType::Audio)
+            && app_name.is_none()
+            && window_name.is_none()
+        {
             let audio_results = self
                 .search_audio(
                     query, limit, offset, start_time, end_time, min_length, max_length,

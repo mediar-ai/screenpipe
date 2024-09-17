@@ -2,7 +2,7 @@ use anyhow;
 use log::debug;
 use std::io::Write;
 use std::path::PathBuf;
-use vad_rs::Vad;
+use vad_rs::{Vad, VadStatus};
 
 pub enum VadEngineEnum {
     WebRtc,
@@ -80,12 +80,12 @@ impl VadEngine for SileroVad {
             let mut chunk_data: Vec<f32> = chunk.to_vec();
             chunk_data.resize(CHUNK_SIZE, 0.0);
 
-            let result = self.vad.compute(&chunk_data).map_err(|e| {
+            let mut result = self.vad.compute(&chunk_data).map_err(|e| {
                 debug!("SileroVad Error computing VAD: {}", e);
                 anyhow::anyhow!("Vad compute error: {}", e)
             })?;
 
-            if result.prob < 0.3 {
+            if result.status() == VadStatus::Speech {
                 return Ok(true);
             }
         }

@@ -106,17 +106,18 @@ async fn main() -> anyhow::Result<()> {
 
     // Add custom log levels for specific modules based on environment variables
     let env_filter = env::var("SCREENPIPE_LOG")
-    .unwrap_or_default()
-    .split(',')
-    .fold(env_filter, |filter, module_directive| {
-        match module_directive.parse() {
-            Ok(directive) => filter.add_directive(directive),
-            Err(e) => {
-                eprintln!("warning: invalid log directive '{}': {}", module_directive, e);
-                filter
+        .unwrap_or_default()
+        .split(',')
+        .filter(|s| !s.is_empty()) // Filter out empty strings
+        .fold(env_filter, |filter, module_directive| {
+            match module_directive.parse() {
+                Ok(directive) => filter.add_directive(directive),
+                Err(e) => {
+                    eprintln!("warning: invalid log directive '{}': {}", module_directive, e);
+                    filter
+                }
             }
-        }
-    });
+        });
 
     // Usage:
     //  SCREENPIPE_LOG=screenpipe_audio=debug ./screenpipe

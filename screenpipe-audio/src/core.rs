@@ -41,13 +41,13 @@ pub struct DeviceControl {
     pub is_paused: bool,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
 pub enum DeviceType {
     Input,
     Output,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
 pub struct AudioDevice {
     pub name: String,
     pub device_type: DeviceType,
@@ -299,7 +299,7 @@ pub async fn record_and_transcribe(
     debug!("Sending audio of length {} to audio model", data.len());
     if let Err(e) = whisper_sender.send(AudioInput {
         data: data.clone(),
-        device: audio_device.to_string(),
+        device: audio_device.clone(),
         sample_rate,
         channels,
     }) {

@@ -405,6 +405,7 @@ async fn process_audio_result(
                     &transcription,
                     0,
                     &transcription_engine,
+                    &result.input.device,
                 )
                 .await
             {
