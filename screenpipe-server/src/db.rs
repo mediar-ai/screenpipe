@@ -521,8 +521,7 @@ impl DatabaseManager {
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
-        // If app_name is specified, only search OCR content
-        if app_name.is_some() || window_name.is_some() {
+        if content_type == ContentType::All || content_type == ContentType::OCR {
             let ocr_results = self
                 .search_ocr(
                     query,
@@ -537,28 +536,19 @@ impl DatabaseManager {
                 )
                 .await?;
             results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-        } else {
-            if content_type == ContentType::All || content_type == ContentType::OCR {
-                let ocr_results = self
-                    .search_ocr(
-                        query, limit, offset, start_time, end_time, None, None, min_length,
-                        max_length,
-                    )
-                    .await?;
-                results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-            }
-
-            if content_type == ContentType::All || content_type == ContentType::Audio {
-                let audio_results = self
-                    .search_audio(
-                        query, limit, offset, start_time, end_time, min_length, max_length,
-                    )
-                    .await?;
-                results.extend(audio_results.into_iter().map(SearchResult::Audio));
-            }
         }
 
-        // Sort results by timestamp in descending order
+        if (content_type == ContentType::All || content_type == ContentType::Audio) 
+           && app_name.is_none() && window_name.is_none() {
+            let audio_results = self
+                .search_audio(
+                    query, limit, offset, start_time, end_time, min_length, max_length,
+                )
+                .await?;
+            results.extend(audio_results.into_iter().map(SearchResult::Audio));
+        }
+
+        // sort results by timestamp in descending order
         results.sort_by(|a, b| {
             let timestamp_a = match a {
                 SearchResult::OCR(ocr) => ocr.timestamp,
@@ -573,9 +563,7 @@ impl DatabaseManager {
             timestamp_b.cmp(&timestamp_a)
         });
 
-        // !HACK THIS SHOULDNT BE NEEDED AND BE DONE AT QUERY LEVEL
-
-        // Apply limit after combining and sorting
+        // apply limit after combining and sorting
         results.truncate(limit as usize);
 
         Ok(results)

@@ -31,6 +31,8 @@ import {
   Loader2,
   Search,
   Send,
+  X,
+  Square,
 } from "lucide-react";
 import { useToast } from "./ui/use-toast";
 import posthog from "posthog-js";
@@ -47,7 +49,14 @@ import {
   AccordionTrigger,
 } from "./ui/accordion";
 import { VideoComponent } from "./video";
-import { Dialog, DialogContent, DialogTrigger } from "./ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -58,6 +67,9 @@ import { Separator } from "./ui/separator";
 import { useInputHistory } from "@/lib/hooks/use-input-history";
 import { ContextUsageIndicator } from "./context-usage-indicator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatISO } from "date-fns";
+import { IconCode } from "@/components/ui/icons";
+import { CodeBlock } from "./ui/codeblock";
 
 export function SearchChat() {
   // Search state
@@ -105,6 +117,32 @@ export function SearchChat() {
   );
   const [hoveredResult, setHoveredResult] = useState<number | null>(null);
 
+  const [isCurlDialogOpen, setIsCurlDialogOpen] = useState(false);
+
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const generateCurlCommand = () => {
+    const baseUrl = "http://localhost:3030";
+    const queryParams = new URLSearchParams({
+      content_type: contentType,
+      limit: limit.toString(),
+      offset: offset.toString(),
+      start_time: formatISO(startDate, { representation: "complete" }),
+      end_time: formatISO(endDate, { representation: "complete" }),
+      min_length: minLength.toString(),
+      max_length: maxLength.toString(),
+    });
+
+    if (query) queryParams.append("q", query);
+    if (appName) queryParams.append("app_name", appName);
+    if (windowName) queryParams.append("window_name", windowName);
+    if (includeFrames) queryParams.append("include_frames", "true");
+
+    return `curl "${baseUrl}/search?\\
+${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
+  };
+
   useEffect(() => {
     if (results.length > 0) {
       setSelectedResults(new Set(results.map((_, index) => index)));
@@ -142,21 +180,6 @@ export function SearchChat() {
         behavior: "smooth",
       });
     }
-  };
-
-  // Add this function to calculate total content length
-  const calculateTotalContentLength = (results: ContentItem[]): number => {
-    return results.reduce((total, item) => {
-      const contentLength =
-        item.type === "OCR"
-          ? item.content.text.length
-          : item.type === "Audio"
-          ? item.content.transcription.length
-          : item.type === "FTS"
-          ? item.content.matched_text.length
-          : 0;
-      return total + contentLength;
-    }, 0);
   };
 
   useEffect(() => {
@@ -208,7 +231,12 @@ export function SearchChat() {
 
   const handleFloatingInputSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!floatingInput.trim()) return;
+    if (!floatingInput.trim() && !isStreaming) return;
+
+    if (isStreaming) {
+      handleStopStreaming();
+      return;
+    }
 
     scrollToBottom();
 
@@ -277,11 +305,19 @@ export function SearchChat() {
         },
       ];
 
-      const stream = await openai.chat.completions.create({
-        model: model,
-        messages: messages,
-        stream: true,
-      });
+      abortControllerRef.current = new AbortController();
+      setIsStreaming(true);
+
+      const stream = await openai.chat.completions.create(
+        {
+          model: model,
+          messages: messages,
+          stream: true,
+        },
+        {
+          signal: abortControllerRef.current.signal,
+        }
+      );
 
       let fullResponse = "";
       // @ts-ignore
@@ -304,19 +340,32 @@ export function SearchChat() {
         ]);
         scrollToBottom();
       }
-    } catch (error) {
-      console.error("Error generating AI response:", error);
-      toast({
-        title: "Error",
-        description: "Failed to generate AI response. Please try again.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      if (error.toString().includes("aborted")) {
+        console.log("Streaming was aborted");
+      } else {
+        console.error("Error generating AI response:", error);
+        toast({
+          title: "Error",
+          description: "Failed to generate AI response. Please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsAiLoading(false);
       setIsFloatingInputVisible(false);
+      setIsStreaming(false);
       if (!isUserScrolling) {
         scrollToBottom();
       }
+    }
+  };
+
+  const handleStopStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsStreaming(false);
+      setIsAiLoading(false);
     }
   };
 
@@ -333,32 +382,39 @@ export function SearchChat() {
     scrollToBottom();
     setResults([]);
 
-    const response = await queryScreenpipe({
-      q: query || undefined,
-      content_type: contentType as "all" | "ocr" | "audio",
-      limit: limit,
-      offset: newOffset,
-      start_time: startDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
-      end_time: endDate.toISOString().replace(/\.\d{3}Z$/, "Z"),
-      app_name: appName || undefined,
-      window_name: windowName || undefined,
-      include_frames: includeFrames,
-      min_length: minLength,
-      max_length: maxLength,
-    });
+    try {
+      const response = await queryScreenpipe({
+        q: query || undefined,
+        content_type: contentType as "all" | "ocr" | "audio",
+        limit: limit,
+        offset: newOffset,
+        start_time: formatISO(startDate, { representation: "complete" }),
+        end_time: formatISO(endDate, { representation: "complete" }),
+        app_name: appName || undefined,
+        window_name: windowName || undefined,
+        include_frames: includeFrames,
+        min_length: minLength,
+        max_length: maxLength,
+      });
 
-    if (!response) {
+      if (!response || !Array.isArray(response.data)) {
+        throw new Error("invalid response data");
+      }
+
+      setResults(response.data);
+      setTotalResults(response.pagination.total);
+    } catch (error) {
+      console.error("search error:", error);
       toast({
-        title: "Error",
-        description: "Failed to fetch search results. Please try again.",
+        title: "error",
+        description: "failed to fetch search results. please try again.",
         variant: "destructive",
       });
-      return;
+      setResults([]);
+      setTotalResults(0);
+    } finally {
+      setIsLoading(false);
     }
-
-    setResults(response.data);
-    setTotalResults(response.pagination.total);
-    setIsLoading(false);
   };
 
   const handleNextPage = () => {
@@ -393,137 +449,142 @@ export function SearchChat() {
       return <p className="text-center">No results found</p>;
     }
 
-    return results.map((item, index) => (
-      <motion.div
-        key={index}
-        className="flex items-center mb-4 relative pl-8"
-        onHoverStart={() => setHoveredResult(index)}
-        onHoverEnd={() => setHoveredResult(null)}
-      >
-        <AnimatePresence>
-          {hoveredResult === index && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="absolute left-0 top-1/2 transform -translate-y-1/2"
-            >
-              <Checkbox
-                checked={selectedResults.has(index)}
-                onCheckedChange={() => handleResultSelection(index)}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <Card className="w-full">
-          <CardContent className="p-4">
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value={`item-${index}`}>
-                <AccordionTrigger className="flex items-center">
-                  <div className="flex items-center w-full">
-                    <Badge className="mr-2">{item.type}</Badge>
-                  </div>
-                  <span className="flex-grow text-center truncate">
-                    {item.type === "OCR" && item.content.text.substring(0, 50)}
-                    {item.type === "Audio" &&
-                      item.content.transcription.substring(0, 50)}
-                    {item.type === "FTS" &&
-                      item.content.matched_text.substring(0, 50)}
-                    ...
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent>
-                  {item.type === "OCR" && (
-                    <>
-                      <p className="mt-2">{item.content.text}</p>
-                      <div className="flex justify-center mt-4">
-                        <VideoComponent filePath={item.content.file_path} />
-                      </div>
-                      {includeFrames && item.content.frame && (
-                        <div className="mt-2 flex items-center">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <img
-                                src={`data:image/jpeg;base64,${item.content.frame}`}
-                                alt="Frame"
-                                className="w-24 h-auto cursor-pointer"
-                              />
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[80vw]">
-                              <img
-                                src={`data:image/jpeg;base64,${item.content.frame}`}
-                                alt="Frame"
-                                className="w-full h-auto"
-                              />
-                            </DialogContent>
-                          </Dialog>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>this is the frame where the text appeared</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+    return results
+      .filter((item) => item && item.type)
+      .map((item, index) => (
+        <motion.div
+          key={index}
+          className="flex items-center mb-4 relative pl-8"
+          onHoverStart={() => setHoveredResult(index)}
+          onHoverEnd={() => setHoveredResult(null)}
+        >
+          <AnimatePresence>
+            {hoveredResult === index && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="absolute left-0 top-1/2 transform -translate-y-1/2"
+              >
+                <Checkbox
+                  checked={selectedResults.has(index)}
+                  onCheckedChange={() => handleResultSelection(index)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <Card className="w-full">
+            <CardContent className="p-4">
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value={`item-${index}`}>
+                  <AccordionTrigger className="flex items-center">
+                    <div className="flex items-center w-full">
+                      <Badge className="mr-2">{item.type}</Badge>
+                    </div>
+                    <span className="flex-grow text-center truncate">
+                      {item.type === "OCR" &&
+                        item.content.text.substring(0, 50)}
+                      {item.type === "Audio" &&
+                        item.content.transcription.substring(0, 50)}
+                      {item.type === "FTS" &&
+                        item.content.matched_text.substring(0, 50)}
+                      ...
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    {item.type === "OCR" && (
+                      <>
+                        <p className="mt-2">{item.content.text}</p>
+                        <div className="flex justify-center mt-4">
+                          <VideoComponent filePath={item.content.file_path} />
                         </div>
-                      )}
-                    </>
-                  )}
-                  {item.type === "Audio" && (
-                    <>
-                      <p className="mt-2">{item.content.transcription}</p>
-                      <div className="flex justify-center mt-4">
-                        <VideoComponent filePath={item.content.file_path} />
-                      </div>
-                    </>
-                  )}
-                  {item.type === "FTS" && (
-                    <>
-                      <p className="mt-2">{item.content.matched_text}</p>
-                      {item.content.original_frame_text && (
-                        <p className="mt-2 text-sm text-gray-600">
-                          Original: {item.content.original_frame_text}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <p className="text-xs text-gray-400">
-                {new Date(item.content.timestamp).toLocaleString()}
-              </p>
-              {item.type === "OCR" && item.content.app_name && (
-                <Badge
-                  className="text-xs cursor-pointer"
-                  onClick={() => setAppName(item.content.app_name)}
-                >
-                  {item.content.app_name}
-                </Badge>
-              )}
-              {item.type === "OCR" && item.content.window_name && (
-                <Badge
-                  className="text-xs cursor-pointer"
-                  onClick={() => setWindowName(item.content.window_name)}
-                >
-                  {item.content.window_name}
-                </Badge>
-              )}
-              {item.content.tags &&
-                item.content.tags.map((tag, index) => (
-                  <Badge key={index} className="text-xs">
-                    {tag}
+                        {includeFrames && item.content.frame && (
+                          <div className="mt-2 flex items-center">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <img
+                                  src={`data:image/jpeg;base64,${item.content.frame}`}
+                                  alt="Frame"
+                                  className="w-24 h-auto cursor-pointer"
+                                />
+                              </DialogTrigger>
+                              <DialogContent className="sm:max-w-[80vw]">
+                                <img
+                                  src={`data:image/jpeg;base64,${item.content.frame}`}
+                                  alt="Frame"
+                                  className="w-full h-auto"
+                                />
+                              </DialogContent>
+                            </Dialog>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>
+                                    this is the frame where the text appeared
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {item.type === "Audio" && (
+                      <>
+                        <p className="mt-2">{item.content.transcription}</p>
+                        <div className="flex justify-center mt-4">
+                          <VideoComponent filePath={item.content.file_path} />
+                        </div>
+                      </>
+                    )}
+                    {item.type === "FTS" && (
+                      <>
+                        <p className="mt-2">{item.content.matched_text}</p>
+                        {item.content.original_frame_text && (
+                          <p className="mt-2 text-sm text-gray-600">
+                            Original: {item.content.original_frame_text}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <p className="text-xs text-gray-400">
+                  {new Date(item.content.timestamp).toLocaleString()}
+                </p>
+                {item.type === "OCR" && item.content.app_name && (
+                  <Badge
+                    className="text-xs cursor-pointer"
+                    onClick={() => setAppName(item.content.app_name)}
+                  >
+                    {item.content.app_name}
                   </Badge>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-    ));
+                )}
+                {item.type === "OCR" && item.content.window_name && (
+                  <Badge
+                    className="text-xs cursor-pointer"
+                    onClick={() => setWindowName(item.content.window_name)}
+                  >
+                    {item.content.window_name}
+                  </Badge>
+                )}
+                {item.content.tags &&
+                  item.content.tags.map((tag, index) => (
+                    <Badge key={index} className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      ));
   };
 
   return (
@@ -599,7 +660,7 @@ export function SearchChat() {
         </div>
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
-            <Label htmlFor="start-date">start date</Label>
+            <Label htmlFor="start-date">start date (local time)</Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -621,7 +682,7 @@ export function SearchChat() {
         </div>
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
-            <Label htmlFor="end-date">end date</Label>
+            <Label htmlFor="end-date">end date (local time)</Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -833,6 +894,28 @@ export function SearchChat() {
             "search"
           )}
         </Button>
+        <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="icon">
+              <IconCode className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>curl command</DialogTitle>
+              <DialogDescription>
+                you can use this curl command to make the same search request
+                from the command line.
+                <br />
+                <br />
+                <span className="text-xs text-gray-500">
+                  note: you need to have `jq` installed to use the command.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <CodeBlock language="bash" value={generateCurlCommand()} />
+          </DialogContent>
+        </Dialog>
       </div>
       {isLoading && (
         <div className="my-2">
@@ -886,11 +969,10 @@ export function SearchChat() {
                   placeholder="ask a question about the results..."
                   value={floatingInput}
                   disabled={
-                    isAiLoading ||
                     calculateSelectedContentLength() > MAX_CONTENT_LENGTH
                   }
                   onChange={(e) => setFloatingInput(e.target.value)}
-                  className="w-full h-12 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border transition-all duration-200 pr-10"
+                  className="w-full h-12 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border-b transition-all duration-200 pr-10"
                 />
                 <TooltipProvider>
                   <Tooltip>
@@ -914,13 +996,14 @@ export function SearchChat() {
               </div>
               <Button
                 type="submit"
-                className="w-12"
-                disabled={
-                  isAiLoading ||
-                  calculateSelectedContentLength() > MAX_CONTENT_LENGTH
-                }
+                className={`w-12 `}
+                disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
               >
-                <Send className="h-4 w-4" />
+                {isStreaming ? (
+                  <Square className="h-4 w-4" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </form>
           </motion.div>
