@@ -612,7 +612,7 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
             <Input
               id="search-query"
               type="text"
-              placeholder="search your data..."
+              placeholder="one keyword matching audio transcription or screen text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoCorrect="off"

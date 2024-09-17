@@ -12,7 +12,7 @@ import { OpenAI } from "openai";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "./ui/use-toast";
 import ReactMarkdown from "react-markdown";
-import { X, Activity, Copy } from "lucide-react"; // Import the X icon and Activity icon for live meetings
+import { X, Activity, Copy, StopCircle } from "lucide-react"; // Import the X icon and Activity icon for live meetings
 import { useInterval } from "@/lib/hooks/use-interval"; // Add this import
 import { usePostHog } from "posthog-js/react";
 import debounce from "lodash/debounce";
@@ -57,6 +57,7 @@ interface Meeting {
   name: string | null;
   participants: string | null;
   summary: string | null;
+  isStopped?: boolean;
 }
 
 interface AudioContent {
@@ -498,7 +499,10 @@ export default function MeetingHistory() {
   const isLiveMeeting = (meeting: Meeting) => {
     const lastTranscriptionTime = new Date(meeting.meeting_end);
     const now = new Date();
-    return now.getTime() - lastTranscriptionTime.getTime() < 1 * 60 * 1000;
+    return (
+      now.getTime() - lastTranscriptionTime.getTime() < 1 * 60 * 1000 &&
+      !meeting.isStopped
+    );
   };
 
   // Add this useInterval hook
@@ -516,6 +520,33 @@ export default function MeetingHistory() {
     });
   };
 
+  function stopLiveMeeting(meetingGroup: number) {
+    const updatedMeetings = meetings.map((meeting) => {
+      if (meeting.meeting_group === meetingGroup) {
+        return {
+          ...meeting,
+          meeting_end: new Date().toISOString(),
+          isStopped: true,
+        };
+      }
+      return meeting;
+    });
+
+    setMeetings(updatedMeetings);
+
+    const newLiveMeetings = new Set(liveMeetings);
+    newLiveMeetings.delete(meetingGroup);
+    setLiveMeetings(newLiveMeetings);
+
+    toast({
+      title: "meeting stopped",
+      description: "the live meeting has been marked as ended.",
+    });
+
+    // update local storage
+    setItem("meetings", updatedMeetings);
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -525,14 +556,14 @@ export default function MeetingHistory() {
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
         <DialogHeader className="py-4">
-          <DialogTitle>
+          <DialogTitle className="flex items-center">
             meeting and conversation history
             <Badge variant="secondary" className="ml-2">
               experimental
             </Badge>
           </DialogTitle>
         </DialogHeader>
-        <DialogDescription>
+        <DialogDescription className="mb-4">
           <p className="text-sm text-gray-600">
             this page provides transcriptions and summaries of your daily
             meetings. it uses your ai settings and custom prompt to generate
@@ -540,8 +571,8 @@ export default function MeetingHistory() {
             know&quot; might be transcription errors. for better accuracy,
             consider using deepgram as the engine or adjust your custom prompt
             to ignore these.
-            <br />
-            <br />
+          </p>
+          <p className="text-sm text-gray-600 mt-2">
             <strong>make sure to setup your ai settings</strong>
           </p>
         </DialogDescription>
@@ -582,14 +613,25 @@ export default function MeetingHistory() {
               )}
               <div className="space-y-6">
                 {sortedMeetings.map((meeting, index) => (
-                  <div key={index} className="p-4 border rounded relative">
+                  <div key={index} className="p-6 border rounded relative">
                     {isLiveMeeting(meeting) && (
-                      <div className="absolute top-2 right-2 flex items-center text-black">
-                        <Activity size={16} className="mr-1" />
-                        <span className="text-sm font-semibold">live</span>
+                      <div className="absolute top-4 right-4 flex items-center space-x-2">
+                        <div className="flex items-center text-black">
+                          <Activity size={16} className="mr-1" />
+                          <span className="text-sm font-semibold">live</span>
+                        </div>
+                        <Button
+                          onClick={() => stopLiveMeeting(meeting.meeting_group)}
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center"
+                        >
+                          <StopCircle className="mr-2 h-4 w-4" />
+                          stop
+                        </Button>
                       </div>
                     )}
-                    <h3 className="font-bold">
+                    <h3 className="font-bold text-lg mb-2">
                       {`meeting ${new Date(
                         meeting.meeting_start
                       ).toLocaleDateString()}, ${new Date(
@@ -598,54 +640,23 @@ export default function MeetingHistory() {
                         meeting.meeting_end
                       ).toLocaleTimeString()}`}
                     </h3>
-                    <p className="flex items-center">
-                      participants: {meeting.participants || ""}
+                    <div className="flex items-center mb-4">
+                      <p className="mr-2">
+                        participants: {meeting.participants || "not identified"}
+                      </p>
                       {!meeting.participants && (
                         <Button
                           onClick={() => identifyParticipants(meeting)}
                           disabled={isIdentifying}
-                          className="ml-2 px-2 py-0.5 text-[10px] bg-black text-white hover:bg-gray-800 h-5 min-h-0"
+                          size="sm"
+                          className="text-xs bg-black text-white hover:bg-gray-800"
                         >
                           {isIdentifying ? "identifying..." : "identify"}
                         </Button>
                       )}
-                    </p>
-                    {isLiveMeeting(meeting) ? (
-                      <p className="mt-2 text-sm text-gray-500 italic">
-                        summary not available for live meetings
-                      </p>
-                    ) : meeting.summary ? (
-                      <div>
-                        <h4 className="font-semibold mt-2 flex items-center">
-                          summary:
-                          <Button
-                            onClick={() =>
-                              copyWithToast(meeting.summary || "", "summary")
-                            }
-                            className="ml-2 p-1 h-6 w-6"
-                            variant="outline"
-                            size="icon"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </h4>
-                        <ReactMarkdown className="prose max-w-none">
-                          {meeting.summary}
-                        </ReactMarkdown>
-                      </div>
-                    ) : (
-                      <Button
-                        onClick={() => generateSummary(meeting)}
-                        disabled={isSummarizing}
-                        className="mt-2"
-                      >
-                        {isSummarizing
-                          ? "generating summary..."
-                          : "generate summary"}
-                      </Button>
-                    )}
-                    <div className="mt-4">
-                      <h4 className="font-semibold flex items-center">
+                    </div>
+                    <div className="mb-4">
+                      <h4 className="font-semibold flex items-center mb-2">
                         full transcription:
                         <Button
                           onClick={() =>
@@ -661,10 +672,48 @@ export default function MeetingHistory() {
                           <Copy className="h-4 w-4" />
                         </Button>
                       </h4>
-                      <pre className="whitespace-pre-wrap bg-gray-100 p-2 rounded mt-2 text-sm max-h-40 overflow-y-auto">
+                      <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
                         {meeting.full_transcription}
                       </pre>
                     </div>
+                    {isLiveMeeting(meeting) ? (
+                      <p className="text-sm text-gray-500 italic">
+                        summary not available for live meetings
+                      </p>
+                    ) : (
+                      <div>
+                        <h4 className="font-semibold flex items-center mb-2">
+                          summary:
+                          {meeting.summary && (
+                            <Button
+                              onClick={() =>
+                                copyWithToast(meeting.summary || "", "summary")
+                              }
+                              className="ml-2 p-1 h-6 w-6"
+                              variant="outline"
+                              size="icon"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </h4>
+                        {meeting.summary ? (
+                          <ReactMarkdown className="prose max-w-none">
+                            {meeting.summary}
+                          </ReactMarkdown>
+                        ) : (
+                          <Button
+                            onClick={() => generateSummary(meeting)}
+                            disabled={isSummarizing}
+                            className="mt-2"
+                          >
+                            {isSummarizing
+                              ? "generating summary..."
+                              : "generate summary"}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
