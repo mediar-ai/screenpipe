@@ -59,7 +59,9 @@ export const VideoComponent = memo(function VideoComponent({
   useEffect(() => {
     async function loadMedia() {
       try {
+        console.log("Loading media:", filePath);
         const sanitizedPath = sanitizeFilePath(filePath);
+        console.log("Sanitized path:", sanitizedPath);
         if (!sanitizedPath) {
           throw new Error("Invalid file path");
         }
