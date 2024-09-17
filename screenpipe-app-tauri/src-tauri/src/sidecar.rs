@@ -173,11 +173,20 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     .map_err(|e| e.to_string())?
     .unwrap_or(String::from("default"));
 
+    let fps = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("fps")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.5))
+    })
+    .map_err(|e| e.to_string())?;
+
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
-    if cfg!(target_os = "macos") {
+    let fps_str = fps.to_string();
+    if fps != 0.5 {
         args.push("--fps");
-        args.push("0.2");
+        args.push(fps_str.as_str());
     }
 
     if data_dir != "default" {

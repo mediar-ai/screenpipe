@@ -41,6 +41,7 @@ import {
 } from "./ui/tooltip";
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
+import { Slider } from "./ui/slider";
 
 interface AudioDevice {
   name: string;
@@ -164,6 +165,7 @@ export function RecordingSettings({
         ignoredWindows: localSettings.ignoredWindows,
         includedWindows: localSettings.includedWindows,
         deepgramApiKey: localSettings.deepgramApiKey,
+        fps: localSettings.fps,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -261,6 +263,10 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, disableAudio: checked });
   };
 
+  const handleFpsChange = (value: number[]) => {
+    setLocalSettings({ ...localSettings, fps: value[0] });
+  };
+
   return (
     <>
       <div className="relative">
@@ -271,7 +277,9 @@ export function RecordingSettings({
               (go to status)
             </CardTitle>
           </Card>
-        ) : <></>}
+        ) : (
+          <></>
+        )}
         <Card className={cn(isDisabled && "opacity-50 pointer-events-none")}>
           <CardHeader>
             <CardTitle className="text-center">recording settings</CardTitle>
@@ -705,6 +713,42 @@ export function RecordingSettings({
                 >
                   add
                 </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label htmlFor="fps" className="flex items-center space-x-2">
+                <span>frames per second (fps)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        adjust the recording frame rate. lower values save
+                        <br />
+                        resources, higher values provide smoother recordings, less likely to miss activity.
+                        <br />
+                        (we do not use resources if your screen does not change much)
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="fps"
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                  value={[localSettings.fps]}
+                  onValueChange={handleFpsChange}
+                  className="flex-grow"
+                />
+                <span className="w-12 text-right">
+                  {localSettings.fps.toFixed(1)}
+                </span>
               </div>
             </div>
 
