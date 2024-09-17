@@ -25,20 +25,14 @@ const NotificationHandler: React.FC = () => {
       }
 
       if (permission) {
-        const lastNotificationTime = localStorage.getItem(
-          "lastNotificationTime"
-        );
-        const currentTime = Date.now();
+        const welcomeShown = localStorage.getItem("welcomeNotificationShown");
 
-        if (
-          !lastNotificationTime ||
-          currentTime - parseInt(lastNotificationTime) > 3600000
-        ) {
+        if (!welcomeShown) {
           sendNotification({
-            title: "Welcome to Screenpipe",
-            body: "Thank you for using Screenpipe! We're dedicated to help you get the most out of screenpipe.",
+            title: "welcome to screenpipe",
+            body: "thank you for using screenpipe! we're dedicated to help you get the most out of screenpipe.",
           });
-          localStorage.setItem("lastNotificationTime", currentTime.toString());
+          localStorage.setItem("welcomeNotificationShown", "true");
         }
       }
 

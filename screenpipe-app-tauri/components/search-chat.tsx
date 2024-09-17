@@ -217,6 +217,8 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
   const calculateSelectedContentLength = () => {
     return Array.from(selectedResults).reduce((total, index) => {
       const item = results[index];
+      if (!item || !item.type) return total; // Add this check
+
       const contentLength =
         item.type === "OCR"
           ? item.content.text.length
@@ -276,7 +278,9 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
           content: `You are a helpful assistant.
             The user is using a product called "screenpipe" which records
             his screen and mics 24/7. The user ask you questions
-            and you use his screenpipe recordings to answer him.
+            and you use his screenpipe recordings to answer him. 
+            The user will provide you with a list of search results
+            and you will use them to answer his questions.
 
             Rules:
             - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}. Adjust start/end times to match user intent.
@@ -288,11 +292,6 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
             - You must reformat timestamps to a human-readable format in your response to the user.
             - Never output UTC time unless explicitly asked by the user.
             - Do not try to embed videos in table (would crash the app)
-            
-            Based on the following selected search results:
-            ${JSON.stringify(
-              results.filter((_, index) => selectedResults.has(index))
-            )}
             `,
         },
         ...chatMessages.map((msg) => ({
@@ -301,7 +300,11 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
         })),
         {
           role: "user" as const,
-          content: userMessage.content,
+          content: `Context data: ${JSON.stringify(
+            results.filter((_, index) => selectedResults.has(index))
+          )}
+          
+          User query: ${floatingInput}`,
         },
       ];
 

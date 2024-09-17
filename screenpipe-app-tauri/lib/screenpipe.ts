@@ -143,23 +143,26 @@ export async function queryScreenpipe(
 ): Promise<ScreenpipeResponse | null> {
   try {
     console.log("params", params);
-    const queryParams = new URLSearchParams();
 
-    // properly encode each parameter
-    if (params.q) queryParams.append("q", encodeURIComponent(params.q));
-    queryParams.append("offset", params.offset.toString());
-    queryParams.append("limit", params.limit.toString());
-    queryParams.append("start_time", encodeURIComponent(params.start_time));
-    queryParams.append("end_time", encodeURIComponent(params.end_time));
-    queryParams.append("content_type", params.content_type);
-    if (params.app_name)
-      queryParams.append("app_name", encodeURIComponent(params.app_name));
-    if (params.window_name)
-      queryParams.append("window_name", encodeURIComponent(params.window_name));
-    queryParams.append("include_frames", params.include_frames.toString());
-    queryParams.append("min_length", params.min_length.toString());
-    queryParams.append("max_length", params.max_length.toString());
-
+    const queryParams = new URLSearchParams(
+      Object.entries({
+        q: params.q ? encodeURIComponent(params.q) : undefined,
+        offset: params.offset.toString(),
+        limit: params.limit.toString(),
+        start_time: params.start_time,
+        end_time: params.end_time,
+        content_type: params.content_type,
+        app_name: params.app_name
+          ? encodeURIComponent(params.app_name)
+          : undefined,
+        window_name: params.window_name
+          ? encodeURIComponent(params.window_name)
+          : undefined,
+        include_frames: params.include_frames.toString(),
+        min_length: params.min_length.toString(),
+        max_length: params.max_length.toString(),
+      }).filter(([_, v]) => v != null) as [string, string][]
+    );
     console.log("calling screenpipe", JSON.stringify(params));
     const response = await fetch(`http://localhost:3030/search?${queryParams}`);
     if (!response.ok) {
