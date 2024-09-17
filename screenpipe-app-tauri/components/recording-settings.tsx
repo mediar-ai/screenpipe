@@ -503,7 +503,7 @@ export function RecordingSettings({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4" />
+                        <HelpCircle className="h-4 w-4 cursor-default" />
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>
@@ -531,7 +531,7 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4" />
+                      <HelpCircle className="h-4 w-4 cursor-default" />
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
@@ -572,7 +572,7 @@ export function RecordingSettings({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4" />
+                        <HelpCircle className="h-4 w-4 cursor-default" />
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>
@@ -595,7 +595,7 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4" />
+                      <HelpCircle className="h-4 w-4 cursor-default" />
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
@@ -660,7 +660,7 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4" />
+                      <HelpCircle className="h-4 w-4 cursor-default" />
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
@@ -722,7 +722,7 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4" />
+                      <HelpCircle className="h-4 w-4 cursor-default" />
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>

@@ -11,7 +11,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { useSettings } from "@/lib/hooks/use-settings";
 import {
   Tooltip,
@@ -19,8 +18,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
-import { MemoizedReactMarkdown } from "./markdown";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
@@ -136,9 +133,7 @@ export function Settings({ className }: { className?: string }) {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="ml-2">
-                            <HelpCircle className="h-4 w-4" />
-                          </Button>
+                          <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
                         </TooltipTrigger>
                         <TooltipContent side="left">
                           <p>
@@ -264,9 +259,7 @@ export function Settings({ className }: { className?: string }) {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="ml-2">
-                            <HelpCircle className="h-4 w-4" />
-                          </Button>
+                          <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
                         </TooltipTrigger>
                         <TooltipContent side="left">
                           <p>
