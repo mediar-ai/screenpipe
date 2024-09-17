@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726530625200,
+  "lastUpdate": 1726531969318,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -6779,6 +6779,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1977187958,
             "range": "± 53026378",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "04ba4347a5a8bba324c915caf10f96d3d898b5a8",
+          "message": "feat: add fps in recording settings",
+          "timestamp": "2024-09-16T17:02:26-07:00",
+          "tree_id": "5d7b9d55b60bdb5fd816ca952cb2140cbc4d6e9b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/04ba4347a5a8bba324c915caf10f96d3d898b5a8"
+        },
+        "date": 1726531967837,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1970491146,
+            "range": "± 64193732",
             "unit": "ns/iter"
           }
         ]
