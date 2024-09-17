@@ -88,13 +88,24 @@ impl WhisperModel {
     }
 
     fn get_optimal_device() -> Result<Device> {
-        if let Ok(device) = Device::new_metal(0) {
-            info!("Using Metal GPU");
-            Ok(device)
-        } else {
-            info!("Metal not available, falling back to CPU");
-            Ok(Device::Cpu)
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(device) = Device::new_metal(0) {
+                info!("Using Metal GPU");
+                return Ok(device);
+            }
         }
+    
+        #[cfg(not(target_os = "macos"))]
+        {
+            if let Ok(device) = Device::new_cuda(0) {
+                info!("Using CUDA GPU");
+                return Ok(device);
+            }
+        }
+    
+        info!("GPU not available, falling back to CPU");
+        Ok(Device::Cpu)
     }
 
 }
