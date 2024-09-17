@@ -82,7 +82,7 @@ pub struct Cli {
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
-    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))] 
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
     pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
@@ -186,6 +186,10 @@ pub struct Cli {
     /// Deepgram API Key for audio transcription
     #[arg(long = "deepgram-api-key")]
     pub deepgram_api_key: Option<String>,
+
+    /// PID to watch for auto-destruction. If provided, screenpipe will stop when this PID is no longer running.
+    #[arg(long)]
+    pub auto_destruct_pid: Option<u32>,
 
     #[command(subcommand)]
     pub command: Option<Command>,

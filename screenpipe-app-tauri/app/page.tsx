@@ -61,7 +61,7 @@ export default function Home() {
             ))}
           </div>
         </div>
-      ) : settings.useOllama || settings.openaiApiKey ? (
+      ) : settings.aiUrl ? (
         <>
           <h1 className="text-2xl font-bold mb-8 text-center mb-12">
             where pixels become magic

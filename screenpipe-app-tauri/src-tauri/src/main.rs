@@ -324,30 +324,7 @@ async fn main() {
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
-            let app_handle_clone = app_handle.clone();
-            let app_handle_clone2 = app_handle.clone();
-            let stores = app_handle.state::<StoreCollection<Wry>>();
-            let path = app_handle
-                .path()
-                .local_data_dir()
-                .unwrap()
-                .join("store.bin");
-            let use_dev_mode = with_store(app_handle.clone(), stores, path, |store| {
-                Ok(store
-                    .get("devMode")
-                    .unwrap_or(&Value::Bool(false))
-                    .as_bool()
-                    .unwrap_or(false))
-            })
-            .unwrap_or(false);
-            if !use_dev_mode {
-                tauri::async_runtime::spawn(async move {
-                    let state = app_handle_clone.state::<SidecarState>();
-                    if let Err(e) = kill_all_sreenpipes(state, app_handle_clone2).await {
-                        error!("Failed to kill screenpipe processes: {}", e);
-                    }
-                });
-            }
+            
             // Add this to shut down the server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
                 let _ = server_shutdown_tx.send(());

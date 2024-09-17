@@ -16,8 +16,7 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand},
-    start_continuous_recording, DatabaseManager, PipeManager, ResourceMonitor, Server,
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
@@ -27,6 +26,7 @@ use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
+
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -557,6 +557,18 @@ async fn main() -> anyhow::Result<()> {
         }
     };
     pin_mut!(pipes_future);
+
+    // Add auto-destruct watcher
+    if let Some(pid) = cli.auto_destruct_pid {
+        info!("watching pid {} for auto-destruction", pid);
+        let shutdown_tx_clone = shutdown_tx.clone();
+        tokio::spawn(async move {
+            if watch_pid(pid).await {
+                info!("watched pid {} has stopped, initiating shutdown", pid);
+                let _ = shutdown_tx_clone.send(());
+            }
+        });
+    }
 
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);

@@ -177,14 +177,22 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         Ok(store
             .get("fps")
             .and_then(|v| v.as_f64())
-            .unwrap_or(0.5))
+            .unwrap_or(0.2))
+    })
+    .map_err(|e| e.to_string())?;
+
+    let dev_mode = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("devMode")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false))
     })
     .map_err(|e| e.to_string())?;
 
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
     let fps_str = fps.to_string();
-    if fps != 0.5 {
+    if fps != 0.2 {
         args.push("--fps");
         args.push(fps_str.as_str());
     }
@@ -252,6 +260,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             args.push("--included-windows");
             args.push(window);
         }
+    }
+    let current_pid = std::process::id();
+    let current_pid_str = current_pid.to_string();
+    // Set auto-destruct PID if not in dev mode
+    if !dev_mode {
+        args.push("--auto-destruct-pid");
+        args.push(current_pid_str.as_str());
     }
 
     // args.push("--debug");
@@ -333,7 +348,6 @@ impl SidecarManager {
         debug!("last_restart: {:?}", self.last_restart);
 
         // kill previous task if any
-
         if let Some(task) = self.restart_task.take() {
             task.abort();
         }
@@ -362,6 +376,8 @@ impl SidecarManager {
                 sleep(Duration::from_secs(60)).await;
             }
         }));
+
+
 
         Ok(())
     }
