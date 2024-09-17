@@ -4,7 +4,7 @@ use chrono::Utc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use log::{debug, error, info, warn};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,7 +41,7 @@ pub struct DeviceControl {
     pub is_paused: bool,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug, Deserialize)]
 pub enum DeviceType {
     Input,
     Output,

@@ -21,6 +21,7 @@ use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
+    DeviceType,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -131,6 +132,8 @@ pub struct AudioContent {
     pub file_path: String,
     pub offset_index: i64,
     pub tags: Vec<String>,
+    pub device_name: String,
+    pub device_type: DeviceType,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -282,6 +285,8 @@ pub(crate) async fn search(
                 file_path: audio.file_path.clone(),
                 offset_index: audio.offset_index,
                 tags: audio.tags.clone(),
+                device_name: audio.device_name.clone(),
+                device_type: audio.device_type.clone(),
             }),
             SearchResult::FTS(fts) => ContentItem::FTS(FTSContent {
                 text_id: fts.text_id,

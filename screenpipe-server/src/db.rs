@@ -111,6 +111,8 @@ struct AudioResultRaw {
     offset_index: i64,
     transcription_engine: String,
     tags: Option<String>,
+    device_name: String,
+    is_input_device: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,6 +124,8 @@ pub struct AudioResult {
     pub offset_index: i64,
     pub transcription_engine: String,
     pub tags: Vec<String>,
+    pub device_name: String,
+    pub device_type: DeviceType,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -721,7 +725,9 @@ impl DatabaseManager {
             audio_chunks.file_path,
             audio_transcriptions.offset_index,
             audio_transcriptions.transcription_engine,
-            GROUP_CONCAT(tags.name, ',') as tags
+            GROUP_CONCAT(tags.name, ',') as tags,
+            audio_transcriptions.device as device_name,
+            audio_transcriptions.is_input_device
         FROM 
             audio_transcriptions
         JOIN 
@@ -799,6 +805,12 @@ impl DatabaseManager {
                     .tags
                     .map(|s| s.split(',').map(String::from).collect())
                     .unwrap_or_default(),
+                device_name: raw.device_name,
+                device_type: if raw.is_input_device {
+                    DeviceType::Input
+                } else {
+                    DeviceType::Output
+                },
             })
             .collect();
 
