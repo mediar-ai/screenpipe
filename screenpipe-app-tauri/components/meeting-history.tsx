@@ -12,22 +12,33 @@ import { OpenAI } from "openai";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "./ui/use-toast";
 import ReactMarkdown from "react-markdown";
-import { X, Activity } from "lucide-react"; // Import the X icon and Activity icon for live meetings
+import { X, Activity, Copy } from "lucide-react"; // Import the X icon and Activity icon for live meetings
 import { useInterval } from "@/lib/hooks/use-interval"; // Add this import
 import { usePostHog } from "posthog-js/react";
 import debounce from "lodash/debounce";
 import { Badge } from "./ui/badge";
+import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
+import localforage from "localforage";
 
-function setItem(key: string, value: any): void {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(key, JSON.stringify(value));
+async function setItem(key: string, value: any): Promise<void> {
+  try {
+    if (typeof window !== "undefined") {
+      await localforage.setItem(key, value);
+    }
+  } catch (error) {
+    console.error("error setting item in storage:", error);
+    throw error;
   }
 }
 
-function getItem(key: string): any {
-  if (typeof window !== "undefined") {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : null;
+async function getItem(key: string): Promise<any> {
+  try {
+    if (typeof window !== "undefined") {
+      return await localforage.getItem(key);
+    }
+  } catch (error) {
+    console.error("error getting item from storage:", error);
+    throw error;
   }
   return null;
 }
@@ -73,6 +84,7 @@ export default function MeetingHistory() {
   const { toast } = useToast();
   const [showError, setShowError] = useState(false);
   const [liveMeetings, setLiveMeetings] = useState<Set<number>>(new Set());
+  const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
 
   const debouncedCapture = useCallback(
     debounce((eventName: string, properties: any) => {
@@ -112,7 +124,7 @@ export default function MeetingHistory() {
   async function loadMeetings() {
     setLoading(true);
     try {
-      const storedMeetings = getItem("meetings") || [];
+      const storedMeetings = (await getItem("meetings")) || [];
       setMeetings(storedMeetings);
 
       await fetchMeetings();
@@ -128,7 +140,7 @@ export default function MeetingHistory() {
     setLoading(true);
     try {
       let startTime;
-      const storedMeetings = getItem("meetings") || [];
+      const storedMeetings = (await getItem("meetings")) || [];
       if (storedMeetings.length > 0) {
         // Get the start time of the last stored meeting
         const lastMeeting = storedMeetings[storedMeetings.length - 1];
@@ -141,7 +153,6 @@ export default function MeetingHistory() {
       }
       console.log("searching from:", startTime);
 
-
       const response = await fetch(
         `http://localhost:3030/search?content_type=audio&start_time=${startTime}&limit=1000`
       );
@@ -152,7 +163,6 @@ export default function MeetingHistory() {
       console.log("fetch result:", result);
       const newMeetings = processMeetings(result.data);
       console.log("processed new meetings:", newMeetings);
-
 
       const newLiveMeetings = new Set(liveMeetings);
 
@@ -185,12 +195,10 @@ export default function MeetingHistory() {
               ).toLocaleTimeString()}`
             );
             newLiveMeetings.add(newMeeting.meeting_group);
-
           }
         } else if (liveMeetings.has(newMeeting.meeting_group)) {
           sendNotification("meeting ended", `the meeting has ended`);
           newLiveMeetings.delete(newMeeting.meeting_group);
-          
         }
       });
 
@@ -201,13 +209,12 @@ export default function MeetingHistory() {
       const completedMeetings = updatedMeetings.filter(
         (meeting) => !isLiveMeeting(meeting)
       );
-      setItem("meetings", completedMeetings);
+      await setItem("meetings", completedMeetings);
     } catch (err) {
       setError(
         "some trouble fetching new meetings. please check health status."
       );
       console.error("fetch error:", err);
-
     } finally {
       console.log("fetch completed");
       setLoading(false);
@@ -262,30 +269,77 @@ export default function MeetingHistory() {
         },
       ];
 
-      const response = await openai.chat.completions.create({
+      const stream = await openai.chat.completions.create({
         model: model,
         messages: messages,
+        stream: true,
       });
 
-      const summary =
-        response.choices[0]?.message?.content || "no summary generated.";
+      let summary = "";
+      const updatedMeeting = { ...meeting, summary: "" };
 
-      // Update the meeting with the new summary
-      const updatedMeeting = { ...meeting, summary };
-      const updatedMeetings = meetings.map((m) =>
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || "";
+        summary += content;
+        updatedMeeting.summary = summary;
+
+        // update the meeting with the new summary
+        const updatedMeetings = meetings.map((m) =>
+          m.meeting_group === meeting.meeting_group ? updatedMeeting : m
+        );
+        setMeetings(updatedMeetings);
+      }
+
+      // final update after streaming is complete
+      const finalUpdatedMeetings = meetings.map((m) =>
         m.meeting_group === meeting.meeting_group ? updatedMeeting : m
       );
-      setMeetings(updatedMeetings);
-      setItem("meetings", updatedMeetings);
+      setMeetings(finalUpdatedMeetings);
 
-      toast({
-        title: "summary generated",
-        description: "the meeting summary has been created successfully.",
-      });
+      try {
+        console.log("updating meetings state...");
+        setMeetings(finalUpdatedMeetings);
 
- 
+        console.log("storing meetings in storage...");
+        await setItem("meetings", finalUpdatedMeetings);
 
-  
+        console.log("storage operation completed");
+
+        toast({
+          title: "summary generated",
+          description:
+            "the meeting summary has been created and saved successfully.",
+        });
+      } catch (storageError) {
+        console.error("error updating storage:", storageError);
+        toast({
+          title: "warning",
+          description:
+            "summary generated but couldn't be saved due to storage limits. older meetings might be removed to make space.",
+          variant: "destructive",
+        });
+
+        // attempt to remove older meetings to make space
+        try {
+          const oldMeetings = (await getItem("meetings")) || [];
+          const meetingsToKeep = oldMeetings.slice(-10); // keep only the last 10 meetings
+          await setItem("meetings", meetingsToKeep);
+          setMeetings(meetingsToKeep);
+          toast({
+            title: "storage cleaned",
+            description:
+              "older meetings were removed to make space for new ones.",
+          });
+        } catch (cleanupError) {
+          console.error("failed to clean up storage:", cleanupError);
+          toast({
+            title: "error",
+            description:
+              "failed to clean up storage. please clear your browser data manually.",
+            variant: "destructive",
+          });
+        }
+      }
     } catch (error) {
       console.error("error generating summary:", error);
       toast({
@@ -293,8 +347,6 @@ export default function MeetingHistory() {
         description: "failed to generate meeting summary. please try again.",
         variant: "destructive",
       });
-
-
     } finally {
       setIsSummarizing(false);
     }
@@ -341,15 +393,13 @@ export default function MeetingHistory() {
         m.meeting_group === meeting.meeting_group ? updatedMeeting : m
       );
       setMeetings(updatedMeetings);
-      setItem("meetings", updatedMeetings);
+      await setItem("meetings", updatedMeetings);
 
       toast({
         title: "participants identified",
         description:
           "the meeting participants have been identified successfully.",
       });
-
-
     } catch (error) {
       console.error("error identifying participants:", error);
       toast({
@@ -358,8 +408,6 @@ export default function MeetingHistory() {
           "failed to identify meeting participants. please try again.",
         variant: "destructive",
       });
-
- 
     } finally {
       setIsIdentifying(false);
     }
@@ -460,6 +508,14 @@ export default function MeetingHistory() {
     }
   }, 30000); // 30 seconds
 
+  const copyWithToast = (content: string, type: string) => {
+    copyToClipboard(content);
+    toast({
+      title: "copied to clipboard",
+      description: `${type} has been copied to your clipboard.`,
+    });
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -477,7 +533,7 @@ export default function MeetingHistory() {
           </DialogTitle>
         </DialogHeader>
         <DialogDescription>
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm text-gray-600">
             this page provides transcriptions and summaries of your daily
             meetings. it uses your ai settings and custom prompt to generate
             summaries. note: phrases like &quot;thank you&quot; or &quot;you
@@ -489,7 +545,7 @@ export default function MeetingHistory() {
             <strong>make sure to setup your ai settings</strong>
           </p>
         </DialogDescription>
-        <div className="flex-grow overflow-auto p-4">
+        <div className="flex-grow overflow-auto">
           {loading ? (
             <div className="space-y-6">
               {[1, 2, 3].map((i) => (
@@ -560,7 +616,19 @@ export default function MeetingHistory() {
                       </p>
                     ) : meeting.summary ? (
                       <div>
-                        <h4 className="font-semibold mt-2">summary:</h4>
+                        <h4 className="font-semibold mt-2 flex items-center">
+                          summary:
+                          <Button
+                            onClick={() =>
+                              copyWithToast(meeting.summary || "", "summary")
+                            }
+                            className="ml-2 p-1 h-6 w-6"
+                            variant="outline"
+                            size="icon"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </h4>
                         <ReactMarkdown className="prose max-w-none">
                           {meeting.summary}
                         </ReactMarkdown>
@@ -577,7 +645,22 @@ export default function MeetingHistory() {
                       </Button>
                     )}
                     <div className="mt-4">
-                      <h4 className="font-semibold">full transcription:</h4>
+                      <h4 className="font-semibold flex items-center">
+                        full transcription:
+                        <Button
+                          onClick={() =>
+                            copyWithToast(
+                              meeting.full_transcription,
+                              "full transcription"
+                            )
+                          }
+                          className="ml-2 p-1 h-6 w-6"
+                          variant="outline"
+                          size="icon"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </h4>
                       <pre className="whitespace-pre-wrap bg-gray-100 p-2 rounded mt-2 text-sm max-h-40 overflow-y-auto">
                         {meeting.full_transcription}
                       </pre>

@@ -172,6 +172,9 @@ export function Settings({ className }: { className?: string }) {
                       onChange={handleApiKeyChange}
                       className="pr-10"
                       placeholder="enter your ai api key"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      autoComplete="off"
                     />
                     <Button
                       type="button"
@@ -200,6 +203,9 @@ export function Settings({ className }: { className?: string }) {
                     onChange={handleModelChange}
                     className="flex-grow"
                     placeholder="enter ai model (e.g., gpt-4)"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    autoComplete="off"
                   />
                 </div>
               </div>
