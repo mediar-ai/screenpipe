@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726596040775,
+  "lastUpdate": 1726599298611,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -7019,6 +7019,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2033816479,
             "range": "± 66603612",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "248f7145439b1cb57c0e54900fbd1dad30e955ed",
+          "message": "feat: add button to stop live meeting + alignment / spacing, other stuff",
+          "timestamp": "2024-09-17T11:45:01-07:00",
+          "tree_id": "55927f137444db0d4e9729fd98f960d91a3e3a02",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/248f7145439b1cb57c0e54900fbd1dad30e955ed"
+        },
+        "date": 1726599297132,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2096009771,
+            "range": "± 92990164",
             "unit": "ns/iter"
           }
         ]
