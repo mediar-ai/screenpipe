@@ -149,10 +149,15 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
+            # These settings are specific to macOS builds
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
-          elif [[ "${{ matrix.platform }}" == "ubuntu-22.04" || "${{ matrix.platform }}" == "windows-latest" ]]; then
+          elif [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            # Linux-specific settings (if any)
+            export RUSTFLAGS="-C target-cpu=native"
+          elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            # Windows-specific settings (if any)
             export RUSTFLAGS="-C target-cpu=native"
           fi
           cargo build --release ${{ matrix.args }}

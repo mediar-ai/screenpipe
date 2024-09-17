@@ -80,8 +80,8 @@ criterion = { workspace = true }
 memory-stats = "1.0"
 
 [features]
-default = ["metal"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
+cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 
 
