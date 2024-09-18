@@ -1,9 +1,10 @@
-use crate::cli::CliVadEngine;
+use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
+use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
     AudioInput, AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
@@ -42,6 +43,7 @@ pub async fn start_continuous_recording(
     ignored_windows: &[String],
     include_windows: &[String],
     deepgram_api_key: Option<String>,
+    vad_sensitivity: CliVadSensitivity,
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -62,6 +64,7 @@ pub async fn start_continuous_recording(
             VadEngineEnum::from(vad_engine),
             deepgram_api_key,
             &PathBuf::from(output_path.as_ref()),
+            VadSensitivity::from(vad_sensitivity),
         )
         .await?
     };

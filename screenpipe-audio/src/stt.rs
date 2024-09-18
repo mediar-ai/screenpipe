@@ -23,7 +23,7 @@ use rubato::{
 
 use crate::{
     encode_single_audio, multilingual,
-    vad_engine::{SileroVad, VadEngine, VadEngineEnum, WebRtcVad},
+    vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
     AudioDevice, AudioTranscriptionEngine,
 };
 
@@ -579,81 +579,50 @@ pub async fn stt(
         audio_data = resample(audio_data, audio_input.sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
-    // Filter out non-speech segments using Silero VAD
-    debug!(
-        "device: {}, filtering out non-speech segments with VAD",
-        audio_input.device
-    );
-    let frame_size = 1600; // 10ms frame size for 16kHz audio
+    let frame_size = 1600; // 100ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
-    let mut is_speech = false;
-    let mut speech_duration = 0.0;
-    let mut silence_duration = 0.0;
-    let min_speech_dur = 0.3; // Minimum speech duration in seconds
-    let min_silence_dur = 0.5; // Minimum silence duration in seconds
-    let sample_rate = m::SAMPLE_RATE as f32;
+    let mut total_frames = 0;
+    let mut speech_frame_count = 0;
 
-    for (frame_index, chunk) in audio_data.chunks(frame_size).enumerate() {
+    for chunk in audio_data.chunks(frame_size) {
+        total_frames += 1;
         match vad_engine.is_voice_segment(chunk) {
             Ok(is_voice) => {
                 if is_voice {
-                    if is_speech {
-                        speech_duration += frame_size as f32 / sample_rate;
-                    } else {
-                        if silence_duration >= min_silence_dur {
-                            silence_duration = 0.0;
-                        }
-                        speech_duration = frame_size as f32 / sample_rate;
-                        is_speech = true;
-                    }
                     speech_frames.extend_from_slice(chunk);
-                } else {
-                    if is_speech {
-                        if speech_duration >= min_speech_dur {
-                            // Keep the speech segment
-                            silence_duration = frame_size as f32 / sample_rate;
-                        } else {
-                            // Discard short speech segment
-                            speech_frames.truncate(
-                                speech_frames.len() - speech_duration as usize * frame_size,
-                            );
-                            silence_duration += speech_duration + frame_size as f32 / sample_rate;
-                        }
-                        speech_duration = 0.0;
-                        is_speech = false;
-                    } else {
-                        silence_duration += frame_size as f32 / sample_rate;
-                    }
+                    speech_frame_count += 1;
                 }
             }
             Err(e) => {
-                debug!("VAD failed for frame {}: {:?}", frame_index, e);
+                debug!("VAD failed for chunk: {:?}", e);
             }
         }
     }
 
+    let speech_duration_ms = speech_frame_count * 100; // Each frame is 100ms
+    let speech_ratio = speech_frame_count as f32 / total_frames as f32;
+    let min_speech_ratio = vad_engine.get_min_speech_ratio();
+
     info!(
-        "device: {}, total audio frames processed: {}, frames that include speech: {}",
+        "device: {}, total audio frames processed: {}, frames that include speech: {}, speech duration: {}ms, speech ratio: {:.2}, min required ratio: {:.2}",
         audio_input.device,
-        audio_data.len() / frame_size,
-        speech_frames.len() / frame_size
+        total_frames,
+        speech_frame_count,
+        speech_duration_ms,
+        speech_ratio,
+        min_speech_ratio
     );
 
-    // If no speech frames detected, skip processing
-    if speech_frames.is_empty() {
+    // If no speech frames detected or speech ratio is too low, skip processing
+    if speech_frames.is_empty() || speech_ratio < min_speech_ratio {
         debug!(
-            "device: {}, no speech detected using VAD, skipping audio processing",
-            audio_input.device
+            "device: {}, insufficient speech detected (ratio: {:.2}, min required: {:.2}), skipping audio processing",
+            audio_input.device,
+            speech_ratio,
+            min_speech_ratio
         );
-        return Ok(("".to_string(), "".to_string())); // Return an empty string or consider a more specific "no speech" indicator
+        return Ok(("".to_string(), "".to_string()));
     }
-
-    debug!(
-        "device: {}, using {} speech frames out of {} total frames",
-        audio_input.device,
-        speech_frames.len() / frame_size,
-        audio_data.len() / frame_size
-    );
 
     let transcription: Result<String> =
         if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
@@ -855,6 +824,7 @@ pub async fn create_whisper_channel(
     vad_engine: VadEngineEnum,
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
+    vad_sensitivity: VadSensitivity,
 ) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
@@ -869,10 +839,11 @@ pub async fn create_whisper_channel(
         UnboundedSender<TranscriptionResult>,
         UnboundedReceiver<TranscriptionResult>,
     ) = unbounded_channel();
-    let vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
+    let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
         VadEngineEnum::Silero => Box::new(SileroVad::new().await?),
     };
+    vad_engine.set_sensitivity(vad_sensitivity);
     let vad_engine = Arc::new(Mutex::new(vad_engine));
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();

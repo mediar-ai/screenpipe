@@ -273,7 +273,7 @@ async fn main() -> anyhow::Result<()> {
     let ocr_engine_clone = cli.ocr_engine.clone();
     let vad_engine = cli.vad_engine.clone();
     let vad_engine_clone = vad_engine.clone();
-
+    let vad_sensitivity_clone = cli.vad_sensitivity.clone();
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
     let audio_runtime = Runtime::new().unwrap();
@@ -326,6 +326,7 @@ async fn main() -> anyhow::Result<()> {
                     &cli.ignored_windows,
                     &cli.included_windows,
                     cli.deepgram_api_key.clone(),
+                    cli.vad_sensitivity.clone(),
                 );
 
                 let result = tokio::select! {
@@ -406,6 +407,10 @@ async fn main() -> anyhow::Result<()> {
     println!(
         "│ vad engine          │ {:<34} │",
         format!("{:?}", vad_engine_clone)
+    );
+    println!(
+        "│ vad sensitivity     │ {:<34} │",
+        format!("{:?}", vad_sensitivity_clone)
     );
     println!(
         "│ data directory      │ {:<34} │",

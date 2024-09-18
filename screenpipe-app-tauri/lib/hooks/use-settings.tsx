@@ -37,8 +37,10 @@ const defaultSettings: Settings = {
   aiUrl: "https://api.openai.com/v1",
   aiMaxContextChars: 30000,
   fps: 0.5,
+  vadSensitivity: "high",
 };
 
+export type VadSensitivity = "low" | "medium" | "high";
 export interface Settings {
   openaiApiKey: string;
   deepgramApiKey: string;
@@ -64,6 +66,7 @@ export interface Settings {
   aiUrl: string;
   aiMaxContextChars: number;
   fps: number;
+  vadSensitivity: VadSensitivity;
 }
 
 let store: Store | null = null;
@@ -157,6 +160,8 @@ export function useSettings() {
         const savedFps =
           ((await store!.get("fps")) as number) ||
           (platform() === "macos" ? 0.2 : 1);
+        const savedVadSensitivity =
+          ((await store!.get("vadSensitivity")) as VadSensitivity) || "high";
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -182,6 +187,7 @@ export function useSettings() {
           aiUrl: savedAiUrl,
           aiMaxContextChars: savedAiMaxContextChars,
           fps: savedFps,
+          vadSensitivity: savedVadSensitivity,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);

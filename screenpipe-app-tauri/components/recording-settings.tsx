@@ -28,7 +28,11 @@ import {
   CommandItem,
 } from "./ui/command";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings, useSettings } from "@/lib/hooks/use-settings";
+import {
+  Settings,
+  useSettings,
+  VadSensitivity,
+} from "@/lib/hooks/use-settings";
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { invoke } from "@tauri-apps/api/core";
@@ -166,6 +170,7 @@ export function RecordingSettings({
         includedWindows: localSettings.includedWindows,
         deepgramApiKey: localSettings.deepgramApiKey,
         fps: localSettings.fps,
+        vadSensitivity: localSettings.vadSensitivity,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -265,6 +270,33 @@ export function RecordingSettings({
 
   const handleFpsChange = (value: number[]) => {
     setLocalSettings({ ...localSettings, fps: value[0] });
+  };
+
+  const vadSensitivityOptions = [
+    { value: 0, label: "low" },
+    { value: 1, label: "medium" },
+    { value: 2, label: "high" },
+  ];
+
+  const handleVadSensitivityChange = (value: number[]) => {
+    const sensitivityMap: { [key: number]: VadSensitivity } = {
+      0: "high",
+      1: "medium",
+      2: "low",
+    };
+    setLocalSettings({
+      ...localSettings,
+      vadSensitivity: sensitivityMap[value[0]],
+    });
+  };
+
+  const vadSensitivityToNumber = (sensitivity: VadSensitivity): number => {
+    const sensitivityMap: { [key in VadSensitivity]: number } = {
+      high: 2,
+      medium: 1,
+      low: 0,
+    };
+    return sensitivityMap[sensitivity];
   };
 
   return (
@@ -728,9 +760,11 @@ export function RecordingSettings({
                       <p>
                         adjust the recording frame rate. lower values save
                         <br />
-                        resources, higher values provide smoother recordings, less likely to miss activity.
+                        resources, higher values provide smoother recordings,
+                        less likely to miss activity.
                         <br />
-                        (we do not use resources if your screen does not change much)
+                        (we do not use resources if your screen does not change
+                        much)
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -749,6 +783,54 @@ export function RecordingSettings({
                 <span className="w-12 text-right">
                   {localSettings.fps.toFixed(1)}
                 </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="vadSensitivity"
+                className="flex items-center space-x-2"
+              >
+                <span>vad sensitivity</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        adjust the voice activity detection sensitivity.
+                        <br />
+                        low: more sensitive, catches most speech but may have
+                        more false positives.
+                        <br />
+                        medium: balanced sensitivity.
+                        <br />
+                        high (recommended): less sensitive, may miss some speech
+                        but reduces false positives.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="vadSensitivity"
+                  min={0}
+                  max={2}
+                  step={1}
+                  value={[vadSensitivityToNumber(localSettings.vadSensitivity)]}
+                  onValueChange={handleVadSensitivityChange}
+                  className="flex-grow"
+                />
+                <span className="w-16 text-right">
+                  {localSettings.vadSensitivity}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>low</span>
+                <span>medium</span>
+                <span>high</span>
               </div>
             </div>
 

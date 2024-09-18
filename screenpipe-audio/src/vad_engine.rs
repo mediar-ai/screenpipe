@@ -1,8 +1,26 @@
 use anyhow;
 use log::debug;
+use std::collections::VecDeque;
 use std::io::Write;
 use std::path::PathBuf;
 use vad_rs::{Vad, VadStatus};
+
+#[derive(Clone, Copy, Debug)]
+pub enum VadSensitivity {
+    Low,
+    Medium,
+    High,
+}
+
+impl VadSensitivity {
+    pub fn min_speech_ratio(&self) -> f32 {
+        match self {
+            VadSensitivity::Low => 0.1,     // 10% of frames must be speech
+            VadSensitivity::Medium => 0.05, // 5% of frames must be speech
+            VadSensitivity::High => 0.02,   // 2% of frames must be speech
+        }
+    }
+}
 
 pub enum VadEngineEnum {
     WebRtc,
@@ -11,15 +29,22 @@ pub enum VadEngineEnum {
 
 pub trait VadEngine: Send {
     fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool>;
+    fn set_sensitivity(&mut self, sensitivity: VadSensitivity);
+    fn get_min_speech_ratio(&self) -> f32;
 }
 
-pub struct WebRtcVad(webrtc_vad::Vad);
+pub struct WebRtcVad {
+    vad: webrtc_vad::Vad,
+    sensitivity: VadSensitivity,
+}
 
 impl WebRtcVad {
     pub fn new() -> Self {
-        let mut vad = webrtc_vad::Vad::new();
-        vad.set_mode(webrtc_vad::VadMode::VeryAggressive);
-        Self(vad)
+        let vad = webrtc_vad::Vad::new();
+        Self {
+            vad,
+            sensitivity: VadSensitivity::High,
+        }
     }
 }
 
@@ -28,19 +53,40 @@ impl VadEngine for WebRtcVad {
         // Convert f32 to i16
         let i16_chunk: Vec<i16> = audio_chunk.iter().map(|&x| (x * 32767.0) as i16).collect();
 
+        // Set VAD mode based on sensitivity
+        let mode = match self.sensitivity {
+            VadSensitivity::Low => webrtc_vad::VadMode::Quality,
+            VadSensitivity::Medium => webrtc_vad::VadMode::Aggressive,
+            VadSensitivity::High => webrtc_vad::VadMode::VeryAggressive,
+        };
+        self.vad.set_mode(mode);
+
         let result = self
-            .0
+            .vad
             .is_voice_segment(&i16_chunk)
             .map_err(|e| anyhow::anyhow!("WebRTC VAD error: {:?}", e))?;
 
-        // debug!("WebRTC VAD result: is_voice_segment = {}", result);
-
         Ok(result)
+    }
+
+    fn set_sensitivity(&mut self, sensitivity: VadSensitivity) {
+        self.sensitivity = sensitivity;
+    }
+
+    fn get_min_speech_ratio(&self) -> f32 {
+        self.sensitivity.min_speech_ratio()
     }
 }
 
+const FRAME_HISTORY: usize = 10; // Number of frames to consider for decision
+const SPEECH_THRESHOLD: f32 = 0.5;
+const SILENCE_THRESHOLD: f32 = 0.35;
+const SPEECH_FRAME_THRESHOLD: usize = 3; // Minimum number of frames above SPEECH_THRESHOLD to consider as speech
+
 pub struct SileroVad {
     vad: Vad,
+    prob_history: VecDeque<f32>,
+    sensitivity: VadSensitivity,
 }
 
 impl SileroVad {
@@ -53,7 +99,11 @@ impl SileroVad {
             anyhow::anyhow!("Vad creation error: {}", e)
         })?;
         debug!("SileroVad initialized successfully");
-        Ok(Self { vad })
+        Ok(Self {
+            vad,
+            prob_history: VecDeque::with_capacity(FRAME_HISTORY),
+            sensitivity: VadSensitivity::Medium,
+        })
     }
 
     async fn download_model() -> anyhow::Result<PathBuf> {
@@ -70,27 +120,67 @@ impl SileroVad {
 
         Ok(path)
     }
+
+    fn update_status(&mut self, prob: f32) -> VadStatus {
+        self.prob_history.push_back(prob);
+        if self.prob_history.len() > FRAME_HISTORY {
+            self.prob_history.pop_front();
+        }
+
+        let speech_frames = self
+            .prob_history
+            .iter()
+            .filter(|&&p| p > SPEECH_THRESHOLD)
+            .count();
+        let silence_frames = self
+            .prob_history
+            .iter()
+            .filter(|&&p| p < SILENCE_THRESHOLD)
+            .count();
+
+        if speech_frames >= SPEECH_FRAME_THRESHOLD {
+            VadStatus::Speech
+        } else if silence_frames > self.prob_history.len() / 2 {
+            VadStatus::Silence
+        } else {
+            VadStatus::Unknown
+        }
+    }
+
+    fn get_threshold(&self) -> f32 {
+        match self.sensitivity {
+            VadSensitivity::Low => 0.7,
+            VadSensitivity::Medium => 0.5,
+            VadSensitivity::High => 0.3,
+        }
+    }
 }
 
 impl VadEngine for SileroVad {
     fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
         const CHUNK_SIZE: usize = 1600; // 100 milliseconds
 
-        for chunk in audio_chunk.chunks(CHUNK_SIZE) {
-            let mut chunk_data: Vec<f32> = chunk.to_vec();
-            chunk_data.resize(CHUNK_SIZE, 0.0);
+        let threshold = self.get_threshold();
 
-            let mut result = self.vad.compute(&chunk_data).map_err(|e| {
-                debug!("SileroVad Error computing VAD: {}", e);
-                anyhow::anyhow!("Vad compute error: {}", e)
-            })?;
+        let mut chunk_data: Vec<f32> = audio_chunk.to_vec();
+        chunk_data.resize(CHUNK_SIZE, 0.0);
 
-            if result.status() == VadStatus::Speech {
-                return Ok(true);
-            }
-        }
+        let result = self.vad.compute(&chunk_data).map_err(|e| {
+            debug!("SileroVad Error computing VAD: {}", e);
+            anyhow::anyhow!("Vad compute error: {}", e)
+        })?;
 
-        Ok(false)
+        let status = self.update_status(result.prob);
+
+        Ok(status == VadStatus::Speech && result.prob > threshold)
+    }
+
+    fn set_sensitivity(&mut self, sensitivity: VadSensitivity) {
+        self.sensitivity = sensitivity;
+    }
+
+    fn get_min_speech_ratio(&self) -> f32 {
+        self.sensitivity.min_speech_ratio()
     }
 }
 
