@@ -272,17 +272,12 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, fps: value[0] });
   };
 
-  const vadSensitivityOptions = [
-    { value: 0, label: "low" },
-    { value: 1, label: "medium" },
-    { value: 2, label: "high" },
-  ];
 
   const handleVadSensitivityChange = (value: number[]) => {
     const sensitivityMap: { [key: number]: VadSensitivity } = {
-      0: "high",
+      2: "high",
       1: "medium",
-      2: "low",
+      0: "low",
     };
     setLocalSettings({
       ...localSettings,
