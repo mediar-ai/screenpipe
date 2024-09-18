@@ -1,11 +1,10 @@
 // _meta.tsx
 export default {
-    "getting-started": "Getting Started",
-    "architecture": "Architecture Overview",
-    "plugins": "Plugins",
-    "examples": "Examples & Use Cases",
-    "api-reference": "API Reference",
-    "troubleshooting": "Troubleshooting",
-    "contributing": "Contributing",
-    "faq": "FAQ"
+    "getting-started": "getting started",
+    "architecture": "architecture overview",
+    "plugins": "plugins",
+    "examples": "examples & use cases",
+    "api-reference": "api reference",
+    "contributing": "contributing",
+    "faq": "faq"
   };

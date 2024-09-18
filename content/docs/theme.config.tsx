@@ -2,7 +2,7 @@ const themeConfig = {
     logo: (
         <>
             <img src="https://screenpi.pe/1024x1024.png"  alt="Logo" className="w-32 h-auto" width={50}/>
-            <h1 className="text-xl font-bold">Screenpipe</h1>
+            <h1 className="text-xl font-bold">screenpipe</h1>
         </>
     ),
     // Other configurations
@@ -11,7 +11,7 @@ const themeConfig = {
     },
     docsRepositoryBase: 'https://github.com/mediar-ai/screenpipe/', // Documentation repo link
     footer: {
-        text: 'Screenpipe Documentation',
+        text: 'screenpipe docs',
     },
     // Other config options...
 };
