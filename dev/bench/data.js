@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726623034526,
+  "lastUpdate": 1726626121346,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -7259,6 +7259,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2348248583,
             "range": "± 58237659",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "a9df45b9b9376f0f82bd2d907bfa4a385f3f69b2",
+          "message": "fix: pipes not working on windows #336",
+          "timestamp": "2024-09-17T19:10:21-07:00",
+          "tree_id": "85572bbb0e10a3a935dfda401b5870812a352ae1",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/a9df45b9b9376f0f82bd2d907bfa4a385f3f69b2"
+        },
+        "date": 1726626119885,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1974143479,
+            "range": "± 61765690",
             "unit": "ns/iter"
           }
         ]
