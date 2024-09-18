@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726685495063,
+  "lastUpdate": 1726687823470,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -7349,6 +7349,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2269848250,
             "range": "± 425127996",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "fc1f92797b10921f8a6cd1516b6c5bf1bbd656e8",
+          "message": "feat: VAD sensitivity in CLI & app ui settings",
+          "timestamp": "2024-09-18T12:22:19-07:00",
+          "tree_id": "ac4ebea0d1f9e89e89e626b7c93ebf0314ff8d2e",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/fc1f92797b10921f8a6cd1516b6c5bf1bbd656e8"
+        },
+        "date": 1726687822805,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2665424729,
+            "range": "± 286386069",
             "unit": "ns/iter"
           }
         ]
