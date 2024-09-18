@@ -1,6 +1,6 @@
 use std::{
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -425,7 +425,7 @@ enum Task {
     Translate,
 }
 
-use reqwest::blocking::Client;
+use reqwest::Client;
 use serde_json::Value;
 
 // Replace the get_deepgram_api_key function with this:
@@ -433,8 +433,7 @@ fn get_deepgram_api_key() -> String {
     "7ed2a159a094337b01fd8178b914b7ae0e77822d".to_string()
 }
 
-// TODO: this should use async reqwest not blocking, cause crash issue because all our code is async
-fn transcribe_with_deepgram(
+async fn transcribe_with_deepgram(
     api_key: &str,
     audio_data: &[f32],
     device: &str,
@@ -469,10 +468,10 @@ fn transcribe_with_deepgram(
         .body(wav_data)
         .send();
 
-    match response {
+    match response.await {
         Ok(resp) => {
             debug!("received response from deepgram api");
-            match resp.json::<Value>() {
+            match resp.json::<Value>().await {
                 Ok(result) => {
                     debug!("successfully parsed json response");
                     if let Some(err_code) = result.get("err_code") {
@@ -518,7 +517,37 @@ fn transcribe_with_deepgram(
     }
 }
 
-pub fn stt(
+pub fn stt_sync(
+    audio_input: &AudioInput,
+    whisper_model: &WhisperModel,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>, // Changed type here
+    deepgram_api_key: Option<String>,
+    output_path: &PathBuf,
+) -> Result<(String, String)> {
+    let audio_input = audio_input.clone();
+    let whisper_model = whisper_model.clone();
+    let output_path = output_path.clone();
+    let vad_engine = vad_engine.clone(); // Clone the Arc to move into the closure
+
+    let handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut vad_engine_guard = vad_engine.lock().unwrap();
+
+        rt.block_on(stt(
+            &audio_input,
+            &whisper_model,
+            audio_transcription_engine,
+            &mut **vad_engine_guard, // Obtain &mut dyn VadEngine
+            deepgram_api_key,
+            &output_path,
+        ))
+    });
+
+    handle.join().unwrap()
+}
+
+pub async fn stt(
     audio_input: &AudioInput,
     whisper_model: &WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
@@ -648,7 +677,9 @@ pub fn stt(
                 &speech_frames,
                 &audio_input.device.name,
                 audio_input.sample_rate,
-            ) {
+            )
+            .await
+            {
                 Ok(transcription) => Ok(transcription),
                 Err(e) => {
                     error!(
@@ -838,11 +869,11 @@ pub async fn create_whisper_channel(
         UnboundedSender<TranscriptionResult>,
         UnboundedReceiver<TranscriptionResult>,
     ) = unbounded_channel();
-    let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
+    let vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
-        VadEngineEnum::Silero => Box::new(SileroVad::new()?),
+        VadEngineEnum::Silero => Box::new(SileroVad::new().await?),
     };
-
+    let vad_engine = Arc::new(Mutex::new(vad_engine));
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.clone();
@@ -867,7 +898,7 @@ pub async fn create_whisper_channel(
                         #[cfg(target_os = "macos")]
                         {
                             autoreleasepool(|| {
-                                match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path) {
+                                match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
                                     Ok((transcription, path)) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),
@@ -893,7 +924,7 @@ pub async fn create_whisper_channel(
                             unreachable!("This code should not be reached on non-macOS platforms")
                         }
                     } else {
-                        match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path) {
+                        match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
                             Ok((transcription, path)) => TranscriptionResult {
                                 input: input.clone(),
                                 transcription: Some(transcription),
