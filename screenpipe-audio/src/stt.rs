@@ -433,7 +433,7 @@ fn get_deepgram_api_key() -> String {
     "7ed2a159a094337b01fd8178b914b7ae0e77822d".to_string()
 }
 
-fn transcribe_with_deepgram(
+async fn transcribe_with_deepgram(
     api_key: &str,
     audio_data: &[f32],
     device: &str,
@@ -677,7 +677,9 @@ pub async fn stt(
                 &speech_frames,
                 &audio_input.device.name,
                 audio_input.sample_rate,
-            ) {
+            )
+            .await
+            {
                 Ok(transcription) => Ok(transcription),
                 Err(e) => {
                     error!(
