@@ -1,0 +1,143 @@
+import MotionDiv from '../motionDiv';
+
+# Plugins
+
+<MotionDiv>
+  Plugins are an essential part of Screenpipe, providing powerful extensibility through custom workflows that interact with captured screen and audio data. Whether you need to tag activities, generate summaries, or send data to third-party services, plugins allow you to tailor Screenpipe to your specific needs.
+
+Plugins in screenpipe are categorized into 2 types:
+
+- **Pipes**: These are plugins with native integration with screenpipe. They can run within the CLI/lib/app without the need for manual execution.
+- **Standalone Scripts**: These are independent scripts that need to be run separately and may require additional setup.
+</MotionDiv>
+---
+# 1. Pipes
+## Overview of Pipes
+
+<MotionDiv delay={0.3}>
+  Pipes in Screenpipe are plugins designed to process data captured from your screen and audio feeds. They automate workflows such as tagging, summarizing, and integrating data with external platforms like Notion, Salesforce, or Slack.
+
+  **Pipe Workflow Examples**:
+  - **Pipe Example**: screenpipe | AI tag | Notion update
+  - **Pipe Example**: screenpipe | AI tag | Slack report
+  - **Pipe Example**: screenpipe | Log daily activities
+
+  **Key Features of Pipes**:
+  - **Custom Workflows**: Automate repetitive tasks such as tagging screen activity or summarizing audio transcriptions.
+  - **Real-Time Processing**: Pipes can process captured data in real-time.
+  - **Integration Capabilities**: Extend the functionality by sending processed data to third-party apps.
+
+  **Example Use Cases**:
+  - **AI Activity Tagging**: Automatically tag screen or audio activities based on AI models.
+  - **Meeting Summaries**: Generate summaries of meeting discussions using combined screen and audio data.
+  - **CRM Integration**: Automatically log interactions or captured data into a CRM like Salesforce.
+
+  **Running a Pipe**:
+  - Run local server
+  ```bash
+  ollama run mistral-nemo
+  ```
+  - Download the pipe (can be github or your local machine as well)
+  ```bash
+  curl -X POST "http://localhost:3030/pipes/download"      -H "Content-Type: application/json"      -d '{"url": "$(pwd)/examples/typescript/pipe-security-check"}'
+  ```
+  - Enable the pipe for use
+  ```bash
+  curl -X POST "http://localhost:3030/pipes/enable"      -H "Content-Type: application/json"      -d '{"pipe_id": "pipe-security-check"}'
+  ```
+</MotionDiv>
+
+---
+
+## Available Pipes
+
+<MotionDiv delay={0.5}>
+  Screenpipe provides a variety of pipes and standalone scripts that allow users to extend the platform’s functionality with minimal effort. Below is a table summarizing the available examples:
+
+| **Example**                          | **Description**                                  | **Link**                          |
+| ------------------------------------ | ------------------------------------------------ | --------------------------------- |
+| **Pipe Tagging Activity**            | Automatically tag activities using AI            | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity)                         |
+| **Pipe Stream OCR Text**             | Stream OCR text from screen data                 | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text)                         |
+| **Pipe Activity Topic Tracker**      | Track and summarize activities                   | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-activity-topic-tracker)                         |
+| **Pipe Engineering Team Logs**       | View daily work logs                             | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
+| **Pipe Security Check**              | Notify user if detected any suspicious activity  | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-security-check)                         |
+| **Pipe Sync Meetings To Notion**     | Sync meeting transcriptions & summaries to Notion | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-sync-meetings-to-notion)                        |
+| **Pipe Focus Notification Buddy**     | Help you stay focused                            | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-focus-notification-buddy)                         |
+
+</MotionDiv>
+
+---
+
+## Developing Pipes in Screenpipe
+<MotionDiv delay={0.7}>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/iCqHgZgQHyA?si=KJs4t94dQex48XKy" title="YouTube video player" frameborder="0" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; web-share" allowfullscreen></iframe>
+
+Screenpipe’s plugin system, referred to as the **Pipe Store**, allows you to create customized pipes that automate workflows. These pipes can process, annotate, analyze, summarize, or integrate your screen and audio data with other tools.
+
+Users can begin by cloning an existing pipe, such as [Pipe Stream OCR Text](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text). You can use any JavaScript/TypeScript modules to build your use case, from simple to highly advanced. The primary requirement is that the pipe folder must contain a file named `pipe.js`, `pipe.ts`, `main.js`, or `main.ts`. You can also export the final built file as `main.js` or `pipe.js`.
+
+Once the pipe is ready, follow these steps to make it work with `screenpipe`:
+
+- **Download the pipe** (from local or GitHub URL):
+  ```bash
+  curl -X POST "http://localhost:3030/pipes/download" \
+       -H "Content-Type: application/json" \
+       -d '{"url": "$(pwd)/examples/typescript/pipe-security-check"}'
+  ```
+
+- **Enable the pipe** (enabling will activate the pipe, similar to installing it in Screenpipe):
+  ```bash
+  curl -X POST "http://localhost:3030/pipes/enable" \
+       -H "Content-Type: application/json" \
+       -d '{"pipe_id": "pipe-security-check"}'
+  ```
+
+This setup enables the creation of countless workflows tailored to specific needs, automating tedious or complex tasks.
+
+</MotionDiv>
+
+---
+## Getting Featured in the Pipe Store
+
+<MotionDiv delay={1.1}>
+  Want to share your custom pipes? You can submit them to the **Pipe Store**, where they can be shared or monetized. Get in touch with **@louis030195** or submit your pipe through a pull request.
+
+<img src="https://private-user-images.githubusercontent.com/25003283/361864347-b6856bf4-2cfd-4888-be11-ee7baae6b84b.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MjY2OTMwNTksIm5iZiI6MTcyNjY5Mjc1OSwicGF0aCI6Ii8yNTAwMzI4My8zNjE4NjQzNDctYjY4NTZiZjQtMmNmZC00ODg4LWJlMTEtZWU3YmFhZTZiODRiLnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDA5MTglMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQwOTE4VDIwNTIzOVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTJhZDgyYTczNTJmNzIzNDIyYWY1ZGIxMmVmMTg0NzFiYTQyYWMzZmZjMmNkNGI2ZmZjYzY3NGEzOTQzZjcxNGQmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JmFjdG9yX2lkPTAma2V5X2lkPTAmcmVwb19pZD0wIn0.05bOJjtdu8snpVsCgKM5bAOOr8SipV8MnlmzRbEdXuE" />
+</MotionDiv>
+
+---
+# Standalone Scripts
+<MotionDiv delay={1.5}>
+Screenpipe provides a variety of **Standalone Scripts** that help automate and extend functionality for users who prefer to run scripts separately from the core app. These scripts offer flexibility in how users can interact with their captured data without needing to modify or install pipes within the core system.
+
+## Available Standalone Scripts
+  Screenpipe provides a variety of pipes and standalone scripts that allow users to extend the platform’s functionality with minimal effort. Below is a table summarizing the available examples:
+
+| **Example**                         | **Description**                                 | **Link**                         |
+| ------------------------------------ | ------------------------------------------------ | --------------------------------- |
+| **Daily Log**                        | Daily activity logger using screenpipe           | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/daily-log)                         |
+| **Daily Tracker**                    | AI-powered daily activity tracker                | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/daily-tracker)                         |
+| **RAG in Obsidian**                  | RAG for personal knowledge management            | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/rag-over-your-life-in-obsidian)                         |
+| **Meeting Summaries in Obsidian**    | Automated meeting summary generation             | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/meeting-summaries-in-obsidian)                         |
+| **Apple Shortcut**                   | Integration with Apple Shortcuts                 | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/apple-shortcut)                         |
+| **Agent Multi-Turn RAG**             | Multi-turn Retrieval-Augmented Generation agent  | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/agent-multi-turn-rag)                         |
+| **Vercel AI Chatbot**                | AI-powered chatbot using Vercel AI SDK           | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/vercel-ai-chatbot)                         |
+| **Perplexity RAG Agent**             | RAG agent with user confirmation, inspired by Perplexity | [Link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/perplexity-alike-asking-confirmation-rag-agent)                  |
+</MotionDiv>
+
+---
+<MotionDiv delay={1.8}>
+## How to Use Standalone Scripts
+
+To get started with these standalone scripts:
+
+1. Navigate to the folder for the script you want to use.
+2. Install the dependencies using `pnpm install` or `npm install`.
+3. Set up any environment variables as required (refer to each script’s documentation).
+4. Run the script using the commands provided in the documentation.
+
+## Contributing to Pipes & Standalone Scripts
+
+If you have ideas for improving or adding new standalone scripts, feel free to contribute! Open a pull request on GitHub or contact the Screenpipe team to share your thoughts.
+
+</MotionDiv>
