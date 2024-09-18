@@ -1,6 +1,6 @@
 use std::{
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -516,6 +516,36 @@ async fn transcribe_with_deepgram(
     }
 }
 
+pub fn stt_sync(
+    audio_input: &AudioInput,
+    whisper_model: &WhisperModel,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>, // Changed type here
+    deepgram_api_key: Option<String>,
+    output_path: &PathBuf,
+) -> Result<(String, String)> {
+    let audio_input = audio_input.clone();
+    let whisper_model = whisper_model.clone();
+    let output_path = output_path.clone();
+    let vad_engine = vad_engine.clone(); // Clone the Arc to move into the closure
+
+    let handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut vad_engine_guard = vad_engine.lock().unwrap();
+
+        rt.block_on(stt(
+            &audio_input,
+            &whisper_model,
+            audio_transcription_engine,
+            &mut **vad_engine_guard, // Obtain &mut dyn VadEngine
+            deepgram_api_key,
+            &output_path,
+        ))
+    });
+
+    handle.join().unwrap()
+}
+
 pub async fn stt(
     audio_input: &AudioInput,
     whisper_model: &WhisperModel,
@@ -798,11 +828,11 @@ pub async fn create_whisper_channel(
         UnboundedSender<TranscriptionResult>,
         UnboundedReceiver<TranscriptionResult>,
     ) = unbounded_channel();
-    let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
+    let vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
         VadEngineEnum::Silero => Box::new(SileroVad::new().await?),
     };
-
+    let vad_engine = Arc::new(Mutex::new(vad_engine));
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.clone();
@@ -826,8 +856,8 @@ pub async fn create_whisper_channel(
                     let transcription_result = if cfg!(target_os = "macos") {
                         #[cfg(target_os = "macos")]
                         {
-                            autoreleasepool(|| async {
-                                match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path).await {
+                            autoreleasepool(|| {
+                                match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
                                     Ok((transcription, path)) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),
@@ -846,14 +876,14 @@ pub async fn create_whisper_channel(
                                         }
                                     },
                                 }
-                            }).await
+                            })
                         }
                         #[cfg(not(target_os = "macos"))]
                         {
                             unreachable!("This code should not be reached on non-macOS platforms")
                         }
                     } else {
-                        match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path).await {
+                        match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
                             Ok((transcription, path)) => TranscriptionResult {
                                 input: input.clone(),
                                 transcription: Some(transcription),
