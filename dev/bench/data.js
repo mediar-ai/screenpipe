@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726700860846,
+  "lastUpdate": 1726701276077,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -7469,6 +7469,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1973373646,
             "range": "± 65788762",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05e6e4074b9f27cdb7e33c411fd6f83d57b6c043",
+          "message": "Merge pull request #331 from bhupesh-sf/main\n\nAdded docs website using nextra",
+          "timestamp": "2024-09-18T16:03:39-07:00",
+          "tree_id": "2a2c2fb40fbe36eb7632177b58643867d5a8761a",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/05e6e4074b9f27cdb7e33c411fd6f83d57b6c043"
+        },
+        "date": 1726701275288,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1967049166,
+            "range": "± 65597238",
             "unit": "ns/iter"
           }
         ]
