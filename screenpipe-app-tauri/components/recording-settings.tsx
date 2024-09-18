@@ -83,9 +83,7 @@ export function RecordingSettings({
   const [isUpdating, setIsUpdating] = useState(false);
   const { health } = useHealthCheck();
   const isDisabled = health?.status_code === 500;
-  console.log("localSettings", localSettings);
-  console.log("settings", settings);
-  console.log("availableMonitors", availableMonitors);
+
   useEffect(() => {
     const loadDevices = async () => {
       try {

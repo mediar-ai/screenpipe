@@ -63,10 +63,10 @@ export default function Home() {
         </div>
       ) : settings.aiUrl ? (
         <>
-          <h1 className="text-2xl font-bold mb-8 text-center mb-12">
-            where pixels become magic
-          </h1>
-          <SearchChat />
+          
+          <div className="h-[calc(100vh-200px)]">
+            <SearchChat />
+          </div>
         </>
       ) : (
         // <Tabs
