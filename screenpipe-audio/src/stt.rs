@@ -437,6 +437,7 @@ async fn transcribe_with_deepgram(
     api_key: &str,
     audio_data: &[f32],
     device: &str,
+    sample_rate: u32,
 ) -> Result<String> {
     debug!("starting deepgram transcription");
     let client = Client::new();
