@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726622220393,
+  "lastUpdate": 1726623034526,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -7229,6 +7229,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 3389116979,
             "range": "± 266326978",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "aedf2e2ee4243ab5e5cad56319cf35e066389480",
+          "message": "fix: windows slashes video render #319",
+          "timestamp": "2024-09-17T18:19:38-07:00",
+          "tree_id": "e4575e4162d2c7696b193c803e280eac5016004b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/aedf2e2ee4243ab5e5cad56319cf35e066389480"
+        },
+        "date": 1726623033058,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2348248583,
+            "range": "± 58237659",
             "unit": "ns/iter"
           }
         ]
