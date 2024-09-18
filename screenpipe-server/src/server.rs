@@ -45,6 +45,8 @@ pub struct AppState {
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
+    pub vision_disabled: bool,
+    pub audio_disabled: bool,
 }
 
 // Update the SearchQuery struct
@@ -467,12 +469,12 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let (last_frame, last_audio) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio)) => (frame, audio),
         Err(e) => {
-            error!("Failed to get latest timestamps: {}", e);
+            error!("failed to get latest timestamps: {}", e);
             (None, None)
         }
     };
-    debug!("Last frame timestamp: {:?}", last_frame);
-    debug!("Last audio timestamp: {:?}", last_audio);
+    debug!("last frame timestamp: {:?}", last_frame);
+    debug!("last audio timestamp: {:?}", last_audio);
 
     let now = Utc::now();
     let threshold = Duration::from_secs(60);
@@ -483,55 +485,73 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     if time_since_start < chrono::Duration::from_std(loading_threshold).unwrap() {
         return JsonResponse(HealthCheckResponse {
-            status: "Loading".to_string(),
+            status: "loading".to_string(),
             last_frame_timestamp: last_frame,
             last_audio_timestamp: last_audio,
-            frame_status: "Loading".to_string(),
-            audio_status: "Loading".to_string(),
-            message: "The application is still initializing. Please wait...".to_string(),
+            frame_status: "loading".to_string(),
+            audio_status: "loading".to_string(),
+            message: "the application is still initializing. please wait...".to_string(),
             verbose_instructions: None,
         });
     }
 
-    let frame_status = match last_frame {
-        Some(timestamp)
-            if now.signed_duration_since(timestamp)
-                < chrono::Duration::from_std(threshold).unwrap() =>
-        {
-            "OK"
+    let frame_status = if state.vision_disabled {
+        "disabled"
+    } else {
+        match last_frame {
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "ok"
+            }
+            Some(_) => "stale",
+            None => "no data",
         }
-        Some(_) => "Stale",
-        None => "No data",
     };
 
-    let audio_status = match last_audio {
-        Some(timestamp)
-            if now.signed_duration_since(timestamp)
-                < chrono::Duration::from_std(threshold).unwrap() =>
-        {
-            "OK"
+    let audio_status = if state.audio_disabled {
+        "disabled"
+    } else {
+        match last_audio {
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "ok"
+            }
+            Some(_) => "stale",
+            None => "no data",
         }
-        Some(_) => "Stale",
-        None => "No data",
     };
 
-    let (overall_status, message, verbose_instructions) = if frame_status == "OK"
-        && audio_status == "OK"
+    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
+        || frame_status == "disabled")
+        && (audio_status == "ok" || audio_status == "disabled")
     {
         (
-            "Healthy",
-            "All systems are functioning normally.".to_string(),
+            "healthy",
+            "all systems are functioning normally.".to_string(),
             None,
         )
     } else {
+        let mut unhealthy_systems = Vec::new();
+        if frame_status != "ok" && frame_status != "disabled" {
+            unhealthy_systems.push("vision");
+        }
+        if audio_status != "ok" && audio_status != "disabled" {
+            unhealthy_systems.push("audio");
+        }
+
         (
-            "Unhealthy",
-            format!("Some systems are not functioning properly. Frame status: {}, Audio status: {}", frame_status, audio_status),
-            Some("If you're experiencing issues, please try the following steps:\n\
-                  1. Restart the application.\n\
-                  2. If using a desktop app, reset your Screenpipe OS audio/screen recording permissions.\n\
-                  3. If the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
-                  4. Last, here are some FAQ to help you troubleshoot: https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md".to_string())
+            "unhealthy",
+            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}", 
+                    unhealthy_systems.join(", "), frame_status, audio_status),
+            Some("if you're experiencing issues, please try the following steps:\n\
+                  1. restart the application.\n\
+                  2. if using a desktop app, reset your screenpipe os audio/screen recording permissions.\n\
+                  3. if the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
+                  4. last, here are some faq to help you troubleshoot: https://github.com/mediar-ai/screenpipe/blob/main/content/docs/notes.md".to_string())
         )
     };
 
@@ -688,6 +708,8 @@ pub struct Server {
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
+    vision_disabled: bool,
+    audio_disabled: bool,
 }
 
 impl Server {
@@ -698,6 +720,8 @@ impl Server {
         audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
+        vision_disabled: bool,
+        audio_disabled: bool,
     ) -> Self {
         Server {
             db,
@@ -706,6 +730,8 @@ impl Server {
             audio_devices_control,
             screenpipe_dir,
             pipe_manager,
+            vision_disabled,
+            audio_disabled,
         }
     }
 
@@ -717,7 +743,6 @@ impl Server {
     where
         F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
     {
-        // TODO could init w audio devices
         let app_state = Arc::new(AppState {
             db: self.db,
             vision_control: self.vision_control,
@@ -726,14 +751,14 @@ impl Server {
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
+            vision_disabled: self.vision_disabled,
+            audio_disabled: self.audio_disabled,
         });
 
-        // https://github.com/tokio-rs/console
         let app = create_router()
             .layer(ApiPluginLayer::new(api_plugin))
             .layer(CorsLayer::permissive())
             .layer(
-                // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs
                 TraceLayer::new_for_http()
                     .make_span_with(DefaultMakeSpan::new().include_headers(true)),
             )
@@ -784,7 +809,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
         .route("/pipes/list", get(list_pipes_handler))
         .route("/pipes/download", post(download_pipe_handler))
-        .route("/pipes/enable", post(run_pipe_handler)) // TODO ?
+        .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))

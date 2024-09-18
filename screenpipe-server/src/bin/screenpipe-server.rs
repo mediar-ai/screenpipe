@@ -360,6 +360,8 @@ async fn main() -> anyhow::Result<()> {
         audio_devices_control_server,
         local_data_dir_clone_2,
         pipe_manager.clone(),
+        cli.disable_vision,
+        cli.disable_audio,
     );
 
     let mut pipe_futures = FuturesUnordered::new();

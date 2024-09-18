@@ -11,7 +11,7 @@ use tauri_plugin_store::{with_store, StoreCollection};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-
+use tauri::Emitter;
 #[tauri::command]
 pub async fn kill_all_sreenpipes(
     state: State<'_, SidecarState>,
@@ -298,18 +298,23 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         return Err(e.to_string());
     }
 
-    #[allow(unused_mut, unused_variables)]
     let (mut rx, child) = result.unwrap();
+    let app_handle = app.app_handle().clone();
 
     tauri::async_runtime::spawn(async move {
-        #[allow(unused_variables)]
-        let mut i = 0;
         while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stdout(line) = event {
-                print!("{}", String::from_utf8(line).unwrap());
-                i += 1;
-            } else if let CommandEvent::Stderr(line) = event {
-                error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
+            match event {
+                CommandEvent::Stdout(line) => {
+                    let log_line = String::from_utf8(line).unwrap();
+                    print!("{}", log_line);
+                    app_handle.emit("sidecar_log", log_line).unwrap();
+                }
+                CommandEvent::Stderr(line) => {
+                    let log_line = String::from_utf8(line).unwrap();
+                    error!("Sidecar stderr: {}", log_line);
+                    app_handle.emit("sidecar_log", format!("ERROR: {}", log_line)).unwrap();
+                }
+                _ => {}
             }
         }
     });

@@ -26,9 +26,15 @@ import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { DevSettings } from "./dev-dialog";
-import { Lock, Folder } from "lucide-react";
+import { Lock, Folder, FileText } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { homeDir } from "@tauri-apps/api/path";
+import LogViewer from "./log-viewer-v2";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const getDebuggingCommands = (os: string | null) => {
   let cliInstructions = "";
@@ -218,10 +224,7 @@ const DevModeSettings = () => {
           </Card>
 
           <div className="relative">
-            <Badge
-              variant="secondary"
-              className="text-xs absolute -top-3 left-1/2 transform -translate-x-1/2 z-10"
-            >
+            <Badge className="text-xs absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
               expert only
             </Badge>
             <Card className="p-4">
@@ -333,6 +336,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const { health } = useHealthCheck();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMac, setIsMac] = useState(false);
+  const { settings } = useSettings();
+  const [isLogOpen, setIsLogOpen] = useState(false);
 
   useEffect(() => {
     setIsMac(platform() === "macos");
@@ -379,25 +384,81 @@ const HealthStatus = ({ className }: { className?: string }) => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Healthy":
-        return "bg-green-500";
-      case "Loading":
-        return "bg-yellow-500";
-      case "Unhealthy":
-      case "Error":
-        return "bg-red-500";
-      default:
-        return "bg-red-500";
+  const handleOpenLogFile = async () => {
+    try {
+      const homeDirPath = await homeDir();
+      const logPath =
+        platform() === "windows"
+          ? `${homeDirPath}\\.screenpipe\\screenpipe.log`
+          : `${homeDirPath}/.screenpipe/screenpipe.log`;
+      await open(logPath);
+    } catch (error) {
+      console.error("failed to open log file:", error);
+      toast({
+        title: "error",
+        description: "failed to open log file.",
+        variant: "destructive",
+        duration: 3000,
+      });
     }
+  };
+
+  const getStatusColor = (
+    status: string,
+    frameStatus: string,
+    audioStatus: string,
+    audioDisabled: boolean
+  ) => {
+    if (status === "loading") return "bg-yellow-500";
+
+    const isVisionOk = frameStatus === "ok" || frameStatus === "disabled";
+    const isAudioOk =
+      audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
+
+    if (isVisionOk && isAudioOk) return "bg-green-500";
+    return "bg-red-500";
   };
 
   if (!health) return null;
 
   const formatTimestamp = (timestamp: string | null) => {
-    return timestamp ? new Date(timestamp).toLocaleString() : "N/A";
+    return timestamp ? new Date(timestamp).toLocaleString() : "n/a";
   };
+
+  const getStatusMessage = (
+    status: string,
+    frameStatus: string,
+    audioStatus: string,
+    audioDisabled: boolean
+  ) => {
+    if (status === "loading")
+      return "the application is still initializing. please wait...";
+
+    let unhealthySystems = [];
+    if (frameStatus !== "ok" && frameStatus !== "disabled")
+      unhealthySystems.push("vision");
+    if (!audioDisabled && audioStatus !== "ok" && audioStatus !== "disabled")
+      unhealthySystems.push("audio");
+
+    if (unhealthySystems.length === 0)
+      return "all systems are functioning normally";
+    return `some systems are not functioning properly: ${unhealthySystems.join(
+      ", "
+    )}`;
+  };
+
+  const statusColor = getStatusColor(
+    health.status,
+    health.frame_status,
+    health.audio_status,
+    settings.disableAudio
+  );
+  const statusMessage = getStatusMessage(
+    health.status,
+    health.frame_status,
+    health.audio_status,
+    settings.disableAudio
+  );
 
   return (
     <>
@@ -408,12 +469,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
       >
         status{" "}
         <span
-          className={`ml-1 w-2 h-2 rounded-full ${getStatusColor(
-            health.status
-          )} inline-block ${
-            health.status === "Unhealthy" || health.status === "Error"
-              ? "animate-pulse"
-              : ""
+          className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
+            statusColor === "bg-red-500" ? "animate-pulse" : ""
           }`}
         />
       </Badge>
@@ -423,11 +480,10 @@ const HealthStatus = ({ className }: { className?: string }) => {
           aria-describedby="status-dialog-description"
         >
           <DialogHeader className="flex flex-row items-center justify-between">
-            <DialogTitle>{health.status.toLowerCase()} status</DialogTitle>
+            <DialogTitle>{health.status} status</DialogTitle>
 
             <Button
               variant="outline"
-              size="sm"
               onClick={handleOpenDataDir}
               className="flex-shrink-0"
             >
@@ -437,22 +493,23 @@ const HealthStatus = ({ className }: { className?: string }) => {
           </DialogHeader>
           <div className="flex-grow overflow-auto">
             <p className="text-sm mb-2">
-              {health.message.toLowerCase()}{" "}
-              {health.status === "Loading" && (
+              {statusMessage}
+              {health.status === "loading" && (
                 <span className="ml-1 text-xs">(up to 3m)</span>
               )}
             </p>
+            <p className="text-xs mb-1">frame: {health.frame_status}</p>
             <p className="text-xs mb-1">
-              frame: {health.frame_status.toLowerCase()}
-            </p>
-            <p className="text-xs mb-1">
-              audio: {health.audio_status.toLowerCase()}
+              audio: {settings.disableAudio ? "disabled" : health.audio_status}
             </p>
             <p className="text-xs mb-1">
               last frame: {formatTimestamp(health.last_frame_timestamp)}
             </p>
             <p className="text-xs mb-1">
-              last audio: {formatTimestamp(health.last_audio_timestamp)}
+              last audio:{" "}
+              {settings.disableAudio
+                ? "n/a"
+                : formatTimestamp(health.last_audio_timestamp)}
             </p>
             <div className="text-xs mt-2 relative">
               <p className="font-bold mb-1">troubleshooting instructions:</p>
@@ -470,7 +527,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       <TooltipTrigger asChild>
                         <Button
                           variant="outline"
-                          size="sm"
                           onClick={handleResetScreenPermissions}
                           className="flex-shrink-0"
                         >
@@ -488,6 +544,39 @@ const HealthStatus = ({ className }: { className?: string }) => {
             </div>
             <Separator className="my-4" />
             <DevModeSettings />
+
+            <Collapsible
+              open={isLogOpen}
+              onOpenChange={setIsLogOpen}
+              className="w-full mt-4"
+            >
+              <div className="flex items-center justify-between w-full">
+                <CollapsibleTrigger className="flex items-center justify-between p-2 flex-grow border-b border-gray-200">
+                  recorder logs
+                  <span>{isLogOpen ? "▲" : "▼"}</span>
+                </CollapsibleTrigger>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleOpenLogFile}
+                        className="ml-2"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>open log file</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <CollapsibleContent>
+                <LogViewer className="mt-2" />
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </DialogContent>
       </Dialog>
