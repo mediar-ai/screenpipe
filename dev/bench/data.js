@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726626121346,
+  "lastUpdate": 1726681656492,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -7289,6 +7289,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1974143479,
             "range": "± 61765690",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "68e6c9431592a062c5cc4f13787c0fbc9a53ce8b",
+          "message": "Merge pull request #330 from kerosina/patch-fix-tokio-errors\n\nRemove all references to blocking reqwest, replacing with async reqwest",
+          "timestamp": "2024-09-18T10:37:43-07:00",
+          "tree_id": "ced934b6db1740b47e0567a7408c92c7991c8ee4",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/68e6c9431592a062c5cc4f13787c0fbc9a53ce8b"
+        },
+        "date": 1726681654984,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2096389291,
+            "range": "± 120931328",
             "unit": "ns/iter"
           }
         ]
