@@ -11,6 +11,8 @@ mod server;
 mod video;
 mod video_db;
 mod video_utils;
+mod auto_destruct;
+pub use auto_destruct::watch_pid;
 pub use cli::Cli;
 pub use core::start_continuous_recording;
 pub use db::{ContentSource, ContentType, DatabaseManager, SearchResult};

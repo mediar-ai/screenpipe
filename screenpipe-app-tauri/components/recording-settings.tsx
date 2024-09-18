@@ -28,7 +28,11 @@ import {
   CommandItem,
 } from "./ui/command";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings, useSettings } from "@/lib/hooks/use-settings";
+import {
+  Settings,
+  useSettings,
+  VadSensitivity,
+} from "@/lib/hooks/use-settings";
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { invoke } from "@tauri-apps/api/core";
@@ -41,6 +45,7 @@ import {
 } from "./ui/tooltip";
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
+import { Slider } from "./ui/slider";
 
 interface AudioDevice {
   name: string;
@@ -164,6 +169,8 @@ export function RecordingSettings({
         ignoredWindows: localSettings.ignoredWindows,
         includedWindows: localSettings.includedWindows,
         deepgramApiKey: localSettings.deepgramApiKey,
+        fps: localSettings.fps,
+        vadSensitivity: localSettings.vadSensitivity,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -261,16 +268,44 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, disableAudio: checked });
   };
 
+  const handleFpsChange = (value: number[]) => {
+    setLocalSettings({ ...localSettings, fps: value[0] });
+  };
+
+
+  const handleVadSensitivityChange = (value: number[]) => {
+    const sensitivityMap: { [key: number]: VadSensitivity } = {
+      2: "high",
+      1: "medium",
+      0: "low",
+    };
+    setLocalSettings({
+      ...localSettings,
+      vadSensitivity: sensitivityMap[value[0]],
+    });
+  };
+
+  const vadSensitivityToNumber = (sensitivity: VadSensitivity): number => {
+    const sensitivityMap: { [key in VadSensitivity]: number } = {
+      high: 2,
+      medium: 1,
+      low: 0,
+    };
+    return sensitivityMap[sensitivity];
+  };
+
   return (
     <>
       <div className="relative">
-        {!isUpdating && isDisabled && (
+        {settings.devMode || (!isUpdating && isDisabled) ? (
           <Card className="p-16 shadow-lg w-fit absolute bottom-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 text-center font-bold text-xl mb-4 ">
             <CardTitle>
               make sure to turn off dev mode and start screenpipe recorder first
               (go to status)
             </CardTitle>
           </Card>
+        ) : (
+          <></>
         )}
         <Card className={cn(isDisabled && "opacity-50 pointer-events-none")}>
           <CardHeader>
@@ -495,7 +530,7 @@ export function RecordingSettings({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4" />
+                        <HelpCircle className="h-4 w-4 cursor-default" />
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>
@@ -523,7 +558,7 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4" />
+                      <HelpCircle className="h-4 w-4 cursor-default" />
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
@@ -564,7 +599,7 @@ export function RecordingSettings({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4" />
+                        <HelpCircle className="h-4 w-4 cursor-default" />
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>
@@ -587,7 +622,7 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4" />
+                      <HelpCircle className="h-4 w-4 cursor-default" />
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
@@ -652,7 +687,7 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4" />
+                      <HelpCircle className="h-4 w-4 cursor-default" />
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
@@ -705,6 +740,92 @@ export function RecordingSettings({
                 >
                   add
                 </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label htmlFor="fps" className="flex items-center space-x-2">
+                <span>frames per second (fps)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        adjust the recording frame rate. lower values save
+                        <br />
+                        resources, higher values provide smoother recordings,
+                        less likely to miss activity.
+                        <br />
+                        (we do not use resources if your screen does not change
+                        much)
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="fps"
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                  value={[localSettings.fps]}
+                  onValueChange={handleFpsChange}
+                  className="flex-grow"
+                />
+                <span className="w-12 text-right">
+                  {localSettings.fps.toFixed(1)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="vadSensitivity"
+                className="flex items-center space-x-2"
+              >
+                <span>vad sensitivity</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        adjust the voice activity detection sensitivity.
+                        <br />
+                        low: more sensitive, catches most speech but may have
+                        more false positives.
+                        <br />
+                        medium: balanced sensitivity.
+                        <br />
+                        high (recommended): less sensitive, may miss some speech
+                        but reduces false positives.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="vadSensitivity"
+                  min={0}
+                  max={2}
+                  step={1}
+                  value={[vadSensitivityToNumber(localSettings.vadSensitivity)]}
+                  onValueChange={handleVadSensitivityChange}
+                  className="flex-grow"
+                />
+                <span className="w-16 text-right">
+                  {localSettings.vadSensitivity}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>low</span>
+                <span>medium</span>
+                <span>high</span>
               </div>
             </div>
 

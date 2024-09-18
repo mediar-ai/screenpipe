@@ -1,6 +1,6 @@
 use std::{
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -23,8 +23,8 @@ use rubato::{
 
 use crate::{
     encode_single_audio, multilingual,
-    vad_engine::{SileroVad, VadEngine, VadEngineEnum, WebRtcVad},
-    AudioTranscriptionEngine,
+    vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
+    AudioDevice, AudioTranscriptionEngine,
 };
 
 use hound::{WavSpec, WavWriter};
@@ -425,7 +425,7 @@ enum Task {
     Translate,
 }
 
-use reqwest::blocking::Client;
+use reqwest::Client;
 use serde_json::Value;
 
 // Replace the get_deepgram_api_key function with this:
@@ -433,8 +433,12 @@ fn get_deepgram_api_key() -> String {
     "7ed2a159a094337b01fd8178b914b7ae0e77822d".to_string()
 }
 
-// TODO: this should use async reqwest not blocking, cause crash issue because all our code is async
-fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32], device: &str) -> Result<String> {
+async fn transcribe_with_deepgram(
+    api_key: &str,
+    audio_data: &[f32],
+    device: &str,
+    sample_rate: u32,
+) -> Result<String> {
     debug!("starting deepgram transcription");
     let client = Client::new();
 
@@ -443,7 +447,7 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32], device: &str) -> 
     {
         let spec = WavSpec {
             channels: 1,
-            sample_rate: 32000,
+            sample_rate: sample_rate / 3, // for some reason 96khz device need 32 and 48khz need 16 (be mindful resampling)
             bits_per_sample: 32,
             sample_format: hound::SampleFormat::Float,
         };
@@ -464,10 +468,10 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32], device: &str) -> 
         .body(wav_data)
         .send();
 
-    match response {
+    match response.await {
         Ok(resp) => {
             debug!("received response from deepgram api");
-            match resp.json::<Value>() {
+            match resp.json::<Value>().await {
                 Ok(result) => {
                     debug!("successfully parsed json response");
                     if let Some(err_code) = result.get("err_code") {
@@ -513,7 +517,37 @@ fn transcribe_with_deepgram(api_key: &str, audio_data: &[f32], device: &str) -> 
     }
 }
 
-pub fn stt(
+pub fn stt_sync(
+    audio_input: &AudioInput,
+    whisper_model: &WhisperModel,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>, // Changed type here
+    deepgram_api_key: Option<String>,
+    output_path: &PathBuf,
+) -> Result<(String, String)> {
+    let audio_input = audio_input.clone();
+    let whisper_model = whisper_model.clone();
+    let output_path = output_path.clone();
+    let vad_engine = vad_engine.clone(); // Clone the Arc to move into the closure
+
+    let handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut vad_engine_guard = vad_engine.lock().unwrap();
+
+        rt.block_on(stt(
+            &audio_input,
+            &whisper_model,
+            audio_transcription_engine,
+            &mut **vad_engine_guard, // Obtain &mut dyn VadEngine
+            deepgram_api_key,
+            &output_path,
+        ))
+    });
+
+    handle.join().unwrap()
+}
+
+pub async fn stt(
     audio_input: &AudioInput,
     whisper_model: &WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
@@ -545,48 +579,50 @@ pub fn stt(
         audio_data = resample(audio_data, audio_input.sample_rate, m::SAMPLE_RATE as u32)?;
     }
 
-    // Filter out non-speech segments using Silero VAD
-    debug!(
-        "device: {}, filtering out non-speech segments with VAD",
-        audio_input.device
-    );
-    let frame_size = 160; // 10ms frame size for 16kHz audio
+    let frame_size = 1600; // 100ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
-    for (frame_index, chunk) in audio_data.chunks(frame_size).enumerate() {
+    let mut total_frames = 0;
+    let mut speech_frame_count = 0;
+
+    for chunk in audio_data.chunks(frame_size) {
+        total_frames += 1;
         match vad_engine.is_voice_segment(chunk) {
             Ok(is_voice) => {
                 if is_voice {
                     speech_frames.extend_from_slice(chunk);
+                    speech_frame_count += 1;
                 }
             }
             Err(e) => {
-                debug!("VAD failed for frame {}: {:?}", frame_index, e);
+                debug!("VAD failed for chunk: {:?}", e);
             }
         }
     }
 
+    let speech_duration_ms = speech_frame_count * 100; // Each frame is 100ms
+    let speech_ratio = speech_frame_count as f32 / total_frames as f32;
+    let min_speech_ratio = vad_engine.get_min_speech_ratio();
+
     info!(
-        "device: {}, total audio frames processed: {}, frames that include speech: {}",
+        "device: {}, total audio frames processed: {}, frames that include speech: {}, speech duration: {}ms, speech ratio: {:.2}, min required ratio: {:.2}",
         audio_input.device,
-        audio_data.len() / frame_size,
-        speech_frames.len() / frame_size
+        total_frames,
+        speech_frame_count,
+        speech_duration_ms,
+        speech_ratio,
+        min_speech_ratio
     );
 
-    // If no speech frames detected, skip processing
-    if speech_frames.is_empty() {
+    // If no speech frames detected or speech ratio is too low, skip processing
+    if speech_frames.is_empty() || speech_ratio < min_speech_ratio {
         debug!(
-            "device: {}, no speech detected using VAD, skipping audio processing",
-            audio_input.device
+            "device: {}, insufficient speech detected (ratio: {:.2}, min required: {:.2}), skipping audio processing",
+            audio_input.device,
+            speech_ratio,
+            min_speech_ratio
         );
-        return Ok(("".to_string(), "".to_string())); // Return an empty string or consider a more specific "no speech" indicator
+        return Ok(("".to_string(), "".to_string()));
     }
-
-    debug!(
-        "device: {}, using {} speech frames out of {} total frames",
-        audio_input.device,
-        speech_frames.len() / frame_size,
-        audio_data.len() / frame_size
-    );
 
     let transcription: Result<String> =
         if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
@@ -605,7 +641,14 @@ pub fn stt(
                 audio_input.device,
                 &api_key[..8]
             );
-            match transcribe_with_deepgram(&api_key, &speech_frames, &audio_input.device) {
+            match transcribe_with_deepgram(
+                &api_key,
+                &speech_frames,
+                &audio_input.device.name,
+                audio_input.sample_rate,
+            )
+            .await
+            {
                 Ok(transcription) => Ok(transcription),
                 Err(e) => {
                     error!(
@@ -763,7 +806,7 @@ pub struct AudioInput {
     pub data: Vec<f32>,
     pub sample_rate: u32,
     pub channels: u16,
-    pub device: String,
+    pub device: Arc<AudioDevice>,
 }
 
 #[derive(Debug, Clone)]
@@ -781,6 +824,7 @@ pub async fn create_whisper_channel(
     vad_engine: VadEngineEnum,
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
+    vad_sensitivity: VadSensitivity,
 ) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
@@ -797,9 +841,10 @@ pub async fn create_whisper_channel(
     ) = unbounded_channel();
     let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
-        VadEngineEnum::Silero => Box::new(SileroVad::new()?),
+        VadEngineEnum::Silero => Box::new(SileroVad::new().await?),
     };
-
+    vad_engine.set_sensitivity(vad_sensitivity);
+    let vad_engine = Arc::new(Mutex::new(vad_engine));
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.clone();
@@ -824,7 +869,7 @@ pub async fn create_whisper_channel(
                         #[cfg(target_os = "macos")]
                         {
                             autoreleasepool(|| {
-                                match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path) {
+                                match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
                                     Ok((transcription, path)) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),
@@ -850,7 +895,7 @@ pub async fn create_whisper_channel(
                             unreachable!("This code should not be reached on non-macOS platforms")
                         }
                     } else {
-                        match stt(&input, &whisper_model, audio_transcription_engine.clone(), &mut *vad_engine, deepgram_api_key.clone(), &output_path) {
+                        match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
                             Ok((transcription, path)) => TranscriptionResult {
                                 input: input.clone(),
                                 transcription: Some(transcription),

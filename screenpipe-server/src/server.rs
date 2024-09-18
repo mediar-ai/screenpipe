@@ -6,7 +6,7 @@ use axum::{
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
-use futures::future::try_join_all;
+use futures::future::{try_join, try_join_all};
 use screenpipe_core::download_pipe;
 use screenpipe_vision::monitor::list_monitors;
 
@@ -21,6 +21,7 @@ use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
+    DeviceType,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -44,6 +45,8 @@ pub struct AppState {
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
+    pub vision_disabled: bool,
+    pub audio_disabled: bool,
 }
 
 // Update the SearchQuery struct
@@ -59,11 +62,15 @@ pub(crate) struct SearchQuery {
     #[serde(default)]
     end_time: Option<DateTime<Utc>>,
     #[serde(default)]
-    app_name: Option<String>, // Add this line
+    app_name: Option<String>,
     #[serde(default)]
-    window_name: Option<String>, // Add this line
+    window_name: Option<String>,
     #[serde(default)]
     include_frames: bool,
+    #[serde(default)]
+    min_length: Option<usize>,
+    #[serde(default)]
+    max_length: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -127,6 +134,8 @@ pub struct AudioContent {
     pub file_path: String,
     pub offset_index: i64,
     pub tags: Vec<String>,
+    pub device_name: String,
+    pub device_type: DeviceType,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -136,7 +145,7 @@ pub struct FTSContent {
     pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
     pub app_name: String,
-    pub window_name: String, // Add this field
+    pub window_name: String,
     pub file_path: String,
     pub original_frame_text: Option<String>,
     pub tags: Vec<String>,
@@ -193,6 +202,7 @@ pub struct HealthCheckResponse {
     pub verbose_instructions: Option<String>,
 }
 
+// Update the search function
 pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
@@ -201,7 +211,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}",
+        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -209,7 +219,9 @@ pub(crate) async fn search(
         query.start_time,
         query.end_time,
         query.app_name,
-        query.window_name // Log window_name
+        query.window_name,
+        query.min_length,
+        query.max_length
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -221,9 +233,8 @@ pub(crate) async fn search(
         query.content_type
     };
 
-    let results = match state
-        .db
-        .search(
+    let (results, total) = try_join(
+        state.db.search(
             query_str,
             content_type,
             query.pagination.limit,
@@ -232,37 +243,28 @@ pub(crate) async fn search(
             query.end_time,
             query.app_name.as_deref(),
             query.window_name.as_deref(),
-        )
-        .await
-    {
-        Ok(results) => results,
-        Err(e) => {
-            error!("Failed to search for content: {}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Failed to search for content: {}", e)})),
-            ));
-        }
-    };
-
-    let total = state
-        .db
-        .count_search_results(
+            query.min_length,
+            query.max_length,
+        ),
+        state.db.count_search_results(
             query_str,
             content_type,
             query.start_time,
             query.end_time,
             query.app_name.as_deref(),
-            query.window_name.as_deref(), // Add window_name parameter
+            query.window_name.as_deref(),
+            query.min_length,
+            query.max_length,
+        ),
+    )
+    .await
+    .map_err(|e| {
+        error!("Failed to perform search operations: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to perform search operations: {}", e)})),
         )
-        .await
-        .map_err(|e| {
-            error!("Failed to count search results: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Failed to count search results: {}", e)})),
-            )
-        })?;
+    })?;
 
     let mut content_items: Vec<ContentItem> = results
         .iter()
@@ -285,6 +287,8 @@ pub(crate) async fn search(
                 file_path: audio.file_path.clone(),
                 offset_index: audio.offset_index,
                 tags: audio.tags.clone(),
+                device_name: audio.device_name.clone(),
+                device_type: audio.device_type.clone(),
             }),
             SearchResult::FTS(fts) => ContentItem::FTS(FTSContent {
                 text_id: fts.text_id,
@@ -465,12 +469,12 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let (last_frame, last_audio) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio)) => (frame, audio),
         Err(e) => {
-            error!("Failed to get latest timestamps: {}", e);
+            error!("failed to get latest timestamps: {}", e);
             (None, None)
         }
     };
-    debug!("Last frame timestamp: {:?}", last_frame);
-    debug!("Last audio timestamp: {:?}", last_audio);
+    debug!("last frame timestamp: {:?}", last_frame);
+    debug!("last audio timestamp: {:?}", last_audio);
 
     let now = Utc::now();
     let threshold = Duration::from_secs(60);
@@ -481,55 +485,73 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     if time_since_start < chrono::Duration::from_std(loading_threshold).unwrap() {
         return JsonResponse(HealthCheckResponse {
-            status: "Loading".to_string(),
+            status: "loading".to_string(),
             last_frame_timestamp: last_frame,
             last_audio_timestamp: last_audio,
-            frame_status: "Loading".to_string(),
-            audio_status: "Loading".to_string(),
-            message: "The application is still initializing. Please wait...".to_string(),
+            frame_status: "loading".to_string(),
+            audio_status: "loading".to_string(),
+            message: "the application is still initializing. please wait...".to_string(),
             verbose_instructions: None,
         });
     }
 
-    let frame_status = match last_frame {
-        Some(timestamp)
-            if now.signed_duration_since(timestamp)
-                < chrono::Duration::from_std(threshold).unwrap() =>
-        {
-            "OK"
+    let frame_status = if state.vision_disabled {
+        "disabled"
+    } else {
+        match last_frame {
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "ok"
+            }
+            Some(_) => "stale",
+            None => "no data",
         }
-        Some(_) => "Stale",
-        None => "No data",
     };
 
-    let audio_status = match last_audio {
-        Some(timestamp)
-            if now.signed_duration_since(timestamp)
-                < chrono::Duration::from_std(threshold).unwrap() =>
-        {
-            "OK"
+    let audio_status = if state.audio_disabled {
+        "disabled"
+    } else {
+        match last_audio {
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "ok"
+            }
+            Some(_) => "stale",
+            None => "no data",
         }
-        Some(_) => "Stale",
-        None => "No data",
     };
 
-    let (overall_status, message, verbose_instructions) = if frame_status == "OK"
-        && audio_status == "OK"
+    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
+        || frame_status == "disabled")
+        && (audio_status == "ok" || audio_status == "disabled")
     {
         (
-            "Healthy",
-            "All systems are functioning normally.".to_string(),
+            "healthy",
+            "all systems are functioning normally.".to_string(),
             None,
         )
     } else {
+        let mut unhealthy_systems = Vec::new();
+        if frame_status != "ok" && frame_status != "disabled" {
+            unhealthy_systems.push("vision");
+        }
+        if audio_status != "ok" && audio_status != "disabled" {
+            unhealthy_systems.push("audio");
+        }
+
         (
-            "Unhealthy",
-            format!("Some systems are not functioning properly. Frame status: {}, Audio status: {}", frame_status, audio_status),
-            Some("If you're experiencing issues, please try the following steps:\n\
-                  1. Restart the application.\n\
-                  2. If using a desktop app, reset your Screenpipe OS audio/screen recording permissions.\n\
-                  3. If the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
-                  4. Last, here are some FAQ to help you troubleshoot: https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md".to_string())
+            "unhealthy",
+            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}", 
+                    unhealthy_systems.join(", "), frame_status, audio_status),
+            Some("if you're experiencing issues, please try the following steps:\n\
+                  1. restart the application.\n\
+                  2. if using a desktop app, reset your screenpipe os audio/screen recording permissions.\n\
+                  3. if the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
+                  4. last, here are some faq to help you troubleshoot: https://github.com/mediar-ai/screenpipe/blob/main/content/docs/notes.md".to_string())
         )
     };
 
@@ -686,6 +708,8 @@ pub struct Server {
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
+    vision_disabled: bool,
+    audio_disabled: bool,
 }
 
 impl Server {
@@ -696,6 +720,8 @@ impl Server {
         audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
+        vision_disabled: bool,
+        audio_disabled: bool,
     ) -> Self {
         Server {
             db,
@@ -704,6 +730,8 @@ impl Server {
             audio_devices_control,
             screenpipe_dir,
             pipe_manager,
+            vision_disabled,
+            audio_disabled,
         }
     }
 
@@ -715,7 +743,6 @@ impl Server {
     where
         F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
     {
-        // TODO could init w audio devices
         let app_state = Arc::new(AppState {
             db: self.db,
             vision_control: self.vision_control,
@@ -724,14 +751,14 @@ impl Server {
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
+            vision_disabled: self.vision_disabled,
+            audio_disabled: self.audio_disabled,
         });
 
-        // https://github.com/tokio-rs/console
         let app = create_router()
             .layer(ApiPluginLayer::new(api_plugin))
             .layer(CorsLayer::permissive())
             .layer(
-                // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs
                 TraceLayer::new_for_http()
                     .make_span_with(DefaultMakeSpan::new().include_headers(true)),
             )
@@ -782,33 +809,34 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
         .route("/pipes/list", get(list_pipes_handler))
         .route("/pipes/download", post(download_pipe_handler))
-        .route("/pipes/enable", post(run_pipe_handler)) // TODO ?
+        .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
 }
 
-// Curl commands for reference:
-// # 1. Basic search query
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0"
+/*
 
-// # 2. Search with content type filter (OCR)
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr"
+Curl commands for reference:
+# 1. Basic search query
+curl "http://localhost:3030/search?q=test&limit=5&offset=0" | jq
 
-// # 3. Search with content type filter (Audio)
-// # curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio"
+# 2. Search with content type filter (OCR)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr" | jq
 
-// # 4. Search with pagination
-// # curl "http://localhost:3030/search?q=test&limit=10&offset=20"
+# 3. Search with content type filter (Audio)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio" | jq
 
-// # 6. Search with no query (should return all results)
-// # curl "http://localhost:3030/search?limit=5&offset=0"
+# 4. Search with pagination
+curl "http://localhost:3030/search?q=test&limit=10&offset=20" | jq
+
+# 6. Search with no query (should return all results)
+curl "http://localhost:3030/search?limit=5&offset=0"
 
 // list devices
 // # curl "http://localhost:3030/audio/list" | jq
 
-/*
 
 echo "Listing audio devices:"
 curl "http://localhost:3030/audio/list" | jq
@@ -927,6 +955,32 @@ curl -X POST "http://localhost:3030/pipes/update" \
      }' | jq
 
 
+
+# Basic search with min_length and max_length
+curl "http://localhost:3030/search?q=test&limit=10&offset=0&min_length=5&max_length=50" | jq
+
+# Search for OCR content with length constraints
+curl "http://localhost:3030/search?q=code&content_type=ocr&limit=5&offset=0&min_length=20&max_length=100" | jq
+
+# Search for audio content with length constraints
+curl "http://localhost:3030/search?q=meeting&content_type=audio&limit=5&offset=0&min_length=50&max_length=200" | jq
+
+# Search with time range and length constraints
+curl "http://localhost:3030/search?q=project&limit=10&offset=0&min_length=10&max_length=100&start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search with app_name and length constraints
+curl "http://localhost:3030/search?app_name=cursor&limit=5&offset=0&min_length=15&max_length=150" | jq
+
+# Search with window_name and length constraints
+curl "http://localhost:3030/search?window_name=alacritty&min_length=5&max_length=50" | jq
+
+# Search for very short content
+curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
+
+# Search for very long content
+curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
+
+
 # read random data and generate a clip using the merge endpoint
 
 
@@ -965,5 +1019,6 @@ echo "Merge Response: $MERGE_RESPONSE"
 MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
+
 
 */

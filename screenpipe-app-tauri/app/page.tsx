@@ -23,7 +23,6 @@ import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { DevSettings } from "@/components/dev-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import SearchPanel from "@/components/search-panel";
 import { SearchChat } from "@/components/search-chat";
 
 export default function Home() {
@@ -62,7 +61,7 @@ export default function Home() {
             ))}
           </div>
         </div>
-      ) : settings.useOllama || settings.openaiApiKey ? (
+      ) : settings.aiUrl ? (
         <>
           <h1 className="text-2xl font-bold mb-8 text-center mb-12">
             where pixels become magic

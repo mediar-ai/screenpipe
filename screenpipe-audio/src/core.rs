@@ -4,7 +4,7 @@ use chrono::Utc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use log::{debug, error, info, warn};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,13 +41,13 @@ pub struct DeviceControl {
     pub is_paused: bool,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug, Deserialize)]
 pub enum DeviceType {
     Input,
     Output,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
 pub struct AudioDevice {
     pub name: String,
     pub device_type: DeviceType,
@@ -299,7 +299,7 @@ pub async fn record_and_transcribe(
     debug!("Sending audio of length {} to audio model", data.len());
     if let Err(e) = whisper_sender.send(AudioInput {
         data: data.clone(),
-        device: audio_device.to_string(),
+        device: audio_device.clone(),
         sample_rate,
         channels,
     }) {

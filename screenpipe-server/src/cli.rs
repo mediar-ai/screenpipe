@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use screenpipe_audio::AudioTranscriptionEngine as CoreAudioTranscriptionEngine;
+use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use clap::ValueEnum;
 use screenpipe_audio::vad_engine::VadEngineEnum;
@@ -67,6 +67,23 @@ impl From<CliVadEngine> for VadEngineEnum {
     }
 }
 
+#[derive(Clone, Debug, ValueEnum, PartialEq)]
+pub enum CliVadSensitivity {
+    Low,
+    Medium,
+    High,
+}
+
+impl From<CliVadSensitivity> for VadSensitivity {
+    fn from(cli_sensitivity: CliVadSensitivity) -> Self {
+        match cli_sensitivity {
+            CliVadSensitivity::Low => VadSensitivity::Low,
+            CliVadSensitivity::Medium => VadSensitivity::Medium,
+            CliVadSensitivity::High => VadSensitivity::High,
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(
     author, 
@@ -82,7 +99,7 @@ pub struct Cli {
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
-    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))] 
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
     pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
@@ -186,6 +203,14 @@ pub struct Cli {
     /// Deepgram API Key for audio transcription
     #[arg(long = "deepgram-api-key")]
     pub deepgram_api_key: Option<String>,
+
+    /// PID to watch for auto-destruction. If provided, screenpipe will stop when this PID is no longer running.
+    #[arg(long)]
+    pub auto_destruct_pid: Option<u32>,
+
+    /// Voice activity detection sensitivity level
+    #[arg(long, value_enum, default_value_t = CliVadSensitivity::High)]
+    pub vad_sensitivity: CliVadSensitivity,
 
     #[command(subcommand)]
     pub command: Option<Command>,

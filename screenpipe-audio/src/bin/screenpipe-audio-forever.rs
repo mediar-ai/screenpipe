@@ -7,6 +7,7 @@ use screenpipe_audio::default_output_device;
 use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
+use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
@@ -85,6 +86,7 @@ async fn main() -> Result<()> {
         VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
         args.deepgram_api_key,
         &PathBuf::from("output.mp4"),
+        VadSensitivity::Medium,
     )
     .await?;
     // Spawn threads for each device
@@ -94,7 +96,6 @@ async fn main() -> Result<()> {
         .map(|(i, device)| {
             let device = Arc::new(device);
             let whisper_sender = whisper_sender.clone();
-            
 
             let device_control = Arc::new(AtomicBool::new(true));
 
