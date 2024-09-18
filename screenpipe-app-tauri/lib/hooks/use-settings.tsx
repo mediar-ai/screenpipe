@@ -35,6 +35,8 @@ const defaultSettings: Settings = {
   ignoredWindows: [],
   includedWindows: [],
   aiUrl: "https://api.openai.com/v1",
+  aiMaxContextChars: 30000,
+  fps: 0.5,
 };
 
 export interface Settings {
@@ -60,6 +62,8 @@ export interface Settings {
   ignoredWindows: string[];
   includedWindows: string[];
   aiUrl: string;
+  aiMaxContextChars: number;
+  fps: number;
 }
 
 let store: Store | null = null;
@@ -105,7 +109,8 @@ export function useSettings() {
         await store!.load();
         const savedKey = ((await store!.get("openaiApiKey")) as string) || "";
         const savedDeepgramKey =
-          ((await store!.get("deepgramApiKey")) as string) || "7ed2a159a094337b01fd8178b914b7ae0e77822d";
+          ((await store!.get("deepgramApiKey")) as string) ||
+          "7ed2a159a094337b01fd8178b914b7ae0e77822d";
         const savedUseOllama =
           ((await store!.get("useOllama")) as boolean) || false;
         const savedOllamaUrl =
@@ -147,6 +152,11 @@ export function useSettings() {
         const savedAiUrl =
           ((await store!.get("aiUrl")) as string) ||
           "https://api.openai.com/v1";
+        const savedAiMaxContextChars =
+          ((await store!.get("aiMaxContextChars")) as number) || 30000;
+        const savedFps =
+          ((await store!.get("fps")) as number) ||
+          (platform() === "macos" ? 0.2 : 1);
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -170,6 +180,8 @@ export function useSettings() {
           ignoredWindows: savedIgnoredWindows,
           includedWindows: savedIncludedWindows,
           aiUrl: savedAiUrl,
+          aiMaxContextChars: savedAiMaxContextChars,
+          fps: savedFps,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);

@@ -11,7 +11,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { useSettings } from "@/lib/hooks/use-settings";
 import {
   Tooltip,
@@ -19,11 +18,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
-import { MemoizedReactMarkdown } from "./markdown";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
+import { Slider } from "@/components/ui/slider"; // Add this import
 
 import { platform } from "@tauri-apps/plugin-os";
 import { Eye, EyeOff, HelpCircle, RefreshCw } from "lucide-react";
@@ -71,6 +69,12 @@ export function Settings({ className }: { className?: string }) {
 
   const handleResetCustomPrompt = () => {
     resetSetting("customPrompt");
+  };
+
+  const handleMaxContextCharsChange = (value: number[]) => {
+    const newValue = value[0];
+    setLocalSettings((prev) => ({ ...prev, aiMaxContextChars: newValue }));
+    updateSettings({ aiMaxContextChars: newValue });
   };
 
   React.useEffect(() => {
@@ -129,17 +133,20 @@ export function Settings({ className }: { className?: string }) {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="ml-2">
-                            <HelpCircle className="h-4 w-4" />
-                          </Button>
+                          <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
                         </TooltipTrigger>
                         <TooltipContent side="left">
                           <p>
                             the url of your ai provider&apos;s api endpoint. for
-                            openai: <pre className="bg-gray-100 p-1 rounded-md">https://api.openai.com/v1</pre>
+                            openai:{" "}
+                            <pre className="bg-gray-100 p-1 rounded-md">
+                              https://api.openai.com/v1
+                            </pre>
                             <br />
                             for local providers like ollama usually it&apos;s
-                            <pre className="bg-gray-100 p-1 rounded-md">http://localhost:11434/v1</pre>
+                            <pre className="bg-gray-100 p-1 rounded-md">
+                              http://localhost:11434/v1
+                            </pre>
                           </p>
                         </TooltipContent>
                       </Tooltip>
@@ -160,6 +167,9 @@ export function Settings({ className }: { className?: string }) {
                       onChange={handleApiKeyChange}
                       className="pr-10"
                       placeholder="enter your ai api key"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      autoComplete="off"
                     />
                     <Button
                       type="button"
@@ -188,6 +198,9 @@ export function Settings({ className }: { className?: string }) {
                     onChange={handleModelChange}
                     className="flex-grow"
                     placeholder="enter ai model (e.g., gpt-4)"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    autoComplete="off"
                   />
                 </div>
               </div>
@@ -218,6 +231,48 @@ export function Settings({ className }: { className?: string }) {
                       <RefreshCw className="h-4 w-4 mr-2" />
                       reset
                     </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-full">
+                <div className="flex items-center gap-4 mb-4">
+                  <Label
+                    htmlFor="aiMaxContextChars"
+                    className="min-w-[80px] text-right"
+                  >
+                    max context
+                  </Label>
+                  <div className="flex-grow flex items-center">
+                    <Slider
+                      id="aiMaxContextChars"
+                      min={1000}
+                      max={128000}
+                      step={1000}
+                      value={[localSettings.aiMaxContextChars]}
+                      onValueChange={handleMaxContextCharsChange}
+                      className="flex-grow"
+                    />
+                    <span className="ml-2 min-w-[60px] text-right">
+                      {localSettings.aiMaxContextChars.toLocaleString()}
+                    </span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          <p>
+                            maximum number of characters (think 3 characters per
+                            token) to send to the ai model. <br />
+                            usually, openai models support up to 128k tokens,
+                            which is roughly 30k-40k characters. <br />
+                            we&apos;ll use this for UI purposes to show you how
+                            much you can send.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 </div>
               </div>
@@ -292,8 +347,8 @@ export function Settings({ className }: { className?: string }) {
                   className="text-primary hover:underline"
                 >
                   deepgram&apos;s website
-                </a>
-                {" "} or DM us on discord, it&apos;s on us!
+                </a>{" "}
+                or DM us on discord, it&apos;s on us!
               </p>
             </CardContent>
           </Card>

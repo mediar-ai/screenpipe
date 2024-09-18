@@ -11,7 +11,7 @@ use tauri_plugin_store::{with_store, StoreCollection};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-
+use tauri::Emitter;
 #[tauri::command]
 pub async fn kill_all_sreenpipes(
     state: State<'_, SidecarState>,
@@ -173,11 +173,28 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     .map_err(|e| e.to_string())?
     .unwrap_or(String::from("default"));
 
+    let fps = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("fps")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.2))
+    })
+    .map_err(|e| e.to_string())?;
+
+    let dev_mode = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("devMode")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false))
+    })
+    .map_err(|e| e.to_string())?;
+
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
-    if cfg!(target_os = "macos") {
+    let fps_str = fps.to_string();
+    if fps != 0.2 {
         args.push("--fps");
-        args.push("0.2");
+        args.push(fps_str.as_str());
     }
 
     if data_dir != "default" {
@@ -244,6 +261,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             args.push(window);
         }
     }
+    let current_pid = std::process::id();
+    let current_pid_str = current_pid.to_string();
+    // Set auto-destruct PID if not in dev mode
+    if !dev_mode {
+        args.push("--auto-destruct-pid");
+        args.push(current_pid_str.as_str());
+    }
 
     // args.push("--debug");
 
@@ -274,18 +298,23 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         return Err(e.to_string());
     }
 
-    #[allow(unused_mut, unused_variables)]
     let (mut rx, child) = result.unwrap();
+    let app_handle = app.app_handle().clone();
 
     tauri::async_runtime::spawn(async move {
-        #[allow(unused_variables)]
-        let mut i = 0;
         while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stdout(line) = event {
-                print!("{}", String::from_utf8(line).unwrap());
-                i += 1;
-            } else if let CommandEvent::Stderr(line) = event {
-                error!("Sidecar stderr: {}", String::from_utf8(line).unwrap());
+            match event {
+                CommandEvent::Stdout(line) => {
+                    let log_line = String::from_utf8(line).unwrap();
+                    print!("{}", log_line);
+                    app_handle.emit("sidecar_log", log_line).unwrap();
+                }
+                CommandEvent::Stderr(line) => {
+                    let log_line = String::from_utf8(line).unwrap();
+                    error!("Sidecar stderr: {}", log_line);
+                    app_handle.emit("sidecar_log", format!("ERROR: {}", log_line)).unwrap();
+                }
+                _ => {}
             }
         }
     });
@@ -324,7 +353,6 @@ impl SidecarManager {
         debug!("last_restart: {:?}", self.last_restart);
 
         // kill previous task if any
-
         if let Some(task) = self.restart_task.take() {
             task.abort();
         }
@@ -353,6 +381,8 @@ impl SidecarManager {
                 sleep(Duration::from_secs(60)).await;
             }
         }));
+
+
 
         Ok(())
     }

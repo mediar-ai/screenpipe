@@ -16,8 +16,7 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand},
-    start_continuous_recording, DatabaseManager, PipeManager, ResourceMonitor, Server,
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
@@ -27,6 +26,7 @@ use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
+
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -106,17 +106,18 @@ async fn main() -> anyhow::Result<()> {
 
     // Add custom log levels for specific modules based on environment variables
     let env_filter = env::var("SCREENPIPE_LOG")
-    .unwrap_or_default()
-    .split(',')
-    .fold(env_filter, |filter, module_directive| {
-        match module_directive.parse() {
-            Ok(directive) => filter.add_directive(directive),
-            Err(e) => {
-                eprintln!("warning: invalid log directive '{}': {}", module_directive, e);
-                filter
+        .unwrap_or_default()
+        .split(',')
+        .filter(|s| !s.is_empty()) // Filter out empty strings
+        .fold(env_filter, |filter, module_directive| {
+            match module_directive.parse() {
+                Ok(directive) => filter.add_directive(directive),
+                Err(e) => {
+                    eprintln!("warning: invalid log directive '{}': {}", module_directive, e);
+                    filter
+                }
             }
-        }
-    });
+        });
 
     // Usage:
     //  SCREENPIPE_LOG=screenpipe_audio=debug ./screenpipe
@@ -359,6 +360,8 @@ async fn main() -> anyhow::Result<()> {
         audio_devices_control_server,
         local_data_dir_clone_2,
         pipe_manager.clone(),
+        cli.disable_vision,
+        cli.disable_audio,
     );
 
     let mut pipe_futures = FuturesUnordered::new();
@@ -441,12 +444,12 @@ async fn main() -> anyhow::Result<()> {
 
     if cli.disable_vision {
         println!("│ {:<19} │ {:<34} │", "", "vision disabled");
-    } else if all_monitors.is_empty() {
+    } else if monitor_ids.is_empty() {
         println!("│ {:<19} │ {:<34} │", "", "no monitors available");
     } else {
-        let total_monitors = all_monitors.len();
-        for (_, monitor) in all_monitors.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
-            let monitor_str = format!("id: {}, {:?}", monitor.id(), monitor);
+        let total_monitors = monitor_ids.len();
+        for (_, monitor) in monitor_ids.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+            let monitor_str = format!("id: {}", monitor);
             let formatted_monitor = format_cell(&monitor_str, VALUE_WIDTH);
             println!("│ {:<19} │ {:<34} │", "", formatted_monitor);
         }
@@ -494,9 +497,9 @@ async fn main() -> anyhow::Result<()> {
         let total_pipes = pipes.len();
         for (_, pipe) in pipes.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let pipe_str = format!(
-                "{} ({})",
+                "({}) {}",
+                if pipe.enabled { "enabled" } else { "disabled" },
                 pipe.id,
-                if pipe.enabled { "enabled" } else { "disabled" }
             );
             let formatted_pipe = format_cell(&pipe_str, VALUE_WIDTH);
             println!("│ {:<19} │ {:<34} │", "", formatted_pipe);
@@ -557,6 +560,18 @@ async fn main() -> anyhow::Result<()> {
         }
     };
     pin_mut!(pipes_future);
+
+    // Add auto-destruct watcher
+    if let Some(pid) = cli.auto_destruct_pid {
+        info!("watching pid {} for auto-destruction", pid);
+        let shutdown_tx_clone = shutdown_tx.clone();
+        tokio::spawn(async move {
+            if watch_pid(pid).await {
+                info!("watched pid {} has stopped, initiating shutdown", pid);
+                let _ = shutdown_tx_clone.send(());
+            }
+        });
+    }
 
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
