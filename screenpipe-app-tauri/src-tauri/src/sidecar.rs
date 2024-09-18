@@ -189,6 +189,14 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     })
     .map_err(|e| e.to_string())?;
 
+    let vad_sensitivity = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("vadSensitivity")
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or(String::from("high")))
+    })
+    .map_err(|e| e.to_string())?;
+
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
     let fps_str = fps.to_string();
@@ -267,6 +275,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if !dev_mode {
         args.push("--auto-destruct-pid");
         args.push(current_pid_str.as_str());
+    }
+
+    if vad_sensitivity != "high" {
+        args.push("--vad-sensitivity");
+        args.push(vad_sensitivity.as_str());
     }
 
     // args.push("--debug");
