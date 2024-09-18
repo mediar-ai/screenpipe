@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { readFile, open } from "@tauri-apps/plugin-fs";
+import { platform } from "@tauri-apps/plugin-os";
 
 export const VideoComponent = memo(function VideoComponent({
   filePath,
@@ -11,30 +12,18 @@ export const VideoComponent = memo(function VideoComponent({
   const [isAudio, setIsAudio] = useState(false);
 
   const sanitizeFilePath = useCallback((path: string): string => {
-    return path
-      .replace(/^["']|["']$/g, "")
-      .trim()
-      .replace(/\\/g, "/");
+    const isWindows = platform() === "windows";
+    return (
+      path
+        .replace(/^["']|["']$/g, "")
+        .trim()
+        // only replace forward slashes with backslashes on Windows
+        .replace(/\//g, isWindows ? "\\" : "/")
+    );
   }, []);
 
-  const openFileLocation = useCallback(async () => {
-    try {
-      await open(sanitizeFilePath(filePath));
-    } catch (error) {
-      console.error("Failed to open file location:", error);
-    }
-  }, [filePath, sanitizeFilePath]);
   const renderFileLink = () => (
-    // <Button
-    //   variant="outline"
-    //   size="sm"
-    //   className="mt-2 text-xs"
-    //   onClick={openFileLocation}
-    // >
-    //   <Link className="w-4 h-4 mr-2" />
-    //   Open file location
-    // </Button>
-    // just a link
+    // TODO button open link
     <p className="mt-2 text-center text-xs text-gray-500">{filePath}</p>
   );
 
@@ -60,7 +49,7 @@ export const VideoComponent = memo(function VideoComponent({
     async function loadMedia() {
       try {
         console.log("Loading media:", filePath);
-        const sanitizedPath = sanitizeFilePath(filePath);
+        const sanitizedPath = await sanitizeFilePath(filePath);
         console.log("Sanitized path:", sanitizedPath);
         if (!sanitizedPath) {
           throw new Error("Invalid file path");
