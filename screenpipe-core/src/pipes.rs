@@ -279,22 +279,29 @@ mod pipes {
             ..Default::default()
         });
 
-        // Set some metadata on the runtime
+        // set some metadata on the runtime
         js_runtime.execute_script("main", "globalThis.metadata = { }")?;
-        // Set the pipe id
+        // set the pipe id
         js_runtime.execute_script("main", format!("globalThis.metadata.id = '{}'", pipe))?;
 
-        // Initialize process.env
+        // initialize process.env
         js_runtime.execute_script("main", "globalThis.process = { env: {} }")?;
 
         for (key, value) in env::vars() {
             if key.starts_with("SCREENPIPE_") {
-                js_runtime
-                    .execute_script("main", format!("process.env['{}'] = '{}'", key, value))?;
+                let escaped_value = value.replace('\\', "\\\\").replace('\"', "\\\"");
+                js_runtime.execute_script(
+                    "main",
+                    format!(
+                        "process.env[{}] = \"{}\";",
+                        serde_json::to_string(&key)?,
+                        escaped_value
+                    ),
+                )?;
             }
         }
 
-        // Set additional environment variables
+        // set additional environment variables
         let home_dir = dirs::home_dir().unwrap_or_default();
         let current_dir = env::current_dir()?;
         let temp_dir = env::temp_dir();
@@ -303,43 +310,54 @@ mod pipes {
             "main",
             format!(
                 r#"
-            globalThis.process.env.SCREENPIPE_DIR = '{}';
-            globalThis.process.env.HOME = '{}';
-            globalThis.process.env.CURRENT_DIR = '{}';
-            globalThis.process.env.TEMP_DIR = '{}';
-            globalThis.process.env.PIPE_ID = '{}';
-            globalThis.process.env.PIPE_FILE = '{}';
+            globalThis.process.env.SCREENPIPE_DIR = "{}";
+            globalThis.process.env.HOME = "{}";
+            globalThis.process.env.CURRENT_DIR = "{}";
+            globalThis.process.env.TEMP_DIR = "{}";
+            globalThis.process.env.PIPE_ID = "{}";
+            globalThis.process.env.PIPE_FILE = "{}";
             "#,
-                screenpipe_dir.to_string_lossy(),
-                home_dir.to_string_lossy(),
-                current_dir.to_string_lossy(),
-                temp_dir.to_string_lossy(),
-                pipe,
-                file_path
+                screenpipe_dir
+                    .to_string_lossy()
+                    .replace('\\', "\\\\")
+                    .replace('\"', "\\\""),
+                home_dir
+                    .to_string_lossy()
+                    .replace('\\', "\\\\")
+                    .replace('\"', "\\\""),
+                current_dir
+                    .to_string_lossy()
+                    .replace('\\', "\\\\")
+                    .replace('\"', "\\\""),
+                temp_dir
+                    .to_string_lossy()
+                    .replace('\\', "\\\\")
+                    .replace('\"', "\\\""),
+                pipe.replace('\"', "\\\""),
+                file_path.replace('\\', "\\\\").replace('\"', "\\\"")
             ),
         )?;
 
         let mod_id = js_runtime.load_main_es_module(&main_module).await?;
         let evaluate_future = js_runtime.mod_evaluate(mod_id);
 
-        // Run the event loop and handle potential errors
+        // run the event loop and handle potential errors
         match js_runtime.run_event_loop(Default::default()).await {
             Ok(_) => (),
             Err(e) => {
-                error!("Error in JavaScript runtime event loop: {}", e);
-                // ! avoid crashing screenpipe if pipes broken - maybe disable it
-                // You can choose to return the error or handle it differently
-                // return Err(anyhow::anyhow!("JavaScript runtime error: {}", e));
+                error!("error in javascript runtime event loop: {}", e);
+                // you can choose to return the error or handle it differently
+                // return Err(anyhow::anyhow!("javascript runtime error: {}", e));
             }
         }
 
-        // Evaluate the module and handle potential errors
+        // evaluate the module and handle potential errors
         match evaluate_future.await {
             Ok(_) => Ok(()),
             Err(e) => {
-                error!("Error evaluating JavaScript module: {}", e);
-                // You can choose to return the error or handle it differently
-                Err(anyhow::anyhow!("JavaScript module evaluation error: {}", e))
+                error!("error evaluating javascript module: {}", e);
+                // you can choose to return the error or handle it differently
+                Err(anyhow::anyhow!("javascript module evaluation error: {}", e))
             }
         }
     }
