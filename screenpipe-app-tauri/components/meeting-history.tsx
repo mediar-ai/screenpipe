@@ -31,6 +31,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { keysToCamelCase } from "@/lib/utils";
+import { HelpCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 async function setItem(key: string, value: any): Promise<void> {
   try {
@@ -98,6 +103,9 @@ export default function MeetingHistory() {
     "please provide a concise summary of the following meeting transcript"
   );
   const [isClearing, setIsClearing] = useState(false);
+  const [customIdentifyPrompt, setCustomIdentifyPrompt] = useState<string>(
+    "please identify the participants in this meeting transcript. provide a comma-separated list of one or two word names or roles or characteristics. if it's not possible to identify, respond with n/a."
+  );
 
   useEffect(() => {
     if (posthog) {
@@ -148,11 +156,11 @@ export default function MeetingHistory() {
       let startTime;
       const storedMeetings = (await getItem("meetings")) || [];
       if (storedMeetings.length > 0) {
-        // Get the start time of the last stored meeting
-        const lastMeeting = storedMeetings[storedMeetings.length - 1];
-        startTime = new Date(lastMeeting.meetingStart).toISOString();
+        // get the start time of the last stored meeting
+        const lastMeeting = storedMeetings[0]; // assuming meetings are sorted desc
+        startTime = new Date(lastMeeting.meetingEnd).toISOString();
       } else {
-        // If no stored meetings, search from 7 days ago
+        // if no stored meetings, search from 7 days ago
         startTime = new Date(
           Date.now() - 7 * 24 * 60 * 60 * 1000
         ).toISOString();
@@ -166,34 +174,35 @@ export default function MeetingHistory() {
         throw new Error("failed to fetch meeting history");
       }
       const result = await response.json();
-      console.log("fetch result:", result);
-      const newMeetings = processMeetings(result.data);
+      const camelCaseResult = keysToCamelCase<{ data: AudioTranscription[] }>(
+        result
+      );
+      console.log("fetch result:", camelCaseResult);
+      const newMeetings = processMeetings(camelCaseResult.data);
       console.log("processed new meetings:", newMeetings);
 
-      // Merge new meetings with stored meetings, updating the last meeting if necessary
+      // merge new meetings with stored meetings, avoiding duplicates
       let updatedMeetings = [...storedMeetings];
       newMeetings.forEach((newMeeting) => {
         const existingMeetingIndex = updatedMeetings.findIndex(
           (m) => m.meetingGroup === newMeeting.meetingGroup
         );
-        if (existingMeetingIndex !== -1) {
-          // Update existing meeting
-          updatedMeetings[existingMeetingIndex] = {
-            ...updatedMeetings[existingMeetingIndex],
-            ...newMeeting,
-            fullTranscription:
-              updatedMeetings[existingMeetingIndex].fullTranscription +
-              newMeeting.fullTranscription,
-          };
-        } else {
-          // Add new meeting
+        if (existingMeetingIndex === -1) {
+          // add new meeting only if it doesn't exist
           updatedMeetings.push(newMeeting);
         }
       });
 
+      // sort meetings by start time (descending)
+      updatedMeetings.sort(
+        (a, b) =>
+          new Date(b.meetingStart).getTime() -
+          new Date(a.meetingStart).getTime()
+      );
+
       setMeetings(updatedMeetings);
 
-      // Only store completed meetings
+      // store updated meetings
       await setItem("meetings", updatedMeetings);
     } catch (err) {
       setError(
@@ -221,6 +230,11 @@ export default function MeetingHistory() {
 
       const model = settings.aiModel;
 
+      // create an enhanced prompt that includes identified participants
+      const enhancedPrompt = meeting.participants
+        ? `${customSummaryPrompt}\n\nparticipants: ${meeting.participants}`
+        : customSummaryPrompt;
+
       const messages = [
         {
           role: "system" as const,
@@ -228,7 +242,7 @@ export default function MeetingHistory() {
         },
         {
           role: "user" as const,
-          content: `${customSummaryPrompt}:\n\n${meeting.fullTranscription}`,
+          content: `${enhancedPrompt}:\n\n${meeting.fullTranscription}`,
         },
       ];
 
@@ -333,12 +347,15 @@ export default function MeetingHistory() {
       const messages = [
         {
           role: "system" as const,
-          content:
-            "you are an assistant that identifies participants in meeting transcripts.",
+          content: `you are an assistant that identifies participants in meeting transcripts. your goal is to provide a list of one or two or more word names or roles or characteristics.
+            
+            for example your rsponse could be:
+            Bob Smith (marketing), John Doe (sales), Jane Smith (ceo)
+            `,
         },
         {
           role: "user" as const,
-          content: `please identify the participants in this meeting transcript. try to understand if there are multiple people or the person is talking to themselves, or if the transcript is just a youtube video or similar. provide a comma-separated list of one or two word names or roles or characteristics. if it is not possible to identify then respond with n/a, transcriptions: :\n\n${meeting.fullTranscription}`,
+          content: `${customIdentifyPrompt}\n\ntranscript with device types:\n\n${meeting.fullTranscription}`,
         },
       ];
 
@@ -399,7 +416,7 @@ export default function MeetingHistory() {
       if (
         !currentMeeting ||
         (prevTime &&
-          currentTime.getTime() - prevTime.getTime() >= 1 * 60 * 1000)
+          currentTime.getTime() - prevTime.getTime() >= 5 * 60 * 1000) // increased to 5 minutes
       ) {
         if (currentMeeting) {
           meetings.push(currentMeeting);
@@ -409,14 +426,26 @@ export default function MeetingHistory() {
           meetingGroup: meetingGroup,
           meetingStart: trans.content.timestamp,
           meetingEnd: trans.content.timestamp,
-          fullTranscription: `${trans.content.timestamp} ${trans.content.transcription}\n`,
+          fullTranscription: `${trans.content.timestamp} [${
+            trans.content.deviceType?.toLowerCase() === "input"
+              ? "you"
+              : trans.content.deviceType?.toLowerCase() === "output"
+              ? "others"
+              : "unknown"
+          }] ${trans.content.transcription}\n`,
           name: null,
           participants: null,
           summary: null,
         };
       } else if (currentMeeting) {
         currentMeeting.meetingEnd = trans.content.timestamp;
-        currentMeeting.fullTranscription += `${trans.content.timestamp} ${trans.content.transcription}\n`;
+        currentMeeting.fullTranscription += `${trans.content.timestamp} [${
+          trans.content.deviceType?.toLowerCase() === "input"
+            ? "you"
+            : trans.content.deviceType?.toLowerCase() === "output"
+            ? "others"
+            : "unknown"
+        }] ${trans.content.transcription}\n`;
       }
     });
 
@@ -427,26 +456,14 @@ export default function MeetingHistory() {
     // sort meetings by start time
     meetings.sort(
       (a, b) =>
-        new Date(a.meetingStart).getTime() - new Date(b.meetingStart).getTime()
+        new Date(b.meetingStart).getTime() - new Date(a.meetingStart).getTime()
     );
 
-    // merge overlapping or close meetings
-    meetings = meetings.reduce((acc, meeting) => {
-      const lastMeeting = acc[acc.length - 1];
-      if (lastMeeting) {
-        const timeDiff =
-          new Date(meeting.meetingStart).getTime() -
-          new Date(lastMeeting.meetingEnd).getTime();
-        if (timeDiff < 1 * 60 * 1000) {
-          // if less than 1 minute apart, merge
-          lastMeeting.meetingEnd = meeting.meetingEnd;
-          lastMeeting.fullTranscription += meeting.fullTranscription;
-          return acc;
-        }
-      }
-      acc.push(meeting);
-      return acc;
-    }, [] as Meeting[]);
+    // remove duplicate meetings
+    meetings = meetings.filter(
+      (meeting, index, self) =>
+        index === self.findIndex((t) => t.meetingGroup === meeting.meetingGroup)
+    );
 
     console.log("processed meetings:", meetings);
     return meetings.filter(
@@ -551,7 +568,7 @@ export default function MeetingHistory() {
                       <span className="ml-2">clear data</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
+                  <TooltipContent side="left">
                     <p>
                       remove all stored summary meeting data (can be useful if
                       facing issues)
@@ -578,7 +595,7 @@ export default function MeetingHistory() {
                       <span className="ml-2">refresh</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
+                  <TooltipContent side="left">
                     <p>fetch latest meeting data</p>
                   </TooltipContent>
                 </Tooltip>
@@ -635,63 +652,79 @@ export default function MeetingHistory() {
               )}
               <div className="space-y-6">
                 {sortedMeetings.map((meeting, index) => (
-                  <div key={index} className="p-6 border rounded relative">
-                    <h3 className="font-bold text-lg mb-2">
-                      {`meeting ${new Date(
-                        meeting.meetingStart
-                      ).toLocaleDateString()}, ${new Date(
-                        meeting.meetingStart
-                      ).toLocaleTimeString()} - ${new Date(
-                        meeting.meetingEnd
-                      ).toLocaleTimeString()}`}
-                    </h3>
-                    <div className="flex items-center mb-4">
-                      <p className="mr-2">
-                        participants: {meeting.participants || "not identified"}
-                      </p>
-                      {!meeting.participants && (
-                        <Button
-                          onClick={() => identifyParticipants(meeting)}
-                          disabled={isIdentifying}
-                          size="sm"
-                          className="text-xs bg-black text-white hover:bg-gray-800"
-                        >
-                          {isIdentifying ? (
-                            <Users className="h-4 w-4 mr-2 animate-pulse" />
-                          ) : (
-                            <Users className="h-4 w-4 mr-2" />
-                          )}
-                          {isIdentifying ? "identifying..." : "identify"}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="mb-4 relative">
-                      <h4 className="font-semibold mb-2">
-                        full transcription:
-                      </h4>
-                      <Button
-                        onClick={() =>
-                          copyWithToast(
-                            meeting.fullTranscription,
-                            "full transcription"
-                          )
-                        }
-                        className="absolute top-0 right-0 p-1 h-6 w-6"
-                        variant="outline"
-                        size="icon"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
-                        {meeting.fullTranscription}
-                      </pre>
-                    </div>
-                    <div className="relative">
-                      <h4 className="font-semibold mb-2">summary:</h4>
-                      {meeting.summary && (
+                  <Card key={index} className="relative">
+                    <CardHeader>
+                      <CardTitle>
+                        {`meeting ${new Date(
+                          meeting.meetingStart
+                        ).toLocaleDateString()}, ${new Date(
+                          meeting.meetingStart
+                        ).toLocaleTimeString()} - ${new Date(
+                          meeting.meetingEnd
+                        ).toLocaleTimeString()}`}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-4">
+                        <div className="flex flex-col space-y-2">
+                          <div className="flex items-center justify-end mb-1">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <HelpCircle className="h-5 w-5 cursor-help text-gray-500" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" align="end">
+                                  <p className="max-w-xs">
+                                    best practice for identification is to say
+                                    &quot;person talking about x, y, z, is john
+                                    ...&quot; this helps the ai to link topics
+                                    to specific individuals, improving accuracy
+                                    in participant identification.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <Textarea
+                            rows={2}
+                            value={customIdentifyPrompt}
+                            onChange={(e) =>
+                              setCustomIdentifyPrompt(e.target.value)
+                            }
+                            placeholder="custom identify prompt (optional)"
+                            className="resize-none border rounded text-sm w-full"
+                          />
+                          <div className="flex items-center justify-between">
+                            <p>
+                              participants:{" "}
+                              {meeting.participants || "not identified"}
+                            </p>
+                            <Button
+                              onClick={() => identifyParticipants(meeting)}
+                              disabled={isIdentifying}
+                              size="sm"
+                              className="text-xs bg-black text-white hover:bg-gray-800"
+                            >
+                              {isIdentifying ? (
+                                <Users className="h-4 w-4 mr-2 animate-pulse" />
+                              ) : (
+                                <Users className="h-4 w-4 mr-2" />
+                              )}
+                              {isIdentifying ? "identifying..." : "identify"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mb-4 relative">
+                        <h4 className="font-semibold mb-2">
+                          full transcription:
+                        </h4>
                         <Button
                           onClick={() =>
-                            copyWithToast(meeting.summary || "", "summary")
+                            copyWithToast(
+                              meeting.fullTranscription,
+                              "full transcription"
+                            )
                           }
                           className="absolute top-0 right-0 p-1 h-6 w-6"
                           variant="outline"
@@ -699,39 +732,57 @@ export default function MeetingHistory() {
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
-                      )}
-                      {meeting.summary ? (
-                        <ReactMarkdown className="prose max-w-none">
-                          {meeting.summary}
-                        </ReactMarkdown>
-                      ) : (
-                        <div className="flex items-center mt-2">
-                          <input
-                            type="text"
-                            value={customSummaryPrompt}
-                            onChange={(e) =>
-                              setCustomSummaryPrompt(e.target.value)
-                            }
-                            placeholder="custom summary prompt (optional)"
-                            className="mr-2 p-2 border rounded text-sm flex-grow"
-                          />
+                        <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
+                          {meeting.fullTranscription}
+                        </pre>
+                      </div>
+                      <div className="relative">
+                        <h4 className="font-semibold mb-2">summary:</h4>
+                        {meeting.summary && (
                           <Button
-                            onClick={() => generateSummary(meeting)}
-                            disabled={isSummarizing}
+                            onClick={() =>
+                              copyWithToast(meeting.summary || "", "summary")
+                            }
+                            className="absolute top-0 right-0 p-1 h-6 w-6"
+                            variant="outline"
+                            size="icon"
                           >
-                            {isSummarizing ? (
-                              <FileText className="h-4 w-4 mr-2 animate-pulse" />
-                            ) : (
-                              <PlusCircle className="h-4 w-4 mr-2" />
-                            )}
-                            {isSummarizing
-                              ? "generating summary..."
-                              : "generate summary"}
+                            <Copy className="h-4 w-4" />
                           </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                        )}
+                        {meeting.summary ? (
+                          <ReactMarkdown className="prose max-w-none">
+                            {meeting.summary}
+                          </ReactMarkdown>
+                        ) : (
+                          <div className="flex items-center mt-2">
+                            <Input
+                              type="text"
+                              value={customSummaryPrompt}
+                              onChange={(e) =>
+                                setCustomSummaryPrompt(e.target.value)
+                              }
+                              placeholder="custom summary prompt (optional)"
+                              className="mr-2 p-2 border rounded text-sm flex-grow"
+                            />
+                            <Button
+                              onClick={() => generateSummary(meeting)}
+                              disabled={isSummarizing}
+                            >
+                              {isSummarizing ? (
+                                <FileText className="h-4 w-4 mr-2 animate-pulse" />
+                              ) : (
+                                <PlusCircle className="h-4 w-4 mr-2" />
+                              )}
+                              {isSummarizing
+                                ? "generating summary..."
+                                : "generate summary"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             </>
