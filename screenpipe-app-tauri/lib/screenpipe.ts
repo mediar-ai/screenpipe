@@ -20,6 +20,8 @@ export type AudioContent = {
   file_path: string;
   offset_index: number;
   tags: string[];
+  device_name: string;
+  device_type: string;
 };
 
 export type FTSContent = {
