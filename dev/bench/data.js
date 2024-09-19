@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726776830959,
+  "lastUpdate": 1726780821854,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -7739,6 +7739,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 3326861791,
             "range": "± 155161778",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "9091d57c0c8e5b6b1bcc1000243b82d659ef752b",
+          "message": "fix: meeting weird merge + bunch of ui improvement",
+          "timestamp": "2024-09-19T14:11:03-07:00",
+          "tree_id": "eeb620bad28a02fb8d17c4bf3d1bf6968632e5bd",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/9091d57c0c8e5b6b1bcc1000243b82d659ef752b"
+        },
+        "date": 1726780821049,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1969765250,
+            "range": "± 46579717",
             "unit": "ns/iter"
           }
         ]
