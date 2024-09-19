@@ -2,7 +2,7 @@
 export default {
     "getting-started": "getting started",
     "architecture": "architecture overview",
-    "plugins": "plugins",
+    "plugins": "plugins (pipes)",
     "examples": "examples & use cases",
     "api-reference": "api reference",
     "contributing": "contributing",
