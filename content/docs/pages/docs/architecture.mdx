@@ -21,5 +21,61 @@ screenpipe's architecture handles continuous screen and audio capture, local dat
 
 this modular architecture makes screenpipe adaptable to various use cases, from personal productivity tracking to advanced business intelligence.
 
+## status 
+
+Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop, 24/7.
+
+Uses 600 MB, 10% CPU.
+
+- [ ] Integrations
+    - [x] ollama
+    - [x] openai
+    - [x] Friend wearable 
+    - [x] [Fileorganizer2000](https://github.com/different-ai/file-organizer-2000)
+    - [x] mem0
+    - [x] Brilliant Frames
+    - [x] Vercel AI SDK
+    - [ ] supermemory
+    - [x] deepgram
+    - [x] unstructured
+    - [x] excalidraw
+    - [x] Obsidian
+    - [x] Apple shortcut
+    - [x] multion
+    - [x] iPhone
+    - [ ] Android
+    - [ ] Camera
+    - [ ] Keyboard
+    - [x] Browser
+    - [x] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Deno Typescript engine within screenpipe on your computer
+- [x] screenshots + OCR with different engines to optimise privacy, quality, or energy consumption
+  - [x] tesseract
+  - [x] Windows native OCR
+  - [x] Apple native OCR
+  - [x] unstructured.io
+  - [ ] screenpipe screen/audio specialised LLM
+- [x] audio + STT (works with multi input devices, like your iPhone + mac mic, many STT engines)
+  - [x] Linux, MacOS, Windows input & output devices
+  - [x] iPhone microphone
+- [x] [remote capture](https://github.com/mediar-ai/screenpipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
+- [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
+- [x] sqlite local db
+- [x] local api
+- [x] Cross platform CLI, [desktop app](https://screenpi.pe/) (MacOS, Windows, Linux)
+- [x] Metal, CUDA
+- [ ] TS SDK
+- [ ] multimodal embeddings
+- [ ] cloud storage options (s3, pgsql, etc.)
+- [x] cloud computing options (deepgram for audio, unstructured for OCR)
+- [x] custom storage settings: customizable capture settings (fps, resolution)
+- [ ] security
+  - [x] window specific capture (e.g. can decide to only capture specific tab of cursor, chrome, obsidian, or only specific app)
+  - [ ] encryption
+  - [x] PII removal
+- [ ] fast, optimised, energy-efficient modes
+- [ ] webhooks/events (for automations)
+- [ ] abstractions for multiplayer usage (e.g. aggregate sales team data, company team data, partner, etc.)
+
+
 </MotionDiv>
 
