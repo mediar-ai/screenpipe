@@ -10,3 +10,5 @@ pub use pipes::*;
 pub mod pii_removal;
 #[cfg(feature = "security")]
 pub use pii_removal::*;
+pub mod events;
+pub use events::*;

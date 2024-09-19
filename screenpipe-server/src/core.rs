@@ -1,13 +1,14 @@
 use crate::cli::{CliVadEngine, CliVadSensitivity};
-use crate::{DatabaseManager, VideoCapture};
+use crate::{DatabaseManager, EventSystem, VideoCapture};
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
-use screenpipe_audio::vad_engine::VadSensitivity;
+use screenpipe_audio::meeting_detector::MeetingDetector;
+use screenpipe_audio::vad_engine::{create_vad_engine, VadEngine};
 use screenpipe_audio::{
-    create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
-    AudioInput, AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
+    create_whisper_channel, record_and_transcribe, AudioDevice, AudioInput,
+    AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
 };
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
@@ -15,7 +16,7 @@ use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -44,7 +45,12 @@ pub async fn start_continuous_recording(
     include_windows: &[String],
     deepgram_api_key: Option<String>,
     vad_sensitivity: CliVadSensitivity,
+    event_system: Arc<EventSystem>, // Add this parameter
 ) -> Result<()> {
+    let mut vad_engine = create_vad_engine(vad_engine.into()).await?;
+    vad_engine.set_sensitivity(vad_sensitivity.into());
+    let vad_engine_mutex: Arc<Mutex<Box<dyn VadEngine + Send>>> = Arc::new(Mutex::new(vad_engine));
+    let vad_engine_mutex_clone = vad_engine_mutex.clone();
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
         let (input_sender, _): (UnboundedSender<AudioInput>, UnboundedReceiver<AudioInput>) =
@@ -61,10 +67,9 @@ pub async fn start_continuous_recording(
     } else {
         create_whisper_channel(
             audio_transcription_engine.clone(),
-            VadEngineEnum::from(vad_engine),
             deepgram_api_key,
             &PathBuf::from(output_path.as_ref()),
-            VadSensitivity::from(vad_sensitivity),
+            vad_engine_mutex,
         )
         .await?
     };
@@ -128,6 +133,8 @@ pub async fn start_continuous_recording(
                 audio_devices_control,
                 friend_wearable_uid,
                 audio_transcription_engine,
+                vad_engine_mutex_clone,
+                event_system, // Add this line
             )
             .await
         })
@@ -257,8 +264,11 @@ async fn record_audio(
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     friend_wearable_uid: Option<String>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
+    event_system: Arc<EventSystem>, // Add this parameter
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
+    let mut meeting_detector = MeetingDetector::new(vad_engine).await?;
 
     loop {
         while let Some((audio_device, device_control)) = audio_devices_control.pop() {
@@ -358,7 +368,19 @@ async fn record_audio(
                 "device {} received transcription {:?}",
                 transcription.input.device, transcription.transcription
             );
-            // avoiding crashing the audio processing if one fails
+
+            // Process audio with MeetingDetector
+            if let Some(meeting_event) =
+                meeting_detector.process_audio(&transcription.input.data)?
+            {
+                // Handle meeting event (e.g., log it, store in database, etc.)
+                info!("Meeting event detected: {:?}", meeting_event);
+
+                // Send the meeting event using the event system
+                event_system.publish(meeting_event);
+            }
+
+            // Process transcription result
             if let Err(e) = process_audio_result(
                 &db,
                 transcription,
@@ -368,7 +390,6 @@ async fn record_audio(
             .await
             {
                 error!("Error processing audio result: {}", e);
-                // Optionally, you can add more specific error handling here
             }
         }
 

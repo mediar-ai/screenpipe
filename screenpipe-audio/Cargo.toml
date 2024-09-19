@@ -61,6 +61,8 @@ webrtc-vad = "0.4.0"
 # Deepgram
 reqwest = { workspace = true }
 
+uuid = { version = "1.10.0", features = ["v4"] }
+
 screenpipe-core = { path = "../screenpipe-core" }
 
 [target.'cfg(target_os = "windows")'.dependencies]

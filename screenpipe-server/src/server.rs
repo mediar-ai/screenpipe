@@ -1,7 +1,10 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{
+        ws::{Message, WebSocket},
+        Path, Query, State, WebSocketUpgrade,
+    },
     http::StatusCode,
-    response::Json as JsonResponse,
+    response::{IntoResponse, Json as JsonResponse},
     routing::{get, post},
     serve, Router,
 };
@@ -14,14 +17,14 @@ use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
-    ContentType, DatabaseManager, SearchResult,
+    ContentType, DatabaseManager, EventSystem, SearchResult,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
-    DeviceType,
+    default_input_device, default_output_device, list_audio_devices,
+    meeting_detector::MeetingEvent, AudioDevice, DeviceControl, DeviceType,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -47,6 +50,7 @@ pub struct AppState {
     pub pipe_manager: Arc<PipeManager>,
     pub vision_disabled: bool,
     pub audio_disabled: bool,
+    pub event_system: Arc<EventSystem>,
 }
 
 // Update the SearchQuery struct
@@ -710,6 +714,7 @@ pub struct Server {
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
     audio_disabled: bool,
+    event_system: Arc<EventSystem>,
 }
 
 impl Server {
@@ -722,6 +727,7 @@ impl Server {
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
         audio_disabled: bool,
+        event_system: Arc<EventSystem>,
     ) -> Self {
         Server {
             db,
@@ -732,6 +738,7 @@ impl Server {
             pipe_manager,
             vision_disabled,
             audio_disabled,
+            event_system,
         }
     }
 
@@ -753,6 +760,7 @@ impl Server {
             pipe_manager: self.pipe_manager,
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
+            event_system: self.event_system,
         });
 
         let app = create_router()
@@ -797,6 +805,24 @@ async fn merge_frames_handler(
     }
 }
 
+pub async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_socket(socket, state))
+}
+
+async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+    let mut meeting_event_rx = state.event_system.subscribe::<MeetingEvent>();
+
+    while let Ok(event) = meeting_event_rx.recv().await {
+        let json = serde_json::to_string(&event).unwrap();
+        if socket.send(Message::Text(json)).await.is_err() {
+            break;
+        }
+    }
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/search", get(search))
@@ -814,6 +840,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
+        .route("/ws", get(ws_handler))
 }
 
 /*
@@ -1019,6 +1046,39 @@ echo "Merge Response: $MERGE_RESPONSE"
 MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
+
+
+# events
+
+virtualenv venv
+source venv/bin/activate
+pip install websocket-client
+
+python3
+
+import websocket
+import json
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        print('received event:', data)
+    except json.JSONDecodeError as e:
+        print('error parsing event data:', str(e))
+
+def on_error(ws, error):
+    print('websocket error:', str(error))
+
+def on_close(ws, close_status_code, close_msg):
+    print('websocket connection closed')
+
+def on_open(ws):
+    print('websocket connection established')
+
+websocket.enableTrace(True)
+ws = websocket.WebSocketApp("ws://localhost:3030/ws", on_open=on_open, on_message=on_message, on_error=on_error, on_close=on_close)
+
+ws.run_forever()
 
 
 */

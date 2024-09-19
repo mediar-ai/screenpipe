@@ -22,9 +22,7 @@ use rubato::{
 };
 
 use crate::{
-    encode_single_audio, multilingual,
-    vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
-    AudioDevice, AudioTranscriptionEngine,
+    encode_single_audio, multilingual, vad_engine::VadEngine, AudioDevice, AudioTranscriptionEngine,
 };
 
 use hound::{WavSpec, WavWriter};
@@ -521,14 +519,14 @@ pub fn stt_sync(
     audio_input: &AudioInput,
     whisper_model: &WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>, // Changed type here
+    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
 ) -> Result<(String, String)> {
     let audio_input = audio_input.clone();
     let whisper_model = whisper_model.clone();
     let output_path = output_path.clone();
-    let vad_engine = vad_engine.clone(); // Clone the Arc to move into the closure
+    let vad_engine = vad_engine.clone();
 
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -538,7 +536,7 @@ pub fn stt_sync(
             &audio_input,
             &whisper_model,
             audio_transcription_engine,
-            &mut **vad_engine_guard, // Obtain &mut dyn VadEngine
+            &mut **vad_engine_guard,
             deepgram_api_key,
             &output_path,
         ))
@@ -821,14 +819,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    vad_engine: VadEngineEnum,
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
-    vad_sensitivity: VadSensitivity,
+    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
 ) -> Result<(
     UnboundedSender<AudioInput>,
     UnboundedReceiver<TranscriptionResult>,
-    Arc<AtomicBool>, // Shutdown flag
+    Arc<AtomicBool>,
 )> {
     let whisper_model = WhisperModel::new(audio_transcription_engine.clone())?;
     let (input_sender, mut input_receiver): (
@@ -839,12 +836,7 @@ pub async fn create_whisper_channel(
         UnboundedSender<TranscriptionResult>,
         UnboundedReceiver<TranscriptionResult>,
     ) = unbounded_channel();
-    let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
-        VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
-        VadEngineEnum::Silero => Box::new(SileroVad::new().await?),
-    };
-    vad_engine.set_sensitivity(vad_sensitivity);
-    let vad_engine = Arc::new(Mutex::new(vad_engine));
+
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.clone();

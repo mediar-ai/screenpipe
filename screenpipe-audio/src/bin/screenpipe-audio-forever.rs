@@ -7,13 +7,15 @@ use screenpipe_audio::default_output_device;
 use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
-use screenpipe_audio::vad_engine::VadSensitivity;
+use screenpipe_audio::vad_engine::create_vad_engine;
+use screenpipe_audio::vad_engine::VadEngine;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 #[derive(Parser, Debug)]
@@ -80,13 +82,15 @@ async fn main() -> Result<()> {
         return Err(anyhow!("No audio input devices found"));
     }
 
+    let vad_engine_mutex: Arc<Mutex<Box<dyn VadEngine + Send>>> =
+        Arc::new(Mutex::new(create_vad_engine(VadEngineEnum::Silero).await?));
+
     let chunk_duration = Duration::from_secs_f32(args.audio_chunk_duration);
     let (whisper_sender, mut whisper_receiver, _) = create_whisper_channel(
         Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
-        VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
         args.deepgram_api_key,
         &PathBuf::from("output.mp4"),
-        VadSensitivity::Medium,
+        vad_engine_mutex,
     )
     .await?;
     // Spawn threads for each device

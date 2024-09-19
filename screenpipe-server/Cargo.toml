@@ -37,7 +37,7 @@ hf-hub = "0.3.2"
 rand = "0.8.5"
 
 # Server
-axum = "0.7.5"
+axum = { version = "0.7.5", features = ["ws"] }
 tokio = { version = "1.15", features = ["full", "tracing"] }
 tower-http = { version = "0.5.2", features = ["cors", "trace"] }
 
@@ -68,6 +68,7 @@ reqwest = { workspace = true }
 
 # Concurrency
 crossbeam = { workspace = true }
+parking_lot = "0.12.1"
 
 # Friend integration
 screenpipe-integrations = { path = "../screenpipe-integrations" }

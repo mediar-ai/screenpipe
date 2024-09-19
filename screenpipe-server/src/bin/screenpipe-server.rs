@@ -16,7 +16,7 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, EventSystem, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
@@ -298,6 +298,9 @@ async fn main() -> anyhow::Result<()> {
         1.0
     };
 
+    let event_system = Arc::new(EventSystem::new());
+    let event_system_server = event_system.clone();
+
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -327,6 +330,7 @@ async fn main() -> anyhow::Result<()> {
                     &cli.included_windows,
                     cli.deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
+                    event_system.clone(),
                 );
 
                 let result = tokio::select! {
@@ -363,6 +367,7 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
+        event_system_server,
     );
 
     let mut pipe_futures = FuturesUnordered::new();
