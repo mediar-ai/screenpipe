@@ -27,6 +27,11 @@ export function SqlAutocompleteInput({
   const inputRef = useRef<HTMLInputElement>(null);
   const commandRef = useRef<HTMLDivElement>(null);
 
+  // update local state when prop changes
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
   const handleSelect = (selectedValue: string) => {
     onChange(selectedValue);
     setInputValue(selectedValue);
@@ -36,8 +41,9 @@ export function SqlAutocompleteInput({
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setInputValue(e.target.value);
-      onChange(e.target.value);
+      const newValue = e.target.value;
+      setInputValue(newValue);
+      onChange(newValue);
     },
     [onChange]
   );

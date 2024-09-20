@@ -437,6 +437,14 @@ export function SearchChat() {
     }
   };
 
+  const handleBadgeClick = (value: string, type: "app" | "window") => {
+    if (type === "app") {
+      setAppName(value);
+    } else {
+      setWindowName(value);
+    }
+  };
+
   const renderSearchResults = () => {
     if (isLoading) {
       return Array(3)
@@ -569,7 +577,9 @@ export function SearchChat() {
                 {item.type === "OCR" && item.content.app_name && (
                   <Badge
                     className="text-xs cursor-pointer"
-                    onClick={() => setAppName(item.content.app_name)}
+                    onClick={() =>
+                      handleBadgeClick(item.content.app_name, "app")
+                    }
                   >
                     {item.content.app_name}
                   </Badge>
@@ -577,7 +587,9 @@ export function SearchChat() {
                 {item.type === "OCR" && item.content.window_name && (
                   <Badge
                     className="text-xs cursor-pointer"
-                    onClick={() => setWindowName(item.content.window_name)}
+                    onClick={() =>
+                      handleBadgeClick(item.content.window_name, "window")
+                    }
                   >
                     {item.content.window_name}
                   </Badge>
