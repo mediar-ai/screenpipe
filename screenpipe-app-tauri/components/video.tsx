@@ -13,13 +13,13 @@ export const VideoComponent = memo(function VideoComponent({
 
   const sanitizeFilePath = useCallback((path: string): string => {
     const isWindows = platform() === "windows";
-    return (
-      path
-        .replace(/^["']|["']$/g, "")
-        .trim()
-        // only replace forward slashes with backslashes on Windows
-        .replace(/\//g, isWindows ? "\\" : "/")
-    );
+    if (isWindows) {
+      return path; // no sanitization on windows
+    }
+    return path
+      .replace(/^["']|["']$/g, "")
+      .trim()
+      .replace(/\//g, "/");
   }, []);
 
   const renderFileLink = () => (
