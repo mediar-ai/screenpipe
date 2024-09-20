@@ -7,17 +7,22 @@ use screenpipe_integrations::friend_wearable::FriendWearableDatabase;
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Serialize};
 use sqlx::migrate::MigrateDatabase;
+use sqlx::Column;
 use sqlx::Error as SqlxError;
+use sqlx::Row;
+use sqlx::TypeInfo;
+use sqlx::ValueRef;
 use sqlx::{
     sqlite::{SqlitePool, SqlitePoolOptions},
     FromRow,
 };
+
 use std::error::Error as StdError;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::{timeout, Duration as TokioDuration};
 
+use tokio::time::{timeout, Duration as TokioDuration};
 #[derive(Debug)]
 pub struct DatabaseError(String);
 
@@ -1420,6 +1425,43 @@ impl DatabaseManager {
 
         tx.commit().await?;
         Ok(())
+    }
+    pub async fn execute_raw_sql(&self, query: &str) -> Result<serde_json::Value, sqlx::Error> {
+        let rows = sqlx::query(query).fetch_all(&self.pool).await?;
+
+        let result: Vec<serde_json::Map<String, serde_json::Value>> = rows
+            .iter()
+            .map(|row| {
+                let mut map = serde_json::Map::new();
+                for (i, column) in row.columns().iter().enumerate() {
+                    if let Ok(value) = row.try_get_raw(i) {
+                        let json_value = match value.type_info().name() {
+                            "TEXT" => {
+                                let s: String = row.try_get(i).unwrap_or_default();
+                                serde_json::Value::String(s)
+                            }
+                            "INTEGER" => {
+                                let i: i64 = row.try_get(i).unwrap_or_default();
+                                serde_json::Value::Number(i.into())
+                            }
+                            "REAL" => {
+                                let f: f64 = row.try_get(i).unwrap_or_default();
+                                serde_json::Value::Number(
+                                    serde_json::Number::from_f64(f).unwrap_or(0.into()),
+                                )
+                            }
+                            _ => serde_json::Value::Null,
+                        };
+                        map.insert(column.name().to_string(), json_value);
+                    }
+                }
+                map
+            })
+            .collect();
+
+        Ok(serde_json::Value::Array(
+            result.into_iter().map(serde_json::Value::Object).collect(),
+        ))
     }
 }
 

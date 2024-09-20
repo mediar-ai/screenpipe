@@ -797,6 +797,27 @@ async fn merge_frames_handler(
     }
 }
 
+#[derive(Deserialize)]
+struct RawSqlQuery {
+    query: String,
+}
+
+async fn execute_raw_sql(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<RawSqlQuery>,
+) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<serde_json::Value>)> {
+    match state.db.execute_raw_sql(&payload.query).await {
+        Ok(result) => Ok(JsonResponse(result)),
+        Err(e) => {
+            error!("Failed to execute raw SQL query: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ))
+        }
+    }
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/search", get(search))
@@ -814,6 +835,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
+        .route("/raw_sql", post(execute_raw_sql))
 }
 
 /*

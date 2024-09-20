@@ -70,6 +70,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatISO } from "date-fns";
 import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "./ui/codeblock";
+import { SqlAutocompleteInput } from "./sql-autocomplete-input";
+import { encode } from "@/lib/utils";
 
 export function SearchChat() {
   // Search state
@@ -124,7 +126,7 @@ export function SearchChat() {
 
   const generateCurlCommand = () => {
     const baseUrl = "http://localhost:3030";
-    const queryParams = new URLSearchParams({
+    const params = {
       content_type: contentType,
       limit: limit.toString(),
       offset: offset.toString(),
@@ -132,15 +134,18 @@ export function SearchChat() {
       end_time: formatISO(endDate, { representation: "complete" }),
       min_length: minLength.toString(),
       max_length: maxLength.toString(),
-    });
+      q: query,
+      app_name: appName,
+      window_name: windowName,
+      include_frames: includeFrames ? "true" : undefined,
+    };
 
-    if (query) queryParams.append("q", query);
-    if (appName) queryParams.append("app_name", appName);
-    if (windowName) queryParams.append("window_name", windowName);
-    if (includeFrames) queryParams.append("include_frames", "true");
+    const queryString = Object.entries(params)
+      .filter(([_, value]) => value !== undefined && value !== "")
+      .map(([key, value]) => `  ${key}=${JSON.stringify(value)}`)
+      .join(" \\\n");
 
-    return `curl "${baseUrl}/search?\\
-${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
+    return `curl "${baseUrl}/search" \\\n${queryString} | jq`;
   };
 
   useEffect(() => {
@@ -706,71 +711,34 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
           </div>
         </div>
         <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="app-name">app name</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    enter the name of the app to search for content for example
-                    zoom, notion, etc. only works for ocr.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="relative">
-            <Laptop
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={18}
-            />
-            <Input
-              id="app-name"
-              type="text"
-              placeholder="app name"
-              value={appName}
-              onChange={(e) => setAppName(e.target.value)}
-              autoCorrect="off"
-              className="pl-8"
-            />
-          </div>
+          <SqlAutocompleteInput
+            id="app-name"
+            placeholder="app name"
+            value={appName}
+            onChange={setAppName}
+            type="app"
+            icon={
+              <Laptop
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+            }
+          />
         </div>
         <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="window-name">window name</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    enter the name of the window or tab to search for content.
-                    can be a browser tab name, app tab name, etc. only works for
-                    ocr.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="relative">
-            <Layout
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={18}
-            />
-            <Input
-              id="window-name"
-              type="text"
-              placeholder="window name"
-              value={windowName}
-              onChange={(e) => setWindowName(e.target.value)}
-              autoCorrect="off"
-              className="pl-8"
-            />
-          </div>
+          <SqlAutocompleteInput
+            id="window-name"
+            placeholder="window name"
+            value={windowName}
+            onChange={setWindowName}
+            type="window"
+            icon={
+              <Layout
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+            }
+          />
         </div>
         <div className="flex items-center space-x-2">
           <Switch
@@ -916,7 +884,9 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
                 </span>
               </DialogDescription>
             </DialogHeader>
-            <CodeBlock language="bash" value={generateCurlCommand()} />
+            <div className="overflow-x-auto">
+              <CodeBlock language="bash" value={generateCurlCommand()} />
+            </div>
           </DialogContent>
         </Dialog>
       </div>

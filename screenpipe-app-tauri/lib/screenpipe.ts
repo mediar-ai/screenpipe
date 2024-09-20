@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { encode } from "./utils";
 
 // Define types based on the server's schema
 export type OCRContent = {
@@ -146,37 +147,36 @@ export async function queryScreenpipe(
   try {
     console.log("params", params);
 
-    const queryParams = new URLSearchParams(
-      Object.entries({
-        q: params.q ? encodeURIComponent(params.q) : undefined,
-        offset: params.offset.toString(),
-        limit: params.limit.toString(),
-        start_time: params.start_time,
-        end_time: params.end_time,
-        content_type: params.content_type,
-        app_name: params.app_name
-          ? encodeURIComponent(params.app_name)
-          : undefined,
-        window_name: params.window_name
-          ? encodeURIComponent(params.window_name)
-          : undefined,
-        include_frames: params.include_frames.toString(),
-        min_length: params.min_length.toString(),
-        max_length: params.max_length.toString(),
-      }).filter(([_, v]) => v != null) as [string, string][]
-    );
-    console.log("calling screenpipe", JSON.stringify(params));
-    const response = await fetch(`http://localhost:3030/search?${queryParams}`);
+    const queryParams = new URLSearchParams({
+      content_type: params.content_type,
+      limit: params.limit.toString(),
+      offset: params.offset.toString(),
+      start_time: params.start_time,
+      end_time: params.end_time,
+      min_length: params.min_length.toString(),
+      max_length: params.max_length.toString(),
+      include_frames: params.include_frames.toString(),
+    });
+
+    if (params.q) queryParams.append("q", params.q);
+    if (params.app_name) queryParams.append("app_name", params.app_name);
+    if (params.window_name)
+      queryParams.append("window_name", params.window_name);
+
+    const url = `http://localhost:3030/search?${queryParams.toString()}`;
+    console.log("calling screenpipe", url);
+
+    const response = await fetch(url);
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`HTTP error! status: ${response.status} ${text}`);
+      throw new Error(`http error! status: ${response.status} ${text}`);
     }
     const result = await response.json();
     console.log("result", result);
     console.log("result", result.data.length);
     return result;
   } catch (error) {
-    console.error("Error querying screenpipe:", error);
+    console.error("error querying screenpipe:", error);
     return null;
   }
 }
