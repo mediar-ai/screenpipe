@@ -14,7 +14,6 @@ use log::{debug, error, info};
 use objc::rc::autoreleasepool;
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use candle_transformers::models::whisper::{self as m, audio, Config};
 use rubato::{
@@ -826,19 +825,19 @@ pub async fn create_whisper_channel(
     output_path: &PathBuf,
     vad_sensitivity: VadSensitivity,
 ) -> Result<(
-    UnboundedSender<AudioInput>,
-    UnboundedReceiver<TranscriptionResult>,
+    crossbeam::channel::Sender<AudioInput>,
+    crossbeam::channel::Receiver<TranscriptionResult>,
     Arc<AtomicBool>, // Shutdown flag
 )> {
     let whisper_model = WhisperModel::new(audio_transcription_engine.clone())?;
-    let (input_sender, mut input_receiver): (
-        UnboundedSender<AudioInput>,
-        UnboundedReceiver<AudioInput>,
-    ) = unbounded_channel();
+    let (input_sender, input_receiver): (
+        crossbeam::channel::Sender<AudioInput>,
+        crossbeam::channel::Receiver<AudioInput>,
+    ) = crossbeam::channel::bounded(100);
     let (output_sender, output_receiver): (
-        UnboundedSender<TranscriptionResult>,
-        UnboundedReceiver<TranscriptionResult>,
-    ) = unbounded_channel();
+        crossbeam::channel::Sender<TranscriptionResult>,
+        crossbeam::channel::Receiver<TranscriptionResult>,
+    ) = crossbeam::channel::bounded(100);
     let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
         VadEngineEnum::Silero => Box::new(SileroVad::new().await?),
@@ -857,18 +856,46 @@ pub async fn create_whisper_channel(
             }
             debug!("Waiting for input from input_receiver");
 
-            tokio::select! {
-                Some(input) = input_receiver.recv() => {
-                    debug!("Received input from input_receiver");
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Time went backwards")
-                        .as_secs();
+            crossbeam::select! {
+                recv(input_receiver) -> input_result => {
+                    match input_result {
+                        Ok(input) => {
+                            debug!("Received input from input_receiver");
+                            let timestamp = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .expect("Time went backwards")
+                                .as_secs();
 
-                    let transcription_result = if cfg!(target_os = "macos") {
-                        #[cfg(target_os = "macos")]
-                        {
-                            autoreleasepool(|| {
+                            let transcription_result = if cfg!(target_os = "macos") {
+                                #[cfg(target_os = "macos")]
+                                {
+                                    autoreleasepool(|| {
+                                        match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
+                                            Ok((transcription, path)) => TranscriptionResult {
+                                                input: input.clone(),
+                                                transcription: Some(transcription),
+                                                path,
+                                                timestamp,
+                                                error: None,
+                                            },
+                                            Err(e) => {
+                                                error!("STT error for input {}: {:?}", input.device, e);
+                                                TranscriptionResult {
+                                                    input: input.clone(),
+                                                    transcription: None,
+                                                    path: "".to_string(),
+                                                    timestamp,
+                                                    error: Some(e.to_string()),
+                                                }
+                                            },
+                                        }
+                                    })
+                                }
+                                #[cfg(not(target_os = "macos"))]
+                                {
+                                    unreachable!("This code should not be reached on non-macOS platforms")
+                                }
+                            } else {
                                 match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
                                     Ok((transcription, path)) => TranscriptionResult {
                                         input: input.clone(),
@@ -888,39 +915,20 @@ pub async fn create_whisper_channel(
                                         }
                                     },
                                 }
-                            })
-                        }
-                        #[cfg(not(target_os = "macos"))]
-                        {
-                            unreachable!("This code should not be reached on non-macOS platforms")
-                        }
-                    } else {
-                        match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
-                            Ok((transcription, path)) => TranscriptionResult {
-                                input: input.clone(),
-                                transcription: Some(transcription),
-                                path,
-                                timestamp,
-                                error: None,
-                            },
-                            Err(e) => {
-                                error!("STT error for input {}: {:?}", input.device, e);
-                                TranscriptionResult {
-                                    input: input.clone(),
-                                    transcription: None,
-                                    path: "".to_string(),
-                                    timestamp,
-                                    error: Some(e.to_string()),
-                                }
-                            },
-                        }
-                    };
+                            };
 
-                    if output_sender.send(transcription_result).is_err() {
-                        break;
+                            if output_sender.send(transcription_result).is_err() {
+                                break;
+                            }
+                        },
+                        Err(e) => {
+                            error!("Error receiving input: {:?}", e);
+                            // Depending on the error type, you might want to break the loop or continue
+                            // For now, we'll continue to the next iteration
+                            continue;
+                        }
                     }
-                }
-                else => break,
+                },
             }
         }
         // Cleanup code here (if needed)

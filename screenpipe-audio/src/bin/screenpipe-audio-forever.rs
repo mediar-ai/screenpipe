@@ -81,7 +81,7 @@ async fn main() -> Result<()> {
     }
 
     let chunk_duration = Duration::from_secs_f32(args.audio_chunk_duration);
-    let (whisper_sender, mut whisper_receiver, _) = create_whisper_channel(
+    let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
         Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
         VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
         args.deepgram_api_key,
@@ -121,12 +121,12 @@ async fn main() -> Result<()> {
 
     // Main loop to receive and print transcriptions
     loop {
-        match whisper_receiver.recv().await {
-            Some(result) => {
+        match whisper_receiver.recv() {
+            Ok(result) => {
                 info!("Transcription: {:?}", result);
             }
-            None => {
-                eprintln!("Error receiving transcription");
+            Err(e) => {
+                eprintln!("Error receiving transcription: {:?}", e);
             }
         }
     }

@@ -63,6 +63,9 @@ reqwest = { workspace = true }
 
 screenpipe-core = { path = "../screenpipe-core" }
 
+# crossbeam
+crossbeam = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "2.0.0-rc.5", features = ["download-binaries", "copy-dylibs", "directml", "cuda"] }
 esaxx-rs = "0.1.10"

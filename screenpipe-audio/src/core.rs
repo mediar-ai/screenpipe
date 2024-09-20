@@ -9,7 +9,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, thread};
-use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -158,7 +157,7 @@ async fn get_device_and_config(
 pub async fn record_and_transcribe(
     audio_device: Arc<AudioDevice>,
     duration: Duration,
-    whisper_sender: UnboundedSender<AudioInput>,
+    whisper_sender: crossbeam::channel::Sender<AudioInput>,
     is_running: Arc<AtomicBool>,
 ) -> Result<()> {
     let (cpal_audio_device, config) = get_device_and_config(&audio_device).await?;
