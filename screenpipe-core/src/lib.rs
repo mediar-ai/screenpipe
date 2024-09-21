@@ -1,6 +1,8 @@
 pub mod ffmpeg;
 pub use ffmpeg::find_ffmpeg_path;
+#[cfg(feature = "llm")]
 pub mod llm;
+#[cfg(feature = "llm")]
 pub use llm::*;
 #[cfg(feature = "pipes")]
 pub mod pipes;

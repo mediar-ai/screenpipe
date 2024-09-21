@@ -40,6 +40,7 @@ rand = "0.8.5"
 axum = "0.7.5"
 tokio = { version = "1.15", features = ["full", "tracing"] }
 tower-http = { version = "0.5.2", features = ["cors", "trace"] }
+tokio-stream = "0.1.14"
 
 # Log
 log = { workspace = true }

@@ -13,6 +13,10 @@ mod tests {
         let prompt = "Hello, world!";
         let max_tokens = 5;
         let temperature = 0.7;
+        let top_p = 0.9;
+        let seed = 42;
+        let repeat_penalty = 1.;
+        let repeat_last_n = 64;
 
         let mut generated_text = String::new();
         let callback = |text: String| {
@@ -27,6 +31,10 @@ mod tests {
             prompt,
             max_tokens,
             temperature,
+            repeat_penalty,
+            repeat_last_n,
+            seed,
+            top_p,
             &device,
             callback,
         )?;
