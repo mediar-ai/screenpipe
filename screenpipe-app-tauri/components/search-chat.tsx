@@ -130,8 +130,8 @@ export function SearchChat() {
       content_type: contentType,
       limit: limit.toString(),
       offset: offset.toString(),
-      start_time: formatISO(startDate, { representation: "complete" }),
-      end_time: formatISO(endDate, { representation: "complete" }),
+      start_time: startDate.toISOString(),
+      end_time: endDate.toISOString(),
       min_length: minLength.toString(),
       max_length: maxLength.toString(),
       q: query,
@@ -140,12 +140,12 @@ export function SearchChat() {
       include_frames: includeFrames ? "true" : undefined,
     };
 
-    const queryString = Object.entries(params)
+    const queryParams = Object.entries(params)
       .filter(([_, value]) => value !== undefined && value !== "")
-      .map(([key, value]) => `  ${key}=${JSON.stringify(value)}`)
-      .join(" \\\n");
+      .map(([key, value]) => `${key}=${encodeURIComponent(value!)}`)
+      .join("&");
 
-    return `curl "${baseUrl}/search" \\\n${queryString} | jq`;
+    return `curl "${baseUrl}/search?${queryParams}" | jq`;
   };
 
   useEffect(() => {
@@ -396,8 +396,8 @@ export function SearchChat() {
         content_type: contentType as "all" | "ocr" | "audio",
         limit: limit,
         offset: newOffset,
-        start_time: formatISO(startDate, { representation: "complete" }),
-        end_time: formatISO(endDate, { representation: "complete" }),
+        start_time: startDate.toISOString(), // Convert to UTC
+        end_time: endDate.toISOString(), // Convert to UTC
         app_name: appName || undefined,
         window_name: windowName || undefined,
         include_frames: includeFrames,
@@ -572,7 +572,8 @@ export function SearchChat() {
               </Accordion>
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <p className="text-xs text-gray-400">
-                  {new Date(item.content.timestamp).toLocaleString()}
+                  {new Date(item.content.timestamp).toLocaleString()}{" "}
+                  {/* Display local time */}
                 </p>
                 {item.type === "OCR" && item.content.app_name && (
                   <Badge
