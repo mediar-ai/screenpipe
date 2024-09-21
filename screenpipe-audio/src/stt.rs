@@ -48,7 +48,10 @@ async fn transcribe_with_deepgram(
     {
         let spec = WavSpec {
             channels: 1,
-            sample_rate: sample_rate / 3, // for some reason 96khz device need 32 and 48khz need 16 (be mindful resampling)
+            sample_rate: match sample_rate {
+                88200 => 16000, // Deepgram expects 16kHz for 88.2kHz
+                _ => sample_rate / 3, // Fallback for other sample rates
+            },
             bits_per_sample: 32,
             sample_format: hound::SampleFormat::Float,
         };
