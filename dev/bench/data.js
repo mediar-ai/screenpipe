@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726955002109,
+  "lastUpdate": 1726955059395,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -8309,6 +8309,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1962657167,
             "range": "± 41009003",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ba45351afa683f8b6b1d6ea691ab27f1c962c285",
+          "message": "Merge pull request #355 from mediar-ai/update-formula-x86_64-apple-darwin-0d9713288319ab774a58e3988ed88054661dd5ae\n\nUpdate Homebrew formula for x86_64-apple-darwin",
+          "timestamp": "2024-09-21T14:34:05-07:00",
+          "tree_id": "8c4e57f4b9f11cf79cafb7b875e14ad0c4e3194b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/ba45351afa683f8b6b1d6ea691ab27f1c962c285"
+        },
+        "date": 1726955057922,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1986747479,
+            "range": "± 46996977",
             "unit": "ns/iter"
           }
         ]
