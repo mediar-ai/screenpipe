@@ -215,11 +215,11 @@ impl DatabaseManager {
         offset_index: i64,
         transcription_engine: &str,
         device: &AudioDevice,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
-        sqlx::query(
+        let id = sqlx::query(
             "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         )
         .bind(audio_chunk_id)
@@ -230,12 +230,13 @@ impl DatabaseManager {
         .bind(&device.name)
         .bind(device.device_type == DeviceType::Input)
         .execute(&mut *tx)
-        .await?;
+        .await?
+        .last_insert_rowid();
 
         // Commit the transaction for the full transcription
         tx.commit().await?;
 
-        Ok(())
+        Ok(id)
     }
 
     pub async fn insert_video_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
@@ -327,63 +328,6 @@ impl DatabaseManager {
             .await
             {
                 Ok(Ok(())) => {
-                    // Chunk the text before inserting into chunked text index
-                    // const CHUNKING_ENGINE: &str = "local_simple";
-
-                    // let chunks = match CHUNKING_ENGINE {
-                    //     "local_simple" => text_chunking_simple(text),
-                    //     "candle_jina_bert" => text_chunking_by_similarity(text).await,
-                    //     "unstructured" => unstructured_chunking(text)
-                    //         .map_err(|e| anyhow::anyhow!(e))
-                    //         .and_then(|chunks| Ok(chunks)),
-                    //     _ => text_chunking_simple(text), // Default to simple chunking for unknown engines
-                    // };
-
-                    // match chunks {
-                    //     Ok(chunks) => {
-                    //         debug!("Successfully chunked text into {} chunks", chunks.len());
-                    //         for chunk in chunks.iter() {
-                    //             if let Err(e) = self
-                    //                 .insert_chunked_text(
-                    //                     frame_id,
-                    //                     chunk,
-                    //                     Utc::now(),
-                    //                     &format!("{:?}", *ocr_engine),
-                    //                     CHUNKING_ENGINE,
-                    //                     ContentSource::Screen,
-                    //                 )
-                    //                 .await
-                    //             {
-                    //                 error!("Failed to insert chunk into chunked text index: {}", e);
-                    //             }
-                    //         }
-                    //     }
-                    //     Err(e) => {
-                    //         error!("Failed to chunk text: {}", e);
-                    //         // Fallback to inserting the whole text if chunking fails
-                    //         debug!("Inserting whole text as a single chunk");
-                    //         if let Err(e) = self
-                    //             .insert_chunked_text(
-                    //                 frame_id,
-                    //                 text,
-                    //                 Utc::now(),
-                    //                 &format!("{:?}", *ocr_engine),
-                    //                 "No_Chunking",
-                    //                 ContentSource::Screen,
-                    //             )
-                    //             .await
-                    //         {
-                    //             error!(
-                    //                 "Failed to insert whole text into chunked text index: {}",
-                    //                 e
-                    //             );
-                    //         }
-                    //     }
-                    // }
-                    // debug!(
-                    //     "Successfully completed OCR text insertion for frame_id: {} on attempt {}",
-                    //     frame_id, attempt
-                    // );
                     return Ok(());
                 }
                 Ok(Err(e)) => {
@@ -507,82 +451,7 @@ impl DatabaseManager {
             results.extend(audio_results.into_iter().map(SearchResult::Audio));
         }
 
-        // sort results by timestamp in descending order
-        results.sort_by(|a, b| {
-            let timestamp_a = match a {
-                SearchResult::OCR(ocr) => ocr.timestamp,
-                SearchResult::Audio(audio) => audio.timestamp,
-                SearchResult::FTS(fts) => fts.frame_timestamp,
-            };
-            let timestamp_b = match b {
-                SearchResult::OCR(ocr) => ocr.timestamp,
-                SearchResult::Audio(audio) => audio.timestamp,
-                SearchResult::FTS(fts) => fts.frame_timestamp,
-            };
-            timestamp_b.cmp(&timestamp_a)
-        });
-
-        // apply limit after combining and sorting
-        results.truncate(limit as usize);
-
         Ok(results)
-    }
-
-    #[allow(dead_code)]
-    async fn search_fts(
-        &self,
-        query: &str,
-        limit: u32,
-    ) -> Result<Vec<FTSSearchResult>, sqlx::Error> {
-        let sql = r#"
-        SELECT 
-            fts.text_id,
-            fts.text AS matched_text,
-            f.id AS frame_id,
-            f.timestamp AS frame_timestamp,
-            cte.app_name,
-            cte.window_name,
-            vc.file_path AS video_file_path,
-            o.text AS original_frame_text,
-            GROUP_CONCAT(tags.name, ',') as tags
-        FROM 
-            chunked_text_index_fts fts
-        JOIN chunked_text_entries cte ON fts.text_id = cte.text_id
-        JOIN frames f ON cte.frame_id = f.id
-        JOIN video_chunks vc ON f.video_chunk_id = vc.id
-        LEFT JOIN ocr_text o ON f.id = o.frame_id
-        LEFT JOIN vision_tags vt ON f.id = vt.vision_id
-        LEFT JOIN tags ON vt.tag_id = tags.id
-        WHERE fts.text MATCH ?1 COLLATE NOCASE
-        ORDER BY fts.rank
-        LIMIT ?2
-        "#;
-
-        let fts_results_raw = sqlx::query_as::<_, FTSSearchResultRaw>(sql)
-            .bind(query)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?;
-
-        let fts_results = fts_results_raw
-            .into_iter()
-            .map(|raw| FTSSearchResult {
-                text_id: raw.text_id,
-                matched_text: raw.matched_text,
-                frame_id: raw.frame_id,
-                frame_timestamp: raw.frame_timestamp,
-                app_name: raw.app_name,
-                window_name: raw.window_name,
-                video_file_path: raw.video_file_path,
-                original_frame_text: raw.original_frame_text,
-                tags: raw
-                    .tags
-                    .map(|s| s.split(',').map(String::from).collect())
-                    .unwrap_or_default(),
-            })
-            .collect();
-
-        Ok(fts_results)
     }
 
     async fn search_ocr(
@@ -597,7 +466,8 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
-        let mut sql = r#"
+        let mut sql = format!(
+            r#"
             SELECT 
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
@@ -620,40 +490,16 @@ impl DatabaseManager {
             LEFT JOIN
                 tags ON vision_tags.tag_id = tags.id
             WHERE 
-                ocr_text.text LIKE '%' || ?1 || '%' COLLATE NOCASE
+                (?1 = '' OR ocr_text.text LIKE '%' || ?1 || '%' COLLATE NOCASE)
                 AND ocr_text.text != 'No text found'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
-        "#
-        .to_string();
-
-        let mut param_count = 5; // We already have 5 parameters
-
-        if let Some(_) = app_name {
-            param_count += 1;
-            sql.push_str(&format!(
-                " AND ocr_text.app_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
-                param_count
-            ));
-        }
-
-        if let Some(_) = window_name {
-            param_count += 1;
-            sql.push_str(&format!(
-                " AND ocr_text.window_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
-                param_count
-            ));
-        }
-
-        if let Some(_) = min_length {
-            param_count += 1;
-            sql.push_str(&format!(" AND LENGTH(ocr_text.text) >= ?{}", param_count));
-        }
-
-        if let Some(_) = max_length {
-            param_count += 1;
-            sql.push_str(&format!(" AND LENGTH(ocr_text.text) <= ?{}", param_count));
-        }
+                AND (?4 IS NULL OR LENGTH(ocr_text.text) >= ?4)
+                AND (?5 IS NULL OR LENGTH(ocr_text.text) <= ?5)
+                AND (?6 IS NULL OR ocr_text.app_name LIKE '%' || ?6 || '%' COLLATE NOCASE)
+                AND (?7 IS NULL OR ocr_text.window_name LIKE '%' || ?7 || '%' COLLATE NOCASE)
+        "#,
+        );
 
         sql.push_str(
             r#"
@@ -661,36 +507,24 @@ impl DatabaseManager {
                 ocr_text.frame_id
             ORDER BY 
                 frames.timestamp DESC
-            LIMIT ?4 OFFSET ?5
+            LIMIT ?8 OFFSET ?9
             "#,
         );
 
-        let mut query = sqlx::query_as::<_, OCRResultRaw>(&sql)
-            .bind(query)
+        let query = sqlx::query_as::<_, OCRResultRaw>(&sql)
+            .bind(query.trim()) // Trim the query to handle empty strings properly
             .bind(start_time)
             .bind(end_time)
+            .bind(min_length.map(|l| l as i64))
+            .bind(max_length.map(|l| l as i64))
+            .bind(app_name)
+            .bind(window_name)
             .bind(limit)
             .bind(offset);
 
-        if let Some(app_name) = app_name {
-            query = query.bind(app_name);
-        }
-
-        if let Some(window_name) = window_name {
-            query = query.bind(window_name);
-        }
-
-        if let Some(min) = min_length {
-            query = query.bind(min as i64);
-        }
-
-        if let Some(max) = max_length {
-            query = query.bind(max as i64);
-        }
-
         let ocr_results_raw = query.fetch_all(&self.pool).await?;
 
-        let ocr_results = ocr_results_raw
+        let ocr_results: Vec<OCRResult> = ocr_results_raw
             .into_iter()
             .map(|raw| OCRResult {
                 frame_id: raw.frame_id,
@@ -722,7 +556,8 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
-        let mut sql = r#"
+        let mut sql = format!(
+            r#"
         SELECT 
             audio_transcriptions.audio_chunk_id,
             audio_transcriptions.transcription,
@@ -742,57 +577,35 @@ impl DatabaseManager {
         LEFT JOIN
             tags ON audio_tags.tag_id = tags.id
         WHERE 
-            audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
+            (?1 = '' OR audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE)
             AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
             AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-        "#
-        .to_string();
-
-        let mut param_count = 4; // We already have 4 parameters
-
-        if let Some(_) = min_length {
-            param_count += 1;
-            sql.push_str(&format!(
-                " AND LENGTH(audio_transcriptions.transcription) >= ?{}",
-                param_count
-            ));
-        }
-
-        if let Some(_) = max_length {
-            param_count += 1;
-            sql.push_str(&format!(
-                " AND LENGTH(audio_transcriptions.transcription) <= ?{}",
-                param_count
-            ));
-        }
+            AND (?4 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?4)
+            AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
+        "#,
+        );
 
         sql.push_str(
             r#"
-            GROUP BY
-                audio_transcriptions.audio_chunk_id,
-                audio_transcriptions.transcription,
-                audio_transcriptions.timestamp,
-                audio_transcriptions.offset_index
-            ORDER BY 
-                audio_transcriptions.timestamp DESC
-            LIMIT ?4 OFFSET ?5
-            "#,
+        GROUP BY
+            audio_transcriptions.audio_chunk_id,
+            audio_transcriptions.transcription,
+            audio_transcriptions.timestamp,
+            audio_transcriptions.offset_index
+        ORDER BY 
+            audio_transcriptions.timestamp DESC
+        LIMIT ?6 OFFSET ?7
+        "#,
         );
 
-        let mut query = sqlx::query_as::<_, AudioResultRaw>(&sql)
+        let query = sqlx::query_as::<_, AudioResultRaw>(&sql)
             .bind(query)
             .bind(start_time)
             .bind(end_time)
+            .bind(min_length.map(|l| l as i64))
+            .bind(max_length.map(|l| l as i64))
             .bind(limit)
             .bind(offset);
-
-        if let Some(min) = min_length {
-            query = query.bind(min as i64);
-        }
-
-        if let Some(max) = max_length {
-            query = query.bind(max as i64);
-        }
 
         let audio_results_raw = query.fetch_all(&self.pool).await?;
 
@@ -854,7 +667,7 @@ impl DatabaseManager {
     ) -> Result<usize, sqlx::Error> {
         let mut total_count = 0;
 
-        // If app_name is specified, only count OCR results
+        // If app_name or window_name is specified, only count OCR results
         if app_name.is_some() || window_name.is_some() {
             let ocr_count = self
                 .count_ocr_results(
@@ -869,7 +682,7 @@ impl DatabaseManager {
                 .await?;
             total_count += ocr_count;
         } else {
-            // If no app_name is specified, proceed with normal counting
+            // If no app_name or window_name is specified, proceed with normal counting
             if content_type == ContentType::All || content_type == ContentType::OCR {
                 let ocr_count = self
                     .count_ocr_results(
@@ -889,48 +702,7 @@ impl DatabaseManager {
 
         Ok(total_count)
     }
-    pub async fn count_recent_results(
-        &self,
-        start_timestamp: Option<DateTime<Utc>>,
-        end_timestamp: Option<DateTime<Utc>>,
-    ) -> Result<usize, sqlx::Error> {
-        let mut total_count = 0;
 
-        let ocr_count: (i64,) = sqlx::query_as(
-            r#"
-            SELECT COUNT(*)
-            FROM frames
-            JOIN ocr_text ON frames.id = ocr_text.frame_id
-            WHERE 
-                (?1 IS NULL OR frames.timestamp >= ?1)
-                AND (?2 IS NULL OR frames.timestamp <= ?2)
-            "#,
-        )
-        .bind(start_timestamp)
-        .bind(end_timestamp)
-        .fetch_one(&self.pool)
-        .await?;
-
-        total_count += ocr_count.0 as usize;
-
-        let audio_count: (i64,) = sqlx::query_as(
-            r#"
-            SELECT COUNT(*)
-            FROM audio_transcriptions
-            WHERE 
-                (?1 IS NULL OR timestamp >= ?1)
-                AND (?2 IS NULL OR timestamp <= ?2)
-            "#,
-        )
-        .bind(start_timestamp)
-        .bind(end_timestamp)
-        .fetch_one(&self.pool)
-        .await?;
-
-        total_count += audio_count.0 as usize;
-
-        Ok(total_count)
-    }
     async fn count_ocr_results(
         &self,
         query: &str,
@@ -941,64 +713,30 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
     ) -> Result<usize, sqlx::Error> {
-        let mut sql = r#"
+        let sql = r#"
             SELECT COUNT(*)
             FROM ocr_text
             JOIN frames ON ocr_text.frame_id = frames.id
-            WHERE text LIKE '%' || ?1 || '%' COLLATE NOCASE
+            WHERE 
+                (?1 = '' OR ocr_text.text LIKE '%' || ?1 || '%' COLLATE NOCASE)
+                AND ocr_text.text != 'No text found'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
+                AND (?4 IS NULL OR LENGTH(ocr_text.text) >= ?4)
+                AND (?5 IS NULL OR LENGTH(ocr_text.text) <= ?5)
+                AND (?6 IS NULL OR ocr_text.app_name LIKE '%' || ?6 || '%' COLLATE NOCASE)
+                AND (?7 IS NULL OR ocr_text.window_name LIKE '%' || ?7 || '%' COLLATE NOCASE)
         "#
         .to_string();
 
-        let mut param_count = 3;
-
-        if app_name.is_some() {
-            param_count += 1;
-            sql.push_str(&format!(
-                " AND ocr_text.app_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
-                param_count
-            ));
-        }
-
-        if window_name.is_some() {
-            param_count += 1;
-            sql.push_str(&format!(
-                " AND ocr_text.window_name LIKE '%' || ?{} || '%' COLLATE NOCASE",
-                param_count
-            ));
-        }
-
-        if min_length.is_some() {
-            param_count += 1;
-            sql.push_str(&format!(" AND LENGTH(ocr_text.text) >= ?{}", param_count));
-        }
-
-        if max_length.is_some() {
-            param_count += 1;
-            sql.push_str(&format!(" AND LENGTH(ocr_text.text) <= ?{}", param_count));
-        }
-
-        let mut query = sqlx::query_as::<_, (i64,)>(&sql)
+        let query = sqlx::query_as::<_, (i64,)>(&sql)
             .bind(query)
             .bind(start_time)
-            .bind(end_time);
-
-        if let Some(app_name) = app_name {
-            query = query.bind(app_name);
-        }
-
-        if let Some(window_name) = window_name {
-            query = query.bind(window_name);
-        }
-
-        if let Some(min) = min_length {
-            query = query.bind(min as i64);
-        }
-
-        if let Some(max) = max_length {
-            query = query.bind(max as i64);
-        }
+            .bind(end_time)
+            .bind(min_length.map(|l| l as i64))
+            .bind(max_length.map(|l| l as i64))
+            .bind(app_name)
+            .bind(window_name);
 
         let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count as usize)
@@ -1011,39 +749,24 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
     ) -> Result<usize, sqlx::Error> {
-        let mut sql = r#"
+        let sql = r#"
             SELECT COUNT(*)
             FROM audio_transcriptions
-            WHERE transcription LIKE '%' || ?1 || '%' COLLATE NOCASE
-                AND (?2 IS NULL OR timestamp >= ?2)
-                AND (?3 IS NULL OR timestamp <= ?3)
-        "#
-        .to_string();
+            JOIN audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
+            WHERE 
+                (?1 = '' OR audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE)
+                AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
+                AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
+                AND (?4 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?4)
+                AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
+        "#;
 
-        let mut param_count = 3;
-
-        if min_length.is_some() {
-            param_count += 1;
-            sql.push_str(&format!(" AND LENGTH(transcription) >= ?{}", param_count));
-        }
-
-        if max_length.is_some() {
-            param_count += 1;
-            sql.push_str(&format!(" AND LENGTH(transcription) <= ?{}", param_count));
-        }
-
-        let mut query = sqlx::query_as::<_, (i64,)>(&sql)
+        let query = sqlx::query_as::<_, (i64,)>(sql)
             .bind(query)
             .bind(start_time)
-            .bind(end_time);
-
-        if let Some(min) = min_length {
-            query = query.bind(min as i64);
-        }
-
-        if let Some(max) = max_length {
-            query = query.bind(max as i64);
-        }
+            .bind(end_time)
+            .bind(min_length.map(|l| l as i64))
+            .bind(max_length.map(|l| l as i64));
 
         let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count as usize)

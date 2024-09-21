@@ -138,6 +138,8 @@ swiftc -emit-library -target x86_64-apple-macosx11.0 -o screenpipe-vision/lib/li
 && swiftc -emit-library -target arm64-apple-macosx11.0 -o screenpipe-vision/lib/libscreenpipe_arm64.dylib screenpipe-vision/src/ocr.swift -framework Metal -framework MetalPerformanceShaders -framework Vision -framework CoreImage \
 && lipo -create screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-vision/lib/libscreenpipe_arm64.dylib -output screenpipe-vision/lib/libscreenpipe.dylib
 
+atm dirty hack: cp screenpipe-vision/lib* /usr/local/lib
+
 How to optimise this code:
 
 1. run cargo bench --bench ocr_benchmark

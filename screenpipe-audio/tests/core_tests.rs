@@ -2,7 +2,7 @@
 mod tests {
     use chrono::Utc;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::vad_engine::VadEngineEnum;
+    use screenpipe_audio::vad_engine::{VadEngineEnum, VadSensitivity};
     use screenpipe_audio::{default_output_device, list_audio_devices, AudioTranscriptionEngine};
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
     use std::path::PathBuf;
@@ -11,7 +11,6 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use std::time::{Duration, Instant};
-    use tokio::sync::mpsc::unbounded_channel;
 
     fn setup() {
         // Initialize the logger with an info level filter
@@ -49,7 +48,7 @@ mod tests {
         let duration = Duration::from_secs(30); // Record for 3 seconds
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_{}.mp4", time));
-        let (sender, mut receiver) = unbounded_channel();
+        let (sender, receiver) = crossbeam::channel::bounded(100);
         let is_running = Arc::new(AtomicBool::new(true));
 
         // Act
@@ -98,7 +97,7 @@ mod tests {
         let duration = Duration::from_secs(30);
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_interrupt_{}.mp4", time));
-        let (sender, mut receiver) = unbounded_channel();
+        let (sender, receiver) = crossbeam::channel::bounded(100);
         let is_running = Arc::new(AtomicBool::new(true));
         let is_running_clone = Arc::clone(&is_running);
 
@@ -192,11 +191,12 @@ mod tests {
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let (whisper_sender, mut whisper_receiver, _) = create_whisper_channel(
+        let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
             Arc::new(AudioTranscriptionEngine::WhisperTiny),
             VadEngineEnum::WebRtc,
             None,
             &output_path_2.clone(),
+            VadSensitivity::High,
         )
         .await
         .unwrap();

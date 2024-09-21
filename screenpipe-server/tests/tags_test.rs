@@ -5,6 +5,7 @@ use axum::{
 };
 use chrono::Utc;
 use crossbeam::queue::SegQueue;
+use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
 use std::sync::atomic::AtomicBool;
@@ -26,6 +27,8 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
     let db = Arc::new(DatabaseManager::new("sqlite::memory:").await.unwrap());
     let app_state = Arc::new(AppState {
         db: db.clone(),
+        vision_disabled: false,
+        audio_disabled: false,
         vision_control: Arc::new(AtomicBool::new(false)),
         audio_devices_control: Arc::new(SegQueue::new()),
         devices_status: HashMap::new(),
@@ -376,9 +379,15 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
     let audio_chunk_id = db.insert_audio_chunk("test_audio_file.wav").await.unwrap();
 
     // Insert test audio data
-    db.insert_audio_transcription(audio_chunk_id, "Test audio transcription", 0, "test_engine")
-        .await
-        .unwrap();
+    db.insert_audio_transcription(
+        audio_chunk_id,
+        "Test audio transcription",
+        0,
+        "test_engine",
+        &AudioDevice::new("test".to_string(), DeviceType::Output),
+    )
+    .await
+    .unwrap();
 
     // Insert test FTS data
     db.insert_chunked_text(

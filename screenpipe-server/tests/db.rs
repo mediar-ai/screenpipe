@@ -3,6 +3,7 @@ mod tests {
     use std::sync::Arc;
 
     use chrono::Utc;
+    use screenpipe_audio::{AudioDevice, DeviceType};
     use screenpipe_server::{ContentType, DatabaseManager, SearchResult};
     use screenpipe_vision::OcrEngine;
 
@@ -28,7 +29,18 @@ mod tests {
         .unwrap();
 
         let results = db
-            .search("Hello", ContentType::OCR, 100, 0, None, None, None, None)
+            .search(
+                "Hello",
+                ContentType::OCR,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
@@ -44,12 +56,29 @@ mod tests {
     async fn test_insert_and_search_audio() {
         let db = setup_test_db().await;
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0, "")
-            .await
-            .unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+        )
+        .await
+        .unwrap();
 
         let results = db
-            .search("audio", ContentType::Audio, 100, 0, None, None, None, None)
+            .search(
+                "audio",
+                ContentType::Audio,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
@@ -82,12 +111,29 @@ mod tests {
 
         // Insert Audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio", 0, "")
-            .await
-            .unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+        )
+        .await
+        .unwrap();
 
         let results = db
-            .search("Hello", ContentType::All, 100, 0, None, None, None, None)
+            .search(
+                "Hello",
+                ContentType::All,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(results.len(), 2);
@@ -128,9 +174,15 @@ mod tests {
 
         // Insert first audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 1", 0, "")
-            .await
-            .unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio 1",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+        )
+        .await
+        .unwrap();
 
         // Wait for a short time to ensure timestamp difference
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
@@ -154,13 +206,19 @@ mod tests {
         .await
         .unwrap();
 
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 2", 1, "")
-            .await
-            .unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio 2",
+            1,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+        )
+        .await
+        .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         // Add this check
         let audio_results = db
-            .search_audio("Hello from audio 2", 100, 0, None, None)
+            .search_audio("Hello from audio 2", 100, 0, None, None, None, None)
             .await
             .unwrap();
         println!("Audio results after insertion: {:?}", audio_results);
@@ -175,6 +233,8 @@ mod tests {
                 0,
                 Some(start_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
             )
@@ -192,6 +252,8 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
             )
@@ -215,6 +277,8 @@ mod tests {
                 Some(end_time),
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -229,6 +293,8 @@ mod tests {
                 0,
                 Some(start_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
             )
@@ -260,9 +326,15 @@ mod tests {
 
         // Insert first audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 1", 0, "")
-            .await
-            .unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio 1",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+        )
+        .await
+        .unwrap();
 
         // Capture mid_time after inserting half of the data
         let mid_time = Utc::now();
@@ -284,9 +356,15 @@ mod tests {
         .await
         .unwrap();
 
-        db.insert_audio_transcription(audio_chunk_id, "Hello from audio 2", 1, "")
-            .await
-            .unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio 2",
+            1,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+        )
+        .await
+        .unwrap();
 
         let end_time = Utc::now();
 
@@ -299,6 +377,8 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
             )
@@ -319,6 +399,8 @@ mod tests {
                 ContentType::Audio,
                 Some(start_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
             )

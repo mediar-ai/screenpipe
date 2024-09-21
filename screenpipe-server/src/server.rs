@@ -211,7 +211,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -226,7 +226,7 @@ pub(crate) async fn search(
 
     let query_str = query.q.as_deref().unwrap_or("");
 
-    // If app_name is specified, force content_type to OCR
+    // If app_name or window_name is specified, force content_type to OCR
     let content_type = if query.app_name.is_some() || query.window_name.is_some() {
         ContentType::OCR
     } else {
@@ -259,10 +259,10 @@ pub(crate) async fn search(
     )
     .await
     .map_err(|e| {
-        error!("Failed to perform search operations: {}", e);
+        error!("failed to perform search operations: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": format!("Failed to perform search operations: {}", e)})),
+            JsonResponse(json!({"error": format!("failed to perform search operations: {}", e)})),
         )
     })?;
 
@@ -305,7 +305,7 @@ pub(crate) async fn search(
         .collect();
 
     if query.include_frames {
-        debug!("Extracting frames for OCR content");
+        debug!("extracting frames for ocr content");
         let frame_futures: Vec<_> = content_items
             .iter()
             .filter_map(|item| {
@@ -329,7 +329,7 @@ pub(crate) async fn search(
         }
     }
 
-    info!("Search completed: found {} results", total);
+    info!("search completed: found {} results", total);
     Ok(JsonResponse(PaginatedResponse {
         data: content_items,
         pagination: PaginationInfo {
@@ -897,6 +897,7 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=
 curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
 
 curl "http://localhost:3030/search?app_name=cursor"
+curl "http://localhost:3030/search?content_type=audio&min_length=20"
 
 curl 'http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z' | jq .
 
@@ -1001,6 +1002,9 @@ curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
 
 # Search for very long content
 curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
+
+
+curl "http://localhost:3030/search?limit=10&offset=0&min_length=500&content_type=audio" | jq
 
 
 # read random data and generate a clip using the merge endpoint
