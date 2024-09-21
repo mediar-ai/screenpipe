@@ -321,7 +321,14 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
 
     // Filter function to exclude macOS speakers and AirPods for output devices
     fn should_include_output_device(name: &str) -> bool {
-        !name.to_lowercase().contains("speakers") && !name.to_lowercase().contains("airpods")
+        #[cfg(target_os = "macos")]
+        {
+            !name.to_lowercase().contains("speakers") && !name.to_lowercase().contains("airpods")
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            true
+        }
     }
 
     // macos hack using screen capture kit for output devices - does not work well
@@ -346,6 +353,15 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
             if should_include_output_device(&name) {
                 devices.push(AudioDevice::new(name, DeviceType::Output));
             }
+        }
+    }
+
+    // last, add devices that are listed in .devices() which are not already in the devices vector
+    let other_devices = host.devices().unwrap();
+    for device in other_devices {
+        if !devices.iter().any(|d| d.name == device.name().unwrap()) {
+            // TODO: not sure if it can be input, usually aggregate or multi output
+            devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
         }
     }
 
