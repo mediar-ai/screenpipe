@@ -1,9 +1,9 @@
-use candle::{IndexOp, Result, Tensor, D};
+use crate::whisper::{token_id, Model};
+use candle::IndexOp;
+use candle::{Result, Tensor, D};
 use candle_transformers::models::whisper::SOT_TOKEN;
 use log::info;
 use tokenizers::Tokenizer;
-
-use crate::stt::Model;
 
 const LANGUAGES: [(&str, &str); 99] = [
     ("en", "english"),
@@ -108,11 +108,7 @@ const LANGUAGES: [(&str, &str); 99] = [
 ];
 
 /// Returns the token id for the selected language.
-pub fn detect_language(
-    model: &mut Model,
-    tokenizer: &Tokenizer,
-    mel: &Tensor,
-) -> Result<u32> {
+pub fn detect_language(model: &mut Model, tokenizer: &Tokenizer, mel: &Tensor) -> Result<u32> {
     let (_bsize, _, seq_len) = mel.dims3()?;
     let mel = mel.narrow(
         2,
@@ -122,9 +118,9 @@ pub fn detect_language(
     let device = mel.device();
     let language_token_ids = LANGUAGES
         .iter()
-        .map(|(t, _)| super::stt::token_id(tokenizer, &format!("<|{t}|>")))
+        .map(|(t, _)| token_id(tokenizer, &format!("<|{t}|>")))
         .collect::<Result<Vec<_>>>()?;
-    let sot_token = super::stt::token_id(tokenizer, SOT_TOKEN)?;
+    let sot_token = token_id(tokenizer, SOT_TOKEN)?;
     let audio_features = model.encoder_forward(&mel, true)?;
     let tokens = Tensor::new(&[[sot_token]], device)?;
     let language_token_ids = Tensor::new(language_token_ids.as_slice(), device)?;
@@ -138,7 +134,7 @@ pub fn detect_language(
     for ((_lang_code, _language), _p) in probs.iter().take(5) {
         // info!("{language}: {p}")
     }
-    let language = super::stt::token_id(tokenizer, &format!("<|{}|>", probs[0].0 .0))?;
+    let language = token_id(tokenizer, &format!("<|{}|>", probs[0].0 .0))?;
     info!("detected language: {:?}", probs[0].0);
     Ok(language)
 }
