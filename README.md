@@ -458,30 +458,45 @@ curl "http://localhost:3030/search?app_name=cursor"
 - Search
   - Semantic and keyword search. Find information you've forgotten or misplaced
   - Playback history of your desktop when searching for a specific info
+  
+  https://github.com/user-attachments/assets/895d60aa-0f8e-4807-b962-efe6de2413b1
+
+ ![matt-summary](https://github.com/user-attachments/assets/dcc35aef-71ce-4bbf-8df5-ffd3cfa0a4ba)
+
 - Automation: 
   - Automatically generate documentation
   - Populate CRM systems with relevant data
   - Synchronize company knowledge across platforms
   - Automate repetitive tasks based on screen content
+ ![092024-notion](https://github.com/user-attachments/assets/d3e3b435-c99a-491c-9387-40cb1cdc02b0)
+
 - Analytics:
   - Track personal productivity metrics
   - Organize and analyze educational materials
   - Gain insights into areas for personal improvement
   - Analyze work patterns and optimize workflows
+ ![daily-logger](https://github.com/user-attachments/assets/da8a0966-5ea7-4438-bbfa-449b814ec33f)
+
 - Personal assistant:
   - Summarize lengthy documents or videos
   - Provide context-aware reminders and suggestions
   - Assist with research by aggregating relevant information
   - Live captions, translation support
+ 
+
+
+
 - Collaboration:
   - Share and annotate screen captures with team members
   - Create searchable archives of meetings and presentations
+ ![Meeting](https://github.com/user-attachments/assets/09365c5e-898e-4199-a99f-a0250aae90ec)
+
 - Compliance and security:
   - Track what your employees are really up to
   - Monitor and log system activities for audit purposes
   - Detect potential security threats based on screen content
 
-[**Check other examples**](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript)
+[**Check other examples**](https://docs.screenpi.pe/docs/examples)
 
 ## Status 
 
