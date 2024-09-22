@@ -297,7 +297,7 @@ pub async fn record_and_transcribe(
     let data = audio_data.lock().await;
     debug!("Sending audio of length {} to audio model", data.len());
     if let Err(e) = whisper_sender.send(AudioInput {
-        data: data.clone(),
+        data: Arc::new(data.to_vec()),
         device: audio_device.clone(),
         sample_rate,
         channels,

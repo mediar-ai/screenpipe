@@ -49,7 +49,7 @@ async fn transcribe_with_deepgram(
         let spec = WavSpec {
             channels: 1,
             sample_rate: match sample_rate {
-                88200 => 16000, // Deepgram expects 16kHz for 88.2kHz
+                88200 => 16000,       // Deepgram expects 16kHz for 88.2kHz
                 _ => sample_rate / 3, // Fallback for other sample rates
             },
             bits_per_sample: 32,
@@ -172,16 +172,17 @@ pub async fn stt(
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
-    let mut audio_data = audio_input.data.clone();
-    if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
+    let audio_data = if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
         info!(
             "device: {}, resampling from {} Hz to {} Hz",
             audio_input.device,
             audio_input.sample_rate,
             m::SAMPLE_RATE
         );
-        audio_data = resample(audio_data, audio_input.sample_rate, m::SAMPLE_RATE as u32)?;
-    }
+        resample(audio_input.data.as_ref(), audio_input.sample_rate, m::SAMPLE_RATE as u32)?
+    } else {
+        audio_input.data.as_ref().to_vec()
+    };
 
     let frame_size = 1600; // 100ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
@@ -378,7 +379,7 @@ pub async fn stt(
     Ok((transcription?, file_path_clone))
 }
 
-fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
+fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
     debug!("Resampling audio");
     let params = SincInterpolationParameters {
         sinc_len: 256,
@@ -396,7 +397,7 @@ fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Resu
         1,
     )?;
 
-    let waves_in = vec![input];
+    let waves_in = vec![input.to_vec()];
     debug!("Performing resampling");
     let waves_out = resampler.process(&waves_in, None)?;
     debug!("Resampling complete");
@@ -405,7 +406,7 @@ fn resample(input: Vec<f32>, from_sample_rate: u32, to_sample_rate: u32) -> Resu
 
 #[derive(Debug, Clone)]
 pub struct AudioInput {
-    pub data: Vec<f32>,
+    pub data: Arc<Vec<f32>>,
     pub sample_rate: u32,
     pub channels: u16,
     pub device: Arc<AudioDevice>,
