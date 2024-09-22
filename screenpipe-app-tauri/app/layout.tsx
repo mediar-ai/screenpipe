@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import HealthStatus from "@/components/screenpipe-status";
 import { PHProvider } from "./providers";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -17,6 +16,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+
   return (
     <html lang="en">
       <PHProvider>

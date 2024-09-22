@@ -3,16 +3,16 @@ use axum::{
     http::{Method, StatusCode},
     Json, Router,
 };
-use tower_http::cors::{CorsLayer, Any};
-use tower_http::trace::{TraceLayer, DefaultMakeSpan};
+use http::header::HeaderValue;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tauri::Emitter;
 #[allow(unused_imports)]
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::mpsc;
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
-use http::header::HeaderValue;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
@@ -53,8 +53,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/log", axum::routing::post(log_message))
         .layer(cors)
         .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().include_headers(true)),
+            TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::new().include_headers(true)),
         )
         .with_state(state);
 

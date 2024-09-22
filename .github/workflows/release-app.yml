@@ -176,10 +176,6 @@ jobs:
         with:
           vcpkgGitCommitId: "5b1214315250939257ef5d62ecdcbca18cf4fb1c"
 
-      # - name: Install ONNX Runtime
-      #   if: matrix.platform == 'windows-latest'
-      #   run: vcpkg install onnxruntime:x64-windows
-
       - name: Set up MSVC
         if: matrix.platform == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
@@ -207,13 +203,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
-          # RUSTFLAGS: "-C link-arg=-Wl,--allow-multiple-definition"
         with:
-          tagName: app-v__VERSION__ # the action automatically replaces __VERSION__ with the app version.
-          releaseName: "App v__VERSION__"
-          releaseBody: "What's new? 🎉📣"
-          releaseDraft: true
-          prerelease: true
           args: ${{ matrix.args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
@@ -224,18 +214,3 @@ jobs:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./screenpipe-app-tauri/src-tauri
-
-  # basically wait for macos manual add sset
-  #publish:
-  #  needs: publish-tauri
-
-  #  runs-on: ubuntu-latest
-
-  #  steps:
-  #    - uses: actions/checkout@v4
-
-  #    - name: publish release
-  #      uses: crabnebula-dev/cloud-release@v0.2.0
-  #      with:
-  #        command: release publish ${{ secrets.CN_APP_SLUG }} --framework tauri
-  #        api-key: ${{ secrets.CN_API_KEY }}

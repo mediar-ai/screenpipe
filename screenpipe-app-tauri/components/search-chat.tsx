@@ -72,6 +72,7 @@ import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "./ui/codeblock";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { encode } from "@/lib/utils";
+import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 
 export function SearchChat() {
   // Search state
@@ -124,6 +125,41 @@ export function SearchChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const [selectAll, setSelectAll] = useState(true);
+
+  const [showExamples, setShowExamples] = useState(true);
+
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const handleExampleSelect = async (example: ExampleSearch) => {
+    posthog.capture("example_search", { example: example.title });
+
+    const newWindowName = example.windowName || "";
+    const newAppName = example.appName || "";
+    const newLimit = example.limit || limit;
+    const newMinLength = example.minLength || minLength;
+    const newContentType =
+      (example.contentType as "all" | "ocr" | "audio") || contentType;
+    const newStartDate = example.startDate;
+
+    setWindowName(newWindowName);
+    setAppName(newAppName);
+    setLimit(newLimit);
+    setMinLength(newMinLength);
+    setContentType(newContentType);
+    setStartDate(newStartDate);
+    setShowExamples(false);
+
+    handleSearch(0, {
+      windowName: newWindowName,
+      appName: newAppName,
+      limit: newLimit,
+      minLength: newMinLength,
+      contentType: newContentType,
+      startDate: newStartDate,
+    });
+  };
+
   const generateCurlCommand = () => {
     const baseUrl = "http://localhost:3030";
     const params = {
@@ -151,6 +187,7 @@ export function SearchChat() {
   useEffect(() => {
     if (results.length > 0) {
       setSelectedResults(new Set(results.map((_, index) => index)));
+      setSelectAll(true);
     }
   }, [results]);
 
@@ -377,7 +414,8 @@ export function SearchChat() {
     }
   };
 
-  const handleSearch = async (newOffset = 0) => {
+  const handleSearch = async (newOffset = 0, overrides: any = {}) => {
+    setHasSearched(true);
     queryHistory.saveToHistory();
     appNameHistory.saveToHistory();
     windowNameHistory.saveToHistory();
@@ -393,15 +431,16 @@ export function SearchChat() {
     try {
       const response = await queryScreenpipe({
         q: query || undefined,
-        content_type: contentType as "all" | "ocr" | "audio",
-        limit: limit,
+        content_type: overrides.contentType || contentType,
+        limit: overrides.limit || limit,
         offset: newOffset,
-        start_time: startDate.toISOString(), // Convert to UTC
-        end_time: endDate.toISOString(), // Convert to UTC
-        app_name: appName || undefined,
-        window_name: windowName || undefined,
+        start_time:
+          overrides.startDate?.toISOString() || startDate.toISOString(),
+        end_time: endDate.toISOString(),
+        app_name: overrides.appName || appName || undefined,
+        window_name: overrides.windowName || windowName || undefined,
         include_frames: includeFrames,
-        min_length: minLength,
+        min_length: overrides.minLength || minLength,
         max_length: maxLength,
       });
 
@@ -445,6 +484,15 @@ export function SearchChat() {
     }
   };
 
+  const handleSelectAll = (checked: boolean) => {
+    setSelectAll(checked);
+    if (checked) {
+      setSelectedResults(new Set(results.map((_, index) => index)));
+    } else {
+      setSelectedResults(new Set());
+    }
+  };
+
   const renderSearchResults = () => {
     if (isLoading) {
       return Array(3)
@@ -461,8 +509,12 @@ export function SearchChat() {
         ));
     }
 
-    if (results.length === 0) {
-      return <p className="text-center">No results found</p>;
+    if (hasSearched && results.length === 0) {
+      return <p className="text-center">no results found</p>;
+    }
+
+    if (!hasSearched || results.length === 0) {
+      return null;
     }
 
     return results
@@ -787,7 +839,9 @@ export function SearchChat() {
                 <TooltipContent>
                   <p>
                     select the number of results to display. usually ai cannot
-                    ingest more than 30 results at a time.
+                    ingest more than 30 OCR results at a time
+                    <br />
+                    and 1000 audio results at a time.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -797,9 +851,9 @@ export function SearchChat() {
             id="limit-slider"
             value={[limit]}
             onValueChange={(value: number[]) => setLimit(value[0])}
-            min={1}
-            max={100}
-            step={1}
+            min={10}
+            max={150}
+            step={5}
           />
         </div>
         <div className="space-y-2">
@@ -894,7 +948,7 @@ export function SearchChat() {
                 <br />
                 <span className="text-xs text-gray-500">
                   note: you need to have `jq` installed to use the command.
-                </span>
+                </span>{" "}
               </DialogDescription>
             </DialogHeader>
             <div className="overflow-x-auto">
@@ -903,9 +957,22 @@ export function SearchChat() {
           </DialogContent>
         </Dialog>
       </div>
+      {showExamples && results.length === 0 && (
+        <ExampleSearchCards onSelect={handleExampleSelect} />
+      )}
       {isLoading && (
         <div className="my-2">
           <Progress value={progress} className="w-full" />
+        </div>
+      )}
+      {results.length > 0 && (
+        <div className="flex items-center space-x-2 mb-4 my-8">
+          <Checkbox
+            id="select-all"
+            checked={selectAll}
+            onCheckedChange={handleSelectAll}
+          />
+          <Label htmlFor="select-all">select all results</Label>
         </div>
       )}
       <div className="space-y-4">
@@ -1015,7 +1082,7 @@ export function SearchChat() {
           <ChevronDown className="h-6 w-6" />
         </Button>
       )}
-      <div className="h-24" />
+      {results.length > 0 && <div className="h-24" />}
     </div>
   );
 }

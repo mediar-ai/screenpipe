@@ -24,12 +24,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { DevSettings } from "@/components/dev-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchChat } from "@/components/search-chat";
-
+import { Separator } from "@/components/ui/separator";
 export default function Home() {
   const { settings } = useSettings();
   const posthog = usePostHog();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("search");
 
   useEffect(() => {
     checkForAppUpdates({ toast });
@@ -42,11 +41,12 @@ export default function Home() {
   }, [settings.userId, posthog]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-8">
+    <main className="flex min-h-screen flex-col items-center">
       <NotificationHandler />
       {/* <UpdateNotification checkIntervalHours={3} /> */}
       {/* <ScreenpipeInstanceChecker /> */}
       <Header />
+      <div className="my-4" />
       {settings.isLoading ? (
         <div className="flex flex-col items-center justify-center h-full space-y-4">
           <Skeleton className="w-[200px] h-[24px] rounded-full" />
@@ -63,32 +63,12 @@ export default function Home() {
         </div>
       ) : settings.aiUrl ? (
         <>
-          <h1 className="text-2xl font-bold mb-8 text-center mb-12">
+          <h1 className="text-2xl font-bold text-center mb-12">
             where pixels become magic
           </h1>
           <SearchChat />
         </>
       ) : (
-        // <Tabs
-        //   value={activeTab}
-        //   onValueChange={setActiveTab}
-        //   className="w-full max-w-4xl"
-        // >
-        //   <TabsList className="grid w-full grid-cols-2">
-        //     <TabsTrigger value="chat">chat</TabsTrigger>
-        //     <TabsTrigger value="search">search</TabsTrigger>
-        //   </TabsList>
-        //   <TabsContent value="chat">
-        //     <ChatList
-        //       apiKey={settings.openaiApiKey}
-        //       useOllama={settings.useOllama}
-        //       ollamaUrl={settings.ollamaUrl}
-        //     />
-        //   </TabsContent>
-        //   <TabsContent value="search">
-        //     <SearchPanel />
-        //   </TabsContent>
-        // </Tabs>
         <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
           <Card className="w-[600px]">
             <CardHeader>

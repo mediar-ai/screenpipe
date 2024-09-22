@@ -436,11 +436,11 @@ pub async fn create_whisper_channel(
     let (input_sender, input_receiver): (
         crossbeam::channel::Sender<AudioInput>,
         crossbeam::channel::Receiver<AudioInput>,
-    ) = crossbeam::channel::bounded(100);
+    ) = crossbeam::channel::bounded(20);
     let (output_sender, output_receiver): (
         crossbeam::channel::Sender<TranscriptionResult>,
         crossbeam::channel::Receiver<TranscriptionResult>,
-    ) = crossbeam::channel::bounded(100);
+    ) = crossbeam::channel::bounded(20);
     let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
         VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
         VadEngineEnum::Silero => Box::new(SileroVad::new().await?),
