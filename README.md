@@ -458,6 +458,7 @@ curl "http://localhost:3030/search?app_name=cursor"
 - Search
   - Semantic and keyword search. Find information you've forgotten or misplaced
   - Playback history of your desktop when searching for a specific info
+  
   https://github.com/user-attachments/assets/895d60aa-0f8e-4807-b962-efe6de2413b1
 
  ![matt-summary](https://github.com/user-attachments/assets/dcc35aef-71ce-4bbf-8df5-ffd3cfa0a4ba)
