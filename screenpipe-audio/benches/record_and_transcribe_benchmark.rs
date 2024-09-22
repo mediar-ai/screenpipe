@@ -1,4 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
     create_whisper_channel, default_input_device, record_and_transcribe, AudioDevice, AudioInput,
     AudioTranscriptionEngine,
@@ -7,12 +8,11 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
 
 async fn setup_test() -> (
     Arc<AudioDevice>,
     PathBuf,
-    mpsc::UnboundedSender<AudioInput>,
+    crossbeam::channel::Sender<AudioInput>,
     Arc<AtomicBool>,
 ) {
     let audio_device = default_input_device().unwrap(); // TODO feed voice in automatically somehow
@@ -22,6 +22,8 @@ async fn setup_test() -> (
         Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
         screenpipe_audio::VadEngineEnum::Silero,
         None,
+        &output_path,
+        VadSensitivity::High,
     )
     .await
     .unwrap();
@@ -51,14 +53,13 @@ fn bench_record_and_transcribe(c: &mut Criterion) {
             let mut total_duration = Duration::new(0, 0);
 
             for _ in 0..iters {
-                let (audio_device, output_path, whisper_sender, is_running) = setup_test().await;
+                let (audio_device, _, whisper_sender, is_running) = setup_test().await;
                 let duration = Duration::from_secs(5); // 5 seconds of recording
 
                 let start = std::time::Instant::now();
                 let result = record_and_transcribe(
                     black_box(audio_device),
                     black_box(duration),
-                    black_box(output_path),
                     black_box(whisper_sender),
                     black_box(is_running),
                 )
