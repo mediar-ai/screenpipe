@@ -85,28 +85,22 @@ mod llm_module {
         let mut logits_processor = LogitsProcessor::new(seed, Some(temperature), Some(top_p));
         let tokens = tokenizer.encode(prompt, true).unwrap();
         if tokens.is_empty() {
-            anyhow::bail!("Empty prompts are not supported in the phi model.")
-        }
-        if true {
-            // DEBUG
-            for (token, id) in tokens.get_tokens().iter().zip(tokens.get_ids().iter()) {
-                let token = token.replace('▁', " ").replace("<0x0A>", "\n");
-                println!("{id:7} -> '{token}'");
-            }
+            anyhow::bail!("empty prompt")
         }
         let mut tokens = tokens.get_ids().to_vec();
         let eos_token = match tokenizer.token_to_id("<|endoftext|>") {
             Some(token) => token,
             None => anyhow::bail!("cannot find the endoftext token"),
         };
-        print!("{prompt}");
+
         let mut pos = 0;
-        for index in 0..max_tokens {
-            let context_size = if index > 0 { 1 } else { tokens.len() };
+        for _ in 0..max_tokens {
+            let context_size = if pos > 0 { 1 } else { tokens.len() };
             let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
             let input = Tensor::new(ctxt, device)?.unsqueeze(0)?;
             let logits = model.forward(&input, pos)?;
             let logits = logits.squeeze(0)?.to_dtype(DType::F32)?;
+
             let logits = if repeat_penalty == 1. {
                 logits
             } else {
@@ -128,17 +122,12 @@ mod llm_module {
             let next_token = logits_processor.sample(&logits)?;
             tokens.push(next_token);
             if next_token == eos_token {
-                if let Ok(t) = tokenizer.decode(&[next_token], true) {
-                    print!("{t}");
-                    callback(t)?;
-                }
                 break;
             }
-            if let Ok(t) = tokenizer.decode(&[next_token], true) {
-                print!("{t}");
+            if let Ok(t) = tokenizer.decode(&[next_token], false) {
                 callback(t)?;
             }
-            pos += context_size;
+            pos += 1;
         }
 
         Ok(())

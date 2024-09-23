@@ -4,6 +4,10 @@ pub use ffmpeg::find_ffmpeg_path;
 pub mod llm;
 #[cfg(feature = "llm")]
 pub use llm::*;
+#[cfg(feature = "llm")]
+pub mod mistral;
+#[cfg(feature = "llm")]
+pub use mistral::*;
 #[cfg(feature = "pipes")]
 pub mod pipes;
 #[cfg(feature = "pipes")]
