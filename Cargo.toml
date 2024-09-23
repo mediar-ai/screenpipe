@@ -22,9 +22,9 @@ edition = "2021"
 
 [workspace.dependencies]
 log = "0.4"
-candle = { package = "candle-core", version = "0.6.0" }
-candle-nn = { package = "candle-nn", version = "0.6.0" }
-candle-transformers = { package = "candle-transformers", version = "0.6.0" }
+candle = { package = "candle-core", version = "0.7.0" }
+candle-nn = { package = "candle-nn", version = "0.7.0" }
+candle-transformers = { package = "candle-transformers", version = "0.7.0" }
 tokenizers = "0.19.1"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
