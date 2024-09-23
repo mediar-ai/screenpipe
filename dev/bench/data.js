@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727026099282,
+  "lastUpdate": 1727104087028,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -8789,6 +8789,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2073300312,
             "range": "± 57971008",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "6337a709db6918646b05d1a49d15611bcbe66f75",
+          "message": "feat: add mistral but unused RN",
+          "timestamp": "2024-09-23T07:57:28-07:00",
+          "tree_id": "e9048e5b323f55deaf2c0a94ece30726fc846d39",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/6337a709db6918646b05d1a49d15611bcbe66f75"
+        },
+        "date": 1727104086085,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2218730750,
+            "range": "± 106012886",
             "unit": "ns/iter"
           }
         ]
