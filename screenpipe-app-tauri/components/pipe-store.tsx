@@ -58,7 +58,7 @@ const PipeDialog: React.FC = () => {
   const { health } = useHealthCheck();
   useEffect(() => {
     fetchInstalledPipes();
-  }, [health]);
+  }, [health?.status]);
 
   const handleResetAllPipes = async () => {
     try {
@@ -264,6 +264,9 @@ const PipeDialog: React.FC = () => {
           description: "Please check the URL and try again.",
           variant: "destructive",
         });
+      } finally {
+        setNewRepoUrl("");
+        setSelectedPipe(null);
       }
     }
   };
@@ -456,6 +459,7 @@ const PipeDialog: React.FC = () => {
           ))}
           <Card className="mb-2 p-2">
             <Input
+              type="url"
               placeholder="Enter repo URL"
               value={newRepoUrl}
               onChange={(e) => setNewRepoUrl(e.target.value)}

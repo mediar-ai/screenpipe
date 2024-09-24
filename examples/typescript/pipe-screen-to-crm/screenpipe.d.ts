@@ -32,9 +32,10 @@ declare global {
       SCREENPIPE_LOG_API_URL?: string;
       SCREENPIPE_SERVER_URL?: string;
       PIPE_DIR: string;
+      NOTION_DATABASE_ID: string;
+      NOTION_API_KEY: string;
     }
   }
-
   const process: {
     env: NodeJS.ProcessEnv;
   };

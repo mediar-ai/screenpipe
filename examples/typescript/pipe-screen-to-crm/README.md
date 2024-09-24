@@ -23,15 +23,39 @@ screenpipe | logs daily
 
 basically it would read, process, annotate, analyse, summarize, send, your data customisable to your desire, effortlessly
 
-### pipe-stream-ocr-text
+### pipe-screen-to-crm
 
-this is an experimental, but official pipe, that will stream OCR text from your screen data every 1 min 
+this is an experimental, that will fill with notion table CRM while you work 
 
-this is how you run it through the app:
+instructions to run this pipe:
 
-add the url of this pipe
+1. install screenpipe and git clone this repo
+    ```
+    git clone https://github.com/mediar-ai/screenpipe.git
+    cd screenpipe
+    ```
 
-`https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text`
+2. install and run ollama:
+   - follow instructions at https://github.com/jmorganca/ollama
+   - run `ollama run phi3.5:3.8b-mini-instruct-q4_K_M`
+
+3. set up notion:
+   - create a notion integration: https://www.notion.so/my-integrations - copy the API key
+   - create a database with properties: Name (text), Company (text), Position (text), LinkedIn URL (url), Last Interaction (text), Potential Opportunity (text), Date (date)
+   - share database with your integration - copy the database ID eg https://www.notion.so/<THIS>?<NOTTHIS>
+
+4. set environment variables:
+   ```
+   export SCREENPIPE_NOTION_API_KEY=your_notion_api_key
+   export SCREENPIPE_NOTION_DATABASE_ID=your_notion_database_id
+   ```
+
+5. run the pipe:
+   ```
+   screenpipe pipe download ./examples/typescript/pipe-screen-to-crm
+   screenpipe pipe enable screen-to-crm
+   screenpipe 
+   ```
 
 ### tech details
 

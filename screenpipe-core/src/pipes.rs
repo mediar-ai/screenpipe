@@ -479,6 +479,7 @@ mod pipes {
             if file_type.is_file() {
                 if let Some(file_name_str) = file_name.clone().to_str() {
                     if file_name_str == "pipe.js"
+                        || file_name_str == "pipe.ts"
                         || file_name_str == "pipe.json"
                         || file_name_str == "README.md"
                     {
@@ -541,7 +542,7 @@ mod pipes {
             let file_name = item["name"].as_str().unwrap();
             let download_url = item["download_url"].as_str().unwrap();
 
-            if file_name == "pipe.js" || file_name == "pipe.json" || file_name == "README.md" {
+            if file_name == "pipe.js" || file_name == "pipe.ts" || file_name == "pipe.json" || file_name == "README.md" {
                 let file_content = client.get(download_url).send().await?.bytes().await?;
                 let file_path = pipe_dir.join(file_name);
                 tokio::fs::write(&file_path, &file_content).await?;
@@ -595,11 +596,11 @@ mod pipes {
             let entry = entry?;
             let file_name = entry.file_name();
             let file_name_str = file_name.to_str().unwrap();
-            if file_name_str == "pipe.js" {
+            if file_name_str == "pipe.js" || file_name_str == "pipe.ts" {
                 return Ok(entry.path());
             }
         }
-        anyhow::bail!("No pipe.js found in the pipe/dist directory")
+        anyhow::bail!("No pipe.js/pipe.ts found in the pipe/dist directory")
     }
 }
 
