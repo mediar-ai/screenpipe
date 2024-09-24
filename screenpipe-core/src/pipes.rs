@@ -324,6 +324,7 @@ mod pipes {
             globalThis.process.env.PIPE_ID = "{}";
             globalThis.process.env.PIPE_FILE = "{}";
             globalThis.process.env.PIPE_DIR = "{}";
+            globalThis.process.env.OS = "{}";
             "#,
                 screenpipe_dir
                     .to_string_lossy()
@@ -349,6 +350,11 @@ mod pipes {
                     .to_string_lossy()
                     .replace('\\', "\\\\")
                     .replace('\"', "\\\""),
+                if cfg!(target_os = "windows") {
+                    "windows"
+                } else {
+                    "unix"
+                }
             ),
         )?;
 
@@ -376,7 +382,6 @@ mod pipes {
         }
     }
 
-    #[allow(clippy::manual_async_fn)]
     pub async fn run_pipe(pipe: String, screenpipe_dir: PathBuf) -> anyhow::Result<()> {
         debug!(
             "Running pipe: {}, screenpipe_dir: {}",
@@ -405,6 +410,8 @@ mod pipes {
         info!("Pipe directory: {:?}", pipe_dir);
 
         let main_module = find_pipe_file(&pipe_dir)?;
+
+        info!("Executing pipe: {:?}", main_module);
 
         match run_js(&pipe, &main_module.to_string_lossy(), screenpipe_dir).await {
             Ok(_) => info!("JS execution completed successfully"),
@@ -557,7 +564,7 @@ mod pipes {
             let entry = entry?;
             let file_name = entry.file_name();
             let file_name_str = file_name.to_str().unwrap();
-            if file_name_str.contains("pipe.js") {
+            if file_name_str == "pipe.js" {
                 return Ok(entry.path());
             }
         }

@@ -17,6 +17,15 @@ declare global {
     };
   };
 
+  const fs: {
+    readFileSync: (path: string) => string;
+    writeFileSync: (path: string, contents: string) => void;
+  };
+
+  const path: {
+    join: (...paths: string[]) => string;
+  };
+
   namespace NodeJS {
     interface ProcessEnv {
       SCREENPIPE_DIR: string;

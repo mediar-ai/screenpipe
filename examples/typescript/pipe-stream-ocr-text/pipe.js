@@ -1,5 +1,4 @@
-import * as fs from "fs";
-import * as path from "path";
+"use strict";
 let INTERVAL = 10 * 1000; // 10 seconds in milliseconds
 async function queryScreenpipe() {
     try {
@@ -23,7 +22,9 @@ async function writeToMarkdown(data) {
     const content = data
         .map((item) => `## ${item.content.timestamp}\n\n${item.content.text}\n\n---\n`)
         .join("\n");
-    fs.writeFileSync(path.join(process.env.PIPE_DIR, fileName), content);
+    const dir = path.join(process.env.PIPE_DIR, fileName);
+    console.log("Writing to", dir);
+    fs.writeFileSync(dir, content);
     console.log(`Written OCR data to ${fileName}`);
 }
 async function runOCRTracker() {
