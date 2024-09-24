@@ -1,3 +1,6 @@
+import * as fs from "fs";
+import * as path from "path";
+
 let INTERVAL = 10 * 1000; // 10 seconds in milliseconds
 
 async function queryScreenpipe() {
@@ -7,9 +10,9 @@ async function queryScreenpipe() {
 
     const queryParams = `start_time=${oneMinuteAgo.toISOString()}&end_time=${now.toISOString()}&limit=50&content_type=ocr`;
 
-    const result = await pipe.get(
+    const result = await fetch(
       `http://localhost:3030/search?${queryParams}`
-    );
+    ).then((r) => r.json());
     console.log("Retrieved", result.data.length, "items from screenpipe");
     return result.data;
   } catch (error) {
@@ -18,18 +21,19 @@ async function queryScreenpipe() {
   }
 }
 
-async function writeToMarkdown(data) {
+async function writeToMarkdown(data: any) {
   console.log("Writing to markdown", JSON.stringify(data));
   const fileName = `screen-ocr-${new Date()
     .toISOString()
     .replace(/[:.]/g, "-")}.md`;
   const content = data
     .map(
-      (item) => `## ${item.content.timestamp}\n\n${item.content.text}\n\n---\n`
+      (item: any) =>
+        `## ${item.content.timestamp}\n\n${item.content.text}\n\n---\n`
     )
     .join("\n");
 
-  await pipe.writeFile(fileName, content);
+  fs.writeFileSync(path.join(__dirname, fileName), content);
   console.log(`Written OCR data to ${fileName}`);
 }
 

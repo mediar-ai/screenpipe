@@ -1,0 +1,8 @@
+{
+    "dependencies": {
+        "@types/node": "^22.6.1"
+    },
+    "scripts": {
+        "build": "tsc"
+    }
+}

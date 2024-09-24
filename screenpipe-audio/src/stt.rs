@@ -529,7 +529,7 @@ pub async fn create_whisper_channel(
                             error!("Error receiving input: {:?}", e);
                             // Depending on the error type, you might want to break the loop or continue
                             // For now, we'll continue to the next iteration
-                            continue;
+                            break;
                         }
                     }
                 },

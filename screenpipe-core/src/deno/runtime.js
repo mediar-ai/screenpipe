@@ -1,5 +1,9 @@
 const { core } = Deno;
 const { ops } = core;
+const Path = {
+    isAbsolute: (path) => path.startsWith('/') || /^[A-Za-z]:\\/.test(path),
+    join: (...parts) => parts.join('/').replace(/\/+/g, '/'),
+};
 
 function argsToMessage(...args) {
     return args.map((arg) => JSON.stringify(arg)).join(" ");
@@ -43,14 +47,27 @@ globalThis.console = console;
 
 const pipe = {
     readFile: (path) => {
-        return ops.op_read_file(path);
+        let fullPath;
+        if (Path.isAbsolute(path)) {
+            fullPath = path;
+        } else {
+            const pipeDir = `${process.env.SCREENPIPE_DIR}/pipes/${globalThis.metadata.id}`;
+            fullPath = Path.join(pipeDir, path);
+        }
+        return ops.op_read_file(fullPath);
     },
-    writeFile: (path, contents) => {
-        return ops.op_write_file(path, contents);
-    },
+
     removeFile: (path) => {
-        return ops.op_remove_file(path);
+        let fullPath;
+        if (Path.isAbsolute(path)) {
+            fullPath = path;
+        } else {
+            const pipeDir = `${process.env.SCREENPIPE_DIR}/pipes/${globalThis.metadata.id}`;
+            fullPath = Path.join(pipeDir, path);
+        }
+        return ops.op_remove_file(fullPath);
     },
+
     get: async (url) => {
         const response = await ops.op_fetch_get(url);
         return JSON.parse(response);
