@@ -468,26 +468,41 @@ mod pipes {
     }
 
     async fn copy_local_folder(src: &Path, dst: &Path) -> anyhow::Result<()> {
+        let mut pipe_json: Value = serde_json::json!({});
+        let pipe_json_path = dst.join("pipe.json");
+
         for entry in std::fs::read_dir(src)? {
             let entry = entry?;
             let file_type = entry.file_type()?;
             let file_name = entry.file_name();
 
             if file_type.is_file() {
-                if file_name
-                    .to_str()
-                    .map(|s| s == "pipe.js" || s == "pipe.json")
-                    .unwrap_or(false)
-                {
-                    let src_path = entry.path();
-                    let dst_path = dst.join(file_name);
-                    tokio::fs::copy(&src_path, &dst_path).await?;
-                    info!("Copied: {:?} to {:?}", src_path, dst_path);
+                if let Some(file_name_str) = file_name.clone().to_str() {
+                    if file_name_str == "pipe.js"
+                        || file_name_str == "pipe.json"
+                        || file_name_str == "README.md"
+                    {
+                        let src_path = entry.path();
+                        let dst_path = dst.join(file_name);
+                        tokio::fs::copy(&src_path, &dst_path).await?;
+                        info!("Copied: {:?} to {:?}", src_path, dst_path);
+
+                        if file_name_str == "pipe.json" {
+                            let content = tokio::fs::read_to_string(&dst_path).await?;
+                            pipe_json = serde_json::from_str(&content)?;
+                        }
+                    }
                 }
-            } else if file_type.is_dir() {
-                // Optionally handle subdirectories if needed
             }
         }
+
+        // Update pipe.json with the local source path at the root level
+        // pipe_json["source"] = serde_json::json!(src.to_string_lossy().to_string());
+
+        // Write updated pipe.json
+        tokio::fs::write(&pipe_json_path, serde_json::to_string_pretty(&pipe_json)?).await?;
+        info!("Updated pipe.json with local source path");
+
         Ok(())
     }
 
@@ -520,16 +535,32 @@ mod pipes {
 
         tokio::fs::create_dir_all(&pipe_dir).await?;
 
+        let mut pipe_json: Value = serde_json::json!({});
+
         for item in contents.as_array().unwrap() {
             let file_name = item["name"].as_str().unwrap();
-            if file_name == "pipe.js" || file_name == "pipe.json" {
-                let download_url = item["download_url"].as_str().unwrap();
+            let download_url = item["download_url"].as_str().unwrap();
+
+            if file_name == "pipe.js" || file_name == "pipe.json" || file_name == "README.md" {
                 let file_content = client.get(download_url).send().await?.bytes().await?;
                 let file_path = pipe_dir.join(file_name);
                 tokio::fs::write(&file_path, &file_content).await?;
                 info!("Downloaded: {:?}", file_path);
+
+                if file_name == "pipe.json" {
+                    pipe_json = serde_json::from_slice(&file_content)?;
+                }
             }
         }
+
+        // Update pipe.json with the original GitHub URL at the root level
+        // let github_url = api_url_to_github_url(api_url);
+        // pipe_json["source"] = serde_json::json!(github_url);
+
+        // Write updated pipe.json
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        tokio::fs::write(&pipe_json_path, serde_json::to_string_pretty(&pipe_json)?).await?;
+        info!("updated pipe.json with source url");
 
         info!("Pipe downloaded successfully to: {:?}", pipe_dir);
         Ok(pipe_dir)

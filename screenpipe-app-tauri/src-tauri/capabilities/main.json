@@ -95,6 +95,10 @@
         {
           "path": "$HOME/.screenpipe/data/**",
           "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$HOME/.screenpipe/pipes/**",
+          "requireLiteralLeadingDot": false
         }
       ]
     },

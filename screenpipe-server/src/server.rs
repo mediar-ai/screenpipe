@@ -7,7 +7,6 @@ use axum::{
 };
 use crossbeam::queue::SegQueue;
 use futures::future::{try_join, try_join_all};
-use screenpipe_core::download_pipe;
 use screenpipe_vision::monitor::list_monitors;
 
 use crate::{
@@ -589,15 +588,11 @@ async fn download_pipe_handler(
     JsonResponse(payload): JsonResponse<DownloadPipeRequest>,
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Downloading pipe: {}", payload.url);
-    match download_pipe(&payload.url, state.screenpipe_dir.clone()).await {
-        Ok(pipe_dir) => {
-            let pipe_id = pipe_dir.file_name().unwrap().to_string_lossy().into_owned();
-
-            Ok(JsonResponse(json!({
-                "message": format!("Pipe {} downloaded successfully", pipe_id),
-                "pipe_id": pipe_id
-            })))
-        }
+    match state.pipe_manager.download_pipe(&payload.url).await {
+        Ok(pipe_dir) => Ok(JsonResponse(json!({
+            "message": format!("Pipe {} downloaded successfully", pipe_dir),
+            "pipe_id": pipe_dir
+        }))),
         Err(e) => {
             error!("Failed to download pipe: {}", e);
             Err((

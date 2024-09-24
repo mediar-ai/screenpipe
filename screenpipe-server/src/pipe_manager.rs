@@ -1,5 +1,4 @@
 use anyhow::Result;
-use log::debug;
 use screenpipe_core::{download_pipe, run_pipe};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -7,13 +6,14 @@ use std::future::Future;
 use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipeInfo {
     pub id: String,
     pub enabled: bool,
     pub config: Value,
+    pub source: String,
 }
 
 pub struct PipeManager {
@@ -112,6 +112,12 @@ impl PipeManager {
                 .get("enabled")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            source: config
+                .get("source")
+                .unwrap_or(&Value::Null)
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
             config,
         }
     }
@@ -135,6 +141,21 @@ impl PipeManager {
         let normalized_url = url.trim_matches('"').replace("\\", "/");
 
         let pipe_dir = download_pipe(&normalized_url, self.screenpipe_dir.clone()).await?;
+
+        // update the config with the source url
+        self.update_config(
+            &pipe_dir.file_name().unwrap().to_string_lossy(),
+            serde_json::json!({
+                "source": normalized_url,
+            }),
+        )
+        .await?;
+
+        info!(
+            "pipe {} downloaded",
+            pipe_dir.file_name().unwrap().to_string_lossy()
+        );
+
         Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
     }
 

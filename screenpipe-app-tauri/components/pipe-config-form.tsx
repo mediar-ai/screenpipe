@@ -3,7 +3,6 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Checkbox } from "./ui/checkbox";
-import { Pipe } from "@/lib/hooks/use-pipes";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Tooltip,
@@ -13,6 +12,7 @@ import {
 } from "./ui/tooltip";
 import { RefreshCw } from "lucide-react";
 import { toast } from "./ui/use-toast";
+import { Pipe } from "./pipe-store";
 
 type PipeConfigFormProps = {
   pipe: Pipe;
@@ -60,7 +60,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          pipe_id: pipe.name,
+          pipe_id: pipe.id,
           config: config,
         }),
       });

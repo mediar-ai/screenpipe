@@ -12,21 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Card } from "@/components/ui/card";
 import { MemoizedReactMarkdown } from "@/components/markdown";
-import { usePipes, Pipe } from "@/lib/hooks/use-pipes";
 import { CodeBlock } from "@/components/ui/codeblock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { Skeleton } from "./ui/skeleton";
-import { PrettyLink } from "@/components/pretty-link";
-import { MeetingSummarizer } from "./meeting-summarized";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { open } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "./ui/use-toast";
 import { Input } from "./ui/input";
 import { Download, Plus, Trash2 } from "lucide-react";
-import { FeatureRequestLink } from "./feature-request-link";
-import PipeLogger from "./pipe-logger";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import posthog from "posthog-js";
@@ -39,26 +32,43 @@ const formatDate = (dateString: string) => {
   });
 };
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { readFile } from "@tauri-apps/plugin-fs";
+import { homeDir, join } from "@tauri-apps/api/path";
+import { convertHtmlToMarkdown } from "@/lib/utils";
+
+export interface Pipe {
+  enabled: boolean;
+  id: string;
+  source: string;
+  fullDescription: string;
+  config?: Record<string, any>;
+}
+
 const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
-  const { pipes, loading, error, addCustomPipe } = usePipes([
-    // "https://github.com/different-ai/file-organizer-2000",
-    // "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity",
-    // "https://github.com/mediar-ai/screenpipe/tree/pipe-logs/examples/typescript/pipe-stream-ocr-text",
-  ]);
-  // console.log("pipes", pipes);
-  // console.log("newRepoUrl", newRepoUrl);
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
+  const [pipes, setPipes] = useState<Pipe[]>([]);
   const { settings, updateSettings } = useSettings();
-  const [installedPipes, setInstalledPipes] = useState<string[]>([]);
   const { health } = useHealthCheck();
   useEffect(() => {
     fetchInstalledPipes();
-  }, []);
+  }, [health]);
 
   const handleResetAllPipes = async () => {
     try {
+      // stop screenpipe
+      if (!settings?.devMode) {
+        await invoke("kill_all_sreenpipes");
+      }
+      // reset pipes
       await invoke("reset_all_pipes");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       toast({
         title: "All pipes deleted",
         description: "The pipes folder has been reset.",
@@ -73,19 +83,43 @@ const PipeDialog: React.FC = () => {
         description: "Please try again or check the logs for more information.",
         variant: "destructive",
       });
+    } finally {
+      setSelectedPipe(null);
+      setPipes([]);
+      // start screenpipe
+      if (!settings?.devMode) {
+        await invoke("spawn_screenpipe");
+      }
     }
   };
+  console.log("pipes", pipes);
   const fetchInstalledPipes = async () => {
     if (!health || health?.status === "error") {
       return;
     }
+
     try {
       const response = await fetch("http://localhost:3030/pipes/list");
+
       if (!response.ok) {
         throw new Error("failed to fetch installed pipes");
       }
       const data = await response.json();
-      setInstalledPipes(data.map((pipe: any) => pipe.id));
+      for (const pipe of data) {
+        // read the README.md file from disk and set the fullDescription
+        const home = await homeDir();
+        const pathToReadme = await join(
+          home,
+          ".screenpipe",
+          "pipes",
+          pipe.id,
+          "README.md"
+        );
+        const readme = await readFile(pathToReadme);
+        const readmeString = new TextDecoder().decode(readme);
+        pipe.fullDescription = convertHtmlToMarkdown(readmeString);
+      }
+      setPipes(data);
     } catch (error) {
       console.error("Error fetching installed pipes:", error);
       toast({
@@ -121,7 +155,7 @@ const PipeDialog: React.FC = () => {
       });
       // Refresh the pipe list
       // await addCustomPipe(url);
-      // await fetchInstalledPipes();
+      await fetchInstalledPipes();
     } catch (error) {
       console.error("Failed to download pipe:", error);
       toast({
@@ -135,7 +169,7 @@ const PipeDialog: React.FC = () => {
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
       posthog.capture("toggle_pipe", {
-        pipe_id: pipe.name,
+        pipe_id: pipe.id,
         enabled: !pipe.enabled,
       });
       if (!pipe.enabled) {
@@ -145,7 +179,7 @@ const PipeDialog: React.FC = () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ pipe_id: pipe.name }),
+          body: JSON.stringify({ pipe_id: pipe.id }),
         });
 
         toast({
@@ -159,7 +193,7 @@ const PipeDialog: React.FC = () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ pipe_id: pipe.name }),
+          body: JSON.stringify({ pipe_id: pipe.id }),
         });
 
         toast({
@@ -168,23 +202,6 @@ const PipeDialog: React.FC = () => {
         });
       }
 
-      // await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // // Kill existing screenpipe processes
-      // await invoke("kill_all_sreenpipes");
-
-      // // Spawn new screenpipe process
-      // await invoke("spawn_screenpipe");
-
-      // Update local state
-      const updatedPipe = { ...pipe, enabled: !pipe.enabled };
-      const updatedInstalledPipes = settings.installedPipes.map((p) =>
-        p.name === pipe.name ? updatedPipe : p
-      );
-      await updateSettings({ installedPipes: updatedInstalledPipes });
-
-      setSelectedPipe(updatedPipe);
-
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       toast({
@@ -192,6 +209,13 @@ const PipeDialog: React.FC = () => {
         description:
           "screenpipe has been updated with the new configuration. please restart screenpipe now in status badge",
       });
+
+      // Update selectedPipe if it's the one being toggled
+      if (selectedPipe && selectedPipe.id === pipe.id) {
+        setSelectedPipe((prevPipe) =>
+          prevPipe ? { ...prevPipe, enabled: !prevPipe.enabled } : null
+        );
+      }
     } catch (error) {
       console.error("Failed to toggle pipe:", error);
       toast({
@@ -199,6 +223,8 @@ const PipeDialog: React.FC = () => {
         description: "please try again or check the logs for more information.",
         variant: "destructive",
       });
+    } finally {
+      await fetchInstalledPipes();
     }
   };
 
@@ -212,8 +238,20 @@ const PipeDialog: React.FC = () => {
           title: "Adding custom pipe",
           description: "Please wait...",
         });
-        await addCustomPipe(newRepoUrl);
-        setNewRepoUrl("");
+        // use /download endpoint to download the pipe
+        const response = await fetch(`http://localhost:3030/pipes/download`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: newRepoUrl }),
+        });
+        if (!response.ok) {
+          throw new Error("failed to download pipe");
+        }
+        const data = await response.json();
+        // refresh the pipe list
+        await fetchInstalledPipes();
         toast({
           title: "Custom pipe added",
           description:
@@ -232,12 +270,13 @@ const PipeDialog: React.FC = () => {
 
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
-      const updatedPipe = { ...selectedPipe, config };
-      const updatedInstalledPipes = settings.installedPipes.map((p) =>
-        p.name === selectedPipe.name ? updatedPipe : p
-      );
-      await updateSettings({ installedPipes: updatedInstalledPipes });
-      setSelectedPipe(updatedPipe);
+      fetch(`http://localhost:3030/pipes/update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pipe_id: selectedPipe.id, config }),
+      });
       toast({
         title: "Configuration saved",
         description: "The pipe configuration has been updated.",
@@ -271,80 +310,31 @@ const PipeDialog: React.FC = () => {
       );
     }
 
-    const isInstalled = installedPipes.includes(selectedPipe.name);
-    // console.log("installedPipes", installedPipes);
-
     return (
       <>
-        <h2 className="text-2xl font-bold mb-2">{selectedPipe.name}</h2>
+        <h2 className="text-2xl font-bold mb-2">{selectedPipe.id}</h2>
         <div className="flex justify-between items-center mb-4">
           <div>
-            {selectedPipe.downloads && (
-              <p>downloads: {selectedPipe.downloads}</p>
-            )}
-            {selectedPipe.version && <p>version: {selectedPipe.version}</p>}
-            {selectedPipe.author && (
-              <p>
-                by:{" "}
-                {selectedPipe.authorLink ? (
-                  <a
-                    href={selectedPipe.authorLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline"
-                  >
-                    {selectedPipe.author}
-                  </a>
-                ) : (
-                  selectedPipe.author
-                )}
-              </p>
-            )}
-            {selectedPipe.repository && (
-              <p>
-                repository:{" "}
-                <a
-                  href={selectedPipe.repository}
-                  className="text-blue-500 hover:underline"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  link
-                </a>
-              </p>
-            )}
-            {selectedPipe.lastUpdate && (
-              <p>
-                last update:{" "}
-                <span className="text-gray-500">
-                  {formatDate(selectedPipe.lastUpdate)}
-                </span>
-              </p>
-            )}
+            <a
+              href={selectedPipe.source}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              repository
+            </a>
           </div>
         </div>
-        {selectedPipe.description && (
-          <p className="mb-4">{selectedPipe.description}</p>
-        )}
+
         <div className="flex space-x-2 mb-4">
-          {isInstalled ? (
-            <Button
-              onClick={() => handleToggleEnabled(selectedPipe)}
-              variant={selectedPipe.enabled ? "default" : "outline"}
-              disabled={health?.status === "error"}
-            >
-              {selectedPipe.enabled ? "disable" : "enable"}
-            </Button>
-          ) : (
-            <Button
-              onClick={() => handleDownloadPipe(selectedPipe.repository)}
-              variant="outline"
-              disabled={health?.status === "error"}
-            >
-              <Download className="mr-2" size={16} />
-              Download
-            </Button>
-          )}
+          <Button
+            onClick={() => handleToggleEnabled(selectedPipe)}
+            variant={selectedPipe.enabled ? "default" : "outline"}
+            disabled={health?.status === "error"}
+          >
+            {selectedPipe.enabled ? "disable" : "enable"}
+          </Button>
+
           <Button disabled variant="outline">
             copy share link
             <Badge variant="secondary" className="ml-2">
@@ -360,15 +350,19 @@ const PipeDialog: React.FC = () => {
         </div>
         <Separator className="my-4" />
 
-        {isInstalled && (
-          <PipeConfigForm pipe={selectedPipe} onConfigSave={handleConfigSave} />
+        {selectedPipe.enabled && (
+          <>
+            <PipeConfigForm
+              pipe={selectedPipe}
+              onConfigSave={handleConfigSave}
+            />
+            <Separator className="my-4" />
+          </>
         )}
-
-        <Separator className="my-4" />
 
         {selectedPipe.fullDescription && (
           <div className="mt-4">
-            <h3 className="text-xl font-semibold mb-2">About this pipe</h3>
+            <h3 className="text-xl font-semibold mb-2">about this pipe</h3>
             <MemoizedReactMarkdown
               className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
               remarkPlugins={[remarkGfm, remarkMath]}
@@ -424,6 +418,65 @@ const PipeDialog: React.FC = () => {
     );
   };
 
+  const renderContent = () => {
+    if (!health || health?.status === "error") {
+      return (
+        <div className="flex flex-col items-center justify-center h-[500px]">
+          <p className="text-lg mb-4 text-center">screenpipe is not running</p>
+          <p className="text-sm text-gray-500 text-center">
+            please start screenpipe to use the pipe store.
+            <br />
+            you can do this by clicking the status badge in the top right
+            corner.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-[500px]">
+        <div className="w-1/3 pr-4 overflow-y-auto">
+          {/* {pipes.length === 0 &&
+              Array(5)
+                .fill(0)
+                .map((_, index) => (
+                  <div key={index} className="mb-2">
+                    <Skeleton className="h-24 w-full" />
+                  </div>
+                ))} */}
+          {pipes.map((pipe: Pipe) => (
+            <Card
+              key={pipe.id}
+              className="cursor-pointer hover:bg-gray-100 mb-2 p-2"
+              onClick={() => setSelectedPipe(pipe)}
+            >
+              <div className="flex justify-between items-start">
+                <h3>{pipe.id}</h3>
+              </div>
+            </Card>
+          ))}
+          <Card className="mb-2 p-2">
+            <Input
+              placeholder="Enter repo URL"
+              value={newRepoUrl}
+              onChange={(e) => setNewRepoUrl(e.target.value)}
+            />
+            <Button
+              className="mt-2 w-full"
+              onClick={handleAddOwnPipe}
+              disabled={!newRepoUrl}
+            >
+              <Plus className="mr-2" size={16} />
+              Add Your Own Pipe
+            </Button>
+          </Card>
+        </div>
+        <div className="w-full pl-4 border-l overflow-y-auto">
+          {renderPipeContent()}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -431,21 +484,31 @@ const PipeDialog: React.FC = () => {
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
         <DialogHeader>
-          {/* <div className=" flex flex-col items-start">
-            <Button size="sm" onClick={handleResetAllPipes}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              reset all pipes
-            </Button>
-            <span className="text-xs text-gray-500 mt-1">
-              use this if running into issues with the pipe store
-            </span>
-          </div> */}
           <DialogTitle>
             pipe store
             <Badge variant="secondary" className="ml-2">
               experimental
             </Badge>
           </DialogTitle>
+          <div className="flex justify-end mr-10">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    disabled={health?.status === "error"}
+                    size="sm"
+                    onClick={handleResetAllPipes}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    reset all pipes
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>use this if running into issues with the pipe store</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
 
           <DialogDescription>
             screenpipe&apos;s store is a collection of plugins called
@@ -455,20 +518,22 @@ const PipeDialog: React.FC = () => {
             screenpipe&apos;s data, or anything else you can imagine that help
             you get more out of your recordings.
             <br />
-            {/* <a
-              href="https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript"
+            make sure to restart screenpipe after changing a pipe&apos;s
+            configuration.
+            <a
+              href="https://docs.screenpi.pe/docs/plugins"
               className="text-blue-500 hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >
-              check out more examples on github
-            </a> */}
+              {" "}read the docs
+            </a>
           </DialogDescription>
 
           {/* {selectedPipe && <FeatureRequestLink className="w-80" />} */}
         </DialogHeader>
         {/* center message in big */}
-        <div className="flex flex-col justify-center items-center h-[500px]">
+        {/* <div className="flex flex-col justify-center items-center h-[500px]">
           <p className="text-center">
             currently you need to enable pipes through `screenpipe pipe`
             commands or `/pipes` api
@@ -484,83 +549,8 @@ const PipeDialog: React.FC = () => {
           >
             check out more examples on github
           </a>
-        </div>
-
-        <div className="flex h-[500px]">
-          <div className="w-1/3 pr-4 overflow-y-auto">
-            {/* {pipes.length === 0 &&
-              Array(5)
-                .fill(0)
-                .map((_, index) => (
-                  <div key={index} className="mb-2">
-                    <Skeleton className="h-24 w-full" />
-                  </div>
-                ))} */}
-            {/* {pipes.map((pipe: Pipe) => (
-              <Card
-                key={pipe.name}
-                className="cursor-pointer hover:bg-gray-100 mb-2 p-2"
-                onClick={() => setSelectedPipe(pipe)}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-sm font-semibold">{pipe.name}</h3>
-                    {pipe.author && (
-                      <p className="text-xs text-gray-500">by {pipe.author}</p>
-                    )}
-                  </div>
-                  {pipe.downloads && (
-                    <div className="text-xs text-gray-500 flex items-center">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-3 w-3 mr-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                        />
-                      </svg>
-                      {pipe.downloads}
-                    </div>
-                  )}
-                </div>
-                {pipe.description && (
-                  <p className="text-xs mt-1 line-clamp-2">
-                    {pipe.description}
-                  </p>
-                )}
-                {pipe.lastUpdate && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    updated {formatUpdatedTime(pipe.lastUpdate)}
-                  </p>
-                )}
-              </Card>
-            ))} */}
-            {/* <Card className="mb-2 p-2">
-              <Input
-                placeholder="Enter repo URL"
-                value={newRepoUrl}
-                onChange={(e) => setNewRepoUrl(e.target.value)}
-              />
-              <Button
-                className="mt-2 w-full"
-                onClick={handleAddOwnPipe}
-                disabled={!newRepoUrl}
-              >
-                <Plus className="mr-2" size={16} />
-                Add Your Own Pipe
-              </Button>
-            </Card> */}
-          </div>
-          {/* <div className="w-full pl-4 border-l overflow-y-auto">
-            {renderPipeContent()}
-          </div> */}
-        </div>
+        </div> */}
+        {renderContent()}
       </DialogContent>
     </Dialog>
   );

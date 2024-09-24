@@ -34,3 +34,12 @@ export function encode(str: string): string {
     return "%" + c.charCodeAt(0).toString(16).toUpperCase();
   });
 }
+export const convertHtmlToMarkdown = (html: string) => {
+  const convertedHtml = html.replace(
+    /<img\s+(?:[^>]*?\s+)?src="([^"]*)"(?:\s+(?:[^>]*?\s+)?alt="([^"]*)")?\s*\/?>/g,
+    (match, src, alt) => {
+      return `![${alt || ""}](${src})`;
+    }
+  );
+  return convertedHtml.replace(/<[^>]*>/g, "");
+};
