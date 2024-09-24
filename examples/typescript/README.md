@@ -36,6 +36,14 @@ To run any of these examples:
    - Install the pipe through the screenpipe app or CLI
    - Follow the specific instructions in the pipe's README
 
+For example:
+
+```bash
+screenpipe pipe download https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text
+screenpipe pipe enable pipe-stream-ocr-text
+screenpipe
+```
+
 2. For Standalone Scripts:
    - Navigate to the specific example folder
    - Install dependencies (usually with `pnpm install` or `npm install`)
