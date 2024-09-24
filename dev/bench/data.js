@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727113601094,
+  "lastUpdate": 1727137438495,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -8849,6 +8849,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2205670458,
             "range": "± 96387257",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "a17874d2198e8ec28f393cf5dd09acbc03a84164",
+          "message": "example: local llm pii removal mitm",
+          "timestamp": "2024-09-23T17:07:34-07:00",
+          "tree_id": "b8073a24a9faea6586f567d5887f2fb767782b85",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/a17874d2198e8ec28f393cf5dd09acbc03a84164"
+        },
+        "date": 1727137436967,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2049513667,
+            "range": "± 41654416",
             "unit": "ns/iter"
           }
         ]
