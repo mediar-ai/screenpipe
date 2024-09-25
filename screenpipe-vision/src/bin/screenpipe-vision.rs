@@ -51,14 +51,15 @@ async fn main() {
     // Example: Process results for 10 seconds, then pause for 5 seconds, then stop
     loop {
         if let Some(result) = result_rx.recv().await {
-            println!(
-                "OCR Text length across visible windows: {}",
-                result
-                    .window_ocr_results
-                    .iter()
-                    .map(|w| w.text.len())
-                    .sum::<usize>()
-            );
+            for window_result in &result.window_ocr_results {
+                println!(
+                    "Window: {}\nApp: {}\nText length: {}\nJSON data: {:?}",
+                    window_result.window_name,
+                    window_result.app_name,
+                    window_result.text.len(),
+                    window_result.text_json // Use {:?} to print the JSON data
+                );
+            }
         }
 
         // tokio::time::sleep(Duration::from_secs_f32(1.0 / cli.fps)).await;

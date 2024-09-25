@@ -13,6 +13,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::channel;
 use tokio_tungstenite::tungstenite::Message;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
+use std::collections::HashMap;
 
 #[derive(Clone, Serialize)]
 struct SimplifiedResult {
@@ -22,10 +23,11 @@ struct SimplifiedResult {
 
 #[derive(Clone, Serialize)]
 pub struct SimplifiedWindowResult {
-    pub image: String, // Changed to String to store base64-encoded image
+    // pub image: String,
     pub window_name: String,
     pub app_name: String,
     pub text: String,
+    pub text_json: Vec<HashMap<String, String>>, // Change this line
     pub focused: bool,
     pub confidence: f64,
 }
@@ -115,9 +117,9 @@ async fn run_websocket_server(
 ) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
     let listener = TcpListener::bind(&addr).await?;
-    println!("WebSocket server listening on: {}", addr);
+    println!("websocket server listening on: {}", addr);
 
-    let (tx, _) = tokio::sync::broadcast::channel::<SimplifiedResult>(512);
+    let (tx, _) = tokio::sync::broadcast::channel::<SimplifiedResult>(2);
     let tx = Arc::new(tx);
 
     let tx_clone = tx.clone();
@@ -141,10 +143,11 @@ async fn run_websocket_server(
                         let base64_image = general_purpose::STANDARD.encode(buffer);
 
                         SimplifiedWindowResult {
-                            image: base64_image,
+                            // image: base64_image,
                             window_name: window.window_name,
                             app_name: window.app_name,
                             text: window.text,
+                            text_json: window.text_json, // Add this line
                             focused: window.focused,
                             confidence: window.confidence,
                         }
@@ -153,6 +156,9 @@ async fn run_websocket_server(
                 timestamp: result.timestamp.elapsed().as_secs(),
             };
             let _ = tx_clone.send(simplified);
+            
+            // resubscribe to get only the latest message
+            let _ = tx_clone.subscribe().resubscribe();
         }
     });
 

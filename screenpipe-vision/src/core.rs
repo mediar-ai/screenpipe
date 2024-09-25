@@ -31,7 +31,7 @@ pub struct WindowOcrResult {
     pub window_name: String,
     pub app_name: String,
     pub text: String,
-    pub text_json: Vec<HashMap<String, String>>,
+    pub text_json: Vec<HashMap<String, String>>, // Change this line
     pub focused: bool,
     pub confidence: f64,
 }
