@@ -135,11 +135,18 @@ async function generateDailySummary(
   ollamaModel: string,
   ollamaApiUrl: string
 ): Promise<string> {
+  // if logs is more than 30000 characters, truncate it
+  let truncatedLogs = logs;
+  if (logs.length > 30000) {
+    // HACK!
+    truncatedLogs = logs.slice(0, 30000);
+  }
+
   const prompt = `${customPrompt}
 
     Based on the following daily logs, generate a concise summary of the day's activities:
 
-    ${JSON.stringify(logs)}
+    ${JSON.stringify(truncatedLogs)}
 
     Provide a human-readable summary that highlights key activities and insights.`;
 
@@ -207,6 +214,22 @@ async function sendEmail(
   });
 }
 
+async function getTodayLogs(): Promise<DailyLog[]> {
+  const logsDir = `${process.env.PIPE_DIR}/logs`;
+  const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
+
+  const files = fs.readdirSync(logsDir);
+  const todayFiles = files.filter((file) => file.startsWith(today));
+
+  const logs: DailyLog[] = [];
+  for (const file of todayFiles) {
+    const content = fs.readFileSync(`${logsDir}/${file}`);
+    logs.push(JSON.parse(content));
+  }
+
+  return logs;
+}
+
 async function dailyLogPipeline(): Promise<void> {
   console.log("starting daily log pipeline");
 
@@ -214,6 +237,7 @@ async function dailyLogPipeline(): Promise<void> {
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
+  const summaryFrequency = config.summaryFrequency;
   const emailTime = config.emailTime;
   const emailAddress = config.emailAddress;
   const emailPassword = config.emailPassword;
@@ -225,7 +249,6 @@ async function dailyLogPipeline(): Promise<void> {
   const pageSize = config.pageSize;
 
   let lastEmailSent = new Date(0); // Initialize to a past date
-  let logEntries: DailyLog[] = []; // Store log entries in memory
 
   // send a welcome email to announce what will happen, when it will happen, and what it will do
   const welcomeEmail = `
@@ -263,55 +286,51 @@ async function dailyLogPipeline(): Promise<void> {
         );
         console.log("log entry:", logEntry);
         await saveDailyLog(logEntry);
-        logEntries.push(logEntry); // Store the log entry in memory
       }
 
-      const [emailHour, emailMinute] = emailTime.split(":").map(Number);
-      const emailTimeToday = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        emailHour,
-        emailMinute
-      );
+      let shouldSendSummary = false;
 
-      if (
-        now >= emailTimeToday &&
-        now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000
-      ) {
-        const todayStart = new Date(
+      if (summaryFrequency === "daily") {
+        const [emailHour, emailMinute] = emailTime.split(":").map(Number);
+        const emailTimeToday = new Date(
           now.getFullYear(),
           now.getMonth(),
-          now.getDate()
+          now.getDate(),
+          emailHour,
+          emailMinute
         );
+        shouldSendSummary =
+          now >= emailTimeToday &&
+          now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000;
+      } else if (summaryFrequency.startsWith("hourly:")) {
+        const hours = parseInt(summaryFrequency.split(":")[1], 10);
+        shouldSendSummary =
+          now.getTime() - lastEmailSent.getTime() >= hours * 60 * 60 * 1000;
+      }
 
-        // Filter log entries for today
-        // const todayLogs = logEntries.filter(
-        //   (log) => new Date(log.timestamp) >= todayStart
-        // );
-
-        // console.log("today's logs:", todayLogs);
-
-        // if (todayLogs.length > 0) {
+      if (shouldSendSummary) {
         await retry(async () => {
-          const summary = await generateDailySummary(
-            logEntries,
-            summaryPrompt,
-            ollamaModel,
-            ollamaApiUrl
-          );
-          console.log("summary:", summary);
-          await sendEmail(
-            emailAddress,
-            emailPassword,
-            "daily activity summary",
-            summary
-          );
+          const todayLogs = await getTodayLogs();
+          console.log("today's logs:", todayLogs);
+
+          if (todayLogs.length > 0) {
+            const summary = await generateDailySummary(
+              todayLogs,
+              summaryPrompt,
+              ollamaModel,
+              ollamaApiUrl
+            );
+            console.log("summary:", summary);
+            await sendEmail(
+              emailAddress,
+              emailPassword,
+              "activity summary",
+              summary
+            );
+          }
         });
 
         lastEmailSent = now;
-        logEntries = [];
-        // }
       }
     } catch (error) {
       console.error("error in daily log pipeline:", error);

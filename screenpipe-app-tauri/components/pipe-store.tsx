@@ -69,14 +69,15 @@ const corePipes: CorePipe[] = [
   {
     id: "pipe-phi3.5-engineering-team-logs",
     description:
-      "continuously write logs of your days in a notion table using ollama+phi3.5",
+      "continuously write logs of your days in a notion table using ollama+llama3.2",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs",
   },
-  // {
-  //   id: "transcriber",
-  //   description: "generate accurate transcriptions",
-  //   url: "https://github.com/screenpipe/transcriber-pipe",
-  // },
+  {
+    id: "pipe-email-daily-log",
+    description:
+      "send a daily log of your screen time to your email using ollama+llama3.2",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log",
+  },
 ];
 
 const PipeDialog: React.FC = () => {

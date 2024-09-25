@@ -7,10 +7,16 @@
       "description": "Interval in seconds to read your screen data"
     },
     {
+      "name": "summaryFrequency",
+      "type": "string",
+      "default": "daily",
+      "description": "Frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)"
+    },
+    {
       "name": "emailTime",
       "type": "time",
       "default": "11:00",
-      "description": "Time to send daily summary email"
+      "description": "Time to send daily summary email (used only if summaryFrequency is 'daily')"
     },
     {
       "name": "emailAddress",
