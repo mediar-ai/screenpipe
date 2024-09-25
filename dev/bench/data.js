@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727307527030,
+  "lastUpdate": 1727307585702,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -9359,6 +9359,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2074716187,
             "range": "± 68848658",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f5dd0c26f222576fa107ff7e744c5cd9217c4afc",
+          "message": "Merge pull request #363 from m13v/websocket\n\nWebsocket json output with coordinates",
+          "timestamp": "2024-09-25T16:30:08-07:00",
+          "tree_id": "56a13db407198f70d69079f4d15128f0afe3c4e8",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/f5dd0c26f222576fa107ff7e744c5cd9217c4afc"
+        },
+        "date": 1727307584899,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2127487562,
+            "range": "± 107112329",
             "unit": "ns/iter"
           }
         ]
