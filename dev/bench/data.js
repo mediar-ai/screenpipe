@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727285958148,
+  "lastUpdate": 1727297845040,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -9239,6 +9239,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2058937042,
             "range": "± 69849561",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "332a8b0fbadc729bd50a1541bd4ced4d18716622",
+          "message": "feat: update websocket.rs with more cli args",
+          "timestamp": "2024-09-25T13:47:06-07:00",
+          "tree_id": "3d25baa924dc180916d2edb8a9260b7873566f96",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/332a8b0fbadc729bd50a1541bd4ced4d18716622"
+        },
+        "date": 1727297844103,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2413133854,
+            "range": "± 54880915",
             "unit": "ns/iter"
           }
         ]
