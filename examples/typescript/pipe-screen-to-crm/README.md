@@ -1,4 +1,13 @@
 
+
+![Rocks screenshot (1)](https://github.com/user-attachments/assets/be5f8df5-ebc8-422f-a059-e5055c7c601b)
+
+
+
+https://github.com/user-attachments/assets/ee2ea7fa-d723-4f8e-9ed0-78241851b066
+
+
+
 in screenpipe we have a plugin system called "pipe store" or "pipes"
 
 think of it like this:
