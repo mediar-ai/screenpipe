@@ -38,6 +38,10 @@ screenpipe-integrations = { path = "../screenpipe-integrations" }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 
+# Shared memory
+shared_memory = "0.12.4"
+parking_lot = "0.12"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 criterion = { workspace = true }
