@@ -39,13 +39,26 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     save_text_files: bool,
 
-    /// FPS
-    #[arg(long, default_value_t = 1.0)]
-    fps: f32,
+    /// FPS for continuous recording
+    /// 1 FPS = 30 GB / month
+    /// 5 FPS = 150 GB / month
+    /// Optimise based on your needs.
+    /// Your screen rarely change more than 1 times within a second, right?
+    #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))]
+    fps: f64,
 
     /// WebSocket port
     #[arg(long, default_value_t = 8080)]
     ws_port: u16,
+
+    /// List of windows to ignore (by title) for screen recording
+    #[arg(long)]
+    ignored_windows: Vec<String>,
+
+    /// List of windows to include (by title) for screen recording
+    #[arg(long)]
+    included_windows: Vec<String>,
 }
 
 #[tokio::main]
@@ -72,7 +85,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         continuous_capture(
             result_tx,
-            Duration::from_secs_f32(1.0 / cli.fps),
+            Duration::from_secs_f64(1.0 / cli.fps),
             save_text_files,
             // if apple use apple otherwise if windows use windows native otherwise use tesseract
             if cfg!(target_os = "macos") {
@@ -83,8 +96,8 @@ async fn main() -> Result<()> {
                 OcrEngine::Tesseract
             },
             id,
-            &[],
-            &[],
+            &cli.ignored_windows,
+            &cli.included_windows,
         )
         .await
     });
