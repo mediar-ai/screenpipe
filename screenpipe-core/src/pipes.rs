@@ -22,6 +22,8 @@ mod pipes {
     use reqwest::Client;
     use serde_json::Value;
 
+    use lettre::transport::smtp::authentication::Credentials;
+    use lettre::{Message, SmtpTransport, Transport};
     use reqwest;
     use std::path::Path;
     use tracing::{error, info};
@@ -128,6 +130,20 @@ mod pipes {
     }
 
     #[op2(async)]
+    #[serde]
+    async fn op_readdir(#[string] path: String) -> anyhow::Result<Vec<String>, AnyError> {
+        let mut entries = tokio::fs::read_dir(&path).await?;
+        let mut file_names = Vec::new();
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name().and_then(|os_str| os_str.to_str()) {
+                file_names.push(file_name.to_string());
+            }
+        }
+        Ok(file_names)
+    }
+
+    #[op2(async)]
     #[string]
     async fn op_fetch_get(#[string] url: String) -> anyhow::Result<String, AnyError> {
         let response = reqwest::get(&url).await?;
@@ -183,6 +199,42 @@ mod pipes {
     fn op_remove_file(#[string] path: String) -> anyhow::Result<()> {
         std::fs::remove_file(path)?;
         Ok(())
+    }
+
+    #[op2(async)]
+    #[string]
+    async fn op_send_email(
+        #[string] to: String,
+        #[string] from: String,
+        #[string] password: String,
+        #[string] subject: String,
+        #[string] body: String,
+    ) -> anyhow::Result<String, AnyError> {
+        let email = Message::builder()
+            .from(from.parse()?)
+            .to(to.parse()?)
+            .subject(subject)
+            .body(body)?;
+
+        let creds = Credentials::new(from.clone(), password);
+
+        let mailer = SmtpTransport::relay("smtp.gmail.com")?
+            .credentials(creds)
+            .build();
+
+        match mailer.send(&email) {
+            Ok(_) => Ok("Email sent successfully".to_string()),
+            Err(e) => Err(anyhow::anyhow!("Could not send email: {:?}", e)),
+        }
+    }
+
+    // Add this new operation
+    #[op2(async)]
+    async fn op_create_dir(#[string] path: String) -> anyhow::Result<(), AnyError> {
+        tokio::fs::create_dir_all(&path).await.map_err(|e| {
+            error!("Failed to create directory '{}': {}", path, e);
+            AnyError::from(e)
+        })
     }
 
     struct TsModuleLoader;
@@ -270,6 +322,9 @@ mod pipes {
             op_set_timeout,
             op_fetch,
             op_get_env,
+            op_readdir,
+            op_send_email,
+            op_create_dir,
         ]
     }
 
@@ -542,7 +597,11 @@ mod pipes {
             let file_name = item["name"].as_str().unwrap();
             let download_url = item["download_url"].as_str().unwrap();
 
-            if file_name == "pipe.js" || file_name == "pipe.ts" || file_name == "pipe.json" || file_name == "README.md" {
+            if file_name == "pipe.js"
+                || file_name == "pipe.ts"
+                || file_name == "pipe.json"
+                || file_name == "README.md"
+            {
                 let file_content = client.get(download_url).send().await?.bytes().await?;
                 let file_path = pipe_dir.join(file_name);
                 tokio::fs::write(&file_path, &file_content).await?;

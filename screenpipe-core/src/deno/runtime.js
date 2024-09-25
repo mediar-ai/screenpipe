@@ -142,6 +142,15 @@ const pipe = {
             return {};
         }
     },
+    sendEmail: async ({ to, from, password, subject, body }) => {
+        try {
+            await ops.op_send_email(to, from, password, subject, body);
+            return true;
+        } catch (error) {
+            console.error("Error sending email:", error);
+            return false;
+        }
+    },
     // isEnabled: async () => {
     //     return ops.op_is_enabled();
     // }
@@ -161,6 +170,29 @@ const fs = { // TODO does not work?
         // Similarly, this is a synchronous wrapper
         return new Promise((resolve, reject) => {
             ops.op_write_file(path, contents)
+                .then(resolve)
+                .catch(reject);
+        });
+    },
+    readdirSync: (path) => {
+        return new Promise((resolve, reject) => {
+            ops.op_readdir(path)
+                .then(resolve)
+                .catch(reject);
+        });
+    },
+    mkdirSync: (path) => {
+        // This is a synchronous wrapper around the async operation
+        return new Promise((resolve, reject) => {
+            ops.op_create_dir(path)
+                .then(resolve)
+                .catch(reject);
+        });
+    },
+    statSync: (path) => {
+        // This is a synchronous wrapper around the async operation
+        return new Promise((resolve, reject) => {
+            ops.op_stat(path)
                 .then(resolve)
                 .catch(reject);
         });
@@ -185,4 +217,3 @@ globalThis.pipe = pipe;
 globalThis.pipe.metadata = globalThis.metadata;
 globalThis.fetch = pipe.fetch;
 globalThis.loadConfig = pipe.loadConfig;
-

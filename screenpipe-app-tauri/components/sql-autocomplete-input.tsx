@@ -3,6 +3,7 @@ import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { Command } from "cmdk";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SqlAutocompleteInputProps {
   id: string;
@@ -11,6 +12,7 @@ interface SqlAutocompleteInputProps {
   onChange: (value: string) => void;
   type: "app" | "window";
   icon: React.ReactNode;
+  className?: string;
 }
 
 export function SqlAutocompleteInput({
@@ -20,6 +22,7 @@ export function SqlAutocompleteInput({
   onChange,
   type,
   icon,
+  className,
 }: SqlAutocompleteInputProps) {
   const { items, isLoading } = useSqlAutocomplete(type);
   const [open, setOpen] = useState(false);
@@ -71,7 +74,7 @@ export function SqlAutocompleteInput({
   }, []);
 
   return (
-    <div className="relative" ref={commandRef}>
+    <div className={cn("relative", className)} ref={commandRef}>
       <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 z-10 flex items-center">
         {icon}
         <span className="w-2" />

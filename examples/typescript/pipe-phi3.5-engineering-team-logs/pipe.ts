@@ -1,9 +1,4 @@
-const DEFAULT_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
-const DEFAULT_OLLAMA_API_URL = "http://localhost:11434/api/chat";
-const DEFAULT_OLLAMA_MODEL = "phi3.5:3.8b-mini-instruct-q4_K_M";
 const NOTION_API_URL = "https://api.notion.com/v1/pages";
-const DEFAULT_NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
-const DEFAULT_NOTION_API_KEY = process.env.NOTION_API_KEY;
 
 interface ScreenData {
   data: {
@@ -38,7 +33,9 @@ async function queryScreenpipe(
 }
 
 async function generateEngineeringLog(
-  screenData: ScreenData
+  screenData: ScreenData,
+  ollamaApiUrl: string,
+  ollamaModel: string
 ): Promise<EngineeringLog> {
   const prompt = `Based on the following screen data, generate a concise engineering log entry:
 
@@ -53,14 +50,23 @@ async function generateEngineeringLog(
     }
     Provide 1-3 relevant tags related to the engineering work.`;
 
-  const result = await pipe.post(
-    "http://localhost:11434/api/chat",
-    JSON.stringify({
-      model: "phi3.5",
+  const response = await fetch(ollamaApiUrl + "/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      model: ollamaModel,
       messages: [{ role: "user", content: prompt }],
       stream: false,
-    })
-  );
+    }),
+  });
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error("Error generating engineering log:", errorBody);
+    throw new Error(
+      `HTTP error! status: ${response.status}, body: ${errorBody}`
+    );
+  }
+
+  const result = await response.json();
 
   console.log("AI answer:", result);
 
@@ -114,11 +120,11 @@ async function streamEngineeringLogsToNotion(): Promise<void> {
   const config = await pipe.loadConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
-  const interval = config.interval || DEFAULT_INTERVAL;
-  const databaseId = config.notionDatabaseId || DEFAULT_NOTION_DATABASE_ID;
-  const apiKey = config.notionApiKey || DEFAULT_NOTION_API_KEY;
-  const ollamaApiUrl = config.ollamaApiUrl || DEFAULT_OLLAMA_API_URL;
-  const ollamaModel = config.ollamaModel || DEFAULT_OLLAMA_MODEL;
+  const interval = config.interval * 1000;
+  const databaseId = config.notionDatabaseId;
+  const apiKey = config.notionApiKey;
+  const ollamaApiUrl = config.ollamaApiUrl;
+  const ollamaModel = config.ollamaModel;
 
   while (true) {
     try {
@@ -131,7 +137,11 @@ async function streamEngineeringLogsToNotion(): Promise<void> {
       );
 
       if (screenData.data && screenData.data.length > 0) {
-        const logEntry = await generateEngineeringLog(screenData);
+        const logEntry = await generateEngineeringLog(
+          screenData,
+          ollamaApiUrl,
+          ollamaModel
+        );
         await syncLogToNotion(logEntry, apiKey, databaseId);
       } else {
         console.log("No relevant engineering work detected in the last hour");

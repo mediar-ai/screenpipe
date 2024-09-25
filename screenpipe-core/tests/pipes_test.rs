@@ -232,4 +232,44 @@ mod tests {
 
         assert!(result.is_err(), "Expected an error for invalid URL");
     }
+
+    #[tokio::test]
+    #[ignore] 
+    async fn test_send_email() {
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+        let to = std::env::var("EMAIL_TO").expect("EMAIL_TO not set");
+        let from = std::env::var("EMAIL_TO").expect("EMAIL_TO not set");
+        let password = std::env::var("EMAIL_PASSWORD").expect("EMAIL_PASSWORD not set");
+
+        println!("to: {}", to);
+        println!("from: {}", from);
+        println!("password: {}", password);
+        let code = format!(
+            r#"
+            (async () => {{
+                const result = await pipe.sendEmail({{
+                    to: "{to}",
+                    from: "{from}",
+                    password: "{password}",
+                    subject: "Test Email from Screenpipe",
+                    body: "This is a test email sent from the Screenpipe unit test."
+                }});
+                console.log("Email sent:", result);
+                if (!result) {{
+                    throw new Error("Failed to send email");
+                }}
+            }})();
+        "#
+        );
+        println!("code: {}", code);
+
+        let pipe_dir = setup_test_pipe(&temp_dir, "email_test_pipe", &code).await;
+
+        // Change the working directory to the pipe directory
+        std::env::set_current_dir(&pipe_dir).unwrap();
+
+        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        assert!(result.is_ok(), "Pipe execution failed: {:?}", result);
+    }
 }

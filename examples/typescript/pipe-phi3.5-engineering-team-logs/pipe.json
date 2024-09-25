@@ -27,7 +27,7 @@
     {
       "name": "ollamaModel",
       "type": "string",
-      "default": "phi3.5:3.8b-mini-instruct-q4_K_M",
+      "default": "llama3.2:3b-instruct-q4_K_M",
       "description": "Ollama Model"
     },
     {

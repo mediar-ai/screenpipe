@@ -19,18 +19,21 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "./ui/use-toast";
 import { Input } from "./ui/input";
-import { Download, Plus, Trash2, ExternalLink } from "lucide-react";
+import {
+  Download,
+  Plus,
+  Trash2,
+  ExternalLink,
+  FolderOpen,
+  RefreshCw,
+  Power,
+  Link,
+  Heart,
+} from "lucide-react";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import posthog from "posthog-js";
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-};
+import { open } from "@tauri-apps/plugin-dialog";
 
 import {
   Tooltip,
@@ -41,6 +44,12 @@ import {
 import { readFile } from "@tauri-apps/plugin-fs";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { convertHtmlToMarkdown } from "@/lib/utils";
+import LogViewer from "./log-viewer-v2";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export interface Pipe {
   enabled: boolean;
@@ -59,7 +68,8 @@ interface CorePipe {
 const corePipes: CorePipe[] = [
   {
     id: "pipe-phi3.5-engineering-team-logs",
-    description: "continuously write logs of your days in a notion table using ollama+phi3.5",
+    description:
+      "continuously write logs of your days in a notion table using ollama+phi3.5",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs",
   },
   // {
@@ -75,6 +85,8 @@ const PipeDialog: React.FC = () => {
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const { settings, updateSettings } = useSettings();
   const { health } = useHealthCheck();
+  const [isLogOpen, setIsLogOpen] = useState(false);
+
   useEffect(() => {
     fetchInstalledPipes();
   }, [health?.status]);
@@ -111,7 +123,7 @@ const PipeDialog: React.FC = () => {
       }
     }
   };
-  console.log("pipes", pipes);
+  // console.log("pipes", pipes);
   const fetchInstalledPipes = async () => {
     if (!health || health?.status === "error") {
       return;
@@ -290,6 +302,27 @@ const PipeDialog: React.FC = () => {
     }
   };
 
+  const handleLoadFromLocalFolder = async () => {
+    try {
+      const selectedFolder = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (selectedFolder) {
+        // set in the bar
+        setNewRepoUrl(selectedFolder);
+      }
+    } catch (error) {
+      console.error("failed to load pipe from local folder:", error);
+      toast({
+        title: "error loading pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       fetch(`http://localhost:3030/pipes/update`, {
@@ -354,16 +387,38 @@ const PipeDialog: React.FC = () => {
             variant={selectedPipe.enabled ? "default" : "outline"}
             disabled={health?.status === "error"}
           >
+            <Power className="mr-2 h-4 w-4" />
             {selectedPipe.enabled ? "disable" : "enable"}
           </Button>
 
+          {!selectedPipe.source.startsWith("https://") && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => handleRefreshFromDisk(selectedPipe)}
+                    variant="outline"
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    refresh
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>refresh the code from your local disk</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
           <Button disabled variant="outline">
+            <Link className="mr-2 h-4 w-4" />
             copy share link
             <Badge variant="secondary" className="ml-2">
               soon
             </Badge>
           </Button>
           <Button disabled variant="outline">
+            <Heart className="mr-2 h-4 w-4" />
             donate
             <Badge variant="secondary" className="ml-2">
               soon
@@ -374,11 +429,27 @@ const PipeDialog: React.FC = () => {
 
         {selectedPipe.enabled && (
           <>
+            <Collapsible
+              open={isLogOpen}
+              onOpenChange={setIsLogOpen}
+              className="w-full mt-4"
+            >
+              <div className="flex items-center justify-between w-full">
+                <CollapsibleTrigger className="flex items-center justify-between p-2 flex-grow border-b border-gray-200">
+                  screenpipe logs
+                  <span>{isLogOpen ? "▲" : "▼"}</span>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent>
+                <LogViewer className="mt-2" />
+              </CollapsibleContent>
+            </Collapsible>
+            <Separator className="my-4" />
+
             <PipeConfigForm
               pipe={selectedPipe}
               onConfigSave={handleConfigSave}
             />
-            <Separator className="my-4" />
           </>
         )}
 
@@ -438,6 +509,43 @@ const PipeDialog: React.FC = () => {
         )}
       </>
     );
+  };
+
+  // Add this function to handle refreshing from disk
+  const handleRefreshFromDisk = async (pipe: Pipe) => {
+    try {
+      posthog.capture("refresh_pipe_from_disk", {
+        pipe_id: pipe.id,
+      });
+      toast({
+        title: "refreshing pipe",
+        description: "please wait...",
+      });
+      const response = await fetch(`http://localhost:3030/pipes/download`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: pipe.source }),
+      });
+      if (!response.ok) {
+        throw new Error("failed to refresh pipe");
+      }
+      await fetchInstalledPipes();
+      toast({
+        title: "pipe refreshed",
+        description: "the pipe has been successfully refreshed from disk.",
+      });
+    } catch (error) {
+      console.error("failed to refresh pipe from disk:", error);
+      toast({
+        title: "error refreshing pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    } finally {
+      setSelectedPipe(null);
+    }
   };
 
   const renderCorePipes = () => (
@@ -508,6 +616,14 @@ const PipeDialog: React.FC = () => {
               >
                 <Plus className="mr-2" size={16} />
                 add your own pipe
+              </Button>
+              <Button
+                className="mt-2 w-full"
+                onClick={handleLoadFromLocalFolder}
+                variant="outline"
+              >
+                <FolderOpen className="mr-2" size={16} />
+                load from local folder
               </Button>
             </Card>
           </div>
