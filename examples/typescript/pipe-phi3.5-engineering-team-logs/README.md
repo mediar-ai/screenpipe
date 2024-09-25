@@ -1,40 +1,30 @@
 ### phi3.5 engineering team logs
 
-this pipe automates logging of engineering work to notion using screenpipe and phi3.5 ai.
+automates logging of engineering work to notion using screenpipe and phi3.5 ai.
 
-#### setup
+#### quick setup
 
-1. install screenpipe and git clone this repo
-    ```
-    git clone https://github.com/mediar-ai/screenpipe.git
-    cd screenpipe
-    ```
+1. install stuff:
+   ```
+   npm install -g screenpipe
+   git clone https://github.com/jmorganca/ollama
+   cd ollama && ./scripts/install.sh
+   ```
 
-2. install and run ollama:
-   - follow instructions at https://github.com/jmorganca/ollama
-   - run `ollama run phi3.5`
+2. run ollama:
+   ```
+   ollama run phi3.5:3.8b-mini-instruct-q4_K_M
+   ```
 
 3. set up notion:
-   - create a notion integration: https://www.notion.so/my-integrations
-   - create a database with properties: Title, Description (rich text), Tags (multi-select), Date
-   - share database with your integration
+   - create integration: https://www.notion.so/my-integrations (copy api key)
+   - make database with: Title, Description (rich text), Tags (multi-select), Date
+   - share database with your integration (click three dots, connections, your integration), open database in full screen mode, copy the database id e.g. https://www.notion.so/some-database-id?v=some-database-version-id
 
-4. set environment variables:
-   ```
-   export SCREENPIPE_NOTION_API_KEY=your_notion_api_key
-   export SCREENPIPE_NOTION_DATABASE_ID=your_notion_database_id
-   ```
+4. put the fields in the app ui, save, enable, restart screenpipe recording
 
-5. run the pipe:
-   ```
-   screenpipe pipe download ./examples/typescript/pipe-phi3.5-engineering-team-logs
-   screenpipe pipe enable phi3.5-engineering-team-logs
-   screenpipe 
-   ```
+boom! it'll log your work to notion every minute.
 
-the pipe will run continuously, logging engineering work to your notion database every hour.
+wanna tweak it? check `pipe.ts` to change frequency or adjust the ai prompt.
 
-#### customization
 
-- adjust `INTERVAL` in pipe.ts to change logging frequency
-- modify the prompt to refine ai output

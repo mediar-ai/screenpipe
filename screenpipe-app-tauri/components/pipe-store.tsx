@@ -19,7 +19,7 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "./ui/use-toast";
 import { Input } from "./ui/input";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2, ExternalLink } from "lucide-react";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import posthog from "posthog-js";
@@ -49,6 +49,25 @@ export interface Pipe {
   fullDescription: string;
   config?: Record<string, any>;
 }
+
+interface CorePipe {
+  id: string;
+  description: string;
+  url: string;
+}
+
+const corePipes: CorePipe[] = [
+  {
+    id: "pipe-phi3.5-engineering-team-logs",
+    description: "continuously write logs of your days in a notion table using ollama+phi3.5",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs",
+  },
+  // {
+  //   id: "transcriber",
+  //   description: "generate accurate transcriptions",
+  //   url: "https://github.com/screenpipe/transcriber-pipe",
+  // },
+];
 
 const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
@@ -421,6 +440,28 @@ const PipeDialog: React.FC = () => {
     );
   };
 
+  const renderCorePipes = () => (
+    <div className="mb-3">
+      <h3 className="text-lg font-semibold mb-2">try these pipes</h3>
+      <div className="flex flex-col overflow-hidden">
+        {corePipes.map((pipe) => (
+          <Card key={pipe.id} className="p-4">
+            <h4 className="font-medium text-lg mb-2">{pipe.id}</h4>
+            <p className="text-sm text-gray-500 mb-4">{pipe.description}</p>
+            <Button
+              size="sm"
+              className="w-full"
+              onClick={() => handleDownloadPipe(pipe.url)}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              add pipe
+            </Button>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+
   const renderContent = () => {
     if (!health || health?.status === "error") {
       return (
@@ -436,46 +477,43 @@ const PipeDialog: React.FC = () => {
       );
     }
     return (
-      <div className="flex h-[500px]">
-        <div className="w-1/3 pr-4 overflow-y-auto">
-          {/* {pipes.length === 0 &&
-              Array(5)
-                .fill(0)
-                .map((_, index) => (
-                  <div key={index} className="mb-2">
-                    <Skeleton className="h-24 w-full" />
-                  </div>
-                ))} */}
-          {pipes.map((pipe: Pipe) => (
-            <Card
-              key={pipe.id}
-              className="cursor-pointer hover:bg-gray-100 mb-2 p-2"
-              onClick={() => setSelectedPipe(pipe)}
-            >
-              <div className="flex justify-between items-start">
-                <h3>{pipe.id}</h3>
-              </div>
+      <div className="flex flex-col h-[550px]">
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-3/5 pr-4 overflow-y-auto">
+            {renderCorePipes()}
+            <Separator className="my-4" />
+            <h3 className="text-lg font-semibold mb-2">your pipes</h3>
+            {pipes.map((pipe: Pipe) => (
+              <Card
+                key={pipe.id}
+                className="cursor-pointer hover:bg-gray-100 mb-2 p-2"
+                onClick={() => setSelectedPipe(pipe)}
+              >
+                <div className="flex justify-between items-start">
+                  <h3>{pipe.id}</h3>
+                </div>
+              </Card>
+            ))}
+            <Card className="mb-2 p-2">
+              <Input
+                type="url"
+                placeholder="enter repo url"
+                value={newRepoUrl}
+                onChange={(e) => setNewRepoUrl(e.target.value)}
+              />
+              <Button
+                className="mt-2 w-full"
+                onClick={handleAddOwnPipe}
+                disabled={!newRepoUrl}
+              >
+                <Plus className="mr-2" size={16} />
+                add your own pipe
+              </Button>
             </Card>
-          ))}
-          <Card className="mb-2 p-2">
-            <Input
-              type="url"
-              placeholder="Enter repo URL"
-              value={newRepoUrl}
-              onChange={(e) => setNewRepoUrl(e.target.value)}
-            />
-            <Button
-              className="mt-2 w-full"
-              onClick={handleAddOwnPipe}
-              disabled={!newRepoUrl}
-            >
-              <Plus className="mr-2" size={16} />
-              Add Your Own Pipe
-            </Button>
-          </Card>
-        </div>
-        <div className="w-full pl-4 border-l overflow-y-auto">
-          {renderPipeContent()}
+          </div>
+          <div className="w-full pl-4 border-l overflow-y-auto">
+            {renderPipeContent()}
+          </div>
         </div>
       </div>
     );
@@ -486,7 +524,7 @@ const PipeDialog: React.FC = () => {
       <DialogTrigger asChild>
         <Button variant="ghost">pipe store</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
+      <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full ">
         <DialogHeader>
           <DialogTitle>
             pipe store
@@ -494,7 +532,7 @@ const PipeDialog: React.FC = () => {
               experimental
             </Badge>
           </DialogTitle>
-          <div className="flex justify-end mr-10">
+          <div className="absolute top-4 right-20">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -530,7 +568,8 @@ const PipeDialog: React.FC = () => {
               target="_blank"
               rel="noopener noreferrer"
             >
-              {" "}read the docs
+              {" "}
+              read the docs
             </a>
           </DialogDescription>
 
