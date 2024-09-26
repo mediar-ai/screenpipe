@@ -32,7 +32,7 @@ async function writeToMarkdown(data: any) {
 
   const dir = path.join(process.env.PIPE_DIR, fileName);
   console.log("Writing to", dir);
-  fs.writeFileSync(dir, content);
+  await fs.writeFile(dir, content);
   console.log(`Written OCR data to ${fileName}`);
 }
 

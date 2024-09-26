@@ -135,8 +135,7 @@ mod pipes {
         let mut entries = tokio::fs::read_dir(&path).await?;
         let mut file_names = Vec::new();
         while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if let Some(file_name) = path.file_name().and_then(|os_str| os_str.to_str()) {
+            if let Some(file_name) = entry.file_name().to_str() {
                 file_names.push(file_name.to_string());
             }
         }
@@ -228,7 +227,6 @@ mod pipes {
         }
     }
 
-    // Add this new operation
     #[op2(async)]
     async fn op_create_dir(#[string] path: String) -> anyhow::Result<(), AnyError> {
         tokio::fs::create_dir_all(&path).await.map_err(|e| {
@@ -317,14 +315,15 @@ mod pipes {
             op_read_file,
             op_write_file,
             op_remove_file,
+            op_readdir,
+            op_create_dir,
+            
             op_fetch_get,
             op_fetch_post,
             op_set_timeout,
             op_fetch,
             op_get_env,
-            op_readdir,
             op_send_email,
-            op_create_dir,
         ]
     }
 

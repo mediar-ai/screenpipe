@@ -18,10 +18,11 @@ declare global {
   };
 
   const fs: {
-    readFileSync: (path: string) => string;
-    writeFileSync: (path: string, contents: string) => void;
+    readFile: (path: string) => Promise<string>;
+    writeFile: (path: string, contents: string) => Promise<void>;
+    readdir: (path: string) => Promise<string[]>;
+    mkdir: (path: string) => Promise<void>;
   };
-
   const path: {
     join: (...paths: string[]) => string;
   };

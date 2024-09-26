@@ -34,15 +34,15 @@ const sendLog = async (level, ...args) => {
 
 const console = {
     log: (...args) => {
-        core.print(`[js][info]: ${argsToMessage(...args)}\n`, false);
+        core.print(`[pipe][${globalThis.metadata.id}][info]: ${argsToMessage(...args)}\n`, false);
         // sendLog("info", ...args);
     },
     error: (...args) => {
-        core.print(`[js][error]: ${argsToMessage(...args)}\n`, true);
+        core.print(`[pipe][${globalThis.metadata.id}][error]: ${argsToMessage(...args)}\n`, true);
         // sendLog("error", ...args);
     },
     warn: (...args) => {
-        core.print(`[js][warn]: ${argsToMessage(...args)}\n`, true);
+        core.print(`[pipe][${globalThis.metadata.id}][warn]: ${argsToMessage(...args)}\n`, true);
         // sendLog("warn", ...args);
     }
 };
@@ -160,46 +160,18 @@ const pipe = {
     // }
 };
 
-const fs = { // TODO does not work?
-    readFileSync: (path) => {
-        // This is a synchronous wrapper around the async operation
-        // Note: This will block the event loop and should be used carefully
-        return new Promise((resolve, reject) => {
-            ops.op_read_file(path)
-                .then(resolve)
-                .catch(reject);
-        });
+const fs = {
+    readFile: async (path) => {
+        return await ops.op_read_file(path);
     },
-    writeFileSync: (path, contents) => {
-        // Similarly, this is a synchronous wrapper
-        return new Promise((resolve, reject) => {
-            ops.op_write_file(path, contents)
-                .then(resolve)
-                .catch(reject);
-        });
+    writeFile: async (path, contents) => {
+        return await ops.op_write_file(path, contents);
     },
-    readdirSync: (path) => {
-        return new Promise((resolve, reject) => {
-            ops.op_readdir(path)
-                .then(resolve)
-                .catch(reject);
-        });
+    readdir: async (path) => {
+        return await ops.op_readdir(path);
     },
-    mkdirSync: (path) => {
-        // This is a synchronous wrapper around the async operation
-        return new Promise((resolve, reject) => {
-            ops.op_create_dir(path)
-                .then(resolve)
-                .catch(reject);
-        });
-    },
-    statSync: (path) => {
-        // This is a synchronous wrapper around the async operation
-        return new Promise((resolve, reject) => {
-            ops.op_stat(path)
-                .then(resolve)
-                .catch(reject);
-        });
+    mkdir: async (path) => {
+        return await ops.op_create_dir(path);
     }
 };
 

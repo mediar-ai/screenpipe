@@ -119,6 +119,8 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
               onChange={(e) =>
                 handleInputChange(field.name, parseFloat(e.target.value) || 0)
               }
+              autoCorrect="off"
+              spellCheck="false"
             />
             <TooltipProvider>
               <Tooltip>
@@ -147,6 +149,8 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
               type="time"
               value={value}
               onChange={(e) => handleInputChange(field.name, e.target.value)}
+              autoCorrect="off"
+              spellCheck="false"
             />
             <TooltipProvider>
               <Tooltip>
@@ -206,6 +210,8 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
               type="text"
               value={value}
               onChange={(e) => handleInputChange(field.name, e.target.value)}
+              autoCorrect="off"
+              spellCheck="false"
             />
             <TooltipProvider>
               <Tooltip>

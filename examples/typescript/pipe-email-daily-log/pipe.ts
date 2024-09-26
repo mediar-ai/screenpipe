@@ -45,6 +45,7 @@ async function queryScreenpipe(
 
     const response = await fetch(url);
     if (!response.ok) {
+      console.log("screenpipe response:", await response.text());
       throw new Error(`http error! status: ${response.status}`);
     }
     return await response.json();
@@ -119,8 +120,9 @@ async function generateDailyLog(
 }
 
 async function saveDailyLog(logEntry: DailyLog): Promise<void> {
+  console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
-  fs.mkdirSync(logsDir);
+  console.log("logs dir:", logsDir);
   console.log("saving log entry:", logEntry);
   console.log("logs dir:", logsDir);
   const timestamp = new Date()
@@ -129,7 +131,10 @@ async function saveDailyLog(logEntry: DailyLog): Promise<void> {
     .replace(/\..+/, "");
   const filename = `${timestamp}-${logEntry.category.replace("/", "-")}.json`;
   console.log("filename:", filename);
-  fs.writeFileSync(`${logsDir}/${filename}`, JSON.stringify(logEntry, null, 2));
+  await fs.writeFile(
+    `${logsDir}/${filename}`,
+    JSON.stringify(logEntry, null, 2)
+  );
 }
 
 async function generateDailySummary(
@@ -220,14 +225,17 @@ async function sendEmail(
 async function getTodayLogs(): Promise<DailyLog[]> {
   try {
     const logsDir = `${process.env.PIPE_DIR}/logs`;
-    const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().replace(/:/g, "-").split("T")[0]; // Get today's date in YYYY-MM-DD format
 
-    const files = fs.readdirSync(logsDir);
+    console.log("reading logs dir:", logsDir);
+    const files = await fs.readdir(logsDir);
+    console.log("files:", files);
     const todayFiles = files.filter((file) => file.startsWith(today));
+    console.log("today's files:", todayFiles);
 
     const logs: DailyLog[] = [];
     for (const file of todayFiles) {
-      const content = fs.readFileSync(`${logsDir}/${file}`);
+      const content = await fs.readFile(`${logsDir}/${file}`);
       logs.push(JSON.parse(content));
     }
 
@@ -255,6 +263,13 @@ async function dailyLogPipeline(): Promise<void> {
   const ollamaApiUrl = config.ollamaApiUrl;
   const windowName = config.windowName || "";
   const pageSize = config.pageSize;
+
+  console.log("creating logs dir");
+  const logsDir = `${process.env.PIPE_DIR}/logs`;
+  console.log("logs dir:", logsDir);
+  await fs.mkdir(logsDir).catch((error) => {
+    console.warn("error creating logs dir:", error);
+  });
 
   let lastEmailSent = new Date(0); // Initialize to a past date
 
@@ -321,31 +336,32 @@ async function dailyLogPipeline(): Promise<void> {
       }
 
       if (shouldSendSummary) {
-        await retry(async () => {
-          const todayLogs = await getTodayLogs();
-          console.log("today's logs:", todayLogs);
+        // await retry(async () => {
+        const todayLogs = await getTodayLogs();
+        console.log("today's logs:", todayLogs);
 
-          if (todayLogs.length > 0) {
-            const summary = await generateDailySummary(
-              todayLogs,
-              summaryPrompt,
-              ollamaModel,
-              ollamaApiUrl
-            );
-            console.log("summary:", summary);
-            await sendEmail(
-              emailAddress,
-              emailPassword,
-              "activity summary",
-              summary
-            );
-            lastEmailSent = now;
-          }
-        });
+        if (todayLogs.length > 0) {
+          const summary = await generateDailySummary(
+            todayLogs,
+            summaryPrompt,
+            ollamaModel,
+            ollamaApiUrl
+          );
+          console.log("summary:", summary);
+          await sendEmail(
+            emailAddress,
+            emailPassword,
+            "activity summary",
+            summary
+          );
+          lastEmailSent = now;
+        }
+        // });
       }
     } catch (error) {
       console.warn("error in daily log pipeline:", error);
     }
+    console.log("sleeping for", interval, "ms");
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
 }
