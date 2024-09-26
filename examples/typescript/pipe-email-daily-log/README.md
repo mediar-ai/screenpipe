@@ -1,4 +1,4 @@
-### phi3.5 engineering team logs
+### pipe-email-daily-log
 
 <img width="988" alt="Screenshot 2024-09-25 at 17 56 00" src="https://github.com/user-attachments/assets/f9d604af-b098-4f93-b923-b2fc455a6172">
 
@@ -19,7 +19,7 @@ llama3.2 looks at your screen 24/7 and send you emails summarizing your activity
 
 2. [create app specific password](https://support.google.com/accounts/answer/185833?hl=en) in your google account that will be used to send yourself emails
 
-3. configure pipe in the app ui, save, enable, restart screenpipe recording
+3. configure pipe in the app ui, save, enable, restart screenpipe recording (you can config to either receive a mail a day or several every x hours)
 
 <img width="1312" alt="Screenshot 2024-09-25 at 18 16 54" src="https://github.com/user-attachments/assets/9669b2f1-c67d-4055-9e03-067c67fb51f8">
 
