@@ -121,11 +121,14 @@ async function generateDailyLog(
 async function saveDailyLog(logEntry: DailyLog): Promise<void> {
   const logsDir = `${process.env.PIPE_DIR}/logs`;
   fs.mkdirSync(logsDir);
+  console.log("saving log entry:", logEntry);
+  console.log("logs dir:", logsDir);
   const timestamp = new Date()
     .toISOString()
     .replace(/:/g, "-")
     .replace(/\..+/, "");
   const filename = `${timestamp}-${logEntry.category.replace("/", "-")}.json`;
+  console.log("filename:", filename);
   fs.writeFileSync(`${logsDir}/${filename}`, JSON.stringify(logEntry, null, 2));
 }
 
@@ -215,19 +218,24 @@ async function sendEmail(
 }
 
 async function getTodayLogs(): Promise<DailyLog[]> {
-  const logsDir = `${process.env.PIPE_DIR}/logs`;
-  const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
+  try {
+    const logsDir = `${process.env.PIPE_DIR}/logs`;
+    const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
 
-  const files = fs.readdirSync(logsDir);
-  const todayFiles = files.filter((file) => file.startsWith(today));
+    const files = fs.readdirSync(logsDir);
+    const todayFiles = files.filter((file) => file.startsWith(today));
 
-  const logs: DailyLog[] = [];
-  for (const file of todayFiles) {
-    const content = fs.readFileSync(`${logsDir}/${file}`);
-    logs.push(JSON.parse(content));
+    const logs: DailyLog[] = [];
+    for (const file of todayFiles) {
+      const content = fs.readFileSync(`${logsDir}/${file}`);
+      logs.push(JSON.parse(content));
+    }
+
+    return logs;
+  } catch (error) {
+    console.error("error getting today's logs:", error);
+    return [];
   }
-
-  return logs;
 }
 
 async function dailyLogPipeline(): Promise<void> {
