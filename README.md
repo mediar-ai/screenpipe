@@ -48,7 +48,7 @@
 ---
 
 *Latest News* 🔥
-- [2024/09] Screenpipe hit 60 daily active users!
+- [2024/09] 70 users run screenpipe 24/7!
 - [2024/09] Released a v0 of our [documentation](https://docs.screenpi.pe/)
 - [2024/08] Anyone can now [create, share, install pipes](https://youtu.be/iCqHgZgQHyA?si=DjKJir7HfZoQKItK) (plugins) from the app interface based on a github repo/dir
 - [2024/08] We're running bounties! Contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
@@ -82,8 +82,8 @@ There are multiple ways to install screenpipe:
 - as a CLI (continue reading), for rather technical users
 - as a [paid desktop app](https://screenpi.pe) with 1 year updates, priority support, and priority features
 - as a free forever desktop app (but you need to build it yourself). We're 100% OSS.
-- as a free forever desktop app - by sending a PR ([example](https://github.com/mediar-ai/screenpipe/issues/120#issuecomment-2275043418)) (or offer free app to a friend)
-- as a Rust or WASM library (documentation WIP)
+- as a free forever desktop app - by sending a PR ([example](https://github.com/mediar-ai/screenpipe/issues/120#issuecomment-2275043418)) or [sharing about screenpipe online](https://screenpi.pe/onboarding/free-community)
+- as a Rust or WASM library - check this [websocket](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-vision/examples/websocket.rs) to stream frames + OCR to your app
 - as a business - check [use cases](https://github.com/mediar-ai/screenpipe?tab=readme-ov-file#use-cases) and [DM louis](https://www.linkedin.com/in/louis030195/)
 
 we invest 80% of the paid app revenue in [bounties](https://github.com/mediar-ai/screenpipe/issues?q=is:open+is:issue+label:%22%F0%9F%92%8E+Bounty%22), send PR, make money!
