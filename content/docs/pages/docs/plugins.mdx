@@ -71,13 +71,13 @@ this simple pipe will stream text to local markdown files in current directory.
 
 ---
 
-## developing pipes in screenpipe
+## quick tour - developing pipes in screenpipe
 <MotionDiv delay={0.7}>
 <iframe width="100%" height="500" src="https://www.youtube.com/embed/icqhgzqhya?si=kjs4t94dqex48xky" title="youtube video player" frameborder="0" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; web-share" allowfullscreen></iframe>
 
 screenpipe's plugin system, referred to as **pipes**, allows you to create customized pipes that automate workflows. these pipes can process, annotate, analyze, summarize, or integrate your screen and audio data with other tools.
 
-users can begin by cloning an existing pipe, such as [pipe stream ocr text](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text). you can use any javascript/typescript modules to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js`, `pipe.ts`, `main.js`, or `main.ts`. you can also export the final built file as `main.js` or `pipe.js`.
+users can begin by cloning an existing pipe, such as [pipe-email-daily-log](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
 
 once the pipe is ready, follow these steps to make it work with `screenpipe`:
 
@@ -92,5 +92,21 @@ once the pipe is ready, follow these steps to make it work with `screenpipe`:
   ```
 
 this setup enables the creation of countless workflows tailored to specific needs, automating tedious or complex tasks.
+
+you can also load & enable pipes from the app UI, go to pipe store, and click relevant buttons.
+
+
+### tips & hacks 
+
+- you can use `pipe.json` to let others pass configuration options to your pipe through the UI or CLI.
+- pipes have access to a special API that allows you to interact with your computer or special features like sending notifications, sending emails, etc.
+- check this [file](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/deno/runtime.js) for more details.
+- in general we recommend using local LLMs like ollama as the data can be large and sensitive.
+
+### known limitations
+
+- you can only use JS/TS to build your pipes.
+- we did not figure out yet a way to use dependencies but some manage to do so, this is because pipes run in Deno runtime which is special.
+- you usually need to run the pipe in an infinite loop for example if it's something that process your data continuously, of course if this is for example an agent that summarize your day one shot it does not have to be infinite loop.
 
 </MotionDiv>
