@@ -80,7 +80,7 @@ There are numerous use cases that can be built on top of this layer. To simplify
 
 There are multiple ways to install screenpipe:
 - as a CLI for technical users
-- as a [paid desktop app](https://screenpi.pe) with 1 year updates, priority support, and priority features
+- as a [paid desktop app](https://screenpi.pe/onboarding) with 1 year updates, priority support, and priority features
 - as a free forever desktop app (but you need to build it yourself). We're 100% OSS.
 - as a free forever desktop app - by sending a PR ([example](https://github.com/mediar-ai/screenpipe/issues/120#issuecomment-2275043418)) or [sharing about screenpipe online](https://screenpi.pe/onboarding/free-community)
 - as a Rust or WASM library - check this [websocket](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-vision/examples/websocket.rs) to stream frames + OCR to your app
