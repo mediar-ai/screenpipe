@@ -176,7 +176,7 @@ async function generateDailySummary(
 async function retry<T>(
   fn: () => Promise<T>,
   maxAttempts: number = 3,
-  delay: number = 1000
+  delay: number = 3000
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
