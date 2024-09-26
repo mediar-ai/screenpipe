@@ -41,6 +41,10 @@ const console = {
         core.print(`[js][error]: ${argsToMessage(...args)}\n`, true);
         // sendLog("error", ...args);
     },
+    warn: (...args) => {
+        core.print(`[js][warn]: ${argsToMessage(...args)}\n`, true);
+        // sendLog("warn", ...args);
+    }
 };
 
 globalThis.console = console;

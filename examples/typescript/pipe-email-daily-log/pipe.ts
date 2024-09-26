@@ -49,7 +49,7 @@ async function queryScreenpipe(
     }
     return await response.json();
   } catch (error) {
-    console.error("error querying screenpipe:", error);
+    console.warn("error querying screenpipe:", error);
     return { data: [] };
   }
 }
@@ -110,8 +110,8 @@ async function generateDailyLog(
   try {
     content = JSON.parse(cleanedResult);
   } catch (error) {
-    console.error("failed to parse ai response:", error);
-    console.error("cleaned result:", cleanedResult);
+    console.warn("failed to parse ai response:", error);
+    console.warn("cleaned result:", cleanedResult);
     throw new Error("invalid ai response format");
   }
 
@@ -233,7 +233,7 @@ async function getTodayLogs(): Promise<DailyLog[]> {
 
     return logs;
   } catch (error) {
-    console.error("error getting today's logs:", error);
+    console.warn("error getting today's logs:", error);
     return [];
   }
 }
@@ -263,7 +263,11 @@ async function dailyLogPipeline(): Promise<void> {
     Welcome to the daily log pipeline!
 
     This pipe will send you a daily summary of your activities.
-    It will run at ${emailTime} every day.
+    ${
+      summaryFrequency === "daily"
+        ? `It will run at ${emailTime} every day.`
+        : `It will run every ${summaryFrequency} hours.`
+    }
     
   `;
   await sendEmail(
@@ -335,13 +339,12 @@ async function dailyLogPipeline(): Promise<void> {
               "activity summary",
               summary
             );
+            lastEmailSent = now;
           }
         });
-
-        lastEmailSent = now;
       }
     } catch (error) {
-      console.error("error in daily log pipeline:", error);
+      console.warn("error in daily log pipeline:", error);
     }
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
