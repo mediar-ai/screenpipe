@@ -80,6 +80,11 @@ screenpipe's plugin system, referred to as **pipes**, allows you to create custo
 
 users can begin by cloning an existing pipe, such as [pipe-email-daily-log](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
 
+```bash 
+git clone https://github.com/mediar-ai/screenpipe.git
+cp -r screenpipe/examples/typescript/pipe-email-daily-log screenpipe/examples/typescript/my-pipe
+```
+
 once the pipe is ready, follow these steps to make it work with `screenpipe`:
 
 - **download the pipe** (from local or github url):
@@ -96,6 +101,12 @@ this setup enables the creation of countless workflows tailored to specific need
 
 you can also load & enable pipes from the app UI, go to pipe store, and click relevant buttons.
 
+please send a PR with your pipe to the repo, we will review and merge it!
+
+we also do bounties for new pipes, or if you talk about screenpipe on social media, we give $100+!
+
+also we would love to build integration with Stripe, etc. so you can create a paid pipe for example and
+we would be happy to help you make money!
 
 ### tips & hacks 
 
