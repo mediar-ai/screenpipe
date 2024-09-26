@@ -29,12 +29,13 @@ import {
   Power,
   Link,
   Heart,
+  Puzzle,
 } from "lucide-react";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import posthog from "posthog-js";
 import { open } from "@tauri-apps/plugin-dialog";
-
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 import {
   Tooltip,
   TooltipContent,
@@ -369,18 +370,6 @@ const PipeDialog: React.FC = () => {
     return (
       <>
         <h2 className="text-2xl font-bold mb-2">{selectedPipe.id}</h2>
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <a
-              href={selectedPipe.source}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              repository
-            </a>
-          </div>
-        </div>
 
         <div className="flex space-x-2 mb-4">
           <Button
@@ -411,12 +400,13 @@ const PipeDialog: React.FC = () => {
             </TooltipProvider>
           )}
 
-          <Button disabled variant="outline">
-            <Link className="mr-2 h-4 w-4" />
-            copy share link
-            <Badge variant="secondary" className="ml-2">
-              soon
-            </Badge>
+          <Button
+            onClick={() => openUrl(selectedPipe.source, "_blank")}
+            variant="outline"
+            disabled={!selectedPipe.source.startsWith("http")}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            view source
           </Button>
           <Button disabled variant="outline">
             <Heart className="mr-2 h-4 w-4" />
@@ -639,7 +629,10 @@ const PipeDialog: React.FC = () => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost">pipe store</Button>
+        <Button variant="ghost">
+          <Puzzle className="mr-2 h-4 w-4" />
+          pipe store
+        </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full ">
         <DialogHeader>

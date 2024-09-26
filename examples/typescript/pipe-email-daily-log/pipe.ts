@@ -24,11 +24,12 @@ async function queryScreenpipe(
   startTime: string,
   endTime: string,
   windowName: string,
-  pageSize: number
+  pageSize: number,
+  contentType: string
 ): Promise<ScreenData> {
   try {
     const params: Record<string, string> = {
-      content_type: "ocr",
+      content_type: contentType,
       limit: pageSize.toString(),
       offset: "0",
       start_time: startTime,
@@ -263,6 +264,7 @@ async function dailyLogPipeline(): Promise<void> {
   const ollamaApiUrl = config.ollamaApiUrl;
   const windowName = config.windowName || "";
   const pageSize = config.pageSize;
+  const contentType = config.contentType || 'ocr'; // Default to 'ocr' if not specified
 
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
@@ -301,7 +303,8 @@ async function dailyLogPipeline(): Promise<void> {
         oneMinuteAgo.toISOString(),
         now.toISOString(),
         windowName,
-        pageSize
+        pageSize,
+        contentType
       );
 
       if (screenData.data && screenData.data.length > 0) {

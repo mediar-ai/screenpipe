@@ -20,6 +20,7 @@ import {
   Users,
   FileText,
   PlusCircle,
+  Calendar,
 } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { Badge } from "./ui/badge";
@@ -537,6 +538,7 @@ export default function MeetingHistory() {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" onClick={() => setIsOpen(true)}>
+          <Calendar className="mr-2 h-4 w-4" />
           meetings
         </Button>
       </DialogTrigger>

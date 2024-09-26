@@ -4,7 +4,7 @@
       "name": "interval",
       "type": "number",
       "default": 60,
-      "description": "Interval in seconds to read your screen data"
+      "description": "Interval in seconds to read your screen data and extract structured logs (will be used to summarize and send an email). Increase this value if using audio."
     },
     {
       "name": "summaryFrequency",
@@ -22,49 +22,55 @@
       "name": "emailAddress",
       "type": "string",
       "default": "<fill your email address here>",
-      "description": "Email Address"
+      "description": "Email address to send the daily summary to"
     },
     {
       "name": "emailPassword",
       "type": "string",
       "default": "<fill your email password here>",
-      "description": "Email Password https://support.google.com/accounts/answer/185833?hl=en"
+      "description": "App specific password for your gmail account, https://support.google.com/accounts/answer/185833?hl=en"
     },
     {
       "name": "ollamaApiUrl",
       "type": "string",
       "default": "http://localhost:11434/api",
-      "description": "Ollama API URL"
+      "description": "AI API URL, can be ollama, openai, any openai compatible API, risky to use cloud providers due to high usage"
     },
     {
       "name": "ollamaModel",
       "type": "string",
       "default": "llama3.2:3b-instruct-q4_K_M",
-      "description": "Ollama Model"
+      "description": "AI Model"
     },
     {
       "name": "pageSize",
       "type": "number",
       "default": 100,
-      "description": "Number of records to retrieve from screenpipe per page, keep in mind LLMs have a context window limit"
+      "description": "Number of records to retrieve from screenpipe per page for structured extraction, keep in mind LLMs have a context window limit. Increase this value if using audio."
     },
     {
       "name": "customPrompt",
       "type": "string",
       "default": "You are an AI assistant tasked with extracting structured information from screen data (OCR). Analyze the following screen data and extract relevant information about my daily activity.",
-      "description": "Custom prompt for the AI assistant"
+      "description": "Custom prompt for the AI assistant that will be used to extract information from the screen data every few minutes"
     },
     {
       "name": "summaryPrompt",
       "type": "string",
       "default": "You are an AI assistant tasked with summarizing information that has previously been extracted from screen data (OCR) by another AI assistant. Analyze the following structured data extracted from my screen data and summarize my daily activity, this will be send as a mail to my email address.",
-      "description": "Summary prompt for the AI assistant"
+      "description": "Summary prompt for the AI assistant that will be used to summarize the logs previously extracted and send a mail"
     },
     {
       "name": "windowName",
       "type": "window",
       "default": "",
-      "description": "Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc."
+      "description": "Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio"
+    },
+    {
+      "name": "contentType",
+      "type": "contentType",
+      "default": "ocr",
+      "description": "Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance."
     }
   ]
 }

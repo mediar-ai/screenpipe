@@ -10,10 +10,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
-import { Layout, RefreshCw } from "lucide-react";
+import { Layers, Layout, RefreshCw } from "lucide-react";
 import { toast } from "./ui/use-toast";
 import { Pipe } from "./pipe-store";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { HelpCircle } from "lucide-react";
 
 type PipeConfigFormProps = {
   pipe: Pipe;
@@ -200,6 +208,55 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          </div>
+        );
+      case "contentType":
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Select
+                value={value}
+                onValueChange={(newValue) =>
+                  handleInputChange(field.name, newValue)
+                }
+              >
+                <SelectTrigger id={field.name} className="relative w-full">
+                  <Layers
+                    className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
+                    size={18}
+                  />
+                  <SelectValue placeholder="content type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    <span className="pl-6">all</span>
+                  </SelectItem>
+                  <SelectItem value="ocr">
+                    <span className="pl-6">ocr</span>
+                  </SelectItem>
+                  <SelectItem value="audio">
+                    <span className="pl-6">audio</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={resetToDefault}
+                      className="h-8 w-8"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Reset to default</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
         );
       default:

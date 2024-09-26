@@ -26,7 +26,7 @@ import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { DevSettings } from "./dev-dialog";
-import { Lock, Folder, FileText } from "lucide-react";
+import { Lock, Folder, FileText, Activity } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { homeDir } from "@tauri-apps/api/path";
 import LogViewer from "./log-viewer-v2";
@@ -467,6 +467,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
         className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
         onClick={() => setIsDialogOpen(true)}
       >
+        <Activity className="mr-2 h-4 w-4" />
         status{" "}
         <span
           className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${

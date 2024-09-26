@@ -24,7 +24,7 @@ import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 
 import { platform } from "@tauri-apps/plugin-os";
-import { Eye, EyeOff, HelpCircle, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, HelpCircle, RefreshCw, Settings2 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 
 export function Settings({ className }: { className?: string }) {
@@ -92,6 +92,7 @@ export function Settings({ className }: { className?: string }) {
     >
       <DialogTrigger asChild>
         <Button variant="ghost" className={className}>
+          <Settings2 className="mr-2 h-4 w-4" />
           settings
         </Button>
       </DialogTrigger>

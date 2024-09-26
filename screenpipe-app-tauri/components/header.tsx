@@ -13,6 +13,14 @@ import {
 import React from "react";
 import PipeDialog from "@/components/pipe-store";
 import MeetingHistory from "@/components/meeting-history";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MessageSquare, Heart, Menu } from "lucide-react";
+import { open } from "@tauri-apps/plugin-shell";
 
 function IconNewChat() {
   return (
@@ -71,8 +79,6 @@ export default function Header() {
         </div>
       </div>
       <div className="flex space-x-4 absolute top-4 right-4">
-        {" "}
-        {/* Added margin-top for spacing */}
         <HealthStatus className="mt-3" />
         <Settings />
         <MeetingHistory />
@@ -96,27 +102,36 @@ export default function Header() {
               <line x1="10" y1="14" x2="21" y2="3" />
             </svg>
           </PrettyLink> */}
-        <PrettyLink
-          variant="outline"
-          href="mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
-        >
-          <span className="mr-2">send feedback</span>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-            <polyline points="15 3 21 3 21 9" />
-            <line x1="10" y1="14" x2="21" y2="3" />
-          </svg>
-        </PrettyLink>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <Menu className="h-[1.2rem] w-[1.2rem]" />
+              <span className="sr-only">menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="mr-4" align="end">
+            <DropdownMenuItem
+              onClick={() =>
+                open(
+                  "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe",
+                )
+              }
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              <span>send feedback</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                open(
+                  "https://twitter.com/intent/tweet?text=here's%20how%20i%20use%20@screen_pipe%20...%20%5Bscreenshot%5D%20an%20awesome%20tool%20for%20...",
+                )
+              }
+            >
+              <Heart className="mr-2 h-4 w-4" />
+              <span>support us</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
