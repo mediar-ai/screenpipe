@@ -27,4 +27,83 @@ boom!
 
 wanna tweak it? check `pipe.ts`.
 
-(can be used through CLI also)
+can be used through CLI also, you can tweak the `pipe.json` to your needs, mine looks like this:
+
+```json
+{
+  "fields": [
+    {
+      "name": "interval",
+      "type": "number",
+      "default": 60,
+      "description": "Interval in seconds to read your screen data"
+    },
+    {
+      "name": "summaryFrequency",
+      "type": "string",
+      "default": "daily",
+      "description": "Frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)",
+      "value": "hourly:1"
+    },
+    {
+      "name": "emailTime",
+      "type": "time",
+      "default": "11:00",
+      "description": "Time to send daily summary email (used only if summaryFrequency is 'daily')"
+    },
+    {
+      "name": "emailAddress",
+      "type": "string",
+      "default": "<fill your email address here>",
+      "description": "Email Address",
+      "value": "louis@screenpi.pe"
+    },
+    {
+      "name": "emailPassword",
+      "type": "string",
+      "default": "<fill your email password here>",
+      "description": "Email Password https://support.google.com/accounts/answer/185833?hl=en",
+      "value": "mypassword"
+    },
+    {
+      "name": "ollamaApiUrl",
+      "type": "string",
+      "default": "http://localhost:11434/api",
+      "description": "Ollama API URL"
+    },
+    {
+      "name": "ollamaModel",
+      "type": "string",
+      "default": "llama3.2:3b-instruct-q4_K_M",
+      "description": "Ollama Model"
+    },
+    {
+      "name": "pageSize",
+      "type": "number",
+      "default": 100,
+      "description": "Number of records to retrieve from screenpipe per page, keep in mind LLMs have a context window limit"
+    },
+    {
+      "name": "customPrompt",
+      "type": "string",
+      "default": "You are an AI assistant tasked with extracting structured information from screen data (OCR). Analyze the following screen data and extract relevant information about my daily activity.",
+      "description": "Custom prompt for the AI assistant"
+    },
+    {
+      "name": "summaryPrompt",
+      "type": "string",
+      "default": "You are an AI assistant tasked with summarizing information that has previously been extracted from screen data (OCR) by another AI assistant. Analyze the following structured data extracted from my screen data and summarize my daily activity, this will be send as a mail to my email address.",
+      "description": "Summary prompt for the AI assistant"
+    },
+    {
+      "name": "windowName",
+      "type": "window",
+      "default": "",
+      "description": "Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc.",
+      "value": "matt"
+    }
+  ],
+  "source": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log",
+  "enabled": true
+}
+```
