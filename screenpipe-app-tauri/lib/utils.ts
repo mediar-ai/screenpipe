@@ -1,3 +1,4 @@
+import { platform } from "@tauri-apps/plugin-os";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -43,3 +44,17 @@ export const convertHtmlToMarkdown = (html: string) => {
   );
   return convertedHtml.replace(/<[^>]*>/g, "");
 };
+
+export function getCliPath() {
+  const os = platform();
+  switch (os) {
+    case "windows":
+      return "%LOCALAPPDATA%\\screenpipe\\screenpipe.exe";
+    case "macos":
+      return "/Applications/screenpipe.app/Contents/MacOS/screenpipe";
+    case "linux":
+      return "/usr/local/bin/screenpipe";
+    default:
+      return "screenpipe";
+  }
+}

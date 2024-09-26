@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,7 +20,7 @@ import {
   Monitor,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getCliPath } from "@/lib/utils";
 import {
   Command,
   CommandInput,
@@ -46,6 +48,17 @@ import {
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
 import { Slider } from "./ui/slider";
+import { IconCode } from "./ui/icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { CodeBlock } from "./ui/codeblock";
+import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 
 interface AudioDevice {
   name: string;
@@ -83,6 +96,8 @@ export function RecordingSettings({
   const [isUpdating, setIsUpdating] = useState(false);
   const { health } = useHealthCheck();
   const isDisabled = health?.status_code === 500;
+  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
+  const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
   console.log("localSettings", localSettings);
   console.log("settings", settings);
   console.log("availableMonitors", availableMonitors);
@@ -272,7 +287,6 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, fps: value[0] });
   };
 
-
   const handleVadSensitivityChange = (value: number[]) => {
     const sensitivityMap: { [key: number]: VadSensitivity } = {
       2: "high",
@@ -294,6 +308,72 @@ export function RecordingSettings({
     return sensitivityMap[sensitivity];
   };
 
+  const generateCliCommand = () => {
+    const cliPath = getCliPath();
+    let args = [];
+
+    if (localSettings.audioTranscriptionEngine !== "default") {
+      args.push(
+        `--audio-transcription-engine ${localSettings.audioTranscriptionEngine}`
+      );
+    }
+    if (localSettings.ocrEngine !== "default") {
+      args.push(`--ocr-engine ${localSettings.ocrEngine}`);
+    }
+    if (
+      localSettings.monitorIds.length > 0 &&
+      localSettings.monitorIds[0] !== "default"
+    ) {
+      localSettings.monitorIds.forEach((id) => args.push(`--monitor-id ${id}`));
+    }
+    if (
+      localSettings.audioDevices.length > 0 &&
+      localSettings.audioDevices[0] !== "default"
+    ) {
+      localSettings.audioDevices.forEach((device) =>
+        args.push(`--audio-device "${device}"`)
+      );
+    }
+    if (localSettings.usePiiRemoval) {
+      args.push("--use-pii-removal");
+    }
+    if (localSettings.restartInterval > 0) {
+      args.push(`--restart-interval ${localSettings.restartInterval}`);
+    }
+    if (localSettings.disableAudio) {
+      args.push("--disable-audio");
+    }
+    localSettings.ignoredWindows.forEach((window) =>
+      args.push(`--ignored-windows "${window}"`)
+    );
+    localSettings.includedWindows.forEach((window) =>
+      args.push(`--included-windows "${window}"`)
+    );
+    if (
+      localSettings.deepgramApiKey &&
+      localSettings.deepgramApiKey !== "default"
+    ) {
+      args.push(`--deepgram-api-key "${localSettings.deepgramApiKey}"`);
+    }
+    if (localSettings.fps !== 0.2) {
+      args.push(`--fps ${localSettings.fps}`);
+    }
+    if (localSettings.vadSensitivity !== "high") {
+      args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
+    }
+
+    return `${cliPath} ${args.join(" ")}`;
+  };
+
+  const handleCopyCliCommand = () => {
+    const command = generateCliCommand();
+    copyToClipboard(command);
+    toast({
+      title: "CLI command copied",
+      description: "The CLI command has been copied to your clipboard.",
+    });
+  };
+
   return (
     <>
       <div className="relative">
@@ -309,7 +389,16 @@ export function RecordingSettings({
         )}
         <Card className={cn(isDisabled && "opacity-50 pointer-events-none")}>
           <CardHeader>
-            <CardTitle className="text-center">recording settings</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-center">recording settings</CardTitle>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsCopyDialogOpen(true)}
+              >
+                <IconCode className="h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col space-y-2">
@@ -847,6 +936,23 @@ export function RecordingSettings({
           </CardContent>
         </Card>
       </div>
+      <Dialog open={isCopyDialogOpen} onOpenChange={setIsCopyDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>CLI command</DialogTitle>
+            <DialogDescription>
+              You can use this CLI command to start Screenpipe with the current
+              settings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-x-auto">
+            <CodeBlock language="bash" value={generateCliCommand()} />
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCopyCliCommand}>Copy to Clipboard</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
