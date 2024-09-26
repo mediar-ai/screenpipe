@@ -12,21 +12,21 @@ This folder contains various examples demonstrating the usage of screenpipe in d
 
 Below is a table of the available examples:
 
-| Example | Description | Type | Link |
-|---------|-------------|------|------|
-| TypeScript Pipe Tagging Activity | Automatically tag activities using AI | Pipe v1 | [Pipe Tagging Activity](./pipe-tagging-activity) |
-| TypeScript Pipe Stream OCR Text | Stream OCR text from screen data | Pipe v2 | [Pipe Stream OCR Text](./pipe-stream-ocr-text) |
-| TypeScript Pipe Activity Topic Tracker | Track and summarize activities | Pipe v1 | [Pipe Activity Topic Tracker](./pipe-activity-topic-tracker) |
-| TypeScript Daily Log | A daily activity logger using screenpipe | Standalone Script | [Daily Log](./daily-log) |
-| TypeScript Daily Tracker | An AI-powered daily activity tracker | Standalone Script | [Daily Tracker](./daily-tracker) |
-| TypeScript RAG Over Your Life in Obsidian | Retrieval-Augmented Generation for personal knowledge management | Standalone Script | [RAG in Obsidian](./rag-over-your-life-in-obsidian) |
-| TypeScript Meeting Summaries in Obsidian | Automated meeting summary generation for Obsidian | Standalone Script | [Meeting Summaries](./meeting-summaries-in-obsidian) |
-| TypeScript Apple Shortcut | Integration with Apple Shortcuts | Standalone Script | [Apple Shortcut](./apple-shortcut) |
-| TypeScript Agent Multi-Turn RAG | Multi-turn Retrieval-Augmented Generation agent | Standalone Script | [Agent Multi-Turn RAG](./agent-multi-turn-rag) |
-| TypeScript Vercel AI Chatbot | AI-powered chatbot using Vercel AI SDK | Standalone Script | [Vercel AI Chatbot](./vercel-ai-chatbot) |
-| TypeScript Perplexity-alike Asking Confirmation RAG Agent | A Perplexity-inspired RAG agent with user confirmation | Standalone Script | [Perplexity RAG Agent](./perplexity-alike-asking-confirmation-rag-agent) |
+| **example**                          | **description**                                  | **link**                          |
+| ------------------------------------ | ------------------------------------------------ | --------------------------------- |
+| **pipe email daily log**             | send daily activity logs via email               | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log)                         |
+| **pipe screen to crm**               | integrate screen data with crm systems           | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-screen-to-crm)                         |
+| **pipe phi3.5 engineering team logs**| generate engineering team work logs              | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
+| **pipe stream ocr text**             | stream ocr text from screen data                 | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text)                         |
+| **pipe activity topic tracker**      | track and summarize activities                   | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-activity-topic-tracker)                         |
+| **pipe focus notification buddy**    | help you stay focused                            | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-focus-notification-buddy)                         |
+| **pipe security check**              | notify user if detected any suspicious activity  | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-security-check)                         |
+| **pipe sync meetings to notion**     | sync meeting transcriptions & summaries to notion| [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-sync-meetings-to-notion)                        |
+| **pipe tagging activity**            | automatically tag activities using ai            | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity)                         |
 
 Each example folder contains its own README with specific instructions on how to set up and run the example.
+
+We recommend you to use pipes instead of standalone scripts as they are easier to develop and maintain and more aligned with the screenpipe infrastructure.
 
 ## Getting Started
 
