@@ -85,7 +85,6 @@ const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const [pipes, setPipes] = useState<Pipe[]>([]);
-  const { settings, updateSettings } = useSettings();
   const { health } = useHealthCheck();
   const [isLogOpen, setIsLogOpen] = useState(false);
 
@@ -95,10 +94,6 @@ const PipeDialog: React.FC = () => {
 
   const handleResetAllPipes = async () => {
     try {
-      // stop screenpipe
-      if (!settings?.devMode) {
-        await invoke("kill_all_sreenpipes");
-      }
       // reset pipes
       await invoke("reset_all_pipes");
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -119,10 +114,6 @@ const PipeDialog: React.FC = () => {
     } finally {
       setSelectedPipe(null);
       setPipes([]);
-      // start screenpipe
-      if (!settings?.devMode) {
-        await invoke("spawn_screenpipe");
-      }
     }
   };
   // console.log("pipes", pipes);

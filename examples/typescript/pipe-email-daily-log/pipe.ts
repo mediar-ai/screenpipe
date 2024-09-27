@@ -1,12 +1,3 @@
-interface ScreenData {
-  data: {
-    content: {
-      timestamp: string;
-      text: string;
-    };
-  }[];
-}
-
 interface DailyLog {
   activity: string;
   category: string;
@@ -14,50 +5,8 @@ interface DailyLog {
   timestamp: string;
 }
 
-function encodeQueryData(data: Record<string, string>): string {
-  return Object.keys(data)
-    .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(data[key])}`)
-    .join("&");
-}
-
-async function queryScreenpipe(
-  startTime: string,
-  endTime: string,
-  windowName: string,
-  pageSize: number,
-  contentType: string
-): Promise<ScreenData> {
-  try {
-    const params: Record<string, string> = {
-      content_type: contentType,
-      limit: pageSize.toString(),
-      offset: "0",
-      start_time: startTime,
-      end_time: endTime,
-    };
-
-    if (windowName) {
-      params.window_name = windowName;
-    }
-
-    const queryString = encodeQueryData(params);
-    const url = `http://localhost:3030/search?${queryString}`;
-    console.log("query url:", url);
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.log("screenpipe response:", await response.text());
-      throw new Error(`http error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.warn("error querying screenpipe:", error);
-    return { data: [] };
-  }
-}
-
 async function generateDailyLog(
-  screenData: ScreenData,
+  screenData: ContentItem[],
   customPrompt: string,
   ollamaModel: string,
   ollamaApiUrl: string
@@ -264,7 +213,7 @@ async function dailyLogPipeline(): Promise<void> {
   const ollamaApiUrl = config.ollamaApiUrl;
   const windowName = config.windowName || "";
   const pageSize = config.pageSize;
-  const contentType = config.contentType || 'ocr'; // Default to 'ocr' if not specified
+  const contentType = config.contentType || "ocr"; // Default to 'ocr' if not specified
 
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
@@ -299,17 +248,17 @@ async function dailyLogPipeline(): Promise<void> {
       const now = new Date();
       const oneMinuteAgo = new Date(now.getTime() - interval);
 
-      const screenData = await queryScreenpipe(
-        oneMinuteAgo.toISOString(),
-        now.toISOString(),
-        windowName,
-        pageSize,
-        contentType
-      );
+      const screenData = await pipe.queryScreenpipe({
+        start_time: oneMinuteAgo.toISOString(),
+        end_time: now.toISOString(),
+        window_name: windowName,
+        limit: pageSize,
+        content_type: contentType,
+      });
 
-      if (screenData.data && screenData.data.length > 0) {
+      if (screenData && screenData.data && screenData.data.length > 0) {
         const logEntry = await generateDailyLog(
-          screenData,
+          screenData.data,
           customPrompt,
           ollamaModel,
           ollamaApiUrl

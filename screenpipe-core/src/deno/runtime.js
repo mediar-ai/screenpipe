@@ -146,9 +146,9 @@ const pipe = {
             return {};
         }
     },
-    sendEmail: async ({ to, from, password, subject, body }) => {
+    sendEmail: async ({ to, from, password, subject, body, contentType = 'text/plain' }) => {
         try {
-            await ops.op_send_email(to, from, password, subject, body);
+            await ops.op_send_email(to, from, password, subject, body, contentType);
             return true;
         } catch (error) {
             console.error("Error sending email:", error);
@@ -158,6 +158,45 @@ const pipe = {
     // isEnabled: async () => {
     //     return ops.op_is_enabled();
     // }
+};
+
+function encodeQueryData(data) {
+    return Object.keys(data)
+        .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(data[key])}`)
+        .join('&');
+}
+
+pipe.queryScreenpipe = async (params) => {
+    try {
+        const queryParams = {
+            content_type: params.content_type || 'all',
+            limit: params.limit || 50,
+            offset: params.offset || 0,
+            start_time: params.start_time || new Date(Date.now() - 3600000).toISOString(),
+            end_time: params.end_time || new Date().toISOString(),
+            min_length: params.min_length || 50,
+            max_length: params.max_length || 10000,
+            include_frames: params.include_frames || false,
+        };
+
+        if (params.q) queryParams.q = params.q;
+        if (params.app_name) queryParams.app_name = params.app_name;
+        if (params.window_name) queryParams.window_name = params.window_name;
+
+        const queryString = encodeQueryData(queryParams);
+        const url = `http://localhost:3030/search?${queryString}`;
+        console.log("calling screenpipe", url);
+
+        const response = await pipe.fetch(url);
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`http error! status: ${response.status} ${text}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("error querying screenpipe:", error);
+        return null;
+    }
 };
 
 const fs = {

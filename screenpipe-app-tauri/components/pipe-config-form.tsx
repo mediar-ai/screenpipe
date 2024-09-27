@@ -294,7 +294,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <h3 className="text-lg font-semibold">Pipe Configuration</h3>
+      <h3 className="text-lg font-semibold">pipe configuration</h3>
       {config?.fields.map((field: FieldConfig) => (
         <div key={field.name} className="space-y-2">
           <Label htmlFor={field.name} className="font-medium">
@@ -304,7 +304,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
           <p className="text-sm text-gray-500">{field.description}</p>
         </div>
       ))}
-      <Button type="submit">Save Configuration</Button>
+      <Button type="submit">save configuration</Button>
     </form>
   );
 };

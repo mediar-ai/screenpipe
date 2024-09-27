@@ -9,6 +9,7 @@ mod pipes {
     use deno_core::op2;
     use deno_core::ModuleLoadResponse;
     use deno_core::ModuleSourceCode;
+    use lettre::message::header::ContentType;
     use regex::Regex;
     use reqwest::header::HeaderMap;
     use reqwest::header::HeaderValue;
@@ -208,11 +209,13 @@ mod pipes {
         #[string] password: String,
         #[string] subject: String,
         #[string] body: String,
+        #[string] content_type: String,
     ) -> anyhow::Result<String, AnyError> {
         let email = Message::builder()
             .from(from.parse()?)
             .to(to.parse()?)
             .subject(subject)
+            .header(ContentType::parse(content_type.as_str())?)
             .body(body)?;
 
         let creds = Credentials::new(from.clone(), password);
@@ -317,7 +320,7 @@ mod pipes {
             op_remove_file,
             op_readdir,
             op_create_dir,
-            
+
             op_fetch_get,
             op_fetch_post,
             op_set_timeout,
