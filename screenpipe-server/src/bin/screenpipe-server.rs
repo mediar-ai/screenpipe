@@ -645,20 +645,27 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
                 Err(e) => eprintln!("failed to update pipe config: {}", e),
             }
         }
-        PipeCommand::Purge => {
-            print!("are you sure you want to purge all pipes? this action cannot be undone. (y/N): ");
-            io::stdout().flush()?;
-            
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-            
-            if input.trim().to_lowercase() == "y" {
+        PipeCommand::Purge { yes } => {
+            if yes {
                 match pipe_manager.purge_pipes().await {
                     Ok(_) => println!("all pipes purged successfully."),
                     Err(e) => eprintln!("failed to purge pipes: {}", e),
                 }
             } else {
-                println!("pipe purge cancelled.");
+                print!("are you sure you want to purge all pipes? this action cannot be undone. (y/N): ");
+                io::stdout().flush()?;
+                
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+                
+                if input.trim().to_lowercase() == "y" {
+                    match pipe_manager.purge_pipes().await {
+                        Ok(_) => println!("all pipes purged successfully."),
+                        Err(e) => eprintln!("failed to purge pipes: {}", e),
+                    }
+                } else {
+                    println!("pipe purge cancelled.");
+                }
             }
         },
     }

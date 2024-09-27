@@ -35,7 +35,7 @@ import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import posthog from "posthog-js";
 import { open } from "@tauri-apps/plugin-dialog";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { Command, open as openUrl } from "@tauri-apps/plugin-shell";
 import {
   Tooltip,
   TooltipContent,
@@ -101,7 +101,10 @@ const PipeDialog: React.FC = () => {
   const handleResetAllPipes = async () => {
     try {
       // reset pipes
-      await invoke("reset_all_pipes");
+      // await invoke("reset_all_pipes");
+      // instead use screenpipe pipe purge -y
+      const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
+      await cmd.execute();
       await new Promise((resolve) => setTimeout(resolve, 1000));
       toast({
         title: "All pipes deleted",

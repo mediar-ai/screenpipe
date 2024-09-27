@@ -259,5 +259,9 @@ pub enum PipeCommand {
         config: String,
     },
     /// Purge all pipes
-    Purge,
+    Purge {
+        /// Automatically confirm purge without prompting
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 }

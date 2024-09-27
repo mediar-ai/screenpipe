@@ -71,8 +71,9 @@ import { formatISO } from "date-fns";
 import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "./ui/codeblock";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
-import { encode } from "@/lib/utils";
+import { encode, removeDuplicateSelections } from "@/lib/utils";
 import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 
 export function SearchChat() {
   // Search state
@@ -118,6 +119,7 @@ export function SearchChat() {
   const [selectedResults, setSelectedResults] = useState<Set<number>>(
     new Set()
   );
+  const [similarityThreshold, setSimilarityThreshold] = useState(0.9);
   const [hoveredResult, setHoveredResult] = useState<number | null>(null);
 
   const [isCurlDialogOpen, setIsCurlDialogOpen] = useState(false);
@@ -130,6 +132,9 @@ export function SearchChat() {
   const [showExamples, setShowExamples] = useState(true);
 
   const [hasSearched, setHasSearched] = useState(false);
+
+  const [isFiltering, setIsFiltering] = useState(false);
+  const debouncedThreshold = useDebounce(similarityThreshold, 300);
 
   const handleExampleSelect = async (example: ExampleSearch) => {
     posthog.capture("example_search", { example: example.title });
@@ -190,6 +195,23 @@ export function SearchChat() {
       setSelectAll(true);
     }
   }, [results]);
+
+  useEffect(() => {
+    handleFilterDuplicates();
+  }, [debouncedThreshold, results]);
+
+  const handleFilterDuplicates = async () => {
+    setIsFiltering(true);
+    // simulate a delay to show loading state
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const allIndices = new Set(results.map((_, index) => index));
+    setSelectedResults(
+      removeDuplicateSelections(results, allIndices, debouncedThreshold)
+    );
+    setSelectAll(false);
+    setIsFiltering(false);
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -966,13 +988,47 @@ export function SearchChat() {
         </div>
       )}
       {results.length > 0 && (
-        <div className="flex items-center space-x-2 mb-4 my-8">
-          <Checkbox
-            id="select-all"
-            checked={selectAll}
-            onCheckedChange={handleSelectAll}
-          />
-          <Label htmlFor="select-all">select all results</Label>
+        <div className="flex flex-col space-y-4 mb-4 my-8">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="select-all"
+                checked={selectAll}
+                onCheckedChange={handleSelectAll}
+              />
+              <Label htmlFor="select-all">select all results</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="similarity-threshold" className="ml-4">
+                similarity threshold: {similarityThreshold.toFixed(2)}
+              </Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      adjust this slider to unselect similar results. lower
+                      values mean stricter filtering.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <div className="relative w-64">
+                <Slider
+                  id="similarity-threshold"
+                  min={0.5}
+                  max={1}
+                  step={0.01}
+                  value={[similarityThreshold]}
+                  onValueChange={(value) => setSimilarityThreshold(value[0])}
+                  className={isFiltering ? "opacity-50 cursor-not-allowed" : ""}
+                  disabled={isFiltering}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
       <div className="space-y-4">
