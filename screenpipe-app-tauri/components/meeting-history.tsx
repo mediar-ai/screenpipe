@@ -154,18 +154,8 @@ export default function MeetingHistory() {
     console.log("fetching meetings...");
     setLoading(true);
     try {
-      let startTime;
-      const storedMeetings = (await getItem("meetings")) || [];
-      if (storedMeetings.length > 0) {
-        // get the start time of the last stored meeting
-        const lastMeeting = storedMeetings[0]; // assuming meetings are sorted desc
-        startTime = new Date(lastMeeting.meetingEnd).toISOString();
-      } else {
-        // if no stored meetings, search from 7 days ago
-        startTime = new Date(
-          Date.now() - 7 * 24 * 60 * 60 * 1000
-        ).toISOString();
-      }
+      // Always fetch from the last 24 hours
+      const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       console.log("searching from:", startTime);
 
       const response = await fetch(
@@ -182,15 +172,22 @@ export default function MeetingHistory() {
       const newMeetings = processMeetings(camelCaseResult.data);
       console.log("processed new meetings:", newMeetings);
 
-      // merge new meetings with stored meetings, avoiding duplicates
-      let updatedMeetings = [...storedMeetings];
+      // merge new meetings with stored meetings, updating existing ones
+      let updatedMeetings = [...meetings];
       newMeetings.forEach((newMeeting) => {
         const existingMeetingIndex = updatedMeetings.findIndex(
           (m) => m.meetingGroup === newMeeting.meetingGroup
         );
         if (existingMeetingIndex === -1) {
-          // add new meeting only if it doesn't exist
+          // add new meeting if it doesn't exist
           updatedMeetings.push(newMeeting);
+        } else {
+          // update existing meeting with new data
+          updatedMeetings[existingMeetingIndex] = {
+            ...updatedMeetings[existingMeetingIndex],
+            ...newMeeting,
+            fullTranscription: updatedMeetings[existingMeetingIndex].fullTranscription + newMeeting.fullTranscription,
+          };
         }
       });
 

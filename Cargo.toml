@@ -21,15 +21,17 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 
 [workspace.dependencies]
+# AI
+candle = { package = "candle-core", version = "0.7.1" }
+candle-nn = { package = "candle-nn", version = "0.7.1" }
+candle-transformers = { package = "candle-transformers", version = "0.7.1" }
+tokenizers = "0.20.0"
+hf-hub = "0.3.0"
+
 log = "0.4"
-candle = { package = "candle-core", version = "0.7.0" }
-candle-nn = { package = "candle-nn", version = "0.7.0" }
-candle-transformers = { package = "candle-transformers", version = "0.7.0" }
-tokenizers = "0.19.1"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tokio = { version = "1.15", features = ["full", "tracing"] }
-hf-hub = "0.3.0"
 crossbeam = "0.8.4"
 image = "0.25"
 reqwest = { version = "0.11", features = ["blocking", "multipart", "json"] }

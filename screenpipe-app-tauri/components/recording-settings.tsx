@@ -130,31 +130,50 @@ export function RecordingSettings({
         setAvailableAudioDevices(audioDevices);
 
         console.log("localSettings", localSettings);
-        // Update local settings if current values are default
+
+        // Update monitors
+        const availableMonitorIds = monitors.map((monitor) =>
+          monitor.id.toString()
+        );
+        let updatedMonitorIds = localSettings.monitorIds.filter((id) =>
+          availableMonitorIds.includes(id)
+        );
+
         if (
-          localSettings.monitorIds.length === 1 &&
-          localSettings.monitorIds[0] === "default" &&
-          monitors.length > 0
+          updatedMonitorIds.length === 0 ||
+          (localSettings.monitorIds.length === 1 &&
+            localSettings.monitorIds[0] === "default" &&
+            monitors.length > 0)
         ) {
-          setLocalSettings({
-            ...localSettings,
-            monitorIds: [
-              monitors.find((monitor) => monitor.is_default)!.id!.toString(),
-            ],
-          });
+          updatedMonitorIds = [
+            monitors.find((monitor) => monitor.is_default)!.id!.toString(),
+          ];
         }
+
+        // Update audio devices
+        const availableAudioDeviceNames = audioDevices.map(
+          (device) => device.name
+        );
+        let updatedAudioDevices = localSettings.audioDevices.filter((device) =>
+          availableAudioDeviceNames.includes(device)
+        );
+
         if (
-          localSettings.audioDevices.length === 1 &&
-          localSettings.audioDevices[0] === "default" &&
-          audioDevices.length > 0
+          updatedAudioDevices.length === 0 ||
+          (localSettings.audioDevices.length === 1 &&
+            localSettings.audioDevices[0] === "default" &&
+            audioDevices.length > 0)
         ) {
-          setLocalSettings({
-            ...localSettings,
-            audioDevices: audioDevices
-              .filter((device) => device.is_default)
-              .map((device) => device.name),
-          });
+          updatedAudioDevices = audioDevices
+            .filter((device) => device.is_default)
+            .map((device) => device.name);
         }
+
+        setLocalSettings({
+          ...localSettings,
+          monitorIds: updatedMonitorIds,
+          audioDevices: updatedAudioDevices,
+        });
       } catch (error) {
         console.error("Failed to load devices:", error);
       }

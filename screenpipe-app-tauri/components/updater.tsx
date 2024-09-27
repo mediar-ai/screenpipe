@@ -1,6 +1,8 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { invoke } from "@tauri-apps/api/core";
+import { platform } from "@tauri-apps/plugin-os";
 
 export async function checkForAppUpdates({ toast }: { toast: any }) {
   const update = await check();
@@ -20,6 +22,11 @@ Release notes: ${update.body}
     );
 
     if (yes) {
+      // on windows only - TODO shouldnt be necessary
+      // const os = platform();
+      // if (os === "windows") {
+      // await invoke("kill_all_sreenpipes");
+
       const toastId = toast({
         title: "Updating...",
         description: "Downloading and installing update",
