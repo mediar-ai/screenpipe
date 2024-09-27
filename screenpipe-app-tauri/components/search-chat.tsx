@@ -1016,16 +1016,23 @@ export function SearchChat() {
                 </Tooltip>
               </TooltipProvider>
               <div className="relative w-64">
-                <Slider
-                  id="similarity-threshold"
-                  min={0.5}
-                  max={1}
-                  step={0.01}
-                  value={[similarityThreshold]}
-                  onValueChange={(value) => setSimilarityThreshold(value[0])}
-                  className={isFiltering ? "opacity-50 cursor-not-allowed" : ""}
-                  disabled={isFiltering}
-                />
+                <div className="flex items-center space-x-2">
+                  <Slider
+                    id="similarity-threshold"
+                    min={0.5}
+                    max={1}
+                    step={0.01}
+                    value={[similarityThreshold]}
+                    onValueChange={(value) => setSimilarityThreshold(value[0])}
+                    className={
+                      isFiltering ? "opacity-50 cursor-not-allowed" : ""
+                    }
+                    disabled={isFiltering}
+                  />
+                  {isFiltering && (
+                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                  )}
+                </div>
               </div>
             </div>
           </div>
