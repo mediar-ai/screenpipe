@@ -5,6 +5,10 @@ pub mod llm;
 #[cfg(feature = "llm")]
 pub use llm::*;
 #[cfg(feature = "llm")]
+pub mod phi;
+#[cfg(feature = "llm")]
+pub use phi::*;
+#[cfg(feature = "llm")]
 pub mod google;
 #[cfg(feature = "llm")]
 pub use google::*;
@@ -12,6 +16,10 @@ pub use google::*;
 pub mod mistral;
 #[cfg(feature = "llm")]
 pub use mistral::*;
+#[cfg(feature = "llm")]
+pub mod llama;
+#[cfg(feature = "llm")]
+pub use llama::*;
 #[cfg(feature = "pipes")]
 pub mod pipes;
 #[cfg(feature = "pipes")]
