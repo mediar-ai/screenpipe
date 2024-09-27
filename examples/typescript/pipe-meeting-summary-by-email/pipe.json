@@ -21,8 +21,8 @@
     {
       "name": "aiApiUrl",
       "type": "string",
-      "default": "http://localhost:11434/api",
-      "description": "ai api url, can be ollama, openai, any openai compatible api"
+      "default": "http://localhost:11434/api/chat",
+      "description": "ai api url, can be ollama, openai, any openai compatible api, for openai use https://api.openai.com/v1/chat/completions"
     },
     {
       "name": "aiModel",
@@ -31,9 +31,9 @@
       "description": "ai model"
     },
     {
-      "name": "summaryPrompt",
+      "name": "customSummaryPrompt",
       "type": "string",
-      "default": "summarize the following meeting transcript, focusing on key points, action items, and decisions made:",
+      "default": "summarize the following meeting transcript, there might be multiple meeting in the transcript, make sure to properly separate them, focusing on key points, action items, and decisions made:",
       "description": "custom prompt for summarizing the meeting"
     }
   ]

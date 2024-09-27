@@ -44,6 +44,10 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   console.log("pipe", pipe);
   console.log("config", config);
 
+  useEffect(() => {
+    setConfig(pipe.config);
+  }, [pipe]);
+
   const handleInputChange = (name: string, value: any) => {
     if (!config) return;
     setConfig((prevConfig) => ({

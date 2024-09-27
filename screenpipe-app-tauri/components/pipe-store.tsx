@@ -139,11 +139,23 @@ const PipeDialog: React.FC = () => {
           pipe.id,
           "README.md"
         );
-        const readme = await readFile(pathToReadme);
-        const readmeString = new TextDecoder().decode(readme);
-        pipe.fullDescription = convertHtmlToMarkdown(readmeString);
+        try {
+          const readme = await readFile(pathToReadme);
+          const readmeString = new TextDecoder().decode(readme);
+          pipe.fullDescription = convertHtmlToMarkdown(readmeString);
+        } catch (error) {
+          console.warn(`no readme found for pipe ${pipe.id}`);
+          pipe.fullDescription = "no description available for this pipe.";
+        }
       }
       setPipes(data);
+      // Update selectedPipe if it exists in the new data
+      if (selectedPipe) {
+        const updatedSelectedPipe = data.find(
+          (pipe: Pipe) => pipe.id === selectedPipe.id
+        );
+        setSelectedPipe(updatedSelectedPipe || null);
+      }
     } catch (error) {
       console.error("Error fetching installed pipes:", error);
       toast({
@@ -332,14 +344,6 @@ const PipeDialog: React.FC = () => {
     }
   };
 
-  const formatUpdatedTime = (date: string) => {
-    const now = new Date();
-    const updated = new Date(date);
-    const diffTime = Math.abs(now.getTime() - updated.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
-  };
-
   const renderPipeContent = () => {
     if (!selectedPipe) {
       return (
@@ -391,14 +395,15 @@ const PipeDialog: React.FC = () => {
             </TooltipProvider>
           )}
 
-          <Button
-            onClick={() => openUrl(selectedPipe.source, "_blank")}
-            variant="outline"
-            disabled={!selectedPipe.source.startsWith("http")}
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            view source
-          </Button>
+          {selectedPipe.source.startsWith("http") && (
+            <Button
+              onClick={() => openUrl(selectedPipe.source, "_blank")}
+              variant="outline"
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              view source
+            </Button>
+          )}
           <Button disabled variant="outline">
             <Heart className="mr-2 h-4 w-4" />
             donate
@@ -673,27 +678,7 @@ const PipeDialog: React.FC = () => {
               read the docs
             </a>
           </DialogDescription>
-
-          {/* {selectedPipe && <FeatureRequestLink className="w-80" />} */}
         </DialogHeader>
-        {/* center message in big */}
-        {/* <div className="flex flex-col justify-center items-center h-[500px]">
-          <p className="text-center">
-            currently you need to enable pipes through `screenpipe pipe`
-            commands or `/pipes` api
-            <br />
-            we&apos;re going to make this nontechnical next week.
-          </p>
-          <br />
-          <a
-            href="https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript"
-            className="text-blue-500 hover:underline"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            check out more examples on github
-          </a>
-        </div> */}
         {renderContent()}
       </DialogContent>
     </Dialog>
