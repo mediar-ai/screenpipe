@@ -23,7 +23,7 @@ reqwest = { workspace = true }
 tokio = { workspace = true }
 
 deno_core = { version = "0.311.0", optional = true }
-deno_ast = { version = "0.42.0", features = ["transpiling"], optional = true }
+deno_ast = { version = "0.38.2", features = ["transpiling"], optional = true }
 # Security
 regex = { version = "1.10.6", features = ["std"], optional = true }
 lazy_static = { version = "1.4.0", optional = true }
