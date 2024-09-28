@@ -34,16 +34,16 @@
       "name": "gptApiUrl",
       "type": "string",
       "default": "https://api.openai.com/v1/chat/completions",
-      "description": "GPT API URL"
+      "description": "openai-compatible API URL"
     },
     {
       "name": "gptModel",
       "type": "string",
       "default": "gpt-4o",
-      "description": "GPT Model"
+      "description": "AI Model name"
     },
     {
-      "name": "openai_api_key",
+      "name": "openaiApiKey",
       "type": "string",
       "default": "",
       "description": "Your OpenAI API key"
@@ -55,13 +55,13 @@
       "description": "Number of records to retrieve from screenpipe per page for structured extraction, keep in mind LLMs have a context window limit. Increase this value if using audio."
     },
     {
-      "name": "additional prompt for logs",
+      "name": "dailylogPrompt",
       "type": "string",
       "default": "",
       "description": "additional prompt for the AI assistant that will be used to extract information from the screen data every specified amount of minutes"
     },
     {
-      "name": "additional prompt for reddit questions",
+      "name": "customPrompt",
       "type": "string",
       "default": "",
       "description": "additional prompt for the AI assistant that will be used to generate a list of questions to post on reddit based on the logs previously extracted"
