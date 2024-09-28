@@ -1,6 +1,12 @@
 ### pipe-post-questions-on-reddit
 GPT-4o (or local model) looks at your screen 24/7 and sends you emails with questions to post on Reddit based on your activity.
 
+
+
+https://github.com/user-attachments/assets/289d1809-6855-4336-807f-dd9ee7181324
+
+
+
 #### quick setup
 1. [Get an OpenAI API key](https://platform.openai.com/account/api-keys)
 2. [Create an app-specific password](https://support.google.com/accounts/answer/185833?hl=en) in your Google account that will be used to send yourself emails
