@@ -7,12 +7,12 @@ interface DailyLog {
 
 async function generateDailyLog(
   screenData: ContentItem[],
-  customPrompt: string,
+  dailylogPrompt: string,
   gptModel: string,
   gptApiUrl: string,
   openaiApiKey: string
 ): Promise<DailyLog> {
-  const prompt = `${customPrompt}
+  const prompt = `${dailylogPrompt}
 
     Based on the following screen data, generate a concise daily log entry:
 
@@ -249,10 +249,10 @@ async function dailyLogPipeline(): Promise<void> {
   const emailAddress = config.emailAddress;
   const emailPassword = config.emailPassword;
   const customPrompt = config.customPrompt!;
-  const summaryPrompt = config.summaryPrompt!;
+  const dailylogPrompt = config.dailylogPrompt!;
   const gptModel = config.gptModel;
   const gptApiUrl = config.gptApiUrl;
-  const openaiApiKey = config.openai_api_key;
+  const openaiApiKey = config.openaiApiKey;
   const windowName = config.windowName || "";
   const pageSize = config.pageSize;
   const contentType = config.contentType || "ocr"; // Default to 'ocr' if not specified
@@ -301,7 +301,7 @@ async function dailyLogPipeline(): Promise<void> {
       if (screenData && screenData.data && screenData.data.length > 0) {
         const logEntry = await generateDailyLog(
           screenData.data,
-          customPrompt,
+          dailylogPrompt,  // Use dailylogPrompt here instead of customPrompt
           gptModel,
           gptApiUrl,
           openaiApiKey
