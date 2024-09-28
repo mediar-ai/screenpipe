@@ -21,6 +21,8 @@ import {
   FileText,
   PlusCircle,
   Calendar,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { Badge } from "./ui/badge";
@@ -36,7 +38,27 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { keysToCamelCase } from "@/lib/utils";
 import { HelpCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+function formatDate(date: string): string {
+  const dateObj = new Date(date);
+  const formattedDate = dateObj.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const formattedTime = dateObj.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${formattedDate} at ${formattedTime}`;
+}
 
 async function setItem(key: string, value: any): Promise<void> {
   try {
@@ -69,6 +91,7 @@ interface Meeting {
   name: string | null;
   participants: string | null;
   summary: string | null;
+  mergedWith?: number[]; // Array of meeting groups merged with this one
 }
 
 interface AudioContent {
@@ -155,7 +178,9 @@ export default function MeetingHistory() {
     setLoading(true);
     try {
       // Always fetch from the last 24 hours
-      const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const startTime = new Date(
+        Date.now() - 24 * 60 * 60 * 1000
+      ).toISOString();
       console.log("searching from:", startTime);
 
       const response = await fetch(
@@ -186,7 +211,9 @@ export default function MeetingHistory() {
           updatedMeetings[existingMeetingIndex] = {
             ...updatedMeetings[existingMeetingIndex],
             ...newMeeting,
-            fullTranscription: updatedMeetings[existingMeetingIndex].fullTranscription + newMeeting.fullTranscription,
+            fullTranscription:
+              updatedMeetings[existingMeetingIndex].fullTranscription +
+              newMeeting.fullTranscription,
           };
         }
       });
@@ -531,6 +558,40 @@ export default function MeetingHistory() {
     }
   };
 
+  const mergeMeetings = (index: number) => {
+    posthog?.capture("meeting_merged");
+    const updatedMeetings = [...meetings];
+    const currentMeeting = updatedMeetings[index];
+    const nextMeeting = updatedMeetings[index + 1];
+
+    const mergedMeeting: Meeting = {
+      ...currentMeeting,
+      meetingEnd: new Date(
+        Math.max(
+          new Date(currentMeeting.meetingEnd).getTime(),
+          new Date(nextMeeting.meetingEnd).getTime()
+        )
+      ).toISOString(),
+      meetingStart: new Date(
+        Math.min(
+          new Date(currentMeeting.meetingStart).getTime(),
+          new Date(nextMeeting.meetingStart).getTime()
+        )
+      ).toISOString(),
+      fullTranscription: `${currentMeeting.fullTranscription}\n${nextMeeting.fullTranscription}`,
+      mergedWith: [
+        ...(currentMeeting.mergedWith || []),
+        nextMeeting.meetingGroup,
+        ...(nextMeeting.mergedWith || []),
+      ],
+    };
+
+    updatedMeetings[index] = mergedMeeting;
+    updatedMeetings.splice(index + 1, 1); // remove the next meeting
+    setMeetings(updatedMeetings);
+    setItem("meetings", updatedMeetings);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -564,13 +625,15 @@ export default function MeetingHistory() {
                       ) : (
                         <Trash2 className="h-4 w-4" />
                       )}
-                      <span className="ml-2">clear data</span>
+                      <span className="ml-2">reset data</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="left">
                     <p>
-                      remove all stored summary meeting data (can be useful if
-                      facing issues)
+                      this will restore your meeting data to the original state
+                      based on transcription timestamps,
+                      <br />
+                      without the editing you have done here
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -651,96 +714,89 @@ export default function MeetingHistory() {
               )}
               <div className="space-y-6">
                 {sortedMeetings.map((meeting, index) => (
-                  <Card key={index} className="relative">
-                    <CardHeader>
-                      <CardTitle>
-                        {`meeting ${new Date(
-                          meeting.meetingStart
-                        ).toLocaleDateString()}, ${new Date(
-                          meeting.meetingStart
-                        ).toLocaleTimeString()} - ${new Date(
-                          meeting.meetingEnd
-                        ).toLocaleTimeString()}`}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="mb-4">
-                        <div className="flex flex-col space-y-2">
-                          <div className="flex items-center justify-end mb-1">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <HelpCircle className="h-5 w-5 cursor-help text-gray-500" />
-                                </TooltipTrigger>
-                                <TooltipContent side="top" align="end">
-                                  <p className="max-w-xs">
-                                    best practice for identification is to say
-                                    &quot;person talking about x, y, z, is john
-                                    ...&quot; this helps the ai to link topics
-                                    to specific individuals, improving accuracy
-                                    in participant identification.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                          <Textarea
-                            rows={2}
-                            value={customIdentifyPrompt}
-                            onChange={(e) =>
-                              setCustomIdentifyPrompt(e.target.value)
-                            }
-                            placeholder="custom identify prompt (optional)"
-                            className="resize-none border rounded text-sm w-full"
-                          />
-                          <div className="flex items-center justify-between">
-                            <p>
-                              participants:{" "}
-                              {meeting.participants || "not identified"}
-                            </p>
-                            <Button
-                              onClick={() => identifyParticipants(meeting)}
-                              disabled={isIdentifying}
-                              size="sm"
-                              className="text-xs bg-black text-white hover:bg-gray-800"
-                            >
-                              {isIdentifying ? (
-                                <Users className="h-4 w-4 mr-2 animate-pulse" />
-                              ) : (
-                                <Users className="h-4 w-4 mr-2" />
-                              )}
-                              {isIdentifying ? "identifying..." : "identify"}
-                            </Button>
+                  <React.Fragment key={index}>
+                    <Card className="relative">
+                      <CardHeader>
+                        <CardTitle className="text-lg font-semibold flex flex-wrap items-center gap-2">
+                          meeting {meeting.meetingGroup}
+                          {meeting.mergedWith &&
+                            meeting.mergedWith.length > 0 && (
+                              <>
+                                <Badge variant="secondary">merged</Badge>
+                                {meeting.mergedWith.map((mergedGroupId) => (
+                                  <Badge key={mergedGroupId} variant="outline">
+                                    meeting {mergedGroupId}
+                                  </Badge>
+                                ))}
+                              </>
+                            )}
+                        </CardTitle>
+                        <CardDescription>
+                          {formatDate(meeting.meetingStart)} -{" "}
+                          {formatDate(meeting.meetingEnd)}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="mb-4">
+                          <div className="flex flex-col space-y-2">
+                            <div className="flex items-center justify-end mb-1">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <HelpCircle className="h-5 w-5 cursor-help text-gray-500" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" align="end">
+                                    <p className="max-w-xs">
+                                      best practice for identification is to say
+                                      &quot;person talking about x, y, z, is
+                                      john ...&quot; this helps the ai to link
+                                      topics to specific individuals, improving
+                                      accuracy in participant identification.
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            <Textarea
+                              rows={2}
+                              value={customIdentifyPrompt}
+                              onChange={(e) =>
+                                setCustomIdentifyPrompt(e.target.value)
+                              }
+                              placeholder="custom identify prompt (optional)"
+                              className="resize-none border rounded text-sm w-full"
+                            />
+                            <div className="flex items-center justify-between">
+                              <p>
+                                participants:{" "}
+                                {meeting.participants || "not identified"}
+                              </p>
+                              <Button
+                                onClick={() => identifyParticipants(meeting)}
+                                disabled={isIdentifying}
+                                size="sm"
+                                className="text-xs bg-black text-white hover:bg-gray-800"
+                              >
+                                {isIdentifying ? (
+                                  <Users className="h-4 w-4 mr-2 animate-pulse" />
+                                ) : (
+                                  <Users className="h-4 w-4 mr-2" />
+                                )}
+                                {isIdentifying ? "identifying..." : "identify"}
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="mb-4 relative">
-                        <h4 className="font-semibold mb-2">
-                          full transcription:
-                        </h4>
-                        <Button
-                          onClick={() =>
-                            copyWithToast(
-                              meeting.fullTranscription,
-                              "full transcription"
-                            )
-                          }
-                          className="absolute top-0 right-0 p-1 h-6 w-6"
-                          variant="outline"
-                          size="icon"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
-                          {meeting.fullTranscription}
-                        </pre>
-                      </div>
-                      <div className="relative">
-                        <h4 className="font-semibold mb-2">summary:</h4>
-                        {meeting.summary && (
+                        <div className="mb-4 relative">
+                          <h4 className="font-semibold mb-2">
+                            full transcription:
+                          </h4>
                           <Button
                             onClick={() =>
-                              copyWithToast(meeting.summary || "", "summary")
+                              copyWithToast(
+                                meeting.fullTranscription,
+                                "full transcription"
+                              )
                             }
                             className="absolute top-0 right-0 p-1 h-6 w-6"
                             variant="outline"
@@ -748,40 +804,71 @@ export default function MeetingHistory() {
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
-                        )}
-                        {meeting.summary ? (
-                          <ReactMarkdown className="prose max-w-none">
-                            {meeting.summary}
-                          </ReactMarkdown>
-                        ) : (
-                          <div className="flex items-center mt-2">
-                            <Input
-                              type="text"
-                              value={customSummaryPrompt}
-                              onChange={(e) =>
-                                setCustomSummaryPrompt(e.target.value)
-                              }
-                              placeholder="custom summary prompt (optional)"
-                              className="mr-2 p-2 border rounded text-sm flex-grow"
-                            />
+                          <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
+                            {meeting.fullTranscription}
+                          </pre>
+                        </div>
+                        <div className="relative">
+                          <h4 className="font-semibold mb-2">summary:</h4>
+                          {meeting.summary && (
                             <Button
-                              onClick={() => generateSummary(meeting)}
-                              disabled={isSummarizing}
+                              onClick={() =>
+                                copyWithToast(meeting.summary || "", "summary")
+                              }
+                              className="absolute top-0 right-0 p-1 h-6 w-6"
+                              variant="outline"
+                              size="icon"
                             >
-                              {isSummarizing ? (
-                                <FileText className="h-4 w-4 mr-2 animate-pulse" />
-                              ) : (
-                                <PlusCircle className="h-4 w-4 mr-2" />
-                              )}
-                              {isSummarizing
-                                ? "generating summary..."
-                                : "generate summary"}
+                              <Copy className="h-4 w-4" />
                             </Button>
-                          </div>
-                        )}
+                          )}
+                          {meeting.summary ? (
+                            <ReactMarkdown className="prose max-w-none">
+                              {meeting.summary}
+                            </ReactMarkdown>
+                          ) : (
+                            <div className="flex items-center mt-2">
+                              <Input
+                                type="text"
+                                value={customSummaryPrompt}
+                                onChange={(e) =>
+                                  setCustomSummaryPrompt(e.target.value)
+                                }
+                                placeholder="custom summary prompt (optional)"
+                                className="mr-2 p-2 border rounded text-sm flex-grow"
+                              />
+                              <Button
+                                onClick={() => generateSummary(meeting)}
+                                disabled={isSummarizing}
+                              >
+                                {isSummarizing ? (
+                                  <FileText className="h-4 w-4 mr-2 animate-pulse" />
+                                ) : (
+                                  <PlusCircle className="h-4 w-4 mr-2" />
+                                )}
+                                {isSummarizing
+                                  ? "generating summary..."
+                                  : "generate summary"}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    {index < sortedMeetings.length - 1 && (
+                      <div className="flex justify-center my-2">
+                        <Button
+                          onClick={() => mergeMeetings(index)}
+                          size="sm"
+                          variant="outline"
+                          className="text-xs"
+                        >
+                          <ChevronDown className="h-4 w-4 mr-2" />
+                          merge with next meeting
+                        </Button>
                       </div>
-                    </CardContent>
-                  </Card>
+                    )}
+                  </React.Fragment>
                 ))}
               </div>
             </>
