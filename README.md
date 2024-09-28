@@ -96,6 +96,11 @@ screenpipe has a plugin system called "pipe" which lets you run code in a sandbo
 
 [check examples](https://docs.screenpi.pe/docs/examples)
 
+## star history
+
+![GitHub Star History (1)](https://github.com/user-attachments/assets/533d4b26-e3b5-4b11-8cef-df17b3cd9197)
+
+
 ## Contributing
 
 Contributions are welcome! If you'd like to contribute, please read [CONTRIBUTING.md](CONTRIBUTING.md).
