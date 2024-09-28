@@ -63,29 +63,6 @@ const config = {
 	},
 }
 
-// async function findWget() {
-// 	const possiblePaths = [
-// 		'C:\\ProgramData\\chocolatey\\bin\\wget.exe',
-// 		'C:\\Program Files\\Git\\mingw64\\bin\\wget.exe',
-// 		'C:\\msys64\\usr\\bin\\wget.exe',
-// 		'C:\\Windows\\System32\\wget.exe',
-// 		'wget' // This will work if wget is in PATH
-// 	];
-//
-// 	for (const wgetPath of possiblePaths) {
-// 		try {
-// 			await $`${wgetPath} --version`.quiet();
-// 			console.log(`wget found at: ${wgetPath}`);
-// 			return wgetPath;
-// 		} catch (error) {
-// 			// wget not found at this path, continue searching
-// 		}
-// 	}
-//
-// 	console.error('wget not found. Please install wget and make sure it\'s in your PATH.');
-// 	process.exit(1);
-// }
-
 // Export for Github actions
 const exports = {
 	ffmpeg: path.join(cwd, config.ffmpegRealname),
