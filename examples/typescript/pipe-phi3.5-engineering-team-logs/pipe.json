@@ -7,16 +7,16 @@
       "description": "Interval in seconds to stream data"
     },
     {
-      "name": "notionDatabaseId",
-      "type": "string",
-      "default": "<fill your notion database id here>",
-      "description": "Notion Database ID"
-    },
-    {
       "name": "notionApiKey",
       "type": "string",
       "default": "<fill your notion api key here>",
-      "description": "Notion API Key"
+      "description": "notion api key for authentication https://www.notion.so/my-integrations"
+    },
+    {
+      "name": "notionDatabaseId",
+      "type": "string",
+      "default": "<fill your notion database id here>",
+      "description": "id of the notion database to sync conversations to eg https://www.notion.so/your-workspace/database-id?v=..."
     },
     {
       "name": "ollamaApiUrl",

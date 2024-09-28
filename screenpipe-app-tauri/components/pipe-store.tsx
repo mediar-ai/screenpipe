@@ -35,7 +35,7 @@ import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import posthog from "posthog-js";
 import { open } from "@tauri-apps/plugin-dialog";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { Command, open as openUrl } from "@tauri-apps/plugin-shell";
 import {
   Tooltip,
   TooltipContent,
@@ -68,6 +68,12 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "pipe-meeting-summary-by-email",
+    description:
+      "send you regular emails summarizing your meetings using ollama+llama3.2",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-meeting-summary-by-email",
+  },
+  {
     id: "pipe-phi3.5-engineering-team-logs",
     description:
       "continuously write logs of your days in a notion table using ollama+llama3.2",
@@ -95,7 +101,10 @@ const PipeDialog: React.FC = () => {
   const handleResetAllPipes = async () => {
     try {
       // reset pipes
-      await invoke("reset_all_pipes");
+      // await invoke("reset_all_pipes");
+      // instead use screenpipe pipe purge -y
+      const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
+      await cmd.execute();
       await new Promise((resolve) => setTimeout(resolve, 1000));
       toast({
         title: "All pipes deleted",
@@ -404,12 +413,16 @@ const PipeDialog: React.FC = () => {
               view source
             </Button>
           )}
-          <Button disabled variant="outline">
+          <Button
+            onClick={() =>
+              openUrl(
+                "https://twitter.com/intent/tweet?text=here's%20how%20i%20use%20@screen_pipe%20...%20%5Bscreenshot%5D%20an%20awesome%20tool%20for%20..."
+              )
+            }
+            variant="outline"
+          >
             <Heart className="mr-2 h-4 w-4" />
-            donate
-            <Badge variant="secondary" className="ml-2">
-              soon
-            </Badge>
+            support us
           </Button>
         </div>
         <Separator className="my-4" />
@@ -474,7 +487,59 @@ const PipeDialog: React.FC = () => {
                     />
                   );
                 },
+                a({ href, children }) {
+                  const isDirectVideo =
+                    href?.match(/\.(mp4|webm|ogg)$/) ||
+                    href?.includes("user-attachments/assets");
+                  const youtubeMatch = href?.match(
+                    /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
+                  );
+
+                  if (isDirectVideo) {
+                    return (
+                      <video
+                        src={href}
+                        controls
+                        className="max-w-full h-auto"
+                        style={{ maxHeight: "400px" }}
+                      >
+                        your browser does not support the video tag.
+                      </video>
+                    );
+                  } else if (youtubeMatch) {
+                    const videoId = youtubeMatch[1];
+                    return (
+                      <iframe
+                        width="100%"
+                        height="315"
+                        src={`https://www.youtube.com/embed/${videoId}`}
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="max-w-full"
+                        style={{ maxHeight: "400px" }}
+                      ></iframe>
+                    );
+                  }
+
+                  return (
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      {children}
+                    </a>
+                  );
+                },
+                video({ src }) {
+                  console.log("vid", src);
+                  return (
+                    <video
+                      src={src}
+                      className="max-w-full h-auto"
+                      style={{ maxHeight: "400px" }}
+                    />
+                  );
+                },
                 img({ src, alt }) {
+                  console.log("img", src);
                   return (
                     <img
                       src={src}

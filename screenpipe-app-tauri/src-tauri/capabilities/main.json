@@ -118,6 +118,21 @@
         }
       ]
     },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "screenpipe",
+          "cmd": "screenpipe",
+          "args": [
+            "pipe",
+            "purge",
+            "-y"
+          ],
+          "sidecar": true
+        }
+      ]
+    },
     "cli:default",
     "shell:default",
     "dialog:default",

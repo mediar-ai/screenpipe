@@ -1,0 +1,52 @@
+{
+  "fields": [
+    {
+      "name": "pollingInterval",
+      "type": "number",
+      "default": 60000,
+      "description": "interval in milliseconds to poll conversation content (default: 2 minutes)"
+    },
+    {
+      "name": "pollingSize",
+      "type": "number",
+      "default": 100,
+      "description": "number of records to retrieve from Screenpipe per page"
+    },
+    {
+      "name": "windowName",
+      "type": "window",
+      "default": "",
+      "description": "specific window name to filter the conversation data, e.g., 'slack', 'gmail', etc."
+    },
+    {
+      "name": "aiApiUrl",
+      "type": "string",
+      "default": "http://localhost:11434/api/chat",
+      "description": "ai api url, can be ollama, openai, or any openai compatible api"
+    },
+    {
+      "name": "aiModel",
+      "type": "string",
+      "default": "llama3.2:3b-instruct-q4_K_M",
+      "description": "ai model to use for summarizing conversations"
+    },
+    {
+      "name": "notionApiKey",
+      "type": "string",
+      "default": "<fill your notion api key here>",
+      "description": "notion api key for authentication https://www.notion.so/my-integrations"
+    },
+    {
+      "name": "notionDatabaseId",
+      "type": "string",
+      "default": "<fill your notion database id here>",
+      "description": "id of the notion database to sync conversations to eg https://www.notion.so/your-workspace/database-id?v=..."
+    },
+    {
+      "name": "customSummaryPrompt",
+      "type": "string",
+      "default": "you are an expert in user research and product development, trained in 'the mom test' methodology. analyze this user conversation with the following guidelines:\n\n1. focus on extracting specific examples and stories, not opinions.\n2. identify problems and frustrations the user is currently facing.\n3. uncover the user's current behaviors and workflows.\n4. look for emotional responses and strong reactions.\n5. detect any mentions of money or time investments.\n6. note any alternative solutions the user has tried.\n7. capture any future plans or intended actions.\n8. identify potential product ideas or feature requests.\n9. highlight any misunderstandings or areas of confusion.\n10. detect any 'maybes' or non-committal responses that need further exploration.\n\nremember, good user research is about listening and observing, not pitching or leading the user. extract insights that can drive product decisions and improvements.",
+      "description": "custom prompt for the ai to analyze and summarize the conversation"
+    }
+  ]
+}

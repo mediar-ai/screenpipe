@@ -22,6 +22,10 @@ import {
   SelectValue,
 } from "./ui/select";
 import { HelpCircle } from "lucide-react";
+import { MemoizedReactMarkdown } from "./markdown";
+import { CodeBlock } from "./ui/codeblock";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 
 type PipeConfigFormProps = {
   pipe: Pipe;
@@ -305,7 +309,53 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
             {field.name} ({field.type})
           </Label>
           {renderConfigInput(field)}
-          <p className="text-sm text-gray-500">{field.description}</p>
+          <MemoizedReactMarkdown
+            className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
+            remarkPlugins={[remarkGfm, remarkMath]}
+            components={{
+              p({ children }) {
+                return <p className="mb-2 last:mb-0">{children}</p>;
+              },
+              a({ node, href, children, ...props }) {
+                return (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    {...props}
+                  >
+                    {children}
+                  </a>
+                );
+              },
+              code({ node, className, children, ...props }) {
+                const content = String(children).replace(/\n$/, "");
+                const match = /language-(\w+)/.exec(className || "");
+
+                if (!match) {
+                  return (
+                    <code
+                      className="px-1 py-0.5 rounded-sm font-mono text-sm"
+                      {...props}
+                    >
+                      {content}
+                    </code>
+                  );
+                }
+
+                return (
+                  <CodeBlock
+                    key={Math.random()}
+                    language={(match && match[1]) || ""}
+                    value={content}
+                    {...props}
+                  />
+                );
+              },
+            }}
+          >
+            {field.description}
+          </MemoizedReactMarkdown>
         </div>
       ))}
       <Button type="submit">save configuration</Button>
