@@ -63,6 +63,29 @@ const config = {
 	},
 }
 
+async function findWget() {
+	const possiblePaths = [
+		'C:\\ProgramData\\chocolatey\\bin\\wget.exe',
+		'C:\\Program Files\\Git\\mingw64\\bin\\wget.exe',
+		'C:\\msys64\\usr\\bin\\wget.exe',
+		'C:\\Windows\\System32\\wget.exe',
+		'wget' // This will work if wget is in PATH
+	];
+
+	for (const wgetPath of possiblePaths) {
+		try {
+			await $`${wgetPath} --version`.quiet();
+			console.log(`wget found at: ${wgetPath}`);
+			return wgetPath;
+		} catch (error) {
+			// wget not found at this path, continue searching
+		}
+	}
+
+	console.error('wget not found. Please install wget and make sure it\'s in your PATH.');
+	process.exit(1);
+}
+
 // Export for Github actions
 const exports = {
 	ffmpeg: path.join(cwd, config.ffmpegRealname),
@@ -117,26 +140,7 @@ if (platform == 'linux') {
 
 /* ########## Windows ########## */
 if (platform == 'windows') {
-
-    const childProcess = require('child_process');
-    async function exePath(command) {
-        try {
-            const result = childProcess.execSync(`where.exe ${command}`, { encoding: "utf-8" });
-            let output = result.trim()
-            if (output.length > 0 && !output.startsWith('INFO: Could not find')) {
-                const lines = output.split('\n');
-                const executablePath = lines[0].replace(/^\s+|\s+$/gm, '').trim();
-                return executablePath;
-            } else {
-                throw new Error('Command not found');
-            }
-        } catch (error) {
-            console.log(`${command} not found, Please install it`)
-            return null;
-        }
-    }
-
-    const wgetPath = await exePath("wget");
+	const wgetPath = await findWget();
 
 	console.log('Copying screenpipe binary...');
 
@@ -167,12 +171,11 @@ if (platform == 'windows') {
 		// process.exit(1);
 	}
 
-    const sevenZipPath = await exePath("7z");
 
 	// Setup FFMPEG
-	if (!(await fs.exists(config.ffmpegRealname)) && sevenZipPath) {
-		await $`'${wgetPath}' -O -nc --continue --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
-		await $`'${sevenZipPath}' x ${config.windows.ffmpegName}.7z`
+	if (!(await fs.exists(config.ffmpegRealname))) {
+		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
+		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
@@ -185,7 +188,7 @@ if (platform == 'windows') {
 
 	if (!(await fs.exists('tesseract'))) {
 		console.log('Setting up Tesseract for Windows...')
-		await $`'${wgetPath}' -O -nc --continue --no-check-certificate --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
+		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
 		await $`"${process.cwd()}\\${tesseractInstaller}" /S /D=C:\\Program Files\\Tesseract-OCR`
 		await $`rm ${tesseractInstaller}`
 		// Replace the mv command with xcopy
@@ -201,13 +204,12 @@ if (platform == 'windows') {
 	process.env.PATH = `${process.cwd()}\\tesseract;${process.env.PATH}`
 
 	// Setup ONNX Runtime
-    const unzipPath = await exePath("unzip");
 	const onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
 	const onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
 	const onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`
-	if (!(await fs.exists(onnxRuntimeName)) && unzipPath) {
+	if (!(await fs.exists(onnxRuntimeName))) {
 		console.log('Setting up ONNX Runtime libraries for Windows...')
-		await $`'${wgetPath}' -O -nc --continue --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
+		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
 		await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
 		await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
 		console.log('ONNX Runtime libraries for Windows set up successfully.')
@@ -217,8 +219,8 @@ if (platform == 'windows') {
 
 	// Setup OpenBlas
 	if (!(await fs.exists(config.openblasRealname)) && hasFeature('openblas')) {
-		await $`'${wgetPath}' -O -nc --continue --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
-		await $`${sevenZipPath} x ${config.windows.openBlasName}.zip -o${config.openblasRealname}`
+		await $`${wgetPath} -nc --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
+		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.openBlasName}.zip -o${config.openblasRealname}`
 		await $`rm ${config.windows.openBlasName}.zip`
 		fs.cp(path.join(config.openblasRealname, 'include'), path.join(config.openblasRealname, 'lib'), { recursive: true, force: true })
 		// It tries to link only openblas.lib but our is libopenblas.lib`
@@ -227,21 +229,16 @@ if (platform == 'windows') {
 
 	// Setup CLBlast
 	if (!(await fs.exists(config.clblastRealname)) && !hasFeature('cuda')) {
-        await $`'${wgetPath}' -O -nc --continue --show-progress ${config.windows.clblastUrl} -O ${config.windows.clblastName}.zip`
-		await $`'${sevenZipPath}' x ${config.windows.clblastName}.zip` // 7z file inside
-		await $`'${sevenZipPath}' x ${config.windows.clblastName}.7z` // Inner folder
+		await $`${wgetPath} -nc --show-progress ${config.windows.clblastUrl} -O ${config.windows.clblastName}.zip`
+		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.zip` // 7z file inside
+		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.7z` // Inner folder
 		await $`mv ${config.windows.clblastName} ${config.clblastRealname}`
 		await $`rm ${config.windows.clblastName}.zip`
 		await $`rm ${config.windows.clblastName}.7z`
 	}
 
-	// Setup vcpkg packages, requires VCPKG_ROOT env var
-    try {
-        await $`C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`
-    } catch (error) {
-        await $`vcpkg.exe install ${config.windows.vcpkgPackages}`
-    }
-    
+	// Setup vcpkg packages
+	await $`C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {
