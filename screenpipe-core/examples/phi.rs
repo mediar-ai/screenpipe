@@ -1,9 +1,10 @@
-use anyhow::Result;
-use candle::Device;
-use screenpipe_core::{generate_text_streaming, load_llama_model};
-use std::env;
-
+#[cfg(feature = "llm")]
 fn main() -> Result<()> {
+    use anyhow::Result;
+    use candle::Device;
+    use screenpipe_core::{generate_text_streaming, load_llama_model};
+    use std::env;
+
     let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
 
     let (mut model, tokenizer) = load_llama_model(&device)?;
@@ -40,4 +41,9 @@ fn main() -> Result<()> {
 
     println!("\n");
     Ok(())
+}
+
+#[cfg(not(feature = "llm"))]
+fn main() {
+    println!("LLM is not enabled");
 }

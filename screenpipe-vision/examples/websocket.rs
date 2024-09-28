@@ -140,7 +140,7 @@ async fn run_websocket_server(
                                 window.image.color().into(),
                             )
                             .expect("Failed to encode image");
-                        let base64_image = general_purpose::STANDARD.encode(buffer);
+                        let _base64_image = general_purpose::STANDARD.encode(buffer);
 
                         SimplifiedWindowResult {
                             // image: base64_image,

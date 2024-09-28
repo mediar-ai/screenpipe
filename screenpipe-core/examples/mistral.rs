@@ -1,6 +1,7 @@
 use anyhow::Result;
 #[cfg(feature = "llm")]
 use screenpipe_core::mistral::MistralConfig;
+#[cfg(feature = "llm")]
 use screenpipe_core::stream_text;
 
 fn main() -> Result<()> {

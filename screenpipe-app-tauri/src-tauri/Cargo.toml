@@ -111,3 +111,7 @@ default = ["custom-protocol"]
 
 # DO NOT REMOVE!!
 custom-protocol = [ "tauri/custom-protocol" ]
+
+
+[package.metadata.cargo-machete]
+ignored = ["tauri-utils"]

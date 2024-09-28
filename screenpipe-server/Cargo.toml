@@ -40,14 +40,12 @@ rand = "0.8.5"
 axum = "0.7.5"
 tokio = { version = "1.15", features = ["full", "tracing"] }
 tower-http = { version = "0.5.2", features = ["cors", "trace"] }
-tokio-stream = "0.1.14"
 
 # Log
 log = { workspace = true }
 env_logger = "0.10"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tracing-appender = "0.2.3"
 # Cli ! shouldn't be required if using as lib
 clap = { version = "4.3", features = ["derive"] }
 
@@ -83,18 +81,16 @@ base64 = "0.22.1"
 
 uuid = "1.5.0"
 
+tempfile = { version = "3.3.0", optional = true }
+url = { version = "2.2.0", optional = true }
 [dev-dependencies]
 tempfile = "3.3.0"
-
 
 # Benches
 criterion = { workspace = true }
 rand = "0.8"
 
 axum-test = "15.3.0"
-
-# Url encoding
-url = "2.4.0"
 
 [[bench]]
 name = "db_benchmarks"
@@ -114,16 +110,11 @@ pipes = [
     "url",
 ]
 
-[dependencies.tempfile]
-version = "3.2"
-optional = true
-
-[dependencies.url]
-version = "2.2"
-optional = true
-
 
 [[bin]]
 name = "screenpipe"
 path = "src/bin/screenpipe-server.rs"
 
+
+[package.metadata.cargo-machete]
+ignored = ["tempfile", "url"]

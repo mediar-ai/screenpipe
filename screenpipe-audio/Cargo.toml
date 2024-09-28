@@ -99,7 +99,4 @@ harness = false
 name = "record_and_transcribe_benchmark"
 harness = false
 
-[[bench]]
-name = "stt_benchmark"
-harness = false
 
