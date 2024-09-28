@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727542472184,
+  "lastUpdate": 1727542646674,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -10499,6 +10499,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1978632271,
             "range": "± 12644049",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "21ebe20a550c24acc8fd493d179c4ae131194746",
+          "message": "Merge pull request #372 from tribhuwan-kumar/main\n\nfix: video rendering issue in windows",
+          "timestamp": "2024-09-28T09:45:55-07:00",
+          "tree_id": "05e4e950afffd32677539fcee6adc9b5595c26f2",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/21ebe20a550c24acc8fd493d179c4ae131194746"
+        },
+        "date": 1727542645839,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2159711020,
+            "range": "± 258893200",
             "unit": "ns/iter"
           }
         ]
