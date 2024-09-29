@@ -34,9 +34,22 @@ clap = { version = "4.0", features = ["derive"] }
 
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
+screenpipe-core = { path = "../screenpipe-core" }
 
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
+
+candle = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+tokenizers = { workspace = true }
+hf-hub = { workspace = true, features = ["tokio"] }
+
+[features]
+metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
+cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
+
 
 [dev-dependencies]
 tempfile = "3.3.0"

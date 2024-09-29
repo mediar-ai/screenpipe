@@ -14,3 +14,4 @@ pub mod capture_screenshot_by_window;
 #[cfg(target_os = "windows")]
 pub use microsoft::perform_ocr_windows;
 pub use tesseract::perform_ocr_tesseract;
+pub mod multimodal_embeddings;
