@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727571554122,
+  "lastUpdate": 1727636174802,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -10739,6 +10739,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1978658104,
             "range": "± 16418859",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cba866ff343324ff37b8b419c270136c4c4ca576",
+          "message": "Merge pull request #379 from eltociear/patch-3\n\nchore: update screenpipe.js",
+          "timestamp": "2024-09-29T11:46:31-07:00",
+          "tree_id": "c5cd529ca848760a7a8ddfa6390e0136b93f0c6b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/cba866ff343324ff37b8b419c270136c4c4ca576"
+        },
+        "date": 1727636173776,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2119773416,
+            "range": "± 55198168",
             "unit": "ns/iter"
           }
         ]
