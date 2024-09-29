@@ -29,7 +29,7 @@ const screenpipe = async (conf) => {
           'content': `Based on this user selection: "${msg}", generate parameters as JSON for 3 different queries to screenpipe. 
             Each query should have "q", "offset", "limit", and start_time, end_time fields. 
             Rules:
-            - q should be a single keyword that would properly find in the text found on the user screen some infomation that would help answering the user question.
+            - q should be a single keyword that would properly find in the text found on the user screen some information that would help answering the user question.
             Return a list of objects with the key "queries"
             - q contains a single query, again, for example instead of "life plan" just use "life"
             - Respond with only the updated JSON object
