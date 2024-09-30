@@ -3,7 +3,7 @@ use std::sync::Arc;
 use xcap::{Monitor, Window};
 
 // ! logic here: we pick the biggest window and assume it's the one showing the most text that will be grabbed by OCR
-// TODO: longer term we should define a data strcture for OCR on specific monitor, window, etc.
+// TODO: longer term we should define a data structure for OCR on specific monitor, window, etc.
 pub async fn get_focused_window(monitor: Arc<Monitor>) -> Option<Window> {
     let windows = Window::all().unwrap_or_default();
 

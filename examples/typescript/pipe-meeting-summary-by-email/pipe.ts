@@ -4,7 +4,7 @@ async function summarizeAudio(
   aiModel: string,
   customSummaryPrompt: string
 ): Promise<string> {
-  const prompt = `Very important intructions to follow: "${customSummaryPrompt}"
+  const prompt = `Very important instructions to follow: "${customSummaryPrompt}"
 
     summarize the following meeting transcript:
 
@@ -63,7 +63,7 @@ async function checkTimeAdjustment(
 
     ${JSON.stringify(audioData)}
 
-    Determine if this appears to be a complete meeting or if it might be truncated. 
+    Determine if this appears to be a complete meeting or if it might be truncated.
     Return a JSON object with the following structure:
     {
       "shouldAdjust": boolean,
