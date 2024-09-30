@@ -119,7 +119,7 @@ export function SearchChat() {
   const [selectedResults, setSelectedResults] = useState<Set<number>>(
     new Set()
   );
-  const [similarityThreshold, setSimilarityThreshold] = useState(0.9);
+  const [similarityThreshold, setSimilarityThreshold] = useState(1);
   const [hoveredResult, setHoveredResult] = useState<number | null>(null);
 
   const [isCurlDialogOpen, setIsCurlDialogOpen] = useState(false);
@@ -201,6 +201,11 @@ export function SearchChat() {
   }, [debouncedThreshold, results]);
 
   const handleFilterDuplicates = async () => {
+    if (similarityThreshold === 1) {
+      setSelectedResults(new Set(results.map((_, index) => index)));
+      setSelectAll(true);
+      return;
+    }
     setIsFiltering(true);
     // simulate a delay to show loading state
     await new Promise((resolve) => setTimeout(resolve, 100));

@@ -4,7 +4,7 @@ getting started locally:
 
 ```
 # Build the Rust backend first
-cargo build --release 
+cargo build --release # add --features metal or cuda or whatever u need 
 cd screenpipe-app-tauri
 # Install dependencies using Bun
 bun i 
@@ -17,21 +17,26 @@ can be more complex on windows
 
 ### macos specific
 
-add this to `.vscode/settings.json`:
+louis' macos cursor/vscode settings `.vscode/settings.json`:
 
 ```json
 {
+    "rust-analyzer.cargo.features": [
+        "metal",
+        "pipes"
+    ],
     "rust-analyzer.server.extraEnv": {
-        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
+        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
+        "SCREENPIPE_APP_DEV": "true"
     },
     "rust-analyzer.cargo.extraEnv": {
-        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
+        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
+        "SCREENPIPE_APP_DEV": "true"
     },
     "terminal.integrated.env.osx": {
         "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
+        "SCREENPIPE_APP_DEV": "true"
     }
 }
 ```
-
-this is used to link apple native OCR compiled lib to the bins
 
