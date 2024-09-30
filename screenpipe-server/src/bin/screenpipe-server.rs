@@ -297,6 +297,8 @@ async fn main() -> anyhow::Result<()> {
         1.0
     };
 
+    let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
+
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -307,7 +309,7 @@ async fn main() -> anyhow::Result<()> {
                     db_clone.clone(),
                     output_path_clone.clone(),
                     fps,
-                    Duration::from_secs(cli.audio_chunk_duration),
+                    audio_chunk_duration, // use the new setting
                     Duration::from_secs(cli.video_chunk_duration),
                     vision_control_clone.clone(),
                     audio_devices_control.clone(),

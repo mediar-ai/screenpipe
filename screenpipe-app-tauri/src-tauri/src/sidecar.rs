@@ -197,6 +197,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     })
     .map_err(|e| e.to_string())?;
 
+    let audio_chunk_duration = with_store(app.clone(), stores.clone(), path.clone(), |store| {
+        Ok(store
+            .get("audioChunkDuration")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(30))
+    })
+    .map_err(|e| e.to_string())?;
+
+    println!("audio_chunk_duration: {}", audio_chunk_duration);
+
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
     let fps_str = fps.to_string();
@@ -222,11 +232,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         let model = ocr_engine.as_str();
         args.push(model);
     }
-    // if monitor_id != "default" {
-    //     args.push("--monitor-id");
-    //     let id = monitor_id.as_str();
-    //     args.push(id);
-    // }
+
 
     if !monitor_ids.is_empty() && monitor_ids[0] != Value::String("default".to_string()) {
         for monitor in &monitor_ids {
@@ -280,6 +286,12 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if vad_sensitivity != "high" {
         args.push("--vad-sensitivity");
         args.push(vad_sensitivity.as_str());
+    }
+
+    let audio_chunk_duration_str = audio_chunk_duration.to_string();
+    if audio_chunk_duration != 30 {
+        args.push("--audio-chunk-duration");
+        args.push(audio_chunk_duration_str.as_str());
     }
 
     // args.push("--debug");
