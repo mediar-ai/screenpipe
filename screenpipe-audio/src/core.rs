@@ -343,7 +343,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     // macos hack using screen capture kit for output devices - does not work well
     #[cfg(target_os = "macos")]
     {
-        // !HACK macos is suppoed to use special macos feature "display capture"
+        // !HACK macos is supposed to use special macos feature "display capture"
         // ! see https://github.com/RustAudio/cpal/pull/894
         if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
             for device in host.input_devices()? {
