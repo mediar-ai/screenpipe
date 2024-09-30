@@ -23,25 +23,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 
-import { platform } from "@tauri-apps/plugin-os";
 import { Eye, EyeOff, HelpCircle, RefreshCw, Settings2 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
-  const [currentPlatform, setCurrentPlatform] = React.useState<string>("");
   const [showApiKey, setShowApiKey] = React.useState(false);
 
   const handleApiUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, aiUrl: newValue }));
+    setLocalSettings({ ...localSettings, aiUrl: newValue });
     updateSettings({ aiUrl: newValue });
   };
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, openaiApiKey: newValue }));
+    setLocalSettings({ ...localSettings, openaiApiKey: newValue });
     updateSettings({ openaiApiKey: newValue });
   };
 
@@ -49,13 +47,13 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, deepgramApiKey: newValue }));
+    setLocalSettings({ ...localSettings, deepgramApiKey: newValue });
     updateSettings({ deepgramApiKey: newValue });
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, aiModel: newValue }));
+    setLocalSettings({ ...localSettings, aiModel: newValue });
     updateSettings({ aiModel: newValue });
   };
 
@@ -63,7 +61,7 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, customPrompt: newValue }));
+    setLocalSettings({ ...localSettings, customPrompt: newValue });
     updateSettings({ customPrompt: newValue });
   };
 
@@ -73,22 +71,21 @@ export function Settings({ className }: { className?: string }) {
 
   const handleMaxContextCharsChange = (value: number[]) => {
     const newValue = value[0];
-    setLocalSettings((prev) => ({ ...prev, aiMaxContextChars: newValue }));
+    setLocalSettings({ ...localSettings, aiMaxContextChars: newValue });
     updateSettings({ aiMaxContextChars: newValue });
   };
 
   React.useEffect(() => {
     setLocalSettings(settings);
-    setCurrentPlatform(platform());
   }, [settings]);
 
   return (
     <Dialog
-      onOpenChange={(open) => {
-        if (!open) {
-          location.reload(); // ! HACK to properly refresh stuff (tood beter)
-        }
-      }}
+    // onOpenChange={(open) => {
+    //   if (!open) {
+    //     location.reload(); // ! HACK to properly refresh stuff (tood beter)
+    //   }
+    // }}
     >
       <DialogTrigger asChild>
         <Button variant="ghost" className={className}>
@@ -107,7 +104,6 @@ export function Settings({ className }: { className?: string }) {
           <RecordingSettings
             localSettings={localSettings}
             setLocalSettings={setLocalSettings}
-            currentPlatform={currentPlatform}
           />
 
           <Separator />

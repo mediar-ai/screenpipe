@@ -59,6 +59,7 @@ import {
 } from "./ui/dialog";
 import { CodeBlock } from "./ui/codeblock";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
+import { platform } from "@tauri-apps/plugin-os";
 
 interface AudioDevice {
   name: string;
@@ -76,11 +77,9 @@ interface MonitorDevice {
 export function RecordingSettings({
   localSettings,
   setLocalSettings,
-  currentPlatform,
 }: {
   localSettings: Settings;
   setLocalSettings: (settings: Settings) => void;
-  currentPlatform: string;
 }) {
   const { settings, updateSettings } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
@@ -98,9 +97,7 @@ export function RecordingSettings({
   const isDisabled = health?.status_code === 500;
   const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
   const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
-  console.log("localSettings", localSettings);
-  console.log("settings", settings);
-  console.log("availableMonitors", availableMonitors);
+
   useEffect(() => {
     const loadDevices = async () => {
       try {
@@ -180,7 +177,7 @@ export function RecordingSettings({
     };
 
     loadDevices();
-  }, [localSettings, setLocalSettings]);
+  }, [settings]);
 
   const handleUpdate = async () => {
     setIsUpdating(true);
@@ -393,6 +390,29 @@ export function RecordingSettings({
     });
   };
 
+  const renderOcrEngineOptions = () => {
+    const currentPlatform = platform();
+    return (
+      <>
+        {/* <SelectItem value="unstructured">
+          <div className="flex items-center justify-between w-full space-x-2">
+            <span>unstructured</span>
+            <Badge variant="secondary">cloud</Badge>
+          </div>
+        </SelectItem> */}
+        {currentPlatform === "linux" && (
+          <SelectItem value="tesseract">tesseract</SelectItem>
+        )}
+        {currentPlatform === "windows" && (
+          <SelectItem value="windows-native">windows native</SelectItem>
+        )}
+        {currentPlatform === "macos" && (
+          <SelectItem value="apple-native">apple native</SelectItem>
+        )}
+      </>
+    );
+  };
+
   return (
     <>
       <div className="relative">
@@ -460,25 +480,7 @@ export function RecordingSettings({
                 <SelectTrigger>
                   <SelectValue placeholder="select ocr engine" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unstructured">
-                    <div className="flex items-center justify-between w-full space-x-2">
-                      <span>unstructured</span>
-                      <Badge variant="secondary">cloud</Badge>
-                    </div>
-                  </SelectItem>
-                  {currentPlatform !== "macos" && (
-                    <SelectItem value="tesseract">tesseract</SelectItem>
-                  )}
-                  {currentPlatform === "windows" && (
-                    <SelectItem value="windows-native">
-                      windows native
-                    </SelectItem>
-                  )}
-                  {currentPlatform === "macos" && (
-                    <SelectItem value="apple-native">apple native</SelectItem>
-                  )}
-                </SelectContent>
+                <SelectContent>{renderOcrEngineOptions()}</SelectContent>
               </Select>
             </div>
 

@@ -25,7 +25,6 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { DevSettings } from "./dev-dialog";
 import { Lock, Folder, FileText, Activity } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { homeDir } from "@tauri-apps/api/path";
@@ -122,8 +121,7 @@ const DevModeSettings = () => {
   const handleDevModeToggle = async (checked: boolean) => {
     try {
       await updateSettings({ devMode: checked });
-      setLocalSettings((prev) => ({ ...prev, devMode: checked }));
-      // ... rest of the function ...
+      setLocalSettings({ ...localSettings, devMode: checked });
     } catch (error) {
       console.error("Failed to update dev mode:", error);
       // Add error handling, e.g., show a toast notification
