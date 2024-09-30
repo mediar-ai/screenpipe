@@ -252,7 +252,7 @@ export function ChatList() {
                 <div>
                   <div className="font-medium">GPT-4</div>
                   <div className="text-muted-foreground/80">
-                    With DALL-E, browing and analysis. Limit 40 messages / 3
+                    With DALL-E, browsing and analysis. Limit 40 messages / 3
                     hours
                   </div>
                 </div>

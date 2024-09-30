@@ -9,7 +9,7 @@ Any other issue? [Will solve your problem in less than 15 min](https://cal.com/l
   <summary>Frames not recorded</summary>
 
   Try a different monitor. `screenpipe --list-monitors` and `screenpipe --monitor-id <monitor id>`
-    
+
   </details>
 
   <details>
@@ -23,20 +23,20 @@ Abort trap: 6
 >
 
   i'll investigate this issue now, in the meantime you can do this:
-  
+
   ```
   brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
   brew install screenpipe
   ```
-  
-  
-  and then 
-  
+
+
+  and then
+
   ```
   cd
   screenpipe --ocr-engine apple-native
   ```
-  
+
   </details>
 
   <details>
@@ -46,26 +46,26 @@ Abort trap: 6
   Sometimes this happen when computer goes to sleep for long. Just restart. We're going to make it fix itself automatically soon.
 
   </details>
-  
+
   <details>
 
   <summary>Permission error in Windows</summary>
 
   If you run into this error in your CMD terminal using CLI you should run the terminal as administrator (right click on the icon)
-  
+
   </details>
-  
+
   <details>
 
   <summary>`TESSDATA_PREFIX` error</summary>
 
-  This can happen on Windows. 
-  
+  This can happen on Windows.
+
   - Type "environment" in the search bar of Windows, and click environment variables.
   - Click "new" (the first one).
   - The key will be `TESSDATA_PREFIX` and the value will be the path you installed screenpipe (default is `C:\Users\<your username>\AppData\Local\screenpipe`)
 
-  You can also try our experimental Windows OCR engine by adding `--ocr-engine windows-native` which sould solve the above problem too
+  You can also try our experimental Windows OCR engine by adding `--ocr-engine windows-native` which should solve the above problem too
 
   </details>
 
@@ -93,7 +93,7 @@ Abort trap: 6
   <summary>I can't install screenpipe</summary>
 
   Make sure to press control + right click on the `.dmg` file and press open
-  
+
   <img width="372" alt="Screenshot 2024-07-24 at 16 07 22" src="https://github.com/user-attachments/assets/1b077f0f-0b90-4d40-b61d-ba11c8a8285c">
 
   Then drag the app to your application folder
@@ -115,18 +115,18 @@ Abort trap: 6
 
 <details>
   <summary>All files are 10 KB</summary>
-  
+
   Some audio files might be small, like when there is no sound at all.
 </details>
 
 <details>
   <summary>MacOS Audio does not work</summary>
-  
-  Make sure to enable permissions in settings. 
+
+  Make sure to enable permissions in settings.
   <img width="827" alt="Screenshot 2024-07-24 at 16 08 51" src="https://github.com/user-attachments/assets/799c0834-8d35-476b-80f8-67f94342b891">
 
   Still does not work? Remove and re-enable the permission: click on screenpipe and click the minus "-" icon:
-  
+
 ![Screenshot 2024-07-30 at 14 41 33](https://github.com/user-attachments/assets/3b67bd52-c9a1-4fb0-a4be-3e7713c54ebd)
 
   Then restart screenpipe and the dialog of permission should pop again and enable it, restarting screenpipe
@@ -135,12 +135,12 @@ Abort trap: 6
 
 <details>
   <summary>MacOS Screen capture does not work</summary>
-  
-   Make sure to enable permissions in settings. 
+
+   Make sure to enable permissions in settings.
   <img width="827" alt="Screenshot 2024-07-24 at 16 08 51" src="https://github.com/user-attachments/assets/799c0834-8d35-476b-80f8-67f94342b891">
 
   Still does not work? Remove and re-enable the permission: click on screenpipe and click the minus "-" icon:
-  
+
 ![Screenshot 2024-07-30 at 14 41 33](https://github.com/user-attachments/assets/3b67bd52-c9a1-4fb0-a4be-3e7713c54ebd)
 
   Then restart screenpipe and the dialog of permission should pop again and enable it, restarting screenpipe
@@ -156,11 +156,11 @@ Abort trap: 6
     Windows: Using the app, you can find the data in C:\Users\AppData\Local\screenpipe
     MacOS: Using the app, you can find the data in ~/Library/Application Support/screenpipe
     Linux: Using the app, you can find the data in ~/.config/screenpipe
-  
+
 </details>
 
 <details>
   <summary>How can I interpret my data more intuitively?</summary>
 
-  We recommend using [TablePlus](https://tableplus.com/) to open the SQLite database located alongside the data. 
+  We recommend using [TablePlus](https://tableplus.com/) to open the SQLite database located alongside the data.
 </details>
