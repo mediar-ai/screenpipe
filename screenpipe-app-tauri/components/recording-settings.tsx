@@ -202,6 +202,7 @@ export function RecordingSettings({
         deepgramApiKey: localSettings.deepgramApiKey,
         fps: localSettings.fps,
         vadSensitivity: localSettings.vadSensitivity,
+        audioChunkDuration: localSettings.audioChunkDuration,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -322,6 +323,10 @@ export function RecordingSettings({
       low: 0,
     };
     return sensitivityMap[sensitivity];
+  };
+
+  const handleAudioChunkDurationChange = (value: number[]) => {
+    setLocalSettings({ ...localSettings, audioChunkDuration: value[0] });
   };
 
   const generateCliCommand = () => {
@@ -936,6 +941,49 @@ export function RecordingSettings({
                 <span>low</span>
                 <span>medium</span>
                 <span>high</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="audioChunkDuration"
+                className="flex items-center space-x-2"
+              >
+                <span>audio chunk duration (seconds)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        adjust the duration of each audio chunk.
+                        <br />
+                        shorter durations may lower resource usage spikes,
+                        <br />
+                        while longer durations may increase transcription
+                        quality.
+                        <br />
+                        deepgram in general works better than whisper if you
+                        want higher quality transcription.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="audioChunkDuration"
+                  min={5}
+                  max={3000}
+                  step={1}
+                  value={[localSettings.audioChunkDuration]}
+                  onValueChange={handleAudioChunkDurationChange}
+                  className="flex-grow"
+                />
+                <span className="w-12 text-right">
+                  {localSettings.audioChunkDuration} s
+                </span>
               </div>
             </div>
 
