@@ -21,7 +21,6 @@ import UpdateNotification from "@/components/update-notification";
 import { usePostHog } from "posthog-js/react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
-import { DevSettings } from "@/components/dev-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchChat } from "@/components/search-chat";
 import { Separator } from "@/components/ui/separator";

@@ -323,7 +323,6 @@ const DevModeSettings = () => {
               and ask ChatGPT for curl commands to interact with the API.
             </p>
           </div>
-          {/* <DevSettings /> */}
         </>
       )}
     </>
