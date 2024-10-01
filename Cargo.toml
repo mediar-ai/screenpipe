@@ -43,5 +43,8 @@ git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
 
+# [dependencies]
+axum = "0.7"  # 使用与您项目兼容的版本
+
 
 

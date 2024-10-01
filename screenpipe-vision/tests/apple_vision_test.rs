@@ -34,4 +34,24 @@ mod tests {
             result
         );
     }
+// # 中文测试
+    #[tokio::test]
+    async fn test_apple_native_ocr_chinese() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests");
+        path.push("testing_OCR_chinese.png");
+        println!("Path to testing_OCR_chinese.png: {:?}", path);
+
+        let image = image::open(&path).expect("Failed to open Chinese test image");
+        println!("Image dimensions: {:?}", image.dimensions());
+
+        let result = perform_ocr_apple(&image);
+
+        println!("OCR text: {:?}", result);
+        assert!(
+            result.contains("管理分支"),  // 替换为您的测试图像中的实际中文文本
+            "OCR failed to recognize Chinese text: {:?}",
+            result
+        );
+    }
 }
