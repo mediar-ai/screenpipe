@@ -357,10 +357,10 @@ async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyh
 
     if env::consts::OS == "windows" {
         // TODO switch back to libx264 when ffmpeg is updated in pre_build.js
-        // Use MPEG-4 encoder for Windows
+        // Use H264_mf encoder for Windows
         args.extend_from_slice(&[
             "-vcodec",
-            "mpeg4",
+            "h264_mf",
             "-q:v",
             "5", // Adjust quality (1-31, lower is better)
             "-preset",
