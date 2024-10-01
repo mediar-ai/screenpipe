@@ -84,7 +84,6 @@ const corePipes: CorePipe[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log",
   },
 ];
-
 const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);

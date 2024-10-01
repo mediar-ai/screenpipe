@@ -141,22 +141,34 @@ async fn main() {
                 .with_writer(std::io::stdout)
                 .with_filter(EnvFilter::new("debug"));
 
+            // Initialize OpenTelemetry
+            // let tracer = opentelemetry_otlp::new_pipeline()
+            //     .tracing()
+            //     .with_exporter(
+            //         opentelemetry_otlp::new_exporter()
+            //             .http()
+            //             .with_endpoint("https://otel.highlight.io/v1/traces")
+            //     )
+            //     .with_trace_config(
+            //         trace::config()
+            //             .with_sampler(Sampler::AlwaysOn)
+            //             .with_resource(Resource::new(vec![opentelemetry::KeyValue::new(
+            //                 "service.name",
+            //                 "screenpipe-app",
+            //             )]))
+            //     )
+            //     .install_batch(opentelemetry::runtime::Tokio)
+            //     .expect("Failed to initialize OpenTelemetry tracer");
+
+            // // Create a tracing layer with the configured tracer
+            // let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
             // Initialize the tracing subscriber with both layers
             tracing_subscriber::registry()
-                .with(sentry::integrations::tracing::layer())
+                // .with(telemetry)
                 .with(file_layer)
                 .with(console_layer)
                 .init();
-
-            // Initialize Sentry
-            let _guard = sentry::init((
-                "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
-                sentry::ClientOptions {
-                    release: sentry::release_name!(),
-                    traces_sample_rate: 0.2,
-                    ..Default::default()
-                }
-            ));
 
             // Windows-specific setup
             if cfg!(windows) {
