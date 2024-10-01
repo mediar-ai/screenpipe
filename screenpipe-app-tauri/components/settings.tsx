@@ -164,6 +164,11 @@ export function Settings({ className }: { className?: string }) {
                             <pre className="bg-gray-100 p-1 rounded-md">
                               http://localhost:11434/v1
                             </pre>
+                            <br />
+                            note: on windows, you may need to run ollama with:
+                            <pre className="bg-gray-100 p-1 rounded-md">
+                              OLLAMA_ORIGINS=* ollama run llama3.2
+                            </pre>
                           </p>
                         </TooltipContent>
                       </Tooltip>
