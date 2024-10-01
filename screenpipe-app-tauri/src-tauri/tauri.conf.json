@@ -11,12 +11,7 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": [
-      "app",
-      "dmg",
-      "appimage",
-      "nsis"
-    ],
+    "targets": ["app", "dmg", "appimage", "nsis"],
     "externalBin": [],
     "icon": [
       "icons/32x32.png",
@@ -26,37 +21,21 @@
       "icons/512x512.png",
       "icons/1024x1024.png",
       "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/updates-white.png",
+      "icons/updates-black.png"
     ],
     "longDescription": "",
-    "resources": [
-      "assets/*"
-    ],
+    "resources": ["assets/*"],
     "shortDescription": "",
     "fileAssociations": [
       {
         "description": "Video files",
-        "ext": [
-          "mp4",
-          "mkv",
-          "avi",
-          "mov",
-          "wmv",
-          "webm"
-        ]
+        "ext": ["mp4", "mkv", "avi", "mov", "wmv", "webm"]
       },
       {
         "description": "Audio files",
-        "ext": [
-          "mp3",
-          "wav",
-          "aac",
-          "flac",
-          "oga",
-          "ogg",
-          "opic",
-          "opus"
-        ]
+        "ext": ["mp3", "wav", "aac", "flac", "oga", "ogg", "opic", "opus"]
       }
     ]
   },

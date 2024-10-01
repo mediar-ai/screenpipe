@@ -29,9 +29,9 @@ export default function Home() {
   const posthog = usePostHog();
   const { toast } = useToast();
 
-  useEffect(() => {
-    checkForAppUpdates({ toast });
-  }, [toast]);
+  // useEffect(() => {
+  //   checkForAppUpdates({ toast });
+  // }, [toast]);
 
   useEffect(() => {
     if (settings.userId) {

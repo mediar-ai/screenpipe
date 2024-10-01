@@ -15,7 +15,13 @@ rust-version = "1.75"
 tauri-build = { version = "2.0.0-rc.10", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0-rc.10", features = [ "macos-private-api", "tray-icon", "devtools", "image-png", "image-ico"] }
+tauri = { version = "2.0.0-rc.10", features = [
+  "macos-private-api",
+  "tray-icon",
+  "devtools",
+  "image-png",
+  "image-ico",
+] }
 tauri-utils = { version = "=2.0.0-rc.10", features = [] }
 
 serde_json = "1.0"
@@ -60,7 +66,7 @@ sysinfo = "0.29.0"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
-axum = "0.6.0"  # or your current version
+axum = "0.6.0"    # or your current version
 serde = "1.0.160"
 
 
@@ -93,13 +99,13 @@ tauri-plugin-cli = "2.0.0-alpha.2"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = "2.0.0-rc.1"
-# tauri-plugin-updater = "2.0.0-alpha.2"
+tauri-plugin-updater = "2.0.0-alpha.2"
 
 [features]
 # cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
 # metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
 cudart = []
-metal = [] # unused
+metal = []                    # unused
 mkl = []
 default = ["custom-protocol"]
 
@@ -110,7 +116,7 @@ default = ["custom-protocol"]
 # rocm = []
 
 # DO NOT REMOVE!!
-custom-protocol = [ "tauri/custom-protocol" ]
+custom-protocol = ["tauri/custom-protocol"]
 
 
 [package.metadata.cargo-machete]
