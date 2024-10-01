@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727798055909,
+  "lastUpdate": 1727798412837,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -11189,6 +11189,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2951836250,
             "range": "± 222418915",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "33d7313825563629c57ed04d8eedb79437d3d360",
+          "message": "Merge pull request #390 from Glavin001/docs/oss-desktop-app\n\nAdd step in getting started for building OSS desktop app",
+          "timestamp": "2024-10-01T08:49:02-07:00",
+          "tree_id": "ba80081e119167878e18eebe232f8c6f2ec50b11",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/33d7313825563629c57ed04d8eedb79437d3d360"
+        },
+        "date": 1727798411238,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2369131187,
+            "range": "± 294771819",
             "unit": "ns/iter"
           }
         ]
