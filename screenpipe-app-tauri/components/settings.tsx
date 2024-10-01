@@ -28,6 +28,8 @@ import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
 import * as Sentry from "@sentry/react";
 import posthog from "posthog-js";
+import { trace } from "@opentelemetry/api";
+
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
@@ -86,21 +88,17 @@ export function Settings({ className }: { className?: string }) {
       posthog.capture("telemetry", {
         enabled: false,
       });
-      Sentry.init({
-        enabled: false,
-        dsn: "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
-      });
-      Sentry.close();
+      // disable opentelemetry
+      trace.disable();
       posthog.opt_out_capturing();
+      console.log("telemetry disabled");
     } else {
       posthog.opt_in_capturing();
       posthog.capture("telemetry", {
         enabled: true,
       });
-      Sentry.init({
-        enabled: true,
-        dsn: "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
-      });
+      // enable opentelemetry
+      console.log("telemetry enabled");
     }
   };
 

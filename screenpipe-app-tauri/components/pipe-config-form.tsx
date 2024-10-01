@@ -56,7 +56,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
     if (!config) return;
     setConfig((prevConfig) => ({
       ...prevConfig,
-      fields: prevConfig?.fields.map((field: FieldConfig) =>
+      fields: prevConfig?.fields?.map((field: FieldConfig) =>
         field.name === name ? { ...field, value } : field
       ),
     }));
@@ -303,7 +303,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <h3 className="text-lg font-semibold">pipe configuration</h3>
-      {config?.fields.map((field: FieldConfig) => (
+      {config?.fields?.map((field: FieldConfig) => (
         <div key={field.name} className="space-y-2">
           <Label htmlFor={field.name} className="font-medium">
             {field.name} ({field.type})

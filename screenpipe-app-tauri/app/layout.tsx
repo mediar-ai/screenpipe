@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { PHProvider } from "./providers";
+import { Providers } from "./providers";
 import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -16,18 +16,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
-
   return (
     <html lang="en">
-      <PHProvider>
+      <Providers>
         {/* https://posthog.com/docs/libraries/next-js for more info */}
         <body className={inter.className}>
           {children}
 
           <Toaster />
         </body>
-      </PHProvider>
+      </Providers>
     </html>
   );
 }

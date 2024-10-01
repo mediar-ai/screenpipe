@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.2.83"
+version = "0.2.84"
 description = ""
 authors = ["you"]
 license = ""
@@ -35,8 +35,10 @@ reqwest = { version = "0.12", features = ["json"] }
 # Uuid
 uuid = { version = "1.10.0", features = ["v4"] }
 
-# Sentry 
-sentry = { version = "0.34.0", features = ["tracing"] }
+# OpenTelemetry
+# opentelemetry = { version = "0.25.0" }
+# opentelemetry-otlp = { version = "0.25.0", features = ["http-proto", "reqwest-client"] }
+# tracing-opentelemetry = "0.26.0"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-appender = "0.2.3"
