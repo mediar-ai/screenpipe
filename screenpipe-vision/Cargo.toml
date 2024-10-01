@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-vision"
-version = { workspace = true }
+version = "0.1.93"
 authors = { workspace = true }
 description = { workspace = true }
 repository = { workspace = true }
@@ -37,6 +37,8 @@ screenpipe-integrations = { path = "../screenpipe-integrations" }
 
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
+
+axum = "0.7"
 
 [dev-dependencies]
 tempfile = "3.3.0"
