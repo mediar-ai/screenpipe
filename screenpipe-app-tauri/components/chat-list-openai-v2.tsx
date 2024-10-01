@@ -29,7 +29,6 @@ import { FunctionCallMessage } from "./function-call-message";
 import { EmptyScreen } from "./empty-screen";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { usePostHog } from "posthog-js/react";
-import * as Sentry from "@sentry/nextjs";
 import { queryScreenpipeNtimes, screenpipeMultiQuery } from "@/lib/screenpipe";
 
 // function to generate a tool call id
@@ -348,7 +347,6 @@ export function ChatList({
         ]);
       }
 
-      Sentry.captureException(error);
     } finally {
       setIsLoading(false);
     }

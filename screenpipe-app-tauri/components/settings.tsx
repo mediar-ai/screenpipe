@@ -26,7 +26,6 @@ import { Slider } from "@/components/ui/slider"; // Add this import
 import { Eye, EyeOff, HelpCircle, RefreshCw, Settings2 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
-import * as Sentry from "@sentry/react";
 import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
 
