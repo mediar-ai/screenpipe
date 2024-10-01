@@ -105,7 +105,7 @@ screenpipe has a plugin system called "pipe" which lets you run code in a sandbo
 
 ## star history
 
-![GitHub Star History (5)](https://github.com/user-attachments/assets/fd8968fb-e59c-4d81-a42d-059c94ce9c71)
+![GitHub Star History (6)](https://github.com/user-attachments/assets/91cdc7a6-19ea-4156-a7bf-a2bef4cc946f)
 
 
 ## Contributing
