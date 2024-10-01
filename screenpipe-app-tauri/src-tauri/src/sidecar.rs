@@ -4,6 +4,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
+use tauri::Emitter;
 use tauri::{Manager, State, Wry};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -11,7 +12,8 @@ use tauri_plugin_store::{with_store, StoreCollection};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-use tauri::Emitter;
+use tracing_subscriber::field::debug;
+
 #[tauri::command]
 pub async fn kill_all_sreenpipes(
     state: State<'_, SidecarState>,
@@ -58,6 +60,22 @@ pub async fn kill_all_sreenpipes(
             Err(format!("Failed to kill screenpipe processes: {}", e))
         }
     }
+}
+
+#[tauri::command]
+pub async fn kill_sidecar(
+    state: State<'_, SidecarState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    debug!("Killing sidecar");
+
+    let mut manager = state.0.lock().await;
+    if let Some(manager) = manager.as_mut() {
+        if let Some(restart_task) = manager.restart_task.take() {
+            restart_task.abort();
+        }
+    }
+    kill_all_sreenpipes(state.clone(), app).await
 }
 
 #[tauri::command]
@@ -149,7 +167,12 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         Ok(store
             .get("ignoredWindows")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect::<Vec<_>>())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(String::from)
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default())
     })
     .map_err(|e| e.to_string())?;
@@ -158,12 +181,15 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         Ok(store
             .get("includedWindows")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect::<Vec<_>>())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(String::from)
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default())
     })
     .map_err(|e| e.to_string())?;
-
-
 
     let deepgram_api_key = with_store(app.clone(), stores.clone(), path.clone(), |store| {
         Ok(store
@@ -174,10 +200,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     .unwrap_or(String::from("default"));
 
     let fps = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("fps")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.2))
+        Ok(store.get("fps").and_then(|v| v.as_f64()).unwrap_or(0.2))
     })
     .map_err(|e| e.to_string())?;
 
@@ -325,7 +348,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
                 CommandEvent::Stderr(line) => {
                     let log_line = String::from_utf8(line).unwrap();
                     error!("Sidecar stderr: {}", log_line);
-                    app_handle.emit("sidecar_log", format!("ERROR: {}", log_line)).unwrap();
+                    app_handle
+                        .emit("sidecar_log", format!("ERROR: {}", log_line))
+                        .unwrap();
                 }
                 _ => {}
             }
@@ -394,8 +419,6 @@ impl SidecarManager {
                 sleep(Duration::from_secs(60)).await;
             }
         }));
-
-
 
         Ok(())
     }

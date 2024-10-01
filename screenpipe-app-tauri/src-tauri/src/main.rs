@@ -5,10 +5,10 @@ use commands::load_pipe_config;
 use commands::save_pipe_config;
 use serde_json::Value;
 use sidecar::SidecarManager;
+use tokio::runtime::Handle;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::future::IntoFuture;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Config;
@@ -74,7 +74,7 @@ fn show_main_window(app_handle: &tauri::AppHandle) {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() { 
     let _ = fix_path_env::fix();
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
@@ -198,7 +198,7 @@ async fn main() {
                 let quit = MenuItemBuilder::with_id("quit", "Quit Screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app).items(&[&show, update_manager.update_now_menu_item_ref(), &menu_divider, &quit]).build()?;
                 let _ = main_tray.set_menu(Some(menu));
-                
+
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
                         show_main_window(&app_handle);
@@ -207,8 +207,16 @@ async fn main() {
                         println!("quit clicked");
                         app_handle.exit(0);
                     },
-                    "update_now" => {
-                        update_manager.update_screenpipe();
+                    "update_now" => {                        
+                        tokio::task::block_in_place(move || {
+                            Handle::current().block_on(async move {
+                                if let Err(err) = sidecar::kill_sidecar(app_handle.state::<SidecarState>(), app_handle.clone()).await {
+                                    error!("Failed to kill sidecar: {}", err);
+                                }
+                            });
+
+                        });
+                        // update_manager.update_screenpipe();
                     }
                     _ => (),
                 });
