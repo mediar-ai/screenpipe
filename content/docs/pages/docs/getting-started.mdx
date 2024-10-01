@@ -77,7 +77,7 @@ if you require additional configurations such as running in debug mode or switch
 1. start by installing rust and all necessary dependencies:
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   brew install pkg-config ffmpeg jq tesseract
+   brew install pkg-config ffmpeg jq tesseract cmake wget
    ```
 
 2. clone the screenpipe repository:
@@ -95,6 +95,8 @@ if you require additional configurations such as running in debug mode or switch
    ```bash
    ./target/release/screenpipe
    ```
+
+5. for building the desktop app then continue to follow the README for [`screenpipe-app-tauri`](https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-app-tauri/README.md)
 
 [need help? open an issue on github.](https://github.com/mediar-ai/screenpipe/issues/new)
 
