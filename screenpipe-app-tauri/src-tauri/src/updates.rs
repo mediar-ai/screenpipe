@@ -3,7 +3,7 @@ use log::{error, info};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};
-use tauri::Wry;
+use tauri::{Manager, Wry};
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
 use tokio::time::interval;
@@ -36,10 +36,12 @@ impl UpdatesManager {
                 .set_text("Downloading Latest Version of Screenpipe")?;
 
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
-                if let Ok(image) = tauri::image::Image::from_path("icons/updates-white.png") {
-                    if let Err(err) = tray.set_icon(Some(image)) {
-                        error!("Problem setting icon: {}", err);
-                    }
+                let path = self.app.path().resolve(
+                    "assets/updates-white.png",
+                    tauri::path::BaseDirectory::Resource,
+                )?;
+                if let Ok(image) = tauri::image::Image::from_path(path) {
+                    tray.set_icon(Some(image))?;
                 }
             }
 

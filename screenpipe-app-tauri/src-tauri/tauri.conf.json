@@ -21,9 +21,7 @@
       "icons/512x512.png",
       "icons/1024x1024.png",
       "icons/icon.icns",
-      "icons/icon.ico",
-      "icons/updates-white.png",
-      "icons/updates-black.png"
+      "icons/icon.ico"
     ],
     "longDescription": "",
     "resources": ["assets/*"],
