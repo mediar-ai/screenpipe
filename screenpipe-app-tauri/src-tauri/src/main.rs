@@ -216,7 +216,7 @@ async fn main() {
                             });
 
                         });
-                        // update_manager.update_screenpipe();
+                        update_manager.update_screenpipe();
                     }
                     _ => (),
                 });

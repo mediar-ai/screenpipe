@@ -52,7 +52,8 @@
   "app": {
     "trayIcon": {
       "id": "screenpipe_main",
-      "iconPath": "icons/32x32.png"
+      "iconPath": "icons/screenpipe-logo-tray-black.png",
+      "iconAsTemplate": true
     },
     "windows": [
       {

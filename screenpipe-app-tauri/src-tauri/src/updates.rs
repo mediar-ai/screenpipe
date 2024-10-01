@@ -7,6 +7,7 @@ use tauri::{Manager, Wry};
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
 use tokio::time::interval;
+
 pub struct UpdatesManager {
     interval: Duration,
     update_available: Arc<Mutex<bool>>,
@@ -37,11 +38,13 @@ impl UpdatesManager {
 
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
                 let path = self.app.path().resolve(
-                    "assets/updates-white.png",
+                    "assets/update-logo-black.png",
                     tauri::path::BaseDirectory::Resource,
                 )?;
+
                 if let Ok(image) = tauri::image::Image::from_path(path) {
                     tray.set_icon(Some(image))?;
+                    tray.set_icon_as_template(true)?;
                 }
             }
 
@@ -85,7 +88,7 @@ pub fn start_update_check(
 ) -> Result<Arc<UpdatesManager>, Box<dyn std::error::Error>> {
     let updates_manager = Arc::new(UpdatesManager::new(app, interval_hours)?);
 
-    // Send initial event at boot
+    // Check for updates at boot
     tokio::spawn({
         let updates_manager = updates_manager.clone();
         async move {

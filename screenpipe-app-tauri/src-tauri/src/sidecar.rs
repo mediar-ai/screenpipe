@@ -12,7 +12,6 @@ use tauri_plugin_store::{with_store, StoreCollection};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-use tracing_subscriber::field::debug;
 
 #[tauri::command]
 pub async fn kill_all_sreenpipes(
