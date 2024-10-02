@@ -1,6 +1,5 @@
 "use client";
 
-import { ChatList } from "@/components/chat-list-openai-v2";
 import { Settings } from "@/components/settings";
 import { useSettings } from "@/lib/hooks/use-settings";
 import {
