@@ -150,7 +150,7 @@ jobs:
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
-            # export V8_FROM_SOURCE=1
+            V8_FLAGS: "--max-old-space-size=4096" # https://github.com/denoland/deno_core/issues/916
           fi
           cargo build --release ${{ matrix.args }}
 
