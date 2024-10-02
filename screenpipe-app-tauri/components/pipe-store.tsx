@@ -382,7 +382,7 @@ const PipeDialog: React.FC = () => {
             {selectedPipe.enabled ? "disable" : "enable"}
           </Button>
 
-          {!selectedPipe.source.startsWith("https://") && (
+          {!selectedPipe.source?.startsWith("https://") && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -401,7 +401,7 @@ const PipeDialog: React.FC = () => {
             </TooltipProvider>
           )}
 
-          {selectedPipe.source.startsWith("http") && (
+          {selectedPipe.source?.startsWith("http") && (
             <Button
               onClick={() => openUrl(selectedPipe.source, "_blank")}
               variant="outline"
