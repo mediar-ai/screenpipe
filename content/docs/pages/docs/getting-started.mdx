@@ -99,7 +99,8 @@ add this to your vscode settings in the root of the project `.vscode/settings.js
 ```bash
 cd screenpipe-app-tauri
 bun install
-bun run tauri build
+bun scripts/pre_build.js # <- this is important to copy the CLI into the app
+bun tauri build
 ```
 
 [need help? open an issue on github.](https://github.com/mediar-ai/screenpipe/issues/new)
@@ -166,7 +167,7 @@ cargo build --release --features cuda
 
 cd screenpipe-app-tauri
 bun install
-bun scripts\pre_build.js # (you might wget not retriving error, if so use '-O' flag)
+bun scripts\pre_build.js # (you might wget not retriving error, if so use '-O' flag) <- this is important to copy the CLI into the app
 bun tauri build
 ```
 
@@ -201,7 +202,7 @@ bun tauri build
 ```bash
 cd screenpipe-app-tauri
 bun install
-bun scripts/pre_build.js
+bun scripts/pre_build.js # <- this is important to copy the CLI into the app
 bun tauri build 
 ```
 
