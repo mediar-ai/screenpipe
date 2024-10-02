@@ -24,10 +24,13 @@ import { useToast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchChat } from "@/components/search-chat";
 import { Separator } from "@/components/ui/separator";
+import Timeline from "@/components/timeline"; // Import the new Timeline component
+
 export default function Home() {
   const { settings } = useSettings();
   const posthog = usePostHog();
   const { toast } = useToast();
+  const [showTimeline, setShowTimeline] = useState(false); // Add state to manage the visibility of the timeline
 
   useEffect(() => {
     checkForAppUpdates({ toast });
@@ -38,6 +41,19 @@ export default function Home() {
       posthog?.identify(settings.userId);
     }
   }, [settings.userId, posthog]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === "t") {
+        setShowTimeline((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleShortcut);
+    };
+  }, []);
 
   return (
     <main className="flex min-h-screen flex-col items-center">
@@ -66,6 +82,7 @@ export default function Home() {
             where pixels become magic
           </h1>
           <SearchChat />
+          {showTimeline && <Timeline />} {/* Render the Timeline component conditionally */}
         </>
       ) : (
         <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
