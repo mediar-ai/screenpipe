@@ -40,7 +40,8 @@ function generateToolCallId() {
 async function generateTextWithRetry(
   params: any, // TODO: typed
   maxRetries = 3,
-  delay = 1000
+  delay = 1000,
+  onProgress?: (progress: number) => void // Pded6
 ) {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -54,6 +55,9 @@ async function generateTextWithRetry(
       if (i === maxRetries - 1) throw error;
       // sleep
       await new Promise((resolve) => setTimeout(resolve, delay));
+      if (onProgress) {
+        onProgress(((i + 1) / maxRetries) * 100); // Pded6
+      }
     }
   }
 }
@@ -74,6 +78,7 @@ export function ChatList({
   const { settings } = useSettings();
   const posthog = usePostHog();
   const customPrompt = settings.customPrompt || "";
+  const [downloadProgress, setDownloadProgress] = useState(0); // P6f8c
 
   const { messagesRef } = useScrollAnchor();
 
@@ -208,12 +213,17 @@ export function ChatList({
           },
         ];
         console.log("generateObjectMessages", generateObjectMessages);
-        const generateObjectResult = await generateObject({
-          model: provider(model),
-          // @ts-ignore
-          messages: generateObjectMessages,
-          schema: screenpipeMultiQuery,
-        });
+        const generateObjectResult = await generateTextWithRetry(
+          {
+            model: provider(model),
+            // @ts-ignore
+            messages: generateObjectMessages,
+            schema: screenpipeMultiQuery,
+          },
+          3,
+          1000,
+          setDownloadProgress // Pded6
+        );
 
         // call query_screenpipe tool
         const results = await queryScreenpipeNtimes(
@@ -426,6 +436,19 @@ export function ChatList({
             screenpipe is in alpha, base its answer on your screen & audio
             recordings and can make errors.
           </p>
+          {isLoading && (
+            <div className="mt-2">
+              <p className="text-xs font-medium text-center text-neutral-700">
+                Downloading model... {downloadProgress.toFixed(0)}% // Pce30
+              </p>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                <div
+                  className="bg-blue-600 h-2.5 rounded-full"
+                  style={{ width: `${downloadProgress}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

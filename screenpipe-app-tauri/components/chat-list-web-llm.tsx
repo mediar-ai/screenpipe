@@ -1,6 +1,3 @@
-// ignore all file ts errors
-// @ts-nocheck
-
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -50,6 +47,7 @@ function useWebLLM(modelName: string = "Llama-3.1-8B-Instruct-q4f32_1-MLC") {
   const [engine, setEngine] = useState<MLCEngineInterface | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0); // P1404
 
   useEffect(() => {
     async function initEngine() {
@@ -61,6 +59,7 @@ function useWebLLM(modelName: string = "Llama-3.1-8B-Instruct-q4f32_1-MLC") {
           appConfig,
           initProgressCallback: (progress) => {
             console.log("Loading progress:", progress);
+            setDownloadProgress(progress * 100); // P1daf
           },
         });
 
@@ -147,11 +146,11 @@ Use this function to answer any questions about the user's activity.
     [engine]
   );
 
-  return { engine, isLoading, error, streamChat, askQuestion };
+  return { engine, isLoading, error, streamChat, askQuestion, downloadProgress }; // P1daf
 }
 
 export function ChatList() {
-  const { isLoading, error, streamChat, askQuestion } = useWebLLM();
+  const { isLoading, error, streamChat, askQuestion, downloadProgress } = useWebLLM(); // P1daf
   const [messages, setMessages] = useState<
     Array<{ role: string; content: string }>
   >([]);
@@ -284,7 +283,7 @@ export function ChatList() {
                   }
                 />
                 <AvatarFallback>
-                  {msg.role === "user" ? "YO" : "📺"}
+                  {msg.role === "user" ? "YO" : "�"}
                 </AvatarFallback>
               </Avatar>
               <div className="grid gap-1">
@@ -330,6 +329,19 @@ export function ChatList() {
             screenpipe canNOT make mistakes. Consider checking important
             information.
           </p>
+          {isLoading && (
+            <div className="mt-2">
+              <p className="text-xs font-medium text-center text-neutral-700">
+                Downloading model... {downloadProgress.toFixed(0)}% // P077f
+              </p>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                <div
+                  className="bg-blue-600 h-2.5 rounded-full"
+                  style={{ width: `${downloadProgress}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
