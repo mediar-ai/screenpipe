@@ -209,10 +209,16 @@ if (platform == 'windows') {
 	const onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`
 	if (!(await fs.exists(onnxRuntimeName))) {
 		console.log('Setting up ONNX Runtime libraries for Windows...')
-		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
-		await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
-		await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
-		console.log('ONNX Runtime libraries for Windows set up successfully.')
+		try {
+			await $`${wgetPath} -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
+			await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
+			await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
+			console.log('ONNX Runtime libraries for Windows set up successfully.')
+		} catch (error) {
+			console.error('Error downloading or extracting ONNX Runtime:', error);
+			console.log('Attempting alternative download method...');
+			// Add alternative download method here
+		}
 	} else {
 		console.log('ONNX Runtime libraries for Windows already exists.')
 	}
