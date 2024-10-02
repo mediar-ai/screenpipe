@@ -38,3 +38,5 @@ pnpm-lock.yaml
 
 # Ignore onnxruntime-win-x64-gpu libraries
 onnxruntime-win-x64-gpu*/
+
+.env
