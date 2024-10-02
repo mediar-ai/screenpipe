@@ -47,32 +47,7 @@ for users preferring full control or customization, building the app manually fr
 
 <MotionDiv delay={1.2}>
 
-### **option 1: homebrew installation (recommended)**
-
-1. to install screenpipe using homebrew, simply execute the following commands:
-   ```bash
-   brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
-   brew install screenpipe
-   ```
-
-2. once installed, run screenpipe with the following:
-   ```bash
-   screenpipe
-   ```
-
-3. optional flags:
-   ```bash
-   screenpipe -h
-   ```
-
-
-if you require additional configurations such as running in debug mode or switching to webrtc for audio processing, you can refer to the official [screenpipe cli documentation](https://github.com/mediar-ai/screenpipe).
-
-</MotionDiv>
-
-<MotionDiv delay={1.5}>
-
-### **option 2: build from source (for advanced users)**
+### **option 1: build from source (for advanced users)**
 
 1. start by installing rust and all necessary dependencies:
    ```bash
@@ -96,9 +71,61 @@ if you require additional configurations such as running in debug mode or switch
    ./target/release/screenpipe
    ```
 
-5. for building the desktop app then continue to follow the README for [`screenpipe-app-tauri`](https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-app-tauri/README.md)
+5. to build the desktop app:
+
+add this to your vscode settings in the root of the project `.vscode/settings.json`:
+
+```json
+{
+   "rust-analyzer.cargo.features": [
+      "metal",
+      "pipes"
+   ],
+   "rust-analyzer.server.extraEnv": {
+      "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
+      "SCREENPIPE_APP_DEV": "true"
+   },
+   "rust-analyzer.cargo.extraEnv": {
+      "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
+      "SCREENPIPE_APP_DEV": "true"
+   },
+   "terminal.integrated.env.osx": {
+      "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
+      "SCREENPIPE_APP_DEV": "true"
+   }
+}
+```
+
+```bash
+cd screenpipe-app-tauri
+bun install
+bun run tauri build
+```
 
 [need help? open an issue on github.](https://github.com/mediar-ai/screenpipe/issues/new)
+
+
+---
+
+### **option 2: homebrew installation (installs only CLI)**
+
+1. to install screenpipe using homebrew, simply execute the following commands:
+   ```bash
+   brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
+   brew install screenpipe
+   ```
+
+2. once installed, run screenpipe with the following:
+   ```bash
+   screenpipe
+   ```
+
+3. optional flags:
+   ```bash
+   screenpipe -h
+   ```
+
+if you require additional configurations such as running in debug mode or switching to webrtc for audio processing, you can refer to the official [screenpipe cli documentation](https://github.com/mediar-ai/screenpipe).
 
 </MotionDiv>
 
@@ -115,24 +142,12 @@ if you require additional configurations such as running in debug mode or switch
 
 If this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
 
-- Install chocolatey
-- Install git
-- Install CUDA Toolkit (if using NVIDIA and building with cuda)
-- Install MS Visual Studio Build Tools (below are the components I have installed)
-	- Desktop development with C++
-		- MSVC v143
-		- Windows 11 SDK
-		- C++ Cmake tools for Windows
-		- Testing tools core features - Build tools
-		- C++ AddressSanitizer
-		- C++ ATL for latest v143
-	- Individual components
-		- C++ ATL for latest v143 build tools (x86 & x64)
-		- MSBuild support for LLVM (clang-c) toolset
-		- C++ Clang Compiler for Windows
+Install 7zip: https://www.7-zip.org/download.html
 
 ```batch
-choco install pkgconfiglite rust
+choco install pkgconfiglite
+winget install -e --id GnuWin32.UnZip
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 cd V:\projects
 git clone https://github.com/mediar-ai/screenpipe
 cd V:\packages
@@ -145,9 +160,14 @@ vcpkg.exe install ffmpeg
 SET PKG_CONFIG_PATH=V:\packages\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
 SET VCPKG_ROOT=V:\packages\vcpkg
 SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
-cd V:\projects\screen-pipe
+cd V:\projects\screenpipe
 
 cargo build --release --features cuda
+
+cd screenpipe-app-tauri
+bun install
+bun scripts\pre_build.js # (you might wget not retriving error, if so use '-O' flag)
+bun tauri build
 ```
 
 </MotionDiv>
@@ -176,11 +196,20 @@ cargo build --release --features cuda
    ./target/release/screenpipe
    ```
 
+4. to build the desktop app:
+
+```bash
+cd screenpipe-app-tauri
+bun install
+bun scripts/pre_build.js
+bun tauri build 
+```
+
 </MotionDiv>
 
 <MotionDiv delay={2.3}>
 
-### **option 2: install via nix**
+### **option 2: install CLI via nix**
 
 screenpipe can be easily installed on nix-based systems. follow the instructions below:
 
@@ -202,3 +231,14 @@ after editing the configuration, rebuild your system using:
    ```
 
 </MotionDiv>
+
+## for businesses 
+
+you can use screenpipe in your business either by:
+- running the CLI on your customer's computer
+- running the app on your customer's computer
+- embedding the library or CLI in your own software
+- running the CLI in the cloud and forward the video/audio through SSH
+
+[book a demo with our team](https://cal.com/louis030195/screenpipe-for-businesses)
+
