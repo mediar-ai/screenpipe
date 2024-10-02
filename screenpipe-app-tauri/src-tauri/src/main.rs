@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Config;
 use tauri::Manager;
-use tauri::Wry;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState},
@@ -21,7 +20,7 @@ use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_store::{StoreBuilder, StoreCollection};
+use tauri_plugin_store::StoreBuilder;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;

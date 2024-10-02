@@ -106,7 +106,13 @@ export function Settings({ className }: { className?: string }) {
   }, [settings]);
 
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) { // hack bcs something does not update settings for some reason 
+          window.location.reload();
+        }
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="ghost" className={className}>
           <Settings2 className="mr-2 h-4 w-4" />

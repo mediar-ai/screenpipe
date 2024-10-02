@@ -58,7 +58,7 @@ tracing-appender = "0.2.3"
 
 # Chrono
 tauri-plugin-shell = "2.0.0"
-tauri-plugin-store = "2.0.0"
+tauri-plugin-store = "2"
 
 
 anyhow = "1.0.71"
