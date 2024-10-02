@@ -210,7 +210,7 @@ async fn main() {
                     "update_now" => {                        
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                if let Err(err) = sidecar::kill_sidecar(app_handle.state::<SidecarState>(), app_handle.clone()).await {
+                                if let Err(err) = sidecar::kill_all_sreenpipes(app_handle.state::<SidecarState>(), app_handle.clone()).await {
                                     error!("Failed to kill sidecar: {}", err);
                                 }
                             });

@@ -62,22 +62,6 @@ pub async fn kill_all_sreenpipes(
 }
 
 #[tauri::command]
-pub async fn kill_sidecar(
-    state: State<'_, SidecarState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    debug!("Killing sidecar");
-
-    let mut manager = state.0.lock().await;
-    if let Some(manager) = manager.as_mut() {
-        if let Some(restart_task) = manager.restart_task.take() {
-            restart_task.abort();
-        }
-    }
-    kill_all_sreenpipes(state.clone(), app).await
-}
-
-#[tauri::command]
 pub async fn spawn_screenpipe(
     state: tauri::State<'_, SidecarState>,
     app: tauri::AppHandle,
