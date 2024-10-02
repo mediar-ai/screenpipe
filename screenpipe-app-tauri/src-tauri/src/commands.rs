@@ -1,8 +1,3 @@
-// #[tauri::command]
-// pub fn has_screen_capture_access() -> bool {
-//     scap::has_permission()
-// }
-
 use serde_json::Value;
 use tracing::info;
 
@@ -78,7 +73,6 @@ pub async fn save_pipe_config(pipe_name: String, config: Value) -> Result<(), St
     Ok(())
 }
 
-
 #[tauri::command]
 pub async fn reset_all_pipes() -> Result<(), String> {
     info!("Resetting all pipes");
@@ -100,3 +94,8 @@ pub async fn reset_all_pipes() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn handle_timeline_shortcut() {
+    // This function will be called when the specific shortcut is used
+    // You can add any logic here if needed
+}
