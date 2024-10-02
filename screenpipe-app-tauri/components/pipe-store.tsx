@@ -705,7 +705,6 @@ const PipeDialog: React.FC = () => {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    disabled={health?.status === "error"}
                     size="sm"
                     onClick={handleResetAllPipes}
                   >
