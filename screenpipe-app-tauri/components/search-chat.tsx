@@ -144,7 +144,7 @@ export function SearchChat() {
     const newLimit = example.limit || limit;
     const newMinLength = example.minLength || minLength;
     const newContentType =
-      (example.contentType as "all" | "ocr" | "audio") || contentType;
+      (example.contentType as "all" | "ocr" | "audio" | "screen_capture") || contentType;
     const newStartDate = example.startDate;
 
     setWindowName(newWindowName);
@@ -754,6 +754,9 @@ export function SearchChat() {
               </SelectItem>
               <SelectItem value="audio">
                 <span className="pl-6">audio</span>
+              </SelectItem>
+              <SelectItem value="screen_capture">
+                <span className="pl-6">screen capture</span>
               </SelectItem>
             </SelectContent>
           </Select>

@@ -194,6 +194,12 @@ export function ChatList({
                 ]
               }
 
+              5. user: "ingest screen captures from my recent OBS recordings"
+              {
+                "queries": [
+                  { "content_type": "screen_capture", "start_time": "2024-03-01T00:00:00Z", "end_time": "2024-03-15T23:59:59Z" }
+                ]
+              }
               `,
           },
           // add prev messages but convert all tool role messages to assistant bcs not supported in generateText
@@ -437,7 +443,7 @@ export function SpinnerMessage() {
   return (
     <div className="group relative flex items-start ">
       <div className="flex size-[24px] shrink-0 select-none items-center justify-center rounded-md border bg-primary text-primary-foreground shadow-sm">
-        {settings.useOllama ? <>🦙</> : <IconOpenAI />}
+        {settings.useOllama ? <>�</> : <IconOpenAI />}
       </div>
       <div className="ml-4 h-[24px] flex flex-row items-center flex-1 space-y-2 overflow-hidden px-1">
         {spinner}

@@ -1,6 +1,3 @@
-// ignore all file ts errors
-// @ts-nocheck
-
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -26,6 +23,7 @@ async function queryScreenpipe(params: {
   limit: number;
   start_time: string;
   end_time: string;
+  content_type?: string; // Add content_type parameter
 }) {
   try {
     const queryParams = new URLSearchParams({
@@ -35,6 +33,9 @@ async function queryScreenpipe(params: {
       start_time: params.start_time,
       end_time: params.end_time,
     });
+    if (params.content_type) {
+      queryParams.append("content_type", params.content_type);
+    }
     const response = await fetch(`http://localhost:3030/search?${queryParams}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -117,6 +118,10 @@ Use this function to answer any questions about the user's activity.
                 end_time: {
                   type: "string",
                   description: "The end time for the query in ISO format",
+                },
+                content_type: {
+                  type: "string",
+                  description: "The type of content to search for (e.g., 'ocr', 'audio', 'screen_capture')", // Add content_type parameter description
                 },
               },
               required: ["q", "offset", "limit", "start_time", "end_time"],
@@ -284,7 +289,7 @@ export function ChatList() {
                   }
                 />
                 <AvatarFallback>
-                  {msg.role === "user" ? "YO" : "📺"}
+                  {msg.role === "user" ? "YO" : "�"}
                 </AvatarFallback>
               </Avatar>
               <div className="grid gap-1">
