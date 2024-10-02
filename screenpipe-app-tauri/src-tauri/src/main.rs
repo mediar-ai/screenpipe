@@ -3,19 +3,19 @@
 
 use commands::load_pipe_config;
 use commands::save_pipe_config;
-use sidecar::SidecarManager;
-use tauri::Config;
-use tokio::sync::mpsc;
 use serde_json::Value;
+use sidecar::SidecarManager;
+use tokio::runtime::Handle;
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tauri::Config;
 use tauri::Manager;
 use tauri::Wry;
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
+    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState},
 };
 use tauri_plugin_autostart::MacosLauncher;
@@ -23,25 +23,29 @@ use tauri_plugin_autostart::ManagerExt;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::{with_store, StoreCollection};
+use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
+use updates::start_update_check;
 use uuid::Uuid;
 mod analytics;
 
 use crate::analytics::start_analytics;
 
 mod commands;
-mod sidecar;
 mod server;
+mod sidecar;
+// mod system_tray;
+mod updates;
 pub use commands::open_screen_capture_preferences;
-pub use commands::reset_screen_permissions;
 pub use commands::reset_all_pipes;
+pub use commands::reset_screen_permissions;
+pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
-pub use server::spawn_server;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -62,7 +66,7 @@ fn show_main_window(app_handle: &tauri::AppHandle) {
         let _ = tauri::WebviewWindowBuilder::new(
             app_handle,
             "main",
-            tauri::WebviewUrl::App("index.html".into())
+            tauri::WebviewUrl::App("index.html".into()),
         )
         .title("Screenpipe")
         .build();
@@ -70,18 +74,18 @@ fn show_main_window(app_handle: &tauri::AppHandle) {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() { 
     let _ = fix_path_env::fix();
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
 
     let app = tauri::Builder::default().on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
-                window.hide().unwrap();
-                api.prevent_close();
+        window.hide().unwrap();
+        api.prevent_close();
             }
             _ => {}
-        })
+    })
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -103,6 +107,7 @@ async fn main() {
                 .set_focus()
                 .expect("Can't focus window!");
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -184,7 +189,6 @@ async fn main() {
                 autostart_manager.is_enabled().unwrap()
             );
 
-
             info!("Local data directory: {}", base_dir.display());
 
             // PostHog analytics setup
@@ -196,12 +200,17 @@ async fn main() {
                 let _ = File::create(path.clone()).unwrap();
             }
 
+            // Set up update check
+            let update_manager = start_update_check(app_handle, 1)?;
+
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                 let show = MenuItemBuilder::with_id("show", "Show Screenpipe").build(app)?;
+                let menu_divider = PredefinedMenuItem::separator(app)?;
                 let quit = MenuItemBuilder::with_id("quit", "Quit Screenpipe").build(app)?;
-                let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
+                let menu = MenuBuilder::new(app).items(&[&show, update_manager.update_now_menu_item_ref(), &menu_divider, &quit]).build()?;
                 let _ = main_tray.set_menu(Some(menu));
+
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
                         show_main_window(&app_handle);
@@ -209,6 +218,17 @@ async fn main() {
                     "quit" => {
                         println!("quit clicked");
                         app_handle.exit(0);
+                    },
+                    "update_now" => {                        
+                        tokio::task::block_in_place(move || {
+                            Handle::current().block_on(async move {
+                                if let Err(err) = sidecar::kill_all_sreenpipes(app_handle.state::<SidecarState>(), app_handle.clone()).await {
+                                    error!("Failed to kill sidecar: {}", err);
+                                }
+                            });
+
+                        });
+                        update_manager.update_screenpipe();
                     }
                     _ => (),
                 });
@@ -231,6 +251,8 @@ async fn main() {
                     _ => {}
                 });
             }
+
+            
 
             // Store setup and analytics initialization
             let stores = app.state::<StoreCollection<Wry>>();
@@ -336,7 +358,7 @@ async fn main() {
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
-            
+
             // Add this to shut down the server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
                 let _ = server_shutdown_tx.send(());
