@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.2.87"
+version = "0.2.88"
 description = ""
 authors = ["you"]
 license = ""
@@ -12,17 +12,26 @@ rust-version = "1.75"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-rc.10", features = [] }
+tauri-build = { version = "2.0.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0-rc.10", features = [
+tauri = { version = "2.0.0", features = [
   "macos-private-api",
   "tray-icon",
   "devtools",
   "image-png",
   "image-ico",
 ] }
-tauri-utils = { version = "=2.0.0-rc.10", features = [] }
+tauri-utils = { version = "2.0.0", features = [] }
+
+# plugins
+tauri-plugin-fs = "2.0.0"
+tauri-plugin-notification = "2.0.0"
+tauri-plugin-updater = "2.0.0"
+tauri-plugin-dialog = "2.0.0"
+tauri-plugin-os = "2.0.0"
+tauri-plugin-process = "2.0.0"
+tauri-plugin-autostart = "2.0.0"
 
 serde_json = "1.0"
 
@@ -41,22 +50,15 @@ reqwest = { version = "0.12", features = ["json"] }
 # Uuid
 uuid = { version = "1.10.0", features = ["v4"] }
 
-# OpenTelemetry
-# opentelemetry = { version = "0.25.0" }
-# opentelemetry-otlp = { version = "0.25.0", features = ["http-proto", "reqwest-client"] }
-# tracing-opentelemetry = "0.26.0"
+# tracing
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-appender = "0.2.3"
-# broken not compatible w tauri2?
-# sentry-tauri = "0.2"
 
-# Autostart
-tauri-plugin-autostart = "2.0.0-beta.9"
 
 # Chrono
-tauri-plugin-shell = "2.0.0-rc.2"
-tauri-plugin-store = "2.0.0-beta"
+tauri-plugin-shell = "2.0.0"
+tauri-plugin-store = "2.0.0"
 
 
 anyhow = "1.0.71"
@@ -72,50 +74,22 @@ axum = "0.6.0"    # or your current version
 serde = "1.0.160"
 
 
-tauri-plugin-fs = "2.0.0-beta"
-tauri-plugin-notification = "2.0.0-alpha.3"
-tauri-plugin-updater = "2.0.0-alpha.2"
-tauri-plugin-dialog = "2.0.0-alpha.2"
-tauri-plugin-os = "2.0.0-alpha.2"
-tauri-plugin-process = "2.0.0-alpha.2"
 
 dirs = "5.0.1"
 
-# # M series MacOS
-# [target.'cfg(target_os = "macos")'.dependencies]
-# screenpipe-server = { path = "../../../../screenpipe-server", features = ["metal"] }
-# screenpipe-audio = { path = "../../../../screenpipe-audio", features = ["metal"] }
-
-# # Linux
-# [target.'cfg(target_os = "linux")'.dependencies]
-# screenpipe-server = { path = "../../../../screenpipe-server", features = [] }
-# screenpipe-audio = { path = "../../../../screenpipe-audio", features = [] }
-
-# # Windows
-# [target.'cfg(target_os = "windows")'.dependencies]
-# screenpipe-server = { path = "../../../../screenpipe-server", features = [] }
-# screenpipe-audio = { path = "../../../../screenpipe-audio", features = [] }
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
-tauri-plugin-cli = "2.0.0-alpha.2"
+tauri-plugin-cli = "2.0.0"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
-tauri-plugin-single-instance = "2.0.0-rc.1"
-tauri-plugin-updater = "2.0.0-alpha.2"
+tauri-plugin-single-instance = "2.0.0"
+tauri-plugin-updater = "2.0.0"
 
 [features]
-# cuda = ["screenpipe-server/cuda", "screenpipe-audio/cuda"]
-# metal = ["screenpipe-server/metal", "screenpipe-audio/metal"]
 cudart = []
-metal = []                    # unused
+metal = []
 mkl = []
 default = ["custom-protocol"]
-
-# TODOS one day
-# coreml = []
-# openblas = []
-# opencl = []
-# rocm = []
 
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]

@@ -8,7 +8,7 @@ use tauri::Emitter;
 use tauri::{Manager, State, Wry};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_store::{with_store, StoreCollection};
+use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
@@ -79,137 +79,78 @@ pub async fn spawn_screenpipe(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    let stores = app.state::<StoreCollection<Wry>>();
     let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-    let sidecar = app.shell().sidecar("screenpipe").unwrap();
     let path = base_dir.join("store.bin");
+    let store = StoreBuilder::new(&app.clone(), path).build();
 
-    let audio_transcription_engine =
-        with_store(app.clone(), stores.clone(), path.clone(), |store| {
-            Ok(store
-                .get("audioTranscriptionEngine")
-                .and_then(|v| v.as_str().map(String::from)))
-        })
-        .map_err(|e| e.to_string())?
+    let audio_transcription_engine = store
+        .get("audioTranscriptionEngine")
+        .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
 
-    let ocr_engine = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("ocrEngine")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
+    let ocr_engine = store
+        .get("ocrEngine")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
 
-    let monitor_ids = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("monitorIds")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or_default();
+    let monitor_ids = store
+        .get("monitorIds")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
 
-    let audio_devices = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("audioDevices")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or_default();
+    let audio_devices = store
+        .get("audioDevices")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
 
-    let use_pii_removal = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("usePiiRemoval")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
-    let port = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030))
-    })
-    .map_err(|e| e.to_string())?;
-    let data_dir = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("dataDir")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
+    let use_pii_removal = store
+        .get("usePiiRemoval")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    let disable_audio = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("disableAudio")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
+    let port = store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030);
 
-    let ignored_windows = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("ignoredWindows")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(String::from)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default())
-    })
-    .map_err(|e| e.to_string())?;
+    let data_dir = store
+        .get("dataDir")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
 
-    let included_windows = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("includedWindows")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(String::from)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default())
-    })
-    .map_err(|e| e.to_string())?;
+    let disable_audio = store
+        .get("disableAudio")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    let deepgram_api_key = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("deepgramApiKey")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
+    let ignored_windows = store
+        .get("ignoredWindows")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
 
-    let fps = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store.get("fps").and_then(|v| v.as_f64()).unwrap_or(0.2))
-    })
-    .map_err(|e| e.to_string())?;
+    let included_windows = store
+        .get("includedWindows")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
 
-    let dev_mode = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("devMode")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
+    let deepgram_api_key = store
+        .get("deepgramApiKey")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
 
-    let vad_sensitivity = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("vadSensitivity")
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or(String::from("high")))
-    })
-    .map_err(|e| e.to_string())?;
+    let fps = store.get("fps").and_then(|v| v.as_f64()).unwrap_or(0.2);
 
-    let audio_chunk_duration = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("audioChunkDuration")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(30))
-    })
-    .map_err(|e| e.to_string())?;
+    let dev_mode = store
+        .get("devMode")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let vad_sensitivity = store
+        .get("vadSensitivity")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("high"));
+
+    let audio_chunk_duration = store
+        .get("audioChunkDuration")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(30);
 
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
@@ -238,7 +179,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         let model = ocr_engine.as_str();
         args.push(model);
     }
-
 
     if !monitor_ids.is_empty() && monitor_ids[0] != Value::String("default".to_string()) {
         for monitor in &monitor_ids {
@@ -271,14 +211,14 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if !ignored_windows.is_empty() {
         for window in &ignored_windows {
             args.push("--ignored-windows");
-            args.push(window);
+            args.push(window.as_str().unwrap());
         }
     }
 
     if !included_windows.is_empty() {
         for window in &included_windows {
             args.push("--included-windows");
-            args.push(window);
+            args.push(window.as_str().unwrap());
         }
     }
     let current_pid = std::process::id();
@@ -309,7 +249,12 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             .expect("Failed to get parent directory of executable")
             .to_path_buf();
         let tessdata_path = exe_dir.join("tessdata");
-        let c = sidecar.env("TESSDATA_PREFIX", tessdata_path).args(&args);
+        let c = app
+            .shell()
+            .sidecar("screenpipe")
+            .unwrap()
+            .env("TESSDATA_PREFIX", tessdata_path)
+            .args(&args);
 
         let (_, child) = c.spawn().map_err(|e| {
             error!("Failed to spawn sidecar: {}", e);
@@ -321,7 +266,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         return Ok(child);
     }
 
-    let command = sidecar.args(&args);
+    let command = app.shell().sidecar("screenpipe").unwrap().args(&args);
 
     let result = command.spawn();
     if let Err(e) = result {
@@ -419,27 +364,21 @@ impl SidecarManager {
     }
 
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
-        let stores = app.state::<StoreCollection<Wry>>();
         let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
         let path = base_dir.join("store.bin");
+        let store = StoreBuilder::new(&app.clone(), path).build();
 
-        let restart_interval = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-            Ok(store
-                .get("restartInterval")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0))
-        })
-        .map_err(|e| e.to_string())?;
+        let restart_interval = store
+            .get("restartInterval")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
 
         debug!("restart_interval: {}", restart_interval);
 
-        let dev_mode = with_store(app.clone(), stores.clone(), path, |store| {
-            Ok(store
-                .get("devMode")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false))
-        })
-        .map_err(|e| e.to_string())?;
+        let dev_mode = store
+            .get("devMode")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         debug!("dev_mode: {}", dev_mode);
 
