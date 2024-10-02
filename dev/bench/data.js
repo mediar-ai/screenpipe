@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727827967398,
+  "lastUpdate": 1727886240807,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -11429,6 +11429,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2125132104,
             "range": "± 109349141",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c8b150901512d53043f53d2e826f8fb8031c93c2",
+          "message": "Merge pull request #392 from EzraEllette/386-add-update-to-tray\n\n386 add update to tray",
+          "timestamp": "2024-10-02T09:15:30-07:00",
+          "tree_id": "46a198db48e1f909844d5f9251c44f2238215f0f",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/c8b150901512d53043f53d2e826f8fb8031c93c2"
+        },
+        "date": 1727886239175,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2108172500,
+            "range": "± 97974032",
             "unit": "ns/iter"
           }
         ]
