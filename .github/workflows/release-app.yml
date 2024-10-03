@@ -195,6 +195,13 @@ jobs:
         with:
           version: "10.0"
 
+      - name: Upload build artifacts
+        if: matrix.platform == 'macos-latest' && matrix.args == '--target aarch64-apple-darwin --features metal'
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts-2
+          path: ./screenpipe-app-tauri/src-tauri/screenpipe-aarch64-apple-darwin
+
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
