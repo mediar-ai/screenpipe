@@ -13,17 +13,17 @@ on:
   workflow_dispatch:
 
 jobs:
-  # draft:
-  #   runs-on: ubuntu-latest
+  draft:
+    runs-on: ubuntu-latest
 
-  #   steps:
-  #     - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-  #     - name: create draft release
-  #       uses: crabnebula-dev/cloud-release@v0
-  #       with:
-  #         command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
-  #         api-key: ${{ secrets.CN_API_KEY }}
+      - name: create draft release
+        uses: crabnebula-dev/cloud-release@v0
+        with:
+          command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
 
   publish-tauri:
     # needs: draft
