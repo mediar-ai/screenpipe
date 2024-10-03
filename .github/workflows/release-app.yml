@@ -44,7 +44,7 @@ jobs:
           # - platform: "windows-latest" # Windows x86_64
           #   args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
           #   pre-build-args: "" # --openblas
-            # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
+          # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -149,7 +149,7 @@ jobs:
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
-            # export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
+            export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
             # export V8_FLAGS="--max-old-space-size=4096" # https://github.com/denoland/deno_core/issues/916
           fi
           # cargo build --release ${{ matrix.args }}
@@ -157,6 +157,7 @@ jobs:
           cargo build --release ${{ matrix.args }}
 
       - name: Upload build artifacts
+        if: matrix.platform == 'macos-latest' && matrix.args == '--target aarch64-apple-darwin --features metal'
         uses: actions/upload-artifact@v3
         with:
           name: build-artifacts
@@ -165,60 +166,60 @@ jobs:
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
 
-      # # Run pre build again to copy the CLI into app
-      # - name: Run pre_build.js on ${{ matrix.platform }}
-      #   shell: bash
-      #   run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-      #   working-directory: ./screenpipe-app-tauri
+      # Run pre build again to copy the CLI into app
+      - name: Run pre_build.js on ${{ matrix.platform }}
+        shell: bash
+        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        working-directory: ./screenpipe-app-tauri
 
-      # - name: Identify esaxx usage (Windows)
-      #   if: matrix.platform == 'windows-latest'
-      #   run: |
-      #     cargo tree > cargo_tree_output.txt
-      #     findstr /i "esaxx" cargo_tree_output.txt
-      #   continue-on-error: true
+      - name: Identify esaxx usage (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          cargo tree > cargo_tree_output.txt
+          findstr /i "esaxx" cargo_tree_output.txt
+        continue-on-error: true
 
-      # - name: Install vcpkg
-      #   if: matrix.platform == 'windows-latest'
-      #   uses: lukka/run-vcpkg@v11
-      #   with:
-      #     vcpkgGitCommitId: "5b1214315250939257ef5d62ecdcbca18cf4fb1c"
+      - name: Install vcpkg
+        if: matrix.platform == 'windows-latest'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "5b1214315250939257ef5d62ecdcbca18cf4fb1c"
 
-      # - name: Set up MSVC
-      #   if: matrix.platform == 'windows-latest'
-      #   uses: ilammy/msvc-dev-cmd@v1
+      - name: Set up MSVC
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
 
-      # - name: Install LLVM and Clang
-      #   if: matrix.platform == 'windows-latest'
-      #   uses: KyleMayes/install-llvm-action@v2
-      #   with:
-      #     version: "10.0"
+      - name: Install LLVM and Clang
+        if: matrix.platform == 'windows-latest'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
 
-      # - name: Build
-      #   uses: tauri-apps/tauri-action@v0
-      #   env:
-      #     # for updater
-      #     TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-      #     TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-      #     # for release
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #     # for macos signing
-      #     APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      #     APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      #     APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      #     APPLE_ID: ${{ secrets.APPLE_ID }}
-      #     APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      #     APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      #     # https://tauri.app/v1/guides/distribution/sign-macos
-      #     CI: true
-      #   with:
-      #     args: ${{ matrix.args }}
-      #     projectPath: "./screenpipe-app-tauri"
-      #     tauriScript: bunx tauri -v
+      - name: Build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # for updater
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          # for release
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # for macos signing
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # https://tauri.app/v1/guides/distribution/sign-macos
+          CI: true
+        with:
+          args: ${{ matrix.args }}
+          projectPath: "./screenpipe-app-tauri"
+          tauriScript: bunx tauri -v
 
-      # - name: Upload Assets to CrabNebula Cloud
-      #   uses: crabnebula-dev/cloud-release@v0
-      #   with:
-      #     command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
-      #     api-key: ${{ secrets.CN_API_KEY }}
-      #     path: ./screenpipe-app-tauri/src-tauri
+      - name: Upload Assets to CrabNebula Cloud
+        uses: crabnebula-dev/cloud-release@v0
+        with:
+          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: ./screenpipe-app-tauri/src-tauri
