@@ -154,13 +154,13 @@ jobs:
           fi
           # cargo build --release ${{ matrix.args }}
           # tmp https://github.com/denoland/deno_core/issues/916
-          cargo build ${{ matrix.args }}
+          cargo build --release ${{ matrix.args }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
         with:
           name: build-artifacts
-          path: ./target/aarch64-apple-darwin/debug/screenpipe
+          path: ./target/aarch64-apple-darwin/release/screenpipe
 
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
