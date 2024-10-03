@@ -156,8 +156,8 @@ jobs:
           # tmp https://github.com/denoland/deno_core/issues/916
           cargo build ${{ matrix.args }}
 
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
 
       # Run pre build again to copy the CLI into app
       - name: Run pre_build.js on ${{ matrix.platform }}
