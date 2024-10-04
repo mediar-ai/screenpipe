@@ -7,8 +7,12 @@ mod pipes {
     use deno_core::error::AnyError;
     use deno_core::extension;
     use deno_core::op2;
+    use deno_core::v8;
+    use deno_core::v8::Platform;
+    use deno_core::v8::SharedRef;
     use deno_core::ModuleLoadResponse;
     use deno_core::ModuleSourceCode;
+    use deno_core::RuntimeOptions;
     use lettre::message::header::ContentType;
     use regex::Regex;
     use reqwest::header::HeaderMap;
@@ -23,6 +27,7 @@ mod pipes {
     use reqwest::Client;
     use serde_json::Value;
 
+    use deno_core::v8::CreateParams;
     use lettre::transport::smtp::authentication::Credentials;
     use lettre::{Message, SmtpTransport, Transport};
     use reqwest;
@@ -336,9 +341,13 @@ mod pipes {
         screenpipe_dir: PathBuf,
     ) -> anyhow::Result<()> {
         let main_module = deno_core::resolve_path(file_path, env::current_dir()?.as_path())?;
+        let platform_params = v8::CreateParams::default().heap_limits(0, 4 * 1024 * 1024 * 1024); // Set max old space size to 4GB
+
+
         let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(TsModuleLoader)),
             startup_snapshot: Some(RUNTIME_SNAPSHOT),
+            create_params: Some(platform_params),
             extensions: vec![runjs::init_ops()],
             ..Default::default()
         });
