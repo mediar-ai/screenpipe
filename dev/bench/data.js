@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728061570846,
+  "lastUpdate": 1728068380327,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -12359,6 +12359,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1847487083,
             "range": "± 8143208",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "0c0f4c403c27a6b73055b781aac5e9a90a518f9d",
+          "message": "refactor: download silero just once, and use cache dir",
+          "timestamp": "2024-10-04T11:49:40-07:00",
+          "tree_id": "2895720da4b97cf7c920ae177c84bf7e6aadfbc0",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/0c0f4c403c27a6b73055b781aac5e9a90a518f9d"
+        },
+        "date": 1728068376835,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1926178833,
+            "range": "± 71191493",
             "unit": "ns/iter"
           }
         ]
