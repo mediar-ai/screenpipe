@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728061516758,
+  "lastUpdate": 1728061570846,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -12329,6 +12329,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2030313646,
             "range": "± 98511816",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "549aa5fadc8264895457fad125b3baf962687432",
+          "message": "Merge QuincySan-CN_support branch, keeping our bun.lockb",
+          "timestamp": "2024-10-04T09:55:25-07:00",
+          "tree_id": "ede472ba7fd48b59fdb0b520d9c8a16032f05e26",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/549aa5fadc8264895457fad125b3baf962687432"
+        },
+        "date": 1728061569709,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1847487083,
+            "range": "± 8143208",
             "unit": "ns/iter"
           }
         ]
