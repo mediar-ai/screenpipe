@@ -56,7 +56,7 @@ sysinfo = "0.29.0"
 colored = "2.0"
 
 # Plugins
-tower = "0.4"
+tower = { version = "0.5", features = ["util"] }
 futures = "0.3.17"
 
 # Directory management
