@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728060843980,
+  "lastUpdate": 1728061516758,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -12299,6 +12299,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1992289021,
             "range": "± 20531771",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e2045a2f6ee277847f7d2e8a15a6efced67fc7fd",
+          "message": "Merge pull request #428 from charpeni/patch-1\n\nFix typos in `CONTRIBUTING.md`",
+          "timestamp": "2024-10-04T09:57:07-07:00",
+          "tree_id": "aa76a8e737e3853cb7d0e141c436ef744b7afa5d",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e2045a2f6ee277847f7d2e8a15a6efced67fc7fd"
+        },
+        "date": 1728061515143,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2030313646,
+            "range": "± 98511816",
             "unit": "ns/iter"
           }
         ]
