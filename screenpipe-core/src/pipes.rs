@@ -8,11 +8,8 @@ mod pipes {
     use deno_core::extension;
     use deno_core::op2;
     use deno_core::v8;
-    use deno_core::v8::Platform;
-    use deno_core::v8::SharedRef;
     use deno_core::ModuleLoadResponse;
     use deno_core::ModuleSourceCode;
-    use deno_core::RuntimeOptions;
     use lettre::message::header::ContentType;
     use regex::Regex;
     use reqwest::header::HeaderMap;
@@ -27,7 +24,6 @@ mod pipes {
     use reqwest::Client;
     use serde_json::Value;
 
-    use deno_core::v8::CreateParams;
     use lettre::transport::smtp::authentication::Credentials;
     use lettre::{Message, SmtpTransport, Transport};
     use reqwest;
