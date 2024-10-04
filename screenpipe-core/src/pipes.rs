@@ -341,14 +341,20 @@ mod pipes {
         screenpipe_dir: PathBuf,
     ) -> anyhow::Result<()> {
         let main_module = deno_core::resolve_path(file_path, env::current_dir()?.as_path())?;
-        let platform_params = v8::CreateParams::default().heap_limits(0, 4 * 1024 * 1024 * 1024); // Set max old space size to 4GB
 
+        // Adjust these values as needed
+        let max_old_space_size = 2 * 1024 * 1024 * 1024; // 2GB
+        let initial_old_space_size = 512 * 1024 * 1024; // 512MB
+
+        let platform_params =
+            v8::CreateParams::default().heap_limits(initial_old_space_size, max_old_space_size);
 
         let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(TsModuleLoader)),
             startup_snapshot: Some(RUNTIME_SNAPSHOT),
             create_params: Some(platform_params),
             extensions: vec![runjs::init_ops()],
+            v8_platform: Some(v8::new_default_platform(0, false).make_shared()),
             ..Default::default()
         });
 
