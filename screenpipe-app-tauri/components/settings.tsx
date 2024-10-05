@@ -26,8 +26,6 @@ import { Slider } from "@/components/ui/slider"; // Add this import
 import { Eye, EyeOff, HelpCircle, RefreshCw, Settings2 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
-import posthog from "posthog-js";
-import { trace } from "@opentelemetry/api";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
@@ -76,29 +74,6 @@ export function Settings({ className }: { className?: string }) {
     const newValue = value[0];
     setLocalSettings({ ...localSettings, aiMaxContextChars: newValue });
     updateSettings({ aiMaxContextChars: newValue });
-  };
-
-  const handleAnalyticsToggle = (checked: boolean) => {
-    const newValue = checked;
-    setLocalSettings({ ...localSettings, analyticsEnabled: newValue });
-    updateSettings({ analyticsEnabled: newValue });
-
-    if (!newValue) {
-      posthog.capture("telemetry", {
-        enabled: false,
-      });
-      // disable opentelemetry
-      trace.disable();
-      posthog.opt_out_capturing();
-      console.log("telemetry disabled");
-    } else {
-      posthog.opt_in_capturing();
-      posthog.capture("telemetry", {
-        enabled: true,
-      });
-      // enable opentelemetry
-      console.log("telemetry enabled");
-    }
   };
 
   React.useEffect(() => {
@@ -378,39 +353,6 @@ export function Settings({ className }: { className?: string }) {
                   deepgram&apos;s website
                 </a>{" "}
                 or DM us on discord, it&apos;s on us!
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-center">privacy settings</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center space-y-4">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="analytics-toggle"
-                  checked={localSettings.analyticsEnabled}
-                  onCheckedChange={handleAnalyticsToggle}
-                />
-                <Label htmlFor="analytics-toggle">enable telemetry</Label>
-              </div>
-              <p className="text-sm text-muted-foreground text-center">
-                telemetry helps us improve screenpipe.
-                <br />
-                when enabled, we collect anonymous usage data such as button
-                clicks.
-                <br />
-                we do not collect any screen data, microphone, query data. read
-                more on our data privacy policy{" "}
-                <a
-                  href="https://screenpi.pe/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  here
-                </a>
               </p>
             </CardContent>
           </Card>

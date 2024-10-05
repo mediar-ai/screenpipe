@@ -55,7 +55,7 @@
 
 *Latest News* 🔥
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
-- [2024/09] 70 users run screenpipe 24/7!
+- [2024/09] 150 users run screenpipe 24/7!
 - [2024/09] Released a v0 of our [documentation](https://docs.screenpi.pe/)
 - [2024/08] Anyone can now [create, share, install pipes](https://youtu.be/iCqHgZgQHyA?si=DjKJir7HfZoQKItK) (plugins) from the app interface based on a github repo/dir
 - [2024/08] We're running bounties! Contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
@@ -105,7 +105,7 @@ screenpipe has a plugin system called "pipe" which lets you run code in a sandbo
 
 ## star history
 
-![GitHub Star History (6)](https://github.com/user-attachments/assets/91cdc7a6-19ea-4156-a7bf-a2bef4cc946f)
+![GitHub Star History (10)](https://github.com/user-attachments/assets/5d5c9672-d2d3-4e4c-8734-a7e0c2fee246)
 
 
 ## Contributing

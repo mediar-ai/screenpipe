@@ -9,7 +9,8 @@ use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
-use log::{debug, error, info};
+use highlightio::{Highlight, HighlightConfig};
+use log::{debug, error, info, Log, Metadata, Record};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,
@@ -25,7 +26,6 @@ use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
-
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -58,6 +58,9 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     fs::create_dir_all(&data_dir)?;
     Ok(base_dir)
 }
+
+
+
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -128,29 +131,24 @@ async fn main() -> anyhow::Result<()> {
         env_filter
     };
 
-    // Initialize the tracing subscriber with both layers and the EnvFilter
+    let mut h: Option<Highlight> = None;
+    if !cli.disable_telemetry {
+        // TODO crashes on init
+        // h = Some(Highlight::init(HighlightConfig {
+        //     project_id: "82688".to_string(),
+        //     logger: Box::new(NopLogger),
+        //     ..Default::default()
+        // }).expect("Failed to initialize Highlight.io"));
+    } 
+    
+    // Initialize tracing without OpenTelemetry if telemetry is disabled
     tracing_subscriber::registry()
         .with(env_filter)
         .with(file_layer)
         .with(console_layer)
         .init();
 
-    // Add warning for Linux and Windows users
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
-    {
-        use log::warn;
-        warn!("screenpipe hasn't been extensively tested on this os. we'd love your feedback!");
-        println!(
-            "{}",
-            "would love your feedback on the ux, let's a 15 min call soon:".bright_yellow()
-        );
-        println!(
-            "{}",
-            "https://cal.com/louis030195/screenpipe"
-                .bright_blue()
-                .underline()
-        );
-    }
+
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
     if cli.list_audio_devices {
@@ -381,7 +379,7 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌─────────────────────┬────────────────────────────────────┐");
+    println!("┌───────────────────┬────────────────────────────────────┐");
     println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
@@ -418,6 +416,7 @@ async fn main() -> anyhow::Result<()> {
         local_data_dir_clone.display()
     );
     println!("│ debug mode          │ {:<34} │", cli.debug);
+    println!("│ telemetry           │ {:<34} │", !cli.disable_telemetry);
 
     println!("│ use pii removal     │ {:<34} │", cli.use_pii_removal);
     println!(
@@ -521,7 +520,7 @@ async fn main() -> anyhow::Result<()> {
 
     println!("└─────────────────────┴────────────────────────────────────┘");
 
-    // Add warning for cloud arguments
+    // Add warning for cloud arguments and telemetry
     if warning_audio_transcription_engine_clone == CliAudioTranscriptionEngine::Deepgram
         || warning_ocr_engine_clone == CliOcrEngine::Unstructured
     {
@@ -535,6 +534,22 @@ async fn main() -> anyhow::Result<()> {
             "{}",
             "you are using local processing. all your data stays on your computer.\n"
                 .bright_yellow()
+        );
+    }
+
+    // Add warning for telemetry
+    if !cli.disable_telemetry {
+        println!(
+            "{}",
+            "warning: telemetry is enabled. only error-level data will be sent to highlight.io.\n\
+            to disable, use the --disable-telemetry flag."
+                .bright_yellow()
+        );
+    } else {
+        println!(
+            "{}",
+            "telemetry is disabled. no data will be sent to external services."
+                .bright_green()
         );
     }
 
@@ -600,6 +615,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     info!("shutdown complete");
+
+    if let Some(h) = h {
+        h.shutdown();
+    }
+
     Ok(())
 }
 

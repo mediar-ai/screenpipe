@@ -23,7 +23,7 @@ const config = {
 	ffmpegRealname: 'ffmpeg',
 	openblasRealname: 'openblas',
 	clblastRealname: 'clblast',
-	windows: { // TODO probably windows lack mp3
+	windows: {
 		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
 		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 
@@ -243,8 +243,8 @@ if (platform == 'windows') {
 		await $`rm ${config.windows.clblastName}.7z`
 	}
 
-	// Setup vcpkg packages
-	await $`C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
+	// Setup vcpkg packages with environment variables set inline
+	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {

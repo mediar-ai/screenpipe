@@ -2,7 +2,7 @@
 
 First off, thank you for considering contributing to Screen Pipe! It's people like you that make Screen Pipe such a great tool.
 
-I'd love to personnally onboard you to the project. Let's [schedule a call](https://cal.com/louis030195/screenpipe).
+I'd love to personally onboard you to the project. Let's [schedule a call](https://cal.com/louis030195/screenpipe).
 
 ## Getting Started
 
@@ -55,7 +55,7 @@ We follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) fold
 
 ### AI system prompt
 
-i use cursor with this prompt to help me with the code:
+I use cursor with this prompt to help me with the code:
 
 ```
 Rules:

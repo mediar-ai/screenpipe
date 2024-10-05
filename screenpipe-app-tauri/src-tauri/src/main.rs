@@ -198,7 +198,7 @@ async fn main() {
             }
 
             // Set up update check
-            let update_manager = start_update_check(app_handle, 1)?;
+            let update_manager = start_update_check(app_handle, 5)?;
 
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
@@ -224,6 +224,14 @@ async fn main() {
                         app_handle.exit(0);
                     }
                     "update_now" => {
+                        use tauri_plugin_notification::NotificationExt;
+                        app_handle.notification()
+                            .builder()
+                            .title("screenpipe")
+                            .body("installing latest version")
+                            .show()
+                            .unwrap();
+
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
                                 if let Err(err) = sidecar::kill_all_sreenpipes(
