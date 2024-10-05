@@ -44,7 +44,10 @@ jobs:
           - platform: "windows-latest" # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
             pre-build-args: "" # --openblas
-          # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
+            target: x86_64-pc-windows-msvc
+          - platform: "windows-latest"
+            args: "--target aarch64-pc-windows-msvc"
+            target: aarch64-pc-windows-msvc
 
     runs-on: ${{ matrix.platform }}
     steps:
