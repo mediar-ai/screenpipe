@@ -124,7 +124,7 @@ jobs:
 
       # Run pre build
       - name: Run pre_build.js on ${{ matrix.platform }}
-        shell: ${ matrix.platform != 'windows-latest' && 'bash' || 'pwsh' }
+        shell: ${{ matrix.platform != 'windows-latest' && 'bash' || 'pwsh' }}
         env:
           SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
         run: |
