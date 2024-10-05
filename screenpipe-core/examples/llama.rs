@@ -1,14 +1,12 @@
 use anyhow::Result;
-#[cfg(feature = "llm")]
-use screenpipe_core::llama::LlamaInitConfig;
-#[cfg(feature = "llm")]
-use screenpipe_core::llama_stream_text;
 
+#[cfg(feature = "llm")]
 fn main() -> Result<()> {
     #[cfg(feature = "llm")]
-    llama_stream_text(LlamaInitConfig::default(), |text| {
-        println!("{}", text);
-        Ok(())
-    })?;
+    {
+        let mut llama = screenpipe_core::llama::Llama::new()?;
+        llama.llama_stream_text(Some("What is the meaning of life?".to_string()), None)?;
+        llama.llama_stream_text(Some("What is the meaning of life?".to_string()), None)?;
+    }
     Ok(())
 }
