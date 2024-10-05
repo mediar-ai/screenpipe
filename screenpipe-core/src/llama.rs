@@ -294,6 +294,8 @@ mod llm_module {
                 .get_ids()
                 .to_vec();
 
+            let prompt_tokens = tokens.len();
+
             let mut tokenizer = TokenOutputStream::new(self.tokenizer.clone());
 
             let mut output = String::new();
@@ -363,9 +365,6 @@ mod llm_module {
                 token_generated, tps
             );
 
-            // TODO: delete
-            debug_assert!(tps > 45.);
-
             Ok(ChatResponse {
                 id: "123".to_string(),
                 object: "chat.completion".to_string(),
@@ -382,10 +381,11 @@ mod llm_module {
                     finish_reason: "stop".to_string(),
                 }],
                 usage: ChatResponseUsage {
-                    prompt_tokens: tokens.len() as i64,
+                    prompt_tokens: prompt_tokens as i64,
                     completion_tokens: token_generated,
                     total_tokens: token_generated,
                     completion_tokens_details: serde_json::Value::Null,
+                    tps,
                 },
             })
         }

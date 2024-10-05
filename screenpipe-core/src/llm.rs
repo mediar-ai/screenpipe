@@ -24,6 +24,7 @@ mod llm_module {
         pub completion_tokens: i64,
         pub total_tokens: i64,
         pub completion_tokens_details: serde_json::Value,
+        pub tps: f64,
     }
 
     #[derive(Serialize, Deserialize)]
