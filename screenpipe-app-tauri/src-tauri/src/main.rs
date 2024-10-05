@@ -198,7 +198,7 @@ async fn main() {
             }
 
             // Set up update check
-            let update_manager = start_update_check(app_handle, 1)?;
+            let update_manager = start_update_check(app_handle, 5)?;
 
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {

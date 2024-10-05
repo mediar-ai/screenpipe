@@ -17,13 +17,13 @@ pub struct UpdatesManager {
 }
 
 impl UpdatesManager {
-    pub fn new(app: &tauri::AppHandle, interval_hours: u64) -> Result<Self, Error> {
+    pub fn new(app: &tauri::AppHandle, interval_minutes: u64) -> Result<Self, Error> {
         Ok(Self {
-            interval: Duration::from_secs(interval_hours * 3600),
+            interval: Duration::from_secs(interval_minutes * 60),
             update_available: Arc::new(Mutex::new(false)),
             update_installed: Arc::new(Mutex::new(false)),
             app: app.clone(),
-            update_menu_item: MenuItemBuilder::with_id("update_now", "Screenpipe is up to date")
+            update_menu_item: MenuItemBuilder::with_id("update_now", "screenpipe is up to date")
                 .enabled(false)
                 .build(app)?,
         })
@@ -34,7 +34,7 @@ impl UpdatesManager {
             *self.update_available.lock().await = true;
 
             self.update_menu_item
-                .set_text("Downloading Latest Version of Screenpipe")?;
+                .set_text("downloading latest version of screenpipe")?;
 
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
                 let path = self.app.path().resolve(
@@ -52,7 +52,7 @@ impl UpdatesManager {
 
             *self.update_installed.lock().await = true;
             self.update_menu_item.set_enabled(true)?;
-            self.update_menu_item.set_text("Update Now")?;
+            self.update_menu_item.set_text("update now")?;
 
             return Result::Ok(true);
         }
@@ -84,9 +84,9 @@ impl UpdatesManager {
 
 pub fn start_update_check(
     app: &tauri::AppHandle,
-    interval_hours: u64,
+    interval_minutes: u64,
 ) -> Result<Arc<UpdatesManager>, Box<dyn std::error::Error>> {
-    let updates_manager = Arc::new(UpdatesManager::new(app, interval_hours)?);
+    let updates_manager = Arc::new(UpdatesManager::new(app, interval_minutes)?);
 
     // Check for updates at boot
     tokio::spawn({
