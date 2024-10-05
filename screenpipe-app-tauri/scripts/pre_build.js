@@ -18,14 +18,7 @@ console.log('cwd', cwd)
 function hasFeature(name) {
 	return process.argv.includes(`--${name}`) || process.argv.includes(name)
 }
-// Add this near the top of the file, after imports
-if (platform === 'windows') {
-	console.log('Applying vcpkg download fix for Windows...');
-	process.env.SystemDrive = process.env.SYSTEMDRIVE;
-	process.env.SystemRoot = process.env.SYSTEMROOT;
-	process.env.windir = process.env.WINDIR;
-	console.log('vcpkg download fix applied.');
-}
+
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	openblasRealname: 'openblas',
@@ -250,8 +243,8 @@ if (platform == 'windows') {
 		await $`rm ${config.windows.clblastName}.7z`
 	}
 
-	// Setup vcpkg packages
-	await $`C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
+	// Setup vcpkg packages with environment variables set inline
+	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {
