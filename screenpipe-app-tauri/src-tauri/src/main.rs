@@ -224,6 +224,14 @@ async fn main() {
                         app_handle.exit(0);
                     }
                     "update_now" => {
+                        use tauri_plugin_notification::NotificationExt;
+                        app_handle.notification()
+                            .builder()
+                            .title("screenpipe")
+                            .body("installing latest version")
+                            .show()
+                            .unwrap();
+
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
                                 if let Err(err) = sidecar::kill_all_sreenpipes(
