@@ -477,22 +477,6 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     let now = Utc::now();
     let threshold = Duration::from_secs(60);
-    let loading_threshold = Duration::from_secs(120);
-
-    let app_start_time = state.app_start_time;
-    let time_since_start = now.signed_duration_since(app_start_time);
-
-    if time_since_start < chrono::Duration::from_std(loading_threshold).unwrap() {
-        return JsonResponse(HealthCheckResponse {
-            status: "loading".to_string(),
-            last_frame_timestamp: last_frame,
-            last_audio_timestamp: last_audio,
-            frame_status: "loading".to_string(),
-            audio_status: "loading".to_string(),
-            message: "the application is still initializing. please wait...".to_string(),
-            verbose_instructions: None,
-        });
-    }
 
     let frame_status = if state.vision_disabled {
         "disabled"
@@ -883,7 +867,7 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&start_time=
 curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for content between 2 hours ago and 1 hour ago
-curl "http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for OCR content from yesterday
 curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
@@ -1040,6 +1024,5 @@ echo "Merge Response: $MERGE_RESPONSE"
 MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
-
 
 */
