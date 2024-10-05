@@ -122,26 +122,13 @@ jobs:
           ls . 
           bun install
 
-      # Run pre build for non-Windows platforms
-      - name: Run pre_build.js (non-Windows)
-        if: runner.os != 'Windows'
+      - name: Run pre_build.js
         shell: bash
         env:
           SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
           ls -R .
-        working-directory: ./screenpipe-app-tauri
-
-      # Run pre build for Windows
-      - name: Run pre_build.js (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
-        run: |
-          bun ./scripts/pre_build.js $env:pre_build_args
-          Get-ChildItem -Recurse
         working-directory: ./screenpipe-app-tauri
 
       - name: Verify Tesseract Installation
