@@ -7,6 +7,10 @@ use axum::{
 };
 use crossbeam::queue::SegQueue;
 use futures::future::{try_join, try_join_all};
+#[cfg(feature = "llm")]
+use screenpipe_core::LLM;
+#[cfg(feature = "llm")]
+use screenpipe_core::{ChatRequest, ChatResponse};
 use screenpipe_vision::monitor::list_monitors;
 
 use crate::{
@@ -46,6 +50,8 @@ pub struct AppState {
     pub pipe_manager: Arc<PipeManager>,
     pub vision_disabled: bool,
     pub audio_disabled: bool,
+    #[cfg(feature = "llm")]
+    pub llm: Option<LLM>,
 }
 
 // Update the SearchQuery struct
@@ -689,9 +695,12 @@ pub struct Server {
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
     audio_disabled: bool,
+    #[cfg(feature = "llm")]
+    llm: Option<LLM>,
 }
 
 impl Server {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
@@ -701,6 +710,7 @@ impl Server {
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
         audio_disabled: bool,
+        #[cfg(feature = "llm")] llm: Option<LLM>,
     ) -> Self {
         Server {
             db,
@@ -711,6 +721,8 @@ impl Server {
             pipe_manager,
             vision_disabled,
             audio_disabled,
+            #[cfg(feature = "llm")]
+            llm,
         }
     }
 
@@ -732,6 +744,8 @@ impl Server {
             pipe_manager: self.pipe_manager,
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
+            #[cfg(feature = "llm")]
+            llm: self.llm,
         });
 
         let app = create_router()
@@ -776,6 +790,40 @@ async fn merge_frames_handler(
     }
 }
 
+#[cfg(feature = "llm")]
+async fn llm_chat_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<ChatRequest>,
+) -> Result<JsonResponse<ChatResponse>, (StatusCode, JsonResponse<Value>)> {
+    if payload.stream {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": "Stream not supported"})),
+        ));
+    }
+
+    let llm = match &state.llm {
+        Some(llm) => llm,
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({"error": "LLM is not enabled"})),
+            ))
+        }
+    };
+
+    match llm.chat(payload) {
+        Ok(res) => Ok(JsonResponse(res)),
+        Err(e) => {
+            error!("Failed to chat: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ))
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct RawSqlQuery {
     query: String,
@@ -797,6 +845,7 @@ async fn execute_raw_sql(
     }
 }
 
+#[cfg(not(feature = "llm"))]
 pub fn create_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/search", get(search))
@@ -817,6 +866,27 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/raw_sql", post(execute_raw_sql))
 }
 
+#[cfg(feature = "llm")]
+pub fn create_router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/search", get(search))
+        .route("/audio/list", get(api_list_audio_devices))
+        .route("/vision/list", post(api_list_monitors))
+        .route(
+            "/tags/:content_type/:id",
+            post(add_tags).delete(remove_tags),
+        )
+        .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
+        .route("/pipes/list", get(list_pipes_handler))
+        .route("/pipes/download", post(download_pipe_handler))
+        .route("/pipes/enable", post(run_pipe_handler))
+        .route("/pipes/disable", post(stop_pipe_handler))
+        .route("/pipes/update", post(update_pipe_config_handler))
+        .route("/experimental/frames/merge", post(merge_frames_handler))
+        .route("/health", get(health_check))
+        .route("/raw_sql", post(execute_raw_sql))
+        .route("/llm/chat", post(llm_chat_handler))
+}
 /*
 
 Curl commands for reference:

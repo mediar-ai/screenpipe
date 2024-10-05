@@ -1,6 +1,9 @@
 #[cfg(feature = "llm")]
 mod llm_module {
-    use std::rc::Rc;
+    use std::{
+        ops::{Deref, DerefMut},
+        sync::Arc,
+    };
 
     use anyhow::{Error as E, Result};
 
@@ -10,10 +13,14 @@ mod llm_module {
     use hf_hub::{Repo, RepoType};
 
     use candle_transformers::models::llama as model;
+    use log::debug;
     use model::LlamaConfig;
     use tokenizers::Tokenizer;
 
-    use crate::TokenOutputStream;
+    use crate::{
+        ChatMessage, ChatRequest, ChatResponse, ChatResponseChoice, ChatResponseUsage, Model,
+        TokenOutputStream,
+    };
 
     const EOS_TOKEN: &str = "</s>";
     const DEFAULT_PROMPT: &str = "My favorite theorem is ";
@@ -113,7 +120,6 @@ mod llm_module {
         llama: model::Llama,
         eos_token_id: Option<model::LlamaEosToks>,
         config: LlamaInitConfig,
-        logits_processor: Rc<LogitsProcessor>,
     }
 
     impl Llama {
@@ -145,129 +151,142 @@ mod llm_module {
             let eos_token_id = tokenizer
                 .token_to_id(EOS_TOKEN)
                 .map(model::LlamaEosToks::Single);
-            let temperature = init_config.temperature;
-            let sampling = if temperature <= 0. {
-                Sampling::ArgMax
-            } else {
-                match (init_config.top_k, init_config.top_p) {
-                    (None, None) => Sampling::All { temperature },
-                    (Some(k), None) => Sampling::TopK { k, temperature },
-                    (None, Some(p)) => Sampling::TopP { p, temperature },
-                    (Some(k), Some(p)) => Sampling::TopKThenTopP { k, p, temperature },
-                }
-            };
-            let logits_processor = LogitsProcessor::from_sampling(init_config.seed, sampling);
             Ok(Self {
                 llama_config,
                 device,
                 eos_token_id,
                 tokenizer,
                 llama,
-                logits_processor: Rc::new(logits_processor),
                 config: init_config,
             })
         }
 
-        pub fn llama_stream_text_test(
-            &mut self,
-            prompt: Option<String>,
-            token_limit: Option<usize>,
-        ) -> Result<()> {
-            let mut cache =
-                model::Cache::new(true, self.config.dtype, &self.llama_config, &self.device)?;
+        // pub fn llama_stream_text_test(
+        //     &mut self,
+        //     prompt: Option<String>,
+        //     token_limit: Option<usize>,
+        // ) -> Result<()> {
+        //     let mut cache =
+        //         model::Cache::new(true, self.config.dtype, &self.llama_config, &self.device)?;
 
-            let prompt = prompt.as_ref().map_or(DEFAULT_PROMPT, |p| p.as_str());
-            let logits_processor: &mut LogitsProcessor =
-                Rc::get_mut(&mut self.logits_processor).unwrap();
-            let mut tokens = self
-                .tokenizer
-                .encode(prompt, true)
-                .map_err(E::msg)?
-                .get_ids()
-                .to_vec();
+        //     let prompt = prompt.as_ref().map_or(DEFAULT_PROMPT, |p| p.as_str());
+        //     let logits_processor: &mut LogitsProcessor =
+        //         Arc::get_mut(&mut self.logits_processor).unwrap();
+        //     let mut tokens = self
+        //         .tokenizer
+        //         .encode(prompt, true)
+        //         .map_err(E::msg)?
+        //         .get_ids()
+        //         .to_vec();
 
-            let mut tokenizer = TokenOutputStream::new(self.tokenizer.clone());
+        //     let mut tokenizer = TokenOutputStream::new(self.tokenizer.clone());
 
-            println!("starting the inference loop");
-            print!("{prompt}");
-            let mut start_gen = std::time::Instant::now();
+        //     println!("starting the inference loop");
+        //     print!("{prompt}");
+        //     let mut start_gen = std::time::Instant::now();
 
-            let mut index_pos = 0;
-            let mut token_generated = 0;
-            let sample_len = match token_limit {
-                Some(l) => l,
-                None => self.config.sample_len,
-            };
+        //     let mut index_pos = 0;
+        //     let mut token_generated = 0;
+        //     let sample_len = match token_limit {
+        //         Some(l) => l,
+        //         None => self.config.sample_len,
+        //     };
 
-            for index in 0..sample_len {
-                let (context_size, context_index) = if cache.use_kv_cache && index > 0 {
-                    (1, index_pos)
-                } else {
-                    (tokens.len(), 0)
-                };
-                if index == 1 {
-                    start_gen = std::time::Instant::now()
-                }
-                let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
-                let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
-                let logits = self.llama.forward(&input, context_index, &mut cache)?;
-                let logits = logits.squeeze(0)?;
-                let logits = if self.config.repeat_penalty == 1. {
-                    logits
-                } else {
-                    let start_at = tokens.len().saturating_sub(self.config.repeat_last_n);
-                    candle_transformers::utils::apply_repeat_penalty(
-                        &logits,
-                        self.config.repeat_penalty,
-                        &tokens[start_at..],
-                    )?
-                };
-                index_pos += ctxt.len();
+        //     for index in 0..sample_len {
+        //         let (context_size, context_index) = if cache.use_kv_cache && index > 0 {
+        //             (1, index_pos)
+        //         } else {
+        //             (tokens.len(), 0)
+        //         };
+        //         if index == 1 {
+        //             start_gen = std::time::Instant::now()
+        //         }
+        //         let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
+        //         let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
+        //         let logits = self.llama.forward(&input, context_index, &mut cache)?;
+        //         let logits = logits.squeeze(0)?;
+        //         let logits = if self.config.repeat_penalty == 1. {
+        //             logits
+        //         } else {
+        //             let start_at = tokens.len().saturating_sub(self.config.repeat_last_n);
+        //             candle_transformers::utils::apply_repeat_penalty(
+        //                 &logits,
+        //                 self.config.repeat_penalty,
+        //                 &tokens[start_at..],
+        //             )?
+        //         };
+        //         index_pos += ctxt.len();
 
-                let next_token = logits_processor.sample(&logits)?;
-                token_generated += 1;
-                tokens.push(next_token);
+        //         let next_token = logits_processor.sample(&logits)?;
+        //         token_generated += 1;
+        //         tokens.push(next_token);
 
-                // match eos_token_id {
-                match self.eos_token_id {
-                    Some(model::LlamaEosToks::Single(eos_tok_id)) if next_token == eos_tok_id => {
-                        break;
-                    }
-                    Some(model::LlamaEosToks::Multiple(ref eos_ids))
-                        if eos_ids.contains(&next_token) =>
-                    {
-                        break;
-                    }
-                    _ => (),
-                }
-                if let Some(t) = tokenizer.next_token(next_token)? {
-                    print!("{t}");
-                }
-            }
-            if let Some(rest) = tokenizer.decode_rest().map_err(E::msg)? {
-                print!("{rest}");
-            }
-            let dt = start_gen.elapsed();
-            println!(
-                "\n\n{} tokens generated ({} token/s)\n",
-                token_generated,
-                (token_generated - 1) as f64 / dt.as_secs_f64(),
-            );
-            tokenizer.clear();
+        //         // match eos_token_id {
+        //         match self.eos_token_id {
+        //             Some(model::LlamaEosToks::Single(eos_tok_id)) if next_token == eos_tok_id => {
+        //                 break;
+        //             }
+        //             Some(model::LlamaEosToks::Multiple(ref eos_ids))
+        //                 if eos_ids.contains(&next_token) =>
+        //             {
+        //                 break;
+        //             }
+        //             _ => (),
+        //         }
+        //         if let Some(t) = tokenizer.next_token(next_token)? {
+        //             print!("{t}");
+        //         }
+        //     }
+        //     if let Some(rest) = tokenizer.decode_rest().map_err(E::msg)? {
+        //         print!("{rest}");
+        //     }
+        //     let dt = start_gen.elapsed();
+        //     println!(
+        //         "\n\n{} tokens generated ({} token/s)\n",
+        //         token_generated,
+        //         (token_generated - 1) as f64 / dt.as_secs_f64(),
+        //     );
+        //     tokenizer.clear();
+        //     Ok(())
+        // }
+
+        // TODO Implement
+        pub fn llama_stream_text(&self) -> Result<()> {
             Ok(())
         }
+    }
 
-        pub fn llama_stream_text(
-            &mut self,
-            prompt: Option<String>,
-            token_limit: Option<usize>,
-        ) -> Result<()> {
+    impl Model for Llama {
+        fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {
+            let sample_len = request
+                .max_completion_tokens
+                .unwrap_or(self.config.sample_len);
+            let prompt = request
+                .messages
+                .iter()
+                .map(|m| m.content.as_str())
+                .collect::<Vec<&str>>()
+                .join("\n\n");
             let mut cache =
                 model::Cache::new(true, self.config.dtype, &self.llama_config, &self.device)?;
 
-            let prompt = prompt.as_ref().map_or(DEFAULT_PROMPT, |p| p.as_str());
-            let logits_processor: &mut LogitsProcessor =
-                Rc::get_mut(&mut self.logits_processor).unwrap();
+            let temperature = request.temperature.unwrap_or(self.config.temperature);
+            let top_k = request.top_k.or(self.config.top_k);
+            let top_p = request.top_p.or(self.config.top_p);
+            let seed = request.seed.unwrap_or(self.config.seed);
+            let sampling = if temperature <= 0. {
+                Sampling::ArgMax
+            } else {
+                match (top_k, top_p) {
+                    (None, None) => Sampling::All { temperature },
+                    (Some(k), None) => Sampling::TopK { k, temperature },
+                    (None, Some(p)) => Sampling::TopP { p, temperature },
+                    (Some(k), Some(p)) => Sampling::TopKThenTopP { k, p, temperature },
+                }
+            };
+            let mut logits_processor = LogitsProcessor::from_sampling(seed, sampling);
+
+            let prompt = prompt.as_str();
             let mut tokens = self
                 .tokenizer
                 .encode(prompt, true)
@@ -277,16 +296,14 @@ mod llm_module {
 
             let mut tokenizer = TokenOutputStream::new(self.tokenizer.clone());
 
+            let mut output = String::new();
+
             println!("starting the inference loop");
             print!("{prompt}");
             let mut start_gen = std::time::Instant::now();
 
             let mut index_pos = 0;
             let mut token_generated = 0;
-            let sample_len = match token_limit {
-                Some(l) => l,
-                None => self.config.sample_len,
-            };
 
             for index in 0..sample_len {
                 let (context_size, context_index) = if cache.use_kv_cache && index > 0 {
@@ -330,20 +347,47 @@ mod llm_module {
                     _ => (),
                 }
                 if let Some(t) = tokenizer.next_token(next_token)? {
-                    print!("{t}");
+                    output.push_str(&t);
                 }
             }
             if let Some(rest) = tokenizer.decode_rest().map_err(E::msg)? {
-                print!("{rest}");
+                output.push_str(&rest);
             }
             let dt = start_gen.elapsed();
-            println!(
-                "\n\n{} tokens generated ({} token/s)\n",
-                token_generated,
-                (token_generated - 1) as f64 / dt.as_secs_f64(),
-            );
             tokenizer.clear();
-            Ok(())
+
+            let tps = (token_generated - 1) as f64 / dt.as_secs_f64();
+
+            debug!(
+                "Llama: {} tokens generated ({} token/s)",
+                token_generated, tps
+            );
+
+            // TODO: delete
+            debug_assert!(tps > 45.);
+
+            Ok(ChatResponse {
+                id: "123".to_string(),
+                object: "chat.completion".to_string(),
+                created: 1,
+                model: "llama3.2-1B-Instruct".to_string(),
+                system_fingerprint: "".to_string(),
+                choices: vec![ChatResponseChoice {
+                    index: 0,
+                    message: ChatMessage {
+                        role: "assistant".to_string(),
+                        content: output,
+                    },
+                    logprobs: None,
+                    finish_reason: "stop".to_string(),
+                }],
+                usage: ChatResponseUsage {
+                    prompt_tokens: tokens.len() as i64,
+                    completion_tokens: token_generated,
+                    total_tokens: token_generated,
+                    completion_tokens_details: serde_json::Value::Null,
+                },
+            })
         }
     }
 }
