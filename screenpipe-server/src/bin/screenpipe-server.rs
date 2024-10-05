@@ -9,15 +9,14 @@ use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
-use highlightio::{Highlight, HighlightConfig};
-use log::{debug, error, info, Log, Metadata, Record};
+use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, logs::SingleFileRollingWriter, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, logs::SingleFileRollingWriter, start_continuous_recording, watch_pid, DatabaseManager, Highlight, HighlightConfig, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
@@ -26,7 +25,6 @@ use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
-
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
     for device in devices.iter() {
@@ -131,23 +129,21 @@ async fn main() -> anyhow::Result<()> {
         env_filter
     };
 
-    let mut h: Option<Highlight> = None;
-    if !cli.disable_telemetry {
-        // TODO crashes on init
-        // h = Some(Highlight::init(HighlightConfig {
-        //     project_id: "82688".to_string(),
-        //     logger: Box::new(NopLogger),
-        //     ..Default::default()
-        // }).expect("Failed to initialize Highlight.io"));
-    } 
-    
-    // Initialize tracing without OpenTelemetry if telemetry is disabled
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(file_layer)
-        .with(console_layer)
-        .init();
-
+    let h = if !cli.disable_telemetry {
+        Some(Highlight::init(HighlightConfig {
+            project_id: "82688".to_string(),
+            service_name: Some("screenpipe-server".to_string()),
+            service_version: Some(std::env::var("GIT_HASH").unwrap_or("local".to_string())),
+        }).unwrap())
+    } else {
+        // Initialize tracing without OpenTelemetry if telemetry is disabled
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(file_layer)
+            .with(console_layer)
+            .init();
+        None
+    };
 
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();

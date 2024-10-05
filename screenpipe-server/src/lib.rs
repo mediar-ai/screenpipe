@@ -12,6 +12,8 @@ mod server;
 mod video;
 mod video_db;
 mod video_utils;
+mod otel_config;
+pub use otel_config::*;
 pub use auto_destruct::watch_pid;
 pub use cli::Cli;
 pub use core::start_continuous_recording;
