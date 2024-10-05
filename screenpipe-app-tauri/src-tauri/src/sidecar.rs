@@ -152,6 +152,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_u64())
         .unwrap_or(30);
 
+    let telemetry_enabled = store
+        .get("analyticsEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -238,6 +243,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if audio_chunk_duration != 30 {
         args.push("--audio-chunk-duration");
         args.push(audio_chunk_duration_str.as_str());
+    }
+
+    if !telemetry_enabled {
+        args.push("--disable_telemetry");
     }
 
     // args.push("--debug");

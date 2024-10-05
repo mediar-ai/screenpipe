@@ -108,6 +108,7 @@ export function useSettings() {
           ? "windows-native"
           : "tesseract";
       try {
+        console.log("loading settings", store);
         // no need to call load() as it's done automatically
         const savedKey = (await store!.get<string>("openaiApiKey")) || "";
         const savedDeepgramKey =
@@ -119,9 +120,9 @@ export function useSettings() {
         const savedUserId = (await store!.get<string>("userId")) || "";
         const savedCustomPrompt =
           (await store!.get<string>("customPrompt")) || "";
-        let savedDevMode = (await store!.get<boolean>("devMode")) || false;
+        const savedDevMode = (await store!.get<boolean>("devMode")) || false;
+        console.log("savedDevMode", savedDevMode);
 
-        savedDevMode = savedDevMode === true;
         const savedAudioTranscriptionEngine =
           (await store!.get<string>("audioTranscriptionEngine")) ||
           "whisper-large";
@@ -208,6 +209,7 @@ export function useSettings() {
           await store!.set(key, updatedSettings[key as keyof Settings]);
         }
       }
+      await store!.save();
       // no need to call save() as we're using autoSave: true
     } catch (error) {
       console.error("failed to update settings:", error);

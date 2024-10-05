@@ -212,8 +212,13 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = CliVadSensitivity::High)]
     pub vad_sensitivity: CliVadSensitivity,
 
+    /// Disable telemetry
+    #[arg(long, default_value_t = false)]
+    pub disable_telemetry: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
+
 }
 
 #[derive(Subcommand)]

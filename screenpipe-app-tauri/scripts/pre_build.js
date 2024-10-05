@@ -18,7 +18,14 @@ console.log('cwd', cwd)
 function hasFeature(name) {
 	return process.argv.includes(`--${name}`) || process.argv.includes(name)
 }
-
+// Add this near the top of the file, after imports
+if (platform === 'windows') {
+	console.log('Applying vcpkg download fix for Windows...');
+	process.env.SystemDrive = process.env.SYSTEMDRIVE;
+	process.env.SystemRoot = process.env.SYSTEMROOT;
+	process.env.windir = process.env.WINDIR;
+	console.log('vcpkg download fix applied.');
+}
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	openblasRealname: 'openblas',

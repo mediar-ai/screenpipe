@@ -60,6 +60,8 @@ import {
 import { CodeBlock } from "./ui/codeblock";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { platform } from "@tauri-apps/plugin-os";
+import posthog from "posthog-js";
+import { trace } from "@opentelemetry/api";
 
 interface AudioDevice {
   name: string;
@@ -203,9 +205,27 @@ export function RecordingSettings({
         fps: localSettings.fps,
         vadSensitivity: localSettings.vadSensitivity,
         audioChunkDuration: localSettings.audioChunkDuration,
+        analyticsEnabled: localSettings.analyticsEnabled,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
+
+      if (!localSettings.analyticsEnabled) {
+        posthog.capture("telemetry", {
+          enabled: false,
+        });
+        // disable opentelemetry
+        trace.disable();
+        posthog.opt_out_capturing();
+        console.log("telemetry disabled");
+      } else {
+        posthog.opt_in_capturing();
+        posthog.capture("telemetry", {
+          enabled: true,
+        });
+        // enable opentelemetry
+        console.log("telemetry enabled");
+      }
 
       await invoke("kill_all_sreenpipes");
 
@@ -418,6 +438,11 @@ export function RecordingSettings({
     );
   };
 
+  const handleAnalyticsToggle = (checked: boolean) => {
+    const newValue = checked;
+    setLocalSettings({ ...localSettings, analyticsEnabled: newValue });
+  };
+
   return (
     <>
       <div className="relative">
@@ -435,13 +460,33 @@ export function RecordingSettings({
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="text-center">recording settings</CardTitle>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setIsCopyDialogOpen(true)}
-              >
-                <IconCode className="h-4 w-4" />
-              </Button>
+              <div className="flex  space-x-2">
+                <div className="flex flex-col space-y-2">
+                  <Button
+                    onClick={handleUpdate}
+                    disabled={settings.devMode || isUpdating}
+                  >
+                    {isUpdating ? "updating..." : "save and restart"}
+                  </Button>
+                  {settings.devMode ? (
+                    <span className="text-xs text-gray-500 text-center">
+                      not available in dev mode, use CLI args in this case
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500 text-center">
+                      this will restart screenpipe recording process with new
+                      settings
+                    </span>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsCopyDialogOpen(true)}
+                >
+                  <IconCode className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -986,20 +1031,48 @@ export function RecordingSettings({
                 </span>
               </div>
             </div>
-
-            <div className="flex flex-col space-y-2">
-              <Button
-                onClick={handleUpdate}
-                disabled={settings.devMode || isUpdating}
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="analytics-toggle"
+                checked={localSettings.analyticsEnabled}
+                onCheckedChange={handleAnalyticsToggle}
+              />
+              <Label
+                htmlFor="analytics-toggle"
+                className="flex items-center space-x-2"
               >
-                {isUpdating ? "updating..." : "update"}
-              </Button>
-              <Label className="text-center">
-                <span className="text-xs text-gray-500">
-                  {settings.devMode
-                    ? "not available in dev mode, use CLI args in this case"
-                    : "this will restart screenpipe recording process with new settings"}
-                </span>
+                <span>enable telemetry</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        telemetry helps us improve screenpipe.
+                        <br />
+                        when enabled, we collect anonymous usage data such as
+                        button clicks.
+                        <br />
+                        we do not collect any screen data, microphone, query
+                        data.
+                        <br />
+                        do not collect any screen data, microphone, query data.
+                        <br />
+                        read more on our data privacy policy at
+                        <br />
+                        <a
+                          href="https://screenpi.pe/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          https://screenpi.pe/privacy
+                        </a>
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </Label>
             </div>
           </CardContent>
