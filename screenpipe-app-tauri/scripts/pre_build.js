@@ -30,7 +30,7 @@ const config = {
 	ffmpegRealname: 'ffmpeg',
 	openblasRealname: 'openblas',
 	clblastRealname: 'clblast',
-	windows: { // TODO probably windows lack mp3
+	windows: {
 		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
 		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 

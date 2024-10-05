@@ -128,6 +128,11 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
         run: |
+          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            export SystemDrive="$SYSTEMDRIVE"
+            export SystemRoot="$SYSTEMROOT"
+            export windir="$WINDIR"
+          fi
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
           ls -R .
         working-directory: ./screenpipe-app-tauri
