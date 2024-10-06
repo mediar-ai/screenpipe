@@ -1,11 +1,7 @@
 #[cfg(feature = "llm")]
 mod llm_module {
-    use std::{
-        ops::{Deref, DerefMut},
-        sync::Arc,
-    };
-    use std::path::PathBuf;
     use anyhow::{Error as E, Result};
+    use std::path::PathBuf;
 
     use candle::{DType, Device, Tensor};
     use candle_nn::VarBuilder;
@@ -23,7 +19,6 @@ mod llm_module {
     };
 
     const EOS_TOKEN: &str = "</s>";
-    const DEFAULT_PROMPT: &str = "My favorite theorem is ";
 
     #[derive(Clone, Debug, Copy, PartialEq, Eq)]
     enum Which {
@@ -65,8 +60,6 @@ mod llm_module {
 
         /// The length of the sample to generate (in tokens).
         sample_len: usize,
-
-        /// The initial prompt.
 
         /// Use different dtype than f16
         dtype: DType,
@@ -161,7 +154,11 @@ mod llm_module {
             let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
 
             let vb = unsafe {
-                VarBuilder::from_mmaped_safetensors(&self.filenames.clone(), self.config.dtype, &device)?
+                VarBuilder::from_mmaped_safetensors(
+                    &self.filenames.clone(),
+                    self.config.dtype,
+                    &device,
+                )?
             };
 
             let llama = model::Llama::load(vb, &self.llama_config)?;
