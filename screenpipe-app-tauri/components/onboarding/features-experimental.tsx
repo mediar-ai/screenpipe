@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from '@/components/onboarding/navigation';
+import { Info } from "lucide-react";
 
 interface OnboardingExperimentalFeaturesProps {
   className?: string,
@@ -59,7 +60,7 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
           </CardContent>
         </Card>
         <Card className="w-[45%]">
-          <CardContent className="mt-3">
+          <CardContent className="mt-4">
             <h1 className="font-semibold text-lg">Experimental features:</h1>
               <ul className="list-disc ml-5">
                 <li className="text-muted-foreground text-sm">
@@ -80,7 +81,7 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
         </Card>
       </div>
       <span className="absolute bottom-14 text-muted-foreground prose-sm text-center block w-full">
-        Be careful with experimental features!
+       <Info className="inline w-4 h-4 mb-[1px]" /> Be careful with experimental features!
       </span>
       <OnboardingNavigation 
         className="mt-10"

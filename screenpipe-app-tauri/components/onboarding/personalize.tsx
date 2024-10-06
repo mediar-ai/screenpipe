@@ -76,7 +76,7 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
         </Card>
       </div>
       <OnboardingNavigation
-        className="mt-12"
+        className="mt-14"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNextSlide}
         prevBtnText="Previous"

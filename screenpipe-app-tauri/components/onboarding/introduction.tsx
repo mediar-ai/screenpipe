@@ -3,14 +3,16 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 interface OnboardingIntroProps {
+  className?: string;
   handleNextSlide: () => void;
 }
 
 const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
+  className = "",
   handleNextSlide,
 }) => (
-  <div className="flex justify-center items-center flex-col">
-    <DialogHeader className="mt-1 px-2">
+  <div className={` flex justify-center items-center flex-col ${className}`}>
+    <DialogHeader className="px-2">
       <div className="w-full inline-flex justify-center">
         <img
           src="/128x128.png"
@@ -19,7 +21,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
           height="72"
         />
       </div>
-      <DialogTitle className="!mt-[-5px] text-center text-[23px] text-balance flex justify-center">
+      <DialogTitle className="!mt-[-1px] text-center text-[23px] text-balance flex justify-center">
         Heya! We're stoked to have you as part of Screenpipe Community!
       </DialogTitle>
       <p className="text-center !mt-[0px] text-base">
@@ -28,8 +30,8 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
       </p>
     </DialogHeader>
     <video
-      width="85%"
-      className="mt-2 rounded-md"
+      width="600px"
+      className="mt-3 rounded-md"
       autoPlay
       controls
       preload="true"

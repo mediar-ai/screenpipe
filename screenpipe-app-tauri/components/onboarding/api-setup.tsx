@@ -54,9 +54,9 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   }, [settings]);
 
   return (
-    <>
+    <div className={`flex h-[80%] flex-col ${className}`}>
       <DialogHeader
-        className={` flex justify-center items-center ${className}`}
+        className={`flex justify-center items-center`}
       >
         <div className="w-full inline-flex justify-center">
           <img
@@ -189,7 +189,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         prevBtnText="Previous"
         nextBtnText="Setup"
       />
-    </>
+    </div>
   );
 };
 

@@ -54,17 +54,19 @@ const Onboarding: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentSlide, setCurrentSlide] = useState<SlideKey>("intro");
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [selectedPersonalization, setSelectedPersonalization] = useState<
-    string | null
-  >(null);
+  const [selectedPersonalization, setSelectedPersonalization] = useState< string | null >(null);
   const [error, setError] = useState<string | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    setIsVisible(true);
+  }, [currentSlide]);
 
   useEffect(() => {
     if (isOpen) {
       const hideCloseButton = () => {
         const closeButton = document.querySelector(".lucide-x");
         if (closeButton) {
-          console.log("button", closeButton);
           (closeButton as HTMLElement).classList.add("hidden");
         }
       };
@@ -88,8 +90,11 @@ const Onboarding: React.FC = () => {
       selectedPersonalization
     );
     if (nextSlide) {
-      setCurrentSlide(nextSlide);
-      setError(null);
+      setIsVisible(false)
+      setTimeout(() => {
+        setCurrentSlide(nextSlide);
+        setError(null);
+      }, 300);
     } else {
       if (currentSlide === "selection") {
         setError("Please select at least one option before proceeding!");
@@ -113,10 +118,13 @@ const Onboarding: React.FC = () => {
   };
 
   const handlePrevSlide = () => {
-    const prevSlide = getPrevSlide();
-    if (prevSlide) {
-      setCurrentSlide(prevSlide);
-    }
+    setIsVisible(false);
+    setTimeout(() => {
+      const prevSlide = getPrevSlide();
+      if (prevSlide) {
+        setCurrentSlide(prevSlide);
+      }
+    }, 300);
   };
 
   const handleOptionClick = (option: string) => {
@@ -137,19 +145,25 @@ const Onboarding: React.FC = () => {
 
   const handleEnd = async () => {
     setIsOpen(false);
-    // await setFirstTimeUserFlag();
+    await setFirstTimeUserFlag();
     window.location.reload();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleDialogClose}>
-      <DialogContent className="max-w-3xl h-[70vh] max-h-[80vh] onboarding-dialog">
-        <div className="relative w-full h-full transition-transform duration-500 ease-in-out overflow-hidden">
+      <DialogContent className="max-w-3xl h-[70vh] max-h-[80vh]">
+        <div className="relative w-full h-full overflow-hidden">
           {currentSlide === "intro" && (
-            <OnboardingIntro handleNextSlide={handleNextSlide} />
+            <OnboardingIntro 
+              className={`transition-opacity duration-300 
+              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              handleNextSlide={handleNextSlide} 
+            />
           )}
           {currentSlide === "selection" && (
             <OnboardingSelection
+              className={`transition-opacity duration-300 ease-in-out 
+              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
               handleOptionClick={handleOptionClick}
               selectedOptions={selectedOptions}
               handlePrevSlide={handlePrevSlide}
@@ -159,6 +173,8 @@ const Onboarding: React.FC = () => {
           )}
           {currentSlide === "personalize" && (
             <OnboardingPersonalize
+              className={`transition-opacity duration-300 ease-in-out 
+              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
               handleOptionClick={setSelectedPersonalization}
               selectedPersonalization={selectedPersonalization}
               handlePrevSlide={handlePrevSlide}
@@ -166,15 +182,17 @@ const Onboarding: React.FC = () => {
             />
           )}
           {currentSlide === "apiSetup" && (
-            <div className="flex h-[80%] flex-col">
-              <OnboardingAPISetup
-                handleNextSlide={handleNextSlide}
-                handlePrevSlide={handlePrevSlide}
-              />
-            </div>
+            <OnboardingAPISetup
+              className={`transition-opacity duration-300 ease-in-out 
+              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              handleNextSlide={handleNextSlide}
+              handlePrevSlide={handlePrevSlide}
+            />
           )}
           {currentSlide === "experimentalFeatures" && (
             <OnboardingExperimentalFeatures
+              className={`transition-opacity duration-300 
+              ${isVisible ? 'opacity-100' : 'opacity-0'}`}
               handleNextSlide={handleEnd}
               handlePrevSlide={handlePrevSlide}
             />
