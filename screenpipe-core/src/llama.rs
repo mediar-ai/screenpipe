@@ -204,9 +204,6 @@ mod llm_module {
             let mut tokenizer = TokenOutputStream::new(self.tokenizer.clone());
 
             let mut output = String::new();
-
-            println!("starting the inference loop");
-            print!("{prompt}");
             let mut start_gen = std::time::Instant::now();
 
             let mut index_pos = 0;
