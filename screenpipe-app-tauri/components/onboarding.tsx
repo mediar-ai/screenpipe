@@ -89,17 +89,21 @@ const Onboarding: React.FC = () => {
       selectedOptions,
       selectedPersonalization
     );
+    if (currentSlide === "selection" && (!selectedOptions || selectedOptions.length === 0)) {
+      setError("Please select at least one option before proceeding!");
+      return;
+    }
+    if (currentSlide === "personalize" && !selectedPersonalization) {
+      setError("Please select a personalization option!");
+      return;
+    }
     if (nextSlide) {
       setIsVisible(false)
       setTimeout(() => {
         setCurrentSlide(nextSlide);
         setError(null);
       }, 300);
-    } else {
-      if (currentSlide === "selection") {
-        setError("Please select at least one option before proceeding!");
-      }
-    }
+    } 
   };
 
   const getPrevSlide = (): SlideKey | null => {
@@ -122,6 +126,7 @@ const Onboarding: React.FC = () => {
     setTimeout(() => {
       const prevSlide = getPrevSlide();
       if (prevSlide) {
+        setError(null);
         setCurrentSlide(prevSlide);
       }
     }, 300);
@@ -151,7 +156,7 @@ const Onboarding: React.FC = () => {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleDialogClose}>
-      <DialogContent className="max-w-3xl h-[70vh] max-h-[80vh]">
+      <DialogContent className="max-w-3xl h-[580px] max-h-[80vh]">
         <div className="relative w-full h-full overflow-hidden">
           {currentSlide === "intro" && (
             <OnboardingIntro 
@@ -179,6 +184,7 @@ const Onboarding: React.FC = () => {
               selectedPersonalization={selectedPersonalization}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
+              error={error}
             />
           )}
           {currentSlide === "apiSetup" && (
@@ -204,3 +210,4 @@ const Onboarding: React.FC = () => {
 };
 
 export default Onboarding;
+

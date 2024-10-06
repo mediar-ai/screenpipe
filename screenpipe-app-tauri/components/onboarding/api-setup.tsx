@@ -58,7 +58,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       <DialogHeader
         className={`flex justify-center items-center`}
       >
-        <div className="w-full inline-flex justify-center">
+        <div className="w-full !mt-[-10px] inline-flex justify-center">
           <img
             src="/128x128.png"
             alt="screenpipe-logo"
@@ -76,7 +76,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         </CardHeader>
         <CardContent className="flex flex-col items-center space-y-4">
           <div className="w-full">
-            <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
               <Label htmlFor="aiUrl" className="min-w-[80px] text-right">
                 AI URL
               </Label>
@@ -119,7 +119,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
             </div>
           </div>
           <div className="w-full">
-            <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
               <Label htmlFor="aiApiKey" className="min-w-[80px] text-right">
                 API key
               </Label>
@@ -183,7 +183,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         <ArrowUpRight className="inline w-4 h-4 ml-1 " />
       </a>
       <OnboardingNavigation 
-        className="mt-10"
+        className="mt-8"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNextSlide}
         prevBtnText="Previous"

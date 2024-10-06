@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { TextSearch, BotMessageSquare } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 
 interface OnboardingPersonalizeProps {
+  error: string | null;
   handleOptionClick: (option: string) => void;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
@@ -18,11 +19,12 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
   handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
+  error,
 }) => {
   return (
-    <div className={`${className} w-full flex justify-center flex-col`}>
+    <div className={`${className} w-full flex justify-center flex-col relative`}>
       <DialogHeader className="mt-1 px-2">
-        <div className="w-full inline-flex justify-center">
+        <div className="w-full !mt-[-10px] inline-flex justify-center">
           <img
             src="/128x128.png"
             alt="screenpipe-logo"
@@ -74,9 +76,10 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
             </span>
           </CardContent>
         </Card>
+        {error && <div className="text-destructive text-center bottom-10 absolute mt-3">{error}</div>}
       </div>
       <OnboardingNavigation
-        className="mt-14"
+        className="mt-8"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNextSlide}
         prevBtnText="Previous"

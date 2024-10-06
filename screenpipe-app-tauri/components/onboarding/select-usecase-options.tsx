@@ -24,7 +24,7 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   return (
     <div className={` ${className}`}>
       <DialogHeader className={` flex justify-center items-center`}>
-        <div className="w-full inline-flex justify-center">
+        <div className="w-full !mt-[-10px] inline-flex justify-center">
           <img src="/128x128.png" alt="screenpipe-logo" width="72" height="72"/>
         </div>
         <DialogTitle className="font-bold text-[30px] text-balance">
@@ -82,7 +82,7 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
           {error && <div className="text-destructive absolute mt-2 bottom-[-20px]">{error}</div>}
         </div>
         <OnboardingNavigation
-          className="mt-14"
+          className="mt-8"
           handlePrevSlide={handlePrevSlide}
           handleNextSlide={handleNextSlide}
           prevBtnText="Previous"

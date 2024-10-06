@@ -13,7 +13,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
 }) => (
   <div className={` flex justify-center items-center flex-col ${className}`}>
     <DialogHeader className="px-2">
-      <div className="w-full inline-flex justify-center">
+      <div className="w-full !mt-[-10px] inline-flex justify-center">
         <img
           src="/128x128.png"
           alt="screenpipe-logo"
@@ -21,8 +21,8 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
           height="72"
         />
       </div>
-      <DialogTitle className="!mt-[-1px] text-center text-[23px] text-balance flex justify-center">
-        Heya! We&apos;re stoked to have you as part of Screenpipe Community!
+      <DialogTitle className="!mt-[-2px] font-bold text-nowrap text-center text-[24px] flex justify-center">
+        Hey! We&apos;re excited to have you in the Screenpipe Community!
       </DialogTitle>
       <p className="text-center !mt-[0px] text-base">
         Get ready to discover all the amazing things our product has
@@ -31,7 +31,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
     </DialogHeader>
     <video
       width="600px"
-      className="mt-3 rounded-md"
+      className="mt-2 rounded-md"
       autoPlay
       controls
       preload="true"

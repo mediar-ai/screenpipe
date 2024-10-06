@@ -18,7 +18,7 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
   return (
     <div className={`${className} w-full flex justify-center flex-col`}>
       <DialogHeader className="px-2">
-        <div className="w-full inline-flex justify-center">
+        <div className="w-full inline-flex !mt-[-10px] justify-center">
           <img
             src="/128x128.png"
             alt="screenpipe-logo"
@@ -26,14 +26,14 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
             height="72"
           />
         </div>
-        <DialogTitle className="text-center font-bold text-[32px] text-balance flex justify-center">
+        <DialogTitle className="text-center !mt-[-2px] font-bold text-[32px] text-balance flex justify-center">
           Features of Screenpipe
         </DialogTitle>
-        <h1 className="font-medium text-center text-md prose">
+        <h1 className="font-medium text-center !mt-[-1px] text-md prose">
           Screenpipe hasn&apos;t been extensively tested. we&apos;d love your feedback!
         </h1>
       </DialogHeader>
-      <div className="mt-4 w-full flex justify-around flex-row relative">
+      <div className="mt-3 w-full flex justify-around flex-row relative">
         <Card className="w-[45%]">
           <CardContent className="mt-4">
             <h1 className="font-semibold text-lg">Essential features:</h1>
@@ -80,11 +80,11 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
           </CardContent>
         </Card>
       </div>
-      <span className="absolute bottom-14 text-muted-foreground prose-sm text-center block w-full">
+      <span className="absolute bottom-10 text-muted-foreground prose-sm text-center block w-full">
        <Info className="inline w-4 h-4 mb-[1px]" /> Be careful with experimental features!
       </span>
       <OnboardingNavigation 
-        className="mt-10"
+        className="mt-8"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNextSlide}
         prevBtnText="Previous"
