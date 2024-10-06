@@ -22,7 +22,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
         />
       </div>
       <DialogTitle className="!mt-[-1px] text-center text-[23px] text-balance flex justify-center">
-        Heya! We're stoked to have you as part of Screenpipe Community!
+        Heya! We&apos;re stoked to have you as part of Screenpipe Community!
       </DialogTitle>
       <p className="text-center !mt-[0px] text-base">
         Get ready to discover all the amazing things our product has

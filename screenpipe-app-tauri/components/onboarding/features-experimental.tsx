@@ -30,7 +30,7 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
           Features of Screenpipe
         </DialogTitle>
         <h1 className="font-medium text-center text-md prose">
-          Screenpipe hasn&apos;t been extensively tested. we'd love your feedback!
+          Screenpipe hasn&apos;t been extensively tested. we&apos;d love your feedback!
         </h1>
       </DialogHeader>
       <div className="mt-4 w-full flex justify-around flex-row relative">
@@ -74,7 +74,7 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
                   <span className="font-medium text-nowrap text-[14px] prose mr-1">
                     Restart interval:
                   </span>
-                    It's an experimental setting that lets you set an automatic restart interval to refresh processes or clear cached data, ensuring optimized performance.
+                    It&apos;s an experimental setting that lets you set an automatic restart interval to refresh processes or clear cached data, ensuring optimized performance.
                 </li>
               </ul>
           </CardContent>
@@ -88,7 +88,7 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNextSlide}
         prevBtnText="Previous"
-        nextBtnText="Let's get started"
+        nextBtnText="Let&apos;s get started"
       />
     </div>
   );
