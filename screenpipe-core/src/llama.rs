@@ -4,7 +4,7 @@ mod llm_module {
         ops::{Deref, DerefMut},
         sync::Arc,
     };
-
+    use std::path::PathBuf;
     use anyhow::{Error as E, Result};
 
     use candle::{DType, Device, Tensor};
@@ -95,37 +95,25 @@ mod llm_module {
                 which: Which::V32_1bInstruct,
                 repeat_penalty: 1.1,
                 repeat_last_n: 64,
-                dtype: DType::BF16,
-            }
-        }
-    }
-
-    impl LlamaInitConfig {
-        fn with_device(device: Device) -> Self {
-            Self {
-                use_flash_attn: device.is_cpu(),
-                dtype: match device {
-                    Device::Cpu => DType::F16,
-                    _ => DType::F16,
-                },
-                ..Default::default()
+                dtype: DType::F16,
             }
         }
     }
 
     pub struct Llama {
         llama_config: candle_transformers::models::llama::Config,
-        device: Device,
+        // device: Device,
+        filenames: Vec<PathBuf>,
         tokenizer: Tokenizer,
-        llama: model::Llama,
+        // llama: model::Llama,
         eos_token_id: Option<model::LlamaEosToks>,
         config: LlamaInitConfig,
     }
 
     impl Llama {
         pub fn new() -> Result<Self> {
-            let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
-            let init_config = LlamaInitConfig::with_device(device.clone());
+            // let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
+            let init_config = LlamaInitConfig::default();
             let api = hf_hub::api::sync::Api::new()?;
 
             let hf_api = api.repo(Repo::with_revision(
@@ -140,23 +128,24 @@ mod llm_module {
             let llama_config = config.into_config(init_config.use_flash_attn);
 
             let filenames = vec![hf_api.get("model.safetensors")?];
-            let vb = unsafe {
-                VarBuilder::from_mmaped_safetensors(&filenames, init_config.dtype, &device)?
-            };
+            // let vb = unsafe {
+            //     VarBuilder::from_mmaped_safetensors(&filenames, init_config.dtype, &device)?
+            // };
 
             let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
 
-            let llama = model::Llama::load(vb, &llama_config)?;
+            // let llama = model::Llama::load(vb, &llama_config)?;
 
             let eos_token_id = tokenizer
                 .token_to_id(EOS_TOKEN)
                 .map(model::LlamaEosToks::Single);
             Ok(Self {
                 llama_config,
-                device,
+                // device,
+                filenames,
                 eos_token_id,
                 tokenizer,
-                llama,
+                // llama,
                 config: init_config,
             })
         }
@@ -169,6 +158,14 @@ mod llm_module {
 
     impl Model for Llama {
         fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {
+            let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
+
+            let vb = unsafe {
+                VarBuilder::from_mmaped_safetensors(&self.filenames.clone(), self.config.dtype, &device)?
+            };
+
+            let llama = model::Llama::load(vb, &self.llama_config)?;
+
             let sample_len = request
                 .max_completion_tokens
                 .unwrap_or(self.config.sample_len);
@@ -179,7 +176,7 @@ mod llm_module {
                 .collect::<Vec<&str>>()
                 .join("\n\n");
             let mut cache =
-                model::Cache::new(true, self.config.dtype, &self.llama_config, &self.device)?;
+                model::Cache::new(true, self.config.dtype, &self.llama_config, &device)?;
 
             let temperature = request.temperature.unwrap_or(self.config.temperature);
             let top_k = request.top_k.or(self.config.top_k);
@@ -228,8 +225,8 @@ mod llm_module {
                     start_gen = std::time::Instant::now()
                 }
                 let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
-                let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
-                let logits = self.llama.forward(&input, context_index, &mut cache)?;
+                let input = Tensor::new(ctxt, &device)?.unsqueeze(0)?;
+                let logits = llama.forward(&input, context_index, &mut cache)?;
                 let logits = logits.squeeze(0)?;
                 let logits = if self.config.repeat_penalty == 1. {
                     logits
