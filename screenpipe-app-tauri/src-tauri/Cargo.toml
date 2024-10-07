@@ -74,7 +74,6 @@ axum = "0.6.0"    # or your current version
 serde = "1.0.160"
 
 
-
 dirs = "5.0.1"
 
 
@@ -89,6 +88,7 @@ tauri-plugin-updater = "2.0.0"
 cudart = []
 metal = []
 mkl = []
+llm = []
 default = ["custom-protocol"]
 
 # DO NOT REMOVE!!

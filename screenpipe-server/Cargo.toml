@@ -24,7 +24,12 @@ image = { workspace = true }
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Database
-sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chrono", "migrate"] }
+sqlx = { version = "0.7", features = [
+    "sqlite",
+    "runtime-tokio-native-tls",
+    "chrono",
+    "migrate",
+] }
 
 # Local Embeddings + STT
 candle = { workspace = true }
@@ -108,11 +113,8 @@ harness = false
 default = ["pipes"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
-pipes = [
-    "screenpipe-core/pipes",
-    "tempfile",
-    "url",
-]
+pipes = ["screenpipe-core/pipes", "tempfile", "url"]
+llm = ["screenpipe-core/llm"]
 
 
 [[bin]]
