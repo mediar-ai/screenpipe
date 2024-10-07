@@ -154,14 +154,17 @@ jobs:
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
             export V8_FLAGS="--max-old-space-size=8192" # https://github.com/denoland/deno_core/issues/916
           fi
+          if [[ "${{ matrix.args }}" == "--target aarch64-pc-windows-msvc" ]]; then
+            export V8_FROM_SOURCE="true"
+          fi
           cargo build --release ${{ matrix.args }}
 
       - name: Upload build artifacts
-        if: matrix.platform == 'macos-latest' && matrix.args == '--target aarch64-apple-darwin --features metal'
+        if: matrix.platform == 'windows-latest' && matrix.args == '--target aarch64-pc-windows-msvc'
         uses: actions/upload-artifact@v3
         with:
           name: build-artifacts
-          path: ./target/aarch64-apple-darwin/release/screenpipe
+          path: ./target/aarch64-pc-windows-msvc/release/screenpipe
 
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
@@ -196,11 +199,11 @@ jobs:
           version: "10.0"
 
       - name: Upload build artifacts
-        if: matrix.platform == 'macos-latest' && matrix.args == '--target aarch64-apple-darwin --features metal'
+        if: matrix.platform == 'windows-latest' && matrix.args == '--target aarch64-pc-windows-msvc'
         uses: actions/upload-artifact@v3
         with:
           name: build-artifacts-2
-          path: ./screenpipe-app-tauri/src-tauri/screenpipe-aarch64-apple-darwin
+          path: ./screenpipe-app-tauri/src-tauri/screenpipe-aarch64-pc-windows-msvc
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
