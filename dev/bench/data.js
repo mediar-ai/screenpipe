@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728325610886,
+  "lastUpdate": 1728328021121,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -12809,6 +12809,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2995182000,
             "range": "± 442940275",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50280365+EzraEllette@users.noreply.github.com",
+            "name": "Ezra Ellette",
+            "username": "EzraEllette"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f1c717f91a420bdcac659a038764165ebeedae47",
+          "message": "Llm api (#438)\n\nfeat: add embedded LLM api",
+          "timestamp": "2024-10-07T11:57:10-07:00",
+          "tree_id": "8e646aa87590ecdbd8fb63e6f8a679d276efc9e6",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/f1c717f91a420bdcac659a038764165ebeedae47"
+        },
+        "date": 1728328020097,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2290990541,
+            "range": "± 203206019",
             "unit": "ns/iter"
           }
         ]
