@@ -22,9 +22,9 @@ edition = "2021"
 
 [workspace.dependencies]
 # AI
-candle = { package = "candle-core", version = "0.7.1" }
-candle-nn = { package = "candle-nn", version = "0.7.1" }
-candle-transformers = { package = "candle-transformers", version = "0.7.1" }
+candle = { package = "candle-core", version = "0.7.2" }
+candle-nn = { package = "candle-nn", version = "0.7.2" }
+candle-transformers = { package = "candle-transformers", version = "0.7.2" }
 tokenizers = "0.20.0"
 hf-hub = "0.3.0"
 
