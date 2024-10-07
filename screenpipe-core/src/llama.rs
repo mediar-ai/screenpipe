@@ -260,11 +260,11 @@ mod llm_module {
             let dt = start_gen.elapsed();
             tokenizer.clear();
 
-            let tps = (token_generated - 1) as f64 / dt.as_secs_f64();
+            let tokens_per_second = (token_generated - 1) as f64 / dt.as_secs_f64();
 
             debug!(
                 "Llama: {} tokens generated ({} token/s)",
-                token_generated, tps
+                token_generated, tokens_per_second
             );
 
             Ok(ChatResponse {
@@ -287,7 +287,7 @@ mod llm_module {
                     completion_tokens: token_generated,
                     total_tokens: token_generated,
                     completion_tokens_details: serde_json::Value::Null,
-                    tps,
+                    tokens_per_second: tokens_per_second,
                 },
             })
         }

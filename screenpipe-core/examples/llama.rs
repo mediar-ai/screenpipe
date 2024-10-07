@@ -21,6 +21,6 @@ fn main() -> Result<()> {
 
     println!("{:?}", res.choices[0].message.content);
 
-    println!("{:?}", res.usage.tps);
+    println!("{:?}", res.usage.tokens_per_second);
     Ok(())
 }
