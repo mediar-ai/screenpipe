@@ -246,7 +246,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     if !telemetry_enabled {
-        args.push("--disable_telemetry");
+        args.push("--disable-telemetry");
     }
 
     // args.push("--debug");
