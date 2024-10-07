@@ -477,6 +477,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     let now = Utc::now();
     let threshold = Duration::from_secs(60);
+    let app_start_threshold = Duration::from_secs(120); // 2 minutes - ideally should be audio duration chunk
 
     let frame_status = if state.vision_disabled {
         "disabled"
@@ -495,6 +496,8 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     let audio_status = if state.audio_disabled {
         "disabled"
+    } else if now.signed_duration_since(state.app_start_time) < chrono::Duration::from_std(app_start_threshold).unwrap() {
+        "ok" // Consider audio healthy if app started recently
     } else {
         match last_audio {
             Some(timestamp)
