@@ -67,6 +67,13 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
+      - name: Install python
+        if: matrix.args == '--target aarch64-pc-windows-msvc'
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11.x
+          architecture: x64
+
       - uses: actions/cache@v3
         with:
           path: "**/node_modules"
