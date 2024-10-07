@@ -352,7 +352,12 @@ async fn main() -> anyhow::Result<()> {
     debug!("LLM initializing");
 
     #[cfg(feature = "llm")]
-    let llm = screenpipe_core::LLM::new(screenpipe_core::ModelName::Llama)?;
+    let llm = {
+        match cli.enable_llm {
+            true => Some(screenpipe_core::LLM::new(screenpipe_core::ModelName::Llama)?),
+            false => None,
+        }
+        }; 
 
     #[cfg(feature = "llm")]
     debug!("LLM initialized");
@@ -372,7 +377,9 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_vision,
         cli.disable_audio,
         #[cfg(feature = "llm")]
-        Some(llm),
+        cli.enable_llm,
+        #[cfg(feature = "llm")]
+        llm,
 
     );
 
@@ -429,6 +436,7 @@ async fn main() -> anyhow::Result<()> {
     );
     println!("│ debug mode          │ {:<34} │", cli.debug);
     println!("│ telemetry           │ {:<34} │", !cli.disable_telemetry);
+    println!("│ local llm           │ {:<34} │", cli.enable_llm);
 
     println!("│ use pii removal     │ {:<34} │", cli.use_pii_removal);
     println!(

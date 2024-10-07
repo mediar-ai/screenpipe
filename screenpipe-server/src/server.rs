@@ -51,6 +51,8 @@ pub struct AppState {
     pub vision_disabled: bool,
     pub audio_disabled: bool,
     #[cfg(feature = "llm")]
+    pub llm_enabled: bool,
+    #[cfg(feature = "llm")]
     pub llm: Option<LLM>,
 }
 
@@ -696,6 +698,8 @@ pub struct Server {
     vision_disabled: bool,
     audio_disabled: bool,
     #[cfg(feature = "llm")]
+    enable_llm: bool,
+    #[cfg(feature = "llm")]
     llm: Option<LLM>,
 }
 
@@ -710,6 +714,7 @@ impl Server {
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
         audio_disabled: bool,
+        #[cfg(feature = "llm")] enable_llm: bool,
         #[cfg(feature = "llm")] llm: Option<LLM>,
     ) -> Self {
         Server {
@@ -721,6 +726,8 @@ impl Server {
             pipe_manager,
             vision_disabled,
             audio_disabled,
+            #[cfg(feature = "llm")]
+            enable_llm,
             #[cfg(feature = "llm")]
             llm,
         }
@@ -744,6 +751,8 @@ impl Server {
             pipe_manager: self.pipe_manager,
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
+            #[cfg(feature = "llm")]
+            llm_enabled: self.enable_llm,
             #[cfg(feature = "llm")]
             llm: self.llm,
         });
