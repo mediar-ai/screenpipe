@@ -44,21 +44,17 @@ async function getAIProvider(config: Config): Promise<AIProvider> {
     return { provider: config.aiProvider, model: config.models[config.aiProvider] };
 }
 
-async function queryScreenpipe(params: ScreenpipeQueryParams): Promise<ScreenpipeResponse | null> {
-    try {
-        const queryParams = Object.entries(params)
-            .filter(([_, v]) => v != null)
-            .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-            .join('&');
-        console.log("Calling screenpipe", JSON.stringify(params));
-        const result = await pipe.get(`http://localhost:3030/search?${queryParams}`);
-        console.log("Got", result.data.length, "items from screenpipe");
-        return result;
-    } catch (error) {
-        console.error("Error querying screenpipe:", error);
-        return null;
-    }
-}
+// async function queryScreenpipe(params: ScreenpipeQueryParams): Promise<ScreenpipeResponse | null> {
+//     try {
+//         console.log("Calling screenpipe", JSON.stringify(params));
+//         const result = await pipe.queryScreenpipe(params);
+//         console.log("Got", result.data.length, "items from screenpipe");
+//         return result;
+//     } catch (error) {
+//         console.error("Error querying screenpipe:", error);
+//         return null;
+//     }
+// }
 
 async function generateNarrativeSummary(screenData: ContentItem[], provider: AIProvider, config: Config): Promise<NarrativeSummary> {
     // Limit the number of items we send to the AI
@@ -300,7 +296,7 @@ async function main() {
             const now = new Date();
             const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-            const screenData = await queryScreenpipe({
+            const screenData = await pipe.queryScreenpipe({
                 start_time: oneDayAgo.toISOString(),
                 end_time: now.toISOString(),
                 limit: config.pageSize,
