@@ -68,7 +68,7 @@ can be used through CLI also, you can tweak the `pipe.json` to your needs, mine 
     {
       "name": "ollamaApiUrl",
       "type": "string",
-      "default": "http://localhost:11434/api",
+      "default": "http://localhost:11434/api/chat",
       "description": "Ollama API URL"
     },
     {

@@ -98,7 +98,7 @@ Rules:
 
   try {
     console.log(`sending request to ollama api: ${ollamaApiUrl}`);
-    const response = await fetch(ollamaApiUrl + "/chat", {
+    const response = await fetch(ollamaApiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

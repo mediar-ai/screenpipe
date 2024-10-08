@@ -13,6 +13,9 @@ async function summarizeAudio(
     provide a concise summary of the key points discussed in the meeting.`;
 
   const response = await fetch(aiApiUrl, {
+    headers: {
+      "Content-Type": "application/json",
+    },
     method: "POST",
     body: JSON.stringify({
       model: aiModel,
@@ -79,6 +82,9 @@ async function checkTimeAdjustment(
     `;
 
   const response = await fetch(aiApiUrl, {
+    headers: {
+      "Content-Type": "application/json",
+    },
     method: "POST",
     body: JSON.stringify({
       model: aiModel,

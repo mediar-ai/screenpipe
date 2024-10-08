@@ -32,6 +32,9 @@ async function generateDailyLog(
     `;
 
   const response = await fetch(ollamaApiUrl + "/chat", {
+    headers: {
+      "Content-Type": "application/json",
+    },
     method: "POST",
     body: JSON.stringify({
       model: ollamaModel,
