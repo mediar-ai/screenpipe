@@ -1,0 +1,41 @@
+{
+  "name": "Screen Time Storyteller",
+  "version": "1.0.0",
+  "description": "Generates a narrative summary of your day based on your screen activities",
+  "author": "AI Assistant",
+  "fields": [
+    {
+      "name": "aiProvider",
+      "value": "ollama"
+    },
+    {
+      "name": "models",
+      "value": {
+        "claude": "claude-3-5-sonnet-20240620",
+        "openai": "gpt-4-turbo-preview",
+        "ollama": "llama3.1"
+      }
+    },
+    {
+      "name": "apiKeys",
+      "value": {
+        "claude": "your_claude_api_key_here",
+        "openai": "your_openai_api_key_here"
+      }
+    },
+    {
+      "name": "pageSize",
+      "value": 1000
+    },
+    {
+      "name": "contentType",
+      "value": "ocr"
+    },
+    {
+      "name": "github",
+      "value": {
+        "personalAccessToken": "your_github_personal_access_token_here"
+      }
+    }
+  ]
+}
