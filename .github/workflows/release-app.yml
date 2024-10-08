@@ -163,6 +163,14 @@ jobs:
           fi
           if [[ "${{ matrix.args }}" == "--target aarch64-pc-windows-msvc" ]]; then
             export V8_FROM_SOURCE="true"
+            cargo fetch ${{ matrix.args }}
+            git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git --single-branch --depth=1
+            export PATH=$(pwd)/depot_tools:$PATH
+            mkdir v8
+            cd v8
+            gclient
+            fetch v8
+            cp -r v8/third_party/icu D:/a/screenpipe/screenpipe/target/release/gn_root/third_party
           fi
           cargo build --release ${{ matrix.args }}
 
