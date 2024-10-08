@@ -64,6 +64,7 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    debug!("starting screenpipe server");
     let cli = Cli::parse();
     let local_data_dir = get_base_dir(cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
@@ -347,6 +348,19 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
+    #[cfg(feature = "llm")]
+    debug!("LLM initializing");
+
+    #[cfg(feature = "llm")]
+    let llm = {
+        match cli.enable_llm {
+            true => Some(screenpipe_core::LLM::new(screenpipe_core::ModelName::Llama)?),
+            false => None,
+        }
+        }; 
+
+    #[cfg(feature = "llm")]
+    debug!("LLM initialized");
 
     let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
         if req.uri().path() == "/search" {
@@ -362,6 +376,11 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
+        #[cfg(feature = "llm")]
+        cli.enable_llm,
+        #[cfg(feature = "llm")]
+        llm,
+
     );
 
     let mut pipe_futures = FuturesUnordered::new();
@@ -417,6 +436,7 @@ async fn main() -> anyhow::Result<()> {
     );
     println!("│ debug mode          │ {:<34} │", cli.debug);
     println!("│ telemetry           │ {:<34} │", !cli.disable_telemetry);
+    println!("│ local llm           │ {:<34} │", cli.enable_llm);
 
     println!("│ use pii removal     │ {:<34} │", cli.use_pii_removal);
     println!(

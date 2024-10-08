@@ -50,7 +50,10 @@ async function generateEngineeringLog(
     }
     Provide 1-3 relevant tags related to the engineering work.`;
 
-  const response = await fetch(ollamaApiUrl + "/chat", {
+  const response = await fetch(ollamaApiUrl, {
+    headers: {
+      "Content-Type": "application/json",
+    },
     method: "POST",
     body: JSON.stringify({
       model: ollamaModel,

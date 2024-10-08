@@ -216,6 +216,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub disable_telemetry: bool,
 
+    /// Enable Local LLM API
+    #[arg(long, default_value_t = false)]
+    pub enable_llm: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 

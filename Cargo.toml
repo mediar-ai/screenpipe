@@ -22,9 +22,9 @@ edition = "2021"
 
 [workspace.dependencies]
 # AI
-candle = { package = "candle-core", version = "0.7.1" }
-candle-nn = { package = "candle-nn", version = "0.7.1" }
-candle-transformers = { package = "candle-transformers", version = "0.7.1" }
+candle = { package = "candle-core", version = "0.7.2" }
+candle-nn = { package = "candle-nn", version = "0.7.2" }
+candle-transformers = { package = "candle-transformers", version = "0.7.2" }
 tokenizers = "0.20.0"
 hf-hub = "0.3.0"
 
@@ -37,6 +37,9 @@ image = "0.25"
 reqwest = { version = "0.11", features = ["blocking", "multipart", "json"] }
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 vcpkg = "0.2"
+
+[patch.crates-io]
+hf-hub = { git = "https://github.com/king-jingxiang/hf-hub" }
 
 [workspace.metadata.vcpkg]
 git = "https://github.com/microsoft/vcpkg"

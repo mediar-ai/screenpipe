@@ -75,6 +75,9 @@ async function summarizeConversation(
     `;
 
   const response = await fetch(aiApiUrl, {
+    headers: {
+      "Content-Type": "application/json",
+    },
     method: "POST",
     body: JSON.stringify({
       model: aiModel,

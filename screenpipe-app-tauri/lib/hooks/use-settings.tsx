@@ -37,6 +37,7 @@ const defaultSettings: Settings = {
   vadSensitivity: "high",
   analyticsEnabled: true,
   audioChunkDuration: 30, // default to 10 seconds
+  useChineseMirror: false, // Add this line
 };
 
 export type VadSensitivity = "low" | "medium" | "high";
@@ -66,6 +67,7 @@ export interface Settings {
   vadSensitivity: VadSensitivity;
   analyticsEnabled: boolean;
   audioChunkDuration: number; // new field
+  useChineseMirror: boolean; // Add this line
 }
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -159,6 +161,8 @@ export function useSettings() {
           (await store!.get<boolean>("analyticsEnabled")) || true;
         const savedAudioChunkDuration =
           (await store!.get<number>("audioChunkDuration")) || 30;
+        const savedUseChineseMirror =
+          (await store!.get<boolean>("useChineseMirror")) || false;
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -185,6 +189,7 @@ export function useSettings() {
           vadSensitivity: savedVadSensitivity,
           analyticsEnabled: savedAnalyticsEnabled,
           audioChunkDuration: savedAudioChunkDuration,
+          useChineseMirror: savedUseChineseMirror,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

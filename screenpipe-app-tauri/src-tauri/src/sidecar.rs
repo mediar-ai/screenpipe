@@ -157,6 +157,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
+    let use_chinese_mirror = store
+        .get("useChineseMirror")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -246,8 +251,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     if !telemetry_enabled {
-        args.push("--disable_telemetry");
+        args.push("--disable-telemetry");
     }
+
+
 
     // args.push("--debug");
 
@@ -258,12 +265,17 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             .expect("Failed to get parent directory of executable")
             .to_path_buf();
         let tessdata_path = exe_dir.join("tessdata");
-        let c = app
+        let mut c = app
             .shell()
             .sidecar("screenpipe")
             .unwrap()
-            .env("TESSDATA_PREFIX", tessdata_path)
-            .args(&args);
+            .env("TESSDATA_PREFIX", tessdata_path);
+
+        if use_chinese_mirror {
+            c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
+        }
+
+        let c = c.args(&args);
 
         let (_, child) = c.spawn().map_err(|e| {
             error!("Failed to spawn sidecar: {}", e);
@@ -275,7 +287,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         return Ok(child);
     }
 
-    let command = app.shell().sidecar("screenpipe").unwrap().args(&args);
+    let mut command = app.shell().sidecar("screenpipe").unwrap();
+
+    if use_chinese_mirror {
+        command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
+    }
+
+    let command = command.args(&args);
 
     let result = command.spawn();
     if let Err(e) = result {
