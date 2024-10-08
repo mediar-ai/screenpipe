@@ -171,6 +171,7 @@ jobs:
             cd v8
             gclient
             fetch v8
+            git checkout 10.6.194
             cp -r v8/third_party/icu C:/Users/runneradmin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/v8-0.106.0/third_party
           fi
           cargo build --release ${{ matrix.args }}
