@@ -22,10 +22,10 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
         />
       </div>
       <DialogTitle className="!mt-[-2px] font-bold text-nowrap text-center text-[24px] flex justify-center">
-        Hey! We&apos;re excited to have you in the Screenpipe Community!
+        hey! we&apos;re excited to have you in the screenpipe community!
       </DialogTitle>
       <p className="text-center !mt-[0px] text-base">
-        Get ready to discover all the amazing things our product has
+        get ready to discover all the amazing things our product has
         to offer!!
       </p>
     </DialogHeader>
@@ -37,13 +37,13 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
       preload="true"
     >
       <source src="/onboarding-screenpipe.mp4" type="video/mp4" />
-      Your browser does not support the video tag.
+      your browser does not support the video tag.
     </video>
     <Button
       className="mt-5 w-28 ml-auto float-right mr-20"
       onClick={handleNextSlide}
     >
-      Get Started
+      get started
     </Button>
   </div>
 );

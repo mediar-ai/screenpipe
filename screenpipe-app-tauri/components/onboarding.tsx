@@ -2,7 +2,7 @@ import localforage from "localforage";
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import OnboardingPersonalize from "@/components/onboarding/personalize";
-import OnboardingSelection from "@/components/onboarding/select-usecase-options";
+import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import OnboardingIntro from "@/components/onboarding/introduction";
 import OnboardingAPISetup from "@/components/onboarding/api-setup";
 import OnboardingExperimentalFeatures from "@/components/onboarding/features-experimental";
@@ -90,11 +90,11 @@ const Onboarding: React.FC = () => {
       selectedPersonalization
     );
     if (currentSlide === "selection" && (!selectedOptions || selectedOptions.length === 0)) {
-      setError("Please select at least one option before proceeding!");
+      setError("please select at least one option before proceeding!");
       return;
     }
     if (currentSlide === "personalize" && !selectedPersonalization) {
-      setError("Please select a personalization option!");
+      setError("please select a personalization option!");
       return;
     }
     if (nextSlide) {

@@ -13,6 +13,46 @@ interface OnboardingPersonalizeProps {
   className?: string;
 }
 
+const PERSONALIZATION_OPTIONS = [
+  {
+    key: "withoutAI",
+    icon: TextSearch,
+    title: "conventional search",
+    description: "seamless functionality, easily monitor screen and audio with built-in ocr for precise scanning.",
+    note: "no api key needed.",
+  },
+  {
+    key: "withAI",
+    icon: BotMessageSquare,
+    title: "ai-enhanced Search",
+    description: "leverage ai capabilities and seamlessly monitor your screen, using advanced AI to summarize collected data.",
+    note: "api key required.",
+  },
+];
+
+const CardItem: React.FC<{
+  option: typeof PERSONALIZATION_OPTIONS[number];
+  isSelected: boolean;
+  onClick: () => void;
+}> = ({ option, isSelected, onClick }) => {
+  const { icon: Icon, title, description, note } = option;
+
+  return (
+    <Card
+      className={`p-4 h-[270px] !mt-[-5px] hover:bg-accent cursor-pointer 
+      ${isSelected ? "bg-accent" : "" }`}
+      onClick={onClick}
+    >
+      <CardContent className="flex flex-col w-[250px] justify-center">
+        <Icon className="w-16 h-16 mx-auto" />
+        <h2 className="font-semibold text-xl text-center mt-1">{title}</h2>
+        <span className="prose prose-sm mt-2">{description}</span>
+        <span className="text-muted-foreground text-center prose-sm mt-4">{note}</span>
+      </CardContent>
+    </Card>
+  );
+};
+
 const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
   className = "",
   selectedPersonalization = "",
@@ -25,65 +65,32 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
     <div className={`${className} w-full flex justify-center flex-col relative`}>
       <DialogHeader className="mt-1 px-2">
         <div className="w-full !mt-[-10px] inline-flex justify-center">
-          <img
-            src="/128x128.png"
-            alt="screenpipe-logo"
-            width="72"
-            height="72"
-          />
+          <img src="/128x128.png" alt="screenpipe-logo" width="72" height="72" />
         </div>
-        <DialogTitle className="text-center font-bold text-[32px] text-balance flex justify-center">
-          Personalize your Screepipe
+        <DialogTitle className="text-center !mt-[-2px] font-bold text-[32px] text-balance flex justify-center">
+          personalize your screenpipe
         </DialogTitle>
-        <p className="text-center text-lg ">
-          How would you like to use Screenpipe ?
+        <p className="text-center text-lg">
+          how would you like to use screenpipe?
         </p>
       </DialogHeader>
       <div className="flex w-full justify-around mt-6">
-        <Card
-          className={` p-4 h-[250px] hover:bg-accent ${
-            selectedPersonalization === "withoutAI" ? "bg-accent" : ""
-          }`}
-          onClick={() => handleOptionClick("withoutAI")}
-        >
-          <CardContent className="flex flex-col w-[250px] justify-center cursor-pointer">
-            <TextSearch className="w-16 h-16 mr-auto ml-auto" />
-            <h2 className="font-semibold text-xl">Conventional Search</h2>
-            <span className="prose prose-sm">
-              Seamless functionality, Easily monitor screen and audio with
-              built-in OCR for precise scanning.
-            </span>
-            <span className="text-muted-foreground text-center prose-sm mt-2">
-              No API key needed.
-            </span>
-          </CardContent>
-        </Card>
-        <Card
-          className={` p-4 h-[250px] hover:bg-accent ${
-            selectedPersonalization === "withAI" ? "bg-accent" : ""
-          }`}
-          onClick={() => handleOptionClick("withAI")}
-        >
-          <CardContent className="flex flex-col w-[250px] justify-center cursor-pointer">
-            <BotMessageSquare className="w-16 h-16 mr-auto ml-auto" />
-            <h2 className="font-semibold text-xl">AI-Enhanced Search</h2>
-            <span className="prose prose-sm">
-              Leverage AI capabilities and seamlessly monitor your screen, using
-              advanced AI to summarize collected data
-            </span>
-            <span className="text-muted-foreground text-center prose-sm mt-2">
-              API key required.
-            </span>
-          </CardContent>
-        </Card>
-        {error && <div className="text-destructive text-center bottom-10 absolute mt-3">{error}</div>}
+        {PERSONALIZATION_OPTIONS.map((option) => (
+          <CardItem
+            key={option.key}
+            option={option}
+            isSelected={selectedPersonalization === option.key}
+            onClick={() => handleOptionClick(option.key)}
+          />
+        ))}
       </div>
+      {error && <div className="text-destructive w-full text-center absolute mt-3 bottom-10">{error}</div>}
       <OnboardingNavigation
-        className="mt-8"
+        className="mt-9"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNextSlide}
-        prevBtnText="Previous"
-        nextBtnText="Next"
+        prevBtnText="previous"
+        nextBtnText="next"
       />
     </div>
   );

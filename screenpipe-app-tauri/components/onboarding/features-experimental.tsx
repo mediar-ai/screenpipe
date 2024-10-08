@@ -27,68 +27,68 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
           />
         </div>
         <DialogTitle className="text-center !mt-[-2px] font-bold text-[32px] text-balance flex justify-center">
-          Features of Screenpipe
+          features of screenpipe
         </DialogTitle>
         <h1 className="font-medium text-center !mt-[-1px] text-md prose">
-          Screenpipe hasn&apos;t been extensively tested. we&apos;d love your feedback!
+          screenpipe hasn&apos;t been extensively tested. we&apos;d love your feedback!
         </h1>
       </DialogHeader>
-      <div className="mt-3 w-full flex justify-around flex-row relative">
+      <div className="mt-3 w-full flex justify-around flex-row">
         <Card className="w-[45%]">
           <CardContent className="mt-4">
-            <h1 className="font-semibold text-lg">Essential features:</h1>
+            <h1 className="font-semibold text-lg">essential features:</h1>
               <ul className="list-disc ml-5">
                 <li className="text-muted-foreground text-sm">
                   <span className="font-medium text-nowrap text-[14px] prose mr-1">
-                      Continuous media capture: 
+                      continuous media capture: 
                   </span>
-                  Seamlessly records screen and audio data 24/7, storing everything locally
+                  seamlessly records screen and audio data 24/7, storing everything locally
                 </li>
                 <li className="text-muted-foreground text-sm">
                   <span className="font-medium text-nowrap text-[14px] prose mr-1">
-                    Personalized AI integration:
+                    personalized ai integration:
                   </span>
-                    Empowers AI models with insights derived from your captured data.
+                    empowers ai models with insights derived from your captured data.
                 </li>
                 <li className="text-muted-foreground text-sm">
                   <span className="font-medium text-[14px] prose mr-1">
-                    Open source &amp; secure:
+                    open source &amp; secure:
                   </span>
-                    Ensures your data remains private, giving you full control over storage and processing.
+                    ensures your data remains private, giving you full control over storage and processing.
                 </li>
               </ul>
           </CardContent>
         </Card>
         <Card className="w-[45%]">
           <CardContent className="mt-4">
-            <h1 className="font-semibold text-lg">Experimental features:</h1>
+            <h1 className="font-semibold text-lg">experimental features:</h1>
               <ul className="list-disc ml-5">
                 <li className="text-muted-foreground text-sm">
                   <span className="font-medium text-nowrap text-[14px] prose mr-1">
-                    Remove personal information (PII):
+                    remove personal information (pii):
                   </span>
-                    For automatically detecting and removing your personally identifiable information (PII) from captured data to ensure your privacy  with data
+                    for automatically detecting and removing your personally identifiable information (PII) from captured data to ensure your privacy  with data
                     protection.
                 </li>
                 <li className="text-muted-foreground text-sm mt-2">
                   <span className="font-medium text-nowrap text-[14px] prose mr-1">
-                    Restart interval:
+                    restart interval:
                   </span>
-                    It&apos;s an experimental setting that lets you set an automatic restart interval to refresh processes or clear cached data, ensuring optimized performance.
+                    it&apos;s an experimental setting that lets you set an automatic restart interval to refresh processes or clear cached data, ensuring optimized performance.
                 </li>
               </ul>
           </CardContent>
         </Card>
       </div>
-      <span className="absolute bottom-10 text-muted-foreground prose-sm text-center block w-full">
-       <Info className="inline w-4 h-4 mb-[1px]" /> Be careful with experimental features!
+      <span className="absolute bottom-12 text-muted-foreground prose-sm text-center block w-full z-[-1]">
+       <Info className="inline w-4 h-4 mb-[1px]" /> be careful with experimental features!
       </span>
       <OnboardingNavigation 
         className="mt-8"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNextSlide}
-        prevBtnText="Previous"
-        nextBtnText="Let&apos;s get started"
+        prevBtnText="previous"
+        nextBtnText="let&apos;s get started"
       />
     </div>
   );
