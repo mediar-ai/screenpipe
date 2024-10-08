@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728343269019,
+  "lastUpdate": 1728346635934,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -12869,6 +12869,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2354492062,
             "range": "± 170271086",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "84d0067c07247c7f1f35719781e5d9a882b8f75d",
+          "message": "chore: small changes to make pipes work with embedded llm etc",
+          "timestamp": "2024-10-07T17:08:13-07:00",
+          "tree_id": "cf2115290964bee594eec17f2b14be6da21c5f71",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/84d0067c07247c7f1f35719781e5d9a882b8f75d"
+        },
+        "date": 1728346634147,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1845114187,
+            "range": "± 41653509",
             "unit": "ns/iter"
           }
         ]
