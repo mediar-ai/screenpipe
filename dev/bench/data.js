@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728346635934,
+  "lastUpdate": 1728346653197,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -12899,6 +12899,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1845114187,
             "range": "± 41653509",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "62795688+neo773@users.noreply.github.com",
+            "name": "neo773",
+            "username": "neo773"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "212035749fed9e3c0e58cfccce00f6fe6a35add6",
+          "message": "path hf-hub (#415)\n\nfeat: download hf model in china",
+          "timestamp": "2024-10-07T17:07:25-07:00",
+          "tree_id": "48088fce97b838be1d5cd1a1a3894e263a72607e",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/212035749fed9e3c0e58cfccce00f6fe6a35add6"
+        },
+        "date": 1728346652143,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1862861708,
+            "range": "± 63959351",
             "unit": "ns/iter"
           }
         ]
