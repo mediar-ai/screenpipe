@@ -1125,7 +1125,7 @@ export function RecordingSettings({
           <DialogHeader>
             <DialogTitle>CLI command</DialogTitle>
             <DialogDescription>
-              You can use this CLI command to start Screenpipe with the current
+              you can use this CLI command to start screenpipe with the current
               settings.
             </DialogDescription>
           </DialogHeader>

@@ -202,9 +202,9 @@ async fn main() {
 
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-                let show = MenuItemBuilder::with_id("show", "Show Screenpipe").build(app)?;
+                let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
                 let menu_divider = PredefinedMenuItem::separator(app)?;
-                let quit = MenuItemBuilder::with_id("quit", "Quit Screenpipe").build(app)?;
+                let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app)
                     .items(&[
                         &show,
