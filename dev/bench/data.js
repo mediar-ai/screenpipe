@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728346653197,
+  "lastUpdate": 1728348262045,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -12929,6 +12929,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1862861708,
             "range": "± 63959351",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "e4d26ed9ea59328f092705f5b7ddb5b2ce49a936",
+          "message": "feat: add support for using screenpipe in china without vpn",
+          "timestamp": "2024-10-07T17:33:58-07:00",
+          "tree_id": "a9de7fa6a9d58f56605fd387810648ead58e7a03",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e4d26ed9ea59328f092705f5b7ddb5b2ce49a936"
+        },
+        "date": 1728348261090,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1865931374,
+            "range": "± 74515120",
             "unit": "ns/iter"
           }
         ]
