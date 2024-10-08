@@ -46,6 +46,5 @@ git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
 
-
-
-
+[profile.release]
+lto = true
