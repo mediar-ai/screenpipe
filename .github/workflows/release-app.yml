@@ -42,10 +42,10 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "--features mkl" # TODO CUDA, mkl
+            args: "" # TODO CUDA, mkl
             tauri-args: ""
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA, mkl?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
           # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
@@ -154,10 +154,6 @@ jobs:
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
             export V8_FLAGS="--max-old-space-size=8192" # https://github.com/denoland/deno_core/issues/916
-          elif [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
-            export RUSTFLAGS="-C target-cpu=native"
-          elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            export RUSTFLAGS="-C target-cpu=native"
           fi
           cargo build --release ${{ matrix.args }}
 
