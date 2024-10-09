@@ -17,6 +17,7 @@ use rubato::{
 };
 
 use crate::{
+    audio_processing::normalize_v2,
     encode_single_audio, multilingual,
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
     whisper::{Decoder, WhisperModel},
@@ -145,6 +146,7 @@ pub fn stt_sync(
             &mut **vad_engine_guard, // Obtain &mut dyn VadEngine
             deepgram_api_key,
             &output_path,
+            false,
         ))
     });
 
@@ -158,6 +160,7 @@ pub async fn stt(
     vad_engine: &mut dyn VadEngine,
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
+    skip_encoding: bool,
 ) -> Result<(String, String)> {
     let model = &whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
@@ -179,10 +182,16 @@ pub async fn stt(
             audio_input.sample_rate,
             m::SAMPLE_RATE
         );
-        resample(audio_input.data.as_ref(), audio_input.sample_rate, m::SAMPLE_RATE as u32)?
+        resample(
+            audio_input.data.as_ref(),
+            audio_input.sample_rate,
+            m::SAMPLE_RATE as u32,
+        )?
     } else {
         audio_input.data.as_ref().to_vec()
     };
+
+    let audio_data = normalize_v2(&audio_data);
 
     let frame_size = 1600; // 100ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
@@ -369,12 +378,14 @@ pub async fn stt(
         .to_string();
     let file_path_clone = file_path.clone();
     // Run FFmpeg in a separate task
-    encode_single_audio(
-        bytemuck::cast_slice(&audio_input.data),
-        audio_input.sample_rate,
-        audio_input.channels,
-        &file_path.into(),
-    )?;
+    if !skip_encoding {
+        encode_single_audio(
+            bytemuck::cast_slice(&audio_input.data),
+            audio_input.sample_rate,
+            audio_input.channels,
+            &file_path.into(),
+        )?;
+    }
 
     Ok((transcription?, file_path_clone))
 }

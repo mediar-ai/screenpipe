@@ -68,7 +68,7 @@ So it's a little bit, you know"#,
 
             let audio_input = AudioInput {
                 data: Arc::new(audio_data.0),
-                sample_rate: 44100,
+                sample_rate: 44100, // hardcoded based on test data sample rate 
                 channels: 1,
                 device: Arc::new(screenpipe_audio::default_output_device().await.unwrap()),
             };
@@ -77,10 +77,11 @@ So it's a little bit, you know"#,
             let (transcription, _) = stt(
                 &audio_input,
                 &whisper_model,
-                Arc::new(AudioTranscriptionEngine::WhisperTiny),
+                Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 &mut **vad_engine_guard,
                 None,
                 &output_path,
+                true,
             )
             .await
             .unwrap();

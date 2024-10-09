@@ -305,6 +305,7 @@ mod tests {
             &mut **vad_engine.lock().unwrap(),
             None,
             &output_path,
+            true,
         )
         .await;
 
