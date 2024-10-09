@@ -71,6 +71,7 @@ dirs = "5.0.1"
 
 lazy_static = { version = "1.4.0" }
 
+pyannote-rs = "0.2.7"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "2.0.0-rc.5", features = ["download-binaries", "copy-dylibs", "directml", "cuda"] }
@@ -87,6 +88,8 @@ tempfile = "3.3.0"
 infer = "0.15"
 criterion = { workspace = true }
 memory-stats = "1.0"
+strsim = "0.10.0"
+futures = "0.3.31"
 
 [features]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
