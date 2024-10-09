@@ -15,7 +15,7 @@ pub enum AudioTranscriptionEngine {
     Deepgram,
     WhisperTiny,
     WhisperDistilLargeV3,
-    WhisperLargeV3Turbo
+    WhisperLargeV3Turbo,
 }
 
 impl fmt::Display for AudioTranscriptionEngine {
@@ -387,7 +387,7 @@ pub fn default_input_device() -> Result<AudioDevice> {
     Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
 // this should be optional ?
-pub async fn default_output_device() -> Result<AudioDevice> {
+pub fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
         // ! see https://github.com/RustAudio/cpal/pull/894
