@@ -2,14 +2,19 @@
 mod tests {
     use chrono::Utc;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::vad_engine::{VadEngineEnum, VadSensitivity};
-    use screenpipe_audio::{default_output_device, list_audio_devices, AudioTranscriptionEngine};
+    use screenpipe_audio::stt::{self, stt};
+    use screenpipe_audio::vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
+    use screenpipe_audio::whisper::WhisperModel;
+    use screenpipe_audio::{
+        default_output_device, list_audio_devices, pcm_decode, AudioDevice, AudioInput,
+        AudioTranscriptionEngine,
+    };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
     use std::path::PathBuf;
     use std::process::Command;
     use std::str::FromStr;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
     fn setup() {
@@ -259,5 +264,56 @@ mod tests {
         // Clean up
         let _ = recording_thread.abort();
         std::fs::remove_file(output_path_2).unwrap_or_default();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_stt_speed() {
+        setup();
+
+        // Load a sample audio file for testing
+        let audio_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("test_data")
+            .join("selah.mp4");
+        let audio_data = pcm_decode(&audio_path).expect("Failed to decode audio file");
+        // Create a temporary output path
+        let output_path =
+            PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
+
+        // Create AudioInput from the audio data
+        let audio_input = AudioInput {
+            data: Arc::new(audio_data.0),
+            sample_rate: 16000, // Adjust this based on your test audio
+            channels: 1,
+            device: Arc::new(default_output_device().await.unwrap()),
+        };
+
+        // Initialize the WhisperModel
+        let whisper_model = WhisperModel::new(&AudioTranscriptionEngine::WhisperDistilLargeV3)
+            .expect("Failed to initialize WhisperModel");
+
+        // Initialize VAD engine
+        let vad_engine: Box<dyn VadEngine + Send> = Box::new(SileroVad::new().await.unwrap());
+        let vad_engine = Arc::new(Mutex::new(vad_engine));
+
+        // Measure transcription time
+        let start_time = Instant::now();
+
+        let _ = stt(
+            &audio_input,
+            &whisper_model,
+            Arc::new(AudioTranscriptionEngine::WhisperTiny),
+            &mut **vad_engine.lock().unwrap(),
+            None,
+            &output_path,
+        )
+        .await;
+
+        let elapsed_time = start_time.elapsed();
+
+        debug!("Transcription completed in {:?}", elapsed_time);
+
+        // Clean up
+        std::fs::remove_file(output_path).unwrap_or_default();
     }
 }
