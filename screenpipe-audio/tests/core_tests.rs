@@ -48,7 +48,7 @@ mod tests {
         setup();
 
         // Setup
-        let device_spec = Arc::new(default_output_device().await.unwrap());
+        let device_spec = Arc::new(default_output_device().unwrap());
         let duration = Duration::from_secs(30); // Record for 3 seconds
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_{}.mp4", time));
@@ -97,7 +97,7 @@ mod tests {
         setup();
 
         // Setup
-        let device_spec = Arc::new(default_output_device().await.unwrap());
+        let device_spec = Arc::new(default_output_device().unwrap());
         let duration = Duration::from_secs(30);
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_interrupt_{}.mp4", time));
@@ -191,7 +191,7 @@ mod tests {
         // 3. the test should succeed (takes ~120s for some reason?) ! i think whisper is just slow as hell on cpu?
 
         // Setup
-        let device_spec = Arc::new(default_output_device().await.unwrap());
+        let device_spec = Arc::new(default_output_device().unwrap());
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
@@ -284,7 +284,7 @@ mod tests {
             data: Arc::new(audio_data.0),
             sample_rate: 16000, // Adjust this based on your test audio
             channels: 1,
-            device: Arc::new(default_output_device().await.unwrap()),
+            device: Arc::new(default_output_device().unwrap()),
         };
 
         // Initialize the WhisperModel

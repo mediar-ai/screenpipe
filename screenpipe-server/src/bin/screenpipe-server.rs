@@ -193,7 +193,7 @@ async fn main() -> anyhow::Result<()> {
             }
             // audio output only on macos <15.0 atm ?
             // see https://github.com/mediar-ai/screenpipe/pull/106
-            if let Ok(output_device) = default_output_device().await {
+            if let Ok(output_device) = default_output_device() {
                 audio_devices.push(Arc::new(output_device.clone()));
                 let device_control = DeviceControl {
                     is_running: true,

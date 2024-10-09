@@ -7,9 +7,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use strsim::levenshtein;
 use tokio::sync::Mutex;
+use tracing::debug;
 
 #[tokio::test]
 async fn test_transcription_accuracy() {
+    // Initialize tracing
+    // tracing_subscriber::fmt()
+    //     .with_max_level(tracing::Level::DEBUG)
+    //     .init();
+
+    debug!("starting transcription accuracy test");
+
     // Setup
     let test_cases = vec![
         (
@@ -45,6 +53,10 @@ async fn test_transcription_accuracy() {
 
 So it's a little bit, you know"#,
         ),
+        (
+            "test_data/accuracy5.wav",
+            r#"Thank you. Yeah. So I cannot they they took it, refresh because of my one set top top time. And, also, second thing is, your byte was stolen. By the time?"#,
+        ),
         // Add more test cases as needed
     ];
 
@@ -68,9 +80,9 @@ So it's a little bit, you know"#,
 
             let audio_input = AudioInput {
                 data: Arc::new(audio_data.0),
-                sample_rate: 44100, // hardcoded based on test data sample rate 
+                sample_rate: 44100, // hardcoded based on test data sample rate
                 channels: 1,
-                device: Arc::new(screenpipe_audio::default_output_device().await.unwrap()),
+                device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
             };
 
             let mut vad_engine_guard = vad_engine.lock().await;
