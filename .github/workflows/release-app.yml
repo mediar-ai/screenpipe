@@ -154,6 +154,10 @@ jobs:
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
             export V8_FLAGS="--max-old-space-size=8192" # https://github.com/denoland/deno_core/issues/916
+          elif [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            export RUSTFLAGS="-C target-cpu=native"
+          elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            export RUSTFLAGS="-C target-cpu=native"
           fi
           cargo build --release ${{ matrix.args }}
 
