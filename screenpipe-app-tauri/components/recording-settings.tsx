@@ -409,6 +409,13 @@ export function RecordingSettings({
     if (localSettings.vadSensitivity !== "high") {
       args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
     }
+    
+    if (!localSettings.analyticsEnabled) {
+      args.push("--disable-telemetry");
+    }
+    if (localSettings.audioChunkDuration !== 30) {
+      args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
+    }
 
     return `${cliPath} ${args.join(" ")}`;
   };
