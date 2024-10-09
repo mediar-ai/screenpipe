@@ -36,14 +36,18 @@ jobs:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
             args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
+            tauri-args: "--target aarch64-apple-darwin"
           - platform: "macos-latest" # for Intel based macs.
             args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
+            tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "" # TODO CUDA, mkl
+            args: "--features cuda,mkl" # TODO CUDA, mkl
+            tauri-args: ""
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc --features cuda,mkl" # TODO CUDA, mkl?  --features "openblas"
             pre-build-args: "" # --openblas
+            tauri-args: "--target x86_64-pc-windows-msvc"
           # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
 
     runs-on: ${{ matrix.platform }}
@@ -153,13 +157,6 @@ jobs:
           fi
           cargo build --release ${{ matrix.args }}
 
-      - name: Upload build artifacts
-        if: matrix.platform == 'macos-latest' && matrix.args == '--target aarch64-apple-darwin --features metal'
-        uses: actions/upload-artifact@v3
-        with:
-          name: build-artifacts
-          path: ./target/aarch64-apple-darwin/release/screenpipe
-
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
 
@@ -168,13 +165,6 @@ jobs:
         shell: bash
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
-
-      - name: Identify esaxx usage (Windows)
-        if: matrix.platform == 'windows-latest'
-        run: |
-          cargo tree > cargo_tree_output.txt
-          findstr /i "esaxx" cargo_tree_output.txt
-        continue-on-error: true
 
       - name: Install vcpkg
         if: matrix.platform == 'windows-latest'
@@ -191,13 +181,6 @@ jobs:
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
-
-      - name: Upload build artifacts
-        if: matrix.platform == 'macos-latest' && matrix.args == '--target aarch64-apple-darwin --features metal'
-        uses: actions/upload-artifact@v3
-        with:
-          name: build-artifacts-2
-          path: ./screenpipe-app-tauri/src-tauri/screenpipe-aarch64-apple-darwin
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
@@ -217,7 +200,7 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
         with:
-          args: ${{ matrix.args }}
+          args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
