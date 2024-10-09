@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728513377276,
+  "lastUpdate": 1728513627434,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -13409,6 +13409,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2415058083,
             "range": "± 430191431",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "the.daveads@gmail.com",
+            "name": "Adejumo David Adewale",
+            "username": "daveads"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cdbd6472d0f9420fe4e378dd10ac9e8a07cdc902",
+          "message": "Integration test (#449)\n\nintegration test for linux & windows end to end screenpipe w audio & screen",
+          "timestamp": "2024-10-09T15:29:54-07:00",
+          "tree_id": "33ae9516cd85e5b0fa401f09f9ae542900cbacae",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/cdbd6472d0f9420fe4e378dd10ac9e8a07cdc902"
+        },
+        "date": 1728513625691,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1870511500,
+            "range": "± 36918140",
             "unit": "ns/iter"
           }
         ]
