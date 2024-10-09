@@ -1,0 +1,72 @@
+name: Linux Integration Test
+
+on:
+  push:
+    branches: [ main  ]
+  pull_request:
+    branches: [ main  ]
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    
+    - name: Install dependencies
+      run: .github/scripts/install_dependencies.sh
+    
+    - name: Verify Tesseract installation
+      run: .github/scripts/verify_tesseract.sh
+    
+    - name: Build CLI
+      run: cargo build --release
+    
+    - name: Set up virtual display with window manager
+      run: .github/scripts/setup_display.sh
+    
+    - name: Setup audio
+      run: .github/scripts/setup_audio.sh
+    
+    - name: Run Screenpipe
+      run: .github/scripts/run_screenpipe.sh
+    
+    - name: Test OCR
+      run: .github/scripts/test_ocr.sh
+    
+    - name: Test Audio Capture
+      run: .github/scripts/test_audio_capture.sh
+    
+    - name: Stop screenpipe
+      run: .github/scripts/stop_screenpipe.sh
+    
+    - name: Check for crashes and expected behavior
+      run: .github/scripts/check_logs.sh
+    
+    - name: Upload logs
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: screenpipe-logs
+        path: screenpipe_output.log
+    
+    - name: Upload captured data
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: screenpipe-data
+        path: |
+          ~/.screenpipe/data/
+    
+    - name: Upload test image
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-image
+        path: test_image.png
