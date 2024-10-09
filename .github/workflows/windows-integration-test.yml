@@ -2,9 +2,9 @@ name: Windows CLI Integration Test
 
 on:
   push:
-    branches: [ cli-test ]
+    branches: [ main ]
   pull_request:
-    branches: [ cli-test ]
+    branches: [ main ]
 
 jobs:
   test-windows:
