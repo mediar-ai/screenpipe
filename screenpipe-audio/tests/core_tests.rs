@@ -2,12 +2,11 @@
 mod tests {
     use chrono::Utc;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::stt::{self, stt};
+    use screenpipe_audio::stt::stt;
     use screenpipe_audio::vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
     use screenpipe_audio::whisper::WhisperModel;
     use screenpipe_audio::{
-        default_output_device, list_audio_devices, pcm_decode, AudioDevice, AudioInput,
-        AudioTranscriptionEngine,
+        default_output_device, list_audio_devices, pcm_decode, AudioInput, AudioTranscriptionEngine,
     };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
     use std::path::PathBuf;

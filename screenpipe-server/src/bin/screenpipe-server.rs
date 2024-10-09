@@ -9,8 +9,8 @@ use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
-use highlightio::{Highlight, HighlightConfig};
-use log::{debug, error, info, Log, Metadata, Record};
+use highlightio::Highlight;
+use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,

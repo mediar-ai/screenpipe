@@ -94,7 +94,7 @@ jobs:
             screenpipe-app-tauri/src-tauri/clblast
             screenpipe-app-tauri/src-tauri/ffmpeg
             screenpipe-app-tauri/src-tauri/tesseract-*
-          key: ${{ matrix.platform }}-${{ matrix.args }}-pre-build
+          key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build
 
       - uses: actions/cache@v3
         with:
