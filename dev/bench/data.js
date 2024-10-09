@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728431147579,
+  "lastUpdate": 1728432978951,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -13079,6 +13079,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1858617667,
             "range": "± 18198825",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "cca3e1b1cd9f2a8c77a906d95501c6a0525fb08e",
+          "message": "feat: add support for whisper-large-v3-turbo",
+          "timestamp": "2024-10-08T17:08:10-07:00",
+          "tree_id": "1d09a330a093389896212384ed73619d1cf67940",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/cca3e1b1cd9f2a8c77a906d95501c6a0525fb08e"
+        },
+        "date": 1728432977253,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2182684812,
+            "range": "± 161850859",
             "unit": "ns/iter"
           }
         ]
