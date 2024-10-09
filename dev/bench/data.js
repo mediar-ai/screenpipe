@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728500380306,
+  "lastUpdate": 1728501295587,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -13349,6 +13349,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1957883728,
             "range": "± 84062043",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "6bb82de286f64ac82785166cbb29f4df1d41c591",
+          "message": "refactor: improve STT accuracy by 4%",
+          "timestamp": "2024-10-09T12:04:30-07:00",
+          "tree_id": "3c3d72b4548940fc69336496628ccfd4661cd083",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/6bb82de286f64ac82785166cbb29f4df1d41c591"
+        },
+        "date": 1728501294262,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2106331500,
+            "range": "± 47071884",
             "unit": "ns/iter"
           }
         ]
