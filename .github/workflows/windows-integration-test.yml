@@ -1,0 +1,62 @@
+name: Windows CLI Integration Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Install dependencies
+      shell: pwsh
+      run: |
+        choco install ffmpeg
+        echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Verify installations
+      shell: pwsh
+      run: |
+        ffmpeg -version
+
+    - name: Build CLI
+      run: cargo build --release
+
+    - name: Run CLI
+      shell: pwsh
+      run: |
+        $env:RUST_LOG = "debug"
+        $process = Start-Process -FilePath ".\target\release\screenpipe.exe" -ArgumentList "--debug" -PassThru -RedirectStandardOutput "screenpipe_output.log" -RedirectStandardError "screenpipe_error.log" -NoNewWindow
+        Start-Sleep -Seconds 60  # Run for 60 seconds
+        Stop-Process -Id $process.Id -Force
+
+    - name: Check for crashes
+      shell: pwsh
+      run: |
+        if (Select-String -Path "screenpipe_output.log" -Pattern "panic" -Quiet) {
+          Write-Host "CLI crashed"
+          Get-Content "screenpipe_output.log"
+          exit 1
+        }
+        Write-Host "CLI ran successfully without crashing"
+        Get-Content "screenpipe_output.log" -Tail 100
+
+    - name: Upload logs
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: windows-logs
+        path: |
+          screenpipe_output.log
+          screenpipe_error.log
