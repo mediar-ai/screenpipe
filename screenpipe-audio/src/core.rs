@@ -15,6 +15,7 @@ pub enum AudioTranscriptionEngine {
     Deepgram,
     WhisperTiny,
     WhisperDistilLargeV3,
+    WhisperLargeV3Turbo
 }
 
 impl fmt::Display for AudioTranscriptionEngine {
@@ -23,13 +24,14 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::Deepgram => write!(f, "Deepgram"),
             AudioTranscriptionEngine::WhisperTiny => write!(f, "WhisperTiny"),
             AudioTranscriptionEngine::WhisperDistilLargeV3 => write!(f, "WhisperLarge"),
+            AudioTranscriptionEngine::WhisperLargeV3Turbo => write!(f, "WhisperLargeV3Turbo"),
         }
     }
 }
 
 impl Default for AudioTranscriptionEngine {
     fn default() -> Self {
-        AudioTranscriptionEngine::WhisperTiny
+        AudioTranscriptionEngine::WhisperLargeV3Turbo
     }
 }
 

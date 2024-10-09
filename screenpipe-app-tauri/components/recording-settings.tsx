@@ -525,6 +525,9 @@ export function RecordingSettings({
                   </SelectItem>
                   <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
                   <SelectItem value="whisper-large">whisper-large</SelectItem>
+                  <SelectItem value="whisper-large-v3-turbo">
+                    whisper-large-turbo
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
