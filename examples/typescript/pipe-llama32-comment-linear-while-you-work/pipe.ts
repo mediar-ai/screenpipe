@@ -1,3 +1,10 @@
+import {
+  queryScreenpipe,
+  loadPipeConfig,
+  ContentItem,
+  sendDesktopNotification,
+} from "screenpipe";
+
 const LINEAR_API_URL = "https://api.linear.app/graphql";
 
 interface LinearComment {
@@ -254,7 +261,7 @@ async function searchLinearTasks(
 async function streamCommentsToLinear(): Promise<void> {
   console.log("starting comments stream to linear");
 
-  const config = await pipe.loadConfig();
+  const config = await loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
@@ -268,7 +275,7 @@ async function streamCommentsToLinear(): Promise<void> {
       const now = new Date();
       const intervalAgo = new Date(now.getTime() - interval);
 
-      const screenData = await pipe.queryScreenpipe({
+      const screenData = await queryScreenpipe({
         start_time: intervalAgo.toISOString(),
         end_time: now.toISOString(),
         limit: config.pageSize,
@@ -304,7 +311,7 @@ async function streamCommentsToLinear(): Promise<void> {
         await addCommentToLinear(comment, apiKey);
 
         // randomly send a notification
-        await pipe.sendNotification({
+        await sendDesktopNotification({
           title: "linear comment pipeline update",
           body: `comment added to task ${comment.taskId}`,
         });

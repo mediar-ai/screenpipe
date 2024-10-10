@@ -1,0 +1,5 @@
+{
+    "imports": {
+        "screenpipe": "https://raw.githubusercontent.com/mediar-ai/screenpipe/deno-thru-cli/screenpipe-js/main.ts"
+    }
+}

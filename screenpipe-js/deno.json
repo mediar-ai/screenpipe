@@ -1,0 +1,5 @@
+{
+    "imports": {
+        "fs": "node:fs/promises"
+    }
+}
