@@ -407,7 +407,7 @@ fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result
     let params = SincInterpolationParameters {
         sinc_len: 256,
         f_cutoff: 0.95,
-        interpolation: SincInterpolationType::Cubic,
+        interpolation: SincInterpolationType::Linear,
         oversampling_factor: 256,
         window: WindowFunction::BlackmanHarris2,
     };
