@@ -78,7 +78,7 @@ const slideFlow: Record<
   },
   devOrNonDev: {                                                                                    // dev or no dev
     next: (_, selectedPreference) => 
-      selectedPreference === "devMode" ? "devConfig" : "instructions",
+      selectedPreference === "devMode" ? "devConfig" : "personalize",
     prev: () => "selection",
   },
   devConfig: {                                                                                      // dev configuration

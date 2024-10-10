@@ -34,6 +34,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [areAllInputsFilled, setAreAllInputsFilled] = React.useState(false);
   const [errors, setErrors] = React.useState<{ [key: string]: string }>({});
+  const [isValidating, setIsValidating] = React.useState(false);
 
   const handleApiUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -120,7 +121,9 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   };
   
   const handleValidationMoveNextSlide = async () => {
+    setIsValidating(true)
     const isValid = await validateInputs();
+    setIsValidating(false)
     if (isValid) {
       toast({
         title: "success",
@@ -266,6 +269,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       </a>
       <OnboardingNavigation 
         className="mt-8"
+        isLoading={isValidating}
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={
           areAllInputsFilled 

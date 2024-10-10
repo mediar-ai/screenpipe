@@ -34,7 +34,7 @@ const OPTIONS = [
     key: "developmentlUse",
     icon: Wrench,
     label: "development purpose",
-    description: "automate data capture & create AI-powered workflows",
+    description: "automate data capture & create ai-powered workflows",
   },
   {
     key: "otherUse",

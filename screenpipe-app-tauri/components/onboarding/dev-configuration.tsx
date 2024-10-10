@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
-import { CodeBlock } from "@/components/onboarding/single-codeblock"
+import { platform } from "@tauri-apps/plugin-os";
+import { CodeBlock } from "@/components/onboarding/single-codeblock";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 
@@ -11,94 +12,69 @@ interface OnboardingDevConfigProps {
   handleNextSlide: () => void;
 }
 
-const getDebuggingCommands = (os: string | null) => {
-  let cliInstructions = "";
-
-  if (os === "windows") {
-    cliInstructions =
-      "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n";
-  } else if (os === "macos") {
-    cliInstructions =
-      "# 1. Open Terminal\n# 2. Navigate to: /Applications/screenpipe.app/Contents/MacOS/\n#    Type: cd /Applications/screenpipe.app/Contents/MacOS/\n";
-  } else if (os === "linux") {
-    cliInstructions =
-      "# 1. Open Terminal\n# 2. Navigate to: /usr/local/bin/\n#    Type: cd /usr/local/bin/\n";
-  } else {
-    cliInstructions =
-      "# OS not recognized. Please check the documentation for your specific operating system.\n";
-  }
-
-  const baseInstructions = `# First, view the Screenpipe CLI arguments:
-${cliInstructions}
-# 3. Run: screenpipe -h
-# 4. Choose your preferred setup and start Screenpipe:
-#    (Replace [YOUR_ARGS] with your chosen arguments)
-#    Example: screenpipe --fps 1 `;
-
-  const dataDir =
-    os === "windows" ? "%USERPROFILE%\\.screenpipe" : "$HOME/.screenpipe";
-
-  const logPath =
-    os === "windows"
-      ? "%USERPROFILE%\\.screenpipe\\screenpipe.log"
-      : "$HOME/.screenpipe/screenpipe.log";
-
-  const dbPath =
-    os === "windows"
-      ? "%USERPROFILE%\\.screenpipe\\db.sqlite"
-      : "$HOME/.screenpipe/db.sqlite";
-
-  const baseCommand =
-    baseInstructions +
-    dataDir +
-    (os === "windows"
-      ? "\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir %USERPROFILE%\\.screenpipe --ocr-engine windows-native\n"
-      : "") +
-    "\n\n# 5. If you've already started Screenpipe, try these debugging commands:\n";
-
-  if (os === "windows") {
-    return (
-      baseCommand +
-      `# Stream the log:
-type "${logPath}"
-
-# Scroll the logs:
-more "${logPath}"
-
-# View last 10 frames:
-sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-
-# View last 10 audio transcriptions:
-sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
-    );
-  } else if (os === "macos" || os === "linux") {
-    return (
-      baseCommand +
-      `# Stream the log:
-tail -f "${logPath}"
-
-# Scroll the logs:
-less "${logPath}"
-
-# View last 10 frames:
-sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-
-# View last 10 audio transcriptions:
-sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
-    );
-  } else {
-    return "OS not recognized. \n\nPlease check the documentation for your specific operating system.";
-  }
+interface devInstructionsItemsTypes {
+  label: string;
+  description: string;
+  command: string;
 }
 
-
-
+type devInstructionItems = Record<string, devInstructionsItemsTypes[]>;
 
 const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
   className = "",
   handlePrevSlide,
   handleNextSlide,
 }) => {
+  const [instructions, setInstructions] = useState<devInstructionsItemsTypes[]>(
+    []
+  );
+
+  const devInstructionsData: devInstructionItems = {
+    windows: [
+      {
+        label: "to start using the screenpipe cli,",
+        description: "to use the screenpipe cli, open your terminal with admin privileges and navigate to '%LOCALAPPDATA%\\screenpipe' or run this command to view all setup arguments",
+        command: "cd %LOCALAPPDATA%\screenpipe && ./\screenpipe.exe -h   # shows list of arguments",
+      },
+      {
+        label: "starting screenpipe with custom arguments,",
+        description: "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
+        command: "screenpipe --ignored-windows settings    # ignore the windows named settings",
+      },
+    ],
+    macos: [
+      {
+        label: "to start using the screenpipe cli,",
+        description: "to use the screenpipe cli, open your terminal and navigate to '/Applications/screenpipe.app/Contents/MacOS/' or run this command to view all setup arguments",
+        command: "cd /Applications/screenpipe.app/Contents/MacOS/ && screenpipe -h  # shows help",
+      },
+      {
+        label: "starting screenpipe with custom arguments",
+        description: "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
+        command: "screenpipe --list-monitors     # list monitors",
+      },
+    ],
+    linux: [
+      {
+        label: "to start using the screenpipe cli,",
+        description: "open your terminal and navigate to the installation directory (usually /usr/local/bin) or run this command, this will show all arguments to setup screenpipe as you prefer.",
+        command: "cd /usr/local/bin/ && screenpipe -h   # shows list of arguments",
+      },
+      {
+        label: "starting screenpipe with custom arguments",
+        description: "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
+        command: "screenpipe --ignored-windows kitty    # ignore the windows named kitty",
+      },
+    ],
+  };
+
+  useEffect(() => {
+    const getOsType = () => {
+      const os = platform();
+      setInstructions(devInstructionsData[os] || []);
+    };
+    getOsType();
+  }, []);
 
   return (
     <div className={`${className} w-full flex justify-center flex-col`}>
@@ -111,64 +87,58 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
             height="72"
           />
         </div>
-        <DialogTitle className="text-center !mt-[-3px] font-bold text-[30px] text-balance flex justify-center">
+        <DialogTitle className="text-center !mt-[-4px] font-bold text-[30px] text-balance flex justify-center">
           screenpipe with dev config
         </DialogTitle>
         <h1 className="font-medium text-center !mt-[-1px] text-md">
           customize the screenpipe setting using dev configuration
         </h1>
       </DialogHeader>
-      <div className="mt-0 w-full flex justify-around flex-col">
+      <div className="mt-2 w-full flex justify-around flex-col">
         <div className="mx-3">
           <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
-            </span> 
+            <span className="font-medium prose text-[14px] mr-1">
+              by using the cli,
+            </span>
+            you can manually configure and manage backend processes for advanced
+            customization and debugging.
           </p>
         </div>
-        <div className="mx-3 mt-2">
-          <h1 className="font-semibold text-md">
-            run the screenpipe backend via cli
-          </h1>
-          <ul className="mt-1">
-            <li className="list-disc">
-              <p className="text-muted-foreground text-sm ml-4">
-                <span className="font-medium text-nowrap text-[14px] mr-1 prose">
-                </span> 
-              </p>
-              <CodeBlock 
-                className="rounded-md mt-2"
-                language="bash"
-                value="#"
-              />
-            </li>
-            <li className="mt-2 list-disc">
-              <p className="text-muted-foreground text-sm ml-4">
-                <span className=" font-medium text-nowrap text-[14px] mr-1 prose">
-                </span> 
-              </p>
-              <CodeBlock 
-                className="rounded-md mt-2"
-                language="bash"
-                value="#"
-              />
-            </li>
-          </ul>
-        </div>
+        {instructions.length > 0 && (
+          <div className="mx-3 mt-1">
+            <h1 className="font-medium text-md">
+              run the screenpipe backend via cli:
+            </h1>
+            <ul className="mt-0">
+              {instructions.map((instructions, index) => (
+                <li key={index} className="list-disc mt-1">
+                  <p className="text-muted-foreground text-sm ml-4">
+                    <span className="font-medium text-nowrap text-[14px] mr-1 prose">
+                      {instructions.label}
+                    </span>
+                    {instructions.description}
+                  </p>
+                  <CodeBlock
+                    className="rounded-md mt-2"
+                    language="bash"
+                    value={instructions.command}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <a
-          onClick={() =>
-            open(
-              "https://docs.screenpi.pe/",
-            )
-          }
+          onClick={() => open("https://docs.screenpi.pe/")}
           href="#"
           className="mt-4 text-muted-foreground text-sm mr-auto ml-auto !text-center hover:underline"
         >
-          learn more about screenpipe
+          learn more about screenpipe args &amp; api
           <ArrowUpRight className="inline w-4 h-4 ml-1 " />
         </a>
       </div>
       <OnboardingNavigation
-        className="mt-8"
+        className="mt-6"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNextSlide}
         prevBtnText="previous"
@@ -179,4 +149,3 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
 };
 
 export default OnboardingDevConfig;
-
