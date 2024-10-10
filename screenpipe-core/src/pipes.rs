@@ -140,25 +140,12 @@ mod pipes {
                 anyhow::bail!("local source is not a directory");
             }
 
-            copy_local_folder(source_path, &dest_dir).await?;
+            copy_dir_all(source_path, &dest_dir).await?;
+            info!("Copied local folder: {:?} to {:?}", source_path, dest_dir);
         }
 
         info!("pipe copied successfully to: {:?}", dest_dir);
         Ok(dest_dir)
-    }
-
-    async fn copy_local_folder(src: &Path, dst: &Path) -> anyhow::Result<()> {
-        let pipe_json: Value = serde_json::json!({});
-        let pipe_json_path = dst.join("pipe.json");
-
-        // Recursively copy the directory
-        copy_dir_all(src, dst).await?;
-        info!("Copied local folder: {:?} to {:?}", src, dst);
-
-        // Write updated pipe.json
-        tokio::fs::write(&pipe_json_path, serde_json::to_string_pretty(&pipe_json)?).await?;
-
-        Ok(())
     }
 
     async fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {

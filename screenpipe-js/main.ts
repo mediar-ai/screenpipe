@@ -88,7 +88,7 @@ export type ContentItem =
 /**
  * Pagination information for search results.
  */
-interface PaginationInfo {
+export interface PaginationInfo {
   limit: number;
   offset: number;
   total: number;
@@ -97,7 +97,7 @@ interface PaginationInfo {
 /**
  * Structure of the response from a Screenpipe query.
  */
-interface ScreenpipeResponse {
+export interface ScreenpipeResponse {
   data: ContentItem[];
   pagination: PaginationInfo;
 }
