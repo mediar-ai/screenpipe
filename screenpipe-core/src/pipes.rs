@@ -32,9 +32,7 @@ mod pipes {
 
     pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<()> {
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
-        println!("pipe_dir: {:?}", pipe_dir);
         let main_module = find_pipe_file(&pipe_dir)?;
-        println!("main_module: {:?}", main_module);
 
         info!("executing pipe: {:?}", main_module);
 
@@ -72,23 +70,27 @@ mod pipes {
         let stdout = child.stdout.take().expect("failed to get stdout");
         let stderr = child.stderr.take().expect("failed to get stderr");
 
+        let pipe_clone = pipe.to_string();
+
         // Spawn tasks to handle stdout and stderr
         let stdout_handle = tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
             while let Ok(line) = lines.next_line().await {
                 if let Some(line) = line {
-                    info!("deno stdout: {}", line);
+                    info!("[pipe][info][{}] {}", pipe_clone, line);
                 }
             }
         });
+
+        let pipe_clone = pipe.to_string();
 
         let stderr_handle = tokio::spawn(async move {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(line) = lines.next_line().await {
                 if let Some(line) = line {
-                    error!("deno stderr: {}", line);
+                    error!("[pipe][error][{}] {}", pipe_clone, line);
                 }
             }
         });
