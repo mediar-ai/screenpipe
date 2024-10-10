@@ -94,6 +94,13 @@ declare global {
     queryScreenpipe: (
       params: ScreenpipeQueryParams
     ) => Promise<ScreenpipeResponse | null>;
+
+    /**
+     * Extracts a JSON object from a string. Useful for parsing JSON out of drunk LLM responses.
+     * @param response - The string to extract the JSON object from.
+     * @returns The JSON object.
+     */
+    extractJsonFromLlmResponse: (response: string) => any;
   };
 
   const fs: {

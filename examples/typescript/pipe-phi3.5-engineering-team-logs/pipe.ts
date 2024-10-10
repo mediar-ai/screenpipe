@@ -1,39 +1,13 @@
 const NOTION_API_URL = "https://api.notion.com/v1/pages";
 
-interface ScreenData {
-  data: {
-    content: {
-      timestamp: string;
-      text: string;
-    };
-  }[];
-}
-
 interface EngineeringLog {
   title: string;
   description: string;
   tags: string[];
 }
 
-async function queryScreenpipe(
-  startTime: string,
-  endTime: string
-): Promise<ScreenData> {
-  try {
-    const queryParams = `start_time=${startTime}&end_time=${endTime}&limit=50&content_type=ocr`;
-    const response = await fetch(`http://localhost:3030/search?${queryParams}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error querying screenpipe:", error);
-    return { data: [] };
-  }
-}
-
 async function generateEngineeringLog(
-  screenData: ScreenData,
+  screenData: ContentItem[],
   ollamaApiUrl: string,
   ollamaModel: string
 ): Promise<EngineeringLog> {
@@ -134,14 +108,16 @@ async function streamEngineeringLogsToNotion(): Promise<void> {
       const now = new Date();
       const oneHourAgo = new Date(now.getTime() - interval);
 
-      const screenData = await queryScreenpipe(
-        oneHourAgo.toISOString(),
-        now.toISOString()
-      );
+      const screenData = await pipe.queryScreenpipe({
+        start_time: oneHourAgo.toISOString(),
+        end_time: now.toISOString(),
+        limit: 50,
+        content_type: "ocr",
+      });
 
-      if (screenData.data && screenData.data.length > 0) {
+      if (screenData && screenData.data.length > 0) {
         const logEntry = await generateEngineeringLog(
-          screenData,
+          screenData.data,
           ollamaApiUrl,
           ollamaModel
         );

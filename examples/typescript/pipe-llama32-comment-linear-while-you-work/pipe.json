@@ -1,0 +1,40 @@
+{
+  "fields": [
+    {
+      "name": "interval",
+      "type": "number",
+      "default": 300,
+      "description": "interval in seconds to stream data (default: 5 minutes)"
+    },
+    {
+      "name": "linearApiKey",
+      "type": "string",
+      "default": "<fill your linear api key here>",
+      "description": "linear api key for authentication"
+    },
+    {
+      "name": "ollamaApiUrl",
+      "type": "string",
+      "default": "http://localhost:11434/api/chat",
+      "description": "ollama api url"
+    },
+    {
+      "name": "ollamaModel",
+      "type": "string",
+      "default": "nemotron-mini:4b-instruct-q4_K_M",
+      "description": "ollama model"
+    },
+    {
+      "name": "pageSize",
+      "type": "number",
+      "default": 100,
+      "description": "number of records to retrieve from screenpipe per page"
+    },
+    {
+      "name": "customCommentPrompt",
+      "type": "string",
+      "default": "",
+      "description": "custom prompt to override part of the system prompt for comment generation"
+    }
+  ]
+}
