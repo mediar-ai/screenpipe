@@ -1,9 +1,6 @@
 use anyhow::Result;
-use candle_transformers::models::whisper::audio::Float;
 use realfft::num_complex::{Complex32, ComplexFloat};
-use realfft::num_traits::Pow;
 use realfft::RealFftPlanner;
-use symphonia::core::audio;
 
 pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
     let rms = (audio.iter().map(|&x| x * x).sum::<f32>() / audio.len() as f32).sqrt();

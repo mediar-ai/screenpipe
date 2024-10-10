@@ -26,10 +26,9 @@ use crate::{
 };
 
 use hound::{WavSpec, WavWriter};
-use std::io::Cursor;
-use std::slice::Chunks;
 use reqwest::Client;
 use serde_json::Value;
+use std::io::Cursor;
 
 // Replace the get_deepgram_api_key function with this:
 fn get_deepgram_api_key() -> String {
@@ -214,8 +213,6 @@ pub async fn stt(
                     let processed_audio = spectral_subtraction(chunk, noise)?;
                     speech_frames.extend(processed_audio);
                     speech_frame_count += 1;
-                } else {
-                    noise = average_noise_spectrum(chunk);
                 }
                 VadStatus::Unknown => {
                     noise = average_noise_spectrum(chunk);
@@ -463,7 +460,7 @@ fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result
     let params = SincInterpolationParameters {
         sinc_len: 256,
         f_cutoff: 0.95,
-        interpolation: SincInterpolationType::Linear,
+        interpolation: SincInterpolationType::Cubic,
         oversampling_factor: 256,
         window: WindowFunction::BlackmanHarris2,
     };
@@ -499,34 +496,9 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
-
-impl TranscriptionResult {
-    // TODO --optimize
-    pub fn cleanup_overlap(&mut self, previous_transcript: String) -> Option<(String, String)> {
-        if let Some(transcription) = &self.transcription {
-            let transcription = transcription.to_string();
-            if let Some((prev_idx, cur_idx)) =
-                longest_common_word_substring(previous_transcript.as_str(), transcription.as_str())
-            {
-                // strip old transcript from prev_idx word pos
-                let new_prev = previous_transcript
-                    .split_whitespace()
-                    .collect::<Vec<&str>>()[..prev_idx]
-                    .join(" ");
-                // strip new transcript before cur_idx word pos
-                let new_cur =
-                    transcription.split_whitespace().collect::<Vec<&str>>()[cur_idx..].join(" ");
-
-                return Some((new_prev, new_cur));
-            }
-        }
-
-        None
-    }
-}
-
 use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
 use regex::Regex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::atomic::{AtomicBool, Ordering};
 use vad_rs::VadStatus;
 
