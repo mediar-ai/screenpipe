@@ -26,9 +26,10 @@ use crate::{
 };
 
 use hound::{WavSpec, WavWriter};
+use std::io::Cursor;
+use std::slice::Chunks;
 use reqwest::Client;
 use serde_json::Value;
-use std::io::Cursor;
 
 // Replace the get_deepgram_api_key function with this:
 fn get_deepgram_api_key() -> String {
@@ -213,6 +214,8 @@ pub async fn stt(
                     let processed_audio = spectral_subtraction(chunk, noise)?;
                     speech_frames.extend(processed_audio);
                     speech_frame_count += 1;
+                } else {
+                    noise = average_noise_spectrum(chunk);
                 }
                 VadStatus::Unknown => {
                     noise = average_noise_spectrum(chunk);
@@ -523,7 +526,6 @@ impl TranscriptionResult {
 }
 
 use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
-use crate::whisper::Segment;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use vad_rs::VadStatus;
