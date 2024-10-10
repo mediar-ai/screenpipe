@@ -34,40 +34,61 @@ Screen Time Storyteller is an AI-powered pipe for Screenpipe that generates enga
      "name": "Screen Time Storyteller",
      "version": "1.0.0",
      "description": "Generates a narrative summary of your day based on your screen activities",
-     "author": "Your Name",
+     "author": "AI Assistant",
      "fields": [
        {
          "name": "aiProvider",
-         "value": "your_chosen_provider"
+         "type": "string",
+         "default": "claude",
+         "description": "AI provider to use (ollama, openai, or claude)"
        },
        {
-         "name": "models",
-         "value": {
-           "claude": "claude-3-5-sonnet-20240620",
-           "openai": "gpt-4-turbo-preview",
-           "ollama": "llama3.1"
-         }
+         "name": "claudeModel",
+         "type": "string",
+         "default": "claude-3-sonnet-20240229",
+         "description": "Claude AI model to use"
        },
        {
-         "name": "apiKeys",
-         "value": {
-           "claude": "your_claude_api_key",
-           "openai": "your_openai_api_key"
-         }
+         "name": "openaiModel",
+         "type": "string",
+         "default": "gpt-4-turbo-preview",
+         "description": "OpenAI model to use"
+       },
+       {
+         "name": "ollamaModel",
+         "type": "string",
+         "default": "llama3.1",
+         "description": "Ollama model to use"
+       },
+       {
+         "name": "claudeApiKey",
+         "type": "string",
+         "default": "",
+         "description": "API key for Claude"
+       },
+       {
+         "name": "openaiApiKey",
+         "type": "string",
+         "default": "",
+         "description": "API key for OpenAI"
        },
        {
          "name": "pageSize",
-         "value": 1000
+         "type": "number",
+         "default": 1000,
+         "description": "Number of items to process per page"
        },
        {
          "name": "contentType",
-         "value": "ocr"
+         "type": "string",
+         "default": "ocr",
+         "description": "Type of content to process (ocr, audio, or all)"
        },
        {
-         "name": "github",
-         "value": {
-           "personalAccessToken": "your_github_personal_access_token"
-         }
+         "name": "githubToken",
+         "type": "string",
+         "default": "",
+         "description": "GitHub personal access token"
        }
      ]
    }
@@ -87,11 +108,14 @@ You can find the generated summaries in two places:
 You can adjust the pipe's behavior by modifying the `pipe.json` file:
 
 - `aiProvider`: Choose between "claude", "openai", or "ollama"
-- `models`: Specify the model to use for each provider
-- `apiKeys`: Add your API keys for Claude and OpenAI
+- `claudeModel`: Specify the Claude model to use
+- `openaiModel`: Specify the OpenAI model to use
+- `ollamaModel`: Specify the Ollama model to use
+- `claudeApiKey`: Add your API key for Claude
+- `openaiApiKey`: Add your API key for OpenAI
 - `pageSize`: Set the number of screen time entries to analyze
 - `contentType`: Choose between "ocr", "audio", or "all"
-- `github`: Add your GitHub Personal Access Token
+- `githubToken`: Add your GitHub Personal Access Token
 
 ## Troubleshooting
 

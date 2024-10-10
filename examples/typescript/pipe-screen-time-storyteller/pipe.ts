@@ -16,9 +16,7 @@ interface Config {
     openaiApiKey: string;
     pageSize: number;
     contentType: ContentType;
-    github: {
-        personalAccessToken: string;
-    };
+    githubToken: string;
 }
 
 interface NarrativeSummary {

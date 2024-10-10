@@ -58,6 +58,5 @@
       "default": "",
       "description": "GitHub personal access token"
     }
-  ],
-  "enabled": true
+  ]
 }
