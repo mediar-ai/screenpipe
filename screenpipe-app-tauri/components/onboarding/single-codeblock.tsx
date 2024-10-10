@@ -74,7 +74,7 @@ const CodeBlock: FC<Props> = memo(({ className, language, value }) => {
         }}
         codeTagProps={{
           style: {
-            fontSize: "0.8rem",
+            fontSize: "0.85rem",
             fontFamily: "var(--font-mono)",
           },
         }}

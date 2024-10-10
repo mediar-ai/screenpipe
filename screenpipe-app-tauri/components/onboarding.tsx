@@ -91,11 +91,12 @@ const slideFlow: Record<
   },
   instructions: {                                                                                   // instructions for every type of user
     next: () => "experimentalFeatures", 
-    prev: (selectedOptions, selectedPreference, ___) => {
+    prev: (selectedOptions, selectedPreference, selectedPersonalization) => {
+      if (selectedPreference === "devMode") return "pipes";
       if (selectedOptions?.includes("personalUse")) return "personalize";
       if (selectedOptions?.includes("professionalUse")) return "apiSetup";
-      if (selectedOptions?.includes("developmentlUse") && selectedPreference === "devMode") return "pipes";
-      if (selectedOptions?.includes("otherUse" ) && selectedPreference === "devMode") return "pipes";
+      if (selectedOptions?.includes("developmentlUse") && selectedPreference === "nonDevMode" && selectedPersonalization === "withoutAI") return "personalize";
+      if (selectedOptions?.includes("developmentlUse") || selectedOptions?.includes("otherUse") && selectedPersonalization === "withAI") return "apiSetup";
       return "devOrNonDev";
     }
   },

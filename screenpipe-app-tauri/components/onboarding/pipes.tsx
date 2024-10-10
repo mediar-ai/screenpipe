@@ -34,7 +34,7 @@ const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
           unlock screenpipe’s power with customizable pipes
         </h1>
       </DialogHeader>
-      <div className="mt-3 w-full flex justify-around flex-col">
+      <div className="mt-2 w-full flex justify-around flex-col">
         <div className="mx-3">
           <p className="text-muted-foreground text-[14px]">
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
@@ -45,7 +45,7 @@ const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
             for analyzing, managing your captured data.
           </p>
         </div>
-        <div className="mx-3 mt-3">
+        <div className="mx-3 mt-1">
           <h1 className="font-semibold text-md">
             get started with pipes:
           </h1>
