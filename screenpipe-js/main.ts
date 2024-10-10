@@ -152,10 +152,10 @@ export async function sendDesktopNotification(
   }
 }
 
-export async function loadPipeConfig(): Promise<PipeConfig> {
+export function loadPipeConfig(): PipeConfig {
   try {
     const configPath = `${process.env.SCREENPIPE_DIR}/pipes/${process.env.PIPE_ID}/pipe.json`;
-    const configContent = await fs.readFile(configPath, "utf8");
+    const configContent = fs.readFileSync(configPath, "utf8");
     const parsedConfig = JSON.parse(configContent);
     const config: PipeConfig = {};
     parsedConfig.fields.forEach((field: any) => {

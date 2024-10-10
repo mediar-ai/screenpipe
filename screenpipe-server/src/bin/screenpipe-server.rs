@@ -398,7 +398,7 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌───────────────────┬────────────────────────────────────┐");
+    println!("┌─────────────────────┬────────────────────────────────────┐");
     println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
