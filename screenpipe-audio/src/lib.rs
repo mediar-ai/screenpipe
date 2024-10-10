@@ -1,3 +1,4 @@
+pub mod audio_processing;
 mod core;
 pub mod encode;
 mod multilingual;

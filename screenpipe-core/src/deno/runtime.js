@@ -232,3 +232,62 @@ globalThis.pipe = pipe;
 globalThis.pipe.metadata = globalThis.metadata;
 globalThis.fetch = pipe.fetch;
 globalThis.loadConfig = pipe.loadConfig;
+
+
+pipe.extractJsonFromLlmResponse = (response) => {
+    // Remove any markdown code block syntax
+    let cleaned = response.replace(/^```(?:json)?\s*|\s*```$/g, "");
+
+    console.log("cleaned", cleaned);
+
+    // Try to find JSON-like content
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+
+    console.log("jsonMatch", jsonMatch);
+    if (jsonMatch) {
+        cleaned = jsonMatch[0];
+    }
+
+    console.log("cleaned", cleaned);
+    // Remove any non-JSON content before or after the main object
+    cleaned = cleaned.replace(/^[^{]*/, "").replace(/[^}]*$/, "");
+
+    console.log("cleaned", cleaned);
+
+    // Replace any escaped newlines and remove actual newlines
+    cleaned = cleaned.replace(/\\n/g, "").replace(/\n/g, "");
+
+    console.log("cleaned", cleaned);
+
+    // Handle nested JSON strings
+    cleaned = cleaned.replace(/"(\\"|[^"])*"/g, (match) => {
+        return match.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    });
+
+    console.log("cleaned", cleaned);
+
+    try {
+        return JSON.parse(cleaned);
+    } catch (error) {
+        console.warn("failed to parse json:", error);
+        console.warn("cleaned content:", cleaned);
+
+        // Attempt to fix common issues
+        cleaned = cleaned
+            .replace(/,\s*}/g, "}") // Remove trailing commas
+            .replace(/'/g, '"') // Replace single quotes with double quotes
+            .replace(/(\w+):/g, '"$1":') // Add quotes to keys
+            .replace(/:\s*'([^']*)'/g, ': "$1"') // Replace single-quoted values with double-quoted values
+            .replace(/\\"/g, '"') // Replace escaped double quotes with regular double quotes
+            .replace(/"{/g, '{"') // Fix improperly escaped nested JSON
+            .replace(/}"/g, '"}');
+
+        try {
+            return JSON.parse(cleaned);
+        } catch (secondError) {
+            console.warn("failed to parse json after attempted fixes:", secondError);
+            throw new Error("invalid json format in llm response");
+        }
+    }
+};
+

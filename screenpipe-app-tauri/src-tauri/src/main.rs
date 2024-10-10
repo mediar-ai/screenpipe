@@ -302,7 +302,7 @@ async fn main() {
                 });
 
             if is_analytics_enabled {
-                match start_analytics(unique_id, posthog_api_key, interval_hours) {
+                match start_analytics(unique_id, posthog_api_key, interval_hours, "http://localhost:3030".to_string()) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
                     }

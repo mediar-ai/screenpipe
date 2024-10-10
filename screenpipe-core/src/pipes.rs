@@ -434,6 +434,10 @@ mod pipes {
             Ok(_) => (),
             Err(e) => {
                 error!("error in javascript runtime event loop: {}", e);
+                if let Some(source) = e.source() {
+                    error!("  Caused by: {}", source);
+                }
+                error!("  Backtrace: {:?}", e.backtrace());
                 // you can choose to return the error or handle it differently
                 // return Err(anyhow::anyhow!("javascript runtime error: {}", e));
             }
@@ -444,6 +448,11 @@ mod pipes {
             Ok(_) => Ok(()),
             Err(e) => {
                 error!("error evaluating javascript module: {}", e);
+                if let Some(source) = e.source() {
+                    error!("  Caused by: {}", source);
+                }
+                error!("  Backtrace: {:?}", e.backtrace());
+
                 // you can choose to return the error or handle it differently
                 Err(anyhow::anyhow!("javascript module evaluation error: {}", e))
             }

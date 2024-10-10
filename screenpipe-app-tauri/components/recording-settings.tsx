@@ -409,6 +409,13 @@ export function RecordingSettings({
     if (localSettings.vadSensitivity !== "high") {
       args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
     }
+    
+    if (!localSettings.analyticsEnabled) {
+      args.push("--disable-telemetry");
+    }
+    if (localSettings.audioChunkDuration !== 30) {
+      args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
+    }
 
     return `${cliPath} ${args.join(" ")}`;
   };
@@ -525,6 +532,9 @@ export function RecordingSettings({
                   </SelectItem>
                   <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
                   <SelectItem value="whisper-large">whisper-large</SelectItem>
+                  <SelectItem value="whisper-large-v3-turbo">
+                    whisper-large-turbo
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
