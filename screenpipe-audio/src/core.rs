@@ -16,7 +16,6 @@ pub enum AudioTranscriptionEngine {
     WhisperTiny,
     WhisperDistilLargeV3,
     WhisperLargeV3Turbo,
-    WhisperLargeV3,
 }
 
 impl fmt::Display for AudioTranscriptionEngine {
@@ -26,7 +25,6 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::WhisperTiny => write!(f, "WhisperTiny"),
             AudioTranscriptionEngine::WhisperDistilLargeV3 => write!(f, "WhisperLarge"),
             AudioTranscriptionEngine::WhisperLargeV3Turbo => write!(f, "WhisperLargeV3Turbo"),
-            AudioTranscriptionEngine::WhisperLargeV3 => write!(f, "WhisperLargeV3"),
         }
     }
 }
