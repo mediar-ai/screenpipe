@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, HelpCircle, ArrowUpRight } from "lucide-react";
@@ -27,9 +28,12 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   handlePrevSlide,
 }) => {
 
+  const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
+  const [areAllInputsFilled, setAreAllInputsFilled] = React.useState(false);
+  const [errors, setErrors] = React.useState<{ [key: string]: string }>({});
 
   const handleApiUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -47,6 +51,84 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
     const newValue = e.target.value;
     setLocalSettings({ ...localSettings, aiModel: newValue });
     updateSettings({ aiModel: newValue });
+  };
+
+  useEffect(() => {
+    const { aiUrl, openaiApiKey, aiModel } = localSettings;
+    setAreAllInputsFilled(
+      aiUrl.trim() !== "" && openaiApiKey.trim() !== "" && aiModel.trim() !== ""
+    );
+  }, [localSettings])
+  
+  const validateInputs = async () => {
+    const { aiUrl, openaiApiKey, aiModel } = localSettings;
+    const newErrors: {[key: string]: string } = {};
+    try {
+      new URL(aiUrl);
+      const apiKeyValidationResponse = await fetch(`${aiUrl}/models`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+      });
+      if (apiKeyValidationResponse.ok) {
+        try {
+          const modelValidationResponse = await fetch(`${aiUrl}/models/${aiModel}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${openaiApiKey}`,
+            },
+          });
+          if (!modelValidationResponse.ok) {
+            const contentType = modelValidationResponse.headers.get('content-type');
+            let errorMessage = 'unknown error';
+            if (contentType && contentType.includes('application/json')) {
+              const errorJson = await modelValidationResponse.json();
+              errorMessage = errorJson.error?.message || JSON.stringify(errorJson);
+            } else {
+              errorMessage = await modelValidationResponse.text();
+            }
+            newErrors.aiModel = `invalid ai model: ${errorMessage.toLowerCase()}`;
+          }
+        } catch (error: any) {
+          errors.aiModel = `failed to validate ai model, please make sure ai url & api key is correct: ${error.message.toLowerCase()}`;
+        }
+      } else {
+        const contentType = apiKeyValidationResponse.headers.get('content-type');
+        let errorMessage = 'unknown error';
+        if (contentType && contentType.includes('application/json')) {
+          const errorJson = await apiKeyValidationResponse.json();
+          errorMessage = errorJson.error?.message || JSON.stringify(errorJson);
+        } else {
+          errorMessage = await apiKeyValidationResponse.text();
+        }
+        newErrors.openaiApiKey = `invalid api key: ${errorMessage.toLowerCase()}`;
+      }
+    } catch (error: any) {
+      newErrors.openaiApiKey = `failed to validate api key, please make sure ai url is correct: ${error.message.toLowerCase()}`;
+    }
+
+    setErrors(newErrors);
+    Object.keys(newErrors).forEach((key) => {
+      toast({
+        title: "api key validation error",
+        description: newErrors[key],
+        variant: "destructive",
+      })
+    });
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  const handleValidationMoveNextSlide = async () => {
+    const isValid = await validateInputs();
+    if (isValid) {
+      toast({
+        title: "success",
+        description: "ai setup completed successfully",
+        variant: "default",
+      })
+      handleNextSlide();
+    }
   };
 
   React.useEffect(() => {
@@ -185,9 +267,16 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       <OnboardingNavigation 
         className="mt-8"
         handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
+        handleNextSlide={
+          areAllInputsFilled 
+          ? handleValidationMoveNextSlide
+          : handleNextSlide
+        }
         prevBtnText="previous"
-        nextBtnText="setup"
+        nextBtnText={areAllInputsFilled 
+          ? "setup" 
+          : "i'll setup later"
+        }
       />
     </div>
   );

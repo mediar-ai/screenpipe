@@ -67,7 +67,7 @@ const OnboardingExperimentalFeatures: React.FC<OnboardingExperimentalFeaturesPro
                   <span className="font-medium text-nowrap text-[14px] prose mr-1">
                     remove personal information (pii):
                   </span>
-                    for automatically detecting and removing your personally identifiable information (PII) from captured data to ensure your privacy  with data
+                    for automatically detecting and removing your personally identifiable information (pii) from captured data to ensure your privacy  with data
                     protection.
                 </li>
                 <li className="text-muted-foreground text-sm mt-2">

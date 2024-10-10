@@ -5,7 +5,6 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 
 interface OnboardingPersonalizeProps {
-  error: string | null;
   handleOptionClick: (option: string) => void;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
@@ -38,18 +37,24 @@ const CardItem: React.FC<{
   const { icon: Icon, title, description, note } = option;
 
   return (
-    <Card
-      className={`p-4 h-[270px] !mt-[-5px] hover:bg-accent cursor-pointer 
-      ${isSelected ? "bg-accent" : "" }`}
-      onClick={onClick}
-    >
-      <CardContent className="flex flex-col w-[250px] justify-center">
-        <Icon className="w-16 h-16 mx-auto" />
-        <h2 className="font-semibold text-xl text-center mt-1">{title}</h2>
-        <span className="prose prose-sm mt-2">{description}</span>
-        <span className="text-muted-foreground text-center prose-sm mt-4">{note}</span>
-      </CardContent>
-    </Card>
+    <div className="relative group h-[270px]">
+      <div className={`absolute h-full !mt-[-5px] inset-0 rounded-lg transition-all duration-300 ease-out group-hover:before:opacity-100 group-hover:before:scale-100 
+        before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-black dark:before:border-white before:opacity-0 before:scale-95 before:transition-all 
+        before:duration-300 before:ease-out ${isSelected ? "before:!border-none" : "" }`}
+      />
+      <Card
+        className={`p-4 h-full !mt-[-5px] cursor-pointer bg-white dark:bg-gray-800 hover:bg-accent transition-all relative z-[1] duration-300 ease-out group-hover:scale-[0.98]
+        ${isSelected ? "bg-accent transition-transform relative border-2 border-black dark:border-white" : "" }`}
+        onClick={onClick}
+      >
+        <CardContent className="flex flex-col w-[250px] justify-center">
+          <Icon className="w-16 h-16 mx-auto" />
+          <h2 className="font-semibold text-xl text-center mt-1">{title}</h2>
+          <span className="prose prose-sm mt-1">{description}</span>
+          <span className="text-muted-foreground text-center prose-sm mt-4">{note}</span>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
@@ -59,7 +64,6 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
   handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
-  error,
 }) => {
   return (
     <div className={`${className} w-full flex justify-center flex-col relative`}>
@@ -84,7 +88,6 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
           />
         ))}
       </div>
-      {error && <div className="text-destructive w-full text-center absolute mt-3 bottom-10">{error}</div>}
       <OnboardingNavigation
         className="mt-9"
         handlePrevSlide={handlePrevSlide}

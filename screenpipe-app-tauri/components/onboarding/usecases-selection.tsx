@@ -10,7 +10,6 @@ import {
 import OnboardingNavigation from "@/components/onboarding/navigation";
 
 interface OnboardingSelectionProps {
-  error: string | null;
   className?: string;
   selectedOptions: string[] | null;
   handleOptionClick: (option: string) => void;
@@ -72,7 +71,6 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
-  error,
 }) => {
   return (
     <div className={className}>
@@ -96,7 +94,6 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
             onClick={() => handleOptionClick(option.key)}
           />
         ))}
-        {error && <div className="text-destructive absolute bottom-[-24px] z[-1]">{error}</div>}
       </div>
       <OnboardingNavigation
         className="mt-9"
