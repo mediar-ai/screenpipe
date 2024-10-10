@@ -49,9 +49,7 @@ async fn test_transcription_accuracy() {
         ),
         (
             "test_data/accuracy4.wav",
-            r#"Eventually but, I mean, I feel like but, I mean, first, I mean, you think your your vision smart will be interesting because, yeah, you install once. You pay us, you install once. That that yours. So, basically, all the time Microsoft explained, you know, MS Office, long time ago, you just buy the the the software that you can using there forever unless you wanna you wanna update upgrade is the better version. Right?
-
-So it's a little bit, you know"#,
+            r#"Eventually but, I mean, I feel like but, I mean, first, I mean, you think your your vision smart will be interesting because, yeah, you install once. You pay us, you install once. That that yours. So, basically, all the time Microsoft explained, you know, MS Office, long time ago, you just buy the the the software that you can using there forever unless you wanna you wanna update upgrade is the better version. Right? So it's a little bit, you know"#,
         ),
         (
             "test_data/accuracy5.wav",
@@ -117,10 +115,10 @@ So it's a little bit, you know"#,
         let (audio_file, expected_transcription, transcription, accuracy) = result.unwrap();
 
         println!("file: {}", audio_file);
-        // println!("expected: {}", expected_transcription);
-        // println!("actual: {}", transcription);
+        println!("expected: {}", expected_transcription);
+        println!("actual: {}", transcription);
         println!("accuracy: {:.2}%", accuracy * 100.0);
-        // println!();
+        println!();
 
         total_accuracy += accuracy;
         total_tests += 1;
