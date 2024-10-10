@@ -4,6 +4,9 @@ import { WebTracerProvider } from "@opentelemetry/sdk-trace-web";
 import { SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 
 export function initOpenTelemetry(projectId: string, sessionId: string) {
+  const isDebug = process.env.TAURI_ENV_DEBUG === "true";
+  if (isDebug || window.origin.includes("localhost")) return;
+
   const provider = new WebTracerProvider({
     resource: new Resource({
       "highlight.project_id": projectId,
