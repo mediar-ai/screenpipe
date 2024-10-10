@@ -1,9 +1,9 @@
-// @ts-nocheck
-import * as fs from "node:fs/promises";
+import * as fs from "fs";
+import process from "node:process";
 
 // Type definitions
 export interface PipeConfig {
-  [key: string]: any;
+  [key: string]: object | string | number | boolean;
 }
 
 export interface NotificationOptions {
@@ -11,30 +11,130 @@ export interface NotificationOptions {
   body: string;
 }
 
-export interface EmailOptions {
-  to: string;
-  from: string;
-  password: string;
-  subject: string;
-  body: string;
-  contentType?: string;
-}
+/**
+ * Types of content that can be queried in Screenpipe.
+ */
+export type ContentType = "ocr" | "audio" | "all";
 
+/**
+ * Parameters for querying Screenpipe.
+ */
 export interface ScreenpipeQueryParams {
-  content_type?: "all" | "ocr" | "audio";
+  q?: string;
+  contentType?: ContentType;
   limit?: number;
   offset?: number;
-  start_time?: string;
-  end_time?: string;
-  min_length?: number;
-  max_length?: number;
-  include_frames?: boolean;
-  q?: string;
-  app_name?: string;
-  window_name?: string;
+  startTime?: string;
+  endTime?: string;
+  appName?: string;
+  windowName?: string;
+  includeFrames?: boolean;
+  minLength?: number;
+  maxLength?: number;
 }
 
-export async function sendNotification(
+/**
+ * Structure of OCR (Optical Character Recognition) content.
+ */
+export interface OCRContent {
+  frameId: number;
+  text: string;
+  timestamp: string;
+  filePath: string;
+  offsetIndex: number;
+  appName: string;
+  windowName: string;
+  tags: string[];
+  frame?: string;
+}
+
+/**
+ * Structure of audio content.
+ */
+export interface AudioContent {
+  chunkId: number;
+  transcription: string;
+  timestamp: string;
+  filePath: string;
+  offsetIndex: number;
+  tags: string[];
+  deviceName: string;
+  deviceType: string;
+}
+
+/**
+ * Structure of Full Text Search content.
+ */
+export interface FTSContent {
+  textId: number;
+  matchedText: string;
+  frameId: number;
+  timestamp: string;
+  appName: string;
+  windowName: string;
+  filePath: string;
+  originalFrameText?: string;
+  tags: string[];
+}
+
+/**
+ * Union type for different types of content items.
+ */
+export type ContentItem =
+  | { type: "OCR"; content: OCRContent }
+  | { type: "Audio"; content: AudioContent }
+  | { type: "FTS"; content: FTSContent };
+
+/**
+ * Pagination information for search results.
+ */
+interface PaginationInfo {
+  limit: number;
+  offset: number;
+  total: number;
+}
+
+/**
+ * Structure of the response from a Screenpipe query.
+ */
+interface ScreenpipeResponse {
+  data: ContentItem[];
+  pagination: PaginationInfo;
+}
+
+/**
+ * Utility function to convert snake_case to camelCase
+ */
+function toCamelCase(str: string): string {
+  return str.replace(/([-_][a-z])/g, (group) =>
+    group.toUpperCase().replace("-", "").replace("_", "")
+  );
+}
+
+/**
+ * Function to recursively convert object keys from snake_case to camelCase
+ */
+function convertToCamelCase(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(convertToCamelCase);
+  } else if (obj !== null && typeof obj === "object") {
+    return Object.keys(obj).reduce((result, key) => {
+      const camelKey = toCamelCase(key);
+      result[camelKey] = convertToCamelCase(obj[key]);
+      return result;
+    }, {} as any);
+  }
+  return obj;
+}
+
+/**
+ * Function to convert camelCase to snake_case
+ */
+function toSnakeCase(str: string): string {
+  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+export async function sendDesktopNotification(
   options: NotificationOptions
 ): Promise<boolean> {
   const notificationApiUrl =
@@ -52,7 +152,7 @@ export async function sendNotification(
   }
 }
 
-export async function loadConfig(): Promise<PipeConfig> {
+export async function loadPipeConfig(): Promise<PipeConfig> {
   try {
     const configPath = `${process.env.SCREENPIPE_DIR}/pipes/${process.env.PIPE_ID}/pipe.json`;
     const configContent = await fs.readFile(configPath, "utf8");
@@ -71,10 +171,13 @@ export async function loadConfig(): Promise<PipeConfig> {
 
 export async function queryScreenpipe(
   params: ScreenpipeQueryParams
-): Promise<any> {
+): Promise<ScreenpipeResponse | null> {
   const queryParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined) queryParams.append(key, value.toString());
+    if (value !== undefined) {
+      const snakeKey = toSnakeCase(key);
+      queryParams.append(snakeKey, value.toString());
+    }
   });
 
   const url = `http://localhost:3030/search?${queryParams}`;
@@ -83,9 +186,10 @@ export async function queryScreenpipe(
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return await response.json();
+    const data = await response.json();
+    return convertToCamelCase(data) as ScreenpipeResponse;
   } catch (error) {
-    console.error("Error querying Screenpipe:", error);
+    console.error("error querying screenpipe:", error);
     return null;
   }
 }
