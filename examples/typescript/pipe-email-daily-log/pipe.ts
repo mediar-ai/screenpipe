@@ -1,3 +1,8 @@
+import * as fs from "fs";
+import nodemailer from "nodemailer";
+import { queryScreenpipe, loadPipeConfig, ContentItem } from "screenpipe";
+import process from "node:process";
+
 interface DailyLog {
   activity: string;
   category: string;
@@ -84,10 +89,7 @@ async function saveDailyLog(logEntry: DailyLog): Promise<void> {
     .replace(/\..+/, "");
   const filename = `${timestamp}-${logEntry.category.replace("/", "-")}.json`;
   console.log("filename:", filename);
-  await fs.writeFile(
-    `${logsDir}/${filename}`,
-    JSON.stringify(logEntry, null, 2)
-  );
+  fs.writeFileSync(`${logsDir}/${filename}`, JSON.stringify(logEntry, null, 2));
 }
 
 async function generateDailySummary(
@@ -159,16 +161,27 @@ async function sendEmail(
   subject: string,
   body: string
 ): Promise<void> {
-  const from = to; // assuming the sender is the same as the recipient
   await retry(async () => {
-    const result = await pipe.sendEmail({
-      to,
-      from,
-      password,
-      subject,
-      body,
+    // Create a transporter using SMTP
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com", // Replace with your SMTP server
+      port: 587,
+      secure: false, // Use TLS
+      auth: {
+        user: to, // assuming the sender is the same as the recipient
+        pass: password,
+      },
     });
-    if (!result) {
+
+    // Send mail with defined transport object
+    const info = await transporter.sendMail({
+      from: to, // sender address
+      to: to, // list of receivers
+      subject: subject, // Subject line
+      text: body, // plain text body
+    });
+
+    if (!info) {
       throw new Error("failed to send email");
     }
     console.log(`email sent to ${to} with subject: ${subject}`);
@@ -181,14 +194,14 @@ async function getTodayLogs(): Promise<DailyLog[]> {
     const today = new Date().toISOString().replace(/:/g, "-").split("T")[0]; // Get today's date in YYYY-MM-DD format
 
     console.log("reading logs dir:", logsDir);
-    const files = await fs.readdir(logsDir);
+    const files = fs.readdirSync(logsDir);
     console.log("files:", files);
     const todayFiles = files.filter((file) => file.startsWith(today));
     console.log("today's files:", todayFiles);
 
     const logs: DailyLog[] = [];
     for (const file of todayFiles) {
-      const content = await fs.readFile(`${logsDir}/${file}`);
+      const content = fs.readFileSync(`${logsDir}/${file}`);
       logs.push(JSON.parse(content));
     }
 
@@ -202,7 +215,7 @@ async function getTodayLogs(): Promise<DailyLog[]> {
 async function dailyLogPipeline(): Promise<void> {
   console.log("starting daily log pipeline");
 
-  const config = await pipe.loadConfig();
+  const config = await loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
@@ -251,7 +264,7 @@ async function dailyLogPipeline(): Promise<void> {
       const now = new Date();
       const oneMinuteAgo = new Date(now.getTime() - interval);
 
-      const screenData = await pipe.queryScreenpipe({
+      const screenData = await queryScreenpipe({
         start_time: oneMinuteAgo.toISOString(),
         end_time: now.toISOString(),
         window_name: windowName,
@@ -291,7 +304,6 @@ async function dailyLogPipeline(): Promise<void> {
       }
 
       if (shouldSendSummary) {
-        // await retry(async () => {
         const todayLogs = await getTodayLogs();
         console.log("today's logs:", todayLogs);
 
@@ -311,7 +323,6 @@ async function dailyLogPipeline(): Promise<void> {
           );
           lastEmailSent = now;
         }
-        // });
       }
     } catch (error) {
       console.warn("error in daily log pipeline:", error);
