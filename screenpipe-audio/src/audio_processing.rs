@@ -1,9 +1,6 @@
 use anyhow::Result;
-use candle_transformers::models::whisper::audio::Float;
 use realfft::num_complex::{Complex32, ComplexFloat};
-use realfft::num_traits::Pow;
 use realfft::RealFftPlanner;
-use symphonia::core::audio;
 
 pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
     let rms = (audio.iter().map(|&x| x * x).sum::<f32>() / audio.len() as f32).sqrt();
@@ -74,7 +71,7 @@ pub fn spectral_subtraction(audio: &[f32], d: f32) -> Result<Vec<f32>> {
 // not an average of non-speech segments, but I don't know how much pause time we
 // get. for now, we will just assume the noise is constant (kinda defeats the purpose)
 // but oh well
-pub fn average_noise_spectrum(audio: &[f32]) -> f32 { ;
+pub fn average_noise_spectrum(audio: &[f32]) -> f32 {
         let mut total_sum = 0.0f32;
 
         for sample in audio {

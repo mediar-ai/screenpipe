@@ -26,7 +26,6 @@ use crate::{
 
 use hound::{WavSpec, WavWriter};
 use std::io::Cursor;
-use std::slice::Chunks;
 use reqwest::Client;
 use serde_json::Value;
 
@@ -206,14 +205,18 @@ pub async fn stt(
 
     for chunk in audio_data.chunks(frame_size) {
         total_frames += 1;
-        match vad_engine.is_voice_segment(chunk) {
-            Ok(is_voice) => {
-                if is_voice {
-                    let processed_audio = spectral_subtraction(chunk, noise)?;
-                    speech_frames.extend(processed_audio);
-                    speech_frame_count += 1;
-                } else {
-                    noise = average_noise_spectrum(chunk);
+        match vad_engine.audio_type(chunk) {
+            Ok(status) => {
+                match status {
+                    VadStatus::Speech => {
+                        let processed_audio = spectral_subtraction(chunk, noise)?;
+                        speech_frames.extend(processed_audio);
+                        speech_frame_count += 1;
+                    },
+                    VadStatus::Unknown => {
+                        noise = average_noise_spectrum(chunk);
+                    },
+                    _  => {}
                 }
             }
             Err(e) => {
@@ -404,7 +407,7 @@ fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result
     let params = SincInterpolationParameters {
         sinc_len: 256,
         f_cutoff: 0.95,
-        interpolation: SincInterpolationType::Linear,
+        interpolation: SincInterpolationType::Cubic,
         oversampling_factor: 256,
         window: WindowFunction::BlackmanHarris2,
     };
@@ -441,6 +444,7 @@ pub struct TranscriptionResult {
     pub error: Option<String>,
 }
 use std::sync::atomic::{AtomicBool, Ordering};
+use vad_rs::VadStatus;
 use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
 
 pub async fn create_whisper_channel(
