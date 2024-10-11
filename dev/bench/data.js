@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728687631016,
+  "lastUpdate": 1728688417452,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -14639,6 +14639,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1865720083,
             "range": "± 9577455",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "118052427+tribhuwan-kumar@users.noreply.github.com",
+            "name": "tribhuwan",
+            "username": "tribhuwan-kumar"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e1402fc39e43e68b847a970bbdc5699eb9b77850",
+          "message": "feat: add onboarding (#439)\n\n* feat: add onboarding slides for first time users\r\n\r\n* fix: use better way to handle onboarding slides\r\n\r\n* fix: add animation in slides and fix css issues\r\n\r\n* fix: use &apos; instead of '\r\n\r\n* fix: css issue in windows\r\n\r\n* refactor: options & personalize slide and use smaller cases\r\n\r\n* chore: add new required slides and integrate api setup validation in onboarding api-setup\r\n\r\n* chore: create dev config slide and some fixes\r\n\r\n* fix: slide flow as expectation\r\n\r\n* fix: some texts & typos\r\n\r\n* fix: slide flow and next click in dev preference\r\n\r\n---------\r\n\r\nCo-authored-by: tribhuwan-kumar <tribhuwankumar725275@gmail.com>",
+          "timestamp": "2024-10-11T16:04:33-07:00",
+          "tree_id": "a63918a84a00d5cb586ab4f2937b3bc4a2bba2d3",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e1402fc39e43e68b847a970bbdc5699eb9b77850"
+        },
+        "date": 1728688416154,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2558773645,
+            "range": "± 398664049",
             "unit": "ns/iter"
           }
         ]
