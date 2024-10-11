@@ -126,6 +126,14 @@ jobs:
           ls . 
           bun install
 
+      - name: Install Scoop (if needed)
+        if: matrix.platform == 'windows-latest'
+        shell: powershell
+        run: |
+          if (!(Get-Command scoop -ErrorAction SilentlyContinue)) {
+            iwr -useb get.scoop.sh | iex
+          }
+
       - name: Run pre_build.js
         shell: bash
         env:
