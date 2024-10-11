@@ -33,7 +33,7 @@ const config = {
 		clblastName: 'CLBlast-1.6.2-windows-x64',
 		clblastUrl: 'https://github.com/CNugteren/CLBlast/releases/download/1.6.2/CLBlast-1.6.2-windows-x64.zip',
 
-		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
+		vcpkgPackages: ['opencl', 'onnxruntime-gpu', 'onnxruntime-gpu:arm64-windows'],
 	},
 	linux: {
 		aptPackages: [
@@ -301,23 +301,32 @@ if (platform == 'windows') {
 	process.env.PATH = `${process.cwd()}\\tesseract;${process.env.PATH}`
 
 	// Setup ONNX Runtime
-	const onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
-	const onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
-	const onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`
-	if (!(await fs.exists(onnxRuntimeName))) {
-		console.log('Setting up ONNX Runtime libraries for Windows...')
-		try {
-			await $`${wgetPath} -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
-			await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
-			await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
-			console.log('ONNX Runtime libraries for Windows set up successfully.')
-		} catch (error) {
-			console.error('Error downloading or extracting ONNX Runtime:', error);
-			console.log('Attempting alternative download method...');
-			// Add alternative download method here
+	let onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
+	let onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
+	let onnxRuntimeUrls = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`;
+
+	// Run twice, once for ARM64, once for x64
+	for (let x = 0; x < 2; x++) {
+		if (x == 1) {
+			onnxRuntimeName = "onnxruntime-win-arm64-1.19.2"
+			onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
+			onnxRuntimeUrls = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`;
 		}
-	} else {
-		console.log('ONNX Runtime libraries for Windows already exists.')
+		if (!(await fs.exists(onnxRuntimeName))) {
+			console.log('Setting up ONNX Runtime libraries for Windows...')
+			try {
+				await $`${wgetPath} -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
+				await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
+				await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
+				console.log('ONNX Runtime libraries for Windows set up successfully.')
+			} catch (error) {
+				console.error('Error downloading or extracting ONNX Runtime:', error);
+				console.log('Attempting alternative download method...');
+				// Add alternative download method here
+			}
+		} else {
+			console.log('ONNX Runtime libraries for Windows already exists.')
+		}
 	}
 
 	// Setup OpenBlas
@@ -341,7 +350,7 @@ if (platform == 'windows') {
 	}
 
 	// Setup vcpkg packages with environment variables set inline
-	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
+	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages} --allow-unsupported`.quiet()
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {
