@@ -1,0 +1,7 @@
+{
+    "imports": {
+        "fs": "node:fs",
+        "nodemailer": "npm:nodemailer",
+        "screenpipe": "https://raw.githubusercontent.com/mediar-ai/screenpipe/deno-thru-cli/screenpipe-js/main.ts"
+    }
+}

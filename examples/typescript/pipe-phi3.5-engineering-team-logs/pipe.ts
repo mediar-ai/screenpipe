@@ -1,3 +1,4 @@
+import { queryScreenpipe, loadPipeConfig, ContentItem } from "screenpipe";
 const NOTION_API_URL = "https://api.notion.com/v1/pages";
 
 interface EngineeringLog {
@@ -94,7 +95,7 @@ async function syncLogToNotion(
 async function streamEngineeringLogsToNotion(): Promise<void> {
   console.log("Starting Engineering Logs Stream to Notion");
 
-  const config = await pipe.loadConfig();
+  const config = await loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
@@ -108,11 +109,11 @@ async function streamEngineeringLogsToNotion(): Promise<void> {
       const now = new Date();
       const oneHourAgo = new Date(now.getTime() - interval);
 
-      const screenData = await pipe.queryScreenpipe({
-        start_time: oneHourAgo.toISOString(),
-        end_time: now.toISOString(),
+      const screenData = await queryScreenpipe({
+        startTime: oneHourAgo.toISOString(),
+        endTime: now.toISOString(),
         limit: 50,
-        content_type: "ocr",
+        contentType: "ocr",
       });
 
       if (screenData && screenData.data.length > 0) {

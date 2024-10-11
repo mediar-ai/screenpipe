@@ -95,6 +95,41 @@ const exports = {
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
 
+// Add this function to install Deno
+async function installDeno() {
+	console.log('installing deno...');
+
+	if (platform === 'windows') {
+		await $`powershell -c "irm https://deno.land/install.ps1 | iex"`
+	} else {
+		// for macos and linux
+		await $`curl -fsSL https://deno.land/install.sh | sh`
+	}
+
+	console.log('deno installed successfully.');
+}
+
+// Add this function to copy the Deno binary
+async function copyDenoBinary() {
+	console.log('copying deno binary for tauri...');
+
+	let denoPath;
+	if (platform === 'windows') {
+		denoPath = path.join(os.homedir(), '.deno', 'bin', 'deno.exe');
+	} else {
+		denoPath = path.join(os.homedir(), '.deno', 'bin', 'deno');
+	}
+
+	const destPath = path.join(cwd, platform === 'windows' ? 'deno.exe' : 'deno');
+
+	try {
+		await fs.copyFile(denoPath, destPath);
+		console.log('deno binary copied successfully.');
+	} catch (error) {
+		console.error('failed to copy deno binary:', error);
+	}
+}
+
 /* ########## Linux ########## */
 if (platform == 'linux') {
 	// Install APT packages
@@ -508,6 +543,10 @@ if (process.env.GITHUB_ENV) {
 		}
 	}
 }
+
+// Install and setup Deno (add this near the end of the script)
+await installDeno();
+await copyDenoBinary();
 
 // --dev or --build
 const action = process.argv?.[2]

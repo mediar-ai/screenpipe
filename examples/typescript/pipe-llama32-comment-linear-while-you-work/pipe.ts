@@ -1,9 +1,24 @@
-const LINEAR_API_URL = "https://api.linear.app/graphql";
+import {
+  queryScreenpipe,
+  loadPipeConfig,
+  ContentItem,
+  sendDesktopNotification,
+} from "screenpipe";
 
-interface LinearComment {
-  taskId: string;
-  body: string;
-}
+import { z } from "zod";
+import { generateObject } from "ai";
+import { createOllama } from "ollama-ai-provider";
+import { LinearClient } from "npm:@linear/sdk";
+
+const linearSearchQuery = z.object({
+  query: z.string(),
+});
+
+const linearComment = z.object({
+  taskId: z.string(),
+  body: z.string(),
+  nothingToDo: z.boolean().optional(),
+});
 
 async function generateLinearSearchQuery(
   screenData: ContentItem[],
@@ -13,6 +28,8 @@ async function generateLinearSearchQuery(
   const prompt = `based on the following screen data, generate a search query for linear tasks:
 
     ${JSON.stringify(screenData)}
+
+    the query should be relevant to the screen/audio data and will be used to search for relevant linear tasks in the product management tool of the user to comment on it
 
     return a json object with a single 'query' field containing only the text to search for in the task title. here are some examples:
     - { "query": "audio" }
@@ -31,33 +48,19 @@ async function generateLinearSearchQuery(
     - return only the json object, no additional text
     `;
 
-  const response = await fetch(ollamaApiUrl, {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    body: JSON.stringify({
-      model: ollamaModel,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      response_format: { type: "json_object" },
-    }),
+  const provider = createOllama({
+    baseURL: ollamaApiUrl,
   });
 
-  console.log("response", response);
+  const response = await generateObject({
+    model: provider(ollamaModel),
+    messages: [{ role: "user", content: prompt }],
+    schema: linearSearchQuery,
+  });
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `http error! status: ${response.status}, body: ${errorBody}`
-    );
-  }
+  console.log("ai response", response);
 
-  const result = await response.json();
-
-  console.log("ai answer:", result);
-
-  return JSON.parse(result.message.content.trim());
+  return response.object.query;
 }
 
 async function generateLinearComment(
@@ -66,7 +69,7 @@ async function generateLinearComment(
   ollamaApiUrl: string,
   ollamaModel: string,
   customCommentPrompt: string
-): Promise<LinearComment> {
+): Promise<z.infer<typeof linearComment>> {
   console.log("generating linear comment for tasks:", relevantTasks);
   const basePrompt = `based on the following screen data and relevant linear tasks, generate a concise, informative comment for the most relevant task:
 
@@ -75,36 +78,16 @@ async function generateLinearComment(
 
     return a json object with the following structure:
     {
-        "taskId": "linear task id of the most relevant task",
-        "body": "informative comment about work done, progress made, or insights gained"
+        "taskId": "linear task id of the most relevant task (must be one of the provided task ids)",
+        "body": "informative comment about work done, progress made, or insights gained related to the chosen task"
+        "nothingToDo": "no task to comment on based on the screen data"
     }
         
-    here are some examples:
-    {
-        "taskId": "ISS-42",
-        "body": "implemented pagination for user list. load times improved by 60%. next: add infinite scroll"
-    }
-    {
-        "taskId": "BUG-17",
-        "body": "debugged async data fetching. root cause: race condition. proposed fix: implement mutex. need review"
-    }
-    {
-        "taskId": "FEAT-23",
-        "body": "drafted new onboarding flow. key changes: simplified sign-up form, added progress indicator. ready for design review"
-    }
-    {
-        "taskId": "PERF-08",
-        "body": "optimized db queries. avg response time: 500ms -> 150ms. identified potential for further improvement in caching layer"
-    }
-    {
-        "taskId": "DOC-12",
-        "body": "updated api docs with new endpoints. added example requests and responses. todo: update postman collection"
-    }
-
     rules:
     - format JSON correctly
-    - comment should directly relate to the task and recent work/activity
-    - include specific details, metrics, or insights from the screen data
+    - taskId MUST be one of the provided task ids, do not invent new ones
+    - comment should directly relate to the chosen task and recent work/activity
+    - include specific details, metrics, or insights from the screen data if applicable
     - mention progress made, challenges encountered, or next steps if applicable
     - keep it concise but informative (aim for 2-3 sentences)
     - use technical language appropriate for the task context
@@ -115,146 +98,70 @@ async function generateLinearComment(
     ? `${basePrompt}\n\nadditional instructions: ${customCommentPrompt}`
     : basePrompt;
 
-  const response = await fetch(ollamaApiUrl, {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    body: JSON.stringify({
-      model: ollamaModel,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      response_format: { type: "json_object" },
-    }),
+  const provider = createOllama({
+    baseURL: ollamaApiUrl,
   });
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `http error! status: ${response.status}, body: ${errorBody}`
-    );
-  }
+  const response = await generateObject({
+    model: provider(ollamaModel),
+    messages: [{ role: "user", content: prompt }],
+    schema: linearComment,
+  });
 
-  const result = await response.json();
+  console.log("ai response", response);
 
-  return JSON.parse(result.message.content.trim());
+  return response.object;
 }
 
 async function getCurrentUser(
   apiKey: string
 ): Promise<{ id: string; name: string }> {
-  const query = `
-    {
-      viewer {
-        id
-        name
-      }
-    }
-  `;
-
-  const response = await fetch(LINEAR_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `http error! status: ${response.status}, body: ${errorBody}`
-    );
-  }
-
-  const result = await response.json();
-  return result.data.viewer;
+  const client = new LinearClient({ apiKey });
+  const viewer = await client.viewer;
+  return { id: viewer.id, name: viewer.name };
 }
 
 async function addCommentToLinear(
-  comment: LinearComment,
+  comment: z.infer<typeof linearComment>,
   apiKey: string
 ): Promise<void> {
+  const client = new LinearClient({ apiKey });
   const user = await getCurrentUser(apiKey);
   const commentWithMention = `<@${user.id}>: ${comment.body}`;
 
-  const mutation = `
-    mutation CreateComment($input: CommentCreateInput!) {
-      commentCreate(input: $input) {
-        success
-      }
-    }
-  `;
-
-  const variables = {
-    input: {
-      issueId: comment.taskId,
+  try {
+    await client.createComment({
+      issueId: comment.taskId as string,
       body: commentWithMention,
-    },
-  };
-
-  const response = await fetch(LINEAR_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: apiKey, // Remove the "Bearer" prefix
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: mutation, variables }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `http error! status: ${response.status}, body: ${errorBody}`
-    );
+    });
+    console.log("comment added to linear successfully");
+  } catch (error) {
+    console.error("linear api error:", error);
+    throw new Error("failed to add comment to linear");
   }
-
-  const result = await response.json();
-  console.log("result", result);
-
-  console.log("comment added to linear successfully");
 }
 
 async function searchLinearTasks(
   queryText: string,
   apiKey: string
 ): Promise<any[]> {
-  const query = `
-    {
-      issues(filter: { title: { contains: "${queryText}" } }) {
-        nodes {
-          id
-          title
-        }
-      }
-    }
-  `;
-
-  const response = await fetch(LINEAR_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: apiKey, // Remove the "Bearer" prefix
-      "Content-Type": "application/json",
+  const client = new LinearClient({ apiKey });
+  const issues = await client.issues({
+    filter: {
+      title: { contains: queryText },
     },
-    body: JSON.stringify({ query }),
   });
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `http error! status: ${response.status}, body: ${errorBody}`
-    );
-  }
-
-  const result = await response.json();
-  return result.data.issues.nodes;
+  return issues.nodes.map((issue) => ({
+    id: issue.id,
+    title: issue.title,
+  }));
 }
 
 async function streamCommentsToLinear(): Promise<void> {
   console.log("starting comments stream to linear");
 
-  const config = await pipe.loadConfig();
+  const config = await loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
@@ -262,17 +169,22 @@ async function streamCommentsToLinear(): Promise<void> {
   const ollamaApiUrl = config.ollamaApiUrl;
   const ollamaModel = config.ollamaModel;
   const customCommentPrompt = config.customCommentPrompt;
+  const windowName = config.windowName;
+  const contentType = config.contentType;
 
   while (true) {
+    await new Promise((resolve) => setTimeout(resolve, interval));
+
     try {
       const now = new Date();
       const intervalAgo = new Date(now.getTime() - interval);
 
-      const screenData = await pipe.queryScreenpipe({
-        start_time: intervalAgo.toISOString(),
-        end_time: now.toISOString(),
+      const screenData = await queryScreenpipe({
+        startTime: intervalAgo.toISOString(),
+        endTime: now.toISOString(),
         limit: config.pageSize,
-        content_type: "all",
+        contentType: contentType,
+        windowName: windowName,
       });
 
       if (screenData && screenData.data.length > 0) {
@@ -300,11 +212,16 @@ async function streamCommentsToLinear(): Promise<void> {
           customCommentPrompt
         );
 
+        if (comment.nothingToDo) {
+          console.log("no comment to add to linear");
+          continue;
+        }
+
         // step 4: add the comment to the linear task
         await addCommentToLinear(comment, apiKey);
 
         // randomly send a notification
-        await pipe.sendNotification({
+        await sendDesktopNotification({
           title: "linear comment pipeline update",
           body: `comment added to task ${comment.taskId}`,
         });
