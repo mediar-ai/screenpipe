@@ -100,8 +100,6 @@ async function installDeno() {
 	console.log('installing deno...');
 
 	if (platform === 'windows') {
-
-		console.error('failed to install deno using powershell:', psError);
 		console.log('attempting to install deno using scoop...');
 		try {
 			await $`scoop install deno`;
