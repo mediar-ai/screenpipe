@@ -1,5 +1,8 @@
 ### llama3.2 linear task commenter
 
+<img width="1512" alt="Screenshot 2024-10-10 at 19 02 16" src="https://github.com/user-attachments/assets/17498b04-e7cf-465d-bcac-de7c22d4a4fc">
+
+
 are you the kind of engineer who hates product management and considers it bullshit?
 
 no worries, llama3.2 got you covered.
@@ -9,6 +12,8 @@ this pipe will automate your PM work by adding comments to linear tasks based on
 (please avoid watching netflix (or something else ;)) during work hours or it will be written in linear :))
 
 #### quick setup through app ui
+
+<img width="1312" alt="Screenshot 2024-10-10 at 20 51 22" src="https://github.com/user-attachments/assets/bf9aebad-de8e-4887-8f25-60cb408eff67">
 
 1. run ollama:
    ```
