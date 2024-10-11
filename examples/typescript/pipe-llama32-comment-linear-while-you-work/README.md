@@ -8,7 +8,7 @@ this pipe will automate your PM work by adding comments to linear tasks based on
 
 (please avoid watching netflix (or something else ;)) during work hours or it will be written in linear :))
 
-#### quick setup
+#### quick setup through app ui
 
 1. run ollama:
    ```
@@ -31,7 +31,7 @@ wanna tweak it? check `pipe.ts` to adjust the ai prompt or modify the comment ge
 #### cli usage
 
 ```
-screenpipe download examples/typescript/pipe-llama32-comment-linear-while-you-work/pipe.ts # or https url
+screenpipe download https://github.com/mediar-ai/screenpipe/edit/main/examples/typescript/pipe-llama32-comment-linear-while-you-work
 screenpipe enable pipe-llama32-comment-linear-while-you-work
 screenpipe 
 ```
