@@ -100,20 +100,19 @@ async function installDeno() {
 	console.log('installing deno...');
 
 	if (platform === 'windows') {
-		console.log('attempting to install deno using scoop...');
+		console.log('attempting to install deno using chocolatey...');
 		try {
-			await $`scoop install deno`;
-			console.log('deno installed successfully using scoop.');
-		} catch (scoopError) {
-			console.error('failed to install deno using scoop:', scoopError);
-			console.log('attempting to install deno using chocolatey...');
-			try {
-				await $`choco install deno`;
-				console.log('deno installed successfully using chocolatey.');
-			} catch (chocoError) {
-				console.error('failed to install deno using chocolatey:', chocoError);
-				console.error('all installation methods failed. please install deno manually.');
-			}
+			await $`choco upgrade deno -y`;
+			console.log('deno installed/upgraded successfully using chocolatey.');
+
+			// ls some potential installation dirs and console log for debugging purpose
+			await $`ls C:\\ProgramData\\chocolatey\\lib\\deno\\tools`;
+			await $`ls C:\\Users\\runneradmin\\AppData\\Local\\deno`;
+			await $`ls C:\\Users\\runneradmin\\AppData\\Local\\deno\\bin`;
+			await $`ls C:\\ProgramData\\chocolatey\\bin\\deno.exe`;
+		} catch (chocoError) {
+			console.error('failed to install/upgrade deno using chocolatey:', chocoError);
+			console.error('please install deno manually.');
 		}
 	} else {
 		// for macos and linux
@@ -130,12 +129,9 @@ async function copyDenoBinary() {
 	let denoSrc, denoDest1, denoDest2;
 	if (platform === 'windows') {
 		// Check both potential installation locations
-		const scoopPath = path.join(os.homedir(), 'scoop', 'shims', 'deno.exe');
 		const chocoPath = 'C:\\ProgramData\\chocolatey\\bin\\deno.exe';
 
-		if (await fs.exists(scoopPath)) {
-			denoSrc = scoopPath;
-		} else if (await fs.exists(chocoPath)) {
+		if (await fs.exists(chocoPath)) {
 			denoSrc = chocoPath;
 		} else {
 			console.error('deno binary not found in expected locations');
@@ -174,7 +170,7 @@ async function copyDenoBinary() {
 			console.log('attempting to find deno in PATH...');
 
 			try {
-				const { stdout } = await $`which deno`.quiet();
+				const { stdout } = await $`where deno`.quiet();
 				const denoPath = stdout.trim();
 				console.log(`found deno at: ${denoPath}`);
 				await fs.copyFile(denoPath, denoDest1);
