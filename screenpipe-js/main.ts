@@ -3,7 +3,7 @@ import process from "node:process";
 
 // Type definitions
 export interface PipeConfig {
-  [key: string]: object | string | number | boolean;
+  [key: string]: any;
 }
 
 export interface NotificationOptions {
@@ -227,3 +227,37 @@ export function extractJsonFromLlmResponse(response: string): any {
     }
   }
 }
+
+export interface InboxMessage {
+  title: string;
+  body: string;
+  actions?: InboxMessageAction[];
+}
+
+export interface InboxMessageAction {
+  label: string;
+  action: string;
+}
+
+export const pipe = {
+  sendDesktopNotification,
+  loadPipeConfig,
+  queryScreenpipe,
+  inbox: {
+    send: async (message: InboxMessage): Promise<boolean> => {
+      const notificationApiUrl =
+        process.env.SCREENPIPE_SERVER_URL || "http://localhost:11435";
+      try {
+        const response = await fetch(`${notificationApiUrl}/inbox`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...message, type: "inbox" }),
+        });
+        return response.ok;
+      } catch (error) {
+        console.error("failed to send inbox message:", error);
+        return false;
+      }
+    },
+  },
+};
