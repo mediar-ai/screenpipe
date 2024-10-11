@@ -15,6 +15,7 @@ pub enum AudioTranscriptionEngine {
     Deepgram,
     WhisperTiny,
     WhisperDistilLargeV3,
+    WhisperLargeV3Turbo,
 }
 
 impl fmt::Display for AudioTranscriptionEngine {
@@ -23,13 +24,14 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::Deepgram => write!(f, "Deepgram"),
             AudioTranscriptionEngine::WhisperTiny => write!(f, "WhisperTiny"),
             AudioTranscriptionEngine::WhisperDistilLargeV3 => write!(f, "WhisperLarge"),
+            AudioTranscriptionEngine::WhisperLargeV3Turbo => write!(f, "WhisperLargeV3Turbo"),
         }
     }
 }
 
 impl Default for AudioTranscriptionEngine {
     fn default() -> Self {
-        AudioTranscriptionEngine::WhisperTiny
+        AudioTranscriptionEngine::WhisperLargeV3Turbo
     }
 }
 
@@ -336,6 +338,8 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
         #[cfg(not(target_os = "macos"))]
         {
+            // Avoid "unused variable" warning in non-macOS systems
+            let _ = name;
             true
         }
     }
@@ -385,7 +389,7 @@ pub fn default_input_device() -> Result<AudioDevice> {
     Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
 // this should be optional ?
-pub async fn default_output_device() -> Result<AudioDevice> {
+pub fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
         // ! see https://github.com/RustAudio/cpal/pull/894

@@ -19,9 +19,9 @@ pub enum VadSensitivity {
 impl VadSensitivity {
     pub fn min_speech_ratio(&self) -> f32 {
         match self {
-            VadSensitivity::Low => 0.1,     // 10% of frames must be speech
+            VadSensitivity::Low => 0.01,     // 1% of frames must be speech
             VadSensitivity::Medium => 0.05, // 5% of frames must be speech
-            VadSensitivity::High => 0.02,   // 2% of frames must be speech
+            VadSensitivity::High => 0.2,   // 20% of frames must be speech
         }
     }
 }

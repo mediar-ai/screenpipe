@@ -12,6 +12,8 @@ pub enum CliAudioTranscriptionEngine {
     WhisperTiny,
     #[clap(name = "whisper-large")]
     WhisperDistilLargeV3,
+    #[clap(name = "whisper-large-v3-turbo")]
+    WhisperLargeV3Turbo,
 }
 
 impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
@@ -21,6 +23,9 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
             CliAudioTranscriptionEngine::WhisperTiny => CoreAudioTranscriptionEngine::WhisperTiny,
             CliAudioTranscriptionEngine::WhisperDistilLargeV3 => {
                 CoreAudioTranscriptionEngine::WhisperDistilLargeV3
+            }
+            CliAudioTranscriptionEngine::WhisperLargeV3Turbo => {
+                CoreAudioTranscriptionEngine::WhisperLargeV3Turbo
             }
         }
     }
@@ -137,7 +142,8 @@ pub struct Cli {
     /// Audio transcription engine to use.
     /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
     /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
-    /// WhisperDistilLargeV3 is a local, lightweight transcription model (--a whisper-large), recommended for higher quality audio than tiny.
+    /// WhisperDistilLargeV3 is a local, lightweight transcription model (-a whisper-large), recommended for higher quality audio than tiny.
+    /// WhisperLargeV3Turbo is a local, lightweight transcription model (-a whisper-large-v3-turbo), recommended for higher quality audio than tiny.
     #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperDistilLargeV3)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
 

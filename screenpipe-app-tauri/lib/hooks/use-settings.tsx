@@ -20,7 +20,7 @@ const defaultSettings: Settings = {
 
 `,
   devMode: false,
-  audioTranscriptionEngine: "whisper-large",
+  audioTranscriptionEngine: "deepgram",
   ocrEngine: "default",
   monitorIds: ["default"],
   audioDevices: ["default"],
@@ -127,7 +127,7 @@ export function useSettings() {
 
         const savedAudioTranscriptionEngine =
           (await store!.get<string>("audioTranscriptionEngine")) ||
-          "whisper-large";
+          "deepgram";
         const savedOcrEngine =
           (await store!.get<string>("ocrEngine")) || ocrModel;
         const savedMonitorIds = (await store!.get<string[]>("monitorIds")) || [

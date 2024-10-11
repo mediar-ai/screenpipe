@@ -48,3 +48,7 @@ dynamic = true
 
 [profile.release]
 lto = true
+
+[profile.dev-release]
+inherits = "release"
+lto = false

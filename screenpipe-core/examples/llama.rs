@@ -24,3 +24,9 @@ fn main() -> Result<()> {
     println!("{:?}", res.usage.tokens_per_second);
     Ok(())
 }
+
+#[cfg(not(feature = "llm"))]
+fn main() -> Result<()> {
+    println!("LLM feature is not enabled");
+    Ok(())
+}

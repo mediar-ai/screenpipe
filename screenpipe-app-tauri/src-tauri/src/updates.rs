@@ -7,6 +7,10 @@ use tauri::{Manager, Wry};
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
 use tokio::time::interval;
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::MessageDialogButtons;
+use crate::SidecarState;
+use crate::kill_all_sreenpipes;
 
 pub struct UpdatesManager {
     interval: Duration,
@@ -36,6 +40,7 @@ impl UpdatesManager {
             self.update_menu_item
                 .set_text("downloading latest version of screenpipe")?;
 
+
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
                 let path = self.app.path().resolve(
                     "assets/update-logo-black.png",
@@ -53,6 +58,29 @@ impl UpdatesManager {
             *self.update_installed.lock().await = true;
             self.update_menu_item.set_enabled(true)?;
             self.update_menu_item.set_text("update now")?;
+
+
+            let answer = self.app.dialog()
+                .message("update available")
+                .title("screenpipe update")
+                .buttons(MessageDialogButtons::OkCancelCustom("update now".to_string(), "later".to_string()))
+                .blocking_show();
+            if answer {
+                // Proceed with the update
+                
+                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
+                // bad UX: i use CLI and it kills my CLI because i updated app
+
+                if let Err(err) = kill_all_sreenpipes(
+                    self.app.state::<SidecarState>(),
+                    self.app.clone(),
+                )
+                .await
+                {
+                    error!("Failed to kill sidecar: {}", err);
+                }
+                self.update_screenpipe();
+            }
 
             return Result::Ok(true);
         }
