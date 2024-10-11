@@ -231,6 +231,10 @@ if (platform == 'linux') {
 
 	let copied = false;
 	for (const screenpipeSrc of potentialPaths) {
+		if (process.env['SKIP_SCREENPIPE_SETUP']) {
+			copied = true;
+			break;
+		}
 		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-unknown-linux-gnu');
 		try {
 			await fs.copyFile(screenpipeSrc, screenpipeDest);
@@ -267,6 +271,10 @@ if (platform == 'windows') {
 
 	let copied = false;
 	for (const screenpipeSrc of potentialPaths) {
+		if (process.env['SKIP_SCREENPIPE_SETUP']) {
+			copied = true;
+			break;
+		}
 		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-pc-windows-msvc.exe');
 		try {
 			await fs.copyFile(screenpipeSrc, screenpipeDest);
