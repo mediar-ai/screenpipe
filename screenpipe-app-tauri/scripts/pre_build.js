@@ -112,16 +112,16 @@ async function installDeno() {
 // Add this function to copy the Deno binary
 async function copyDenoBinary() {
 	console.log('copying deno binary for tauri...');
-  
+
 	let denoSrc, denoDest;
 	if (platform === 'windows') {
 		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno.exe');
 		denoDest = path.join(cwd, 'deno-x86_64-pc-windows-msvc.exe');
-	} else if (platform === 'darwin') {
+	} else if (platform === 'macos') {
 		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
 		// Check for ARM or Intel Mac
 		const { stdout } = await $`uname -m`.quiet();
-		const arch = stdout.trim();
+		const arch = new TextDecoder().decode(stdout).trim();
 		denoDest = path.join(cwd, `deno-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`);
 	} else if (platform === 'linux') {
 		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
@@ -133,6 +133,7 @@ async function copyDenoBinary() {
 
 	try {
 		await fs.copyFile(denoSrc, denoDest);
+		await fs.chmod(denoDest, 0o755); // Ensure the binary is executable
 		console.log(`deno binary copied successfully to ${denoDest}`);
 	} catch (error) {
 		console.error('failed to copy deno binary:', error);
@@ -400,6 +401,7 @@ if (platform == 'macos') {
 	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
 
 	console.log('Moved and renamed ffmpeg binary for externalBin');
+
 }
 
 // Nvidia
@@ -556,6 +558,8 @@ if (process.env.GITHUB_ENV) {
 // Install and setup Deno (add this near the end of the script)
 await installDeno();
 await copyDenoBinary();
+
+
 
 // --dev or --build
 const action = process.argv?.[2]
