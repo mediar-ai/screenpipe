@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728673683858,
+  "lastUpdate": 1728673910722,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -14429,6 +14429,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1858687666,
             "range": "± 12788472",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "4229f6c55ad84b841f3285d2c9a6c93b841ab0d8",
+          "message": "docs: install deno cli in docs",
+          "timestamp": "2024-10-11T12:02:54-07:00",
+          "tree_id": "5dbdea85b10538e7693fe0dffe49b6b9e95f065c",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/4229f6c55ad84b841f3285d2c9a6c93b841ab0d8"
+        },
+        "date": 1728673909652,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1842191187,
+            "range": "± 8349610",
             "unit": "ns/iter"
           }
         ]
