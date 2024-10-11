@@ -1,16 +1,17 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
-};
-
 use anyhow::Result;
 use candle::Tensor;
 use chrono::Utc;
 use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
-
+use std::collections::HashSet;
+use std::{
+    path::PathBuf,
+    string,
+    sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
+};
+use std::cmp::min;
 use candle_transformers::models::whisper::{self as m, audio};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
@@ -25,9 +26,9 @@ use crate::{
 };
 
 use hound::{WavSpec, WavWriter};
-use std::io::Cursor;
 use reqwest::Client;
 use serde_json::Value;
+use std::io::Cursor;
 
 // Replace the get_deepgram_api_key function with this:
 fn get_deepgram_api_key() -> String {
@@ -192,7 +193,8 @@ pub async fn stt(
 
     let audio_data = if audio_input.device.device_type == DeviceType::Input {
         normalize_v2(&audio_data)
-    } else { // ! for some reason buggy on output devices
+    } else {
+        // ! for some reason buggy on output devices
         audio_data
     };
 
@@ -201,24 +203,22 @@ pub async fn stt(
     let mut total_frames = 0;
     let mut speech_frame_count = 0;
 
-    let mut  noise = 0.;
+    let mut noise = 0.;
 
     for chunk in audio_data.chunks(frame_size) {
         total_frames += 1;
         match vad_engine.audio_type(chunk) {
-            Ok(status) => {
-                match status {
-                    VadStatus::Speech => {
-                        let processed_audio = spectral_subtraction(chunk, noise)?;
-                        speech_frames.extend(processed_audio);
-                        speech_frame_count += 1;
-                    },
-                    VadStatus::Unknown => {
-                        noise = average_noise_spectrum(chunk);
-                    },
-                    _  => {}
+            Ok(status) => match status {
+                VadStatus::Speech => {
+                    let processed_audio = spectral_subtraction(chunk, noise)?;
+                    speech_frames.extend(processed_audio);
+                    speech_frame_count += 1;
                 }
-            }
+                VadStatus::Unknown => {
+                    noise = average_noise_spectrum(chunk);
+                }
+                _ => {}
+            },
             Err(e) => {
                 debug!("VAD failed for chunk: {:?}", e);
             }
@@ -375,11 +375,59 @@ pub async fn stt(
             debug!("device: {}, starting decoding process", audio_input.device);
             let segments = dc.run(&mel)?;
             debug!("device: {}, decoding complete", audio_input.device);
-            Ok(segments
-                .iter()
-                .map(|s| s.dr.text.clone())
-                .collect::<Vec<String>>()
-                .join("\n"))
+
+            let mut ranges: HashSet<String> = HashSet::new();
+            let token_regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>")?;
+            let mut transcript = String::from("");
+
+            let mut min_time: f32 = f32::MAX;
+            let mut max_time: f32 = f32::MIN;
+            let mut i = 0;
+            let segments_len = segments.len();
+            for segment in segments {
+                let mut text = segment.dr.text.clone();
+
+                // maybe not <|0.00|> but <|12.34|>
+                let mut start = text[..8].to_string();
+                if !start.ends_with('>') {
+                    start = text[..9].to_string();
+                }
+                let mut end = text[text.len() - 9..].to_string();
+                // same but for <
+                if !end.starts_with('<') {
+                    end = text[text.len() - 8..].to_string();
+                }
+                // convert start to float
+                let num_regex = Regex::new(r"([<>|])")?;
+                let start_clone = start.clone();
+                let s_time = num_regex.replace_all(start_clone.as_str(), "").parse::<f32>()?;
+                let e_time = num_regex.replace_all(end.as_str(), "").parse::<f32>()?;
+
+                if min_time > s_time {
+                    min_time = s_time;
+                } else if max_time < e_time {
+                    max_time = e_time;
+                }
+
+                start.push_str(&end);
+                // hallucination still present if last range is largest? or if duplicate range?
+                // still unclear https://github.com/openai/whisper/discussions/679 (try)
+                if ranges.insert(start) {
+
+                    if segments_len > 1 && i == segments_len - 1 {
+                        if s_time == min_time && e_time == max_time {
+                            continue;
+                        }
+                    }
+
+                    text = token_regex.replace_all(text.as_str(), "").to_string();
+                    text.push('\n');
+                    transcript.push_str(text.as_str());
+                }
+                i += 1;
+            }
+
+            Ok(transcript)
         };
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
     let sanitized_device_name = audio_input.device.to_string().replace(['/', '\\'], "_");
@@ -443,9 +491,11 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
+use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
+use crate::whisper::Segment;
+use regex::{Regex, Replacer};
 use std::sync::atomic::{AtomicBool, Ordering};
 use vad_rs::VadStatus;
-use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
 
 pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
