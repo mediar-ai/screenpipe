@@ -416,7 +416,14 @@ const HealthStatus = ({ className }: { className?: string }) => {
     return "bg-red-500";
   };
 
-  if (!health) return null;
+  if (!health) {
+    return (
+      <Badge variant="outline" className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground">
+        <Activity className="mr-2 h-4 w-4" />
+        status <span className="ml-1 w-2 h-2 rounded-full bg-yellow-500 inline-block animate-pulse" />
+      </Badge>
+    );
+  }
 
   const formatTimestamp = (timestamp: string | null) => {
     return timestamp ? new Date(timestamp).toLocaleString() : "n/a";
