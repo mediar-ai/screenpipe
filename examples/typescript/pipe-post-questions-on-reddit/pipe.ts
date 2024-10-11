@@ -228,7 +228,11 @@ async function dailyLogPipeline(): Promise<void> {
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
   console.log("logs dir:", logsDir);
-  fs.mkdirSync(logsDir);
+  try {
+    fs.mkdirSync(logsDir);
+  } catch (_error) {
+    console.warn("failed to create logs dir, probably already exists");
+  }
 
   let lastEmailSent = new Date(0); // Initialize to a past date
 
@@ -257,11 +261,11 @@ async function dailyLogPipeline(): Promise<void> {
       const oneMinuteAgo = new Date(now.getTime() - interval);
 
       const screenData = await queryScreenpipe({
-        start_time: oneMinuteAgo.toISOString(),
-        end_time: now.toISOString(),
-        window_name: windowName,
+        startTime: oneMinuteAgo.toISOString(),
+        endTime: now.toISOString(),
+        windowName: windowName,
         limit: pageSize,
-        content_type: contentType,
+        contentType: contentType,
       });
 
       if (screenData && screenData.data && screenData.data.length > 0) {
@@ -298,11 +302,11 @@ async function dailyLogPipeline(): Promise<void> {
 
       if (shouldSendSummary) {
         const screenData = await queryScreenpipe({
-          start_time: oneMinuteAgo.toISOString(),
-          end_time: now.toISOString(),
-          window_name: windowName,
+          startTime: oneMinuteAgo.toISOString(),
+          endTime: now.toISOString(),
+          windowName: windowName,
           limit: pageSize,
-          content_type: contentType,
+          contentType: contentType,
         });
 
         if (screenData && screenData.data && screenData.data.length > 0) {

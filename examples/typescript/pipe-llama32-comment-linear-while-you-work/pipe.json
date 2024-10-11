@@ -10,12 +10,12 @@
       "name": "linearApiKey",
       "type": "string",
       "default": "<fill your linear api key here>",
-      "description": "linear api key for authentication"
+      "description": "linear api key for authentication https://linear.app/mediar/settings/api"
     },
     {
       "name": "ollamaApiUrl",
       "type": "string",
-      "default": "http://localhost:11434/api/chat",
+      "default": "http://localhost:11434/api",
       "description": "ollama api url"
     },
     {
@@ -35,6 +35,18 @@
       "type": "string",
       "default": "",
       "description": "custom prompt to override part of the system prompt for comment generation"
+    },
+    {
+      "name": "windowName",
+      "type": "window",
+      "default": "",
+      "description": "Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio"
+    },
+    {
+      "name": "contentType",
+      "type": "contentType",
+      "default": "ocr",
+      "description": "Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance."
     }
   ]
 }

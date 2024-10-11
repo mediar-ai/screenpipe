@@ -110,10 +110,10 @@ async function streamEngineeringLogsToNotion(): Promise<void> {
       const oneHourAgo = new Date(now.getTime() - interval);
 
       const screenData = await queryScreenpipe({
-        start_time: oneHourAgo.toISOString(),
-        end_time: now.toISOString(),
+        startTime: oneHourAgo.toISOString(),
+        endTime: now.toISOString(),
         limit: 50,
-        content_type: "ocr",
+        contentType: "ocr",
       });
 
       if (screenData && screenData.data.length > 0) {

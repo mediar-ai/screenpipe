@@ -162,9 +162,9 @@ async function meetingSummaryPipeline(): Promise<void> {
       console.log("now:", now);
 
       const audioData = await queryScreenpipe({
-        start_time: oneHourAgo.toISOString(),
-        end_time: now.toISOString(),
-        content_type: "audio",
+        startTime: oneHourAgo.toISOString(),
+        endTime: now.toISOString(),
+        contentType: "audio",
         limit: 10_000,
       });
 
@@ -198,9 +198,9 @@ async function meetingSummaryPipeline(): Promise<void> {
 
           // Query additional data
           const additionalData = await queryScreenpipe({
-            start_time: adjustedStart.toISOString(),
-            end_time: adjustedEnd.toISOString(),
-            content_type: "audio",
+            startTime: adjustedStart.toISOString(),
+            endTime: adjustedEnd.toISOString(),
+            contentType: "audio",
             limit: 10_000,
           });
 
