@@ -1,5 +1,6 @@
 import React from "react";
 import { HelpCircle, Info } from "lucide-react";
+import { open } from "@tauri-apps/plugin-shell";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import {
@@ -40,8 +41,8 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
         </h1>
       </DialogHeader>
       <div className="flex justify-center">
-        <div className="h-[1px] w-40 rounded-full bg-gradient-to-l from-slate-500/50 to-transparent"></div>
-        <div className="h-[1px] w-40 rounded-full bg-gradient-to-r from-slate-500/50 to-transparent"></div>
+        <div className="h-[1px] w-40 rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
+        <div className="h-[1px] w-40 rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
       </div>
       <div className="mt-2 w-full flex justify-around flex-col">
         <div className="mx-4 mb-2">
@@ -57,10 +58,10 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
             ai summarization and processing, providing valuable insights.
           </p>
         </div>
-				<div className="flex justify-center">
-					<div className="h-[1px] w-[80%] rounded-full bg-gradient-to-l from-slate-500/50 to-transparent"></div>
-					<div className="h-[1px] w-[80%] rounded-full bg-gradient-to-r from-slate-500/50 to-transparent"></div>
-				</div>
+        <div className="flex justify-center">
+          <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
+          <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
+        </div>
         <div className="mx-4 mb-2">
           <h2 className="font-medium text-md">
             status menu:
@@ -73,10 +74,10 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
               adjust advanced preferences for backend processes
           </p>
         </div>
-				<div className="flex justify-center">
-					<div className="h-[1px] w-[80%] rounded-full bg-gradient-to-l from-slate-500/50 to-transparent"></div>
-					<div className="h-[1px] w-[80%] rounded-full bg-gradient-to-r from-slate-500/50 to-transparent"></div>
-				</div>
+        <div className="flex justify-center">
+          <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
+          <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
+        </div>
         <div className="mx-4 mb-2">
           <h2 className="font-medium text-md">
             settings menu:
@@ -90,20 +91,19 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
             screenpipe interacts with llms
           </p>
         </div>
-				<div className="flex justify-center">
-					<div className="h-[1px] w-40 rounded-full bg-gradient-to-l from-slate-500/50 to-transparent"></div>
-					<div className="h-[1px] w-40 rounded-full bg-gradient-to-r from-slate-500/50 to-transparent"></div>
-				</div>
+        <div className="flex justify-center">
+          <div className="h-[1px] w-40 rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
+          <div className="h-[1px] w-40 rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
+        </div>
         <div className="mx-4">
           <h2 className="font-medium text-md">
-            screenpipe pipestore:
+            meetings tracking (experimental):
           </h2>
           <p className="text-muted-foreground text-[14px]">
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
-              the pipestore in screenpipe
+              this features of screenpipe
             </span> 
-              allows users to browse and download various functionality-enhancing pipes.
-              explore different plugins to customize workflows, and extend screenpipe’s capabilities. 
+              tracks your meetings by analyzing specific keywords and generates summaries for you using ai &amp; llms .
           </p>
         </div>
       </div>

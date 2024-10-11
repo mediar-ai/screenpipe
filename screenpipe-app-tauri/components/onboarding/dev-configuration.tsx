@@ -33,8 +33,8 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
     windows: [
       {
         label: "to start using the screenpipe cli,",
-        description: "to use the screenpipe cli, open your terminal with admin privileges and navigate to '%LOCALAPPDATA%\\screenpipe' or run this command to view all setup arguments",
-        command: "cd %LOCALAPPDATA%\screenpipe && ./\screenpipe.exe -h   # shows list of arguments",
+        description: "to use the screenpipe cli, open your cmd with admin privileges and navigate to '%LOCALAPPDATA%\\screenpipe' or run this command to view all setup arguments",
+        command: "cd %LOCALAPPDATA%\\screenpipe && ./\screenpipe.exe -h   # shows list of arguments",
       },
       {
         label: "starting screenpipe with custom arguments,",

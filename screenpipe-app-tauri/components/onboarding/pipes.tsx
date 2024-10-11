@@ -31,7 +31,7 @@ const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
           screenpipe with custom pipes (plugins)
         </DialogTitle>
         <h1 className="font-medium text-center !mt-[-1px] text-md prose">
-          unlock screenpipe’s power with customizable pipes
+          unlock screenpipe’s power with customizable pipes (experimental)
         </h1>
       </DialogHeader>
       <div className="mt-2 w-full flex justify-around flex-col">
