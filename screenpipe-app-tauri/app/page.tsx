@@ -28,9 +28,9 @@ export default function Home() {
   const posthog = usePostHog();
   const { toast } = useToast();
 
-  // useEffect(() => {
-  //   checkForAppUpdates({ toast });
-  // }, [toast]);
+  useEffect(() => {
+    checkForAppUpdates({ toast });
+  }, [toast]);
 
   useEffect(() => {
     if (settings.userId) {
@@ -41,7 +41,7 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center">
       <NotificationHandler />
-      {/* <UpdateNotification checkIntervalHours={3} /> */}
+      <UpdateNotification checkIntervalHours={3} />
       {/* <ScreenpipeInstanceChecker /> */}
       <Header />
       <div className="my-4" />

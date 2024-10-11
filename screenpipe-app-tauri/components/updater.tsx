@@ -3,11 +3,20 @@ import { ask, message } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
+import { Notification } from "@tauri-apps/plugin-notification"; 
 
 export async function checkForAppUpdates({ toast }: { toast: any }) {
   const update = await check();
 
   if (update?.available) {
+    Notification.requestPermission().then(permission => {
+      if (permission === "granted") {
+        new Notification("Update Available", {
+          body: `Update to version ${update.version} is available!`,
+        }).show();
+      }
+    });
+    
     const yes = await ask(
       `
 Update to ${update.version} is available!
