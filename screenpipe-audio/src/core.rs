@@ -338,6 +338,8 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
         #[cfg(not(target_os = "macos"))]
         {
+            // Avoid "unused variable" warning in non-macOS systems
+            let _ = name;
             true
         }
     }
