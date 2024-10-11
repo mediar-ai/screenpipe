@@ -70,8 +70,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
 
-  const handleOptionClickWithPreference = async (option: string) => {
-    handleOptionClick(option);
+  const handleNextWithPreference = async (option: string) => {
     try {
       if (option === "devMode") {
         await updateSettings({ devMode: true })
@@ -118,7 +117,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
             key={option.key}
             option={option}
             isSelected={selectedPreference === option.key}
-            onClick={() => handleOptionClickWithPreference(option.key)}
+            onClick={() => handleOptionClick(option.key)}
           />
         ))}
       </div>
@@ -127,10 +126,15 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
       </span>
       <OnboardingNavigation
         className="mt-9"
-        handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
-        prevBtnText="previous"
         nextBtnText="next"
+        prevBtnText="previous"
+        handlePrevSlide={handlePrevSlide}
+        handleNextSlide={async () => {
+          if (selectedPreference) {
+            await handleNextWithPreference(selectedPreference)
+          } 
+          handleNextSlide();
+        }}
       />
     </div>
   );

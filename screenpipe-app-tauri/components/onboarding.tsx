@@ -53,18 +53,30 @@ const slideFlow: Record<
   },                                             
   selection: {                                                                                    // selection (four options)
     next: (selectedOptions) => {
-      if (!Array.isArray(selectedOptions) || selectedOptions.length === 0) return null;
-      if (selectedOptions.includes("personalUse")) return "personalize";
-      if (selectedOptions.includes("professionalUse")) return "apiSetup";
-      if (selectedOptions.includes("developmentlUse")) return "devOrNonDev";
-      if (selectedOptions.includes("otherUse")) return "devOrNonDev";
+      if (!Array.isArray(selectedOptions) 
+        || selectedOptions.length === 0) 
+        return null;
+      if (selectedOptions.includes("personalUse")) 
+        return "personalize";
+      if (selectedOptions.includes("professionalUse")) 
+        return "apiSetup";
+      if (selectedOptions.includes("developmentlUse")) 
+        return "devOrNonDev";
+      if (selectedOptions.includes("otherUse")) 
+        return "devOrNonDev";
       return "instructions";
     },
     prev: () => "status",
   },
   personalize: {                                                                                    // personalize (with ai or without ai)
-    next: (_, __, selectedPersonalization) => 
-      selectedPersonalization === "withAI" ? "apiSetup" : "instructions",
+    next: (selectedOptions, __, selectedPersonalization) => {
+      if (selectedPersonalization === "withAI") 
+        return "apiSetup";
+      if (selectedOptions?.includes("personalUse") 
+        && selectedPersonalization === "withoutAI") 
+        return "devOrNonDev";
+      return "instructions"
+      },
     prev: () => "selection",
   },
   apiSetup: {                                                                                       // api setup & validation
@@ -77,8 +89,15 @@ const slideFlow: Record<
     },
   },
   devOrNonDev: {                                                                                    // dev or no dev
-    next: (_, selectedPreference) => 
-      selectedPreference === "devMode" ? "devConfig" : "personalize",
+    next: (selectedOptions, selectedPreference, selectedPersonalization) => {
+      if (selectedOptions?.includes("personalUse") 
+        && selectedPersonalization === "withoutAI" 
+        && selectedPreference === "nonDevMode") 
+        return "instructions";
+      if (selectedPreference === "devMode")
+        return "devConfig"
+      return "personalize"
+    }, 
     prev: () => "selection",
   },
   devConfig: {                                                                                      // dev configuration
@@ -92,11 +111,20 @@ const slideFlow: Record<
   instructions: {                                                                                   // instructions for every type of user
     next: () => "experimentalFeatures", 
     prev: (selectedOptions, selectedPreference, selectedPersonalization) => {
-      if (selectedPreference === "devMode") return "pipes";
-      if (selectedOptions?.includes("personalUse")) return "personalize";
-      if (selectedOptions?.includes("professionalUse")) return "apiSetup";
-      if (selectedOptions?.includes("developmentlUse") && selectedPreference === "nonDevMode" && selectedPersonalization === "withoutAI") return "personalize";
-      if (selectedOptions?.includes("developmentlUse") || selectedOptions?.includes("otherUse") && selectedPersonalization === "withAI") return "apiSetup";
+      if (selectedPreference === "devMode") 
+        return "pipes";
+      if (selectedOptions?.includes("personalUse")) 
+        return "personalize";
+      if (selectedOptions?.includes("professionalUse")) 
+        return "apiSetup";
+      if (selectedOptions?.includes("developmentlUse") 
+        && selectedPreference === "nonDevMode" 
+        && selectedPersonalization === "withoutAI") 
+        return "personalize";
+      if (selectedOptions?.includes("developmentlUse") 
+        || selectedOptions?.includes("otherUse") 
+        && selectedPersonalization === "withAI") 
+        return "apiSetup";
       return "devOrNonDev";
     }
   },
