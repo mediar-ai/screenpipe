@@ -1,6 +1,6 @@
 ---
 name: bug report
-about: create a report to help us improve
+about: report a bug in screenpipe
 title: "[bug] "
 labels: bug
 assignees: ''
@@ -8,28 +8,19 @@ assignees: ''
 ---
 
 **describe the bug**
-a clear and concise description of what the bug is.
+brief description of the bug.
 
 **to reproduce**
-steps to reproduce the behavior:
-1. go to '...'
-2. click on '....'
-3. scroll down to '....'
-4. see error
+1. 
+2. 
+3. 
 
 **expected behavior**
-a clear and concise description of what you expected to happen.
+what should happen?
 
-**screenshots**
-if applicable, add screenshots to help explain your problem.
-
-**system information:**
- - os: [e.g. macos, windows, linux]
- - os version: [e.g. 10.15.7, 20h2, ubuntu 20.04]
- - application version: [e.g. 1.2.3]
+**system info**
+- os: [e.g. macos 10.15.7, windows 10, ubuntu 20.04]
+- screenpipe version: [e.g. 1.2.3]
 
 **additional context**
-add any other context about the problem here. for example:
-- hardware specifications
-- relevant software versions
-- error logs or console output (in app right click -> "inspect" -> "console")
+add any other context, screenshots, or error logs here.
