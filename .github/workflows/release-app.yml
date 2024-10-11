@@ -134,9 +134,9 @@ jobs:
             iwr -useb get.scoop.sh | iex
           }
 
-      - name: Setup tmate session # HACK
-        if: matrix.platform == 'windows-latest'
-        uses: mxschmitt/action-tmate@v3
+      # - name: Setup tmate session # HACK
+      #   if: matrix.platform == 'windows-latest'
+      #   uses: mxschmitt/action-tmate@v3
 
 
       - name: Run pre_build.js

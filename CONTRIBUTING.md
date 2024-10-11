@@ -158,6 +158,19 @@ This is @louis030195 whole `.vscode/settings.json` file:
 
 ## Other hacks
 
+### Debugging Github Action
+
+ssh into the runner:
+
+```yaml
+- name: Setup tmate session # HACK
+  if: matrix.platform == 'windows-latest'
+  uses: mxschmitt/action-tmate@v3
+```
+
+run locally: https://github.com/nektos/act
+
+
 ### Debugging memory errors
 
 ```bash

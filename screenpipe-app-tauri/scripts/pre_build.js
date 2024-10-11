@@ -104,12 +104,6 @@ async function installDeno() {
 		try {
 			await $`choco upgrade deno -y`;
 			console.log('deno installed/upgraded successfully using chocolatey.');
-
-			// ls some potential installation dirs and console log for debugging purpose
-			await $`ls C:\\ProgramData\\chocolatey\\lib\\deno\\tools`;
-			await $`ls C:\\Users\\runneradmin\\AppData\\Local\\deno`;
-			await $`ls C:\\Users\\runneradmin\\AppData\\Local\\deno\\bin`;
-			await $`ls C:\\ProgramData\\chocolatey\\bin\\deno.exe`;
 		} catch (chocoError) {
 			console.error('failed to install/upgrade deno using chocolatey:', chocoError);
 			console.error('please install deno manually.');
@@ -129,7 +123,7 @@ async function copyDenoBinary() {
 	let denoSrc, denoDest1, denoDest2;
 	if (platform === 'windows') {
 		// Check both potential installation locations
-		const chocoPath = 'C:\\ProgramData\\chocolatey\\bin\\deno.exe';
+		const chocoPath = 'C:\\ProgramData\\chocolatey\\lib\\deno\\tools';
 
 		if (await fs.exists(chocoPath)) {
 			denoSrc = chocoPath;
