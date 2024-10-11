@@ -132,11 +132,32 @@ async function copyDenoBinary() {
 	}
 
 	try {
+		// Check if the source file exists
+		await fs.access(denoSrc);
+		
+		// If it exists, proceed with copying
 		await fs.copyFile(denoSrc, denoDest);
 		await fs.chmod(denoDest, 0o755); // Ensure the binary is executable
 		console.log(`deno binary copied successfully to ${denoDest}`);
 	} catch (error) {
-		console.error('failed to copy deno binary:', error);
+		if (error.code === 'ENOENT') {
+			console.error(`deno binary not found at expected location: ${denoSrc}`);
+			console.log('attempting to find deno in PATH...');
+			
+			try {
+				const { stdout } = await $`where deno`.quiet();
+				const denoPath = stdout.trim();
+				console.log(`found deno at: ${denoPath}`);
+				await fs.copyFile(denoPath, denoDest);
+				await fs.chmod(denoDest, 0o755);
+				console.log(`deno binary copied successfully from PATH to ${denoDest}`);
+			} catch (pathError) {
+				console.error('failed to find deno in PATH:', pathError);
+				console.log('please ensure deno is installed and accessible in your PATH');
+			}
+		} else {
+			console.error('failed to copy deno binary:', error);
+		}
 	}
 }
 
@@ -157,7 +178,7 @@ if (platform == 'linux') {
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
-		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
+		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
 		'/home/runner/work/screenpipe/screenpipe/target/release/screenpipe',
 	];
 
