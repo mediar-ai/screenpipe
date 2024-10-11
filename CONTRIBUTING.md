@@ -1,61 +1,61 @@
-# Contributing to Screen Pipe
+# contributing to screen pipe
 
-First off, thank you for considering contributing to Screen Pipe! It's people like you that make Screen Pipe such a great tool.
+first off, thank you for considering contributing to screen pipe! it's people like you that make screen pipe such a great tool.
 
-I'd love to personally onboard you to the project. Let's [schedule a call](https://cal.com/louis030195/screenpipe).
+i'd love to personally onboard you to the project. let's [schedule a call](https://cal.com/louis030195/screenpipe).
 
-## Getting Started
+## getting started
 
-Before you begin:
-- Make sure you have installed all the necessary dependencies as mentioned in the [README.md](README.md).
-- Familiarize yourself with the project structure and architecture.
+before you begin:
+- make sure you have installed all the necessary dependencies as mentioned in the [readme.md](README.md).
+- familiarize yourself with the project structure and architecture.
 
-## How Can I Contribute?
+## how can i contribute?
 
-### Reporting Bugs
+### reporting bugs
 
-This section guides you through submitting a bug report for Screen Pipe. Following these guidelines helps maintainers and the community understand your report, reproduce the behavior, and find related reports.
+this section guides you through submitting a bug report for screen pipe. following these guidelines helps maintainers and the community understand your report, reproduce the behavior, and find related reports.
 
-- Use a clear and descriptive title for the issue to identify the problem.
-- Describe the exact steps which reproduce the problem in as many details as possible.
-- Provide specific examples to demonstrate the steps.
+- use a clear and descriptive title for the issue to identify the problem.
+- describe the exact steps which reproduce the problem in as many details as possible.
+- provide specific examples to demonstrate the steps.
 
-### Suggesting Enhancements
+### suggesting enhancements
 
-This section guides you through submitting an enhancement suggestion for Screen Pipe, including completely new features and minor improvements to existing functionality.
+this section guides you through submitting an enhancement suggestion for screen pipe, including completely new features and minor improvements to existing functionality.
 
-- Use a clear and descriptive title for the issue to identify the suggestion.
-- Provide a step-by-step description of the suggested enhancement in as many details as possible.
-- Explain why this enhancement would be useful to most Screen Pipe users.
+- use a clear and descriptive title for the issue to identify the suggestion.
+- provide a step-by-step description of the suggested enhancement in as many details as possible.
+- explain why this enhancement would be useful to most screen pipe users.
 
-### Pull Requests
+### pull requests
 
-- Fill in the required template
-- Do not include issue numbers in the PR title
-- Include screenshots and animated GIFs in your pull request whenever possible.
-- Follow the Rust styleguides.
-- End all files with a newline.
+- fill in the required template
+- do not include issue numbers in the pr title
+- include screenshots and animated gifs in your pull request whenever possible.
+- follow the rust styleguides.
+- end all files with a newline.
 
-## Styleguides
+## styleguides
 
-### Git Commit Messages
+### git commit messages
 
-- Use the present tense ("Add feature" not "Added feature")
-- Use the imperative mood ("Move cursor to..." not "Moves cursor to...")
-- Limit the first line to 72 characters or less
-- Reference issues and pull requests liberally after the first line
+- use the present tense ("add feature" not "added feature")
+- use the imperative mood ("move cursor to..." not "moves cursor to...")
+- limit the first line to 72 characters or less
+- reference issues and pull requests liberally after the first line
 
-### Rust Styleguide
+### rust styleguide
 
-All Rust code must adhere to [Rust Style Guide](https://github.com/rust-lang/style-team/blob/master/guide/guide.md).
+all rust code must adhere to [rust style guide](https://github.com/rust-lang/style-team/blob/master/guide/guide.md).
 
-We follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) folder structure.
+we follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) folder structure.
 
-## Additional Notes
+## additional notes
 
-### AI system prompt
+### ai system prompt
 
-I use cursor with this prompt to help me with the code:
+i use cursor with this prompt to help me with the code:
 
 ```
 Rules:
@@ -72,35 +72,35 @@ Rules:
 ```
 
 
-### Principles 
+### principles 
 
-- **User fanatic: focus on building what people want and bring maximum value.**
-- Concurrency: channels > mutexes/locks
-- Simplicity: avoid premature optimization. write code that is easy for humans to read, fast for machines to execute. less is more. optimise for less code, less files, less dependencies, less complexity.
-- Production: we're building real products, not python toy that grow to 150k stars and die prematurely and never leave localhost, thank you.
-- Focus: avoid feature creep. focus on the core functionality and build upon it. focus on the user and their needs.
-- Use numbers: if you can't measure it, you can't improve it.
-- Avoid OOP: prefer functional programming.
-- Positive-sum: we're all going to win, it is a multiplayer, positive sum game. (that escalated quickly)
+- **user fanatic: focus on building what people want and bring maximum value.**
+- concurrency: channels > mutexes/locks
+- simplicity: avoid premature optimization. write code that is easy for humans to read, fast for machines to execute. less is more. optimise for less code, less files, less dependencies, less complexity.
+- production: we're building real products, not python toy that grow to 150k stars and die prematurely and never leave localhost, thank you.
+- focus: avoid feature creep. focus on the core functionality and build upon it. focus on the user and their needs.
+- use numbers: if you can't measure it, you can't improve it.
+- avoid oop: prefer functional programming.
+- positive-sum: we're all going to win, it is a multiplayer, positive sum game. (that escalated quickly)
 
-### Issue and Pull Request Labels
+### issue and pull request labels
 
-This section lists the labels we use to help us track and manage issues and pull requests.
+this section lists the labels we use to help us track and manage issues and pull requests.
 
-* `bug` - Issues that are bugs.
-* `enhancement` - Issues that are feature requests.
-* `documentation` - Issues or pull requests related to documentation.
-* `good first issue` - Good for newcomers.
+* `bug` - issues that are bugs.
+* `enhancement` - issues that are feature requests.
+* `documentation` - issues or pull requests related to documentation.
+* `good first issue` - good for newcomers.
 
-## Building
+## building
 
 ```bash
 cargo build --release --features metal # or cuda, depending on your computer's NPU
 ```
 
-## Running Tests
+## running tests
 
-Before submitting a pull request, run all the tests to ensure nothing has broken:
+before submitting a pull request, run all the tests to ensure nothing has broken:
 
 ```bash
 cargo test
@@ -108,7 +108,7 @@ cargo test
 DYLD_LIBRARY_PATH=$(pwd)/screenpipe-vision/lib cargo test
 ```
 
-You can add env var to `.vscode/settings.json`:
+you can add env var to `.vscode/settings.json`:
 
 ```json
 {
@@ -118,7 +118,7 @@ You can add env var to `.vscode/settings.json`:
 }
 ```
 
-This is @louis030195 whole `.vscode/settings.json` file:
+this is @louis030195 whole `.vscode/settings.json` file:
 
 ```json
 {
@@ -156,9 +156,9 @@ This is @louis030195 whole `.vscode/settings.json` file:
 ```
 
 
-## Other hacks
+## other hacks
 
-### Debugging Github Action
+### debugging github action
 
 ssh into the runner:
 
@@ -171,7 +171,7 @@ ssh into the runner:
 run locally: https://github.com/nektos/act
 
 
-### Debugging memory errors
+### debugging memory errors
 
 ```bash
 RUSTFLAGS="-Z sanitizer=address" cargo run --bin screenpipe
@@ -179,7 +179,7 @@ RUSTFLAGS="-Z sanitizer=address" cargo run --bin screenpipe
 RUSTFLAGS="-Z sanitizer=leak" cargo run --bin screenpipe
 ```
 
-For performance monitoring, you can use the following command:
+for performance monitoring, you can use the following command:
 
 ```bash
 cargo install cargo-instruments
@@ -187,25 +187,25 @@ cargo install cargo-instruments
 cargo instruments -t Leaks --bin screenpipe --features metal --time-limit 600000 --open
 ```
 
-Then open the file in `target/release/instruments` using Xcode -> Open Developer Tool -> Instruments.
+then open the file in `target/release/instruments` using xcode -> open developer tool -> instruments.
 
 
-### Benchmarks
+### benchmarks
 
 ```
 cargo bench
 ```
 
-[Check benchmark visuals](https://mediar-ai.github.io/screenpipe/dev/bench/)
+[check benchmark visuals](https://mediar-ai.github.io/screenpipe/dev/bench/)
 
-### Creating new migrations
+### creating new migrations
 
 ```bash
 cargo install sqlx-cli
 sqlx migrate add <migration_name>
 ```
 
-### Set up Azure Ubuntu VM with display & audio
+### set up azure ubuntu vm with display & audio
 
 ```bash
 # Set variables
@@ -273,12 +273,11 @@ az vm user update \
   --password <new-password>
 ```
 
-Now you can either dev screenpipe on Linux or run screenpipe in the cloud that record your local MacOS. Make sure to configure Microsoft Remote Desktop to forward audio
+now you can either dev screenpipe on linux or run screenpipe in the cloud that record your local macos. make sure to configure microsoft remote desktop to forward audio
 
 
-## Join the Community
+## join the community
 
-Say 👋 in our [public Discord channel](https://discord.gg/dU9EBuw7Uq). We discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
+say 👋 in our [public discord channel](https://discord.gg/du9ebuw7uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
-Thank you for contributing to Screen Pipe! 🎉
-
+thank you for contributing to screen pipe! 🎉

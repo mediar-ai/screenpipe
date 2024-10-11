@@ -24,7 +24,7 @@ related issue: #
 3. 
 
 ## checklist
-- [ ] i have read the [CONTRIBUTING.md](../CONTRIBUTING.md) file 
+- [ ] i have read the [CONTRIBUTING.md](https://github.com/mediar-ai/screenpipe/blob/main/CONTRIBUTING.md) file 
 - [ ] i have added the custom cursor AI prompt to my settings as mentioned in CONTRIBUTING.md and used to write this PR
 - [ ] my code follows the project's style guidelines
 - [ ] i have performed a self-review of my code
