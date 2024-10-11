@@ -104,12 +104,6 @@ async function installDeno() {
 		try {
 			await $`choco upgrade deno -y`;
 			console.log('deno installed/upgraded successfully using chocolatey.');
-
-			// ls some potential installation dirs and console log for debugging purpose
-			await $`ls C:\\ProgramData\\chocolatey\\lib\\deno\\tools`;
-			await $`ls C:\\Users\\runneradmin\\AppData\\Local\\deno`;
-			await $`ls C:\\Users\\runneradmin\\AppData\\Local\\deno\\bin`;
-			await $`ls C:\\ProgramData\\chocolatey\\bin\\deno.exe`;
 		} catch (chocoError) {
 			console.error('failed to install/upgrade deno using chocolatey:', chocoError);
 			console.error('please install deno manually.');
@@ -129,7 +123,7 @@ async function copyDenoBinary() {
 	let denoSrc, denoDest1, denoDest2;
 	if (platform === 'windows') {
 		// Check both potential installation locations
-		const chocoPath = 'C:\\ProgramData\\chocolatey\\bin\\deno.exe';
+		const chocoPath = 'C:\\ProgramData\\chocolatey\\lib\\deno\\tools';
 
 		if (await fs.exists(chocoPath)) {
 			denoSrc = chocoPath;
@@ -155,13 +149,11 @@ async function copyDenoBinary() {
 		await fs.access(denoSrc);
 
 		// If it exists, proceed with copying
-		await fs.copyFile(denoSrc, denoDest1);
-		await fs.chmod(denoDest1, 0o755); // Ensure the binary is executable
+		await copyFile(denoSrc, denoDest1);
 		console.log(`deno binary copied successfully to ${denoDest1}`);
 
 		if (platform === 'macos') {
-			await fs.copyFile(denoSrc, denoDest2);
-			await fs.chmod(denoDest2, 0o755);
+			await copyFile(denoSrc, denoDest2);
 			console.log(`deno binary also copied to ${denoDest2}`);
 		}
 	} catch (error) {
@@ -186,10 +178,34 @@ async function copyDenoBinary() {
 				console.error('failed to find deno in PATH:', pathError);
 				console.log('please ensure deno is installed and accessible in your PATH');
 			}
+		} else if (error.code === 'EPERM') {
+			console.error(`permission denied when copying deno binary. trying elevated copy...`);
+			await elevatedCopy(denoSrc, denoDest1);
+			console.log(`deno binary copied successfully to ${denoDest1} using elevated permissions`);
 		} else {
-			console.error('failed to copy deno binary:', error);
+			console.error(`unexpected error: ${error.message}`);
+			process.exit(1);
 		}
 	}
+}
+
+// Helper function to copy file with elevated permissions on Windows
+async function elevatedCopy(src, dest) {
+	if (platform === 'win32') {
+		const { execSync } = require('child_process');
+		const command = `powershell -Command "Start-Process cmd -Verb RunAs -ArgumentList '/c copy ${src} ${dest}' -WindowStyle Hidden -Wait"`;
+		execSync(command);
+	} else {
+		// For non-Windows platforms, fall back to regular copy
+		await fs.copyFile(src, dest);
+	}
+	await fs.chmod(dest, 0o755); // ensure the binary is executable
+}
+
+// Helper function to copy file and set permissions
+async function copyFile(src, dest) {
+	await fs.copyFile(src, dest);
+	await fs.chmod(dest, 0o755); // ensure the binary is executable
 }
 
 /* ########## Linux ########## */
@@ -215,6 +231,10 @@ if (platform == 'linux') {
 
 	let copied = false;
 	for (const screenpipeSrc of potentialPaths) {
+		if (process.env['SKIP_SCREENPIPE_SETUP']) {
+			copied = true;
+			break;
+		}
 		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-unknown-linux-gnu');
 		try {
 			await fs.copyFile(screenpipeSrc, screenpipeDest);
@@ -251,6 +271,10 @@ if (platform == 'windows') {
 
 	let copied = false;
 	for (const screenpipeSrc of potentialPaths) {
+		if (process.env['SKIP_SCREENPIPE_SETUP']) {
+			copied = true;
+			break;
+		}
 		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-pc-windows-msvc.exe');
 		try {
 			await fs.copyFile(screenpipeSrc, screenpipeDest);

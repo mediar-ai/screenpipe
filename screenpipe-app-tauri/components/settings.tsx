@@ -89,9 +89,9 @@ export function Settings({ className }: { className?: string }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost" className={className}>
-          <Settings2 className="mr-2 h-4 w-4" />
-          settings
+        <Button variant="ghost" size="icon" className={className}>
+          <Settings2 className="h-5 w-5" />
+          <span className="sr-only">settings</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
