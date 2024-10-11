@@ -95,6 +95,103 @@ const exports = {
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
 
+// Add this function to install Deno
+async function installDeno() {
+	console.log('installing deno...');
+
+	if (platform === 'windows') {
+		console.log('attempting to install deno using chocolatey...');
+		try {
+			await $`choco upgrade deno -y`;
+			console.log('deno installed/upgraded successfully using chocolatey.');
+
+			// ls some potential installation dirs and console log for debugging purpose
+			await $`ls C:\\ProgramData\\chocolatey\\lib\\deno\\tools`;
+			await $`ls C:\\Users\\runneradmin\\AppData\\Local\\deno`;
+			await $`ls C:\\Users\\runneradmin\\AppData\\Local\\deno\\bin`;
+			await $`ls C:\\ProgramData\\chocolatey\\bin\\deno.exe`;
+		} catch (chocoError) {
+			console.error('failed to install/upgrade deno using chocolatey:', chocoError);
+			console.error('please install deno manually.');
+		}
+	} else {
+		// for macos and linux
+		await $`curl -fsSL https://deno.land/install.sh | sh`;
+	}
+
+	console.log('deno installation attempt completed.');
+}
+
+// Add this function to copy the Deno binary
+async function copyDenoBinary() {
+	console.log('copying deno binary for tauri...');
+
+	let denoSrc, denoDest1, denoDest2;
+	if (platform === 'windows') {
+		// Check both potential installation locations
+		const chocoPath = 'C:\\ProgramData\\chocolatey\\bin\\deno.exe';
+
+		if (await fs.exists(chocoPath)) {
+			denoSrc = chocoPath;
+		} else {
+			console.error('deno binary not found in expected locations');
+			return;
+		}
+		denoDest1 = path.join(cwd, 'deno-x86_64-pc-windows-msvc.exe');
+	} else if (platform === 'macos') {
+		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
+		denoDest1 = path.join(cwd, 'deno-aarch64-apple-darwin');
+		denoDest2 = path.join(cwd, 'deno-x86_64-apple-darwin');
+	} else if (platform === 'linux') {
+		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
+		denoDest1 = path.join(cwd, 'deno-x86_64-unknown-linux-gnu');
+	} else {
+		console.error('unsupported platform for deno binary copy');
+		return;
+	}
+
+	try {
+		// Check if the source file exists
+		await fs.access(denoSrc);
+
+		// If it exists, proceed with copying
+		await fs.copyFile(denoSrc, denoDest1);
+		await fs.chmod(denoDest1, 0o755); // Ensure the binary is executable
+		console.log(`deno binary copied successfully to ${denoDest1}`);
+
+		if (platform === 'macos') {
+			await fs.copyFile(denoSrc, denoDest2);
+			await fs.chmod(denoDest2, 0o755);
+			console.log(`deno binary also copied to ${denoDest2}`);
+		}
+	} catch (error) {
+		if (error.code === 'ENOENT') {
+			console.error(`deno binary not found at expected location: ${denoSrc}`);
+			console.log('attempting to find deno in PATH...');
+
+			try {
+				const { stdout } = await $`where deno`.quiet();
+				const denoPath = stdout.trim();
+				console.log(`found deno at: ${denoPath}`);
+				await fs.copyFile(denoPath, denoDest1);
+				await fs.chmod(denoDest1, 0o755);
+				console.log(`deno binary copied successfully from PATH to ${denoDest1}`);
+
+				if (platform === 'macos') {
+					await fs.copyFile(denoPath, denoDest2);
+					await fs.chmod(denoDest2, 0o755);
+					console.log(`deno binary also copied to ${denoDest2}`);
+				}
+			} catch (pathError) {
+				console.error('failed to find deno in PATH:', pathError);
+				console.log('please ensure deno is installed and accessible in your PATH');
+			}
+		} else {
+			console.error('failed to copy deno binary:', error);
+		}
+	}
+}
+
 /* ########## Linux ########## */
 if (platform == 'linux') {
 	// Install APT packages
@@ -112,7 +209,7 @@ if (platform == 'linux') {
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
-		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
+		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
 		'/home/runner/work/screenpipe/screenpipe/target/release/screenpipe',
 	];
 
@@ -356,6 +453,7 @@ if (platform == 'macos') {
 	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
 
 	console.log('Moved and renamed ffmpeg binary for externalBin');
+
 }
 
 // Nvidia
@@ -508,6 +606,12 @@ if (process.env.GITHUB_ENV) {
 		}
 	}
 }
+
+// Install and setup Deno (add this near the end of the script)
+await installDeno();
+await copyDenoBinary();
+
+
 
 // --dev or --build
 const action = process.argv?.[2]

@@ -1,0 +1,7 @@
+{
+    "imports": {
+        "zod": "npm:zod",
+        "ai": "npm:ai",
+        "ollama-ai-provider": "npm:ollama-ai-provider"
+    }
+}

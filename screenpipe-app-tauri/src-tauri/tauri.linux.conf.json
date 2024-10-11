@@ -1,7 +1,8 @@
 {
     "bundle": {
         "externalBin": [
-            "screenpipe"
+            "screenpipe",
+            "deno"
         ],
         "linux": {
             "deb": {
