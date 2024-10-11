@@ -113,19 +113,17 @@ async function installDeno() {
 async function copyDenoBinary() {
 	console.log('copying deno binary for tauri...');
 
-	let denoSrc, denoDest;
+	let denoSrc, denoDest1, denoDest2;
 	if (platform === 'windows') {
 		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno.exe');
-		denoDest = path.join(cwd, 'deno-x86_64-pc-windows-msvc.exe');
+		denoDest1 = path.join(cwd, 'deno-x86_64-pc-windows-msvc.exe');
 	} else if (platform === 'macos') {
 		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
-		// Check for ARM or Intel Mac
-		const { stdout } = await $`uname -m`.quiet();
-		const arch = new TextDecoder().decode(stdout).trim();
-		denoDest = path.join(cwd, `deno-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`);
+		denoDest1 = path.join(cwd, 'deno-aarch64-apple-darwin');
+		denoDest2 = path.join(cwd, 'deno-x86_64-apple-darwin');
 	} else if (platform === 'linux') {
 		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
-		denoDest = path.join(cwd, 'deno-x86_64-unknown-linux-gnu');
+		denoDest1 = path.join(cwd, 'deno-x86_64-unknown-linux-gnu');
 	} else {
 		console.error('unsupported platform for deno binary copy');
 		return;
@@ -136,21 +134,33 @@ async function copyDenoBinary() {
 		await fs.access(denoSrc);
 		
 		// If it exists, proceed with copying
-		await fs.copyFile(denoSrc, denoDest);
-		await fs.chmod(denoDest, 0o755); // Ensure the binary is executable
-		console.log(`deno binary copied successfully to ${denoDest}`);
+		await fs.copyFile(denoSrc, denoDest1);
+		await fs.chmod(denoDest1, 0o755); // Ensure the binary is executable
+		console.log(`deno binary copied successfully to ${denoDest1}`);
+
+		if (platform === 'macos') {
+			await fs.copyFile(denoSrc, denoDest2);
+			await fs.chmod(denoDest2, 0o755);
+			console.log(`deno binary also copied to ${denoDest2}`);
+		}
 	} catch (error) {
 		if (error.code === 'ENOENT') {
 			console.error(`deno binary not found at expected location: ${denoSrc}`);
 			console.log('attempting to find deno in PATH...');
 			
 			try {
-				const { stdout } = await $`where deno`.quiet();
+				const { stdout } = await $`which deno`.quiet();
 				const denoPath = stdout.trim();
 				console.log(`found deno at: ${denoPath}`);
-				await fs.copyFile(denoPath, denoDest);
-				await fs.chmod(denoDest, 0o755);
-				console.log(`deno binary copied successfully from PATH to ${denoDest}`);
+				await fs.copyFile(denoPath, denoDest1);
+				await fs.chmod(denoDest1, 0o755);
+				console.log(`deno binary copied successfully from PATH to ${denoDest1}`);
+
+				if (platform === 'macos') {
+					await fs.copyFile(denoPath, denoDest2);
+					await fs.chmod(denoDest2, 0o755);
+					console.log(`deno binary also copied to ${denoDest2}`);
+				}
 			} catch (pathError) {
 				console.error('failed to find deno in PATH:', pathError);
 				console.log('please ensure deno is installed and accessible in your PATH');
