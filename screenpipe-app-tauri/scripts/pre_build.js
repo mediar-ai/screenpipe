@@ -112,19 +112,28 @@ async function installDeno() {
 // Add this function to copy the Deno binary
 async function copyDenoBinary() {
 	console.log('copying deno binary for tauri...');
-
-	let denoPath;
+  
+	let denoSrc, denoDest;
 	if (platform === 'windows') {
-		denoPath = path.join(os.homedir(), '.deno', 'bin', 'deno.exe');
+		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno.exe');
+		denoDest = path.join(cwd, 'deno-x86_64-pc-windows-msvc.exe');
+	} else if (platform === 'darwin') {
+		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
+		// Check for ARM or Intel Mac
+		const { stdout } = await $`uname -m`.quiet();
+		const arch = stdout.trim();
+		denoDest = path.join(cwd, `deno-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`);
+	} else if (platform === 'linux') {
+		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
+		denoDest = path.join(cwd, 'deno-x86_64-unknown-linux-gnu');
 	} else {
-		denoPath = path.join(os.homedir(), '.deno', 'bin', 'deno');
+		console.error('unsupported platform for deno binary copy');
+		return;
 	}
 
-	const destPath = path.join(cwd, platform === 'windows' ? 'deno.exe' : 'deno');
-
 	try {
-		await fs.copyFile(denoPath, destPath);
-		console.log('deno binary copied successfully.');
+		await fs.copyFile(denoSrc, denoDest);
+		console.log(`deno binary copied successfully to ${denoDest}`);
 	} catch (error) {
 		console.error('failed to copy deno binary:', error);
 	}
