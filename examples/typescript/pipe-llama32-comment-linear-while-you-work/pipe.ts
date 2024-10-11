@@ -1,9 +1,4 @@
-import {
-  queryScreenpipe,
-  loadPipeConfig,
-  ContentItem,
-  sendDesktopNotification,
-} from "screenpipe";
+import { ContentItem, pipe } from "screenpipe";
 
 import { z } from "zod";
 import { generateObject } from "ai";
@@ -135,6 +130,20 @@ async function addCommentToLinear(
       body: commentWithMention,
     });
     console.log("comment added to linear successfully");
+
+    // Send inbox message
+    const issue = await client.issue(comment.taskId as string);
+    const inboxMessage = {
+      title: `Comment added to: ${issue.title}`,
+      body: `
+### New comment on Linear issue
+
+${comment.body}
+
+[View issue in Linear](${issue.url})
+      `,
+    };
+    await pipe.inbox.send(inboxMessage);
   } catch (error) {
     console.error("linear api error:", error);
     throw new Error("failed to add comment to linear");
@@ -161,7 +170,7 @@ async function searchLinearTasks(
 async function streamCommentsToLinear(): Promise<void> {
   console.log("starting comments stream to linear");
 
-  const config = await loadPipeConfig();
+  const config = await pipe.loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
@@ -172,6 +181,12 @@ async function streamCommentsToLinear(): Promise<void> {
   const windowName = config.windowName;
   const contentType = config.contentType;
 
+  // announce pipe in the inbox
+  await pipe.inbox.send({
+    title: "linear comment pipeline started",
+    body: `commenting on linear tasks every ${interval / 1000} seconds`,
+  });
+
   while (true) {
     await new Promise((resolve) => setTimeout(resolve, interval));
 
@@ -179,7 +194,7 @@ async function streamCommentsToLinear(): Promise<void> {
       const now = new Date();
       const intervalAgo = new Date(now.getTime() - interval);
 
-      const screenData = await queryScreenpipe({
+      const screenData = await pipe.queryScreenpipe({
         startTime: intervalAgo.toISOString(),
         endTime: now.toISOString(),
         limit: config.pageSize,
@@ -221,7 +236,7 @@ async function streamCommentsToLinear(): Promise<void> {
         await addCommentToLinear(comment, apiKey);
 
         // randomly send a notification
-        await sendDesktopNotification({
+        await pipe.sendDesktopNotification({
           title: "linear comment pipeline update",
           body: `comment added to task ${comment.taskId}`,
         });

@@ -114,11 +114,12 @@ we would be happy to help you make money!
 - pipes have access to a special API that allows you to interact with your computer or special features like sending notifications, sending emails, etc.
 - check this [file](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/deno/runtime.js) for more details.
 - in general we recommend using local LLMs like ollama as the data can be large and sensitive.
+- deno caches dependencies and sometimes need to clear/reload cache
 
 ### known limitations
 
 - you can only use JS/TS to build your pipes.
-- we did not figure out yet a way to use dependencies but some manage to do so, this is because pipes run in Deno runtime which is special.
 - you usually need to run the pipe in an infinite loop for example if it's something that process your data continuously, of course if this is for example an agent that summarize your day one shot it does not have to be infinite loop.
+
 
 </MotionDiv>

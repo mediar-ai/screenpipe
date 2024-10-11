@@ -59,6 +59,9 @@ I use cursor with this prompt to help me with the code:
 
 ```
 Rules:
+- Coding: louis is working on screenpipe most of the time, it's an open source app, lib, and CLI, that record screens & mics 24/7, extract OCR & STT, save to local db, connect to AI, do magic, it's written in Rust + Tauri and we write plugins (pipes) in TS + Deno. the Rust CLI is embedded as a sidecar in Tauri. it works on macos, windows, linux
+- Coding: always keep my style black and white, with some nerdy style and fonts pixelated / scientific style
+- Coding: do not remove @ts-ignore except if i explicitly ask you
 - Coding: always use lower case for logging stuff or UI
 - Coding: Rust: always use anyhow error, tokio instead of std stuff, avoid mutex if you can, prefer channels, write code easy to read for humans, fast for machines
 - Coding: when i ask to give me the full code it means FULL, no fucking // rest of the code comments GIVE ME THE FULL CODE
@@ -71,12 +74,14 @@ Rules:
 
 ### Principles 
 
-- **User fanatic: focus on building what people want and making users happy.**
+- **User fanatic: focus on building what people want and bring maximum value.**
 - Concurrency: channels > mutexes/locks
-- Simplicity: avoid premature optimization. less is more. optimise for less code, less files, less dependencies, less complexity.
+- Simplicity: avoid premature optimization. write code that is easy for humans to read, fast for machines to execute. less is more. optimise for less code, less files, less dependencies, less complexity.
+- Production: we're building real products, not python toy that grow to 150k stars and die prematurely and never leave localhost, thank you.
 - Focus: avoid feature creep. focus on the core functionality and build upon it. focus on the user and their needs.
 - Use numbers: if you can't measure it, you can't improve it.
 - Avoid OOP: prefer functional programming.
+- Positive-sum: we're all going to win, it is a multiplayer, positive sum game. (that escalated quickly)
 
 ### Issue and Pull Request Labels
 
