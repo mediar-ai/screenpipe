@@ -100,13 +100,25 @@ async function installDeno() {
 	console.log('installing deno...');
 
 	if (platform === 'windows') {
-		await $`powershell -c "irm https://deno.land/install.ps1 | iex"`
+		try {
+			await $`winget install DenoLand.Deno`.quiet();
+			console.log('deno installed successfully using winget.');
+		} catch (error) {
+			console.error('failed to install deno using winget:', error);
+			console.log('attempting to install deno using powershell...');
+			try {
+				await $`powershell -c "irm https://deno.land/install.ps1 | iex"`;
+				console.log('deno installed successfully using powershell.');
+			} catch (psError) {
+				console.error('failed to install deno using powershell:', psError);
+			}
+		}
 	} else {
 		// for macos and linux
-		await $`curl -fsSL https://deno.land/install.sh | sh`
+		await $`curl -fsSL https://deno.land/install.sh | sh`;
 	}
 
-	console.log('deno installed successfully.');
+	console.log('deno installation attempt completed.');
 }
 
 // Add this function to copy the Deno binary
@@ -115,7 +127,18 @@ async function copyDenoBinary() {
 
 	let denoSrc, denoDest1, denoDest2;
 	if (platform === 'windows') {
-		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno.exe');
+		// Check both potential installation locations
+		const wingetPath = 'C:\\Program Files\\Deno\\deno.exe';
+		const homePath = path.join(os.homedir(), '.deno', 'bin', 'deno.exe');
+
+		if (await fs.exists(wingetPath)) {
+			denoSrc = wingetPath;
+		} else if (await fs.exists(homePath)) {
+			denoSrc = homePath;
+		} else {
+			console.error('deno binary not found in expected locations');
+			return;
+		}
 		denoDest1 = path.join(cwd, 'deno-x86_64-pc-windows-msvc.exe');
 	} else if (platform === 'macos') {
 		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
@@ -132,7 +155,7 @@ async function copyDenoBinary() {
 	try {
 		// Check if the source file exists
 		await fs.access(denoSrc);
-		
+
 		// If it exists, proceed with copying
 		await fs.copyFile(denoSrc, denoDest1);
 		await fs.chmod(denoDest1, 0o755); // Ensure the binary is executable
@@ -147,7 +170,7 @@ async function copyDenoBinary() {
 		if (error.code === 'ENOENT') {
 			console.error(`deno binary not found at expected location: ${denoSrc}`);
 			console.log('attempting to find deno in PATH...');
-			
+
 			try {
 				const { stdout } = await $`which deno`.quiet();
 				const denoPath = stdout.trim();
