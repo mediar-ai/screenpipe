@@ -23,35 +23,6 @@ mod tests {
             set_global_default(subscriber).expect("Failed to set tracing subscriber");
         });
     }
-    #[tokio::test]
-    #[ignore]
-    async fn test_js_execution() {
-        init();
-        let code = r#"
-            function add(a, b) {
-                return a + b;
-            }
-            add(2, 3);
-            console.log("Hello, world!");
-            const response = await pipe.get("https://jsonplaceholder.typicode.com/todos/1");
-            console.log(response);
-            "#;
-
-        // write code to a file
-        let file_path = "test.js";
-        let mut file = File::create(file_path).await.unwrap();
-        file.write_all(code.as_bytes()).await.unwrap();
-        file.flush().await.unwrap();
-        // Test a simple JavaScript function
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let result = run_js("", file_path, screenpipe_dir).await;
-
-        assert!(result.is_ok());
-        println!("result: {:?}", result);
-        // remove_file(file_path).await.unwrap();
-    }
 
     async fn setup_test_pipe(temp_dir: &TempDir, pipe_name: &str, code: &str) -> PathBuf {
         init();

@@ -1,7 +1,7 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
-    use screenpipe_audio::{list_audio_devices, record_and_transcribe};
+    use screenpipe_audio::{list_audio_devices, record_and_transcribe, AudioInput};
 
     use std::{
         path::PathBuf,
