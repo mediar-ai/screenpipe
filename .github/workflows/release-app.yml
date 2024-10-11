@@ -126,26 +126,17 @@ jobs:
           ls . 
           bun install
 
-      - name: Install Scoop (if needed)
-        if: matrix.platform == 'windows-latest'
-        shell: powershell
-        run: |
-          if (!(Get-Command scoop -ErrorAction SilentlyContinue)) {
-            iwr -useb get.scoop.sh | iex
-          }
-
       # - name: Setup tmate session # HACK
       #   if: matrix.platform == 'windows-latest'
       #   uses: mxschmitt/action-tmate@v3
 
-
       - name: Run pre_build.js
         shell: bash
         env:
-          SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
+          SKIP_SCREENPIPE_SETUP: true
         run: |
+          sudo chmod -R 755 ./scripts/pre_build.js
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-          ls -R .
         working-directory: ./screenpipe-app-tauri
 
       - name: Verify Tesseract Installation
@@ -171,11 +162,11 @@ jobs:
           cargo build --release ${{ matrix.args }}
 
 
-
       # Run pre build again to copy the CLI into app
-      - name: Run pre_build.js on ${{ matrix.platform }}
+      - name: Run pre_build.js
         shell: bash
-        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        run: |
+          bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
       - name: Install vcpkg
