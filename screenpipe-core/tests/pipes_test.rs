@@ -1,7 +1,7 @@
 #[cfg(feature = "pipes")]
 #[cfg(test)]
 mod tests {
-    use screenpipe_core::{download_pipe, run_js, run_pipe};
+    use screenpipe_core::{download_pipe, run_pipe};
     use serde_json::json;
     use std::{path::PathBuf, sync::Once};
     use tempfile::TempDir;
@@ -76,7 +76,7 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "simple_pipe", code).await;
 
-        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
         assert!(result.is_ok());
     }
 
@@ -94,7 +94,7 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "http_pipe", code).await;
 
-        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
         assert!(result.is_ok());
     }
 
@@ -111,7 +111,7 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "error_pipe", code).await;
 
-        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
         assert!(result.is_err());
     }
 
@@ -130,7 +130,7 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "file_pipe", code).await;
 
-        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
         assert!(result.is_ok());
 
         // Verify that the file was created and contains the expected content
@@ -187,7 +187,7 @@ mod tests {
         // Change the working directory to the pipe directory
         std::env::set_current_dir(&pipe_dir).unwrap();
 
-        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
         assert!(result.is_ok(), "Pipe execution failed: {:?}", result);
     }
 
@@ -300,12 +300,12 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "email_test_pipe_plain", &plain_text_code).await;
         std::env::set_current_dir(&pipe_dir).unwrap();
-        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir.clone()).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir.clone()).await;
         assert!(result.is_ok(), "Plain text email test failed: {:?}", result);
 
         let pipe_dir = setup_test_pipe(&temp_dir, "email_test_pipe_html", &html_code).await;
         std::env::set_current_dir(&pipe_dir).unwrap();
-        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
         assert!(result.is_ok(), "HTML email test failed: {:?}", result);
     }
 
@@ -356,7 +356,7 @@ mod tests {
         // Change the working directory to the pipe directory
         std::env::set_current_dir(&pipe_dir).unwrap();
 
-        let result = run_pipe(pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
         assert!(result.is_ok(), "Pipe execution failed: {:?}", result);
 
         // Additional checks
