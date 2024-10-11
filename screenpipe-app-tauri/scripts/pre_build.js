@@ -111,6 +111,21 @@ async function installDeno() {
 				console.log('deno installed successfully using powershell.');
 			} catch (psError) {
 				console.error('failed to install deno using powershell:', psError);
+				console.log('attempting to install deno using scoop...');
+				try {
+					await $`scoop install deno`;
+					console.log('deno installed successfully using scoop.');
+				} catch (scoopError) {
+					console.error('failed to install deno using scoop:', scoopError);
+					console.log('attempting to install deno using chocolatey...');
+					try {
+						await $`choco install deno`;
+						console.log('deno installed successfully using chocolatey.');
+					} catch (chocoError) {
+						console.error('failed to install deno using chocolatey:', chocoError);
+						console.error('all installation methods failed. please install deno manually.');
+					}
+				}
 			}
 		}
 	} else {
@@ -130,11 +145,17 @@ async function copyDenoBinary() {
 		// Check both potential installation locations
 		const wingetPath = 'C:\\Program Files\\Deno\\deno.exe';
 		const homePath = path.join(os.homedir(), '.deno', 'bin', 'deno.exe');
+		const scoopPath = path.join(os.homedir(), 'scoop', 'shims', 'deno.exe');
+		const chocoPath = 'C:\\ProgramData\\chocolatey\\bin\\deno.exe';
 
 		if (await fs.exists(wingetPath)) {
 			denoSrc = wingetPath;
 		} else if (await fs.exists(homePath)) {
 			denoSrc = homePath;
+		} else if (await fs.exists(scoopPath)) {
+			denoSrc = scoopPath;
+		} else if (await fs.exists(chocoPath)) {
+			denoSrc = chocoPath;
 		} else {
 			console.error('deno binary not found in expected locations');
 			return;
