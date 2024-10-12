@@ -328,6 +328,10 @@ async function dailyLogPipeline(): Promise<void> {
             title: "reddit questions",
             body: redditQuestions,
           });
+          await pipe.sendDesktopNotification({
+            title: "reddit questions",
+            body: "just sent you some reddit questions",
+          });
           lastEmailSent = now;
         }
       }
