@@ -108,12 +108,12 @@ function generateRedditLinks(content: string): string {
       const encodedTitle = encodeURIComponent(title);
       const encodedBody = encodeURIComponent(`${title}\n\n${body}`);
 
-      result += `[${index + 1}] ${title}\n\n${body}\n\n`;
+      result += `### ${index + 1}. ${title}\n\n${body}\n\n`;
 
       subredditsMatch.forEach((subreddit) => {
         const subredditName = subreddit.slice(2, -1);
         const link = `https://www.reddit.com/r/${subredditName}/submit?title=${encodedTitle}&text=${encodedBody}`;
-        result += `${subreddit} <a href="${link}">SEND</a>\n`;
+        result += `- ${subreddit} [SEND](${link})\n`;
       });
 
       result += "\n";
