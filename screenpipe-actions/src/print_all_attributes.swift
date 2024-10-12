@@ -85,8 +85,11 @@ func printAllAttributeValues(_ startElement: AXUIElement, to fileHandle: FileHan
     for (position, size, valueStr) in elements {
         let coordinates = formatCoordinates(position, size)
         let output = "\(coordinates) \(valueStr)\n"
-        print(output, terminator: "")
-        fileHandle?.write(output.data(using: .utf8)!)
+        if let fileHandle = fileHandle {
+            fileHandle.write(output.data(using: .utf8)!)
+        } else {
+            print(output, terminator: "")
+        }
     }
 }
 
@@ -162,31 +165,10 @@ func printAllAttributeValuesForCurrentApp() {
     let pid = app.processIdentifier
     let axApp = AXUIElementCreateApplication(pid)
     
-    let fileName = "accessibility_attributes.txt"
-    let fileManager = FileManager.default
-    let currentPath = fileManager.currentDirectoryPath
-    let outputPath = (currentPath as NSString).appendingPathComponent(fileName)
-    
-    guard fileManager.createFile(atPath: outputPath, contents: nil, attributes: nil) else {
-        print("couldn't create file")
-        return
-    }
-    
-    guard let fileHandle = FileHandle(forWritingAtPath: outputPath) else {
-        print("couldn't open file for writing")
-        return
-    }
-    defer {
-        fileHandle.closeFile()
-    }
-    
     let header = "attribute values for \(app.localizedName ?? "unknown app"):\n"
     print(header, terminator: "")
-    fileHandle.write(header.data(using: .utf8)!)
     
-    printAllAttributeValues(axApp, to: fileHandle)
-    
-    print("output written to \(outputPath) and printed to terminal")
+    printAllAttributeValues(axApp, to: nil)
 }
 
 // usage
