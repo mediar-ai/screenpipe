@@ -17,7 +17,7 @@ pub fn capture_main_window_screenshot() -> Result<DynamicImage> {
     );
 
     // save the screenshot to the current folder
-    image.save("screenshot.png").context("failed to save screenshot")?;
+    // image.save("screenshot.png").context("failed to save screenshot")?;
 
     Ok(image)
 }
