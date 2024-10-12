@@ -51,6 +51,7 @@ log = { workspace = true }
 env_logger = "0.10"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
 # Cli ! shouldn't be required if using as lib
 clap = { version = "4.3", features = ["derive"] }
 

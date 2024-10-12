@@ -9,22 +9,22 @@ use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
-use highlightio::Highlight;
-use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device, vad_engine::SileroVad, whisper::WhisperModel, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, logs::SingleFileRollingWriter, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
+use tracing::{info, debug, error};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_appender::non_blocking::WorkerGuard;
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -46,27 +46,72 @@ const DISPLAY: &str = r"
 
 ";
 
-fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
+fn get_base_dir(custom_path: &Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = home_dir()
         .ok_or_else(|| anyhow::anyhow!("failed to get home directory"))?
         .join(".screenpipe");
 
-    let base_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
+    let base_dir = custom_path.as_ref().map(PathBuf::from).unwrap_or(default_path);
     let data_dir = base_dir.join("data");
 
     fs::create_dir_all(&data_dir)?;
     Ok(base_dir)
 }
 
+fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGuard> {
+    let file_appender = RollingFileAppender::builder()
+        .rotation(Rotation::DAILY)
+        .filename_prefix("screenpipe")
+        .filename_suffix("log")
+        .max_log_files(5)
+        .build(local_data_dir)?;
 
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
+    let env_filter = EnvFilter::from_default_env()
+        .add_directive("info".parse().unwrap())
+        .add_directive("tokenizers=error".parse().unwrap())
+        .add_directive("rusty_tesseract=error".parse().unwrap())
+        .add_directive("symphonia=error".parse().unwrap());
+
+    let env_filter = env::var("SCREENPIPE_LOG")
+        .unwrap_or_default()
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .fold(env_filter, |filter, module_directive| {
+            match module_directive.parse() {
+                Ok(directive) => filter.add_directive(directive),
+                Err(e) => {
+                    eprintln!("warning: invalid log directive '{}': {}", module_directive, e);
+                    filter
+                }
+            }
+        });
+
+    let env_filter = if cli.debug {
+        env_filter.add_directive("screenpipe=debug".parse().unwrap())
+    } else {
+        env_filter
+    };
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt::layer().with_writer(std::io::stdout))
+        .with(fmt::layer().with_writer(non_blocking))
+        .init();
+
+    info!("logging initialized");
+    Ok(guard)
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
-    let local_data_dir = get_base_dir(cli.data_dir)?;
+    let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
+
+    let _log_guard = setup_logging(&local_data_dir, &cli)?;
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
@@ -95,71 +140,6 @@ async fn main() -> anyhow::Result<()> {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
         std::process::exit(1);
     }
-
-    // Set up file appender
-    let log_file_path = local_data_dir.join("screenpipe.log");
-    let file_writer = SingleFileRollingWriter::new(log_file_path)?;
-
-    // Create a custom layer for file logging
-    let file_layer = fmt::layer()
-        .with_writer(file_writer)
-        .with_ansi(false)
-        .with_filter(EnvFilter::new("info"));
-
-    // Create a custom layer for console logging
-    let console_layer = fmt::layer()
-        .with_writer(std::io::stdout)
-        .with_filter(EnvFilter::new("debug"));
-
-    // Build the EnvFilter
-    let env_filter = EnvFilter::from_default_env()
-        .add_directive("info".parse().unwrap())
-        .add_directive("tokenizers=error".parse().unwrap())
-        .add_directive("rusty_tesseract=error".parse().unwrap())
-        .add_directive("symphonia=error".parse().unwrap());
-
-    // Add custom log levels for specific modules based on environment variables
-    let env_filter = env::var("SCREENPIPE_LOG")
-        .unwrap_or_default()
-        .split(',')
-        .filter(|s| !s.is_empty()) // Filter out empty strings
-        .fold(env_filter, |filter, module_directive| {
-            match module_directive.parse() {
-                Ok(directive) => filter.add_directive(directive),
-                Err(e) => {
-                    eprintln!("warning: invalid log directive '{}': {}", module_directive, e);
-                    filter
-                }
-            }
-        });
-
-    // Usage:
-    //  SCREENPIPE_LOG=screenpipe_audio=debug ./screenpipe
-    //  SCREENPIPE_LOG=screenpipe_audio=debug,screenpipe_vision=trace ./screenpipe
-
-    let env_filter = if cli.debug {
-        env_filter.add_directive("screenpipe=debug".parse().unwrap())
-    } else {
-        env_filter
-    };
-
-    // ignore mut warning 
-    #[allow(unused_mut)]
-    let mut h: Option<Highlight> = None;
-    if !cli.disable_telemetry {
-        // ! do not use yet - leaks too much privacy and does not catch errors properly 
-        // h = Some(Highlight::init(HighlightConfig {
-        //     project_id: "82688".to_string(),
-        //     ..Default::default()
-        // }).expect("Failed to initialize Highlight.io"));
-    }
-    // } else {
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(file_layer)
-        .with(console_layer)
-        .init();
-    // }
 
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
@@ -564,7 +544,7 @@ async fn main() -> anyhow::Result<()> {
         println!(
             "{}",
             "you are using local processing. all your data stays on your computer.\n"
-                .bright_yellow()
+                .bright_green()
         );
     }
 
@@ -646,10 +626,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     info!("shutdown complete");
-
-    if let Some(h) = h {
-        h.shutdown();
-    }
 
     Ok(())
 }

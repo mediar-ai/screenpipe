@@ -93,7 +93,8 @@ jobs:
       - name: Check logs and data
         run: |
           echo "Checking logs..."
-          tail -n 100 ~/.screenpipe/logs/screenpipe.log
+          
+          tail -n 100 ~/.screenpipe/logs/screenpipe.$(date +%Y-%m-%d).log
           
           echo "Checking database..."
           sqlite3 ~/.screenpipe/db.sqlite ".tables"

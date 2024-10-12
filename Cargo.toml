@@ -13,7 +13,7 @@ resolver = "2"
 
 
 [workspace.package]
-version = "0.1.94"
+version = "0.1.95"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"
@@ -31,6 +31,7 @@ hf-hub = "0.3.0"
 log = "0.4"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-appender = { version = "0.2.3" }
 tokio = { version = "1.15", features = ["full", "tracing"] }
 crossbeam = "0.8.4"
 image = "0.25"
