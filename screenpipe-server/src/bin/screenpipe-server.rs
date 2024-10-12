@@ -12,8 +12,7 @@ use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
 use highlightio::Highlight;
 use log::{debug, error, info};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice, DeviceControl,
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device, vad_engine::SileroVad, whisper::WhisperModel, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
@@ -75,6 +74,18 @@ async fn main() -> anyhow::Result<()> {
         match pipe_command {
             Command::Pipe { subcommand } => {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
+                return Ok(());
+            }
+            Command::Setup => {
+                // this command just download models and stuff (useful to have specific step to display in UI)
+
+                // ! should prob skip if deepgram?
+                WhisperModel::new(&cli.audio_transcription_engine.into()).unwrap();
+                // ! assuming silero is used
+                SileroVad::new().await.unwrap();
+
+                println!("screenpipe setup complete");
+                // TODO: ffmpeg sidecar thing here
                 return Ok(());
             }
         }

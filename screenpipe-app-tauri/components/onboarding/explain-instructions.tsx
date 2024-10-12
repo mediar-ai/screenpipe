@@ -21,7 +21,6 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
   handlePrevSlide,
   handleNextSlide,
 }) => {
-
   return (
     <div className={`${className} w-full flex justify-center flex-col`}>
       <DialogHeader className="px-2">
@@ -46,16 +45,14 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
       </div>
       <div className="mt-2 w-full flex justify-around flex-col">
         <div className="mx-4 mb-2">
-          <h2 className="font-semibold text-md">
-            search functionality:
-          </h2>
+          <h2 className="font-semibold text-md">search functionality:</h2>
           <p className="text-muted-foreground text-[14px]">
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
               on screenpipe&apos;s main menu,
-            </span> 
-            you&apos;ll find a search bar to query the 24/7 captured data. 
-            it filters out pii and lets you select specific results for 
-            ai summarization and processing, providing valuable insights.
+            </span>
+            you&apos;ll find a search bar to query the 24/7 captured data. it
+            lets you select specific results for ai summarization and chatting,
+            providing valuable insights.
           </p>
         </div>
         <div className="flex justify-center">
@@ -63,15 +60,13 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
         </div>
         <div className="mx-4 mb-2">
-          <h2 className="font-medium text-md">
-            status menu:
-          </h2>
+          <h2 className="font-medium text-md">status menu:</h2>
           <p className="text-muted-foreground text-[14px]">
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
-             screenpipe status menu serves  
-            </span> 
-              as a health and process monitor and allows you to 
-              adjust advanced preferences for backend processes
+              screenpipe status menu serves
+            </span>
+            as a health and process monitor and allows you to adjust advanced
+            preferences for backend processes
           </p>
         </div>
         <div className="flex justify-center">
@@ -79,15 +74,13 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
         </div>
         <div className="mx-4 mb-2">
-          <h2 className="font-medium text-md">
-            settings menu:
-          </h2>
+          <h2 className="font-medium text-md">settings menu:</h2>
           <p className="text-muted-foreground text-[14px]">
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
               the settings menu,
-            </span> 
-            is where you can configure various options like monitor
-            recorder settings and ai preferences. this section lets you customize how
+            </span>
+            is where you can configure various options like monitor recorder
+            settings and ai preferences. this section lets you customize how
             screenpipe interacts with llms
           </p>
         </div>
@@ -102,37 +95,23 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           <p className="text-muted-foreground text-[14px]">
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
               this features of screenpipe
-            </span> 
-              tracks your meetings by analyzing specific keywords and generates summaries for you using ai &amp; llms .
+            </span>
+            tracks your meetings by analyzing specific keywords and generates
+            summaries for you using ai &amp; llms .
+          </p>
+        </div>
+        <div className="mx-4">
+          <h2 className="font-medium text-md">pipe store (experimental):</h2>
+          <p className="text-muted-foreground text-[14px]">
+            <span className="font-medium text-nowrap text-[14px] prose mr-1">
+              this features of screenpipe
+            </span>
+            extend your 24/7 data through plugins you can install in seconds,
+            create, share and sell your own.
           </p>
         </div>
       </div>
-      <span className="absolute bottom-12 text-muted-foreground prose-sm text-center block w-full ">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Info className="inline w-4 h-4 mb-[1.5px] mr-1" />hover on these 
-                &apos;<HelpCircle className="mb-1 inline h-4 w-4 cursor-default" />&apos;
-                for more info
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <a
-              onClick={() =>
-                open(
-                  "https://docs.screenpi.pe/",
-                )
-              }
-              href="#"
-              className="mt-4 text-muted-foreground text-sm mr-auto ml-auto !text-center hover:underline"
-            >
-              checkout our docs to learn more
-            </a>
-            </TooltipContent>
-          </Tooltip>
-          </TooltipProvider>
-      </span>
+
       <OnboardingNavigation
         className="mt-8"
         handlePrevSlide={handlePrevSlide}
@@ -145,4 +124,3 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
 };
 
 export default OnboardingInstructions;
-

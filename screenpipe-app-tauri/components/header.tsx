@@ -19,10 +19,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Heart, Menu, Bell } from "lucide-react";
+import { MessageSquare, Heart, Menu, Bell, Play } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { InboxMessages, Message } from "@/components/inbox-messages";
 import { useState, useRef, useEffect } from "react";
+import Onboarding from "@/components/onboarding";
+import { useOnboarding } from "@/lib/hooks/use-onboarding";
 
 function IconNewChat() {
   return (
@@ -56,6 +58,8 @@ export default function Header() {
     setMessages(messages.filter((msg) => msg.id !== id));
   };
 
+  const { setShowOnboarding } = useOnboarding();
+
   return (
     <div>
       <div className="absolute left-8 top-4">
@@ -64,6 +68,7 @@ export default function Header() {
             <TooltipTrigger asChild>
               <Button
                 variant="secondary"
+                className="cursor-pointer"
                 onClick={() => {
                   location.reload();
                 }}
@@ -94,7 +99,7 @@ export default function Header() {
         </div>
       </div>
       <div className="flex space-x-4 absolute top-4 right-4">
-        <HealthStatus className="mt-3" />
+        <HealthStatus className="mt-3 cursor-pointer" />
         <MeetingHistory />
         <PipeDialog />
         <Settings />
@@ -102,6 +107,7 @@ export default function Header() {
         <Button
           variant="ghost"
           size="icon"
+          className="cursor-pointer"
           onClick={() => setShowInbox(!showInbox)}
         >
           <Bell className="h-[1.2rem] w-[1.2rem]" />
@@ -109,13 +115,14 @@ export default function Header() {
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="cursor-pointer">
               <Menu className="h-[1.2rem] w-[1.2rem]" />
               <span className="sr-only">menu</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="mr-4" align="end">
             <DropdownMenuItem
+              className="cursor-pointer"
               onClick={() =>
                 open(
                   "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
@@ -126,6 +133,7 @@ export default function Header() {
               <span>send feedback</span>
             </DropdownMenuItem>
             <DropdownMenuItem
+              className="cursor-pointer"
               onClick={() =>
                 open(
                   "https://twitter.com/intent/tweet?text=here's%20how%20i%20use%20@screen_pipe%20...%20%5Bscreenshot%5D%20an%20awesome%20tool%20for%20..."
@@ -134,6 +142,13 @@ export default function Header() {
             >
               <Heart className="mr-2 h-4 w-4" />
               <span>support us</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onClick={() => setShowOnboarding(true)}
+            >
+              <Play className="mr-2 h-4 w-4" />
+              <span>show onboarding</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

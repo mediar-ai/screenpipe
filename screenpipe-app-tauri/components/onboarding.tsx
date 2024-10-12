@@ -12,6 +12,7 @@ import OnboardingDevConfig from "@/components/onboarding/dev-configuration";
 import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import OnboardingInstructions from "@/components/onboarding/explain-instructions";
 import OnboardingExperimentalFeatures from "@/components/onboarding/features-experimental";
+import { useOnboarding } from "@/lib/hooks/use-onboarding";
 
 const setFirstTimeUserFlag = async () => {
   await localforage.setItem("isFirstTimeUser", false);
@@ -30,126 +31,128 @@ type SlideKey =
   | "experimentalFeatures";
 
 const slideFlow: Record<
-  SlideKey, {
+  SlideKey,
+  {
     next: (
       selectedOptions?: string[],
       selectedPreference?: string | null,
-      selectedPersonalization?: string | null,
+      selectedPersonalization?: string | null
     ) => SlideKey | null;
     prev: (
       selectedOptions?: string[],
       selectedPreference?: string | null,
-      selectedPersonalization?: string | null,
+      selectedPersonalization?: string | null
     ) => SlideKey | null;
   }
 > = {
-  intro: {                                                                                        // introduction video of screenpipe
+  intro: {
+    // introduction video of screenpipe
     next: () => "status",
     prev: () => null,
   },
-  status: {                                                                                       // status of screenpipe (blockage or not) 
-    next: () => "selection", 
-    prev: () => "intro", 
-  },                                             
-  selection: {                                                                                    // selection (four options)
+  status: {
+    // status of screenpipe (blockage or not)
+    next: () => "selection",
+    prev: () => "intro",
+  },
+  selection: {
+    // selection (four options)
     next: (selectedOptions) => {
-      if (!Array.isArray(selectedOptions) 
-        || selectedOptions.length === 0) 
+      if (!Array.isArray(selectedOptions) || selectedOptions.length === 0)
         return null;
-      if (selectedOptions.includes("personalUse")) 
-        return "personalize";
-      if (selectedOptions.includes("professionalUse")) 
-        return "apiSetup";
-      if (selectedOptions.includes("developmentlUse")) 
-        return "devOrNonDev";
-      if (selectedOptions.includes("otherUse")) 
-        return "devOrNonDev";
-      return "instructions";
+      return "devOrNonDev";
     },
     prev: () => "status",
   },
-  personalize: {                                                                                    // personalize (with ai or without ai)
+  personalize: {
+    // personalize (with ai or without ai)
     next: (selectedOptions, __, selectedPersonalization) => {
-      if (selectedPersonalization === "withAI") 
-        return "apiSetup";
-      if (selectedOptions?.includes("personalUse") 
-        && selectedPersonalization === "withoutAI") 
+      if (selectedPersonalization === "withAI") return "apiSetup";
+      if (
+        selectedOptions?.includes("personalUse") &&
+        selectedPersonalization === "withoutAI"
+      )
         return "devOrNonDev";
-      return "instructions"
-      },
+      return "instructions";
+    },
     prev: () => "selection",
   },
-  apiSetup: {                                                                                       // api setup & validation
+  apiSetup: {
+    // api setup & validation
     next: () => "instructions",
     prev: (selectedOptions) => {
-      if (selectedOptions?.length === 1 && selectedOptions?.includes("professionalUse")) {
+      if (
+        selectedOptions?.length === 1 &&
+        selectedOptions?.includes("professionalUse")
+      ) {
         return "selection";
-      } 
-      return "personalize"
+      }
+      return "personalize";
     },
   },
-  devOrNonDev: {                                                                                    // dev or no dev
+  devOrNonDev: {
+    // dev or no dev
     next: (selectedOptions, selectedPreference, selectedPersonalization) => {
-      if (selectedOptions?.includes("personalUse") 
-        && selectedPersonalization === "withoutAI" 
-        && selectedPreference === "nonDevMode") 
+      if (
+        selectedOptions?.includes("personalUse") &&
+        selectedPersonalization === "withoutAI" &&
+        selectedPreference === "nonDevMode"
+      )
         return "instructions";
-      if (selectedPreference === "devMode")
-        return "devConfig"
-      return "personalize"
-    }, 
+      if (selectedPreference === "devMode") return "devConfig";
+      return "personalize";
+    },
     prev: () => "selection",
   },
-  devConfig: {                                                                                      // dev configuration
-    next: () => "pipes", 
-    prev: () => "devOrNonDev"
+  devConfig: {
+    // dev configuration
+    next: () => "pipes",
+    prev: () => "devOrNonDev",
   },
-  pipes: {                                                                                          // explain about pipes to dev
-    next: () => "instructions", 
+  pipes: {
+    // explain about pipes to dev
+    next: () => "instructions",
     prev: () => "devConfig",
   },
-  instructions: {                                                                                   // instructions for every type of user
-    next: () => "experimentalFeatures", 
+  instructions: {
+    // instructions for every type of user
+    next: () => "experimentalFeatures",
     prev: (selectedOptions, selectedPreference, selectedPersonalization) => {
-      if (selectedPreference === "devMode") 
-        return "pipes";
-      if (selectedOptions?.includes("personalUse")) 
-        return "personalize";
-      if (selectedOptions?.includes("professionalUse")) 
-        return "apiSetup";
-      if (selectedOptions?.includes("developmentlUse") 
-        && selectedPreference === "nonDevMode" 
-        && selectedPersonalization === "withoutAI") 
-        return "personalize";
-      if (selectedOptions?.includes("developmentlUse") 
-        || selectedOptions?.includes("otherUse") 
-        && selectedPersonalization === "withAI") 
-        return "apiSetup";
+      if (selectedPreference === "devMode") return "pipes";
+      if (selectedOptions?.includes("personalUse")) return "personalize";
+      if (selectedOptions?.includes("professionalUse")) return "personalize";
+      if (selectedOptions?.includes("developmentlUse")) return "personalize";
+      if (selectedPersonalization === "withAI") return "apiSetup";
       return "devOrNonDev";
-    }
+    },
   },
-  experimentalFeatures: {                                                                           // experimental features
-    next: () => null, 
+  experimentalFeatures: {
+    // experimental features
+    next: () => null,
     prev: () => "instructions",
   },
 };
 
 const Onboarding: React.FC = () => {
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
   const [currentSlide, setCurrentSlide] = useState<SlideKey>("intro");
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);                             // use case selection (four options)
-  const [selectedPersonalization, setSelectedPersonalization] = useState<string | null >(null);     // with ai or without ai
-  const [selectedPreference, setSelectedPreference] = useState<string | null >(null);               // dev or non dev
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]); // use case selection (four options)
+  const [selectedPersonalization, setSelectedPersonalization] = useState<
+    string | null
+  >(null); // with ai or without ai
+  const [selectedPreference, setSelectedPreference] = useState<string | null>(
+    null
+  ); // dev or non dev
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const { showOnboarding, setShowOnboarding } = useOnboarding();
 
   useEffect(() => {
     setIsVisible(true);
   }, [currentSlide]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (showOnboarding) {
       const hideCloseButton = () => {
         const closeButton = document.querySelector(".lucide-x");
         if (closeButton) {
@@ -158,13 +161,13 @@ const Onboarding: React.FC = () => {
       };
       setTimeout(hideCloseButton, 100);
     }
-  }, [isOpen]);
+  }, [showOnboarding]);
 
   useEffect(() => {
     const checkFirstTimeUser = async () => {
       const isFirstTime = await localforage.getItem<boolean>("isFirstTimeUser");
       if (isFirstTime === null) {
-        setIsOpen(true);
+        setShowOnboarding(true);
       }
     };
     checkFirstTimeUser();
@@ -184,9 +187,12 @@ const Onboarding: React.FC = () => {
     const nextSlide = slideFlow[currentSlide].next(
       selectedOptions,
       selectedPreference,
-      selectedPersonalization,
+      selectedPersonalization
     );
-    if (currentSlide === "selection" && (!selectedOptions || selectedOptions.length === 0)) {
+    if (
+      currentSlide === "selection" &&
+      (!selectedOptions || selectedOptions.length === 0)
+    ) {
       setError("please select at least one option before proceeding!");
       return;
     }
@@ -199,14 +205,14 @@ const Onboarding: React.FC = () => {
       return;
     }
     if (nextSlide) {
-      setIsVisible(false)
+      setIsVisible(false);
       setTimeout(() => {
         setCurrentSlide(nextSlide);
         setError(null);
       }, 300);
     } else {
-      setError("Please validate selection")
-    } 
+      setError("Please validate selection");
+    }
   };
 
   const handlePrevSlide = () => {
@@ -215,7 +221,7 @@ const Onboarding: React.FC = () => {
       const prevSlide = slideFlow[currentSlide].prev(
         selectedOptions,
         selectedPreference,
-        selectedPersonalization,
+        selectedPersonalization
       );
       if (prevSlide) {
         setError(null);
@@ -233,42 +239,40 @@ const Onboarding: React.FC = () => {
     setError(null);
   };
 
-  const handleDialogClose = (isOpen: boolean) => {
-    if (!isOpen && currentSlide) {
-      return;
+  const handleDialogClose = (open: boolean) => {
+    if (!open && currentSlide) {
+      setShowOnboarding(open);
     }
-    setIsOpen(isOpen);
   };
 
   const handleEnd = async () => {
-    setIsOpen(false);
+    setShowOnboarding(false);
     await setFirstTimeUserFlag();
-    window.location.reload();
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleDialogClose}>
-      <DialogContent className="max-w-3xl h-[580px] max-h-[80vh]">
+    <Dialog open={showOnboarding} onOpenChange={handleDialogClose}>
+      <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]">
         <div className="relative w-full h-full overflow-hidden">
           {currentSlide === "intro" && (
-            <OnboardingIntro 
+            <OnboardingIntro
               className={`transition-opacity duration-300 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
-              handleNextSlide={handleNextSlide} 
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
+              handleNextSlide={handleNextSlide}
             />
           )}
           {currentSlide === "status" && (
             <OnboardingStatus
               className={`transition-opacity duration-300 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handlePrevSlide={handlePrevSlide}
-              handleNextSlide={handleNextSlide} 
+              handleNextSlide={handleNextSlide}
             />
           )}
           {currentSlide === "selection" && (
             <OnboardingSelection
               className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleOptionClick={handleOptionClick}
               selectedOptions={selectedOptions}
               handlePrevSlide={handlePrevSlide}
@@ -278,7 +282,7 @@ const Onboarding: React.FC = () => {
           {currentSlide === "personalize" && (
             <OnboardingPersonalize
               className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleOptionClick={setSelectedPersonalization}
               selectedPersonalization={selectedPersonalization}
               handlePrevSlide={handlePrevSlide}
@@ -288,7 +292,7 @@ const Onboarding: React.FC = () => {
           {currentSlide === "apiSetup" && (
             <OnboardingAPISetup
               className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleNextSlide={handleNextSlide}
               handlePrevSlide={handlePrevSlide}
             />
@@ -296,7 +300,7 @@ const Onboarding: React.FC = () => {
           {currentSlide === "devOrNonDev" && (
             <OnboardingDevOrNonDev
               className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleOptionClick={setSelectedPreference}
               selectedPreference={selectedPreference}
               handlePrevSlide={handlePrevSlide}
@@ -306,7 +310,7 @@ const Onboarding: React.FC = () => {
           {currentSlide === "devConfig" && (
             <OnboardingDevConfig
               className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleNextSlide={handleNextSlide}
               handlePrevSlide={handlePrevSlide}
             />
@@ -314,7 +318,7 @@ const Onboarding: React.FC = () => {
           {currentSlide === "pipes" && (
             <OnboardingPipes
               className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleNextSlide={handleNextSlide}
               handlePrevSlide={handlePrevSlide}
             />
@@ -322,7 +326,7 @@ const Onboarding: React.FC = () => {
           {currentSlide === "instructions" && (
             <OnboardingInstructions
               className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? 'opacity-100 ease-out' : 'opacity-0 ease-in'}`}
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleNextSlide={handleNextSlide}
               handlePrevSlide={handlePrevSlide}
             />
@@ -330,7 +334,7 @@ const Onboarding: React.FC = () => {
           {currentSlide === "experimentalFeatures" && (
             <OnboardingExperimentalFeatures
               className={`transition-opacity duration-300 
-              ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+              ${isVisible ? "opacity-100" : "opacity-0"}`}
               handleNextSlide={handleEnd}
               handlePrevSlide={handlePrevSlide}
             />
@@ -342,4 +346,3 @@ const Onboarding: React.FC = () => {
 };
 
 export default Onboarding;
-

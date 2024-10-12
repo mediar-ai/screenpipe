@@ -238,7 +238,8 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
-    // ... (other top-level commands if any)
+    /// Setup screenpipe environment
+    Setup,
 }
 
 
