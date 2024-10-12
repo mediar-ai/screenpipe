@@ -123,10 +123,13 @@ async function copyDenoBinary() {
 	let denoSrc, denoDest1, denoDest2;
 	if (platform === 'windows') {
 		// Check both potential installation locations
-		const chocoPath = 'C:\\ProgramData\\chocolatey\\lib\\deno\\tools';
+		const chocoPathTools = 'C:\\ProgramData\\chocolatey\\lib\\deno\\tools\\deno.exe';
+		const chocoPathDirect = 'C:\\ProgramData\\chocolatey\\lib\\deno\\deno.exe';
 
-		if (await fs.exists(chocoPath)) {
-			denoSrc = chocoPath;
+		if (await fs.exists(chocoPathTools)) {
+			denoSrc = chocoPathTools;
+		} else if (await fs.exists(chocoPathDirect)) {
+			denoSrc = chocoPathDirect;
 		} else {
 			console.error('deno binary not found in expected locations');
 			return;
@@ -295,7 +298,7 @@ if (platform == 'windows') {
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`${wgetPath} --tries=5 --retry-connrefused --waitretry=10 --secure-protocol=auto --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
+		await $`${wgetPath} --tries=10 --retry-connrefused --waitretry=10 --secure-protocol=auto --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`

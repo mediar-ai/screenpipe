@@ -33,37 +33,48 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
     windows: [
       {
         label: "to start using the screenpipe cli,",
-        description: "to use the screenpipe cli, open your cmd with admin privileges and navigate to '%LOCALAPPDATA%\\screenpipe' or run this command to view all setup arguments",
-        command: "cd %LOCALAPPDATA%\\screenpipe && ./\screenpipe.exe -h   # shows list of arguments",
+        description:
+          "to use the screenpipe cli, open your cmd with admin privileges and navigate to '%LOCALAPPDATA%\\screenpipe' or run this command to view all setup arguments",
+        command:
+          "cd %LOCALAPPDATA%\\screenpipe && ./screenpipe.exe -h   # shows list of arguments",
       },
       {
         label: "starting screenpipe with custom arguments,",
-        description: "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
-        command: "screenpipe --ignored-windows settings    # ignore the windows named settings",
+        description:
+          "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
+        command:
+          "screenpipe --ignored-windows settings    # ignore the windows named settings",
       },
     ],
     macos: [
       {
         label: "to start using the screenpipe cli,",
-        description: "to use the screenpipe cli, open your terminal and navigate to '/Applications/screenpipe.app/Contents/MacOS/' or run this command to view all setup arguments",
-        command: "cd /Applications/screenpipe.app/Contents/MacOS/ && screenpipe -h  # shows help",
+        description:
+          "to use the screenpipe cli, open your terminal and navigate to '/Applications/screenpipe.app/Contents/MacOS/' or run this command to view all setup arguments",
+        command:
+          "cd /Applications/screenpipe.app/Contents/MacOS/ && screenpipe -h  # shows help",
       },
       {
         label: "starting screenpipe with custom arguments",
-        description: "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
+        description:
+          "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
         command: "screenpipe --list-monitors     # list monitors",
       },
     ],
     linux: [
       {
         label: "to start using the screenpipe cli,",
-        description: "open your terminal and navigate to the installation directory (usually /usr/local/bin) or run this command, this will show all arguments to setup screenpipe as you prefer.",
-        command: "cd /usr/local/bin/ && screenpipe -h   # shows list of arguments",
+        description:
+          "open your terminal and navigate to the installation directory (usually /usr/local/bin) or run this command, this will show all arguments to setup screenpipe as you prefer.",
+        command:
+          "cd /usr/local/bin/ && screenpipe -h   # shows list of arguments",
       },
       {
         label: "starting screenpipe with custom arguments",
-        description: "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
-        command: "screenpipe --ignored-windows kitty    # ignore the windows named kitty",
+        description:
+          "after reviewing the cli arguments, choose your setup options and start screenpipe with your preference. replace arguments as needed. for example:",
+        command:
+          "screenpipe --ignored-windows kitty    # ignore the windows named kitty",
       },
     ],
   };
@@ -137,6 +148,10 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
           <ArrowUpRight className="inline w-4 h-4 ml-1 " />
         </a>
       </div>
+      <p className="text-xs text-muted-foreground text-center mt-2">
+        note: if you use dev mode, you will have to start and maintain the
+        recording process yourself in the terminal
+      </p>
       <OnboardingNavigation
         className="mt-6"
         handlePrevSlide={handlePrevSlide}
