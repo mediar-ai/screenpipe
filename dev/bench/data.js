@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728757666463,
+  "lastUpdate": 1728767871114,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -15029,6 +15029,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2366406020,
             "range": "± 215039259",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "dc76c9144357a7e78d24a5e86757865e6c12c7f2",
+          "message": "fix: make reddit pipe write in markdown",
+          "timestamp": "2024-10-12T14:09:33-07:00",
+          "tree_id": "e85c1822e2521d7ab6ce20ab537a47a4131f8562",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/dc76c9144357a7e78d24a5e86757865e6c12c7f2"
+        },
+        "date": 1728767869959,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1854255770,
+            "range": "± 14374137",
             "unit": "ns/iter"
           }
         ]
