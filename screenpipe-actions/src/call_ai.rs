@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use base64::{engine::general_purpose, Engine as _};
 use image::{DynamicImage, ImageFormat};
-use std::io::Cursor;
+use std::io::Cursor;  // Add this line to import Cursor
 // use crate::screenshot::capture_main_window_screenshot;
 
 pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Result<String> {
@@ -62,12 +62,25 @@ pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Resu
         .to_string();
 
     if expect_json {
-        // Parse the content as JSON to ensure it's valid
-        serde_json::from_str::<Value>(&content)
+        let json_value: Value = serde_json::from_str(&content)
             .context("response content is not valid JSON")?;
+        
+        if let Some(array) = json_value["response"].as_array() {
+            // If "response" is an array, join its elements with newlines
+            Ok(array.iter()
+                .filter_map(|v| v.as_str())
+                .collect::<Vec<_>>()
+                .join("\n"))
+        } else if let Some(response_str) = json_value["response"].as_str() {
+            // If "response" is a string, return it directly
+            Ok(response_str.to_string())
+        } else {
+            // If "response" is neither an array nor a string, return the whole JSON
+            Ok(content)
+        }
+    } else {
+        Ok(content)
     }
-
-    Ok(content)
 }
 
 pub enum AIProvider {
@@ -131,7 +144,7 @@ pub async fn call_openai_with_screenshot(prompt: String, expect_json: bool, scre
         .await?;
 
     // Log the entire response for debugging
-    println!("raw api response: {}", serde_json::to_string_pretty(&response)?);
+    // println!("raw api response: {}", serde_json::to_string_pretty(&response)?);
 
     if response.get("error").is_some() {
         let error_message = response["error"]["message"]
@@ -174,36 +187,43 @@ pub async fn call_claude_with_screenshot(prompt: String, expect_json: bool, scre
         .context("failed to write image to buffer")?;
     let base64_image = general_purpose::STANDARD.encode(&image_buffer);
 
-    let messages = vec![
-        json!({
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": base64_image
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": prompt
-                }
-            ]
-        })
-    ];
+    let system_message = if expect_json {
+        "You must respond in valid JSON format. Always wrap your response in a JSON object with a 'response' key."
+    } else {
+        ""
+    };
 
-    let mut body = json!({
+    let user_message = if expect_json {
+        format!("{}\nRemember to format your entire response as a JSON object with a 'response' key.", prompt)
+    } else {
+        prompt
+    };
+
+    let body = json!({
         "model": "claude-3-5-sonnet-20240620",
-        "messages": messages,
         "max_tokens": 1024,
-        "temperature": 0.2
+        "temperature": 0.2,
+        "system": system_message,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": base64_image
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": user_message
+                    }
+                ]
+            }
+        ]
     });
-
-    if expect_json {
-        body["system"] = json!("You must respond in JSON format.");
-    }
 
     let response: Value = client.post("https://api.anthropic.com/v1/messages")
         .header("x-api-key", &api_key)
@@ -232,16 +252,12 @@ pub async fn call_claude_with_screenshot(prompt: String, expect_json: bool, scre
         .context("failed to extract content from response")?;
 
     if expect_json {
-        // Parse the content as JSON
-        let parsed_content: Value = serde_json::from_str(content)
-            .context("failed to parse content as JSON")?;
+        // Validate that the content is valid JSON
+        serde_json::from_str::<Value>(content)
+            .context("response content is not valid JSON")?;
         
-        // Extract the "response" field
-        let response_text = parsed_content["response"]
-            .as_str()
-            .context("failed to extract 'response' field from JSON")?;
-
-        Ok(response_text.to_string())
+        // Return the full JSON string
+        Ok(content.to_string())
     } else {
         Ok(content.to_string())
     }
