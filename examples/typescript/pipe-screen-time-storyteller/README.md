@@ -2,7 +2,7 @@
 
 ## Overview
 
-Screen Time Storyteller is an AI-powered pipe for Screenpipe that generates engaging, personalized narratives based on your daily screen activities. It uses data from your device usage to create a fun, slightly sassy diary entry, complete with insights and advice for better digital habits.
+Screen Time Storyteller is an AI-powered pipe for Screenpipe that generates engaging, personalized narratives based on your daily screen activities. It uses data from your device usage to create a fun, slightly sassy diary entry, complete with insights and advice for better digital habits. It uses Vercel AI SDK to interface with the Anthropic and OpenAI APIs.
 
 ## Features
 
@@ -11,12 +11,12 @@ Screen Time Storyteller is an AI-powered pipe for Screenpipe that generates enga
 - 😎 Provides a fun, sassy perspective on your digital habits
 - 💡 Offers insights and advice for better screen time management
 - 📝 Creates daily summaries as GitHub gists
-- 🔄 Supports multiple AI providers (Claude, OpenAI, Ollama)
+- 🔄 Supports multiple AI providers (Claude, OpenAI)
 
 ## Prerequisites
 
 - A working Screenpipe installation
-- API keys for your chosen AI provider (Claude, OpenAI, or Ollama)
+- API keys for your chosen AI provider (Claude or OpenAI)
 - GitHub Personal Access Token (for creating gists)
 
 ## Setup
@@ -28,71 +28,80 @@ Screen Time Storyteller is an AI-powered pipe for Screenpipe that generates enga
    cp -r screen-time-storyteller /path/to/your/screenpipe/pipes/
    ```
 
-3. Edit the `pipe.json` file in the `screen-time-storyteller` folder with your API keys, GitHub token, and preferences:
-   ```json
-   {
-     "name": "Screen Time Storyteller",
-     "version": "1.0.0",
-     "description": "Generates a narrative summary of your day based on your screen activities",
-     "author": "AI Assistant",
-     "fields": [
-       {
-         "name": "aiProvider",
-         "type": "string",
-         "default": "claude",
-         "description": "AI provider to use (ollama, openai, or claude)"
-       },
-       {
-         "name": "claudeModel",
-         "type": "string",
-         "default": "claude-3-sonnet-20240229",
-         "description": "Claude AI model to use"
-       },
-       {
-         "name": "openaiModel",
-         "type": "string",
-         "default": "gpt-4-turbo-preview",
-         "description": "OpenAI model to use"
-       },
-       {
-         "name": "ollamaModel",
-         "type": "string",
-         "default": "llama3.1",
-         "description": "Ollama model to use"
-       },
-       {
-         "name": "claudeApiKey",
-         "type": "string",
-         "default": "",
-         "description": "API key for Claude"
-       },
-       {
-         "name": "openaiApiKey",
-         "type": "string",
-         "default": "",
-         "description": "API key for OpenAI"
-       },
-       {
-         "name": "pageSize",
-         "type": "number",
-         "default": 1000,
-         "description": "Number of items to process per page"
-       },
-       {
-         "name": "contentType",
-         "type": "string",
-         "default": "ocr",
-         "description": "Type of content to process (ocr, audio, or all)"
-       },
-       {
-         "name": "githubToken",
-         "type": "string",
-         "default": "",
-         "description": "GitHub personal access token"
-       }
-     ]
-   }
+3. Edit the `pipe.json` file in the `screen-time-storyteller` folder with your API keys, GitHub token, and preferences.
+
+4. Install the required dependencies by running:
    ```
+   npm install zod ai @ai-sdk/anthropic @ai-sdk/openai
+   ```
+
+## Configuration
+
+The `pipe.json` file contains the following configuration options:
+
+```json
+{
+  "name": "Screen Time Storyteller",
+  "version": "0.1.0",
+  "description": "Generates a narrative summary of your screen time data",
+  "author": "David Anyatonwu",
+  "fields": [
+      {
+      "name": "aiProvider",
+      "type": "string",
+      "default": "claude",
+      "description": "AI provider to use (ollama, openai, or claude)"
+    },
+    {
+      "name": "claudeModel",
+      "type": "string",
+      "default": "claude-3-sonnet-20240229",
+      "description": "Claude AI model to use"
+    },
+    {
+      "name": "openaiModel",
+      "type": "string",
+      "default": "gpt-4-turbo-preview",
+      "description": "OpenAI model to use"
+    },
+    {
+      "name": "ollamaModel",
+      "type": "string",
+      "default": "llama3.1",
+      "description": "Ollama model to use"
+    },
+    {
+      "name": "claudeApiKey",
+      "type": "string",
+      "default": "",
+      "description": "API key for Claude"
+    },
+    {
+      "name": "openaiApiKey",
+      "type": "string",
+      "default": "",
+      "description": "API key for OpenAI"
+    },
+    {
+      "name": "pageSize",
+      "type": "number",
+      "default": 1000,
+      "description": "Number of items to process per page"
+    },
+    {
+      "name": "contentType",
+      "type": "string",
+      "default": "ocr",
+      "description": "Type of content to process (ocr, audio, or all)"
+    },
+    {
+      "name": "githubToken",
+      "type": "string",
+      "default": "",
+      "description": "GitHub personal access token"
+    }
+  ]
+}
 
 ## Usage
 
@@ -102,20 +111,6 @@ You can find the generated summaries in two places:
 
 1. A JSON file in the `.screenpipe/pipes/screen-time-storyteller/` directory, named with the current date (e.g., `2024-10-06-narrative-summary.json`).
 2. A GitHub gist, which you can access through your GitHub account.
-
-## Configuration
-
-You can adjust the pipe's behavior by modifying the `pipe.json` file:
-
-- `aiProvider`: Choose between "claude", "openai", or "ollama"
-- `claudeModel`: Specify the Claude model to use
-- `openaiModel`: Specify the OpenAI model to use
-- `ollamaModel`: Specify the Ollama model to use
-- `claudeApiKey`: Add your API key for Claude
-- `openaiApiKey`: Add your API key for OpenAI
-- `pageSize`: Set the number of screen time entries to analyze
-- `contentType`: Choose between "ocr", "audio", or "all"
-- `githubToken`: Add your GitHub Personal Access Token
 
 ## Troubleshooting
 
