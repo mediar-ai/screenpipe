@@ -349,15 +349,17 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     {
         // !HACK macos is supposed to use special macos feature "display capture"
         // ! see https://github.com/RustAudio/cpal/pull/894
-        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-            for device in host.input_devices()? {
-                if let Ok(name) = device.name() {
-                    if should_include_output_device(&name) {
-                        devices.push(AudioDevice::new(name, DeviceType::Output));
-                    }
-                }
-            }
-        }
+        // if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+        //     // host.input_devices() segfaults on MacOS M1 Sonoma 14.7
+
+        //     for device in host.input_devices()? {
+        //         if let Ok(name) = device.name() {
+        //             if should_include_output_device(&name) {
+        //                 devices.push(AudioDevice::new(name, DeviceType::Output));
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     // add default output device - on macos think of custom virtual devices
