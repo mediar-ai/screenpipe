@@ -330,14 +330,14 @@ if (platform == 'windows') {
 	// Setup ONNX Runtime
 	let onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
 	let onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
-	let onnxRuntimeUrls = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`;
+	let onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`;
 
 	// Run twice, once for ARM64, once for x64
 	for (let x = 0; x < 2; x++) {
 		if (x == 1) {
 			onnxRuntimeName = "onnxruntime-win-arm64-1.19.2"
 			onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
-			onnxRuntimeUrls = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`;
+			onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`;
 		}
 		if (!(await fs.exists(onnxRuntimeName))) {
 			console.log('Setting up ONNX Runtime libraries for Windows...')
