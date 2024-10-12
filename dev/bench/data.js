@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728704965380,
+  "lastUpdate": 1728755144194,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -14909,6 +14909,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2585927812,
             "range": "± 208423830",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "91577d7a304333f468b2996aab1ebb93d0012f33",
+          "message": "Merge pull request #488 from ologbonowiwi/refactor/include-load-pipe-config-test-on-ci\n\nci: include `loadPipeConfig` tests and run deno tests on pipeline",
+          "timestamp": "2024-10-12T10:36:26-07:00",
+          "tree_id": "f7a37a3079fd2a69000c76319c4209763386358b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/91577d7a304333f468b2996aab1ebb93d0012f33"
+        },
+        "date": 1728755143048,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1841842416,
+            "range": "± 9891219",
             "unit": "ns/iter"
           }
         ]
