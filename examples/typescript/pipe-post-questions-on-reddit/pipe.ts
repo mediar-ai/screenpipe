@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import nodemailer from "nodemailer";
-import { queryScreenpipe, loadPipeConfig, ContentItem } from "screenpipe";
+import { ContentItem, pipe } from "screenpipe";
 import process from "node:process";
 
 interface DailyLog {
@@ -208,7 +208,7 @@ async function sendEmail(
 async function dailyLogPipeline(): Promise<void> {
   console.log("starting daily log pipeline");
 
-  const config = await loadPipeConfig();
+  const config = pipe.loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
@@ -260,7 +260,7 @@ async function dailyLogPipeline(): Promise<void> {
       const now = new Date();
       const oneMinuteAgo = new Date(now.getTime() - interval);
 
-      const screenData = await queryScreenpipe({
+      const screenData = await pipe.queryScreenpipe({
         startTime: oneMinuteAgo.toISOString(),
         endTime: now.toISOString(),
         windowName: windowName,
@@ -277,7 +277,7 @@ async function dailyLogPipeline(): Promise<void> {
           openaiApiKey
         );
         console.log("log entry:", logEntry);
-        await saveDailyLog(logEntry);
+        saveDailyLog(logEntry);
       }
 
       let shouldSendSummary = false;
@@ -301,7 +301,7 @@ async function dailyLogPipeline(): Promise<void> {
       }
 
       if (shouldSendSummary) {
-        const screenData = await queryScreenpipe({
+        const screenData = await pipe.queryScreenpipe({
           startTime: oneMinuteAgo.toISOString(),
           endTime: now.toISOString(),
           windowName: windowName,
@@ -324,6 +324,10 @@ async function dailyLogPipeline(): Promise<void> {
             "reddit questions",
             redditQuestions
           );
+          await pipe.inbox.send({
+            title: "reddit questions",
+            body: redditQuestions,
+          });
           lastEmailSent = now;
         }
       }
