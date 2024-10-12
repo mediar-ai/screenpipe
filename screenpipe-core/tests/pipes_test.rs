@@ -118,7 +118,7 @@ mod tests {
         config: &str,
     ) -> PathBuf {
         init();
-        let pipe_dir = temp_dir.path().join(pipe_name);
+        let pipe_dir = temp_dir.path().join("pipes").join(pipe_name);
         create_dir_all(&pipe_dir).await.unwrap();
 
         let ts_file_path = pipe_dir.join("pipe.ts");
@@ -158,7 +158,7 @@ mod tests {
         // Change the working directory to the pipe directory
         std::env::set_current_dir(&pipe_dir).unwrap();
 
-        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe("config_pipe", screenpipe_dir).await;
         assert!(result.is_ok(), "Pipe execution failed: {:?}", result);
     }
 
