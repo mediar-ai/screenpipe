@@ -173,23 +173,26 @@ export function InboxMessages({
                     <CardContent className="py-2">
                       <div className="w-full overflow-hidden">
                         <MemoizedReactMarkdown
-                          className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-[35vw]  text-sm"
+                          className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-[35vw] text-sm"
                           remarkPlugins={[remarkGfm, remarkMath]}
                           components={{
                             p: ({ children }) => (
                               <p className="mb-2 last:mb-0">{children}</p>
                             ),
-                            a: ({ node, href, children, ...props }) => (
-                              <a
-                                href={href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="break-all"
-                                {...props}
-                              >
-                                {children}
-                              </a>
-                            ),
+                            a: ({ node, href, children, ...props }) => {
+                              const isExternal = href?.startsWith('http') || href?.startsWith('https');
+                              return (
+                                <a
+                                  href={href}
+                                  target={isExternal ? "_blank" : undefined}
+                                  rel={isExternal ? "noopener noreferrer" : undefined}
+                                  className="break-all text-blue-500 hover:underline"
+                                  {...props}
+                                >
+                                  {children}
+                                </a>
+                              );
+                            },
                           }}
                         >
                           {expandedMessages.has(message.id)
