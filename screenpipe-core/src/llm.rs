@@ -1,5 +1,80 @@
 #[cfg(feature = "llm")]
 mod llm_module {
+
+    use serde::{Deserialize, Serialize};
+
+    use crate::Llama;
+    #[derive(Deserialize, Serialize, Clone, Debug)]
+    pub struct ChatMessage {
+        pub role: String,
+        pub content: String,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    pub struct ChatResponseChoice {
+        pub index: i64,
+        pub message: ChatMessage,
+        pub logprobs: Option<serde_json::Value>,
+        pub finish_reason: String,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    pub struct ChatResponseUsage {
+        pub prompt_tokens: i64,
+        pub completion_tokens: i64,
+        pub total_tokens: i64,
+        pub completion_tokens_details: serde_json::Value,
+        pub tokens_per_second: f64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct ChatResponse {
+        pub id: String,
+        pub object: String,
+        pub created: i64,
+        pub model: String,
+        pub system_fingerprint: String,
+        pub choices: Vec<ChatResponseChoice>,
+        pub usage: ChatResponseUsage,
+    }
+
+    #[derive(Deserialize, Clone, Debug)]
+    pub struct ChatRequest {
+        pub messages: Vec<ChatMessage>,
+        #[serde(default)]
+        pub stream: bool,
+        pub max_completion_tokens: Option<usize>,
+        pub temperature: Option<f64>,
+        pub top_p: Option<f64>,
+        pub top_k: Option<usize>,
+        pub seed: Option<u64>,
+    }
+
+    pub trait Model {
+        fn chat(&self, request: ChatRequest) -> anyhow::Result<ChatResponse>;
+    }
+
+    pub struct LLM {
+        model: Llama,
+    }
+
+    pub enum ModelName {
+        Llama,
+    }
+
+    impl LLM {
+        pub fn new(model_name: ModelName) -> anyhow::Result<Self> {
+            let model = match model_name {
+                ModelName::Llama => Llama::new()?,
+            };
+
+            Ok(Self { model })
+        }
+
+        pub fn chat(&self, request: ChatRequest) -> anyhow::Result<ChatResponse> {
+            self.model.chat(request)
+        }
+    }
     /// This is a wrapper around a tokenizer to ensure that tokens can be returned to the user in a
     /// streaming way rather than having to wait for the full decoding.
     pub struct TokenOutputStream {

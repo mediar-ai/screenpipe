@@ -39,6 +39,21 @@ struct ApiResponse {
     message: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct InboxMessagePayload {
+    title: String,
+    body: String,
+    #[serde(rename = "type")]
+    message_type: String,
+    actions: Option<Vec<InboxMessageAction>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct InboxMessageAction {
+    label: String,
+    action: String,
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let state = ServerState { app_handle };
 
@@ -50,6 +65,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
 
     let app = Router::new()
         .route("/notify", axum::routing::post(send_notification))
+        .route("/inbox", axum::routing::post(send_inbox_message))
         .route("/log", axum::routing::post(log_message))
         .layer(cors)
         .layer(
@@ -84,6 +100,29 @@ async fn send_notification(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to send notification: {}", e),
+            ))
+        }
+    }
+}
+
+async fn send_inbox_message(
+    State(state): State<ServerState>,
+    Json(payload): Json<InboxMessagePayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received inbox message request: {:?}", payload);
+    match state.app_handle.emit("inbox-message-received", &payload) {
+        Ok(e) => {
+            info!("inbox message sent: {:?}", e);
+            Ok(Json(ApiResponse {
+                success: true,
+                message: "inbox message sent successfully".to_string(),
+            }))
+        }
+        Err(e) => {
+            error!("failed to send inbox message: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to send inbox message: {}", e),
             ))
         }
     }

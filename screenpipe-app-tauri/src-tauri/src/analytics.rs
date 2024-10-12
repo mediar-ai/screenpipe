@@ -6,6 +6,8 @@ use std::time::Duration;
 use sysinfo::{System, SystemExt};
 use tokio::sync::Mutex;
 use tokio::time::interval;
+use serde_derive::Deserialize;
+
 pub struct AnalyticsManager {
     client: Client,
     posthog_api_key: String,
@@ -13,10 +15,11 @@ pub struct AnalyticsManager {
     interval: Duration,
     enabled: Arc<Mutex<bool>>,
     api_host: String,
+    local_api_base_url: String,
 }
 
 impl AnalyticsManager {
-    pub fn new(posthog_api_key: String, distinct_id: String, interval_hours: u64) -> Self {
+    pub fn new(posthog_api_key: String, distinct_id: String, interval_hours: u64, local_api_base_url: String) -> Self {
         Self {
             client: Client::new(),
             posthog_api_key,
@@ -24,6 +27,7 @@ impl AnalyticsManager {
             interval: Duration::from_secs(interval_hours * 3600),
             enabled: Arc::new(Mutex::new(!cfg!(debug_assertions))),
             api_host: "https://eu.i.posthog.com".to_string(),
+            local_api_base_url,
         }
     }
 
@@ -76,10 +80,37 @@ impl AnalyticsManager {
             interval.tick().await;
             if *self.enabled.lock().await {
                 if let Err(e) = self.send_event("app_still_running", None).await {
-                    error!("Failed to send periodic PostHog event: {}", e);
+                    error!("failed to send periodic posthog event: {}", e);
+                }
+                
+                // Track enabled pipes
+                if let Err(e) = self.track_enabled_pipes().await {
+                    error!("failed to track enabled pipes: {}", e);
                 }
             }
         }
+    }
+
+    async fn track_enabled_pipes(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let pipes_url = format!("{}/pipes/list", self.local_api_base_url);
+        let pipes: Vec<PipeInfo> = self.client.get(&pipes_url)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        let enabled_pipes: Vec<String> = pipes
+            .into_iter()
+            .filter(|pipe| pipe.enabled)
+            .map(|pipe| pipe.id)
+            .collect();
+
+        let properties = json!({
+            "enabled_pipes": enabled_pipes,
+            "enabled_pipe_count": enabled_pipes.len(),
+        });
+
+        self.send_event("enabled_pipes_hourly", Some(properties)).await
     }
 }
 
@@ -87,13 +118,16 @@ pub fn start_analytics(
     unique_id: String,
     posthog_api_key: String,
     interval_hours: u64,
+    local_api_base_url: String,
 ) -> Result<Arc<AnalyticsManager>, Box<dyn std::error::Error>> {
-    if cfg!(debug_assertions) {
-        info!("Skipping analytics in development mode");
+    let is_debug = std::env::var("TAURI_ENV_DEBUG").unwrap_or("false".to_string()) == "true";
+    if cfg!(debug_assertions) || is_debug {
+        info!("skipping analytics in development mode");
         return Ok(Arc::new(AnalyticsManager::new(
             posthog_api_key,
             unique_id,
             interval_hours,
+            local_api_base_url,
         )));
     }
 
@@ -101,6 +135,7 @@ pub fn start_analytics(
         posthog_api_key,
         unique_id,
         interval_hours,
+        local_api_base_url,
     ));
 
     // Send initial event at boot
@@ -123,4 +158,10 @@ pub fn start_analytics(
     });
 
     Ok(analytics_manager)
+}
+
+#[derive(Deserialize)]
+struct PipeInfo {
+    id: String,
+    enabled: bool,
 }

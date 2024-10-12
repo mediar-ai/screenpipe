@@ -62,6 +62,7 @@ import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
+import { initOpenTelemetry } from "@/lib/opentelemetry";
 
 interface AudioDevice {
   name: string;
@@ -206,6 +207,7 @@ export function RecordingSettings({
         vadSensitivity: localSettings.vadSensitivity,
         audioChunkDuration: localSettings.audioChunkDuration,
         analyticsEnabled: localSettings.analyticsEnabled,
+        useChineseMirror: localSettings.useChineseMirror,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -219,12 +221,17 @@ export function RecordingSettings({
         posthog.opt_out_capturing();
         console.log("telemetry disabled");
       } else {
-        posthog.opt_in_capturing();
-        posthog.capture("telemetry", {
-          enabled: true,
-        });
-        // enable opentelemetry
-        console.log("telemetry enabled");
+        const isDebug = process.env.TAURI_ENV_DEBUG === "true";
+        if (!isDebug) {
+          posthog.opt_in_capturing();
+          posthog.capture("telemetry", {
+            enabled: true,
+          });
+          initOpenTelemetry("82688", new Date().toISOString());
+
+          // enable opentelemetry
+          console.log("telemetry enabled");
+        }
       }
 
       await invoke("kill_all_sreenpipes");
@@ -402,6 +409,13 @@ export function RecordingSettings({
     if (localSettings.vadSensitivity !== "high") {
       args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
     }
+    
+    if (!localSettings.analyticsEnabled) {
+      args.push("--disable-telemetry");
+    }
+    if (localSettings.audioChunkDuration !== 30) {
+      args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
+    }
 
     return `${cliPath} ${args.join(" ")}`;
   };
@@ -441,6 +455,10 @@ export function RecordingSettings({
   const handleAnalyticsToggle = (checked: boolean) => {
     const newValue = checked;
     setLocalSettings({ ...localSettings, analyticsEnabled: newValue });
+  };
+
+  const handleChineseMirrorToggle = (checked: boolean) => {
+    setLocalSettings({ ...localSettings, useChineseMirror: checked });
   };
 
   return (
@@ -514,6 +532,9 @@ export function RecordingSettings({
                   </SelectItem>
                   <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
                   <SelectItem value="whisper-large">whisper-large</SelectItem>
+                  <SelectItem value="whisper-large-v3-turbo">
+                    whisper-large-turbo
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1075,6 +1096,37 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="chinese-mirror-toggle"
+                checked={localSettings.useChineseMirror}
+                onCheckedChange={handleChineseMirrorToggle}
+              />
+              <Label
+                htmlFor="chinese-mirror-toggle"
+                className="flex items-center space-x-2"
+              >
+                <span>use chinese mirror for model downloads</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        enable this option to use a chinese mirror for
+                        <br />
+                        downloading Hugging Face models
+                        <br />
+                        (e.g. Whisper, embedded Llama, etc.)
+                        <br />
+                        which are blocked in mainland China.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1083,7 +1135,7 @@ export function RecordingSettings({
           <DialogHeader>
             <DialogTitle>CLI command</DialogTitle>
             <DialogDescription>
-              You can use this CLI command to start Screenpipe with the current
+              you can use this CLI command to start screenpipe with the current
               settings.
             </DialogDescription>
           </DialogHeader>

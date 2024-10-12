@@ -107,9 +107,6 @@ export function SearchChat() {
 
   const floatingInputRef = useRef<HTMLInputElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const queryHistory = useInputHistory("search_query");
-  const appNameHistory = useInputHistory("app_name");
-  const windowNameHistory = useInputHistory("window_name");
 
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const lastScrollPosition = useRef(0);
@@ -443,9 +440,6 @@ export function SearchChat() {
 
   const handleSearch = async (newOffset = 0, overrides: any = {}) => {
     setHasSearched(true);
-    queryHistory.saveToHistory();
-    appNameHistory.saveToHistory();
-    windowNameHistory.saveToHistory();
 
     posthog.capture("search");
     setIsLoading(true);

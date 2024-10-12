@@ -1,10 +1,8 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
-    use screenpipe_audio::{list_audio_devices, record_and_transcribe};
-    use tokio::sync::mpsc;
+    use screenpipe_audio::{list_audio_devices, record_and_transcribe, AudioInput};
 
-    use super::*;
     use std::{
         path::PathBuf,
         sync::{atomic::AtomicBool, Arc},
@@ -25,14 +23,16 @@ mod tests {
         // Set up for recording
         let duration = Duration::from_secs(5);
         let output_path = PathBuf::from("test_output.mp4");
-        let (tx, _rx) = mpsc::unbounded_channel();
+        let (tx, _rx): (
+            crossbeam::channel::Sender<AudioInput>,
+            crossbeam::channel::Receiver<AudioInput>,
+            ) = crossbeam::channel::bounded(100);
         let is_running = Arc::new(AtomicBool::new(true));
 
         // Record from the virtual device
         let result = record_and_transcribe(
             Arc::new(virtual_device.clone()),
             duration,
-            output_path.clone(),
             tx,
             is_running.clone(),
         )

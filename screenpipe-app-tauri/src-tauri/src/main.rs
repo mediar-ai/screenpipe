@@ -202,9 +202,9 @@ async fn main() {
 
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-                let show = MenuItemBuilder::with_id("show", "Show Screenpipe").build(app)?;
+                let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
                 let menu_divider = PredefinedMenuItem::separator(app)?;
-                let quit = MenuItemBuilder::with_id("quit", "Quit Screenpipe").build(app)?;
+                let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app)
                     .items(&[
                         &show,
@@ -234,6 +234,8 @@ async fn main() {
 
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
+                                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
+                                // bad UX: i use CLI and it kills my CLI because i updated app
                                 if let Err(err) = sidecar::kill_all_sreenpipes(
                                     app_handle.state::<SidecarState>(),
                                     app_handle.clone(),
@@ -302,7 +304,7 @@ async fn main() {
                 });
 
             if is_analytics_enabled {
-                match start_analytics(unique_id, posthog_api_key, interval_hours) {
+                match start_analytics(unique_id, posthog_api_key, interval_hours, "http://localhost:3030".to_string()) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
                     }
