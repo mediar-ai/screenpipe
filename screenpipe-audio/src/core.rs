@@ -396,7 +396,7 @@ pub fn default_output_device() -> Result<AudioDevice> {
     {
         // ! see https://github.com/RustAudio/cpal/pull/894
         if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-            if let Some(device) = host.default_input_device() {
+            if let Some(device) = host.default_output_device() {
                 if let Ok(name) = device.name() {
                     return Ok(AudioDevice::new(name, DeviceType::Output));
                 }
