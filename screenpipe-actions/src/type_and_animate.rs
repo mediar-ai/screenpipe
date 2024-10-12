@@ -1,7 +1,7 @@
-use tokio::time::sleep;
-use std::time::Duration;
 use anyhow::Result;
 use enigo::{Enigo, KeyboardControllable};
+use std::time::Duration;
+use tokio::time;
 
 async fn type_text(text: &str) -> Result<()> {
     let mut enigo = Enigo::new();
@@ -21,9 +21,14 @@ pub async fn delete_characters(count: usize) -> Result<()> {
 }
 
 pub async fn type_slowly(text: &str) -> Result<()> {
+    let mut enigo = Enigo::new();
     for c in text.chars() {
-        type_text(&c.to_string()).await?;
-        sleep(Duration::from_millis(1)).await;
+        match c {
+            '\n' => enigo.key_click(enigo::Key::Return),
+            '\t' => enigo.key_click(enigo::Key::Tab),
+            _ => enigo.key_sequence(&c.to_string()),
+        }
+        time::sleep(Duration::from_millis(1)).await;
     }
     Ok(())
 }
