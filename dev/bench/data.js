@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728703256767,
+  "lastUpdate": 1728703305778,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -14789,6 +14789,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1838091125,
             "range": "± 55036322",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "8a2ad82d76ee8e3d541f60ca3c290f6f4d3f3fa9",
+          "message": "fix: add deno to brew",
+          "timestamp": "2024-10-11T20:11:51-07:00",
+          "tree_id": "5baa0684b4a57c93c39a736a0d5bd3b99e72b4b1",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/8a2ad82d76ee8e3d541f60ca3c290f6f4d3f3fa9"
+        },
+        "date": 1728703304619,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1860367896,
+            "range": "± 13799983",
             "unit": "ns/iter"
           }
         ]
