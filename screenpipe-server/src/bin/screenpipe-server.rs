@@ -12,8 +12,7 @@ use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
 use highlightio::Highlight;
 use log::{debug, error, info};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice, DeviceControl,
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device, vad_engine::SileroVad, whisper::WhisperModel, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
@@ -77,6 +76,18 @@ async fn main() -> anyhow::Result<()> {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
             }
+            Command::Setup => {
+                // this command just download models and stuff (useful to have specific step to display in UI)
+
+                // ! should prob skip if deepgram?
+                WhisperModel::new(&cli.audio_transcription_engine.into()).unwrap();
+                // ! assuming silero is used
+                SileroVad::new().await.unwrap();
+
+                println!("screenpipe setup complete");
+                // TODO: ffmpeg sidecar thing here
+                return Ok(());
+            }
         }
     }
 
@@ -132,23 +143,23 @@ async fn main() -> anyhow::Result<()> {
         env_filter
     };
 
+    // ignore mut warning 
+    #[allow(unused_mut)]
     let mut h: Option<Highlight> = None;
     if !cli.disable_telemetry {
-        // TODO crashes on init
+        // ! do not use yet - leaks too much privacy and does not catch errors properly 
         // h = Some(Highlight::init(HighlightConfig {
         //     project_id: "82688".to_string(),
-        //     logger: Box::new(NopLogger),
         //     ..Default::default()
         // }).expect("Failed to initialize Highlight.io"));
-    } 
-    
-    // Initialize tracing without OpenTelemetry if telemetry is disabled
+    }
+    // } else {
     tracing_subscriber::registry()
         .with(env_filter)
         .with(file_layer)
         .with(console_layer)
         .init();
-
+    // }
 
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
@@ -398,7 +409,7 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌───────────────────┬────────────────────────────────────┐");
+    println!("┌─────────────────────┬────────────────────────────────────┐");
     println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);

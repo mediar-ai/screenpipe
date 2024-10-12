@@ -26,7 +26,6 @@ mod tests {
         let timestamp = Instant::now();
         let (tx, _rx) = mpsc::channel(1);
         let ocr_engine = OcrEngine::WindowsNative;
-        let app_name = "test_app".to_string();
 
         let window_images = vec![(
             image.clone(),

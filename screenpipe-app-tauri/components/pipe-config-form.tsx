@@ -135,6 +135,8 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
               onChange={(e) =>
                 handleInputChange(field.name, parseFloat(e.target.value) || 0)
               }
+              onWheel={(e) => e.preventDefault()} // prevent scrolling down breaking stuff
+              step="any"
               autoCorrect="off"
               spellCheck="false"
             />

@@ -55,23 +55,28 @@ for users preferring full control or customization, building the app manually fr
    brew install pkg-config ffmpeg jq tesseract cmake wget
    ```
 
-2. clone the screenpipe repository:
+2. install deno cli (required for building):
+   ```bash
+   curl -fsSL https://deno.land/install.sh | sh
+   ```
+
+3. clone the screenpipe repository:
    ```bash
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
    ```
 
-3. build the project with:
+4. build the project with:
    ```bash
    cargo build --release --features metal
    ```
 
-4. finally, run screenpipe:
+5. finally, run screenpipe:
    ```bash
    ./target/release/screenpipe
    ```
 
-5. to build the desktop app:
+6. to build the desktop app:
 
 add this to your vscode settings in the root of the project `.vscode/settings.json`:
 
@@ -146,7 +151,7 @@ If this does not work for you, please [open an issue](https://github.com/mediar-
 Install 7zip: https://www.7-zip.org/download.html
 
 ```batch
-choco install pkgconfiglite
+choco install pkgconfiglite deno
 winget install -e --id GnuWin32.UnZip
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 cd V:\projects
@@ -185,19 +190,24 @@ bun tauri build
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
 
-2. clone the repository and build the application:
+2. install deno cli (required for building):
+   ```bash
+   curl -fsSL https://deno.land/install.sh | sh
+   ```
+
+3. clone the repository and build the application:
    ```bash
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
    cargo build --release
    ```
 
-3. to run the application, use:
+4. to run the application, use:
    ```bash
    ./target/release/screenpipe
    ```
 
-4. to build the desktop app:
+5. to build the desktop app:
 
 ```bash
 cd screenpipe-app-tauri

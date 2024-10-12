@@ -234,6 +234,8 @@ async fn main() {
 
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
+                                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
+                                // bad UX: i use CLI and it kills my CLI because i updated app
                                 if let Err(err) = sidecar::kill_all_sreenpipes(
                                     app_handle.state::<SidecarState>(),
                                     app_handle.clone(),

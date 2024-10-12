@@ -135,8 +135,20 @@
         }
       ]
     },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "screenpipe",
+          "cmd": "screenpipe",
+          "args": ["setup"],
+          "sidecar": true
+        }
+      ]
+    },
     "cli:default",
     "shell:default",
+    "shell:allow-spawn",
     "dialog:default",
     "updater:default",
     "os:default",

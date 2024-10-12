@@ -8,11 +8,13 @@ use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
-use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 use tracing::{error, info};
+
+#[cfg(target_os = "macos")]
+use std::process::Command;
 
 pub struct ResourceMonitor {
     start_time: Instant,

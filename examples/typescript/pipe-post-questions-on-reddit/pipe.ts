@@ -1,3 +1,8 @@
+import * as fs from "fs";
+import nodemailer from "nodemailer";
+import { queryScreenpipe, loadPipeConfig, ContentItem } from "screenpipe";
+import process from "node:process";
+
 interface DailyLog {
   activity: string;
   category: string;
@@ -36,7 +41,7 @@ async function generateDailyLog(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${openaiApiKey}`,
+      Authorization: `Bearer ${openaiApiKey}`,
     },
     body: JSON.stringify({
       model: gptModel,
@@ -73,7 +78,7 @@ async function generateDailyLog(
   return content;
 }
 
-async function saveDailyLog(logEntry: DailyLog): Promise<void> {
+function saveDailyLog(logEntry: DailyLog): void {
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
   console.log("logs dir:", logsDir);
@@ -85,15 +90,12 @@ async function saveDailyLog(logEntry: DailyLog): Promise<void> {
     .replace(/\..+/, "");
   const filename = `${timestamp}-${logEntry.category.replace("/", "-")}.json`;
   console.log("filename:", filename);
-  await fs.writeFile(
-    `${logsDir}/${filename}`,
-    JSON.stringify(logEntry, null, 2)
-  );
+  fs.writeFileSync(`${logsDir}/${filename}`, JSON.stringify(logEntry, null, 2));
 }
 
 function generateRedditLinks(content: string): string {
   const posts = content.split(/\[\d+\]/g).filter(Boolean);
-  let result = '';
+  let result = "";
 
   posts.forEach((post, index) => {
     const titleMatch = post.match(/\[TITLE\](.*?)\[\/TITLE\]/s);
@@ -108,13 +110,13 @@ function generateRedditLinks(content: string): string {
 
       result += `[${index + 1}] ${title}\n\n${body}\n\n`;
 
-      subredditsMatch.forEach(subreddit => {
+      subredditsMatch.forEach((subreddit) => {
         const subredditName = subreddit.slice(2, -1);
         const link = `https://www.reddit.com/r/${subredditName}/submit?title=${encodedTitle}&text=${encodedBody}`;
         result += `${subreddit} <a href="${link}">SEND</a>\n`;
       });
 
-      result += '\n';
+      result += "\n";
     }
   });
 
@@ -150,7 +152,7 @@ async function generateRedditQuestions(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${openaiApiKey}`,
+      Authorization: `Bearer ${openaiApiKey}`,
     },
     body: JSON.stringify({
       model: gptModel,
@@ -172,75 +174,41 @@ async function generateRedditQuestions(
   return generateRedditLinks(content);
 }
 
-async function retry<T>(
-  fn: () => Promise<T>,
-  maxAttempts: number = 3,
-  delay: number = 3000
-): Promise<T> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt === maxAttempts) {
-        throw error;
-      }
-      console.log(`attempt ${attempt} failed, retrying in ${delay}ms...`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-  throw new Error("this should never happen");
-}
-
 async function sendEmail(
   to: string,
   password: string,
   subject: string,
   body: string
 ): Promise<void> {
-  const from = to; // assuming the sender is the same as the recipient
-  await retry(async () => {
-    const result = await pipe.sendEmail({
-      to,
-      from,
-      password,
-      subject,
-      body,
-    });
-    if (!result) {
-      throw new Error("failed to send email");
-    }
-    console.log(`email sent to ${to} with subject: ${subject}`);
+  // Create a transporter using SMTP
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com", // Replace with your SMTP server
+    port: 587,
+    secure: false, // Use TLS
+    auth: {
+      user: to, // assuming the sender is the same as the recipient
+      pass: password,
+    },
   });
-}
 
-async function getTodayLogs(): Promise<DailyLog[]> {
-  try {
-    const logsDir = `${process.env.PIPE_DIR}/logs`;
-    const today = new Date().toISOString().replace(/:/g, "-").split("T")[0]; // Get today's date in YYYY-MM-DD format
+  // Send mail with defined transport object
+  const info = await transporter.sendMail({
+    from: to, // sender address
+    to: to, // list of receivers
+    subject: subject, // Subject line
+    text: body, // plain text body
+  });
 
-    console.log("reading logs dir:", logsDir);
-    const files = await fs.readdir(logsDir);
-    console.log("files:", files);
-    const todayFiles = files.filter((file) => file.startsWith(today));
-    console.log("today's files:", todayFiles);
-
-    const logs: DailyLog[] = [];
-    for (const file of todayFiles) {
-      const content = await fs.readFile(`${logsDir}/${file}`);
-      logs.push(JSON.parse(content));
-    }
-
-    return logs;
-  } catch (error) {
-    console.warn("error getting today's logs:", error);
-    return [];
+  if (!info) {
+    throw new Error("failed to send email");
   }
+  console.log(`email sent to ${to} with subject: ${subject}`);
 }
 
 async function dailyLogPipeline(): Promise<void> {
   console.log("starting daily log pipeline");
 
-  const config = await pipe.loadConfig();
+  const config = await loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
@@ -260,9 +228,11 @@ async function dailyLogPipeline(): Promise<void> {
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
   console.log("logs dir:", logsDir);
-  await fs.mkdir(logsDir).catch((error) => {
-    console.warn("error creating logs dir:", error);
-  });
+  try {
+    fs.mkdirSync(logsDir);
+  } catch (_error) {
+    console.warn("failed to create logs dir, probably already exists");
+  }
 
   let lastEmailSent = new Date(0); // Initialize to a past date
 
@@ -290,18 +260,18 @@ async function dailyLogPipeline(): Promise<void> {
       const now = new Date();
       const oneMinuteAgo = new Date(now.getTime() - interval);
 
-      const screenData = await pipe.queryScreenpipe({
-        start_time: oneMinuteAgo.toISOString(),
-        end_time: now.toISOString(),
-        window_name: windowName,
+      const screenData = await queryScreenpipe({
+        startTime: oneMinuteAgo.toISOString(),
+        endTime: now.toISOString(),
+        windowName: windowName,
         limit: pageSize,
-        content_type: contentType,
+        contentType: contentType,
       });
 
       if (screenData && screenData.data && screenData.data.length > 0) {
         const logEntry = await generateDailyLog(
           screenData.data,
-          dailylogPrompt,  // Use dailylogPrompt here instead of customPrompt
+          dailylogPrompt, // Use dailylogPrompt here instead of customPrompt
           gptModel,
           gptApiUrl,
           openaiApiKey
@@ -331,12 +301,12 @@ async function dailyLogPipeline(): Promise<void> {
       }
 
       if (shouldSendSummary) {
-        const screenData = await pipe.queryScreenpipe({
-          start_time: oneMinuteAgo.toISOString(),
-          end_time: now.toISOString(),
-          window_name: windowName,
+        const screenData = await queryScreenpipe({
+          startTime: oneMinuteAgo.toISOString(),
+          endTime: now.toISOString(),
+          windowName: windowName,
           limit: pageSize,
-          content_type: contentType,
+          contentType: contentType,
         });
 
         if (screenData && screenData.data && screenData.data.length > 0) {
