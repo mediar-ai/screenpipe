@@ -5,10 +5,7 @@ mod tests {
     use serde_json::json;
     use std::{path::PathBuf, sync::Once};
     use tempfile::TempDir;
-    use tokio::{
-        fs::{create_dir_all, File},
-        io::AsyncWriteExt,
-    };
+    use tokio::fs::create_dir_all;
     use tracing::subscriber::set_global_default;
     use tracing_subscriber::fmt::Subscriber;
 
