@@ -417,6 +417,10 @@ export function RecordingSettings({
       args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
     }
 
+    if(localSettings.languages.length > 0) {
+      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
+    }
+
     return `${cliPath} ${args.join(" ")}`;
   };
 

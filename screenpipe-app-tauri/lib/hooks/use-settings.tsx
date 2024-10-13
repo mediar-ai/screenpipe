@@ -4,6 +4,7 @@ import { localDataDir, join } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
+import {Language} from "@/lib/language";
 
 const defaultSettings: Settings = {
   openaiApiKey: "",
@@ -38,10 +39,12 @@ const defaultSettings: Settings = {
   analyticsEnabled: true,
   audioChunkDuration: 30, // default to 10 seconds
   useChineseMirror: false, // Add this line
+  languages: [],
 };
 
 export type VadSensitivity = "low" | "medium" | "high";
 export interface Settings {
+  languages: Language[];
   openaiApiKey: string;
   deepgramApiKey: string;
   isLoading: boolean;
@@ -163,6 +166,8 @@ export function useSettings() {
           (await store!.get<number>("audioChunkDuration")) || 30;
         const savedUseChineseMirror =
           (await store!.get<boolean>("useChineseMirror")) || false;
+        const savedLanguages =
+            (await store!.get<Language[]>("languages")) || [];
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -190,6 +195,7 @@ export function useSettings() {
           analyticsEnabled: savedAnalyticsEnabled,
           audioChunkDuration: savedAudioChunkDuration,
           useChineseMirror: savedUseChineseMirror,
+          languages: savedLanguages,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

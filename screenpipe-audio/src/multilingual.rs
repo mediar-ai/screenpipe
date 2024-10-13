@@ -5,7 +5,7 @@ use candle_transformers::models::whisper::SOT_TOKEN;
 use log::info;
 use tokenizers::Tokenizer;
 
-const LANGUAGES: [(&str, &str); 99] = [
+pub const LANGUAGES: [(&str, &str); 99] = [
     ("en", "english"),
     ("zh", "chinese"),
     ("de", "german"),
