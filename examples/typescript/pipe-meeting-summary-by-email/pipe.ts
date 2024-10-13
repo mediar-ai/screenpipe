@@ -1,3 +1,11 @@
+import {
+  queryScreenpipe,
+  loadPipeConfig,
+  ContentItem,
+  extractJsonFromLlmResponse,
+} from "screenpipe";
+import nodemailer from "nodemailer";
+
 async function summarizeAudio(
   audioData: ContentItem[],
   aiApiUrl: string,
@@ -38,15 +46,26 @@ async function sendEmail(
   subject: string,
   body: string
 ): Promise<void> {
-  const from = to;
-  const result = await pipe.sendEmail({
-    to,
-    from,
-    password,
-    subject,
-    body,
+  // Create a transporter using SMTP
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com", // Replace with your SMTP server
+    port: 587,
+    secure: false, // Use TLS
+    auth: {
+      user: to, // assuming the sender is the same as the recipient
+      pass: password,
+    },
   });
-  if (!result) {
+
+  // Send mail with defined transport object
+  const info = await transporter.sendMail({
+    from: to, // sender address
+    to: to, // list of receivers
+    subject: subject, // Subject line
+    text: body, // plain text body
+  });
+
+  if (!info) {
     throw new Error("failed to send email");
   }
   console.log(`email sent to ${to} with subject: ${subject}`);
@@ -114,48 +133,10 @@ async function checkTimeAdjustment(
   return content;
 }
 
-function extractJsonFromLlmResponse(response: string): any {
-  // Remove any markdown code block syntax
-  let cleaned = response.replace(/^```(?:json)?\s*|\s*```$/g, "");
-
-  // Try to find JSON-like content
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    cleaned = jsonMatch[0];
-  }
-
-  // Remove any non-JSON content before or after the main object
-  cleaned = cleaned.replace(/^[^{]*/, "").replace(/[^}]*$/, "");
-
-  // Replace any escaped newlines and remove actual newlines
-  cleaned = cleaned.replace(/\\n/g, "").replace(/\n/g, "");
-
-  try {
-    return JSON.parse(cleaned);
-  } catch (error) {
-    console.warn("failed to parse json:", error);
-    console.warn("cleaned content:", cleaned);
-
-    // Attempt to fix common issues
-    cleaned = cleaned
-      .replace(/,\s*}/g, "}") // Remove trailing commas
-      .replace(/'/g, '"') // Replace single quotes with double quotes
-      .replace(/(\w+):/g, '"$1":') // Add quotes to keys
-      .replace(/:\s*'([^']*)'/g, ': "$1"'); // Replace single-quoted values with double-quoted values
-
-    try {
-      return JSON.parse(cleaned);
-    } catch (secondError) {
-      console.warn("failed to parse json after attempted fixes:", secondError);
-      throw new Error("invalid json format in llm response");
-    }
-  }
-}
-
 async function meetingSummaryPipeline(): Promise<void> {
   console.log("starting meeting summary pipeline");
 
-  const config = await pipe.loadConfig();
+  const config = await loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const {
@@ -180,10 +161,10 @@ async function meetingSummaryPipeline(): Promise<void> {
       console.log("oneHourAgo:", oneHourAgo);
       console.log("now:", now);
 
-      let audioData = await pipe.queryScreenpipe({
-        start_time: oneHourAgo.toISOString(),
-        end_time: now.toISOString(),
-        content_type: "audio",
+      const audioData = await queryScreenpipe({
+        startTime: oneHourAgo.toISOString(),
+        endTime: now.toISOString(),
+        contentType: "audio",
         limit: 10_000,
       });
 
@@ -216,10 +197,10 @@ async function meetingSummaryPipeline(): Promise<void> {
           console.log("New end:", adjustedEnd);
 
           // Query additional data
-          const additionalData = await pipe.queryScreenpipe({
-            start_time: adjustedStart.toISOString(),
-            end_time: adjustedEnd.toISOString(),
-            content_type: "audio",
+          const additionalData = await queryScreenpipe({
+            startTime: adjustedStart.toISOString(),
+            endTime: adjustedEnd.toISOString(),
+            contentType: "audio",
             limit: 10_000,
           });
 

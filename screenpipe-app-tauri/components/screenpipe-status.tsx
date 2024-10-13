@@ -64,8 +64,8 @@ ${cliInstructions}
 
   const logPath =
     os === "windows"
-      ? "%USERPROFILE%\\.screenpipe\\screenpipe.log"
-      : "$HOME/.screenpipe/screenpipe.log";
+      ? `%USERPROFILE%\\.screenpipe\\screenpipe.${new Date().toISOString().split('T')[0]}.log`
+      : `$HOME/.screenpipe/screenpipe.${new Date().toISOString().split('T')[0]}.log`;
 
   const dbPath =
     os === "windows"
@@ -386,8 +386,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
       const homeDirPath = await homeDir();
       const logPath =
         platform() === "windows"
-          ? `${homeDirPath}\\.screenpipe\\screenpipe.log`
-          : `${homeDirPath}/.screenpipe/screenpipe.log`;
+          ? `${homeDirPath}\\.screenpipe\\screenpipe.${new Date().toISOString().split('T')[0]}.log`
+          : `${homeDirPath}/.screenpipe/screenpipe.${new Date().toISOString().split('T')[0]}.log`;
       await open(logPath);
     } catch (error) {
       console.error("failed to open log file:", error);
@@ -416,7 +416,14 @@ const HealthStatus = ({ className }: { className?: string }) => {
     return "bg-red-500";
   };
 
-  if (!health) return null;
+  if (!health) {
+    return (
+      <Badge variant="outline" className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground">
+        <Activity className="mr-2 h-4 w-4" />
+        status <span className="ml-1 w-2 h-2 rounded-full bg-yellow-500 inline-block animate-pulse" />
+      </Badge>
+    );
+  }
 
   const formatTimestamp = (timestamp: string | null) => {
     return timestamp ? new Date(timestamp).toLocaleString() : "n/a";

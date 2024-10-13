@@ -1,9 +1,23 @@
+import * as fs from "fs";
+import nodemailer from "nodemailer";
+import { queryScreenpipe, loadPipeConfig, ContentItem } from "screenpipe";
+import process from "node:process";
+import { z } from "zod";
+import { generateObject, generateText } from "ai";
+import { createOllama } from "ollama-ai-provider";
+
 interface DailyLog {
   activity: string;
   category: string;
   tags: string[];
   timestamp: string;
 }
+
+const dailyLog = z.object({
+  activity: z.string(),
+  category: z.string(),
+  tags: z.array(z.string()),
+});
 
 async function generateDailyLog(
   screenData: ContentItem[],
@@ -31,48 +45,23 @@ async function generateDailyLog(
         
     `;
 
-  const response = await fetch(ollamaApiUrl + "/chat", {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    body: JSON.stringify({
-      model: ollamaModel,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      response_format: { type: "json_object" },
-    }),
+  const provider = createOllama({ baseURL: ollamaApiUrl });
+
+  const response = await generateObject({
+    model: provider(ollamaModel),
+    messages: [{ role: "user", content: prompt }],
+    schema: dailyLog,
   });
 
-  if (!response.ok) {
-    console.log("ollama response:", await response.text());
-    throw new Error(`http error! status: ${response.status}`);
-  }
+  console.log("ai answer:", response);
 
-  const result = await response.json();
+  const result = response.object as DailyLog;
+  result.timestamp = new Date().toISOString();
 
-  console.log("ai answer:", result);
-  // clean up the result
-  const cleanedResult = result.message.content
-    .trim()
-    .replace(/^```(?:json)?\s*|\s*```$/g, "") // remove start and end code block markers
-    .replace(/\n/g, "") // remove newlines
-    .replace(/\\n/g, "") // remove escaped newlines
-    .trim(); // trim any remaining whitespace
-
-  let content;
-  try {
-    content = JSON.parse(cleanedResult);
-  } catch (error) {
-    console.warn("failed to parse ai response:", error);
-    console.warn("cleaned result:", cleanedResult);
-    throw new Error("invalid ai response format");
-  }
-
-  return content;
+  return result;
 }
 
-async function saveDailyLog(logEntry: DailyLog): Promise<void> {
+function saveDailyLog(logEntry: DailyLog): void {
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
   console.log("logs dir:", logsDir);
@@ -84,10 +73,7 @@ async function saveDailyLog(logEntry: DailyLog): Promise<void> {
     .replace(/\..+/, "");
   const filename = `${timestamp}-${logEntry.category.replace("/", "-")}.json`;
   console.log("filename:", filename);
-  await fs.writeFile(
-    `${logsDir}/${filename}`,
-    JSON.stringify(logEntry, null, 2)
-  );
+  fs.writeFileSync(`${logsDir}/${filename}`, JSON.stringify(logEntry, null, 2));
 }
 
 async function generateDailySummary(
@@ -112,26 +98,14 @@ async function generateDailySummary(
     Provide a human-readable summary that highlights key activities and insights.`;
 
   console.log("daily summary prompt:", prompt);
-  const response = await fetch(ollamaApiUrl + "/chat", {
-    method: "POST",
-    body: JSON.stringify({
-      model: ollamaModel,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-    }),
+  const provider = createOllama({ baseURL: ollamaApiUrl });
+  const response = await generateText({
+    model: provider(ollamaModel),
+    messages: [{ role: "user", content: prompt }],
   });
   console.log("daily summary ollama response:", response);
 
-  if (!response.ok) {
-    console.log("ollama response:", await response.text());
-    throw new Error(`http error! status: ${response.status}`);
-  }
-
-  const result = await response.json();
-
-  console.log("ai summary:", result);
-
-  return result.message.content;
+  return response.text;
 }
 
 async function retry<T>(
@@ -159,36 +133,47 @@ async function sendEmail(
   subject: string,
   body: string
 ): Promise<void> {
-  const from = to; // assuming the sender is the same as the recipient
   await retry(async () => {
-    const result = await pipe.sendEmail({
-      to,
-      from,
-      password,
-      subject,
-      body,
+    // Create a transporter using SMTP
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com", // Replace with your SMTP server
+      port: 587,
+      secure: false, // Use TLS
+      auth: {
+        user: to, // assuming the sender is the same as the recipient
+        pass: password,
+      },
     });
-    if (!result) {
+
+    // Send mail with defined transport object
+    const info = await transporter.sendMail({
+      from: to, // sender address
+      to: to, // list of receivers
+      subject: subject, // Subject line
+      text: body, // plain text body
+    });
+
+    if (!info) {
       throw new Error("failed to send email");
     }
     console.log(`email sent to ${to} with subject: ${subject}`);
   });
 }
 
-async function getTodayLogs(): Promise<DailyLog[]> {
+function getTodayLogs(): DailyLog[] {
   try {
     const logsDir = `${process.env.PIPE_DIR}/logs`;
     const today = new Date().toISOString().replace(/:/g, "-").split("T")[0]; // Get today's date in YYYY-MM-DD format
 
     console.log("reading logs dir:", logsDir);
-    const files = await fs.readdir(logsDir);
+    const files = fs.readdirSync(logsDir);
     console.log("files:", files);
     const todayFiles = files.filter((file) => file.startsWith(today));
     console.log("today's files:", todayFiles);
 
     const logs: DailyLog[] = [];
     for (const file of todayFiles) {
-      const content = await fs.readFile(`${logsDir}/${file}`);
+      const content = fs.readFileSync(`${logsDir}/${file}`, "utf8");
       logs.push(JSON.parse(content));
     }
 
@@ -202,7 +187,7 @@ async function getTodayLogs(): Promise<DailyLog[]> {
 async function dailyLogPipeline(): Promise<void> {
   console.log("starting daily log pipeline");
 
-  const config = await pipe.loadConfig();
+  const config = await loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   const interval = config.interval * 1000;
@@ -221,9 +206,11 @@ async function dailyLogPipeline(): Promise<void> {
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
   console.log("logs dir:", logsDir);
-  await fs.mkdir(logsDir).catch((error) => {
-    console.warn("error creating logs dir:", error);
-  });
+  try {
+    fs.mkdirSync(logsDir);
+  } catch (_error) {
+    console.warn("error creating logs dir, probably already exists");
+  }
 
   let lastEmailSent = new Date(0); // Initialize to a past date
 
@@ -251,12 +238,12 @@ async function dailyLogPipeline(): Promise<void> {
       const now = new Date();
       const oneMinuteAgo = new Date(now.getTime() - interval);
 
-      const screenData = await pipe.queryScreenpipe({
-        start_time: oneMinuteAgo.toISOString(),
-        end_time: now.toISOString(),
-        window_name: windowName,
+      const screenData = await queryScreenpipe({
+        startTime: oneMinuteAgo.toISOString(),
+        endTime: now.toISOString(),
+        windowName: windowName,
         limit: pageSize,
-        content_type: contentType,
+        contentType: contentType,
       });
 
       if (screenData && screenData.data && screenData.data.length > 0) {
@@ -291,7 +278,6 @@ async function dailyLogPipeline(): Promise<void> {
       }
 
       if (shouldSendSummary) {
-        // await retry(async () => {
         const todayLogs = await getTodayLogs();
         console.log("today's logs:", todayLogs);
 
@@ -311,7 +297,6 @@ async function dailyLogPipeline(): Promise<void> {
           );
           lastEmailSent = now;
         }
-        // });
       }
     } catch (error) {
       console.warn("error in daily log pipeline:", error);
