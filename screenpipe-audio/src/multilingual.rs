@@ -4,6 +4,7 @@ use candle::{Result, Tensor, D};
 use candle_transformers::models::whisper::SOT_TOKEN;
 use log::info;
 use tokenizers::Tokenizer;
+use screenpipe_core::Language;
 
 pub const LANGUAGES: [(&str, &str); 99] = [
     ("en", "english"),
@@ -108,7 +109,7 @@ pub const LANGUAGES: [(&str, &str); 99] = [
 ];
 
 /// Returns the token id for the selected language.
-pub fn detect_language(model: &mut Model, tokenizer: &Tokenizer, mel: &Tensor) -> Result<u32> {
+pub fn detect_language(model: &mut Model, tokenizer: &Tokenizer, mel: &Tensor, languages: Vec<Language>) -> Result<u32> {
     let (_bsize, _, seq_len) = mel.dims3()?;
     let mel = mel.narrow(
         2,
@@ -130,10 +131,13 @@ pub fn detect_language(model: &mut Model, tokenizer: &Tokenizer, mel: &Tensor) -
     let probs = candle_nn::ops::softmax(&logits, D::Minus1)?;
     let probs = probs.to_vec1::<f32>()?;
     let mut probs = LANGUAGES.iter().zip(probs.iter()).collect::<Vec<_>>();
-    probs.sort_by(|(_, p1), (_, p2)| p2.total_cmp(p1));
+    let mut probs = languages.iter().map(|lang|  {
+        probs[lang.to_owned() as usize]
+    }).collect::<Vec<_>>();
     for ((_lang_code, _language), _p) in probs.iter().take(5) {
         // info!("{language}: {p}")
     }
+
     let language = token_id(tokenizer, &format!("<|{}|>", probs[0].0 .0))?;
     info!("detected language: {:?}", probs[0].0);
     Ok(language)

@@ -14,6 +14,9 @@ struct Cli {
     /// FPS
     #[arg(long, default_value_t = 1.0)]
     fps: f32,
+
+    #[arg(value_enum(Language))]
+    language
 }
 
 #[tokio::main]

@@ -259,6 +259,8 @@ async fn main() -> anyhow::Result<()> {
         cli.monitor_id.clone()
     };
 
+    let languages = cli.language.clone();
+
     let ocr_engine_clone = cli.ocr_engine.clone();
     let vad_engine = cli.vad_engine.clone();
     let vad_engine_clone = vad_engine.clone();
@@ -318,6 +320,7 @@ async fn main() -> anyhow::Result<()> {
                     &cli.included_windows,
                     cli.deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
+                    languages.clone(),
                 );
 
                 let result = tokio::select! {
@@ -453,10 +456,32 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Add languages section
+    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("│ languages           │                                    │");
+    const MAX_ITEMS_TO_DISPLAY: usize = 5;
+
+    if cli.language.is_empty() {
+        println!("│ {:<19} │ {:<34} │", "", "all languages");
+    } else {
+        let total_languages = cli.language.len();
+        for (_, language) in cli.language.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+            let language_str = format!("id: {}", language);
+            let formatted_language = format_cell(&language_str, VALUE_WIDTH);
+            println!("│ {:<19} │ {:<34} │", "", formatted_language);
+        }
+        if total_languages > MAX_ITEMS_TO_DISPLAY {
+            println!(
+                "│ {:<19} │ {:<34} │",
+                "",
+                format!("... and {} more", total_languages - MAX_ITEMS_TO_DISPLAY)
+            );
+        }
+    }
+
     // Add monitors section
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ monitors            │                                    │");
-    const MAX_ITEMS_TO_DISPLAY: usize = 5;
 
     if cli.disable_vision {
         println!("│ {:<19} │ {:<34} │", "", "vision disabled");

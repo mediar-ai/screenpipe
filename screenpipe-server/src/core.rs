@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
+use screenpipe_core::Language;
 
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
@@ -43,6 +44,7 @@ pub async fn start_continuous_recording(
     include_windows: &[String],
     deepgram_api_key: Option<String>,
     vad_sensitivity: CliVadSensitivity,
+    languages: Vec<Language>
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -66,6 +68,7 @@ pub async fn start_continuous_recording(
             deepgram_api_key,
             &PathBuf::from(output_path.as_ref()),
             VadSensitivity::from(vad_sensitivity),
+            languages,
         )
         .await?
     };
@@ -107,6 +110,7 @@ pub async fn start_continuous_recording(
                         &ignored_windows_video,
                         &include_windows_video,
                         video_chunk_duration,
+                        // TODO add languages                        // languages,
                     )
                     .await
                 })

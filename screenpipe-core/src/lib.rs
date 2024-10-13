@@ -26,5 +26,9 @@ pub mod pipes;
 pub use pipes::*;
 #[cfg(feature = "security")]
 pub mod pii_removal;
+mod language;
+
 #[cfg(feature = "security")]
 pub use pii_removal::*;
+
+pub use language::Language;

@@ -27,9 +27,9 @@ use crate::{
 
 use hound::{WavSpec, WavWriter};
 use reqwest::Client;
+use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
-
 // Replace the get_deepgram_api_key function with this:
 fn get_deepgram_api_key() -> String {
     "7ed2a159a094337b01fd8178b914b7ae0e77822d".to_string()
@@ -129,6 +129,7 @@ pub fn stt_sync(
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>, // Changed type here
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
+    languages: Vec<Language>,
 ) -> Result<(String, String)> {
     let audio_input = audio_input.clone();
     let whisper_model = whisper_model.clone();
@@ -147,6 +148,7 @@ pub fn stt_sync(
             deepgram_api_key,
             &output_path,
             false,
+            languages,
         ))
     });
 
@@ -161,6 +163,7 @@ pub async fn stt(
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
     skip_encoding: bool,
+    languages: Vec<Language>,
 ) -> Result<(String, String)> {
     let model = &whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
@@ -272,6 +275,7 @@ pub async fn stt(
                 &speech_frames,
                 &audio_input.device.name,
                 audio_input.sample_rate,
+                // languages,
             )
             .await
             {
@@ -307,6 +311,7 @@ pub async fn stt(
                         &mut model.clone(),
                         &tokenizer,
                         &mel,
+                        languages,
                     )?);
                     let mut model = model.clone();
                     debug!("device: {}, initializing decoder", audio_input.device);
@@ -360,6 +365,7 @@ pub async fn stt(
                 &mut model.clone(),
                 &tokenizer,
                 &mel,
+                languages,
             )?);
             let mut model = model.clone();
             debug!("device: {}, initializing decoder", audio_input.device);
@@ -508,6 +514,7 @@ pub async fn create_whisper_channel(
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
     vad_sensitivity: VadSensitivity,
+    languages: Vec<Language>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
@@ -554,7 +561,7 @@ pub async fn create_whisper_channel(
                                 #[cfg(target_os = "macos")]
                                 {
                                     autoreleasepool(|| {
-                                        match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
+                                        match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
                                             Ok((transcription, path)) => TranscriptionResult {
                                                 input: input.clone(),
                                                 transcription: Some(transcription),
@@ -580,7 +587,7 @@ pub async fn create_whisper_channel(
                                     unreachable!("This code should not be reached on non-macOS platforms")
                                 }
                             } else {
-                                match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
+                                match stt_sync(&input, &whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
                                     Ok((transcription, path)) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),
