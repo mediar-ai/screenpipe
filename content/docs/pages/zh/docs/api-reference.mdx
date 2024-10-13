@@ -1,0 +1,254 @@
+import MotionDiv from '../../components/motion-div'
+
+# Screenpipe API 参考
+
+<MotionDiv>
+
+以下是 Screenpipe 项目中使用的核心 API 的详细说明及示例实现。
+
+</MotionDiv>
+
+<MotionDiv delay={0.3}>
+
+## 1. 搜索 API
+
+- **端点**: `/search`
+- **方法**: `get`
+- **描述**: 根据内容类型、时间戳、应用名称和窗口名称等过滤条件，搜索存储在 Screenpipe 本地数据库中的捕获数据（OCR、音频转录等）。
+
+### 查询参数：
+
+- `q` (字符串, 可选): 搜索词。
+- `content_type` (枚举): 要搜索的内容类型（OCR、音频等）。
+- `limit` (整数): 每页最大结果数（默认: 20）。
+- `offset` (整数): 分页偏移量。
+- `start_time` (时间戳, 可选): 按开始时间戳过滤。
+- `end_time` (时间戳, 可选): 按结束时间戳过滤。
+- `app_name` (字符串, 可选): 根据应用名称过滤结果。
+- `window_name` (字符串, 可选): 根据窗口名称过滤结果。
+- `include_frames` (布尔值, 可选): 如果为 true，则获取 OCR 内容的帧数据。
+
+### 示例请求：
+
+```bash
+curl "http://localhost:3030/search?q=meeting&content_type=ocr&limit=5&offset=0"
+```
+
+### 示例响应：
+
+```json
+{
+  "data": [
+    {
+      "type": "ocr",
+      "content": {
+        "frame_id": 123,
+        "text": "会议记录",
+        "timestamp": "2024-09-10t12:00:00z",
+        "file_path": "/frames/frame123.png",
+        "app_name": "谷歌浏览器",
+        "window_name": "会议室",
+        "tags": ["会议", "重要"]
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 5,
+    "offset": 0,
+    "total": 100
+  }
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.5}>
+
+## 2. 列出音频设备 API
+
+- **端点**: `/audio/list`
+- **方法**: `get`
+- **描述**: 列出机器上所有可用的音频输入和输出设备，包括默认设备。
+
+### 示例请求：
+
+```bash
+curl "http://localhost:3030/audio/list"
+```
+
+### 示例响应：
+
+```json
+[
+  {
+    "name": "内置麦克风",
+    "is_default": true
+  },
+  {
+    "name": "外部扬声器",
+    "is_default": false
+  }
+]
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.7}>
+
+## 3. 添加标签到内容 API
+
+- **端点**: `/tags/:content_type/:id`
+- **方法**: `post`
+- **描述**: 根据内容类型（音频或视觉）为内容项添加自定义标签。
+
+### 请求体：
+
+```json
+{
+  "tags": ["重要", "审核"]
+}
+```
+
+### 示例请求：
+
+```bash
+curl -x post "http://localhost:3030/tags/vision/123" -h "content-type: application/json" -d '{"tags": ["会议", "重要"]}'
+```
+
+### 示例响应：
+
+```json
+{
+  "success": true
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.9}>
+
+## 4. 下载管道 API
+
+- **端点**: `/pipes/download`
+- **方法**: `post`
+- **描述**: 从指定 URL 下载管道（插件）并存储在本地。
+
+### 请求体：
+
+```json
+{
+  "url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"
+}
+```
+
+### 示例请求：
+
+```bash
+curl -x post "http://localhost:3030/pipes/download" -h "content-type: application/json" -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"}'
+```
+
+### 示例响应：
+
+```json
+{
+  "message": "管道 pipe-stream-ocr-text 下载成功",
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={1.1}>
+
+## 5. 运行管道 API
+
+- **端点**: `/pipes/enable`
+- **方法**: `post`
+- **描述**: 启用管道（插件）以开始处理数据。
+
+### 请求体：
+
+```json
+{
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+### 示例请求：
+
+```bash
+curl -x post "http://localhost:3030/pipes/enable" -h "content-type: application/json" -d '{"pipe_id": "pipe-stream-ocr-text"}'
+```
+
+### 示例响应：
+
+```json
+{
+  "message": "管道 pipe-stream-ocr-text 已启动",
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={1.3}>
+
+## 6. 停止管道 API
+
+- **端点**: `/pipes/disable`
+- **方法**: `post`
+- **描述**: 禁用管道以停止处理数据。
+
+### 请求体：
+
+```json
+{
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+### 示例请求：
+
+```bash
+curl -x post "http://localhost:3030/pipes/disable" -h "content-type: application/json" -d '{"pipe_id": "pipe-stream-ocr-text"}'
+```
+
+### 示例响应：
+
+```json
+{
+  "message": "管道 pipe-stream-ocr-text 已停止",
+  "pipe_id": "pipe-stream-ocr-text"
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={1.5}>
+
+## 7. 健康检查 API
+
+- **端点**: `/health`
+- **方法**: `get`
+- **描述**: 返回系统的健康状态，包括最后一帧和音频捕获的时间戳，以及整体系统状态。
+
+### 示例请求：
+
+```bash
+curl "http://localhost:3030/health"
+```
+
+### 示例响应：
+
+```json
+{
+  "status": "健康",
+  "last_frame_timestamp": "2024-09-10t10:00:00z",
+  "last_audio_timestamp": "2024-09-10t10:00:00z",
+  "frame_status": "正常",
+  "audio_status": "正常",
+  "message": "所有系统正常运行。"
+}
+```
+
+</MotionDiv>

@@ -1,0 +1,79 @@
+import MotionDiv from '../../components/motion-div'
+
+# 架构概述
+
+<MotionDiv>
+
+screenpipe 的架构处理连续的屏幕和音频捕获、本地数据存储和实时处理。以下是关键组件的分解：
+
+</MotionDiv>
+
+<MotionDiv delay={0.1}>
+## 图示概述
+
+![screenpipe 图示](https://raw.githubusercontent.com/mediar-ai/screenpipe/main/content/diagram2.png)
+
+1. **输入**: 屏幕和音频数据
+2. **处理**: OCR、STT、转录、多模态集成
+3. **存储**: SQLite 数据库
+4. **插件**: 自定义管道
+5. **集成**: Ollama、Deepgram、Notion、WhatsApp 等
+
+这种模块化架构使 screenpipe 能够适应各种用例，从个人生产力跟踪到高级商业智能。
+
+## 状态
+
+Alpha: 在我的电脑 `Macbook Pro M3 32 GB RAM` 和一台 $400 的 Windows 笔记本电脑上 24/7 运行。
+
+使用 600 MB，10% CPU。
+
+- [ ] 集成
+    - [x] Ollama
+    - [x] OpenAI
+    - [x] Friend 可穿戴设备
+    - [x] [Fileorganizer2000](https://github.com/different-ai/file-organizer-2000)
+    - [x] Mem0
+    - [x] Brilliant Frames
+    - [x] Vercel AI SDK
+    - [ ] Supermemory
+    - [x] Deepgram
+    - [x] Unstructured
+    - [x] Excalidraw
+    - [x] Obsidian
+    - [x] Apple 快捷方式
+    - [x] Multion
+    - [x] iPhone
+    - [ ] Android
+    - [ ] 摄像头
+    - [ ] 键盘
+    - [x] 浏览器
+    - [x] 管道商店（一个可以构建、分享和轻松安装的“管道”列表，以便在不费力的情况下从屏幕和麦克风数据中获得更多价值）。它在您的计算机上的 screenpipe 中运行 Deno Typescript 引擎
+- [x] 截图 + 使用不同引擎的 OCR 以优化隐私、质量或能耗
+  - [x] Tesseract
+  - [x] Windows 原生 OCR
+  - [x] Apple 原生 OCR
+  - [x] Unstructured.io
+  - [ ] Screenpipe 屏幕/音频专用 LLM
+- [x] 音频 + STT（适用于多输入设备，如您的 iPhone + Mac 麦克风，许多 STT 引擎）
+  - [x] Linux、MacOS、Windows 输入和输出设备
+  - [x] iPhone 麦克风
+- [x] [远程捕获](https://github.com/mediar-ai/screenpipe/discussions/68)（在云端运行 screenpipe 并捕获本地机器，仅在 Linux 上测试）例如当您有低计算笔记本电脑时
+- [x] 优化的屏幕和音频录制（mp4 编码，默认设置下估计 30 GB/m）
+- [x] SQLite 本地数据库
+- [x] 本地 API
+- [x] 跨平台 CLI，[桌面应用](https://screenpi.pe/)（MacOS、Windows、Linux）
+- [x] Metal, CUDA
+- [ ] TS SDK
+- [ ] 多模态嵌入
+- [ ] 云存储选项（S3、PgSQL 等）
+- [x] 云计算选项（Deepgram 用于音频，Unstructured 用于 OCR）
+- [x] 自定义存储设置：可自定义的捕获设置（fps、分辨率）
+- [ ] 安全
+  - [x] 窗口特定捕获（例如，可以决定仅捕获光标、Chrome、Obsidian 的特定选项卡，或仅捕获特定应用）
+  - [ ] 加密
+  - [x] PII 移除
+- [ ] 快速、优化、节能模式
+- [ ] Webhooks/事件（用于自动化）
+- [ ] 多人使用抽象（例如，汇总销售团队数据、公司团队数据、合作伙伴等）
+
+</MotionDiv>

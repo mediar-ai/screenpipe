@@ -16,6 +16,11 @@ const nextConfig = {
   ...config,
   pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'md', 'mdx'],
   reactStrictMode: true,
+  i18n: {
+    locales: ['en', 'zh'],
+    defaultLocale: 'en',
+    localeDetection: true,
+  },
   ...withNextra(),
 };
 

@@ -1,0 +1,123 @@
+import MotionDiv from '@/components/motion-div';
+
+# 插件（管道）
+
+<MotionDiv>
+  screenpipe 的一个重要部分是其可扩展性，通过自定义工作流程与捕获的屏幕和音频数据交互，提供强大的扩展性。无论您需要标记活动、生成摘要，还是将数据发送到第三方服务，插件都允许您根据特定需求定制 screenpipe。
+
+screenpipe 中的插件分为两种类型：
+
+- **管道**：这些是与 screenpipe 原生集成的插件。它们可以在 CLI/库/应用程序中运行，而无需手动执行。它们在沙盒环境中运行，可以用 Typescript 或 Javascript 编写。
+- **独立脚本**：这些是需要单独运行的独立脚本，可能需要额外的设置。
+</MotionDiv>
+---
+# 1. 管道
+## 管道概述
+
+<MotionDiv delay={0.3}>
+  screenpipe 中的管道是设计用于处理从您的屏幕和音频源捕获的数据的插件。它们自动化工作流程，如标记、总结和将数据与外部平台（如 Notion、Salesforce 或 Slack）集成。
+
+  **管道工作流程示例**：
+  - **管道示例**：screenpipe | AI 标记 | Notion 更新
+  - **管道示例**：screenpipe | AI 标记 | Slack 报告
+  - **管道示例**：screenpipe | 日常活动日志
+
+  **管道的关键特性**：
+  - **自定义工作流程**：自动化重复性任务，如标记屏幕活动或总结音频转录。
+  - **实时处理**：管道可以实时处理捕获的数据。
+  - **集成能力**：通过将处理后的数据发送到第三方应用程序来扩展功能。
+
+  **示例用例**：
+  - **AI 活动标记**：基于 AI 模型自动标记屏幕或音频活动。
+  - **会议摘要**：使用组合的屏幕和音频数据生成会议讨论的摘要。
+  - **CRM 集成**：自动将交互或捕获的数据记录到 CRM（如 Salesforce）中。
+
+  **运行管道**：
+  - 下载管道（可以是 GitHub 或您的本地机器）
+  ```bash
+  screenpipe pipe download https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text
+  ```
+  - 启用管道以供使用
+  ```bash
+  screenpipe pipe enable pipe-stream-ocr-text
+  ```
+  - 运行管道
+  ```bash
+  screenpipe 
+  ```
+
+这个简单的管道将文本流式传输到当前目录中的本地 Markdown 文件中。
+
+</MotionDiv>
+
+---
+
+## 可用管道
+
+<MotionDiv delay={0.5}>
+  screenpipe 提供多种管道和独立脚本，允许用户以最小的努力扩展平台的功能。以下是可用示例的表格总结：
+
+| **示例**                          | **描述**                                  | **链接**                          |
+| ------------------------------------ | ------------------------------------------------ | --------------------------------- |
+| **管道邮件每日日志**             | 通过电子邮件发送每日活动日志               | [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log)                         |
+| **管道屏幕到 CRM**               | 将屏幕数据与 CRM 系统集成           | [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-screen-to-crm)                         |
+| **管道 phi3.5 工程团队日志**| 生成工程团队工作日志              | [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
+| **管道流式 OCR 文本**             | 从屏幕数据流式传输 OCR 文本                 | [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text)                         |
+| **管道活动主题跟踪器**      | 跟踪和总结活动                   | [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-activity-topic-tracker)                         |
+| **管道专注通知助手**    | 帮助您保持专注                            | [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-focus-notification-buddy)                         |
+| **管道安全检查**              | 如果检测到任何可疑活动则通知用户  | [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-security-check)                         |
+| **管道同步会议到 Notion**     | 将会议转录和摘要同步到 Notion| [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-sync-meetings-to-notion)                        |
+| **管道标记活动**            | 使用 AI 自动标记活动            | [链接](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity)                         |
+
+</MotionDiv>
+
+---
+
+## 快速导览 - 在 screenpipe 中开发管道
+<MotionDiv delay={0.7}>
+
+screenpipe 的插件系统，称为 **管道**，允许您创建自定义管道以自动化工作流程。这些管道可以处理、注释、分析、总结或将您的屏幕和音频数据与其他工具集成。
+
+用户可以通过克隆现有管道（如 [pipe-email-daily-log](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log)）开始。您可以使用任何 JavaScript/TypeScript 来构建您的用例，从简单到高度高级。主要要求是管道文件夹必须包含一个名为 `pipe.js` 或 `pipe.ts` 的文件。 
+
+```bash 
+git clone https://github.com/mediar-ai/screenpipe.git
+cp -r screenpipe/examples/typescript/pipe-email-daily-log screenpipe/examples/typescript/my-pipe
+```
+
+一旦管道准备好，按照以下步骤使其与 `screenpipe` 一起工作：
+
+- **下载管道**（从本地或 GitHub URL）：
+  ```bash
+  screenpipe pipe download path/to/pipe-name
+  ```
+
+- **启用管道**（启用将激活管道，类似于在 screenpipe 中安装它）：
+  ```bash
+  screenpipe pipe enable pipe-name
+  ```
+
+此设置使得可以创建无数个针对特定需求量身定制的工作流程，自动化繁琐或复杂的任务。
+
+您还可以从应用程序 UI 加载和启用管道，进入管道商店并点击相关按钮。
+
+请将您的管道发送 PR 到仓库，我们将审核并合并！
+
+我们还为新管道提供赏金，或者如果您在社交媒体上谈论 screenpipe，我们会给予 $100+！
+
+我们也很乐意与 Stripe 等集成，以便您可以创建付费管道，例如，我们很乐意帮助您赚钱！
+
+### 提示与技巧 
+
+- 您可以使用 `pipe.json` 让其他人通过 UI 或 CLI 向您的管道传递配置选项。
+- 管道可以访问一个特殊的 API，允许您与计算机或特殊功能（如发送通知、发送电子邮件等）进行交互。
+- 查看此 [文件](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/deno/runtime.js) 以获取更多详细信息。
+- 一般来说，我们建议使用本地 LLMs，如 ollama，因为数据可能很大且敏感。
+- deno 缓存依赖项，有时需要清除/重新加载缓存
+
+### 已知限制
+
+- 您只能使用 JS/TS 构建您的管道。
+- 通常，您需要在无限循环中运行管道，例如，如果它是一个持续处理数据的东西，当然，如果这是一个一次性总结您一天的代理，它不必是无限循环。
+
+</MotionDiv>
