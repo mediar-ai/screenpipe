@@ -3,12 +3,15 @@ use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use crossbeam::queue::ArrayQueue;
+use futures::executor::block_on;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use std::{fmt, thread}; // Note: We're using parking_lot for better performance
+use tokio::sync::Notify;
+use tokio::task::spawn_blocking;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
@@ -101,6 +104,104 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
     AudioDevice::from_name(name)
 }
 
+pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
+    let host = cpal::default_host();
+    let mut devices = Vec::new();
+
+    for device in host.input_devices()? {
+        if let Ok(name) = device.name() {
+            devices.push(AudioDevice::new(name, DeviceType::Input));
+        }
+    }
+
+    // Filter function to exclude macOS speakers and AirPods for output devices
+    fn should_include_output_device(name: &str) -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            !name.to_lowercase().contains("speakers") && !name.to_lowercase().contains("airpods")
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            // Avoid "unused variable" warning in non-macOS systems
+            let _ = name;
+            true
+        }
+    }
+
+    // macOS hack using screen capture kit for output devices - does not work well
+    #[cfg(target_os = "macos")]
+    {
+        // !HACK macOS is supposed to use special macOS feature "display capture"
+        // ! see https://github.com/RustAudio/cpal/pull/894
+        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+            for device in host.input_devices()? {
+                if let Ok(name) = device.name() {
+                    if should_include_output_device(&name) {
+                        devices.push(AudioDevice::new(name, DeviceType::Output));
+                    }
+                }
+            }
+        }
+    }
+
+    // Add default output device - on macOS think of custom virtual devices
+    for device in host.output_devices()? {
+        if let Ok(name) = device.name() {
+            if should_include_output_device(&name) {
+                devices.push(AudioDevice::new(name, DeviceType::Output));
+            }
+        }
+    }
+
+    // Last, add devices that are listed in .devices() which are not already in the devices vector
+    let other_devices = host.devices().unwrap();
+    for device in other_devices {
+        if !devices.iter().any(|d| d.name == device.name().unwrap()) {
+            // TODO: not sure if it can be input, usually aggregate or multi output
+            devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
+        }
+    }
+
+    Ok(devices)
+}
+
+pub fn default_input_device() -> Result<AudioDevice> {
+    let host = cpal::default_host();
+    let device = host
+        .default_input_device()
+        .ok_or(anyhow!("No default input device detected"))?;
+    Ok(AudioDevice::new(device.name()?, DeviceType::Input))
+}
+
+// This should be optional?
+pub fn default_output_device() -> Result<AudioDevice> {
+    #[cfg(target_os = "macos")]
+    {
+        // ! see https://github.com/RustAudio/cpal/pull/894
+        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+            if let Some(device) = host.default_input_device() {
+                if let Ok(name) = device.name() {
+                    return Ok(AudioDevice::new(name, DeviceType::Output));
+                }
+            }
+        }
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .ok_or_else(|| anyhow!("No default output device found"))?;
+        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .ok_or_else(|| anyhow!("No default output device found"))?;
+        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
+    }
+}
+
 async fn get_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
@@ -111,7 +212,9 @@ async fn get_device_and_config(
     let is_output_device = audio_device.device_type == DeviceType::Output;
     let is_display = audio_device.to_string().contains("Display");
 
-    let cpal_audio_device = if audio_device.to_string() == "default" {
+    let cpal_audio_device = if audio_device.to_string().to_lowercase() == "default (input)"
+        || audio_device.to_string().to_lowercase() == "default (output)"
+    {
         match audio_device.device_type {
             DeviceType::Input => host.default_input_device(),
             DeviceType::Output => host.default_output_device(),
@@ -146,7 +249,7 @@ async fn get_device_and_config(
     }
     .ok_or_else(|| anyhow!("Audio device not found"))?;
 
-    // if output device and windows, using output config
+    // Determine the appropriate config based on device type
     let config = if is_output_device && !is_display {
         cpal_audio_device.default_output_config()?
     } else {
@@ -173,99 +276,145 @@ pub async fn record_and_transcribe(
     let audio_queue = Arc::new(ArrayQueue::new(100));
     let audio_queue_clone = Arc::clone(&audio_queue);
 
-    let is_running_weak = Arc::downgrade(&is_running);
-    let is_running_weak_2 = Arc::downgrade(&is_running);
-    let is_running_weak_3 = Arc::downgrade(&is_running);
-    let is_running_weak_4 = Arc::downgrade(&is_running);
+    // Use a Notify for graceful shutdown
+    let notify = Arc::new(Notify::new());
+    let notify_clone_for_error: Arc<Notify> = Arc::clone(&notify);
+    let notify_clone_for_stream: Arc<Notify> = Arc::clone(&notify);
 
-    // Define the error callback function
+    // Clone is_running for the error callback
+    let is_running_clone_for_error: Arc<AtomicBool> = Arc::clone(&is_running);
     let error_callback = move |err: StreamError| {
         error!("An error occurred on the audio stream: {}", err);
-        if err.to_string().contains("device is no longer valid") {
+        // Handle specific errors if needed
+        if let StreamError::DeviceNotAvailable = err {
             warn!("Audio device disconnected. Stopping recording.");
-            if let Some(arc) = is_running_weak_2.upgrade() {
-                arc.store(false, Ordering::Relaxed);
-            }
+            is_running_clone_for_error.store(false, Ordering::Relaxed);
+            notify_clone_for_error.notify_one();
         }
     };
 
-    // Spawn a thread to handle the non-Send stream
-    let audio_handle = thread::spawn(move || {
-        let stream = match config.sample_format() {
-            cpal::SampleFormat::I8 => cpal_audio_device.build_input_stream(
-                &config.into(),
-                move |data: &[i8], _: &_| {
-                    if is_running_weak_3
-                        .upgrade()
-                        .map_or(false, |arc| arc.load(Ordering::Relaxed))
-                    {
-                        let _ = audio_queue_clone.push(bytemuck::cast_slice(data).to_vec());
-                    }
-                },
-                error_callback,
-                None,
-            ),
-            cpal::SampleFormat::I16 => cpal_audio_device.build_input_stream(
-                &config.into(),
-                move |data: &[i16], _: &_| {
-                    if is_running_weak_3
-                        .upgrade()
-                        .map_or(false, |arc| arc.load(Ordering::Relaxed))
-                    {
-                        let _ = audio_queue_clone.push(bytemuck::cast_slice(data).to_vec());
-                    }
-                },
-                error_callback,
-                None,
-            ),
-            cpal::SampleFormat::I32 => cpal_audio_device.build_input_stream(
-                &config.into(),
-                move |data: &[i32], _: &_| {
-                    if is_running_weak_3
-                        .upgrade()
-                        .map_or(false, |arc| arc.load(Ordering::Relaxed))
-                    {
-                        let _ = audio_queue_clone.push(bytemuck::cast_slice(data).to_vec());
-                    }
-                },
-                error_callback,
-                None,
-            ),
-            cpal::SampleFormat::F32 => cpal_audio_device.build_input_stream(
-                &config.into(),
-                move |data: &[f32], _: &_| {
-                    if is_running_weak_3
-                        .upgrade()
-                        .map_or(false, |arc| arc.load(Ordering::Relaxed))
-                    {
-                        let _ = audio_queue_clone.push(data.to_vec());
-                    }
-                },
-                error_callback,
-                None,
-            ),
-            _ => {
-                error!("Unsupported sample format: {:?}", config.sample_format());
-                return;
+    // Clone is_running and notify for the stream closure
+    let is_running_clone_for_stream: Arc<AtomicBool> = Arc::clone(&is_running);
+    let stream_notify_clone: Arc<Notify> = Arc::clone(&notify_clone_for_stream);
+
+    // Determine if the device is input or output
+    let is_output_device = audio_device.device_type == DeviceType::Output;
+
+    // Spawn a blocking task to handle the audio stream
+    let stream_handle = spawn_blocking(move || {
+        let stream_result = if is_output_device {
+            // Build output stream
+            match config.sample_format() {
+                cpal::SampleFormat::I8 => cpal_audio_device.build_output_stream(
+                    &config.into(),
+                    move |_data: &mut [i8], _: &_| {
+                        // Handle output audio data if needed
+                        // Typically, for output capture, you may not need to process data here
+                        // as you're capturing from monitor sources as input
+                        // So, do nothing or process if needed
+                    },
+                    error_callback,
+                    None,
+                ),
+                cpal::SampleFormat::I16 => cpal_audio_device.build_output_stream(
+                    &config.into(),
+                    move |_data: &mut [i16], _: &_| {
+                        // Handle output audio data
+                        // If not capturing, do nothing
+                    },
+                    error_callback,
+                    None,
+                ),
+                cpal::SampleFormat::I32 => cpal_audio_device.build_output_stream(
+                    &config.into(),
+                    move |_data: &mut [i32], _: &_| {
+                        // Handle output audio data
+                    },
+                    error_callback,
+                    None,
+                ),
+                cpal::SampleFormat::F32 => cpal_audio_device.build_output_stream(
+                    &config.into(),
+                    move |_data: &mut [f32], _: &_| {
+                        // Handle output audio data
+                    },
+                    error_callback,
+                    None,
+                ),
+                _ => {
+                    error!("Unsupported sample format: {:?}", config.sample_format());
+                    return;
+                }
+            }
+        } else {
+            // Build input stream
+            match config.sample_format() {
+                cpal::SampleFormat::I8 => cpal_audio_device.build_input_stream(
+                    &config.into(),
+                    move |data: &[i8], _: &_| {
+                        if is_running_clone_for_stream.load(Ordering::Relaxed) {
+                            let converted = bytemuck::cast_slice(data).to_vec();
+                            let _ = audio_queue_clone.push(converted);
+                        }
+                    },
+                    error_callback,
+                    None,
+                ),
+                cpal::SampleFormat::I16 => cpal_audio_device.build_input_stream(
+                    &config.into(),
+                    move |data: &[i16], _: &_| {
+                        if is_running_clone_for_stream.load(Ordering::Relaxed) {
+                            let converted = bytemuck::cast_slice(data).to_vec();
+                            let _ = audio_queue_clone.push(converted);
+                        }
+                    },
+                    error_callback,
+                    None,
+                ),
+                cpal::SampleFormat::I32 => cpal_audio_device.build_input_stream(
+                    &config.into(),
+                    move |data: &[i32], _: &_| {
+                        if is_running_clone_for_stream.load(Ordering::Relaxed) {
+                            let converted = bytemuck::cast_slice(data).to_vec();
+                            let _ = audio_queue_clone.push(converted);
+                        }
+                    },
+                    error_callback,
+                    None,
+                ),
+                cpal::SampleFormat::F32 => cpal_audio_device.build_input_stream(
+                    &config.into(),
+                    move |data: &[f32], _: &_| {
+                        if is_running_clone_for_stream.load(Ordering::Relaxed) {
+                            let converted = data.to_vec();
+                            let _ = audio_queue_clone.push(converted);
+                        }
+                    },
+                    error_callback,
+                    None,
+                ),
+                _ => {
+                    error!("Unsupported sample format: {:?}", config.sample_format());
+                    return;
+                }
             }
         };
 
-        match stream {
-            Ok(s) => {
-                if let Err(e) = s.play() {
+        match stream_result {
+            Ok(stream) => {
+                if let Err(e) = stream.play() {
                     error!("Failed to play stream: {}", e);
                 }
-                // Keep the stream alive until the recording is done
-                while is_running_weak
-                    .upgrade()
-                    .map_or(false, |arc| arc.load(Ordering::Relaxed))
-                {
-                    std::thread::sleep(Duration::from_millis(100));
+                // Keep the stream alive until notified to stop
+                block_on(stream_notify_clone.notified());
+                if is_output_device {
+                    stream.pause().ok();
+                } else {
+                    stream.pause().ok();
                 }
-                s.pause().ok();
-                drop(s);
+                drop(stream);
             }
-            Err(e) => error!("Failed to build input stream: {}", e),
+            Err(e) => error!("Failed to build stream: {}", e),
         }
     });
 
@@ -274,13 +423,14 @@ pub async fn record_and_transcribe(
         audio_device.to_string(),
         duration.as_secs()
     );
-    // Spawn another thread to collect audio data
+
+    // Clone is_running for the collector
+    let is_running_clone_for_collector = Arc::clone(&is_running);
+
+    // Spawn a task to collect audio data
     let collector_handle = tokio::spawn(async move {
         let mut collected_audio = Vec::new();
-        while is_running_weak_4
-            .upgrade()
-            .map_or(false, |arc| arc.load(Ordering::Relaxed))
-        {
+        while is_running_clone_for_collector.load(Ordering::Relaxed) || !audio_queue.is_empty() {
             while let Some(chunk) = audio_queue.pop() {
                 collected_audio.extend(chunk);
             }
@@ -294,125 +444,29 @@ pub async fn record_and_transcribe(
 
     // Signal the recording to stop
     is_running.store(false, Ordering::Relaxed);
+    notify.notify_one(); // Notify the audio thread to stop
 
     // Wait for the audio thread to finish
-    if let Err(e) = audio_handle.join() {
-        error!("error joining audio thread: {:?}", e);
+    if let Err(e) = stream_handle.await {
+        error!("Error in audio thread: {:?}", e);
     }
 
     // Collect the final audio data
     let audio_data = collector_handle.await.unwrap_or_else(|e| {
-        error!("error joining collector thread: {:?}", e);
+        error!("Error joining collector thread: {:?}", e);
         Vec::new()
     });
 
-    debug!("sending audio to audio model");
+    debug!("Sending audio to audio model");
     if let Err(e) = whisper_sender.send(AudioInput {
         data: Arc::new(audio_data),
         device: audio_device.clone(),
         sample_rate,
         channels,
     }) {
-        error!("failed to send audio to audio model: {}", e);
+        error!("Failed to send audio to audio model: {}", e);
     }
-    debug!("sent audio to audio model");
+    debug!("Sent audio to audio model");
 
     Ok(())
-}
-
-pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
-    let host = cpal::default_host();
-    let mut devices = Vec::new();
-
-    for device in host.input_devices()? {
-        if let Ok(name) = device.name() {
-            devices.push(AudioDevice::new(name, DeviceType::Input));
-        }
-    }
-
-    // Filter function to exclude macOS speakers and AirPods for output devices
-    fn should_include_output_device(name: &str) -> bool {
-        #[cfg(target_os = "macos")]
-        {
-            !name.to_lowercase().contains("speakers") && !name.to_lowercase().contains("airpods")
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            // Avoid "unused variable" warning in non-macOS systems
-            let _ = name;
-            true
-        }
-    }
-
-    // macos hack using screen capture kit for output devices - does not work well
-    #[cfg(target_os = "macos")]
-    {
-        // !HACK macos is supposed to use special macos feature "display capture"
-        // ! see https://github.com/RustAudio/cpal/pull/894
-        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-            for device in host.input_devices()? {
-                if let Ok(name) = device.name() {
-                    if should_include_output_device(&name) {
-                        devices.push(AudioDevice::new(name, DeviceType::Output));
-                    }
-                }
-            }
-        }
-    }
-
-    // add default output device - on macos think of custom virtual devices
-    for device in host.output_devices()? {
-        if let Ok(name) = device.name() {
-            if should_include_output_device(&name) {
-                devices.push(AudioDevice::new(name, DeviceType::Output));
-            }
-        }
-    }
-
-    // last, add devices that are listed in .devices() which are not already in the devices vector
-    let other_devices = host.devices().unwrap();
-    for device in other_devices {
-        if !devices.iter().any(|d| d.name == device.name().unwrap()) {
-            // TODO: not sure if it can be input, usually aggregate or multi output
-            devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
-        }
-    }
-
-    Ok(devices)
-}
-
-pub fn default_input_device() -> Result<AudioDevice> {
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or(anyhow!("No default input device detected"))?;
-    Ok(AudioDevice::new(device.name()?, DeviceType::Input))
-}
-// this should be optional ?
-pub fn default_output_device() -> Result<AudioDevice> {
-    #[cfg(target_os = "macos")]
-    {
-        // ! see https://github.com/RustAudio/cpal/pull/894
-        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-            if let Some(device) = host.default_input_device() {
-                if let Ok(name) = device.name() {
-                    return Ok(AudioDevice::new(name, DeviceType::Output));
-                }
-            }
-        }
-        let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or_else(|| anyhow!("No default output device found"))?;
-        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or_else(|| anyhow!("No default output device found"))?;
-        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
-    }
 }
