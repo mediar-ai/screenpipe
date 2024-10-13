@@ -4,9 +4,10 @@ use candle_nn::{ops::softmax, VarBuilder};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, error, info};
 use rand::{distributions::Distribution, SeedableRng};
-use tokenizers::Tokenizer;
-
+use tokenizers::{Tokenizer, TokenizerBuilder};
 use candle_transformers::models::whisper::{self as m, Config};
+use regex::Regex;
+use screenpipe_core::Language;
 
 #[derive(Clone)]
 pub struct WhisperModel {
@@ -61,11 +62,14 @@ impl WhisperModel {
         debug!("Parsing config and tokenizer");
         let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-
+        // tokenizer.with_pre_tokenizer(PreT)
         debug!("Loading model weights");
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], m::DTYPE, &device)? };
-        let model = Model::Normal(m::model::Whisper::load(&vb, config.clone())?);
+        let whisper = m::model::Whisper::load(&vb, config.clone())?;
+
+        let model = Model::Normal(whisper);
+
         debug!("WhisperModel initialization complete");
         Ok(Self {
             model,
@@ -147,6 +151,7 @@ pub struct Decoder<'a> {
     no_speech_token: u32,
     no_timestamps_token: u32,
     language_token: Option<u32>,
+    translate_token: u32,
 }
 
 impl<'a> Decoder<'a> {
@@ -183,6 +188,7 @@ impl<'a> Decoder<'a> {
             None => anyhow::bail!("unable to find any non-speech token"),
             Some(n) => n,
         };
+        let translate_token = token_id(&tokenizer, m::TRANSLATE_TOKEN)?;
         Ok(Self {
             model,
             rng: rand::rngs::StdRng::seed_from_u64(seed),
@@ -196,6 +202,7 @@ impl<'a> Decoder<'a> {
             no_speech_token,
             language_token,
             no_timestamps_token,
+            translate_token,
         })
     }
 
@@ -249,7 +256,7 @@ impl<'a> Decoder<'a> {
             } else {
                 logits
             };
-            let next_token = if t > 0f64 {
+            let mut next_token = if t > 0f64 {
                 let prs = softmax(&(&logits / t)?, 0)?;
                 let logits_v: Vec<f32> = prs.to_vec1()?;
                 let distr = rand::distributions::WeightedIndex::new(&logits_v)?;
@@ -264,7 +271,21 @@ impl<'a> Decoder<'a> {
                     .unwrap()
             };
 
+            // if next_token > self.sot_token && next_token < self.no_speech_token && self.language_token.is_some() {
+            //     next_token = self.language_token.unwrap();
+            // }
+
+            // if next_token == self.translate_token {
+            //     panic!("We shouldn't translate anything...");
+            // }
+            //
+            // if is_language_token(self.tokenizer, next_token) && self.language_token.is_some() {
+            //     info!("language token incorrect...");
+            //     next_token = self.language_token.unwrap();
+            // }
+
             tokens.push(next_token);
+
             let prob = softmax(&logits, candle::D::Minus1)?
                 .i(next_token as usize)?
                 .to_scalar::<f32>()? as f64;
@@ -276,6 +297,7 @@ impl<'a> Decoder<'a> {
             {
                 break;
             }
+
 
             last_token_was_timestamp = next_token > self.no_timestamps_token;
         }
@@ -393,6 +415,16 @@ pub fn token_id(tokenizer: &Tokenizer, token: &str) -> candle::Result<u32> {
     match tokenizer.token_to_id(token) {
         None => candle::bail!("no token-id for {token}"),
         Some(id) => Ok(id),
+    }
+}
+
+fn is_language_token(tokenizer: &Tokenizer, token: u32) -> bool {
+    match tokenizer.id_to_token(token) {
+        None => false,
+        Some(token) => {
+            let re = Regex::new(r"^<\|\w{2,3}\|>").unwrap();
+            re.is_match(&token)
+        }
     }
 }
 
