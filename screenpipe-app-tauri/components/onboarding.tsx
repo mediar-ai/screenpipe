@@ -324,14 +324,6 @@ const Onboarding: React.FC = () => {
               handlePrevSlide={handlePrevSlide}
             />
           )}
-          {currentSlide === "experimentalFeatures" && (
-            <OnboardingExperimentalFeatures
-              className={`transition-opacity duration-300 
-              ${isVisible ? "opacity-100" : "opacity-0"}`}
-              handleNextSlide={handleEnd}
-              handlePrevSlide={handlePrevSlide}
-            />
-          )}
         </div>
       </DialogContent>
     </Dialog>
