@@ -5,12 +5,14 @@ import MotionDiv from '@/components/motion-div';
 <MotionDiv>
   an essential part of screenpipe is that it is extensible, providing powerful extensibility through custom workflows that interact with captured screen and audio data. whether you need to tag activities, generate summaries, or send data to third-party services, plugins allow you to tailor screenpipe to your specific needs.
 
-plugins in screenpipe are categorized into 2 types:
+  plugins in screenpipe are categorized into 2 types:
 
-- **pipes**: these are plugins with native integration with screenpipe. they can run within the cli/lib/app without the need for manual execution. they run in a sandboxed environment, and can be written in Typescript or Javascript.
-- **standalone scripts**: these are independent scripts that need to be run separately and may require additional setup.
+  - **pipes**: these are plugins with native integration with screenpipe. they can run within the cli/lib/app without the need for manual execution. they run in a sandboxed environment, and can be written in Typescript or Javascript.
+  - **standalone scripts**: these are independent scripts that need to be run separately and may require additional setup.
 </MotionDiv>
+
 ---
+
 # 1. pipes
 ## overview of pipes
 
@@ -46,7 +48,7 @@ plugins in screenpipe are categorized into 2 types:
   screenpipe 
   ```
 
-this simple pipe will stream text to local markdown files in current directory.
+  this simple pipe will stream text to local markdown files in current directory.
 
 </MotionDiv>
 
@@ -78,12 +80,141 @@ this simple pipe will stream text to local markdown files in current directory.
 
 screenpipe's plugin system, referred to as **pipes**, allows you to create customized pipes that automate workflows. these pipes can process, annotate, analyze, summarize, or integrate your screen and audio data with other tools.
 
-users can begin by cloning an existing pipe, such as [pipe-email-daily-log](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
+users can begin by cloning an existing pipe, such as [pipe-post-questions-on-reddit](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
 
 ```bash 
 git clone https://github.com/mediar-ai/screenpipe.git
-cp -r screenpipe/examples/typescript/pipe-email-daily-log screenpipe/examples/typescript/my-pipe
+cp -r screenpipe/examples/typescript/pipe-post-questions-on-reddit screenpipe/examples/typescript/my-pipe
 ```
+
+we use Deno to run the pipe within the Rust codebase.
+
+check official [deno docs](https://deno.com/manual/basics) for more details on installing and running Deno.
+
+### configuring pipes
+
+we use `pipe.json` to let others pass configuration options to your pipe through the UI or CLI.
+
+we parse your `pipe.json` file to render in the UI the input fields for your pipe so you need to follow the format. 
+
+here's my `pipe.json` for the pipe-post-questions-on-reddit:
+
+```json 
+{
+  "fields": [
+    {
+      "default": 60,
+      "description": "Interval in seconds to read your screen data and extract structured logs (will be used to summarize and send an email). Increase this value if using audio.",
+      "name": "interval",
+      "type": "number"
+    },
+    {
+      "default": "daily",
+      "description": "Frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)",
+      "name": "summaryFrequency",
+      "type": "string",
+      "value": "hourly:1"
+    },
+    {
+      "default": "11:00",
+      "description": "Time to send daily summary email (used only if summaryFrequency is 'daily')",
+      "name": "emailTime",
+      "type": "time"
+    },
+    {
+      "default": "",
+      "description": "Email address to send the daily summary to",
+      "name": "emailAddress",
+      "type": "string",
+      "value": "louis@screenpi.pe"
+    },
+    {
+      "default": "",
+      "description": "App specific password for your gmail account, https://support.google.com/accounts/answer/185833?hl=en",
+      "name": "emailPassword",
+      "type": "string",
+      "value": "abcd"
+    },
+    {
+      "default": "https://api.openai.com/v1/chat/completions",
+      "description": "openai-compatible API URL",
+      "name": "gptApiUrl",
+      "type": "string"
+    },
+    {
+      "default": "gpt-4o",
+      "description": "AI Model name",
+      "name": "gptModel",
+      "type": "string"
+    },
+    {
+      "default": "",
+      "description": "Your OpenAI API key",
+      "name": "openaiApiKey",
+      "type": "string",
+      "value": "sk-proj-1234567890"
+    },
+    {
+      "default": 100,
+      "description": "Number of records to retrieve from screenpipe per page for structured extraction, keep in mind LLMs have a context window limit. Increase this value if using audio.",
+      "name": "pageSize",
+      "type": "number"
+    },
+    {
+      "default": "",
+      "description": "additional prompt for the AI assistant that will be used to extract information from the screen data every specified amount of minutes",
+      "name": "dailylogPrompt",
+      "type": "string",
+      "value": "make sure to extract tags, topics, and short summary of what i do at that time"
+    },
+    {
+      "default": "",
+      "description": "additional prompt for the AI assistant that will be used to generate a list of questions to post on reddit based on the logs previously extracted",
+      "name": "customPrompt",
+      "type": "string",
+      "value": "make sure to generate posts of reasonable length, optimised for attention, providing value, triggering conversations"
+    },
+    {
+      "default": "",
+      "description": "Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio",
+      "name": "windowName",
+      "type": "window"
+    },
+    {
+      "default": "all",
+      "description": "Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance.",
+      "name": "contentType",
+      "type": "contentType"
+    }
+  ],
+}
+```
+
+
+### running pipes
+
+for quick dev, run your pipe locally using deno:
+
+```bash
+cd path/to/your/pipe
+deno run --allow-read --allow-write --allow-net --allow-env pipe.ts
+```
+
+**environment variables**: ensure the following environment variables are set for your pipe:
+
+- `SCREENPIPE_DIR`: the directory where screenpipe is installed.
+- `PIPE_ID`: the unique identifier for your pipe.
+- `PIPE_FILE`: the main file of your pipe (e.g., `pipe.ts`).
+- `PIPE_DIR`: the directory of your pipe.
+
+**example**:
+
+````bash
+export SCREENPIPE_DIR="/path/to/screenpipe"
+export PIPE_ID="my-pipe"
+export PIPE_FILE="pipe.ts"
+export PIPE_DIR="/path/to/screenpipe/pipes/my-pipe"
+````
 
 once the pipe is ready, follow these steps to make it work with `screenpipe`:
 
@@ -97,23 +228,46 @@ once the pipe is ready, follow these steps to make it work with `screenpipe`:
   screenpipe pipe enable pipe-name
   ```
 
-this setup enables the creation of countless workflows tailored to specific needs, automating tedious or complex tasks.
+- **run the pipe** (restart screenpipe):
+  ```bash
+  screenpipe
+  ```
 
-you can also load & enable pipes from the app UI, go to pipe store, and click relevant buttons.
+you can also use the UI to download and enable your pipe (add the path or URL, click the button, enable, config, restart screenpipe).
+
+### screenpipe-js SDK 
+
+cool stuff:
+- `pipe.inbox.send` to send AI messages to the user and ask for confirmation before any dangerous actions.
+- `pipe.sendDesktopNotification` to send a desktop notification to the user.
+- `pipe.queryScreenpipe` to query the screenpipe data.
+
+etc.
+
+[checkout the special api for interacting with screenpipe.](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/main.ts)
+
+
+### closing thoughts
+
+think of pipes like a local Zapier which costs 10x less, 10x less friction because you don't need to authenticate etc. 
+and with the full context of your screen and audio data.
 
 please send a PR with your pipe to the repo, we will review and merge it!
 
 we also do bounties for new pipes, or if you talk about screenpipe on social media, we give $100+!
 
-also we would love to build integration with Stripe, etc. so you can create a paid pipe for example and
-we would be happy to help you make money!
+we're working on integration with Stripe, to allow you to monetize your pipes, feel free to reach out for early access.
 
-### tips & hacks 
+[louis@screenpi.pe](mailto:louis@screenpi.pe)
 
+### outro 
+
+- we use deno to run the pipe within the Rust codebase.
 - you can use `pipe.json` to let others pass configuration options to your pipe through the UI or CLI.
 - pipes have access to a special API that allows you to interact with your computer or special features like sending notifications, sending emails, etc.
-- check this [file](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/deno/runtime.js) for more details.
-- in general we recommend using local LLMs like ollama as the data can be large and sensitive.
+- check this [file](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/pipes.rs) for more details on impl.
+- in general we recommend using local LLMs like ollama as the data can be large and sensitive and JSON outputs.
+- we recommend using [vercel ai sdk](https://github.com/vercel/ai) for faster dev.
 - deno caches dependencies and sometimes need to clear/reload cache
 
 ### known limitations

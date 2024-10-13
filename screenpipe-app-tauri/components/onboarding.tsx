@@ -11,7 +11,6 @@ import OnboardingDevOrNonDev from "@/components/onboarding/dev-or-non-dev";
 import OnboardingDevConfig from "@/components/onboarding/dev-configuration";
 import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import OnboardingInstructions from "@/components/onboarding/explain-instructions";
-import OnboardingExperimentalFeatures from "@/components/onboarding/features-experimental";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 
 const setFirstTimeUserFlag = async () => {
@@ -27,8 +26,7 @@ type SlideKey =
   | "devOrNonDev"
   | "devConfig"
   | "pipes"
-  | "instructions"
-  | "experimentalFeatures";
+  | "instructions";
 
 const slideFlow: Record<
   SlideKey,
@@ -116,7 +114,7 @@ const slideFlow: Record<
   },
   instructions: {
     // instructions for every type of user
-    next: () => "experimentalFeatures",
+    next: () => null,
     prev: (selectedOptions, selectedPreference, selectedPersonalization) => {
       if (selectedPreference === "devMode") return "pipes";
       if (selectedOptions?.includes("personalUse")) return "personalize";
@@ -125,11 +123,6 @@ const slideFlow: Record<
       if (selectedPersonalization === "withAI") return "apiSetup";
       return "devOrNonDev";
     },
-  },
-  experimentalFeatures: {
-    // experimental features
-    next: () => null,
-    prev: () => "instructions",
   },
 };
 
@@ -253,7 +246,7 @@ const Onboarding: React.FC = () => {
   return (
     <Dialog open={showOnboarding} onOpenChange={handleDialogClose}>
       <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]">
-        <div className="relative w-full h-full overflow-hidden">
+        <div className="flex flex-col w-full h-full overflow-hidden">
           {currentSlide === "intro" && (
             <OnboardingIntro
               className={`transition-opacity duration-300 
