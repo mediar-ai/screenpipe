@@ -180,7 +180,7 @@ async fn record_video(
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
-    let rt = tokio::runtime::Handle::current();
+    let rt = Handle::current();
     let new_chunk_callback = move |file_path: &str| {
         let db_chunk_callback = Arc::clone(&db_chunk_callback);
         let file_path = file_path.to_string();
@@ -259,8 +259,10 @@ async fn record_audio(
     friend_wearable_uid: Option<String>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<()> {
+    const OVERLAP_DURATION: Duration = Duration::from_secs(2);
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
-
+    let mut previous_transcript = "".to_string();
+    let mut previous_transcript_id: Option<i64> = None;
     loop {
         while let Some((audio_device, device_control)) = audio_devices_control.pop() {
             debug!("Received audio device: {}", &audio_device);
@@ -282,61 +284,74 @@ async fn record_audio(
 
             let handle = tokio::spawn(async move {
                 let audio_device_clone = Arc::clone(&audio_device);
-                let device_control_clone = Arc::clone(&device_control);
+                let error = Arc::new(AtomicBool::new(false));
                 debug!(
                     "Starting audio capture thread for device: {}",
                     &audio_device
                 );
 
+                let error_clone = Arc::clone(&error);
                 let mut iteration = 0;
                 loop {
-                    iteration += 1;
-                    debug!(
-                        "Starting iteration {} for device {}",
-                        iteration, audio_device_clone
-                    );
-
-                    let whisper_sender = whisper_sender_clone.clone();
-                    let audio_device_clone = audio_device_clone.clone();
-                    let audio_device_clone_2 = audio_device_clone.clone();
-                    let device_control_clone = device_control_clone.clone();
-
-                    debug!(
-                        "Starting record_and_transcribe for device {} (iteration {})",
-                        audio_device_clone, iteration
-                    );
-                    let result = record_and_transcribe(
-                        audio_device_clone,
-                        chunk_duration,
-                        whisper_sender,
-                        Arc::new(AtomicBool::new(device_control_clone.is_running)),
-                    )
-                    .await;
-                    info!(
-                        "Finished record_and_transcribe for device {} (iteration {})",
-                        audio_device_clone_2, iteration
-                    );
-
-                    match result {
-                        Ok(file_path) => {
-                            info!(
-                                "Recording complete for device {} (iteration {}): {:?}",
-                                audio_device, iteration, file_path
-                            );
-                        }
-                        Err(e) => {
-                            error!(
-                                "Error in record_and_transcribe for device {} (iteration {}): {}, stopping thread",
-                                audio_device, iteration, e
-                            );
-                            break;
-                        }
+                    let device_control_clone = Arc::clone(&device_control);
+                    let whisper_sender_clone = whisper_sender_clone.clone();
+                    let error_clone = Arc::clone(&error_clone);
+                    if error_clone.load(Ordering::Relaxed) {
+                        break;
                     }
+                    let audio_device = Arc::clone(&audio_device_clone);
+                    iteration += 1;
+                    tokio::spawn(async move {
+                        debug!(
+                            "Starting iteration {} for device {}",
+                            iteration, audio_device
+                        );
 
-                    info!(
-                        "Finished iteration {} for device {}",
-                        iteration, &audio_device
-                    );
+                        // let error_clone = Arc::clone(&error_clone);
+                        // let whisper_sender_clone_2 = whisper_sender_clone.clone();
+                        let audio_device_clone = audio_device.clone();
+                        // let audio_device_clone_2 = audio_device.clone();
+
+                        debug!(
+                            "Starting record_and_transcribe for device {} (iteration {})",
+                            audio_device_clone, iteration
+                        );
+                        let result = record_and_transcribe(
+                            audio_device,
+                            // audio_device_clone,
+                            chunk_duration,
+                            whisper_sender_clone.clone(),
+                            // whisper_sender_clone_2.clone(),
+                            Arc::new(AtomicBool::new(device_control_clone.is_running)),
+                        )
+                        .await;
+                        info!(
+                            "Finished record_and_transcribe for device {} (iteration {})",
+                            audio_device_clone, iteration
+                        );
+
+                        match result {
+                            Ok(file_path) => {
+                                info!(
+                                    "Recording complete for device {} (iteration {}): {:?}",
+                                    audio_device_clone, iteration, file_path
+                                );
+                            }
+                            Err(e) => {
+                                error!(
+                                "Error in record_and_transcribe for device {} (iteration {}): {}, stopping thread",
+                                audio_device_clone, iteration, e
+                            );
+                                error_clone.store(true, Ordering::Relaxed);
+                            }
+                        }
+                        info!(
+                            "Finished iteration {} for device {}",
+                            iteration, &audio_device_clone
+                        );
+                    });
+
+                    tokio::time::sleep(chunk_duration - OVERLAP_DURATION).await;
                 }
 
                 info!("Exiting audio capture thread for device: {}", &audio_device);
@@ -354,22 +369,39 @@ async fn record_audio(
             }
         });
 
-        while let Ok(transcription) = whisper_receiver.try_recv() {
+        while let Ok(mut transcription) = whisper_receiver.try_recv() {
             info!(
                 "device {} received transcription {:?}",
                 transcription.input.device, transcription.transcription
             );
-            // avoiding crashing the audio processing if one fails
-            if let Err(e) = process_audio_result(
+
+            // Insert the new transcript after fetching
+            let mut current_transcript: Option<String> = transcription.transcription.clone();
+            let mut processed_previous = "".to_string();
+            if let Some((previous, current)) =
+                transcription.cleanup_overlap(previous_transcript.clone())
+            {
+                current_transcript = Some(current);
+                processed_previous = previous;
+            }
+
+            transcription.transcription = current_transcript.clone();
+            // Process the audio result
+            match process_audio_result(
                 &db,
                 transcription,
                 friend_wearable_uid.as_deref(),
                 audio_transcription_engine.clone(),
+                processed_previous,
+                previous_transcript_id,
             )
             .await
             {
-                error!("Error processing audio result: {}", e);
-                // Optionally, you can add more specific error handling here
+                Err(e) => error!("Error processing audio result: {}", e),
+                Ok(id) => {
+                    previous_transcript = current_transcript.unwrap();
+                    previous_transcript_id = id
+                }
             }
         }
 
@@ -382,14 +414,17 @@ async fn process_audio_result(
     result: TranscriptionResult,
     _friend_wearable_uid: Option<&str>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-) -> Result<(), anyhow::Error> {
+    previous_transcript: String,
+    previous_transcript_id: Option<i64>,
+) -> Result<Option<i64>, anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
         error!(
             "Error in audio recording: {}. Not inserting audio result",
             result.error.unwrap_or_default()
         );
-        return Ok(());
+        return Ok(None);
     }
+
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
 
@@ -397,10 +432,27 @@ async fn process_audio_result(
         "device {} inserting audio chunk: {:?}",
         result.input.device, result.path
     );
+    if let Some(id) = previous_transcript_id {
+        match db
+            .update_audio_transcription(id, previous_transcript.as_str())
+            .await
+        {
+            Ok(audio_chunk_id) => {
+                debug!(
+                    "Inserted audio transcription for chunk {} from device {} using {}",
+                    audio_chunk_id, result.input.device, transcription_engine
+                );
+            }
+            Err(e) => error!(
+                "Failed to update transcription for {}: audio_chunk_id {}",
+                result.input.device, e
+            ),
+        }
+    }
     match db.insert_audio_chunk(&result.path).await {
         Ok(audio_chunk_id) => {
             if transcription.is_empty() {
-                return Ok(());
+                return Ok(Some(audio_chunk_id));
             }
 
             if let Err(e) = db
@@ -417,7 +469,7 @@ async fn process_audio_result(
                     "Failed to insert audio transcription for device {}: {}",
                     result.input.device, e
                 );
-                return Ok(());
+                return Ok(Some(audio_chunk_id));
             } else {
                 debug!(
                     "Inserted audio transcription for chunk {} from device {} using {}",
@@ -430,5 +482,5 @@ async fn process_audio_result(
             result.input.device, e
         ),
     }
-    Ok(())
+    Ok(None)
 }
