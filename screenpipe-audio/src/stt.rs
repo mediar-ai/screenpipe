@@ -1,20 +1,20 @@
 use anyhow::Result;
 use candle::Tensor;
+use candle_transformers::models::whisper::{self as m, audio};
 use chrono::Utc;
 use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
+use rubato::{
+    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+};
+use std::cmp::min;
 use std::collections::HashSet;
 use std::{
     path::PathBuf,
     string,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
-};
-use std::cmp::min;
-use candle_transformers::models::whisper::{self as m, audio};
-use rubato::{
-    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
 use crate::{
@@ -26,9 +26,9 @@ use crate::{
 };
 
 use hound::{WavSpec, WavWriter};
-use std::io::Cursor;
 use reqwest::Client;
 use serde_json::Value;
+use std::io::Cursor;
 
 // Replace the get_deepgram_api_key function with this:
 fn get_deepgram_api_key() -> String {
@@ -203,24 +203,22 @@ pub async fn stt(
     let mut total_frames = 0;
     let mut speech_frame_count = 0;
 
-    let mut  noise = 0.;
+    let mut noise = 0.;
 
     for chunk in audio_data.chunks(frame_size) {
         total_frames += 1;
         match vad_engine.audio_type(chunk) {
-            Ok(status) => {
-                match status {
-                    VadStatus::Speech => {
-                        let processed_audio = spectral_subtraction(chunk, noise)?;
-                        speech_frames.extend(processed_audio);
-                        speech_frame_count += 1;
-                    },
-                    VadStatus::Unknown => {
-                        noise = average_noise_spectrum(chunk);
-                    },
-                    _  => {}
+            Ok(status) => match status {
+                VadStatus::Speech => {
+                    let processed_audio = spectral_subtraction(chunk, noise)?;
+                    speech_frames.extend(processed_audio);
+                    speech_frame_count += 1;
                 }
-            }
+                VadStatus::Unknown => {
+                    noise = average_noise_spectrum(chunk);
+                }
+                _ => {}
+            },
             Err(e) => {
                 debug!("VAD failed for chunk: {:?}", e);
             }
@@ -402,8 +400,14 @@ pub async fn stt(
                 // convert start to float
                 let num_regex = Regex::new(r"([<>|])")?;
                 let start_clone = start.clone();
-                let s_time = num_regex.replace_all(start_clone.as_str(), "").parse::<f32>()?;
-                let e_time = num_regex.replace_all(end.as_str(), "").parse::<f32>()?;
+                let s_time = num_regex
+                    .replace_all(start_clone.as_str(), "")
+                    .parse::<f32>()
+                    .unwrap_or(min_time);
+                let e_time = num_regex
+                    .replace_all(end.as_str(), "")
+                    .parse::<f32>()
+                    .unwrap_or(max_time);
 
                 if min_time > s_time {
                     min_time = s_time;
@@ -415,7 +419,6 @@ pub async fn stt(
                 // hallucination still present if last range is largest? or if duplicate range?
                 // still unclear https://github.com/openai/whisper/discussions/679 (try)
                 if ranges.insert(start) {
-
                     if segments_len > 1 && i == segments_len - 1 {
                         if s_time == min_time && e_time == max_time {
                             continue;
@@ -493,9 +496,35 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
+
+impl TranscriptionResult {
+    // TODO --optimize
+    pub fn cleanup_overlap(&mut self, previous_transcript: String) -> Option<(String, String)> {
+        if let Some(transcription) = &self.transcription {
+            let transcription = transcription.to_string();
+            if let Some((prev_idx, cur_idx)) =
+                longest_common_word_substring(previous_transcript.as_str(), transcription.as_str())
+            {
+                // strip old transcript from prev_idx word pos
+                let new_prev = previous_transcript
+                    .split_whitespace()
+                    .collect::<Vec<&str>>()[..prev_idx]
+                    .join(" ");
+                // strip new transcript before cur_idx word pos
+                let new_cur =
+                    transcription.split_whitespace().collect::<Vec<&str>>()[cur_idx..].join(" ");
+
+                return Some((new_prev, new_cur));
+            }
+        }
+
+        None
+    }
+}
+
 use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
 use crate::whisper::Segment;
-use regex::{Regex, Replacer};
+use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use vad_rs::VadStatus;
 
@@ -616,4 +645,43 @@ pub async fn create_whisper_channel(
     });
 
     Ok((input_sender, output_receiver, shutdown_flag))
+}
+
+pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize)> {
+    let s1 = s1.to_lowercase();
+    let s2 = s2.to_lowercase();
+
+    let s1 = s1.replace(|c| char::is_ascii_punctuation(&c), "");
+    let s2 = s2.replace(|c| char::is_ascii_punctuation(&c), "");
+
+    let s1_words: Vec<&str> = s1.split_whitespace().collect();
+    let s2_words: Vec<&str> = s2.split_whitespace().collect();
+
+    let s1_len = s1_words.len();
+    let s2_len = s2_words.len();
+
+    // Table to store lengths of longest common suffixes of word substrings
+    let mut dp = vec![vec![0; s2_len + 1]; s1_len + 1];
+
+    let mut max_len = 0;
+    let mut max_index_s1 = None; // Store the starting word index of the longest substring in s1
+    let mut max_index_s2 = None; // Store the starting word index of the longest substring in s2
+
+    for i in 1..=s1_len {
+        for j in 1..=s2_len {
+            if s1_words[i - 1] == s2_words[j - 1] {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+                if dp[i][j] > max_len {
+                    max_len = dp[i][j];
+                    max_index_s1 = Some(i - max_len); // The start index of the match in s1
+                    max_index_s2 = Some(j - max_len); // The start index of the match in s2
+                }
+            }
+        }
+    }
+
+    match (max_index_s1, max_index_s2) {
+        (Some(idx1), Some(idx2)) => Some((idx1, idx2)),
+        _ => None,
+    }
 }
