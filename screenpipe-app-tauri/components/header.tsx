@@ -25,6 +25,8 @@ import { InboxMessages, Message } from "@/components/inbox-messages";
 import { useState, useRef, useEffect } from "react";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
+import { listen } from "@tauri-apps/api/event";
+import localforage from "localforage";
 
 function IconNewChat() {
   return (
@@ -48,14 +50,53 @@ export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
 
-  const handleMessageRead = (id: string) => {
-    setMessages(
-      messages.map((msg) => (msg.id === id ? { ...msg, read: true } : msg))
-    );
+  useEffect(() => {
+    const loadMessages = async () => {
+      const savedMessages = await localforage.getItem<Message[]>("inboxMessages");
+      if (savedMessages) {
+        setMessages(savedMessages);
+      }
+    };
+
+    loadMessages();
+
+    const unlisten = listen<Message>("inbox-message-received", async (event) => {
+      console.log("inbox-message-received", event);
+      const newMessage: Message = {
+        id: Date.now().toString(),
+        title: event.payload.title,
+        body: event.payload.body,
+        date: new Date().toISOString(),
+        read: false,
+      };
+      setMessages((prevMessages) => {
+        const updatedMessages = [newMessage, ...prevMessages];
+        localforage.setItem("inboxMessages", updatedMessages);
+        return updatedMessages;
+      });
+    });
+
+    return () => {
+      unlisten.then((unlistenFn) => unlistenFn());
+    };
+  }, []);
+
+  const handleMessageRead = async (id: string) => {
+    setMessages((prevMessages) => {
+      const updatedMessages = prevMessages.map((msg) =>
+        msg.id === id ? { ...msg, read: true } : msg
+      );
+      localforage.setItem("inboxMessages", updatedMessages);
+      return updatedMessages;
+    });
   };
 
-  const handleMessageDelete = (id: string) => {
-    setMessages(messages.filter((msg) => msg.id !== id));
+  const handleMessageDelete = async (id: string) => {
+    setMessages((prevMessages) => {
+      const updatedMessages = prevMessages.filter((msg) => msg.id !== id);
+      localforage.setItem("inboxMessages", updatedMessages);
+      return updatedMessages;
+    });
   };
 
   const { setShowOnboarding } = useOnboarding();

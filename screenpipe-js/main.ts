@@ -103,6 +103,17 @@ export interface ScreenpipeResponse {
 }
 
 /**
+ * Parsed config
+ */
+export interface ParsedConfig<T = unknown> {
+  fields: {
+    name: string;
+    value?: T;
+    default?: T;
+  }[]
+}
+
+/**
  * Utility function to convert snake_case to camelCase
  */
 function toCamelCase(str: string): string {
@@ -156,9 +167,9 @@ export function loadPipeConfig(): PipeConfig {
   try {
     const configPath = `${process.env.SCREENPIPE_DIR}/pipes/${process.env.PIPE_ID}/pipe.json`;
     const configContent = fs.readFileSync(configPath, "utf8");
-    const parsedConfig = JSON.parse(configContent);
+    const parsedConfig: ParsedConfig = JSON.parse(configContent);
     const config: PipeConfig = {};
-    parsedConfig.fields.forEach((field: any) => {
+    parsedConfig.fields.forEach((field) => {
       config[field.name] =
         field.value !== undefined ? field.value : field.default;
     });

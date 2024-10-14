@@ -93,16 +93,13 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
 
   return (
     <div className={`${className} flex flex-col h-full`}>
-      <DialogHeader className="flex justify-center items-center">
-        <div className="w-full !mt-[-10px] inline-flex justify-center">
-          <img
-            src="/128x128.png"
-            alt="screenpipe-logo"
-            width="72"
-            height="72"
-          />
-        </div>
-        <DialogTitle className="font-bold text-[30px] text-balance">
+      <DialogHeader className="flex flex-col px-2 justify-center items-center">
+        <img
+          className="w-24 h-24 justify-center"
+          src="/128x128.png"
+          alt="screenpipe-logo"
+        />
+        <DialogTitle className="text-center text-2xl">
           what are you planning to use the screenpipe for?
         </DialogTitle>
       </DialogHeader>
@@ -121,7 +118,6 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
         ))}
       </div>
       <OnboardingNavigation
-        className="mt-auto"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={handleNext}
         prevBtnText="previous"

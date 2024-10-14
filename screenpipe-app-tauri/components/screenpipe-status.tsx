@@ -64,8 +64,8 @@ ${cliInstructions}
 
   const logPath =
     os === "windows"
-      ? "%USERPROFILE%\\.screenpipe\\screenpipe.log"
-      : "$HOME/.screenpipe/screenpipe.log";
+      ? `%USERPROFILE%\\.screenpipe\\screenpipe.${new Date().toISOString().split('T')[0]}.log`
+      : `$HOME/.screenpipe/screenpipe.${new Date().toISOString().split('T')[0]}.log`;
 
   const dbPath =
     os === "windows"
@@ -386,8 +386,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
       const homeDirPath = await homeDir();
       const logPath =
         platform() === "windows"
-          ? `${homeDirPath}\\.screenpipe\\screenpipe.log`
-          : `${homeDirPath}/.screenpipe/screenpipe.log`;
+          ? `${homeDirPath}\\.screenpipe\\screenpipe.${new Date().toISOString().split('T')[0]}.log`
+          : `${homeDirPath}/.screenpipe/screenpipe.${new Date().toISOString().split('T')[0]}.log`;
       await open(logPath);
     } catch (error) {
       console.error("failed to open log file:", error);

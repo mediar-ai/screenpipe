@@ -66,6 +66,12 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "pipe-post-questions-on-reddit",
+    description:
+      "get more followers, promote your content/product while being useful, without doing any work",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit",
+  },
+  {
     id: "pipe-meeting-summary-by-email",
     description:
       "send you regular emails summarizing your meetings using ollama+llama3.2",
@@ -403,7 +409,7 @@ const PipeDialog: React.FC = () => {
 
           {selectedPipe.source?.startsWith("http") && (
             <Button
-              onClick={() => openUrl(selectedPipe.source, "_blank")}
+              onClick={() => openUrl(selectedPipe.source)}
               variant="outline"
             >
               <ExternalLink className="mr-2 h-4 w-4" />

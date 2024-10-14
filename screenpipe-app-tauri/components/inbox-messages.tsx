@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,11 +22,9 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog";
-import { listen } from "@tauri-apps/api/event";
 import { MemoizedReactMarkdown } from "./markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import localforage from "localforage";
 import { format } from "date-fns";
 
 export interface Message {
@@ -45,12 +43,11 @@ interface InboxMessagesProps {
 }
 
 export function InboxMessages({
-  messages: initialMessages,
+  messages,
   onMessageRead,
   onMessageDelete,
   onClose,
 }: InboxMessagesProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(
     new Set()
   );
@@ -58,58 +55,12 @@ export function InboxMessages({
   const [dialogOpen, setDialogOpen] = useState(false);
   const inboxRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const loadMessages = async () => {
-      const savedMessages = await localforage.getItem<Message[]>(
-        "inboxMessages"
-      );
-      if (savedMessages) {
-        setMessages(savedMessages);
-      } else {
-        setMessages(initialMessages);
+  const handleMarkAllAsRead = () => {
+    messages.forEach((msg) => {
+      if (!msg.read) {
+        onMessageRead(msg.id);
       }
-    };
-
-    loadMessages();
-
-    const unlisten = listen<Message>(
-      "inbox-message-received",
-      async (event) => {
-        console.log("inbox-message-received", event);
-        const newMessage: Message = {
-          id: Date.now().toString(),
-          title: event.payload.title,
-          body: event.payload.body,
-          date: new Date().toISOString(),
-          read: false,
-        };
-        const updatedMessages = [newMessage, ...messages];
-        setMessages(updatedMessages);
-        await localforage.setItem("inboxMessages", updatedMessages);
-      }
-    );
-
-    return () => {
-      unlisten.then((unlistenFn) => unlistenFn());
-    };
-  }, [initialMessages, messages]);
-
-  const handleMarkAllAsRead = async () => {
-    const updatedMessages = messages.map((msg) => ({ ...msg, read: true }));
-    setMessages([]); // Clear all messages from the display
-    await localforage.setItem("inboxMessages", updatedMessages);
-    updatedMessages.forEach((msg) => {
-      onMessageRead(msg.id);
-      onMessageDelete(msg.id); // Add this to remove messages from parent state
     });
-  };
-
-  const handleMessageAction = async (id: string) => {
-    const updatedMessages = messages.filter((msg) => msg.id !== id);
-    setMessages(updatedMessages);
-    await localforage.setItem("inboxMessages", updatedMessages);
-    onMessageRead(id);
-    onMessageDelete(id);
   };
 
   const toggleMessageExpansion = (id: string) => {
@@ -135,20 +86,11 @@ export function InboxMessages({
     return format(date, "MMM d, yyyy 'at' h:mm a");
   };
 
-  const handleMessageRead = async (id: string) => {
-    const updatedMessages = messages.map((msg) =>
-      msg.id === id ? { ...msg, read: true } : msg
-    );
-    setMessages(updatedMessages);
-    await localforage.setItem("inboxMessages", updatedMessages);
-    onMessageRead(id);
-  };
-
   const openDialog = (message: Message) => {
     setDialogMessage(message);
     setDialogOpen(true);
     if (!message.read) {
-      handleMessageRead(message.id);
+      onMessageRead(message.id);
     }
   };
 
@@ -156,9 +98,9 @@ export function InboxMessages({
     setDialogOpen(false);
   };
 
-  const handleDeleteAndClose = async () => {
+  const handleDeleteAndClose = () => {
     if (dialogMessage) {
-      await handleMessageAction(dialogMessage.id);
+      onMessageDelete(dialogMessage.id);
       closeDialog();
     }
   };
@@ -170,7 +112,7 @@ export function InboxMessages({
         !inboxRef.current.contains(event.target as Node)
       ) {
         if (!dialogOpen) {
-          onClose(); // Close the entire inbox component
+          onClose();
         }
       }
     }
@@ -231,23 +173,26 @@ export function InboxMessages({
                     <CardContent className="py-2">
                       <div className="w-full overflow-hidden">
                         <MemoizedReactMarkdown
-                          className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-[35vw]  text-sm"
+                          className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-[35vw] text-sm"
                           remarkPlugins={[remarkGfm, remarkMath]}
                           components={{
                             p: ({ children }) => (
                               <p className="mb-2 last:mb-0">{children}</p>
                             ),
-                            a: ({ node, href, children, ...props }) => (
-                              <a
-                                href={href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="break-all"
-                                {...props}
-                              >
-                                {children}
-                              </a>
-                            ),
+                            a: ({ node, href, children, ...props }) => {
+                              const isExternal = href?.startsWith('http') || href?.startsWith('https');
+                              return (
+                                <a
+                                  href={href}
+                                  target={isExternal ? "_blank" : undefined}
+                                  rel={isExternal ? "noopener noreferrer" : undefined}
+                                  className="break-all text-blue-500 hover:underline"
+                                  {...props}
+                                >
+                                  {children}
+                                </a>
+                              );
+                            },
                           }}
                         >
                           {expandedMessages.has(message.id)
@@ -280,7 +225,7 @@ export function InboxMessages({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleMessageAction(message.id)}
+                        onClick={() => onMessageDelete(message.id)}
                         className="text-xs"
                       >
                         <X className="mr-1 h-4 w-4" />
