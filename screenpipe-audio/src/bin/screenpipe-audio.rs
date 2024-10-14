@@ -11,6 +11,7 @@ use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
+use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -29,13 +30,16 @@ struct Args {
     #[clap(long, help = "List available audio devices")]
     list_audio_devices: bool,
 
+    #[clap(short = 'l', long, value_enum)]
+    language: Vec<Language>,
+
     #[clap(long, help = "Deepgram API key")]
     deepgram_api_key: Option<String>,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
-    for (_, device) in devices.iter().enumerate() {
+    for device in devices.iter() {
         println!("  {}", device);
     }
 
@@ -64,6 +68,8 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    let languages = args.language;
+
     let deepgram_api_key = args.deepgram_api_key;
 
     let devices = if args.audio_device.is_empty() {
@@ -91,13 +97,13 @@ async fn main() -> Result<()> {
         deepgram_api_key,
         &output_path,
         VadSensitivity::Medium,
+        languages,
     )
     .await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()
-        .enumerate()
-        .map(|(_, device)| {
+        .map(|device| {
             let device = Arc::new(device);
             let whisper_sender = whisper_sender.clone();
             let device_control = Arc::new(AtomicBool::new(true));
@@ -113,6 +119,7 @@ async fn main() -> Result<()> {
                     whisper_sender,
                     device_control_clone,
                 )
+                .await
             })
         })
         .collect();
@@ -139,7 +146,7 @@ async fn main() -> Result<()> {
 
     // Wait for all recording threads to finish
     for (i, thread) in recording_threads.into_iter().enumerate() {
-        let file_path = thread.await.unwrap().await;
+        let file_path = thread.await.unwrap();
         println!("Recording {} complete: {:?}", i, file_path);
     }
 

@@ -155,6 +155,7 @@ pub fn stt_sync(
     handle.join().unwrap()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn stt(
     audio_input: &AudioInput,
     whisper_model: &WhisperModel,
@@ -290,7 +291,7 @@ pub async fn stt(
                         "device: {}, converting pcm to mel spectrogram",
                         audio_input.device
                     );
-                    let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
+                    let mel = audio::pcm_to_mel(model.config(), &speech_frames, &mel_filters);
                     let mel_len = mel.len();
                     debug!(
                         "device: {}, creating tensor from mel spectrogram",
@@ -303,13 +304,13 @@ pub async fn stt(
                             model.config().num_mel_bins,
                             mel_len / model.config().num_mel_bins,
                         ),
-                        &device,
+                        device,
                     )?;
 
                     debug!("device: {}, detecting language", audio_input.device);
                     let language_token = Some(multilingual::detect_language(
                         &mut model.clone(),
-                        &tokenizer,
+                        tokenizer,
                         &mel,
                         languages,
                     )?);
@@ -319,7 +320,7 @@ pub async fn stt(
                         &mut model,
                         tokenizer,
                         42,
-                        &device,
+                        device,
                         language_token,
                         true,
                         false,
@@ -344,7 +345,7 @@ pub async fn stt(
                 "device: {}, converting pcm to mel spectrogram",
                 audio_input.device
             );
-            let mel = audio::pcm_to_mel(&model.config(), &speech_frames, &mel_filters);
+            let mel = audio::pcm_to_mel(model.config(), &speech_frames, &mel_filters);
             let mel_len = mel.len();
             debug!(
                 "device: {}, creating tensor from mel spectrogram",
@@ -357,13 +358,13 @@ pub async fn stt(
                     model.config().num_mel_bins,
                     mel_len / model.config().num_mel_bins,
                 ),
-                &device,
+                device,
             )?;
 
             debug!("device: {}, detecting language", audio_input.device);
             let language_token = Some(multilingual::detect_language(
                 &mut model.clone(),
-                &tokenizer,
+                tokenizer,
                 &mel,
                 languages,
             )?);
@@ -373,7 +374,7 @@ pub async fn stt(
                 &mut model,
                 tokenizer,
                 42,
-                &device,
+                device,
                 language_token,
                 true,
                 false,
@@ -425,10 +426,12 @@ pub async fn stt(
                 // hallucination still present if last range is largest? or if duplicate range?
                 // still unclear https://github.com/openai/whisper/discussions/679 (try)
                 if ranges.insert(start) {
-                    if segments_len > 1 && i == segments_len - 1 {
-                        if s_time == min_time && e_time == max_time {
-                            continue;
-                        }
+                    if segments_len > 1
+                        && i == segments_len - 1
+                        && s_time == min_time
+                        && e_time == max_time
+                    {
+                        continue;
                     }
 
                     text = token_regex.replace_all(text.as_str(), "").to_string();
@@ -502,6 +505,32 @@ pub struct TranscriptionResult {
     pub timestamp: u64,
     pub error: Option<String>,
 }
+
+impl TranscriptionResult {
+    // TODO --optimize
+    pub fn cleanup_overlap(&mut self, previous_transcript: String) -> Option<(String, String)> {
+        if let Some(transcription) = &self.transcription {
+            let transcription = transcription.to_string();
+            if let Some((prev_idx, cur_idx)) =
+                longest_common_word_substring(previous_transcript.as_str(), transcription.as_str())
+            {
+                // strip old transcript from prev_idx word pos
+                let new_prev = previous_transcript
+                    .split_whitespace()
+                    .collect::<Vec<&str>>()[..prev_idx]
+                    .join(" ");
+                // strip new transcript before cur_idx word pos
+                let new_cur =
+                    transcription.split_whitespace().collect::<Vec<&str>>()[cur_idx..].join(" ");
+
+                return Some((new_prev, new_cur));
+            }
+        }
+
+        None
+    }
+}
+
 use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};

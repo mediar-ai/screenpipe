@@ -43,7 +43,7 @@ pub fn spectral_subtraction(audio: &[f32], d: f32) -> Result<Vec<f32>> {
         .map(|&x| {
             let magnitude_y = x.abs().powf(2.0);
 
-            let div = 1.0 - (d / magnitude_y) as f32;
+            let div = 1.0 - (d / magnitude_y);
 
             let gain = {
                 if div > 0.0 {
