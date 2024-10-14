@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use crossbeam::queue::ArrayQueue;
-use futures::executor::block_on;
+use futures::executor::block_on; // Ensure futures crate is added to Cargo.toml
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -104,7 +104,7 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
     AudioDevice::from_name(name)
 }
 
-pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
+pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     let host = cpal::default_host();
     let mut devices = Vec::new();
 
@@ -154,11 +154,13 @@ pub fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     }
 
     // Last, add devices that are listed in .devices() which are not already in the devices vector
-    let other_devices = host.devices().unwrap();
+    let other_devices = host.devices()?;
     for device in other_devices {
-        if !devices.iter().any(|d| d.name == device.name().unwrap()) {
-            // TODO: not sure if it can be input, usually aggregate or multi output
-            devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
+        if let Ok(device_name) = device.name() {
+            if !devices.iter().any(|d| d.name == device_name) {
+                // TODO: not sure if it can be input, usually aggregate or multi output
+                devices.push(AudioDevice::new(device_name, DeviceType::Output));
+            }
         }
     }
 
@@ -274,15 +276,18 @@ pub async fn record_and_transcribe(
 
     // Create an ArrayQueue with a capacity of 100 chunks (adjust as needed)
     let audio_queue = Arc::new(ArrayQueue::new(100));
-    let audio_queue_clone = Arc::clone(&audio_queue);
 
     // Use a Notify for graceful shutdown
     let notify = Arc::new(Notify::new());
-    let notify_clone_for_error: Arc<Notify> = Arc::clone(&notify);
-    let notify_clone_for_stream: Arc<Notify> = Arc::clone(&notify);
 
-    // Clone is_running for the error callback
-    let is_running_clone_for_error: Arc<AtomicBool> = Arc::clone(&is_running);
+    // Clone necessary variables for closures
+    let audio_queue_clone = Arc::clone(&audio_queue);
+    let is_running_clone_for_error = Arc::clone(&is_running);
+    let is_running_clone_for_stream = Arc::clone(&is_running);
+    let is_running_clone_for_collector = Arc::clone(&is_running);
+    let notify_clone_for_error = Arc::clone(&notify);
+    let notify_clone_for_stream = Arc::clone(&notify);
+
     let error_callback = move |err: StreamError| {
         error!("An error occurred on the audio stream: {}", err);
         // Handle specific errors if needed
@@ -292,10 +297,6 @@ pub async fn record_and_transcribe(
             notify_clone_for_error.notify_one();
         }
     };
-
-    // Clone is_running and notify for the stream closure
-    let is_running_clone_for_stream: Arc<AtomicBool> = Arc::clone(&is_running);
-    let stream_notify_clone: Arc<Notify> = Arc::clone(&notify_clone_for_stream);
 
     // Determine if the device is input or output
     let is_output_device = audio_device.device_type == DeviceType::Output;
@@ -309,35 +310,25 @@ pub async fn record_and_transcribe(
                     &config.into(),
                     move |_data: &mut [i8], _: &_| {
                         // Handle output audio data if needed
-                        // Typically, for output capture, you may not need to process data here
-                        // as you're capturing from monitor sources as input
-                        // So, do nothing or process if needed
                     },
                     error_callback,
                     None,
                 ),
                 cpal::SampleFormat::I16 => cpal_audio_device.build_output_stream(
                     &config.into(),
-                    move |_data: &mut [i16], _: &_| {
-                        // Handle output audio data
-                        // If not capturing, do nothing
-                    },
+                    move |_data: &mut [i16], _: &_| {},
                     error_callback,
                     None,
                 ),
                 cpal::SampleFormat::I32 => cpal_audio_device.build_output_stream(
                     &config.into(),
-                    move |_data: &mut [i32], _: &_| {
-                        // Handle output audio data
-                    },
+                    move |_data: &mut [i32], _: &_| {},
                     error_callback,
                     None,
                 ),
                 cpal::SampleFormat::F32 => cpal_audio_device.build_output_stream(
                     &config.into(),
-                    move |_data: &mut [f32], _: &_| {
-                        // Handle output audio data
-                    },
+                    move |_data: &mut [f32], _: &_| {},
                     error_callback,
                     None,
                 ),
@@ -354,7 +345,9 @@ pub async fn record_and_transcribe(
                     move |data: &[i8], _: &_| {
                         if is_running_clone_for_stream.load(Ordering::Relaxed) {
                             let converted = bytemuck::cast_slice(data).to_vec();
-                            let _ = audio_queue_clone.push(converted);
+                            if audio_queue_clone.push(converted).is_err() {
+                                warn!("Audio queue is full, dropping data");
+                            }
                         }
                     },
                     error_callback,
@@ -365,7 +358,9 @@ pub async fn record_and_transcribe(
                     move |data: &[i16], _: &_| {
                         if is_running_clone_for_stream.load(Ordering::Relaxed) {
                             let converted = bytemuck::cast_slice(data).to_vec();
-                            let _ = audio_queue_clone.push(converted);
+                            if audio_queue_clone.push(converted).is_err() {
+                                warn!("Audio queue is full, dropping data");
+                            }
                         }
                     },
                     error_callback,
@@ -376,7 +371,9 @@ pub async fn record_and_transcribe(
                     move |data: &[i32], _: &_| {
                         if is_running_clone_for_stream.load(Ordering::Relaxed) {
                             let converted = bytemuck::cast_slice(data).to_vec();
-                            let _ = audio_queue_clone.push(converted);
+                            if audio_queue_clone.push(converted).is_err() {
+                                warn!("Audio queue is full, dropping data");
+                            }
                         }
                     },
                     error_callback,
@@ -387,7 +384,9 @@ pub async fn record_and_transcribe(
                     move |data: &[f32], _: &_| {
                         if is_running_clone_for_stream.load(Ordering::Relaxed) {
                             let converted = data.to_vec();
-                            let _ = audio_queue_clone.push(converted);
+                            if audio_queue_clone.push(converted).is_err() {
+                                warn!("Audio queue is full, dropping data");
+                            }
                         }
                     },
                     error_callback,
@@ -406,12 +405,8 @@ pub async fn record_and_transcribe(
                     error!("Failed to play stream: {}", e);
                 }
                 // Keep the stream alive until notified to stop
-                block_on(stream_notify_clone.notified());
-                if is_output_device {
-                    stream.pause().ok();
-                } else {
-                    stream.pause().ok();
-                }
+                block_on(notify_clone_for_stream.notified());
+                stream.pause().ok();
                 drop(stream);
             }
             Err(e) => error!("Failed to build stream: {}", e),
@@ -423,9 +418,6 @@ pub async fn record_and_transcribe(
         audio_device.to_string(),
         duration.as_secs()
     );
-
-    // Clone is_running for the collector
-    let is_running_clone_for_collector = Arc::clone(&is_running);
 
     // Spawn a task to collect audio data
     let collector_handle = tokio::spawn(async move {
@@ -460,7 +452,7 @@ pub async fn record_and_transcribe(
     debug!("Sending audio to audio model");
     if let Err(e) = whisper_sender.send(AudioInput {
         data: Arc::new(audio_data),
-        device: audio_device.clone(),
+        device: audio_device.clone(), // Corrected line
         sample_rate,
         channels,
     }) {
