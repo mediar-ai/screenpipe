@@ -52,7 +52,11 @@ pub async fn perform_ocr_cloud(
     if !languages.is_empty() {
         form = form.text(
             "languages",
-            languages.map(|l: Language| l.to_string()).join("+"),
+            languages
+                .iter()
+                .map(|l| l.to_string())
+                .collect::<Vec<String>>()
+                .join("+"),
         );
     }
 

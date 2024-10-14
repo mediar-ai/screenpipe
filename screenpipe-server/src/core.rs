@@ -68,7 +68,7 @@ pub async fn start_continuous_recording(
             deepgram_api_key,
             &PathBuf::from(output_path.as_ref()),
             VadSensitivity::from(vad_sensitivity),
-            languages,
+            languages.clone(),
         )
         .await?
     };
@@ -95,6 +95,8 @@ pub async fn start_continuous_recording(
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
 
+                let languages = languages.clone();
+
                 debug!("Starting video recording for monitor {}", monitor_id);
                 vision_handle.spawn(async move {
                     record_video(
@@ -110,7 +112,7 @@ pub async fn start_continuous_recording(
                         &ignored_windows_video,
                         &include_windows_video,
                         video_chunk_duration,
-                        // TODO add languages                        // languages,
+                        languages.clone(),
                     )
                     .await
                 })
@@ -181,6 +183,7 @@ async fn record_video(
     ignored_windows: &[String],
     include_windows: &[String],
     video_chunk_duration: Duration,
+    languages: Vec<Language>,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -206,6 +209,7 @@ async fn record_video(
         monitor_id,
         ignored_windows,
         include_windows,
+        languages,
     );
 
     while is_running.load(Ordering::SeqCst) {

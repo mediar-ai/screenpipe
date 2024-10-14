@@ -1,4 +1,5 @@
 use clap::Parser;
+use screenpipe_core::Language;
 use screenpipe_vision::{continuous_capture, monitor::get_default_monitor, OcrEngine};
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
@@ -15,8 +16,8 @@ struct Cli {
     #[arg(long, default_value_t = 1.0)]
     fps: f32,
 
-    #[arg(value_enum(Language))]
-    language
+    #[arg(short = 'l', long, value_enum(Language))]
+    language: Vec<Language>,
 }
 
 #[tokio::main]
@@ -47,6 +48,7 @@ async fn main() {
             id,
             &[],
             &[],
+            languages,
         )
         .await
     });

@@ -1,4 +1,3 @@
-use futures_util::StreamExt;
 use image::DynamicImage;
 use rusty_tesseract::{Args, DataOutput, Image};
 use screenpipe_core::Language;
@@ -92,13 +91,13 @@ pub fn perform_ocr_tesseract(
         _ => LANGUAGES
             .iter()
             .filter_map(|(key, val)| {
-                if let Some(lang) = languages.iter().find(|l| l == val) {
+                if let Some(lang) = languages.iter().find(|l| l == &val) {
                     Some(key.to_string())
                 } else {
                     None
                 }
             })
-            .collect()
+            .collect::<Vec<String>>()
             .join("+"),
     };
     let args = Args {
