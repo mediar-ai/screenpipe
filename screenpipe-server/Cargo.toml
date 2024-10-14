@@ -16,6 +16,7 @@ serde_json = "1.0"
 screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
 screenpipe-core = { path = "../screenpipe-core", features = ["security"] }
+screenpipe-actions = { path = "../screenpipe-actions" }
 
 # Image processing
 image = { workspace = true }
@@ -52,7 +53,7 @@ env_logger = "0.10"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 # Cli ! shouldn't be required if using as lib
-clap = { version = "4.3", features = ["derive"] }
+clap = { version = "4.3", features = ["derive", "env"] }
 
 # Memory watchdog
 sysinfo = "0.29.0"
@@ -92,6 +93,8 @@ url = { version = "2.2.0", optional = true }
 # Telemetry
 highlightio = { version = "1.0.2", features = ["tokio"] }
 
+dotenv = "0.15.0"
+
 [dev-dependencies]
 tempfile = "3.3.0"
 
@@ -115,7 +118,7 @@ metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 pipes = ["screenpipe-core/pipes", "tempfile", "url"]
 llm = ["screenpipe-core/llm"]
-
+beta = ["screenpipe-core/beta"]
 
 [[bin]]
 name = "screenpipe"
