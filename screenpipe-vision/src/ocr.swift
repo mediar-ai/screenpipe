@@ -92,7 +92,12 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
       }
     }
 
-    textRequest.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+    var recognitionLanguages = try? VNRecognizeTextRequest().supportedRecognitionLanguages()
+    if recognitionLanguages == nil {
+        recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+    }
+
+    textRequest.recognitionLanguages = recognitionLanguages
     textRequest.recognitionLevel = .accurate
     textRequest.usesLanguageCorrection = true
 
