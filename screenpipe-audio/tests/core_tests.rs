@@ -288,7 +288,7 @@ mod tests {
         };
 
         // Initialize the WhisperModel
-        let whisper_model = WhisperModel::new(&AudioTranscriptionEngine::WhisperDistilLargeV3)
+        let mut whisper_model = WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo)
             .expect("Failed to initialize WhisperModel");
 
         // Initialize VAD engine
@@ -300,7 +300,7 @@ mod tests {
 
         let _ = stt(
             &audio_input,
-            &whisper_model,
+            &mut whisper_model,
             Arc::new(AudioTranscriptionEngine::WhisperTiny),
             &mut **vad_engine.lock().unwrap(),
             None,

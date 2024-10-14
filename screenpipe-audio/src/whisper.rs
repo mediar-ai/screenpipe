@@ -41,7 +41,7 @@ impl WhisperModel {
                     "main".to_string(),
                 ),
                 _ => Repo::with_revision(
-                    "openai/whisper-tiny".to_string(),
+                    "openai/whisper-large-v3-turbo".to_string(),
                     RepoType::Model,
                     "main".to_string(),
                 ),
