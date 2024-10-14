@@ -8,12 +8,14 @@ pub enum KeystrokeCommand {
     // Add other commands as needed
 }
 
+#[allow(dead_code)]
 pub struct KeystrokeMonitor {
     tx: mpsc::Sender<KeystrokeCommand>,
     last_slash: Arc<Mutex<Option<std::time::Instant>>>,
 }
 
 impl KeystrokeMonitor {
+    #[allow(dead_code)]
     pub fn new(tx: mpsc::Sender<KeystrokeCommand>) -> Self {
         KeystrokeMonitor {
             tx,
@@ -21,6 +23,7 @@ impl KeystrokeMonitor {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn start_monitoring(&self) -> anyhow::Result<()> {
         let tx = self.tx.clone();
         let last_slash = self.last_slash.clone();
@@ -37,6 +40,7 @@ impl KeystrokeMonitor {
     }
 }
 
+#[allow(dead_code)]
 fn handle_event(
     event: Event,
     tx: &mpsc::Sender<KeystrokeCommand>,
@@ -59,6 +63,7 @@ fn handle_event(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn run_keystroke_monitor(tx: mpsc::Sender<KeystrokeCommand>) -> anyhow::Result<()> {
     let monitor = KeystrokeMonitor::new(tx);
     monitor.start_monitoring().await?;
