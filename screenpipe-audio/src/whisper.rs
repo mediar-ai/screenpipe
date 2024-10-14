@@ -40,13 +40,8 @@ impl WhisperModel {
                     RepoType::Model,
                     "main".to_string(),
                 ),
-                crate::AudioTranscriptionEngine::WhisperLargeV3 => Repo::with_revision(
-                    "openai/whisper-large-v3".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
                 _ => Repo::with_revision(
-                    "openai/whisper-tiny".to_string(),
+                    "openai/whisper-large-v3-turbo".to_string(),
                     RepoType::Model,
                     "main".to_string(),
                 ),
