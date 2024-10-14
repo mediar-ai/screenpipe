@@ -14,7 +14,10 @@ use std::path::PathBuf;
 use tempfile::NamedTempFile;
 use tokio::time::{timeout, Duration};
 
-pub async fn perform_ocr_cloud(image: &DynamicImage) -> Result<(String, String, Option<f64>)> {
+pub async fn perform_ocr_cloud(
+    image: &DynamicImage,
+    languages: Vec<&str>,
+) -> Result<(String, String, Option<f64>)> {
     let api_key = match env::var("UNSTRUCTURED_API_KEY") {
         Ok(key) => key,
         Err(_) => {
@@ -43,7 +46,8 @@ pub async fn perform_ocr_cloud(image: &DynamicImage) -> Result<(String, String, 
     let form = Form::new()
         .part("files", part)
         .text("strategy", "auto")
-        .text("coordinates", "true");
+        .text("coordinates", "true")
+        .text("languages", languages.join("+"));
 
     let client = reqwest::Client::new();
     let response = match timeout(
