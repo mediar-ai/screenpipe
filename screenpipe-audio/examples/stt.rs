@@ -9,8 +9,8 @@ use strsim::levenshtein;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-#[tokio::test]
-async fn test_transcription_accuracy() {
+#[tokio::main]
+async fn main() {
     // Initialize tracing
     // tracing_subscriber::fmt()
     //     .with_max_level(tracing::Level::DEBUG)
@@ -93,8 +93,8 @@ async fn test_transcription_accuracy() {
                 &output_path,
                 true,
             )
-            .await
-            .unwrap();
+                .await
+                .unwrap();
             drop(vad_engine_guard);
 
             let distance = levenshtein(expected_transcription, &transcription);
@@ -115,10 +115,10 @@ async fn test_transcription_accuracy() {
         let (audio_file, expected_transcription, transcription, accuracy) = result.unwrap();
 
         println!("file: {}", audio_file);
-        // println!("expected: {}", expected_transcription);
-        // println!("actual: {}", transcription);
+        println!("expected: {}", expected_transcription);
+        println!("actual: {}", transcription);
         println!("accuracy: {:.2}%", accuracy * 100.0);
-        // println!();
+        println!();
 
         total_accuracy += accuracy;
         total_tests += 1;
