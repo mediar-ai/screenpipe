@@ -1,14 +1,11 @@
-use std::fmt;
 use clap::ValueEnum;
 use serde::Serialize;
+use std::fmt;
 
-#[derive(
-    ValueEnum, Clone, Debug, Serialize,
-)]
+#[derive(ValueEnum, Clone, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[repr(usize)]
 pub enum Language {
-
     #[clap(name = "english")]
     English,
     #[clap(name = "chinese")]
@@ -47,8 +44,6 @@ pub enum Language {
     Hindi,
     #[clap(name = "finnish")]
     Finnish,
-    #[clap(name = "vietnamese")]
-    Vietnamese,
     #[clap(name = "hebrew")]
     Hebrew,
     #[clap(name = "ukrainian")]
@@ -65,8 +60,6 @@ pub enum Language {
     Danish,
     #[clap(name = "hungarian")]
     Hungarian,
-    #[clap(name = "tamil")]
-    Tamil,
     #[clap(name = "norwegian")]
     Norwegian,
     #[clap(name = "thai")]
@@ -81,16 +74,12 @@ pub enum Language {
     Lithuanian,
     #[clap(name = "latin")]
     Latin,
-    #[clap(name = "maori")]
-    Maori,
     #[clap(name = "malayalam")]
     Malayalam,
     #[clap(name = "welsh")]
     Welsh,
     #[clap(name = "slovak")]
     Slovak,
-    #[clap(name = "telugu")]
-    Telugu,
     #[clap(name = "persian")]
     Persian,
     #[clap(name = "latvian")]
@@ -103,20 +92,10 @@ pub enum Language {
     Azerbaijani,
     #[clap(name = "slovenian")]
     Slovenian,
-    #[clap(name = "kannada")]
-    Kannada,
     #[clap(name = "estonian")]
     Estonian,
     #[clap(name = "macedonian")]
     Macedonian,
-    #[clap(name = "breton")]
-    Breton,
-    #[clap(name = "basque")]
-    Basque,
-    #[clap(name = "icelandic")]
-    Icelandic,
-    #[clap(name = "armenian")]
-    Armenian,
     #[clap(name = "nepali")]
     Nepali,
     #[clap(name = "mongolian")]
@@ -139,24 +118,10 @@ pub enum Language {
     Sinhala,
     #[clap(name = "khmer")]
     Khmer,
-    #[clap(name = "shona")]
-    Shona,
-    #[clap(name = "yoruba")]
-    Yoruba,
-    #[clap(name = "somali")]
-    Somali,
     #[clap(name = "afrikaans")]
     Afrikaans,
-    #[clap(name = "occitan")]
-    Occitan,
-    #[clap(name = "georgian")]
-    Georgian,
     #[clap(name = "belarusian")]
     Belarusian,
-    #[clap(name = "tajik")]
-    Tajik,
-    #[clap(name = "sindhi")]
-    Sindhi,
     #[clap(name = "gujarati")]
     Gujarati,
     #[clap(name = "amharic")]
@@ -169,16 +134,8 @@ pub enum Language {
     Uzbek,
     #[clap(name = "faroese")]
     Faroese,
-    #[clap(name = "haitian")]
-    Haitian,
-    #[clap(name = "creole")]
-    Creole,
     #[clap(name = "pashto")]
     Pashto,
-    #[clap(name = "turkmen")]
-    Turkmen,
-    #[clap(name = "nynorsk")]
-    Nynorsk,
     #[clap(name = "maltese")]
     Maltese,
     #[clap(name = "sanskrit")]
@@ -191,24 +148,14 @@ pub enum Language {
     Tibetan,
     #[clap(name = "tagalog")]
     Tagalog,
-    #[clap(name = "malagasy")]
-    Malagasy,
     #[clap(name = "assamese")]
     Assamese,
     #[clap(name = "tatar")]
     Tatar,
-    #[clap(name = "hawaiian")]
-    Hawaiian,
-    #[clap(name = "lingala")]
-    Lingala,
     #[clap(name = "hausa")]
     Hausa,
-    #[clap(name = "bashkir")]
-    Bashkir,
     #[clap(name = "javanese")]
     Javanese,
-    #[clap(name = "sundanese")]
-    Sundanese,
 }
 
 impl fmt::Display for Language {
@@ -216,5 +163,11 @@ impl fmt::Display for Language {
         let possible_value = self.to_possible_value().unwrap();
         let action_name = possible_value.get_name();
         write!(f, "{}", action_name)
+    }
+}
+
+impl PartialEq<&str> for Language {
+    fn eq(&self, other: &&str) -> bool {
+        self.to_string().as_str() == *other
     }
 }
