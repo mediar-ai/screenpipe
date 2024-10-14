@@ -1,7 +1,6 @@
 use std::{
-    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env
+    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env, io::Write
 };
-use std::io::Write;
 
 use clap::Parser;
 #[allow(unused_imports)]
@@ -25,6 +24,8 @@ use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
+use screenpipe_actions::run;
+use dotenv::dotenv;
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -63,8 +64,24 @@ fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load .env file if it exists
+    dotenv().ok();
+
     debug!("starting screenpipe server");
     let cli = Cli::parse();
+
+    #[cfg(feature = "beta")]
+    {
+        if let Some(api_key) = cli.openai_api_key {
+            env::set_var("OPENAI_API_KEY", api_key);
+            println!("OpenAI API key has been set.");
+        } else if env::var("OPENAI_API_KEY").is_err() {
+            eprintln!("Warning: OPENAI_API_KEY is not set.");
+            eprintln!("Some AI-related features may not work properly.");
+            eprintln!("You can set it by running the command with --openai-api-key YOUR_KEY");
+        }
+    }
+
     let local_data_dir = get_base_dir(cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
@@ -409,7 +426,7 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌─────────────────────┬────────────────────────────────────┐");
+    println!("┌─────────────────────┬──────────────���─────���───────────────┐");
     println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
@@ -627,6 +644,17 @@ async fn main() -> anyhow::Result<()> {
 
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
+
+    #[cfg(feature = "beta")]
+    {
+        info!("beta feature enabled, starting screenpipe actions");
+        if let Err(e) = run().await {
+            eprintln!("error running screenpipe actions: {}", e);
+            std::process::exit(1);
+        }
+        // Remove the return statement here
+        // return Ok(());
+    }
 
     tokio::select! {
         _ = handle => info!("recording completed"),
