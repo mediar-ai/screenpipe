@@ -3,8 +3,9 @@ use image::{codecs::png::PngEncoder, DynamicImage, ImageEncoder};
 use log::error;
 use reqwest::multipart::{Form, Part};
 use reqwest::Client;
+use screenpipe_core::Language;
 use serde_json;
-use serde_json::Value;
+use serde_json::{to_string, Value};
 use std::collections::HashMap;
 use std::env;
 use std::io::Cursor;
@@ -16,7 +17,7 @@ use tokio::time::{timeout, Duration};
 
 pub async fn perform_ocr_cloud(
     image: &DynamicImage,
-    languages: Vec<&str>,
+    languages: Vec<Language>,
 ) -> Result<(String, String, Option<f64>)> {
     let api_key = match env::var("UNSTRUCTURED_API_KEY") {
         Ok(key) => key,
@@ -43,11 +44,17 @@ pub async fn perform_ocr_cloud(
         .mime_str("image/png")
         .unwrap();
 
-    let form = Form::new()
+    let mut form = Form::new()
         .part("files", part)
         .text("strategy", "auto")
-        .text("coordinates", "true")
-        .text("languages", languages.join("+"));
+        .text("coordinates", "true");
+
+    if !languages.is_empty() {
+        form = form.text(
+            "languages",
+            languages.map(|l: Language| l.to_string()).join("+"),
+        );
+    }
 
     let client = reqwest::Client::new();
     let response = match timeout(
