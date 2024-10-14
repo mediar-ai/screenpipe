@@ -229,6 +229,9 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
 
+    // #[cfg(feature = "beta")]
+    #[arg(long, value_name = "KEY")]
+    pub openai_api_key: Option<String>,
 }
 
 #[derive(Subcommand)]
