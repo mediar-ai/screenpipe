@@ -505,7 +505,6 @@ pub struct TranscriptionResult {
 use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::atomic::{AtomicBool, Ordering};
 use vad_rs::VadStatus;
 
 pub async fn create_whisper_channel(
