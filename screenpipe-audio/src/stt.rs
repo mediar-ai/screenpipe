@@ -179,7 +179,16 @@ fn process_with_whisper(
     let language_token = Some(multilingual::detect_language(model, tokenizer, &mel)?);
 
     debug!("initializing decoder");
-    let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
+    let mut dc = Decoder::new(
+        model,
+        tokenizer,
+        42,
+        device,
+        language_token,
+        true,
+        false,
+        None,
+    )?;
 
     debug!("starting decoding process");
     let segments = dc.run(&mel)?;

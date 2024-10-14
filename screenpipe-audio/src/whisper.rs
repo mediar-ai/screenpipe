@@ -142,6 +142,7 @@ pub struct Decoder<'a> {
     no_speech_token: u32,
     no_timestamps_token: u32,
     language_token: Option<u32>,
+    prompt: Option<Vec<u32>>,
 }
 
 impl<'a> Decoder<'a> {
@@ -154,6 +155,7 @@ impl<'a> Decoder<'a> {
         language_token: Option<u32>,
         timestamps: bool,
         verbose: bool,
+        prompt: Option<String>,
     ) -> Result<Self> {
         let no_timestamps_token = token_id(&tokenizer, m::NO_TIMESTAMPS_TOKEN)?;
         let suppress_tokens: Vec<f32> = (0..model.config().vocab_size as u32)
@@ -178,6 +180,12 @@ impl<'a> Decoder<'a> {
             None => anyhow::bail!("unable to find any non-speech token"),
             Some(n) => n,
         };
+
+        let prompt_tokens = prompt.map(|p| {
+            tokenizer.encode(p, true).map_err(E::msg)
+                .map(|encoding| encoding.get_ids().to_vec())
+        }).transpose()?;
+
         Ok(Self {
             model,
             rng: rand::rngs::StdRng::seed_from_u64(seed),
@@ -191,6 +199,7 @@ impl<'a> Decoder<'a> {
             no_speech_token,
             language_token,
             no_timestamps_token,
+            prompt: prompt_tokens,
         })
     }
 
@@ -209,6 +218,11 @@ impl<'a> Decoder<'a> {
 
         if !self.timestamps {
             tokens.push(self.no_timestamps_token);
+        }
+
+        // Add prompt tokens if available
+        if let Some(prompt_tokens) = &self.prompt {
+            tokens.extend_from_slice(prompt_tokens);
         }
 
         let mut sum_logprob = 0f64;
