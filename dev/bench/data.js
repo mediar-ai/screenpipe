@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728862792381,
+  "lastUpdate": 1728927514864,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -15209,6 +15209,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1857611208,
             "range": "± 24409477",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50280365+EzraEllette@users.noreply.github.com",
+            "name": "Ezra Ellette",
+            "username": "EzraEllette"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "afd6dc42fff9382592acca9da4f814e2ca8b4e40",
+          "message": "refactor: improve transcription accuracy by 10%\n\n* add spectral subtraction with constant noise\r\n\r\n* cubic is slower and no difference in accuracy\r\n\r\n* make example for profiling\r\n\r\n* remove tokens and obvious hallucinations\r\n\r\n* overlap the audio by 2 seconds.\r\n\r\n* remove repetition from overlaps",
+          "timestamp": "2024-10-14T10:29:54-07:00",
+          "tree_id": "f0832b734f517e7ada46b05b9651842a82d87be3",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/afd6dc42fff9382592acca9da4f814e2ca8b4e40"
+        },
+        "date": 1728927512961,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1902050437,
+            "range": "± 137560540",
             "unit": "ns/iter"
           }
         ]
