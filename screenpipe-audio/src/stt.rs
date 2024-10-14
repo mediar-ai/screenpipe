@@ -26,9 +26,9 @@ use crate::{
 };
 
 use hound::{WavSpec, WavWriter};
+use std::io::Cursor;
 use reqwest::Client;
 use serde_json::Value;
-use std::io::Cursor;
 
 // Replace the get_deepgram_api_key function with this:
 fn get_deepgram_api_key() -> String {
@@ -203,22 +203,24 @@ pub async fn stt(
     let mut total_frames = 0;
     let mut speech_frame_count = 0;
 
-    let mut noise = 0.;
+    let mut  noise = 0.;
 
     for chunk in audio_data.chunks(frame_size) {
         total_frames += 1;
         match vad_engine.audio_type(chunk) {
-            Ok(status) => match status {
-                VadStatus::Speech => {
-                    let processed_audio = spectral_subtraction(chunk, noise)?;
-                    speech_frames.extend(processed_audio);
-                    speech_frame_count += 1;
+            Ok(status) => {
+                match status {
+                    VadStatus::Speech => {
+                        let processed_audio = spectral_subtraction(chunk, noise)?;
+                        speech_frames.extend(processed_audio);
+                        speech_frame_count += 1;
+                    },
+                    VadStatus::Unknown => {
+                        noise = average_noise_spectrum(chunk);
+                    },
+                    _  => {}
                 }
-                VadStatus::Unknown => {
-                    noise = average_noise_spectrum(chunk);
-                }
-                _ => {}
-            },
+            }
             Err(e) => {
                 debug!("VAD failed for chunk: {:?}", e);
             }

@@ -115,10 +115,10 @@ async fn test_transcription_accuracy() {
         let (audio_file, expected_transcription, transcription, accuracy) = result.unwrap();
 
         println!("file: {}", audio_file);
-        println!("expected: {}", expected_transcription);
-        println!("actual: {}", transcription);
+        // println!("expected: {}", expected_transcription);
+        // println!("actual: {}", transcription);
         println!("accuracy: {:.2}%", accuracy * 100.0);
-        println!();
+        // println!();
 
         total_accuracy += accuracy;
         total_tests += 1;
