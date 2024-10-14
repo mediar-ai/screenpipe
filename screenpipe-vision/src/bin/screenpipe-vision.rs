@@ -35,6 +35,7 @@ async fn main() {
     let (result_tx, mut result_rx) = channel(512);
 
     let save_text_files = cli.save_text_files;
+    let languages = cli.language;
 
     let monitor = get_default_monitor().await;
     let id = monitor.id();
@@ -48,7 +49,7 @@ async fn main() {
             id,
             &[],
             &[],
-            languages,
+            languages.clone(),
         )
         .await
     });

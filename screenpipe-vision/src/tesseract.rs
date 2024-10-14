@@ -91,7 +91,7 @@ pub fn perform_ocr_tesseract(
         _ => LANGUAGES
             .iter()
             .filter_map(|(key, val)| {
-                if let Some(lang) = languages.iter().find(|l| l == &val) {
+                if let Some(_) = languages.iter().find(|l| l == &val) {
                     Some(key.to_string())
                 } else {
                     None
