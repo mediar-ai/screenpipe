@@ -17,20 +17,22 @@ const PERSONALIZATION_OPTIONS = [
     key: "withoutAI",
     icon: TextSearch,
     title: "conventional search",
-    description: "seamless functionality, easily monitor screen and audio with built-in ocr for precise scanning.",
+    description:
+      "use advanced search capabilities on top of your 24/7 recordings or the pipe store",
     note: "no api key needed.",
   },
   {
     key: "withAI",
     icon: BotMessageSquare,
     title: "ai-enhanced Search",
-    description: "leverage ai capabilities and seamlessly monitor your screen, using advanced AI to summarize collected data.",
+    description:
+      "use ai capabilities to summarize your recordings, extract insights, or use meeting summaries.",
     note: "api key required.",
   },
 ];
 
 const CardItem: React.FC<{
-  option: typeof PERSONALIZATION_OPTIONS[number];
+  option: (typeof PERSONALIZATION_OPTIONS)[number];
   isSelected: boolean;
   onClick: () => void;
 }> = ({ option, isSelected, onClick }) => {
@@ -38,20 +40,29 @@ const CardItem: React.FC<{
 
   return (
     <div className="relative group h-[270px]">
-      <div className={`absolute h-full !mt-[-5px] inset-0 rounded-lg transition-all duration-300 ease-out group-hover:before:opacity-100 group-hover:before:scale-100 
+      <div
+        className={`absolute h-full !mt-[-5px] inset-0 rounded-lg transition-all duration-300 ease-out group-hover:before:opacity-100 group-hover:before:scale-100 
         before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-black dark:before:border-white before:opacity-0 before:scale-95 before:transition-all 
-        before:duration-300 before:ease-out ${isSelected ? "before:!border-none" : "" }`}
+        before:duration-300 before:ease-out ${
+          isSelected ? "before:!border-none" : ""
+        }`}
       />
       <Card
         className={`p-4 h-full !mt-[-5px] cursor-pointer bg-white dark:bg-gray-800 hover:bg-accent transition-all relative z-[1] duration-300 ease-out group-hover:scale-[0.98]
-        ${isSelected ? "bg-accent transition-transform relative border-2 border-black dark:border-white" : "" }`}
+        ${
+          isSelected
+            ? "bg-accent transition-transform relative border-2 border-black dark:border-white"
+            : ""
+        }`}
         onClick={onClick}
       >
         <CardContent className="flex flex-col w-[250px] justify-center">
           <Icon className="w-16 h-16 mx-auto" />
           <h2 className="font-semibold text-xl text-center mt-1">{title}</h2>
           <span className="prose prose-sm mt-1">{description}</span>
-          <span className="text-muted-foreground text-center prose-sm mt-4">{note}</span>
+          <span className="text-muted-foreground text-center prose-sm mt-4">
+            {note}
+          </span>
         </CardContent>
       </Card>
     </div>
@@ -66,17 +77,18 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
   handlePrevSlide,
 }) => {
   return (
-    <div className={`${className} w-full flex justify-center flex-col relative`}>
-      <DialogHeader className="mt-1 px-2">
-        <div className="w-full !mt-[-10px] inline-flex justify-center">
-          <img src="/128x128.png" alt="screenpipe-logo" width="72" height="72" />
-        </div>
-        <DialogTitle className="text-center !mt-[-2px] font-bold text-[32px] text-balance flex justify-center">
-          personalize your screenpipe
+    <div
+      className={`${className} w-full flex justify-center flex-col relative`}
+    >
+      <DialogHeader className="flex flex-col px-2 justify-center items-center">
+        <img
+          className="w-24 h-24 justify-center"
+          src="/128x128.png"
+          alt="screenpipe-logo"
+        />
+        <DialogTitle className="text-center text-2xl">
+          do you want to use AI or just plain search?
         </DialogTitle>
-        <p className="text-center text-lg">
-          how would you like to use screenpipe?
-        </p>
       </DialogHeader>
       <div className="flex w-full justify-around mt-6">
         {PERSONALIZATION_OPTIONS.map((option) => (
@@ -100,4 +112,3 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
 };
 
 export default OnboardingPersonalize;
-

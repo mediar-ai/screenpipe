@@ -89,23 +89,17 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
 
   return (
     <div className={`${className} w-full flex justify-center flex-col`}>
-      <DialogHeader className="px-2">
-        <div className="w-full inline-flex !mt-[-10px] justify-center">
-          <img
-            src="/128x128.png"
-            alt="screenpipe-logo"
-            width="72"
-            height="72"
-          />
-        </div>
-        <DialogTitle className="text-center !mt-[-4px] font-bold text-[30px] text-balance flex justify-center">
-          screenpipe with dev config
+      <DialogHeader className="flex flex-col px-2 justify-center items-center">
+        <img
+          className="w-24 h-24 justify-center"
+          src="/128x128.png"
+          alt="screenpipe-logo"
+        />
+        <DialogTitle className="text-center text-2xl">
+          screenpipe in dev mode
         </DialogTitle>
-        <h1 className="font-medium text-center !mt-[-1px] text-md">
-          customize the screenpipe setting using dev configuration
-        </h1>
       </DialogHeader>
-      <div className="mt-2 w-full flex justify-around flex-col">
+      <div className="mt-8 w-full flex justify-around flex-col">
         <div className="mx-3">
           <p className="text-muted-foreground text-[14px]">
             <span className="font-medium prose text-[14px] mr-1">

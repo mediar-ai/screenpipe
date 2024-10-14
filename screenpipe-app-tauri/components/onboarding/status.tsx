@@ -8,6 +8,7 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import { spinner } from "@/components/spinner";
 import { Command } from "@tauri-apps/plugin-shell";
+import { Separator } from "../ui/separator";
 
 interface OnboardingStatusProps {
   className?: string;
@@ -97,41 +98,40 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   return (
     <div
-      className={`${className} w-full flex justify-center flex-col items-center`}
+      className={`${className} w-full flex justify-between flex-col items-center`}
     >
-      <DialogHeader className="px-2 w-full max-w-md">
-        <div className="w-full inline-flex !mt-[-10px] justify-center">
-          <img
-            src="/128x128.png"
-            alt="screenpipe-logo"
-            width="72"
-            height="72"
-          />
-        </div>
-        <DialogTitle className="text-center !mt-[-3px] font-bold text-[30px] text-balance flex justify-center">
+      <DialogHeader className="flex flex-col px-2 justify-center items-center">
+        <img
+          className="w-24 h-24 justify-center"
+          src="/128x128.png"
+          alt="screenpipe-logo"
+        />
+        <DialogTitle className="text-center text-2xl">
           setting up screenpipe
         </DialogTitle>
-        <h1 className="font-medium text-center !mt-[-1px] text-md prose">
+        <h2 className="text-center text-sm">
+          we need to download some ai models for you.
+          <br />
           this may take a few minutes depending on your internet connection
-        </h1>
-
-        <div className="mt-4 text-sm text-zinc-600 mx-auto">
-          <p className="mb-2 text-center">how screenpipe works:</p>
-          <ul className="list-disc list-inside text-left">
-            <li>core recording process runs in the background</li>
-            <li>gui interface for easy interaction</li>
-            <li>can also be used as a standalone cli tool</li>
-            <li>captures screens & mics 24/7</li>
-            <li>extracts text (ocr) & speech-to-text</li>
-            <li>saves data locally for privacy</li>
-          </ul>
-        </div>
-
-        <p className="text-xs text-center text-zinc-500 mt-2">
-          if encountering any issues, you can proceed to the next step and it
-          will setup screenpipe when starting the recording process
-        </p>
+        </h2>
       </DialogHeader>
+      <div className="my-8" />
+      <div className="mt-4 text-sm text-zinc-600 mx-auto">
+        <p className="mb-2 text-center">how screenpipe works:</p>
+        <ul className="list-disc list-inside text-left">
+          <li>core recording process runs in the background</li>
+          <li>gui interface for easy interaction</li>
+          <li>can also be used as a standalone cli tool</li>
+          <li>captures screens & mics 24/7</li>
+          <li>extracts text (ocr) & speech-to-text</li>
+          <li>saves data locally for privacy</li>
+        </ul>
+      </div>
+
+      <p className="text-xs text-center text-zinc-500 mt-2">
+        if encountering any issues, you can proceed to the next step and it will
+        setup screenpipe when starting the recording process
+      </p>
       {status === null ? (
         <svg
           fill="none"
@@ -148,13 +148,14 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       ) : status === "ok" ? (
         <div className="flex flex-col items-center mt-4">
           <Check className="size-5 stroke-zinc-400" />
-          <p className="text-sm text-zinc-600 mt-2">screenpipe setup complete. ai models downloaded.</p>
+          <p className="text-sm text-zinc-600 mt-2">
+            screenpipe setup complete. ai models downloaded.
+          </p>
         </div>
       ) : (
         <p className="text-center mt-4">{status}</p>
       )}
       <OnboardingNavigation
-        className="mt-8 w-full max-w-md"
         handlePrevSlide={handlePrev}
         handleNextSlide={handleNext}
         prevBtnText="previous"
