@@ -669,7 +669,7 @@ async function installOllamaSidecar() {
 		ollamaExe = 'ollama-x86_64-pc-windows-msvc.exe';
 		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-windows-amd64.zip`;
 	} else if (platform === 'macos') {
-		ollamaExe = 'ollama-darwin';
+		ollamaExe = `ollama-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
 		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-darwin`;
 	} else if (platform === 'linux') {
 		ollamaExe = 'ollama-x86_64-unknown-linux-gnu';
@@ -690,7 +690,11 @@ async function installOllamaSidecar() {
 		const downloadPath = path.join(ollamaDir, path.basename(ollamaUrl));
 
 		console.log('Downloading Ollama...');
-		await $`wget -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
+		if (platform === 'windows') {
+			await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
+		} else {
+			await $`wget -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
+		}
 
 		console.log('Extracting Ollama...');
 		if (platform === 'windows') {
