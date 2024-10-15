@@ -77,7 +77,7 @@ we use `pipe.json` to let others pass configuration options to your pipe through
 
 we parse your `pipe.json` file to render in the UI the input fields for your pipe so you need to follow the format. 
 
-here's my `pipe.json` for the pipe-post-questions-on-reddit:
+here's a snippet of a `pipe.json` for the pipe-post-questions-on-reddit:
 
 ```json 
 {
@@ -95,106 +95,26 @@ here's my `pipe.json` for the pipe-post-questions-on-reddit:
       "type": "string",
       "value": "hourly:1"
     },
-    {
-      "default": "11:00",
-      "description": "Time to send daily summary email (used only if summaryFrequency is 'daily')",
-      "name": "emailTime",
-      "type": "time"
-    },
-    {
-      "default": "",
-      "description": "Email address to send the daily summary to",
-      "name": "emailAddress",
-      "type": "string",
-      "value": "louis@screenpi.pe"
-    },
-    {
-      "default": "",
-      "description": "App specific password for your gmail account, https://support.google.com/accounts/answer/185833?hl=en",
-      "name": "emailPassword",
-      "type": "string",
-      "value": "abcd"
-    },
-    {
-      "default": "https://api.openai.com/v1/chat/completions",
-      "description": "openai-compatible API URL",
-      "name": "gptApiUrl",
-      "type": "string"
-    },
-    {
-      "default": "gpt-4o",
-      "description": "AI Model name",
-      "name": "gptModel",
-      "type": "string"
-    },
-    {
-      "default": "",
-      "description": "Your OpenAI API key",
-      "name": "openaiApiKey",
-      "type": "string",
-      "value": "sk-proj-1234567890"
-    },
-    {
-      "default": 100,
-      "description": "Number of records to retrieve from screenpipe per page for structured extraction, keep in mind LLMs have a context window limit. Increase this value if using audio.",
-      "name": "pageSize",
-      "type": "number"
-    },
-    {
-      "default": "",
-      "description": "additional prompt for the AI assistant that will be used to extract information from the screen data every specified amount of minutes",
-      "name": "dailylogPrompt",
-      "type": "string",
-      "value": "make sure to extract tags, topics, and short summary of what i do at that time"
-    },
-    {
-      "default": "",
-      "description": "additional prompt for the AI assistant that will be used to generate a list of questions to post on reddit based on the logs previously extracted",
-      "name": "customPrompt",
-      "type": "string",
-      "value": "make sure to generate posts of reasonable length, optimised for attention, providing value, triggering conversations"
-    },
-    {
-      "default": "",
-      "description": "Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio",
-      "name": "windowName",
-      "type": "window"
-    },
-    {
-      "default": "all",
-      "description": "Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance.",
-      "name": "contentType",
-      "type": "contentType"
-    }
-  ],
+  ]
 }
 ```
 
 
 ### running pipes
 
-for quick dev, run your pipe locally using deno:
+you can run your pipe manually with deno, for example:
 
 ```bash
-cd path/to/your/pipe
-deno run --allow-read --allow-write --allow-net --allow-env pipe.ts
+# these are mandatory env variables
+export SCREENPIPE_DIR="$HOME/.screenpipe"
+export PIPE_ID="pipe-find-leads-with-exa-ai"
+export PIPE_FILE="pipe.ts"
+export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-find-leads-with-exa-ai"
+
+deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys examples/typescript/pipe-find-leads-with-exa-ai/pipe.ts
 ```
 
-**environment variables**: ensure the following environment variables are set for your pipe:
-
-- `SCREENPIPE_DIR`: the directory where screenpipe is installed.
-- `PIPE_ID`: the unique identifier for your pipe.
-- `PIPE_FILE`: the main file of your pipe (e.g., `pipe.ts`).
-- `PIPE_DIR`: the directory of your pipe.
-
-**example**:
-
-````bash
-export SCREENPIPE_DIR="/path/to/screenpipe"
-export PIPE_ID="my-pipe"
-export PIPE_FILE="pipe.ts"
-export PIPE_DIR="/path/to/screenpipe/pipes/my-pipe"
-````
+make sure to configure your pipe.json first
 
 once the pipe is ready, follow these steps to make it work with `screenpipe`:
 

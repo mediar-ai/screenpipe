@@ -432,7 +432,7 @@ const PipeDialog: React.FC = () => {
 
         {selectedPipe.enabled && (
           <>
-            <Collapsible
+            {/* <Collapsible
               open={isLogOpen}
               onOpenChange={setIsLogOpen}
               className="w-full mt-4"
@@ -447,7 +447,7 @@ const PipeDialog: React.FC = () => {
                 <LogViewer className="mt-2" />
               </CollapsibleContent>
             </Collapsible>
-            <Separator className="my-4" />
+            <Separator className="my-4" /> */}
 
             <PipeConfigForm
               pipe={selectedPipe}
