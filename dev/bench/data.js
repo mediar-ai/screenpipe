@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729029453112,
+  "lastUpdate": 1729029993348,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -15839,6 +15839,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2250474208,
             "range": "± 324205855",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "51977119+onyedikachi-david@users.noreply.github.com",
+            "name": "David Anyatonwu",
+            "username": "onyedikachi-david"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3d30c1310e84e03fbd8d04524b66441463732155",
+          "message": "feat: screen time storyteller pipe (#443)",
+          "timestamp": "2024-10-15T14:56:46-07:00",
+          "tree_id": "de3fd9e99fcdd2596ce6c6f30abde0c26ee0422b",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/3d30c1310e84e03fbd8d04524b66441463732155"
+        },
+        "date": 1729029991300,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1870411062,
+            "range": "± 18527987",
             "unit": "ns/iter"
           }
         ]
