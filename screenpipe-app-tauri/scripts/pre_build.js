@@ -660,18 +660,20 @@ if (process.env.GITHUB_ENV) {
 
 // Modify the installOllamaSidecar function
 async function installOllamaSidecar() {
-	const arch = process.arch;
 	const ollamaDir = path.join(__dirname, '..', 'src-tauri');
 	const ollamaVersion = 'v0.3.13';
 
-	let ollamaExe;
+	let ollamaExe, ollamaUrl;
 
 	if (platform === 'windows') {
 		ollamaExe = 'ollama-x86_64-pc-windows-msvc.exe';
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-windows-amd64.zip`;
 	} else if (platform === 'macos') {
-		ollamaExe = process.arch === 'arm64' ? 'ollama-aarch64-apple-darwin' : 'ollama-x86_64-apple-darwin';
+		ollamaExe = 'ollama-darwin';
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-darwin`;
 	} else if (platform === 'linux') {
 		ollamaExe = 'ollama-x86_64-unknown-linux-gnu';
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-linux-amd64`;
 	} else {
 		throw new Error('Unsupported platform');
 	}
