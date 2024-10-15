@@ -3,17 +3,19 @@ import nodemailer from "nodemailer";
 import { ContentItem, pipe } from "screenpipe";
 import process from "node:process";
 import Exa from "exa-js"
+import { z } from "zod";
+import { generateObject } from "ai";
+import { createOllama } from "ollama-ai-provider";
 
-interface ScreenTopicQuery {
-  query: string;
-  highlights: string[]; 
-  quality: number; 
-}
+const screenTopicQuery = z.object({
+  query: z.string(),
+  quality: z.number()
+});
 
-interface FinalSummaryQuery {
-  summary_query: string;
-  quality: number; 
-}
+const finalSummaryQuery = z.object({
+  summary_query: z.string(),
+  quality: z.number()
+});
 
 function getRandomOffsets(total: number, count: number): number[] {
   const offsets = new Set<number>();
@@ -58,7 +60,7 @@ async function generateScreenTopicQuery(
   screenData: ContentItem[],
   ollamaModel: string,
   ollamaApiUrl: string
-): Promise<ScreenTopicQuery> {
+): Promise<z.infer<typeof screenTopicQuery>> {
   const prompt = `
     You are an assistant who generates search queries for an embedding search database to help a user find content of interest.
 
@@ -85,52 +87,26 @@ async function generateScreenTopicQuery(
     - DO NOT RETURN ANYTHING BUT JSON. NO COMMENTS BELOW THE JSON.
     `;
 
-  const response = await fetch(ollamaApiUrl, {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    body: JSON.stringify({
-      model: ollamaModel,
+    const provider = createOllama({
+      baseURL: ollamaApiUrl,
+    });
+  
+    const response = await generateObject({
+      model: provider(ollamaModel),
       messages: [{ role: "user", content: prompt }],
-      stream: false,
-    }),
-  });
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error("Error checking goal focus log:", errorBody);
-    throw new Error(
-      `HTTP error! status: ${response.status}, body: ${errorBody}`
-    );
-  }
+      schema: screenTopicQuery,
+    });
+  
+    console.log("ai response", response);
 
-  const result = await response.json();
-
-  console.log("AI answer:", result);
-
-  const cleanedResult = result.message.content
-    .trim()
-    .replace(/^```(?:json)?\s*|\s*```$/g, "") // remove start and end code block markers
-    .replace(/\n/g, "") // remove newlines
-    .replace(/\\n/g, "") // remove escaped newlines
-    .trim(); // trim any remaining whitespace
-
-  let parsedContent;
-  try {
-    parsedContent = JSON.parse(cleanedResult);
-  } catch (error) {
-    console.warn("failed to parse ai response:", error);
-    console.warn("cleaned result:", cleanedResult);
-    throw new Error("invalid ai response format");
-  }
-  return parsedContent
+    return response.object
 }
 
 async function generateScreenTopicSummaryQuery(
   topicQueries: string[],
   ollamaModel: string,
   ollamaApiUrl: string
-): Promise<FinalSummaryQuery> {
+): Promise<z.infer<typeof finalSummaryQuery>> {
   const prompt = `
     You are an assistant who helps summarize multiple topic queries.
 
@@ -154,45 +130,19 @@ async function generateScreenTopicSummaryQuery(
     - DO NOT RETURN ANYTHING BUT JSON. NO COMMENTS BELOW THE JSON.
     `;
 
-  const summarizationResponse = await fetch(ollamaApiUrl, {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    body: JSON.stringify({
-      model: ollamaModel,
+    const provider = createOllama({
+      baseURL: ollamaApiUrl,
+    });
+  
+    const response = await generateObject({
+      model: provider(ollamaModel),
       messages: [{ role: "user", content: prompt }],
-      stream: false,
-    }),
-  });
-  if (!summarizationResponse.ok) {
-    const errorBody = await summarizationResponse.text();
-    console.error("Error checking goal focus log:", errorBody);
-    throw new Error(
-      `HTTP error! status: ${summarizationResponse.status}, body: ${errorBody}`
-    );
-  }
+      schema: finalSummaryQuery,
+    });
+  
+    console.log("ai response", response);
 
-  const result = await summarizationResponse.json();
-
-  console.log("Summarize AI answer:", result);
-
-  const cleanedResult = result.message.content
-    .trim()
-    .replace(/^```(?:json)?\s*|\s*```$/g, "") // remove start and end code block markers
-    .replace(/\n/g, "") // remove newlines
-    .replace(/\\n/g, "") // remove escaped newlines
-    .trim(); // trim any remaining whitespace
-
-  let parsedContent;
-  try {
-    parsedContent = JSON.parse(cleanedResult);
-  } catch (error) {
-    console.warn("failed to parse ai response:", error);
-    console.warn("cleaned result:", cleanedResult);
-    throw new Error("invalid ai response format");
-  }
-  return parsedContent
+    return response.object
 }
 
 function formatExaResultsForEmail(results: any[]): string {
@@ -256,7 +206,7 @@ async function exaSearchPipeline(): Promise<void> {
   while (true) {
     try {
       const now = new Date();
-      let shouldRunSearch= false;
+      let shouldRunSearch = false;
       
       const emailTimeToday = new Date(
         now.getFullYear(),
@@ -285,8 +235,8 @@ async function exaSearchPipeline(): Promise<void> {
           const topicQueries = [];
           for (const offset of randomOffsets) {
             const pageData = screenData.data.slice(offset, offset + pageSize); // Extract section of data
-            const screenTopicQuery = await generateScreenTopicQuery(pageData, ollamaModel, ollamaApiUrl);
-            topicQueries.push(screenTopicQuery.query);
+            const topicQuery: z.infer<typeof screenTopicQuery> = await generateScreenTopicQuery(pageData, ollamaModel, ollamaApiUrl);
+            topicQueries.push(topicQuery.query);
           }
           const finalSummary = await generateScreenTopicSummaryQuery(topicQueries, ollamaModel, ollamaApiUrl)
 

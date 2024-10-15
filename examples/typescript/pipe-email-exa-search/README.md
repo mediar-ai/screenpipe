@@ -50,7 +50,7 @@ Warning: There is potential for data leak to Exa AI
     {
       "name": "ollamaApiUrl",
       "type": "string",
-      "default": "http://localhost:11434/api/chat",
+      "default": "http://localhost:11434/api",
       "description": "AI API URL, can be ollama, openai, any openai compatible API, risky to use cloud providers due to high usage"
     },
     {
