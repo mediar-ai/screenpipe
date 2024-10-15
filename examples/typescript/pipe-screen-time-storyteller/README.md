@@ -1,43 +1,21 @@
-# Screen Time Storyteller
+### pipe-screen-time-storyteller
 
-## Overview
+<img width="1312" alt="Screenshot of Screen Time Storyteller" src="https://github.com/user-attachments/assets/screen-time-storyteller-screenshot.png">
 
-Screen Time Storyteller is an AI-powered pipe for Screenpipe that generates engaging, personalized narratives based on your daily screen activities. It uses data from your device usage to create a fun, slightly sassy diary entry, complete with insights and advice for better digital habits. It uses Vercel AI SDK to interface with the Anthropic and OpenAI APIs.
+screen time storyteller uses AI to generate engaging, personalized narratives based on your daily screen activities. it analyzes your device usage data to create a fun, slightly sassy diary entry, complete with insights and advice for better digital habits.
 
-## Features
+easily track your screen time habits, gain insights, and improve your digital wellbeing.
 
-- 📊 Analyzes your screen time data collected by Screenpipe
-- 🤖 Uses AI to generate personalized narratives
-- 😎 Provides a fun, sassy perspective on your digital habits
-- 💡 Offers insights and advice for better screen time management
-- 📝 Creates daily summaries as GitHub gists
-- 🔄 Supports multiple AI providers (Claude, OpenAI)
+https://github.com/user-attachments/assets/screen-time-storyteller-demo.gif
 
-## Prerequisites
+#### quick setup
+1. [get an API key for your chosen AI provider (Claude or OpenAI)](https://platform.openai.com/account/api-keys)
+2. [create a GitHub personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) for creating gists
+3. configure pipe in the app UI, save, enable, and restart screenpipe recording (you can configure to generate summaries every hour)
 
-- A working Screenpipe installation
-- API keys for your chosen AI provider (Claude or OpenAI)
-- GitHub Personal Access Token (for creating gists)
-
-## Setup
-
-1. Ensure you have Screenpipe installed and running.
-
-2. Copy the `screen-time-storyteller` folder into your Screenpipe pipes directory:
-   ```
-   cp -r screen-time-storyteller /path/to/your/screenpipe/pipes/
-   ```
-
-3. Edit the `pipe.json` file in the `screen-time-storyteller` folder with your API keys, GitHub token, and preferences.
-
-4. Install the required dependencies by running:
-   ```
-   npm install zod ai @ai-sdk/anthropic @ai-sdk/openai
-   ```
-
-## Configuration
-
-The `pipe.json` file contains the following configuration options:
+#### advanced
+tech details? check `pipe.ts`.
+can be used through CLI also, you can tweak the `pipe.json` to your needs, mine looks like this:
 
 ```json
 {
@@ -46,11 +24,12 @@ The `pipe.json` file contains the following configuration options:
   "description": "Generates a narrative summary of your screen time data",
   "author": "David Anyatonwu",
   "fields": [
-      {
+    {
       "name": "aiProvider",
       "type": "string",
       "default": "claude",
-      "description": "AI provider to use (ollama, openai, or claude)"
+      "description": "AI provider to use (ollama, openai, or claude)",
+      "value": "claude"
     },
     {
       "name": "claudeModel",
@@ -74,7 +53,8 @@ The `pipe.json` file contains the following configuration options:
       "name": "claudeApiKey",
       "type": "string",
       "default": "",
-      "description": "API key for Claude"
+      "description": "API key for Claude",
+      "value": "your-claude-api-key"
     },
     {
       "name": "openaiApiKey",
@@ -98,37 +78,35 @@ The `pipe.json` file contains the following configuration options:
       "name": "githubToken",
       "type": "string",
       "default": "",
-      "description": "GitHub personal access token"
+      "description": "GitHub personal access token",
+      "value": "your-github-personal-access-token"
     }
-  ]
+  ],
+  "source": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-screen-time-storyteller",
+  "enabled": true
 }
+```
 
-## Usage
+#### usage
+the screen time storyteller pipe will run automatically as part of your screenpipe workflow. it generates a narrative summary every hour based on your screen activities from the past 24 hours.
 
-The Screen Time Storyteller pipe will run automatically as part of your Screenpipe workflow. It generates a narrative summary every hour based on your screen activities from the past 24 hours.
+you can find the generated summaries in two places:
+1. a JSON file in the `.screenpipe/pipes/screen-time-storyteller/` directory, named with the current date (e.g., `2024-10-06-narrative-summary.json`).
+2. a GitHub gist, which you can access through your GitHub account.
 
-You can find the generated summaries in two places:
+#### troubleshooting
+if you encounter any issues:
+1. check screenpipe's logs for any error messages related to the screen time storyteller pipe.
+2. ensure your API keys and GitHub token are correct and have the necessary permissions.
+3. verify that the pipe's directory is in the correct location within your screenpipe installation.
 
-1. A JSON file in the `.screenpipe/pipes/screen-time-storyteller/` directory, named with the current date (e.g., `2024-10-06-narrative-summary.json`).
-2. A GitHub gist, which you can access through your GitHub account.
+#### contributing
+contributions are welcome! please feel free to submit a pull request to the screenpipe repository.
 
-## Troubleshooting
+#### license
+this project is licensed under the same license as screenpipe - see the [LICENSE](LICENSE) file in the screenpipe repository for details.
 
-If you encounter any issues:
+#### acknowledgments
+- thanks to the screenpipe team for providing the underlying screen time tracking functionality.
+- powered by AI models from anthropic, openai, and ollama.
 
-1. Check Screenpipe's logs for any error messages related to the Screen Time Storyteller pipe.
-2. Ensure your API keys and GitHub token are correct and have the necessary permissions.
-3. Verify that the pipe's directory is in the correct location within your Screenpipe installation.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request to the Screenpipe repository.
-
-## License
-
-This project is licensed under the same license as Screenpipe - see the [LICENSE](LICENSE) file in the Screenpipe repository for details.
-
-## Acknowledgments
-
-- Thanks to the Screenpipe team for providing the underlying screen time tracking functionality.
-- Powered by AI models from Anthropic, OpenAI, and Ollama.

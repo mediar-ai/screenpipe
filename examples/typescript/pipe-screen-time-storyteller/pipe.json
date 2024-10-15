@@ -56,7 +56,7 @@
       "name": "githubToken",
       "type": "string",
       "default": "",
-      "description": "GitHub personal access token"
+      "description": "GitHub personal access token with gist scope [create it here](https://github.com/settings/tokens/new)"
     }
   ]
 }
