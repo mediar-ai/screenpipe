@@ -159,9 +159,9 @@ git clone https://github.com/mediar-ai/screenpipe
 cd V:\packages
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
-bootstrap-vcpkg.bat -disableMetrics
-vcpkg.exe integrate install --disable-metrics
-vcpkg.exe install ffmpeg
+./bootstrap-vcpkg.bat -disableMetrics
+./vcpkg.exe integrate install --disable-metrics
+./vcpkg.exe install ffmpeg
 
 SET PKG_CONFIG_PATH=V:\packages\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
 SET VCPKG_ROOT=V:\packages\vcpkg
