@@ -157,18 +157,55 @@ func getAttributeValue(_ element: AXUIElement, forAttribute attr: String) -> Any
 }
 
 func printAllAttributeValuesForCurrentApp() {
+    print("debug: starting printAllAttributeValuesForCurrentApp")
     guard let app = NSWorkspace.shared.frontmostApplication else {
-        print("couldn't get frontmost application")
+        print("error: couldn't get frontmost application")
         return
     }
     
     let pid = app.processIdentifier
     let axApp = AXUIElementCreateApplication(pid)
     
+    print("debug: got application with pid \(pid)")
+    
+    let fileName = "accessibility_attributes.txt"
+    let fileManager = FileManager.default
+    let currentPath = fileManager.currentDirectoryPath
+    let outputPath = (currentPath as NSString).appendingPathComponent(fileName)
+    
+    print("debug: writing to file at \(outputPath)")
+    
+    guard fileManager.createFile(atPath: outputPath, contents: nil, attributes: nil) else {
+        print("error: couldn't create file")
+        return
+    }
+    
+    guard let fileHandle = FileHandle(forWritingAtPath: outputPath) else {
+        print("error: couldn't open file for writing")
+        return
+    }
+    defer {
+        fileHandle.closeFile()
+    }
+    
     let header = "attribute values for \(app.localizedName ?? "unknown app"):\n"
     print(header, terminator: "")
+    fileHandle.write(header.data(using: .utf8)!)
     
-    printAllAttributeValues(axApp, to: nil)
+    print("debug: starting printAllAttributeValues")
+    printAllAttributeValues(axApp, to: fileHandle)
+    print("debug: finished printAllAttributeValues")
+    
+    print("debug: finished writing output")
+    
+    // Read and print the file contents
+    if let contents = try? String(contentsOfFile: outputPath, encoding: .utf8) {
+        print("debug: file contents length: \(contents.count)")
+    } else {
+        print("error: couldn't read file contents")
+    }
+    
+    print("debug: finished printAllAttributeValuesForCurrentApp")
 }
 
 // usage
