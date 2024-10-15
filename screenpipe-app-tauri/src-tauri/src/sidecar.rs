@@ -254,8 +254,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--disable-telemetry");
     }
 
-
-
     // args.push("--debug");
 
     if cfg!(windows) {
@@ -275,6 +273,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
+        c = c.env("PATH", app.path().resource_dir().unwrap());
+
         let c = c.args(&args);
 
         let (_, child) = c.spawn().map_err(|e| {
@@ -292,6 +292,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if use_chinese_mirror {
         command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
     }
+
+    // pass the sidecars PATH to the screenpipe process
+    command = command.env("PATH", app.path().resource_dir().unwrap());
 
     let command = command.args(&args);
 
