@@ -17,15 +17,14 @@ use screenpipe_server::{
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
-use tokio::{runtime::Runtime, signal, sync::broadcast};
+use tokio::{runtime::Runtime, signal, sync::broadcast, task};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 use tracing::{info, debug, error};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_appender::non_blocking::WorkerGuard;
-use screenpipe_actions::run;
-use dotenv::dotenv;
+use screenpipe_actions::run; // Ensure this import is present
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -107,23 +106,9 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Load .env file if it exists
-    dotenv().ok();
 
     debug!("starting screenpipe server");
     let cli = Cli::parse();
-
-    #[cfg(feature = "beta")]
-    {
-        if let Some(api_key) = cli.openai_api_key {
-            env::set_var("OPENAI_API_KEY", api_key);
-            println!("OpenAI API key has been set.");
-        } else if env::var("OPENAI_API_KEY").is_err() {
-            eprintln!("Warning: OPENAI_API_KEY is not set.");
-            eprintln!("Some AI-related features may not work properly.");
-            eprintln!("You can set it by running the command with --openai-api-key YOUR_KEY");
-        }
-    }
 
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
@@ -628,12 +613,13 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "beta")]
     {
         info!("beta feature enabled, starting screenpipe actions");
-        if let Err(e) = run().await {
-            eprintln!("error running screenpipe actions: {}", e);
-            std::process::exit(1);
-        }
-        // Remove the return statement here
-        // return Ok(());
+
+        // Spawn the run function in a blocking task to avoid affecting the async runtime
+        tokio::spawn(async {
+            if let Err(e) = run().await {
+                eprintln!("Error running screenpipe actions: {}", e);
+            }
+        });
     }
 
     tokio::select! {
