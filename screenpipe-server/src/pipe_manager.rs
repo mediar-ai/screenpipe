@@ -121,15 +121,21 @@ impl PipeManager {
             config,
         }
     }
+
     pub async fn list_pipes(&self) -> Vec<PipeInfo> {
         let pipe_dir = self.screenpipe_dir.join("pipes");
         let mut pipe_infos = Vec::new();
 
         if let Ok(mut entries) = tokio::fs::read_dir(pipe_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
-                let pipe_id = entry.file_name().to_string_lossy().into_owned();
-                let config_path = entry.path().join("pipe.json");
-                pipe_infos.push(Self::load_pipe_info(pipe_id, config_path));
+                let file_name = entry.file_name();
+                let pipe_id = file_name.to_string_lossy();
+
+                // ignore hidden directories
+                if !pipe_id.starts_with('.') {
+                    let config_path = entry.path().join("pipe.json");
+                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path));
+                }
             }
         }
 
