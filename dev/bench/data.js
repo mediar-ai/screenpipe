@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729009919343,
+  "lastUpdate": 1729012252299,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -15719,6 +15719,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1930386062,
             "range": "± 39300529",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "117595548+varshith257@users.noreply.github.com",
+            "name": "Vamshi Maskuri",
+            "username": "varshith257"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "08c873124e2fc6733b91de1df738bde288bffd5e",
+          "message": "add simplified Chinese README (#476)",
+          "timestamp": "2024-10-15T10:02:10-07:00",
+          "tree_id": "fd8ceff434d1ed95308eb4a68454b69c0f193c1f",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/08c873124e2fc6733b91de1df738bde288bffd5e"
+        },
+        "date": 1729012250865,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1870184146,
+            "range": "± 25525778",
             "unit": "ns/iter"
           }
         ]
