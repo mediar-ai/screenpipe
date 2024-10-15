@@ -131,15 +131,15 @@ impl PipeManager {
                 let file_name = entry.file_name();
                 let pipe_id = file_name.to_string_lossy();
 
-                // ignore hidden directories
-                if !pipe_id.starts_with('.') {
+                // ignore hidden directories and files
+                if !pipe_id.starts_with('.') && entry.file_type().await.map(|ft| ft.is_dir()).unwrap_or(false) {
                     let config_path = entry.path().join("pipe.json");
-                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path));
+                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path).await);
                 }
             }
         }
 
-        futures::future::join_all(pipe_infos).await
+        pipe_infos
     }
 
     pub async fn download_pipe(&self, url: &str) -> Result<String> {

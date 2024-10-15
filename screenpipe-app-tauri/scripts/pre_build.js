@@ -419,16 +419,21 @@ if (platform == 'macos') {
 			} else {
 				console.error("No suitable arm64 screenpipe binary found");
 			}
-			// if the binary exists, hard code the fucking dylib
-			if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
-				console.log(`hard coded the FUCKING dylib`);
-			} else if (await fs.exists('screenpipe-aarch64-apple-darwin') && isDevMode) {
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
-				await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-aarch64-apple-darwin`
-				console.log(`Updated dylib paths for arm64 in dev mode`);
+
+			try {
+				// if the binary exists, hard code the fucking dylib
+				if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
+					console.log(`hard coded the dylib`);
+				} else if (await fs.exists('screenpipe-aarch64-apple-darwin') && isDevMode) {
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
+					await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-aarch64-apple-darwin`
+					console.log(`Updated dylib paths for arm64 in dev mode`);
+				}
+			} catch (error) {
+				console.error('Error updating dylib paths:', error);
 			}
 
 
@@ -447,11 +452,16 @@ if (platform == 'macos') {
 			} else {
 				console.error("No suitable x86_64 screenpipe binary found");
 			}
-			// hard code the fucking dylib
-			if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
-				console.log(`hard coded the FUCKING dylib`);
+
+			try {
+				// hard code the dylib
+				if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
+					console.log(`hard coded the dylib`);
+				}
+			} catch (error) {
+				console.error('Error updating dylib paths:', error);
 			}
 
 		}
