@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728951397050,
+  "lastUpdate": 1728952301361,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -15479,6 +15479,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1952376812,
             "range": "± 155088659",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "986e0ca46f1982db9cb75f78747913a17a93cbae",
+          "message": "fix: ignore hidden dir in pipes",
+          "timestamp": "2024-10-14T17:24:29-07:00",
+          "tree_id": "d4c5c6e7afefb27928053570ee16152f73a93d71",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/986e0ca46f1982db9cb75f78747913a17a93cbae"
+        },
+        "date": 1728952300326,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1884492562,
+            "range": "± 30328383",
             "unit": "ns/iter"
           }
         ]
