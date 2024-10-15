@@ -1,12 +1,11 @@
 ### pipe-screen-time-storyteller
 
-<img width="1312" alt="Screenshot of Screen Time Storyteller" src="https://github.com/user-attachments/assets/screen-time-storyteller-screenshot.png">
+
+<img width="1512" alt="Screenshot 2024-10-15 at 15 11 00" src="https://github.com/user-attachments/assets/07851108-1f04-404b-908e-62a360d95852">
 
 screen time storyteller uses AI to generate engaging, personalized narratives based on your daily screen activities. it analyzes your device usage data to create a fun, slightly sassy diary entry, complete with insights and advice for better digital habits.
 
 easily track your screen time habits, gain insights, and improve your digital wellbeing.
-
-https://github.com/user-attachments/assets/screen-time-storyteller-demo.gif
 
 #### quick setup
 1. [get an API key for your chosen AI provider (Claude or OpenAI)](https://platform.openai.com/account/api-keys)
