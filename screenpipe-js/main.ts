@@ -110,7 +110,7 @@ export interface ParsedConfig<T = unknown> {
     name: string;
     value?: T;
     default?: T;
-  }[]
+  }[];
 }
 
 /**
