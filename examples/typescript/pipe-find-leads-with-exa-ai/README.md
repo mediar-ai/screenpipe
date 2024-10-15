@@ -1,6 +1,8 @@
 
 ### find leads with exa ai pipe
 
+https://youtu.be/2UJMo-mkYV4
+
 this pipe automates the process of finding potential leads based on an evolving ideal customer profile (icp). it uses screenpipe data, exa ai for company search, and openai for analysis and formatting.
 
 #### features
