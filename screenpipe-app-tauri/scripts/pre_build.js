@@ -673,7 +673,7 @@ async function installOllamaSidecar() {
 		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-darwin`;
 	} else if (platform === 'linux') {
 		ollamaExe = 'ollama-x86_64-unknown-linux-gnu';
-		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-linux-amd64`;
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-linux-amd64.tgz`;
 	} else {
 		throw new Error('Unsupported platform');
 	}
