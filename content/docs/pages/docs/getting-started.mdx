@@ -168,6 +168,7 @@ SET VCPKG_ROOT=V:\packages\vcpkg
 SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
 cd V:\projects\screenpipe
 
+rustup default stable
 cargo build --release --features cuda
 
 cd screenpipe-app-tauri
