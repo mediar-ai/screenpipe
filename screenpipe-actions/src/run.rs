@@ -1,58 +1,47 @@
-use crate::{run_keystroke_monitor, KeystrokeCommand, call_ai, type_slowly, delete_characters};
-use tokio::sync::mpsc;
+use crate::{call_ai, run_keystroke_monitor, KeystrokeCommand};
+use crate::type_and_animate::{delete_characters, type_slowly, EnigoCommand};
 use tokio::process::Command;
+use tokio::sync::mpsc;
+use tokio::task;
+use tokio::time::Instant;
 use reqwest;
 use anyhow::Context;
-// Commented out unused imports
-// use screenpipe_actions::capture_main_window_screenshot;
-// use base64::{Engine as _, engine::general_purpose};
-// use image::DynamicImage;
-use tokio::time::Instant;
-use std::fs;
 use tempfile::NamedTempFile;
-
-async fn run_swift_script() -> anyhow::Result<String> {
-    let start = Instant::now();
-    
-    let script_content = include_str!("print_all_attributes.swift");
-    let temp_file = NamedTempFile::new()?;
-    fs::write(temp_file.path(), script_content)?;
-
-    let output = Command::new("swift")
-        .arg(temp_file.path())
-        .output()
-        .await?;
-
-    let duration = start.elapsed();
-    println!("{:.1?} - run_swift_script", duration);
-
-    if !output.status.success() {
-        anyhow::bail!("swift script failed: {}", String::from_utf8_lossy(&output.stderr));
-    }
-
-    let stdout = String::from_utf8(output.stdout)
-        .context("failed to parse swift script output as utf-8")?;
-
-    Ok(stdout)
-}
-
-async fn search_localhost(query: &str) -> anyhow::Result<String> {
-    let start = Instant::now();
-    let client = reqwest::Client::new();
-    let url: String = format!("http://localhost:3030/search?q={}&content_type=all&limit=5&offset=0", query);
-    let response = client.get(&url).send().await?.text().await?;
-    let duration = start.elapsed();
-    println!("{:.1?} - search_localhost for '{}'", duration, query);
-    Ok(response)
-}
 
 pub async fn run() -> anyhow::Result<()> {
     println!("starting keystroke monitor. press '//' to print attributes for the current app and call openai.");
     let (tx, mut rx) = mpsc::channel(100);
-    
-    tokio::spawn(async move {
-        if let Err(error) = run_keystroke_monitor(tx).await {
-            eprintln!("error in keystroke monitoring: {:?}", error);
+
+    let (enigo_tx, mut enigo_rx) = mpsc::channel(100);
+
+    // Spawn the Enigo handler thread
+    task::spawn_blocking(move || {
+        use enigo::KeyboardControllable;
+        let mut enigo = enigo::Enigo::new();
+        while let Some(command) = enigo_rx.blocking_recv() {
+            match command {
+                EnigoCommand::TypeCharacter(c) => {
+                    enigo.key_click(enigo::Key::Layout(c));
+                }
+                EnigoCommand::TypeString(s) => {
+                    enigo.key_sequence(&s);
+                }
+                EnigoCommand::DeleteCharacter => {
+                    enigo.key_click(enigo::Key::Backspace);
+                }
+                EnigoCommand::Shutdown => {
+                    println!("Shutting down Enigo thread.");
+                    break;
+                }
+            }
+        }
+    });
+
+    // Spawn the keystroke monitor
+    let tx_clone = tx.clone();
+    task::spawn(async move {
+        if let Err(e) = run_keystroke_monitor(tx_clone).await {
+            eprintln!("Error in keystroke monitoring: {:?}", e);
         }
     });
 
@@ -198,4 +187,56 @@ pub async fn run() -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+async fn run_swift_script() -> anyhow::Result<String> {
+    let start = Instant::now();
+
+    let script_content = include_str!("print_all_attributes.swift");
+    let temp_file = NamedTempFile::new()?;
+    tokio::fs::write(temp_file.path(), script_content).await?;
+
+    println!("debug: running swift script");
+    let output = Command::new("swift")
+        .arg(temp_file.path())
+        .output()
+        .await?;
+
+    let duration = start.elapsed();
+    println!("{:.1?} - run_swift_script", duration);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("debug: swift stdout length: {}", stdout.len());
+    println!("debug: swift stderr length: {}", stderr.len());
+
+    if !output.status.success() {
+        println!("debug: swift script failed with status: {:?}", output.status);
+        anyhow::bail!(
+            "swift script failed: {}",
+            stderr
+        );
+    }
+
+    if stdout.is_empty() {
+        println!("debug: swift stdout is empty, returning stderr");
+        Ok(stderr.into_owned())
+    } else {
+        println!("debug: returning swift stdout");
+        Ok(stdout.into_owned())
+    }
+}
+
+async fn search_localhost(query: &str) -> anyhow::Result<String> {
+    let start = Instant::now();
+    let client = reqwest::Client::new();
+    let url = format!(
+        "http://localhost:3030/search?q={}&content_type=all&limit=5&offset=0",
+        query
+    );
+    let response = client.get(&url).send().await?.text().await?;
+    let duration = start.elapsed();
+    println!("{:.1?} - search_localhost for '{}'", duration, query);
+    Ok(response)
 }
