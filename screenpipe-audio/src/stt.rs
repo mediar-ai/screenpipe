@@ -197,7 +197,7 @@ fn process_with_whisper(
         let mut text = segment.dr.text.clone();
 
         // Extract start and end times
-        let (start, end) = extract_time_tokens(&text);
+        let (start, end) = extract_time_tokens(&text, &token_regex);
         let (s_time, e_time) = parse_time_tokens(&start, &end, &mut min_time, &mut max_time);
 
         let range = format!("{}{}", start, end);
@@ -216,18 +216,14 @@ fn process_with_whisper(
     Ok(transcript)
 }
 
-fn extract_time_tokens(text: &str) -> (String, String) {
-    let start = if text[..8].ends_with('>') {
-        text[..8].to_string()
-    } else {
-        text[..9].to_string()
-    };
+fn extract_time_tokens(text: &str, token_regex: &Regex) -> (String, String) {
+    let tokens = token_regex
+        .find_iter(text)
+        .map(|m| m.as_str())
+        .collect::<Vec<&str>>();
 
-    let end = if text[text.len() - 9..].starts_with('<') {
-        text[text.len() - 9..].to_string()
-    } else {
-        text[text.len() - 8..].to_string()
-    };
+    let start = tokens.first().unwrap().to_string();
+    let end = tokens.last().unwrap().to_string();
 
     (start, end)
 }
