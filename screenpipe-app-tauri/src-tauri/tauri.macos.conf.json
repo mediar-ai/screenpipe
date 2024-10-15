@@ -25,7 +25,8 @@
         "externalBin": [
             "screenpipe",
             "ffmpeg",
-            "deno"
+            "deno",
+            "ollama"
         ]
     }
 }

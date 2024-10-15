@@ -2,7 +2,8 @@
     "bundle": {
         "externalBin": [
             "screenpipe",
-            "deno"
+            "deno",
+            "ollama"
         ],
         "linux": {
             "deb": {

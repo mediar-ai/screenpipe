@@ -54,7 +54,7 @@ mod pipes {
         ));
 
         // Execute Deno
-        let mut child = Command::new("deno")
+        let child_result = Command::new("deno")
             .arg("run")
             .arg("--config")
             .arg(pipe_dir.join("deno.json"))
@@ -66,7 +66,18 @@ mod pipes {
             .envs(env_vars)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            .spawn();
+
+        let mut child = match child_result {
+            Ok(child) => child,
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    anyhow::bail!("deno not found in system path. please install deno: https://deno.land/#installation");
+                } else {
+                    anyhow::bail!("failed to spawn deno process: {}", e);
+                }
+            }
+        };
 
         let stdout = child.stdout.take().expect("failed to get stdout");
         let stderr = child.stderr.take().expect("failed to get stderr");
