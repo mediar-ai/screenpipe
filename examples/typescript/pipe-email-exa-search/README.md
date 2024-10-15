@@ -1,24 +1,23 @@
 ## pipe-email-exa-search
 
-### Overview
-1. Pulls random sections of screenpipe text results from the previous day
-2. Tries to pull user interests from each section
-3. Combines user interests across the sections to create an exa search query
-4. Uses Exa.ai to search for relevant content to the user's screen
-5. Emails the top 25 results to the user at the predetermined time each day
+email exa search analyzes your daily screen activity, extracts your interests, and uses exa.ai to find relevant content. it then emails you a curated list of 25 top results, keeping you informed about topics that matter to you.
 
-Warning: There is potential for data leak to Exa AI
+easily discover new content related to your daily interests and stay up-to-date with minimal effort.
+
+warning: there is potential for data leak to exa ai
 
 #### quick setup
-
 1. run ollama:
    ```
    ollama run llama3.2:3b-instruct-q4_K_M
    ```
 2. [create app specific password](https://support.google.com/accounts/answer/185833?hl=en) in your google account that will be used to send yourself emails
-3. [Get Exa.ai API key](https://exa.ai/)
+3. [get exa.ai API key](https://exa.ai/)
 4. configure pipe in the app ui, save, enable, restart screenpipe recording
 
+#### advanced
+tech details? check `pipe.ts`.
+can be used through CLI also, you can tweak the `pipe.json` to your needs, mine looks like this:
 
 ```json
 {
@@ -33,19 +32,22 @@ Warning: There is potential for data leak to Exa AI
       "name": "emailAddress",
       "type": "string",
       "default": "",
-      "description": "Email address to send the daily summary to"
+      "description": "Email address to send the daily summary to",
+      "value": "your.email@example.com"
     },
     {
       "name": "emailPassword",
       "type": "string",
       "default": "",
-      "description": "App specific password for your gmail account, https://support.google.com/accounts/answer/185833?hl=en"
+      "description": "App specific password for your gmail account, https://support.google.com/accounts/answer/185833?hl=en",
+      "value": "your-app-specific-password"
     },
     {
       "name": "exaApiKey",
       "type": "string",
       "default": "",
-      "description": "Exa Api key, you can get one for free at https://exa.ai/"
+      "description": "Exa Api key, you can get one for free at https://exa.ai/",
+      "value": "your-exa-api-key"
     },
     {
       "name": "ollamaApiUrl",
@@ -83,6 +85,7 @@ Warning: There is potential for data leak to Exa AI
       "default": "ocr",
       "description": "Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance."
     }
-  ]
+  ],
+  "source": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-exa-search",
+  "enabled": true
 }
-```
