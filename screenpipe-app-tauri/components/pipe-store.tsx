@@ -49,6 +49,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { LogFileButton } from "./screenpipe-status";
 
 export interface Pipe {
   enabled: boolean;
@@ -427,6 +428,7 @@ const PipeDialog: React.FC = () => {
             <Heart className="mr-2 h-4 w-4" />
             support us
           </Button>
+          <LogFileButton />
         </div>
         <Separator className="my-4" />
 
@@ -710,10 +712,7 @@ const PipeDialog: React.FC = () => {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    onClick={handleResetAllPipes}
-                  >
+                  <Button size="sm" onClick={handleResetAllPipes}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     reset all pipes
                   </Button>

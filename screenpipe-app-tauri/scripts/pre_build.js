@@ -95,8 +95,23 @@ const exports = {
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
 
+// Add this function to check if Deno is installed
+async function isDenoInstalled() { // assuming it's installed in PATH
+	try {
+		await $`deno --version`.quiet();
+		return true;
+	} catch (error) {
+		return false;
+	}
+}
+
 // Add this function to install Deno
 async function installDeno() {
+	if (await isDenoInstalled()) {
+		console.log('deno is already installed.');
+		return;
+	}
+
 	console.log('installing deno...');
 
 	if (platform === 'windows') {
@@ -118,7 +133,7 @@ async function installDeno() {
 
 // Add this function to copy the Deno binary
 async function copyDenoBinary() {
-	console.log('copying deno binary for tauri...');
+	console.log('checking deno binary for tauri...');
 
 	let denoSrc, denoDest1, denoDest2;
 	if (platform === 'windows') {
@@ -144,6 +159,11 @@ async function copyDenoBinary() {
 		denoDest1 = path.join(cwd, 'deno-x86_64-unknown-linux-gnu');
 	} else {
 		console.error('unsupported platform for deno binary copy');
+		return;
+	}
+
+	if (await fs.exists(denoDest1)) {
+		console.log('deno binary already exists for tauri.');
 		return;
 	}
 
@@ -635,20 +655,73 @@ if (process.env.GITHUB_ENV) {
 			await fs.appendFile(process.env.GITHUB_ENV, clblast)
 		}
 
-		if (hasFeature('older-cpu')) {
-			await fs.appendFile(process.env.GITHUB_ENV, `WHISPER_NO_AVX=ON\n`)
-			await fs.appendFile(process.env.GITHUB_ENV, `WHISPER_NO_AVX2=ON\n`)
-			await fs.appendFile(process.env.GITHUB_ENV, `WHISPER_NO_FMA=ON\n`)
-			await fs.appendFile(process.env.GITHUB_ENV, `WHISPER_NO_F16C=ON\n`)
-		}
 	}
 }
 
-// Install and setup Deno (add this near the end of the script)
+// Modify the installOllamaSidecar function
+async function installOllamaSidecar() {
+	const arch = process.arch;
+	const ollamaDir = path.join(__dirname, '..', 'src-tauri');
+	const ollamaVersion = 'v0.3.13';
+
+	let ollamaExe;
+
+	if (platform === 'windows') {
+		ollamaExe = 'ollama-x86_64-pc-windows-msvc.exe';
+	} else if (platform === 'macos') {
+		ollamaExe = process.arch === 'arm64' ? 'ollama-aarch64-apple-darwin' : 'ollama-x86_64-apple-darwin';
+	} else if (platform === 'linux') {
+		ollamaExe = 'ollama-x86_64-unknown-linux-gnu';
+	} else {
+		throw new Error('Unsupported platform');
+	}
+
+	const ollamaPath = path.join(ollamaDir, ollamaExe);
+
+	if (await fs.exists(ollamaPath)) {
+		console.log('Ollama sidecar already exists. Skipping installation.');
+		return;
+	}
+
+	try {
+		await fs.mkdir(ollamaDir, { recursive: true });
+		const downloadPath = path.join(ollamaDir, path.basename(ollamaUrl));
+
+		console.log('Downloading Ollama...');
+		await $`wget -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
+
+		console.log('Extracting Ollama...');
+		if (platform === 'windows') {
+			await $`powershell -command "Expand-Archive -Path '${downloadPath}' -DestinationPath '${ollamaDir}'"`;
+			await fs.rename(path.join(ollamaDir, 'ollama.exe'), path.join(ollamaDir, ollamaExe));
+		} else if (platform === 'linux') {
+			await $`tar -xzf "${downloadPath}" -C "${ollamaDir}"`;
+			await fs.rename(path.join(ollamaDir, 'ollama'), path.join(ollamaDir, ollamaExe));
+		} else if (platform === 'macos') {
+			await fs.rename(downloadPath, path.join(ollamaDir, ollamaExe));
+		}
+
+		console.log('Setting permissions...');
+		if (platform !== 'windows') {
+			await fs.chmod(path.join(ollamaDir, ollamaExe), '755');
+		}
+
+		console.log('Cleaning up...');
+		if (platform !== 'macos') {
+			await fs.unlink(downloadPath);
+		}
+
+		console.log('Ollama sidecar installed successfully');
+	} catch (error) {
+		console.error('Error installing Ollama sidecar:', error);
+		throw error;
+	}
+}
+
+// Near the end of the script, call these functions
 await installDeno();
 await copyDenoBinary();
-
-
+await installOllamaSidecar().catch(console.error);
 
 // --dev or --build
 const action = process.argv?.[2]
