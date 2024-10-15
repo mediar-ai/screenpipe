@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729028372215,
+  "lastUpdate": 1729029453112,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -15809,6 +15809,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1881840416,
             "range": "± 46144982",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e89730aa06cfbb3a9ded00abb33ab59f2b44959b",
+          "message": "Merge pull request #505 from braxton-mills/docs-add-missing-install-linux\n\ndocumentation: include CMake installation in Linux dependencies",
+          "timestamp": "2024-10-15T14:47:42-07:00",
+          "tree_id": "225c42c568cc009c2eb6cc35d9c50f5f23130af3",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e89730aa06cfbb3a9ded00abb33ab59f2b44959b"
+        },
+        "date": 1729029451246,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2250474208,
+            "range": "± 324205855",
             "unit": "ns/iter"
           }
         ]
