@@ -218,7 +218,7 @@ fn process_with_whisper(
 
 fn extract_time_tokens(text: &str, token_regex: &Regex) -> (String, String) {
     let tokens = token_regex
-        .find_iter(text.as_str())
+        .find_iter(text)
         .map(|m| m.as_str())
         .collect::<Vec<&str>>();
 
