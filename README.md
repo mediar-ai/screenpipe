@@ -1,3 +1,5 @@
+English | [简体中文](README-zh_CN.md)
+
 <p align="center">
    <a href ="https://screenpi.pe">
       <img src="https://github.com/user-attachments/assets/d3b1de26-c3c0-4c84-b9c4-b03213b97a30" alt="logo" width="200">
@@ -47,7 +49,7 @@
 
 <p align="center">
    <a href ="https://screenpi.pe">
-       <img alt="demo" src="https://github.com/user-attachments/assets/39d27adc-e17e-4ca5-89c5-faf45a3ea20f" width="800" />
+       <video alt="demo" src="https://github.com/user-attachments/assets/00a6af05-0c29-436e-88cc-83bb91f6211d" width="800" />
    </a>
 </p>
 
