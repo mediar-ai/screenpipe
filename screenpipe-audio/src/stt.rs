@@ -387,16 +387,13 @@ pub async fn stt(
             for segment in segments {
                 let mut text = segment.dr.text.clone();
 
-                // maybe not <|0.00|> but <|12.34|>
-                let mut start = text[..8].to_string();
-                if !start.ends_with('>') {
-                    start = text[..9].to_string();
-                }
-                let mut end = text[text.len() - 9..].to_string();
-                // same but for <
-                if !end.starts_with('<') {
-                    end = text[text.len() - 8..].to_string();
-                }
+                let tokens = token_regex
+                    .find_iter(text.as_str())
+                    .map(|m| m.as_str())
+                    .collect::<Vec<&str>>();
+                let start = tokens.first().unwrap().to_string();
+                let end = tokens.last().unwrap().to_string();
+
                 // convert start to float
                 let num_regex = Regex::new(r"([<>|])")?;
                 let start_clone = start.clone();
@@ -415,10 +412,10 @@ pub async fn stt(
                     max_time = e_time;
                 }
 
-                start.push_str(&end);
+                let range = [start, end].concat();
                 // hallucination still present if last range is largest? or if duplicate range?
                 // still unclear https://github.com/openai/whisper/discussions/679 (try)
-                if ranges.insert(start) {
+                if ranges.insert(range) {
                     if segments_len > 1 && i == segments_len - 1 {
                         if s_time == min_time && e_time == max_time {
                             continue;
