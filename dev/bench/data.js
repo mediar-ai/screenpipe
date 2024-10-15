@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729031506614,
+  "lastUpdate": 1729031591411,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -16019,6 +16019,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1897154729,
             "range": "± 69387565",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df53c89233ffe9e43a7969f3b30a32b8aed3128f",
+          "message": "Merge pull request #506 from EzraEllette/arabic-transcribe\n\nupdate transcript processing to support multibyte characters",
+          "timestamp": "2024-10-15T15:23:37-07:00",
+          "tree_id": "b93ac76629ca772efe4ca94e3b105b3cc360ced2",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/df53c89233ffe9e43a7969f3b30a32b8aed3128f"
+        },
+        "date": 1729031589658,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2099635000,
+            "range": "± 338922341",
             "unit": "ns/iter"
           }
         ]
