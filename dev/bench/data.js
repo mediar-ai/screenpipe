@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729013841529,
+  "lastUpdate": 1729028372215,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -15779,6 +15779,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1920582604,
             "range": "± 46426692",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "2ef28b4075a40579fe249d40f9b9a2e686280874",
+          "message": "feat: embedded LLM, #475",
+          "timestamp": "2024-10-15T14:31:04-07:00",
+          "tree_id": "c0eccefc8be01c9ccf1a90700d4188dbb7810c69",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/2ef28b4075a40579fe249d40f9b9a2e686280874"
+        },
+        "date": 1729028370423,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1881840416,
+            "range": "± 46144982",
             "unit": "ns/iter"
           }
         ]
