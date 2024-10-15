@@ -1,5 +1,3 @@
-import LanguageSwitcher from './components/LanguageSwitcher';
-
 const themeConfig = {
   logo: (
     <>
@@ -19,9 +17,6 @@ const themeConfig = {
   docsRepositoryBase: "https://github.com/mediar-ai/screenpipe/", // Documentation repo link
   footer: {
     text: "screenpipe docs",
-  },
-  header: {
-    extraContent: <LanguageSwitcher />,
   },
   // Other config options...
 };
