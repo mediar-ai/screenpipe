@@ -13,13 +13,13 @@ pub mod google;
 #[cfg(feature = "llm")]
 pub use google::*;
 #[cfg(feature = "llm")]
-pub mod mistral;
-#[cfg(feature = "llm")]
-pub use mistral::*;
-#[cfg(feature = "llm")]
 pub mod llama;
 #[cfg(feature = "llm")]
 pub use llama::*;
+#[cfg(feature = "llm")]
+pub mod llama_cpp;
+#[cfg(feature = "llm")]
+pub use llama_cpp::*;
 #[cfg(feature = "pipes")]
 pub mod pipes;
 #[cfg(feature = "pipes")]
