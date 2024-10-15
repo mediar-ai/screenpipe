@@ -94,8 +94,6 @@ url = { version = "2.2.0", optional = true }
 # Telemetry
 highlightio = { version = "1.0.2", features = ["tokio"] }
 
-dotenv = "0.15.0"
-
 [dev-dependencies]
 tempfile = "3.3.0"
 
