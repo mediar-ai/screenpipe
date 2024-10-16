@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729039878746,
+  "lastUpdate": 1729040920494,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -16199,6 +16199,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1889757354,
             "range": "± 95999279",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "0231e1910e7e486edfae67239c7c0284b0393075",
+          "message": "fix: disable embedded llm for windows and linux",
+          "timestamp": "2024-10-15T17:58:53-07:00",
+          "tree_id": "22426c9fd5b1ed54677d18e9546afcdf8db6552a",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/0231e1910e7e486edfae67239c7c0284b0393075"
+        },
+        "date": 1729040919246,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1858416917,
+            "range": "± 64105649",
             "unit": "ns/iter"
           }
         ]
