@@ -22,6 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
+import { Badge } from "@/components/ui/badge"; // Add this import
 
 import {
   Eye,
@@ -424,10 +425,13 @@ export function Settings({ className }: { className?: string }) {
                         >
                           embedded ai
                         </Label>
+                        <Badge variant="outline" className="ml-2">
+                          experimental
+                        </Badge>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <HelpCircle className="h-4 w-4 cursor-help" />
+                              <HelpCircle className="h-4 w-4 cursor-help ml-2" />
                             </TooltipTrigger>
                             <TooltipContent
                               side="right"
@@ -435,9 +439,11 @@ export function Settings({ className }: { className?: string }) {
                             >
                               <p>
                                 enable this to use local ai features in
-                                screenpipe. you can use it through search or
-                                pipes for enhanced functionality without relying
-                                on external services.
+                                screenpipe. this is an experimental feature that
+                                may be unstable or change in future updates. you
+                                can use it through search or pipes for enhanced
+                                functionality without relying on external
+                                services.
                               </p>
                             </TooltipContent>
                           </Tooltip>
@@ -470,7 +476,7 @@ export function Settings({ className }: { className?: string }) {
                             ? "running"
                             : ollamaStatus === "error"
                             ? "error"
-                            : "start llm"}
+                            : "start ai"}
                         </Button>
                         <Button
                           variant="outline"
@@ -478,7 +484,7 @@ export function Settings({ className }: { className?: string }) {
                           className="ml-auto"
                         >
                           <X className="h-4 w-4 mr-2" />
-                          stop llm
+                          stop ai
                         </Button>
                         <LogFileButton />
                       </div>

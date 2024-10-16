@@ -33,6 +33,8 @@ import {
   Send,
   X,
   Square,
+  Settings,
+  Clock,
 } from "lucide-react";
 import { useToast } from "./ui/use-toast";
 import posthog from "posthog-js";
@@ -56,6 +58,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "./ui/dialog";
 import {
   Tooltip,
@@ -74,6 +77,7 @@ import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { encode, removeDuplicateSelections } from "@/lib/utils";
 import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 export function SearchChat() {
   // Search state
@@ -132,6 +136,36 @@ export function SearchChat() {
 
   const [isFiltering, setIsFiltering] = useState(false);
   const debouncedThreshold = useDebounce(similarityThreshold, 300);
+
+  const [isQueryParamsDialogOpen, setIsQueryParamsDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const updateDates = () => {
+      const now = new Date();
+      setEndDate(now);
+      // Optionally update startDate if you want to maintain a rolling time window
+      // setStartDate(new Date(now.getTime() - 24 * 3600000)); // 24 hours ago
+    };
+
+    // Update dates immediately
+    updateDates();
+
+    // Set up interval to update dates every 5 minutes
+    const intervalId = setInterval(updateDates, 5 * 60 * 1000);
+
+    // Add event listener for when the page becomes visible
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        updateDates();
+      }
+    });
+
+    // Clean up on component unmount
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", updateDates);
+    };
+  }, []);
 
   const handleExampleSelect = async (example: ExampleSearch) => {
     posthog.capture("example_search", { example: example.title });
@@ -440,14 +474,23 @@ export function SearchChat() {
 
   const handleSearch = async (newOffset = 0, overrides: any = {}) => {
     setHasSearched(true);
-
-    posthog.capture("search");
+    setShowExamples(false); // Add this line
     setIsLoading(true);
     setOffset(newOffset);
     setProgress(0);
     setChatMessages([]);
     scrollToBottom();
     setResults([]);
+
+    posthog.capture("search", {
+      contentType: overrides.contentType || contentType,
+      limit: overrides.limit || limit,
+      offset: newOffset,
+      start_time: overrides.startDate?.toISOString() || startDate.toISOString(),
+      end_time: endDate.toISOString(),
+      min_length: overrides.minLength || minLength,
+      max_length: maxLength,
+    });
 
     try {
       const response = await queryScreenpipe({
@@ -512,6 +555,13 @@ export function SearchChat() {
     } else {
       setSelectedResults(new Set());
     }
+  };
+
+  const handleQuickTimeFilter = (minutes: number) => {
+    const now = new Date();
+    const newStartDate = new Date(now.getTime() - minutes * 60000);
+    setStartDate(newStartDate);
+    setEndDate(now);
   };
 
   const renderSearchResults = () => {
@@ -682,77 +732,43 @@ export function SearchChat() {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4">
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="search-query">search query</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>enter keywords to search your recorded data</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="relative">
-            <Search
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={18}
-            />
-            <Input
-              id="search-query"
-              type="text"
-              placeholder="one keyword matching audio transcription or screen text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              autoCorrect="off"
-              className="pl-8"
-            />
-          </div>
+    <div className="w-full max-w-4xl mx-auto p-4 mt-12">
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        <div className="flex-grow flex items-center space-x-4">
+          <SqlAutocompleteInput
+            id="window-name"
+            type="window"
+            icon={<Layers className="h-4 w-4" />}
+            value={windowName}
+            onChange={setWindowName}
+            placeholder="filter by window name"
+            className="w-full"
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setIsQueryParamsDialogOpen(true)}
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => handleSearch(0)} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                searching...
+              </>
+            ) : (
+              <>
+                <Search className="mr-2 h-4 w-4" />
+                search
+              </>
+            )}
+          </Button>
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="content-type">content type</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    select the type of content to search. ocr is the text found
-                    on your screen.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <Select value={contentType} onValueChange={setContentType}>
-            <SelectTrigger id="content-type" className="relative">
-              <Layers
-                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-                size={18}
-              />
-              <SelectValue placeholder="content type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">
-                <span className="pl-6">all</span>
-              </SelectItem>
-              <SelectItem value="ocr">
-                <span className="pl-6">ocr</span>
-              </SelectItem>
-              <SelectItem value="audio">
-                <span className="pl-6">audio</span>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        <div className="flex-grow space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="start-date">start date (local time)</Label>
             <TooltipProvider>
@@ -761,20 +777,19 @@ export function SearchChat() {
                   <HelpCircle className="h-4 w-4 text-gray-400" />
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>select the start date to search for content.</p>
+                  <p>select the start date to search for content</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
-          <div className="relative">
-            <DateTimePicker
-              date={startDate}
-              setDate={setStartDate}
-              className="pl-8"
-            />
-          </div>
+          <DateTimePicker
+            date={startDate}
+            setDate={setStartDate}
+            className="w-full"
+          />
         </div>
-        <div className="space-y-2">
+
+        <div className="flex-grow space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="end-date">end date (local time)</Label>
             <TooltipProvider>
@@ -783,203 +798,272 @@ export function SearchChat() {
                   <HelpCircle className="h-4 w-4 text-gray-400" />
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>select the end date to search for content.</p>
+                  <p>select the end date to search for content</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
-          <div className="relative">
-            <DateTimePicker
-              date={endDate}
-              setDate={setEndDate}
-              className="pl-8"
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <SqlAutocompleteInput
-            id="app-name"
-            placeholder="app name"
-            value={appName}
-            onChange={setAppName}
-            type="app"
-            icon={
-              <Laptop
-                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-                size={18}
-              />
-            }
+          <DateTimePicker
+            date={endDate}
+            setDate={setEndDate}
+            className="w-full"
           />
         </div>
-        <div className="space-y-2">
-          <SqlAutocompleteInput
-            id="window-name"
-            placeholder="window name"
-            value={windowName}
-            onChange={setWindowName}
-            type="window"
-            icon={
-              <Layout
-                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-                size={18}
-              />
-            }
-          />
-        </div>
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="include-frames"
-            checked={includeFrames}
-            onCheckedChange={setIncludeFrames}
-          />
-          <Label htmlFor="include-frames">include frames</Label>
+      </div>
 
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <HelpCircle className="h-4 w-4 text-gray-400" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  include frames in the search results. this shows the frame
-                  where the text appeared. only works for ocr. this may slow
-                  down the search.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        <div className="flex flex-col space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="limit-slider">page size: {limit}</Label>
+      <div className="flex space-x-2 justify-center">
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(30)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 30m
+        </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(60)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 60m
+        </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(24 * 60)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 24h
+        </Badge>
+      </div>
+
+      <Dialog
+        open={isQueryParamsDialogOpen}
+        onOpenChange={setIsQueryParamsDialogOpen}
+      >
+        <DialogContent className="sm:max-w-[605px]">
+          <DialogHeader>
+            <DialogTitle>advanced search parameters</DialogTitle>
+            <DialogDescription>
+              adjust additional search parameters here.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="query" className="text-right">
+                query
+              </Label>
+              <div className="col-span-3 flex items-center">
+                <Input
+                  id="query"
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="flex-grow"
+                  placeholder="keyword matching audio transcription or screen text"
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        enter keywords to search your recorded data, <br />
+                        for example: &quot;shoes&quot; or &quot;screenpipe&quot;
+                        or &quot;login&quot;, this will filter out all results
+                        that don&apos;t contain those keywords.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="app-name" className="text-right">
+                app name
+              </Label>
+              <div className="col-span-3 flex items-center">
+                <SqlAutocompleteInput
+                  id="app-name"
+                  type="app"
+                  icon={<Laptop className="h-4 w-4" />}
+                  value={appName}
+                  onChange={setAppName}
+                  placeholder="filter by app name"
+                  className="flex-grow"
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>filter results by specific application names</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="min-length" className="text-right">
+                min length
+              </Label>
+              <div className="col-span-3 flex items-center">
+                <Input
+                  id="min-length"
+                  type="number"
+                  value={minLength}
+                  onChange={(e) => setMinLength(Number(e.target.value))}
+                  className="flex-grow"
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        enter the minimum length of the content to search for
+                        <br />
+                        usually transcriptions are short while text extracted
+                        from images can be long.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="max-length" className="text-right">
+                max length
+              </Label>
+              <div className="col-span-3 flex items-center">
+                <Input
+                  id="max-length"
+                  type="number"
+                  value={maxLength}
+                  onChange={(e) => setMaxLength(Number(e.target.value))}
+                  className="flex-grow"
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        enter the maximum length of the content to search for
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="content-type" className="text-right">
+                content type
+              </Label>
+              <div className="col-span-3 flex items-center">
+                <Select value={contentType} onValueChange={setContentType}>
+                  <SelectTrigger id="content-type" className="flex-grow">
+                    <SelectValue placeholder="content type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">all</SelectItem>
+                    <SelectItem value="ocr">ocr</SelectItem>
+                    <SelectItem value="audio">audio</SelectItem>
+                  </SelectContent>
+                </Select>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        select the type of content to search. ocr is the text
+                        found on your screen.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="limit-slider" className="text-right">
+                page size: {limit}
+              </Label>
+              <div className="col-span-3 flex items-center">
+                <Slider
+                  id="limit-slider"
+                  value={[limit]}
+                  onValueChange={(value: number[]) => setLimit(value[0])}
+                  min={10}
+                  max={150}
+                  step={5}
+                  className="flex-grow"
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        select the number of results to display. usually ai
+                        cannot ingest more than 30 OCR results at a time and
+                        1000 audio results at a time.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-center space-x-2">
+            <Switch
+              id="include-frames"
+              checked={includeFrames}
+              onCheckedChange={setIncludeFrames}
+            />
+            <Label htmlFor="include-frames">include frames</Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                  <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>
-                    select the number of results to display. usually ai cannot
-                    ingest more than 30 OCR results at a time
-                    <br />
-                    and 1000 audio results at a time.
+                    include frames in the search results. this shows the frame
+                    where the text appeared. only works for ocr. this may slow
+                    down the search.
                   </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
-          <Slider
-            id="limit-slider"
-            value={[limit]}
-            onValueChange={(value: number[]) => setLimit(value[0])}
-            min={10}
-            max={150}
-            step={5}
-          />
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="min-length">min length</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>enter the minimum length of the content to search for.</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="relative">
-            <AlignLeft
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={18}
-            />
-            <Input
-              id="min-length"
-              type="number"
-              placeholder="min length"
-              value={minLength}
-              onChange={(e) => setMinLength(Number(e.target.value))}
-              min={0}
-              className="pl-8"
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="max-length">max length</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>enter the maximum length of the content to search for.</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="relative">
-            <AlignLeft
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={18}
-            />
-            <Input
-              id="max-length"
-              type="number"
-              placeholder="max length"
-              value={maxLength}
-              onChange={(e) => setMaxLength(Number(e.target.value))}
-              min={0}
-              className="pl-8"
-            />
-          </div>
-        </div>
-      </div>
-      <div className="flex justify-between items-center mb-4">
-        <Button
-          onClick={() => handleSearch(0)}
-          disabled={isLoading}
-          className="w-full mr-4"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              searching... {progress.toFixed(0)}%
-            </>
-          ) : (
-            "search"
-          )}
-        </Button>
-        <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="icon">
-              <IconCode className="h-4 w-4" />
+          <DialogFooter>
+            <Button onClick={() => setIsQueryParamsDialogOpen(false)}>
+              done
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>curl command</DialogTitle>
-              <DialogDescription>
-                you can use this curl command to make the same search request
-                from the command line.
-                <br />
-                <br />
-                <span className="text-xs text-gray-500">
-                  note: you need to have `jq` installed to use the command.
-                </span>{" "}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="overflow-x-auto">
-              <CodeBlock language="bash" value={generateCurlCommand()} />
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-      {showExamples && results.length === 0 && (
-        <ExampleSearchCards onSelect={handleExampleSelect} />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {isLoading ? (
+        <div className="my-12 flex justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      ) : (
+        showExamples &&
+        results.length === 0 && (
+          <div className="my-12 flex justify-center">
+            <ExampleSearchCards onSelect={handleExampleSelect} />
+          </div>
+        )
       )}
       {isLoading && (
         <div className="my-2">
@@ -1125,7 +1209,7 @@ export function SearchChat() {
         )}
       </AnimatePresence>
 
-      <Separator className="my-8" />
+      {results.length > 0 && <Separator className="my-8" />}
 
       {/* Display chat messages */}
       <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto ">
