@@ -393,7 +393,7 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌─────────────────────┬──────────────���─────���───────────────┐");
+    println!("┌─────────────────────┬────────────────────────────────────┐");
     println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
@@ -634,18 +634,30 @@ async fn main() -> anyhow::Result<()> {
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
 
+    // only in beta and on macos
     #[cfg(feature = "beta")]
     {
-        use screenpipe_actions::run; // Ensure this import is present
+        if cli.enable_beta && cfg!(target_os = "macos") {
+            use screenpipe_actions::run;
 
-        info!("beta feature enabled, starting screenpipe actions");
+            info!("beta feature enabled, starting screenpipe actions");
 
-        // Spawn the run function in a blocking task to avoid affecting the async runtime
-        tokio::spawn(async {
-            if let Err(e) = run().await {
-                eprintln!("Error running screenpipe actions: {}", e);
-            }
-        });
+            let shutdown_tx_clone = shutdown_tx.clone();
+            tokio::spawn(async move {
+                let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                
+                tokio::select! {
+                    result = run() => {
+                        if let Err(e) = result {
+                            error!("Error running screenpipe actions: {}", e);
+                        }
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("Received shutdown signal, stopping screenpipe actions");
+                    }
+                }
+            });
+        }
     }
 
     tokio::select! {

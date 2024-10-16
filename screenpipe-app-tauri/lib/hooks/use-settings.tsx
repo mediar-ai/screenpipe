@@ -41,7 +41,8 @@ export interface Settings {
   audioChunkDuration: number; // new field
   useChineseMirror: boolean; // Add this line
   embeddedLLM: EmbeddedLLMConfig;
-  languages: Language[],
+  languages: Language[];
+  enableBeta: boolean;
 }
 
 const defaultSettings: Settings = {
@@ -83,6 +84,7 @@ const defaultSettings: Settings = {
     model: "llama3.2:1b-instruct-q4_K_M",
     port: 11438,
   },
+  enableBeta: false,
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -212,6 +214,8 @@ export function useSettings() {
             ? savedIgnoredWindows
             : defaultIgnoredWindows;
 
+        const savedEnableBeta = (await store!.get<boolean>("enableBeta")) || false;
+
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -241,6 +245,7 @@ export function useSettings() {
           useChineseMirror: savedUseChineseMirror,
           embeddedLLM: savedEmbeddedLLM,
           languages: savedLanguages,
+          enableBeta: savedEnableBeta,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

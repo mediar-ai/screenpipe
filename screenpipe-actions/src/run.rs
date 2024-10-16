@@ -1,16 +1,19 @@
 use crate::type_and_animate::{delete_characters, type_slowly, EnigoCommand};
 use crate::{call_ai, run_keystroke_monitor, KeystrokeCommand};
 use reqwest;
+use std::string::ToString;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tempfile::NamedTempFile;
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::task;
 use tokio::time::Instant;
 use tracing::{error, info};
-use std::string::ToString;
 
+// TODO: make this function not prevent ctrl+c in the future
 pub async fn run() -> anyhow::Result<()> {
-    info!("starting keystroke monitor. press '//' to print attributes for the current app and call openai.");
+    info!("starting keystroke monitor. press '//' to print attributes for the current app and call openai. press 'ctrl+q' to stop.");
     let (tx, mut rx) = mpsc::channel(100);
 
     let (_enigo_tx, mut enigo_rx) = mpsc::channel(100);
@@ -31,7 +34,7 @@ pub async fn run() -> anyhow::Result<()> {
                     enigo.key_click(enigo::Key::Backspace);
                 }
                 EnigoCommand::Shutdown => {
-                    println!("Shutting down Enigo thread.");
+                    info!("Shutting down Enigo thread.");
                     break;
                 }
             }
@@ -46,21 +49,28 @@ pub async fn run() -> anyhow::Result<()> {
         }
     });
 
-    while let Some(command) = rx.recv().await {
-        match command {
-            KeystrokeCommand::DoubleSlash => {
-                info!("double slash detected. calling ai...");
+    let stop_signal = Arc::new(AtomicBool::new(false));
 
-                type_slowly("thinking".to_string()).await?;
-                let swift_output = run_swift_script().await?;
+    loop {
+        tokio::select! {
+            Some(command) = rx.recv() => {
+                match command {
+                    KeystrokeCommand::DoubleSlash => {
+                        // Reset the stop signal at the start of a new action
+                        stop_signal.store(false, Ordering::SeqCst);
 
-                // Use swift_output directly here
-                // For example, pass it to the LLM or process it further
+                        info!("double slash detected. calling ai...");
 
-                info!("swift output: {}", swift_output);
+                        type_slowly("thinking".to_string(), stop_signal.clone()).await?;
+                        let swift_output = run_swift_script().await?;
 
-                let prompt = format!(
-                    r#"Based on the following Swift output,
+                        // Use swift_output directly here
+                        // For example, pass it to the LLM or process it further
+
+                        info!("swift output: {}", swift_output);
+
+                        let prompt = format!(
+                            r#"Based on the following Swift output,
                 you need to continue where the "//" is. 
                 Output your response in JSON format as follows:
                 {{
@@ -75,32 +85,46 @@ pub async fn run() -> anyhow::Result<()> {
                     swift_output
                 );
 
-                let start = Instant::now();
-                match call_ai(prompt, String::new(), true).await {
-                    Ok(response) => {
-                        let duration = start.elapsed();
-                        info!("{:.1?} - first call_ai", duration);
-                        delete_characters("thinking".len()).await?;
-                        delete_characters(2).await?; // Delete the double slash
-                        info!("ai response: {}", response);
-                        type_slowly("[GENERIC_RESPONSE]".to_string()).await?;
-                        type_slowly("\n".to_string()).await?;
-                        type_slowly(response).await?;
-                    }
-                    Err(e) => {
-                        let duration = start.elapsed();
-                        error!("{:.1?} - failed first call_ai", duration);
-                        delete_characters("thinking".len()).await?;
-                        error!("failed to get response from ai: {}", e);
-                        continue; // skip the rest of the loop iteration
-                    }
-                }
-                type_slowly("\n".to_string()).await?;
-                type_slowly("\n".to_string()).await?;
-                type_slowly("[RESPONSE_WITH_CONTEXT]".to_string()).await?;
+                        let start = Instant::now();
+                        let stop_signal_clone = stop_signal.clone();
+                        match call_ai(prompt, String::new(), true).await {
+                            Ok(response) => {
+                                let duration = start.elapsed();
+                                info!("{:.1?} - first call_ai", duration);
+                                delete_characters("thinking".len()).await?;
+                                delete_characters(2).await?; // Delete the double slash
+                                info!("ai response: {}", response);
 
-                let context = format!("Swift output: {}", swift_output);
-                let prompt = r#"Based on the following Swift output, find double slash '//' to see where users curor is, 
+                                // Spawn a new task for typing
+                                let typing_task = task::spawn(async move {
+                                    let _ = type_slowly("[GENERIC_RESPONSE]".to_string(), stop_signal_clone.clone()).await;
+                                    let _ = type_slowly("\n".to_string(), stop_signal_clone.clone()).await;
+                                    let _ = type_slowly(response, stop_signal_clone).await;
+                                });
+
+                                // Wait for the typing task to complete or be interrupted
+                                tokio::select! {
+                                    _ = typing_task => {},
+                                    _ = rx.recv() => {
+                                        // If we receive any command while typing, stop the typing
+                                        stop_signal.store(true, Ordering::SeqCst);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let duration = start.elapsed();
+                                error!("{:.1?} - failed first call_ai", duration);
+                                delete_characters("thinking".len()).await?;
+                                error!("failed to get response from ai: {}", e);
+                                continue; // skip the rest of the loop iteration
+                            }
+                        }
+                        type_slowly("\n".to_string(), stop_signal.clone()).await?;
+                        type_slowly("\n".to_string(), stop_signal.clone()).await?;
+                        type_slowly("[RESPONSE_WITH_CONTEXT]".to_string(), stop_signal.clone()).await?;
+
+                        let context = format!("Swift output: {}", swift_output);
+                        let prompt = r#"Based on the following Swift output, find double slash '//' to see where users curor is,
                 Now, provide 3 search queries to find relevant context in user files to continue the conversation. follow these guidelines:
 
                 1. focus on specificity, avoid generic words
@@ -121,93 +145,278 @@ pub async fn run() -> anyhow::Result<()> {
                 ]
                 }"#.to_string();
 
-                let start = Instant::now();
-                match call_ai(prompt, context, true).await {
-                    Ok(response) => {
-                        let duration = start.elapsed();
-                        info!("{:.1?} - second call_ai", duration);
-                        // println!("ai response: {}", response);
-
-                        // Split the response by newlines to get individual queries
-                        let queries: Vec<String> = response
-                            .split('\n')
-                            .map(|s| s.trim().to_string())
-                            .filter(|s| !s.is_empty())
-                            .collect();
-
-                        let mut search_results = Vec::new();
-
-                        for query in &queries {
-                            match search_localhost(query).await {
-                                // used to be &query
-                                Ok(search_result) => {
-                                    let truncated_result =
-                                        search_result.chars().take(100).collect::<String>();
-                                    let capitalized_query = query.to_uppercase();
-                                    type_slowly(format!("[{}] ", capitalized_query)).await?;
-                                    info!("search result for '{}': {}", query, truncated_result);
-                                    search_results.push(search_result);
-                                }
-                                Err(e) => {
-                                    error!("error searching localhost for '{}': {:?}", query, e)
-                                }
-                            }
-                        }
-
-                        type_slowly("\n".to_string()).await?;
-                        type_slowly("analyzing".to_string()).await?;
-
-                        // Final LLM call
-                        let final_prompt = r#"Based on the desktop text and search results of my computer, draft a concise response.
-                        Provide the most relevant message
-                        Also provide who your message is addressed to ("TO_YOU" or "ON_YOUR_BEHALF")
-                        You might be writing: a response, a follow-up, a suggestion, a clarification, or you might be puzzled
-                        Output your response in JSON format as follows:
-                        {
-                            "response": "[ADDRESSED TO] Your response text here"
-                        }
-                        Ensure the response matches the length and tone of the message we are responding to.
-                        Make the response concise and to the point.
-                        The response should be casual, social media style.
-                        It should not look like it was written by AI.
-                        "#.to_string();
-                        let final_context = format!(
-                            "swift output: {}\nfirst llm response: {}\nsearch results: {}",
-                            swift_output,
-                            response,
-                            search_results.join("\n")
-                        );
-
                         let start = Instant::now();
-                        match call_ai(final_prompt, final_context, true).await {
-                            Ok(final_response) => {
+                        match call_ai(prompt, context, true).await {
+                            Ok(response) => {
                                 let duration = start.elapsed();
-                                info!("{:.1?} - final call_ai", duration);
-                                delete_characters("analyzing".len()).await?;
-                                info!("<<<llm final response>>>: {}", final_response);
-                                type_slowly(final_response).await?;
+                                info!("{:.1?} - second call_ai", duration);
+                                // println!("ai response: {}", response);
+
+                                // Split the response by newlines to get individual queries
+                                let queries: Vec<String> = response
+                                    .split('\n')
+                                    .map(|s| s.trim().to_string())
+                                    .filter(|s| !s.is_empty())
+                                    .collect();
+
+                                let mut search_results = Vec::new();
+
+                                for query in &queries {
+                                    match search_localhost(query).await {
+                                        // used to be &query
+                                        Ok(search_result) => {
+                                            let truncated_result =
+                                                search_result.chars().take(100).collect::<String>();
+                                            let capitalized_query = query.to_uppercase();
+                                            type_slowly(format!("[{}] ", capitalized_query), stop_signal.clone()).await?;
+                                            info!("search result for '{}': {}", query, truncated_result);
+                                            search_results.push(search_result);
+                                        }
+                                        Err(e) => {
+                                            error!("error searching localhost for '{}': {:?}", query, e)
+                                        }
+                                    }
+                                }
+
+                                type_slowly("\n".to_string(), stop_signal.clone()).await?;
+                                type_slowly("analyzing".to_string(), stop_signal.clone()).await?;
+
+                                // Final LLM call
+                                let final_prompt = r#"Based on the desktop text and search results of my computer, draft a concise response.
+                                Provide the most relevant message
+                                Also provide who your message is addressed to ("TO_YOU" or "ON_YOUR_BEHALF")
+                                You might be writing: a response, a follow-up, a suggestion, a clarification, or you might be puzzled
+                                Output your response in JSON format as follows:
+                                {
+                                    "response": "[ADDRESSED TO] Your response text here"
+                                }
+                                Ensure the response matches the length and tone of the message we are responding to.
+                                Make the response concise and to the point.
+                                The response should be casual, social media style.
+                                It should not look like it was written by AI.
+                                "#.to_string();
+                                let final_context = format!(
+                                    "swift output: {}\nfirst llm response: {}\nsearch results: {}",
+                                    swift_output,
+                                    response,
+                                    search_results.join("\n")
+                                );
+
+                                let start = Instant::now();
+                                match call_ai(final_prompt, final_context, true).await {
+                                    Ok(final_response) => {
+                                        let duration = start.elapsed();
+                                        info!("{:.1?} - final call_ai", duration);
+                                        delete_characters("analyzing".len()).await?;
+                                        info!("<<<llm final response>>>: {}", final_response);
+                                        type_slowly(final_response, stop_signal.clone()).await?;
+                                    }
+                                    Err(e) => {
+                                        error!("error in final openai call: {:?}", e);
+                                        continue;
+                                    }
+                                }
                             }
                             Err(e) => {
-                                error!("error in final openai call: {:?}", e);
+                                error!("error in second openai call: {}", e);
                                 continue;
                             }
                         }
-                    }
-                    Err(e) => {
-                        error!("error in second openai call: {}", e);
-                        continue;
+                    },
+                    KeystrokeCommand::Stop => {
+                        info!("stop command received. stopping current action...");
+                        stop_signal.store(true, Ordering::SeqCst);
                     }
                 }
-            }
+            },
+            else => break,
         }
     }
+
+    // Cleanup code
+    info!("shutting down enigo thread...");
+    if let Err(e) = _enigo_tx.send(EnigoCommand::Shutdown).await {
+        error!("failed to send shutdown command to enigo thread: {:?}", e);
+    }
+
     Ok(())
 }
 
 async fn run_swift_script() -> anyhow::Result<String> {
     let start = Instant::now();
 
-    let script_content = include_str!("print_all_attributes.swift");
+    let script_content = r#"
+import Cocoa
+import ApplicationServices
+import Foundation
+
+class QueueElement {
+    let element: AXUIElement
+    let depth: Int
+    
+    init(_ element: AXUIElement, depth: Int) {
+        self.element = element
+        self.depth = depth
+    }
+}
+
+func printAllAttributeValues(_ startElement: AXUIElement) {
+    var elements: [(CGPoint, CGSize, String)] = []
+    var visitedElements = Set<AXUIElement>()
+    let unwantedValues = ["0", "", "", "3", ""]
+    let unwantedLabels = [
+        "window", "application", "group", "button", "image", "text",
+        "pop up button", "region", "notifications", "table", "column",
+        "html content"
+    ]
+    
+    func traverseHierarchy(_ element: AXUIElement, depth: Int) {
+        guard !visitedElements.contains(element) else { return }
+        visitedElements.insert(element)
+        
+        var attributeNames: CFArray?
+        let result = AXUIElementCopyAttributeNames(element, &attributeNames)
+        
+        guard result == .success, let attributes = attributeNames as? [String] else { return }
+        
+        var position: CGPoint = .zero
+        var size: CGSize = .zero
+        
+        // Get position
+        if let positionValue = getAttributeValue(element, forAttribute: kAXPositionAttribute) as! AXValue?,
+           AXValueGetType(positionValue) == .cgPoint {
+            AXValueGetValue(positionValue, .cgPoint, &position)
+        }
+        
+        // Get size
+        if let sizeValue = getAttributeValue(element, forAttribute: kAXSizeAttribute) as! AXValue?,
+           AXValueGetType(sizeValue) == .cgSize {
+            AXValueGetValue(sizeValue, .cgSize, &size)
+        }
+        
+        for attr in attributes {
+            if ["AXDescription", "AXValue", "AXLabel", "AXRoleDescription", "AXHelp"].contains(attr) {
+                if let value = getAttributeValue(element, forAttribute: attr) {
+                    let valueStr = describeValue(value)
+                    if !valueStr.isEmpty && !unwantedValues.contains(valueStr) && valueStr.count > 1 &&
+                       !unwantedLabels.contains(valueStr.lowercased()) {
+                        elements.append((position, size, valueStr))
+                    }
+                }
+            }
+            
+            // Traverse child elements
+            if let childrenValue = getAttributeValue(element, forAttribute: attr) {
+                if let elementArray = childrenValue as? [AXUIElement] {
+                    for childElement in elementArray {
+                        traverseHierarchy(childElement, depth: depth + 1)
+                    }
+                } else if let childElement = childrenValue as! AXUIElement? {
+                    traverseHierarchy(childElement, depth: depth + 1)
+                }
+            }
+        }
+    }
+    
+    traverseHierarchy(startElement, depth: 0)
+    
+    // Sort elements from top to bottom, then left to right
+    elements.sort { (a, b) in
+        if a.0.y != b.0.y {
+            return a.0.y < b.0.y
+        } else {
+            return a.0.x < b.0.x
+        }
+    }
+    
+    // Deduplicate and print sorted elements to stdout, excluding coordinates
+    var uniqueValues = Set<String>()
+    for (_, _, valueStr) in elements {
+        if uniqueValues.insert(valueStr).inserted {
+            print(valueStr)
+        }
+    }
+}
+
+func formatCoordinates(_ position: CGPoint, _ size: CGSize) -> String {
+    return String(format: "(x:%.0f,y:%.0f,w:%.0f,h:%.0f)", position.x, position.y, size.width, size.height)
+}
+
+func describeValue(_ value: AnyObject?) -> String {
+    switch value {
+    case let string as String:
+        return string
+    case let number as NSNumber:
+        return number.stringValue
+    case let point as NSPoint:
+        return "(\(point.x), \(point.y))"
+    case let size as NSSize:
+        return "w=\(size.width) h=\(size.height)"
+    case let rect as NSRect:
+        return "x=\(rect.origin.x) y=\(rect.origin.y) w=\(rect.size.width) h=\(rect.size.height)"
+    case let range as NSRange:
+        return "loc=\(range.location) len=\(range.length)"
+    case let url as URL:
+        return url.absoluteString
+    case let array as [AnyObject]:
+        return array.isEmpty ? "Empty array" : "Array with \(array.count) elements"
+    case let axValue as AXValue:
+        return describeAXValue(axValue)
+    case is AXUIElement:
+        return "AXUIElement"
+    case .none:
+        return "None"
+    default:
+        return String(describing: value)
+    }
+}
+
+func describeAXValue(_ axValue: AXValue) -> String {
+    let type = AXValueGetType(axValue)
+    switch type {
+    case .cgPoint:
+        var point = CGPoint.zero
+        AXValueGetValue(axValue, .cgPoint, &point)
+        return "(\(point.x), \(point.y))"
+    case .cgSize:
+        var size = CGSize.zero
+        AXValueGetValue(axValue, .cgSize, &size)
+        return "w=\(size.width) h=\(size.height)"
+    case .cgRect:
+        var rect = CGRect.zero
+        AXValueGetValue(axValue, .cgRect, &rect)
+        return "x=\(rect.origin.x) y=\(rect.origin.y) w=\(rect.size.width) h=\(rect.size.height)"
+    case .cfRange:
+        var range = CFRange(location: 0, length: 0)
+        AXValueGetValue(axValue, .cfRange, &range)
+        return "loc=\(range.location) len=\(range.length)"
+    default:
+        return "Unknown AXValue type"
+    }
+}
+
+func getAttributeValue(_ element: AXUIElement, forAttribute attr: String) -> AnyObject? {
+    var value: AnyObject?
+    let result = AXUIElementCopyAttributeValue(element, attr as CFString, &value)
+    return result == .success ? value : nil
+}
+
+func printAllAttributeValuesForCurrentApp() {
+    guard let app = NSWorkspace.shared.frontmostApplication else {
+        return
+    }
+    
+    let pid = app.processIdentifier
+    let axApp = AXUIElementCreateApplication(pid)
+    
+    print("attribute values for \(app.localizedName ?? "unknown app"):")
+    printAllAttributeValues(axApp)
+}
+
+// usage
+printAllAttributeValuesForCurrentApp()
+"#;
+
     let temp_file = NamedTempFile::new()?;
     tokio::fs::write(temp_file.path(), script_content).await?;
 

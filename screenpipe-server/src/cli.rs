@@ -230,6 +230,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_llm: bool,
 
+    /// Enable beta features
+    #[arg(long, default_value_t = false)]
+    pub enable_beta: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 

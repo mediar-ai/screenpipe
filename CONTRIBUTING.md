@@ -158,6 +158,20 @@ this is @louis030195 whole `.vscode/settings.json` file:
 
 ## other hacks
 
+### running dev + prod in the same time
+
+one command i keep using to avoid having to kill my main "production" process is:
+
+```bash
+./target/release/screenpipe --port 3035 --data-dir /tmp/sp
+```
+
+it will avoid conflicts with the port and avoid conflicts with the data dir
+
+especially useful if you've done new database migrations and want to avoid breaking your previous months of data :)
+
+on macos the /tmp dir keeps being cleaned up by the system fyi
+
 ### debugging github action
 
 ssh into the runner:

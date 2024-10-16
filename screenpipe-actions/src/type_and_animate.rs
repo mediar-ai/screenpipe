@@ -1,8 +1,10 @@
 use anyhow::Result;
-use tokio::time::{sleep, Duration};
-use std::cell::RefCell;
 use enigo::{Enigo, Key, KeyboardControllable};
 use serde::Serialize;
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::time::{sleep, Duration};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -46,23 +48,35 @@ pub async fn delete_characters(count: usize) -> Result<()> {
     Ok(())
 }
 
-pub async fn type_slowly(text: String) -> Result<()> {
+pub async fn type_slowly(text: String, stop_signal: Arc<AtomicBool>) -> Result<()> {
     let text_len = text.len();
-    tokio::task::spawn_blocking(move || {
-        with_enigo(|enigo| {
-            for line in text.split('\n') {
-                if !line.is_empty() {
-                    enigo.key_sequence(line);
+    for line in text.split('\n') {
+        if !line.is_empty() {
+            for char in line.chars() {
+                if stop_signal.load(Ordering::SeqCst) {
+                    return Ok(());
                 }
-                if text.contains('\n') {
+                tokio::task::spawn_blocking(move || {
+                    with_enigo(|enigo| {
+                        enigo.key_sequence(&char.to_string());
+                    });
+                }).await?;
+                sleep(Duration::from_millis(50)).await;
+            }
+        }
+        if text.contains('\n') {
+            if stop_signal.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+            tokio::task::spawn_blocking(move || {
+                with_enigo(|enigo| {
                     enigo.key_down(Key::Shift);
                     enigo.key_click(Key::Return);
                     enigo.key_up(Key::Shift);
-                }
-            }
-        });
-    })
-    .await?;
+                });
+            }).await?;
+        }
+    }
     sleep(Duration::from_millis(text_len as u64)).await;
     Ok(())
 }

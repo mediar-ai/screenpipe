@@ -15,7 +15,7 @@ mod pipes {
     use std::path::Path;
     use std::pin::Pin;
     use tokio::io::{AsyncBufReadExt, BufReader};
-    use tracing::{error, info};
+    use tracing::{debug, error, info};
     use url::Url;
 
     // Update this function near the top of the file
@@ -105,7 +105,7 @@ mod pipes {
                 if let Some(line) = line {
                     if line.contains("Download") {
                         // Log download messages as info instead of error
-                        info!("[pipe][download][{}] {}", pipe_clone, line);
+                        debug!("[pipe][download][{}] {}", pipe_clone, line);
                     } else {
                         // Keep other messages as errors
                         error!("[pipe][error][{}] {}", pipe_clone, line);
