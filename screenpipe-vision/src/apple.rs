@@ -25,14 +25,26 @@ extern "C" {
         length: usize,
         width: i32,
         height: i32,
+        languages: *const *const c_char,
+        languages_count: i32,
     ) -> *mut c_char;
     fn free_string(ptr: *mut c_char);
 }
 #[cfg(target_os = "macos")]
-pub fn perform_ocr_apple(image: &DynamicImage) -> String {
+pub fn perform_ocr_apple(
+    image: &DynamicImage,
+    languages: Vec<screenpipe_core::Language>,
+) -> String {
     let rgba = image.to_rgba8();
     let (width, height) = rgba.dimensions();
     let raw_data = rgba.as_raw();
+
+    let languages = get_apple_languages(languages);
+
+    let c_languages: Vec<*const c_char> = languages
+        .iter()
+        .map(|s| s.as_ptr() as *const c_char)
+        .collect();
 
     unsafe {
         let result_ptr = perform_ocr(
@@ -40,6 +52,8 @@ pub fn perform_ocr_apple(image: &DynamicImage) -> String {
             raw_data.len(),
             width as i32,
             height as i32,
+            c_languages.as_ptr(),
+            c_languages.len() as i32,
         );
         let _guard = OcrResultGuard(result_ptr);
         let result = CStr::from_ptr(result_ptr).to_string_lossy().into_owned();
@@ -94,4 +108,31 @@ pub fn parse_apple_ocr_result(json_result: &str) -> (String, String, Option<f64>
     });
 
     (text, json_output_string, overall_confidence)
+}
+
+#[cfg(target_os = "macos")]
+fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
+    use screenpipe_core::Language;
+
+    let mut langs: Vec<String> = Vec::new();
+    for lang in languages {
+        let lang_str = match lang {
+            Language::English => "en-US",
+            Language::Spanish => "es-ES",
+            Language::French => "fr-FR",
+            Language::German => "de-DE",
+            Language::Italian => "it-IT",
+            Language::Portuguese => "pt-BR",
+            Language::Russian => "ru-RU",
+            Language::Chinese => "zh-Hans",
+            Language::Korean => "ko-KR",
+            Language::Japanese => "ja-JP",
+            Language::Ukrainian => "uk-UA",
+            Language::Thai => "th-TH",
+            Language::Arabic => "ar-SA",
+            _ => continue,
+        };
+        langs.push(lang_str.to_string());
+    }
+    langs
 }
