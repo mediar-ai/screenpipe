@@ -49,6 +49,11 @@ jobs:
         run: cargo test
 
       - name: Run deno tests
+        env:
+          SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
+          PIPE_ID: test
+          PIPE_FILE: pipe.ts
+          PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
         run: deno test --allow-env --allow-write --allow-read
         working-directory: ./screenpipe-js
 
@@ -90,6 +95,11 @@ jobs:
         run: cargo test test_process_ocr_task_windows
 
       - name: Run deno tests
+        env:
+          SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
+          PIPE_ID: test
+          PIPE_FILE: pipe.ts
+          PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
         run: deno test --allow-env --allow-write --allow-read
         working-directory: ./screenpipe-js
 
@@ -136,5 +146,10 @@ jobs:
         run: cargo test test_apple_native_ocr
 
       - name: Run deno tests
+        env:
+          SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
+          PIPE_ID: test
+          PIPE_FILE: pipe.ts
+          PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
         run: deno test --allow-env --allow-write --allow-read
         working-directory: ./screenpipe-js

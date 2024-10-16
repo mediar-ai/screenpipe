@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import process from "node:process";
+import cronParser from "npm:cron-parser";
 
 // Type definitions
 export interface PipeConfig {
@@ -250,10 +252,219 @@ export interface InboxMessageAction {
   action: string;
 }
 
+interface TaskState {
+  lastRunTime: number;
+  nextRunTime: number;
+}
+
+interface SchedulerState {
+  [taskName: string]: TaskState;
+}
+
+class Task {
+  private _name: string;
+  private _interval: string | number;
+  private _time: string | null = null;
+  private _handler: (() => Promise<void>) | null = null;
+  private _nextRunTime: Date;
+  private _state?: TaskState;
+
+  constructor(name: string, state?: TaskState) {
+    this._name = name;
+    this._interval = 0;
+    if (state) {
+      this._nextRunTime = new Date(state.nextRunTime);
+    } else {
+      this._nextRunTime = new Date(0);
+    }
+    this._state = state;
+  }
+
+  every(interval: string | number): Task {
+    this._interval = interval;
+    return this;
+  }
+
+  at(time: string): Task {
+    this._time = time;
+    return this;
+  }
+
+  do(handler: () => Promise<void>): Task {
+    this._handler = handler;
+    return this;
+  }
+
+  getNextRunTime(): Date {
+    return this._nextRunTime;
+  }
+
+  async execute(): Promise<void> {
+    if (this._handler) {
+      await this._handler();
+      this._nextRunTime = this.calculateNextRunTime();
+    }
+  }
+
+  private calculateNextRunTime(): Date {
+    const now = new Date();
+    if (typeof this._interval === "number") {
+      return new Date(now.getTime() + this._interval);
+    }
+
+    const cronExpression = this.toCronExpression();
+    const interval = cronParser.parseExpression(cronExpression);
+    return interval.next().toDate();
+  }
+
+  private toCronExpression(): string {
+    if (typeof this._interval === "number") {
+      // Convert milliseconds to minutes for cron
+      const minutes = Math.floor(this._interval / 60000);
+      return `*/${minutes} * * * *`;
+    }
+
+    const [value, unit] = this._interval.split(" ");
+    switch (unit) {
+      case "minute":
+      case "minutes":
+        return `*/${value} * * * *`;
+      case "hour":
+      case "hours":
+        return `0 */${value} * * *`;
+      case "day":
+      case "days":
+        return `0 0 */${value} * *`;
+      default:
+        throw new Error(`Unsupported interval unit: ${unit}`);
+    }
+  }
+
+  getName(): string {
+    return this._name;
+  }
+}
+
+class Scheduler {
+  private tasks: Task[] = [];
+  private running: boolean = false;
+  private state: SchedulerState = {};
+  private stateFilePath: string;
+
+  constructor() {
+    const pipeId = process.env.PIPE_ID;
+    if (!pipeId) {
+      throw new Error("PIPE_ID environment variable is not set");
+    }
+    this.stateFilePath = path.join(
+      process.env.SCREENPIPE_DIR || "",
+      "pipes",
+      pipeId,
+      "scheduler_state.json"
+    );
+    this.loadState();
+  }
+
+  private loadState() {
+    try {
+      if (fs.existsSync(this.stateFilePath)) {
+        const stateData = fs.readFileSync(this.stateFilePath, "utf8");
+        this.state = JSON.parse(stateData);
+      } else {
+        console.log("No existing state file found. Starting with empty state.");
+        this.state = {};
+      }
+    } catch (error) {
+      console.warn("Failed to load scheduler state:", error);
+      this.state = {};
+    }
+  }
+
+  private saveState() {
+    try {
+      const dir = path.dirname(this.stateFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(this.stateFilePath, JSON.stringify(this.state), "utf8");
+    } catch (error) {
+      console.error("Failed to save scheduler state:", error);
+    }
+  }
+
+  task(name: string): Task {
+    const task = new Task(name, this.state[name]);
+    this.tasks.push(task);
+    return task;
+  }
+
+  async start(): Promise<void> {
+    this.running = true;
+    while (this.running) {
+      const now = new Date();
+      for (const task of this.tasks) {
+        if (task.getNextRunTime() <= now) {
+          await task.execute();
+          this.state[task.getName()] = {
+            lastRunTime: now.getTime(),
+            nextRunTime: task.getNextRunTime().getTime(),
+          };
+          this.saveState();
+        }
+      }
+      await this.sleep(100);
+    }
+  }
+
+  stop(): void {
+    this.running = false;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}
+
+/**
+ * The pipe object is used to interact with the screenpipe higher level functions.
+ *
+ */
 export const pipe = {
+  /**
+   * Send a desktop notification to the user.
+   *
+   * @example
+   * ```typescript
+   * pipe.sendDesktopNotification({ title: "Task Completed", body: "Your task has been completed." });
+   * ```
+   */
   sendDesktopNotification,
+  /**
+   * Load the pipe configuration that can be set through the screenpipe app or the pipe.json file.
+   *
+   * @example
+   * ```typescript
+   * pipe.loadPipeConfig();
+   * ```
+   */
   loadPipeConfig,
+  /**
+   * Query the screenpipe API.
+   *
+   * @example
+   * ```typescript
+   * pipe.queryScreenpipe({ q: "squirrel", contentType: "ocr", limit: 10 });
+   * ```
+   */
   queryScreenpipe,
+  /**
+   * Send a notification to the user's AI inbox.
+   *
+   * @example
+   * ```typescript
+   * pipe.inbox.send({ title: "Task Completed", body: "Your task has been completed." });
+   * ```
+   */
   inbox: {
     send: async (message: InboxMessage): Promise<boolean> => {
       const notificationApiUrl =
@@ -271,4 +482,26 @@ export const pipe = {
       }
     },
   },
+  /**
+   * Scheduler for running tasks at specific times or intervals.
+   *
+   * @example
+   * ```typescript
+   * pipe.scheduler.task("dailyReport")
+   *   .every("1 day")
+   *   .at("00:00")
+   *   .do(async () => {
+   *     console.log("running daily report");
+   *   });
+   *
+   * pipe.scheduler.task("everyFiveMinutes")
+   *   .every("5 minutes")
+   *   .do(async () => {
+   *     console.log("running task every 5 minutes");
+   *   });
+   *
+   * pipe.scheduler.start();
+   * ```
+   */
+  scheduler: new Scheduler(),
 };

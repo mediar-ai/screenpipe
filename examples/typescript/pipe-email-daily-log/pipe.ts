@@ -5,6 +5,7 @@ import process from "node:process";
 import { z } from "zod";
 import { generateObject, generateText } from "ai";
 import { createOllama } from "ollama-ai-provider";
+import { pipe } from "screenpipe";
 
 interface DailyLog {
   activity: string;
@@ -200,8 +201,9 @@ async function dailyLogPipeline(): Promise<void> {
   const ollamaModel = config.ollamaModel;
   const ollamaApiUrl = config.ollamaApiUrl;
   const windowName = config.windowName || "";
+  const appName = config.appName || "";
   const pageSize = config.pageSize;
-  const contentType = config.contentType || "ocr"; // Default to 'ocr' if not specified
+  const contentType = config.contentType || "ocr";
 
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
@@ -212,9 +214,9 @@ async function dailyLogPipeline(): Promise<void> {
     console.warn("error creating logs dir, probably already exists");
   }
 
-  let lastEmailSent = new Date(0); // Initialize to a past date
+  let lastEmailSent = new Date(0);
 
-  // send a welcome email to announce what will happen, when it will happen, and what it will do
+  // Send welcome email
   const welcomeEmail = `
     Welcome to the daily log pipeline!
 
@@ -224,7 +226,6 @@ async function dailyLogPipeline(): Promise<void> {
         ? `It will run at ${emailTime} every day.`
         : `It will run every ${summaryFrequency} hours.`
     }
-    
   `;
   await sendEmail(
     emailAddress,
@@ -233,8 +234,16 @@ async function dailyLogPipeline(): Promise<void> {
     welcomeEmail
   );
 
-  while (true) {
-    try {
+  await pipe.inbox.send({
+    title: "Daily Log Started",
+    body: "A new day of activity logging has begun. Your summary will be sent later as scheduled.",
+  });
+
+  // Schedule regular log generation
+  pipe.scheduler
+    .task("generateLog")
+    .every(interval)
+    .do(async () => {
       const now = new Date();
       const oneMinuteAgo = new Date(now.getTime() - interval);
 
@@ -242,6 +251,7 @@ async function dailyLogPipeline(): Promise<void> {
         startTime: oneMinuteAgo.toISOString(),
         endTime: now.toISOString(),
         windowName: windowName,
+        appName: appName,
         limit: pageSize,
         contentType: contentType,
       });
@@ -256,54 +266,89 @@ async function dailyLogPipeline(): Promise<void> {
         console.log("log entry:", logEntry);
         await saveDailyLog(logEntry);
       }
+    });
 
-      let shouldSendSummary = false;
-
-      if (summaryFrequency === "daily") {
-        const [emailHour, emailMinute] = emailTime.split(":").map(Number);
-        const emailTimeToday = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          emailHour,
-          emailMinute
-        );
-        shouldSendSummary =
-          now >= emailTimeToday &&
-          now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000;
-      } else if (summaryFrequency.startsWith("hourly:")) {
-        const hours = parseInt(summaryFrequency.split(":")[1], 10);
-        shouldSendSummary =
-          now.getTime() - lastEmailSent.getTime() >= hours * 60 * 60 * 1000;
-      }
-
-      if (shouldSendSummary) {
-        const todayLogs = await getTodayLogs();
-        console.log("today's logs:", todayLogs);
-
-        if (todayLogs.length > 0) {
-          const summary = await generateDailySummary(
-            todayLogs,
-            summaryPrompt,
-            ollamaModel,
-            ollamaApiUrl
-          );
-          console.log("summary:", summary);
-          await sendEmail(
-            emailAddress,
-            emailPassword,
-            "activity summary",
-            summary
-          );
-          lastEmailSent = now;
-        }
-      }
-    } catch (error) {
-      console.warn("error in daily log pipeline:", error);
-    }
-    console.log("sleeping for", interval, "ms");
-    await new Promise((resolve) => setTimeout(resolve, interval));
+  // Schedule summary generation and email sending
+  if (summaryFrequency === "daily") {
+    const [emailHour, emailMinute] = emailTime.split(":").map(Number);
+    pipe.scheduler
+      .task("dailySummary")
+      .every("1 day")
+      .at(`${emailHour}:${emailMinute}`)
+      .do(async () => {
+        await generateAndSendSummary();
+      });
+  } else if (summaryFrequency.startsWith("hourly:")) {
+    const hours = parseInt(summaryFrequency.split(":")[1], 10);
+    pipe.scheduler
+      .task("hourlySummary")
+      .every(`${hours} hours`)
+      .do(async () => {
+        await generateAndSendSummary();
+      });
   }
+
+  async function generateAndSendSummary() {
+    const todayLogs = getTodayLogs();
+    console.log("today's logs:", todayLogs);
+
+    if (todayLogs.length > 0) {
+      const summary = await generateDailySummary(
+        todayLogs,
+        summaryPrompt,
+        ollamaModel,
+        ollamaApiUrl
+      );
+      console.log("summary:", summary);
+
+      // Send email
+      await sendEmail(
+        emailAddress,
+        emailPassword,
+        "Daily Activity Summary",
+        summary
+      );
+
+      // Send notification to AI inbox
+      await pipe.inbox.send({
+        title: "Daily Activity Summary",
+        body: "Your daily activity summary has been generated and sent to your email.",
+      });
+
+      lastEmailSent = new Date();
+    } else {
+      // Send notification if no logs were found
+      await pipe.inbox.send({
+        title: "No Activity Logged",
+        body: "No activity logs were found for today. Make sure Screenpipe is running and capturing your screen data.",
+      });
+    }
+  }
+
+  // Add a new task to send a daily start notification
+  pipe.scheduler
+    .task("dailyStartNotification")
+    .every("1 day")
+    .at("00:01") // Just after midnight
+    .do(async () => {
+      await pipe.inbox.send({
+        title: "Daily Log Started",
+        body: "A new day of activity logging has begun. Your summary will be sent later as scheduled.",
+        actions: [
+          {
+            label: "View Yesterday's Summary",
+            action: "view_yesterday_summary",
+          },
+          {
+            label: "Dismiss",
+            action: "dismiss",
+          },
+        ],
+      });
+    });
+
+  // Start the scheduler
+  pipe.scheduler.start();
 }
 
 dailyLogPipeline();

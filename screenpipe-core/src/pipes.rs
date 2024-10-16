@@ -62,6 +62,7 @@ mod pipes {
             .arg("--allow-write")
             .arg("--allow-net")
             .arg("--allow-env")
+            .arg("--reload")
             .arg(&main_module)
             .envs(env_vars)
             .stdout(std::process::Stdio::piped())
@@ -102,7 +103,13 @@ mod pipes {
             let mut lines = reader.lines();
             while let Ok(line) = lines.next_line().await {
                 if let Some(line) = line {
-                    error!("[pipe][error][{}] {}", pipe_clone, line);
+                    if line.contains("Download") {
+                        // Log download messages as info instead of error
+                        info!("[pipe][download][{}] {}", pipe_clone, line);
+                    } else {
+                        // Keep other messages as errors
+                        error!("[pipe][error][{}] {}", pipe_clone, line);
+                    }
                 }
             }
         });
