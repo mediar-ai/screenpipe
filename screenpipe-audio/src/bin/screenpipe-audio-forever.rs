@@ -11,6 +11,7 @@ use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
+use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -34,11 +35,14 @@ struct Args {
 
     #[clap(long, help = "Deepgram API key")]
     deepgram_api_key: Option<String>,
+
+    #[clap(short = 'l', long, value_enum)]
+    language: Vec<Language>,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
-    for (_, device) in devices.iter().enumerate() {
+    for device in devices.iter() {
         println!("  {}", device);
     }
 
@@ -59,6 +63,8 @@ async fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
+
+    let languages = args.language;
 
     let devices = list_audio_devices().await?;
 
@@ -87,6 +93,7 @@ async fn main() -> Result<()> {
         args.deepgram_api_key,
         &PathBuf::from("output.mp4"),
         VadSensitivity::Medium,
+        languages,
     )
     .await?;
     // Spawn threads for each device

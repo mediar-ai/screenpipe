@@ -4,6 +4,7 @@ import { localDataDir, join } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
+import {Language} from "@/lib/language";
 
 export type VadSensitivity = "low" | "medium" | "high";
 export type EmbeddedLLMConfig = {
@@ -40,6 +41,7 @@ export interface Settings {
   audioChunkDuration: number; // new field
   useChineseMirror: boolean; // Add this line
   embeddedLLM: EmbeddedLLMConfig;
+  languages: Language[],
 }
 
 const defaultSettings: Settings = {
@@ -75,6 +77,7 @@ const defaultSettings: Settings = {
   analyticsEnabled: true,
   audioChunkDuration: 30, // default to 10 seconds
   useChineseMirror: false, // Add this line
+  languages: [],
   embeddedLLM: {
     enabled: false,
     model: "llama3.2:1b-instruct-q4_K_M",
@@ -179,6 +182,10 @@ export function useSettings() {
           model: "llama3.2:1b-instruct-q4_K_M",
           port: 11438,
         };
+
+        const savedLanguages =
+            (await store!.get<Language[]>("languages")) || [];
+
         const currentPlatform = await platform();
         const defaultIgnoredWindows =
           currentPlatform === "macos" // TODO: windows and linux
@@ -233,6 +240,7 @@ export function useSettings() {
           audioChunkDuration: savedAudioChunkDuration,
           useChineseMirror: savedUseChineseMirror,
           embeddedLLM: savedEmbeddedLLM,
+          languages: savedLanguages,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

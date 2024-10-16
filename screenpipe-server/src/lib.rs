@@ -11,6 +11,8 @@ mod server;
 mod video;
 mod video_db;
 mod video_utils;
+
+pub use screenpipe_core::Language;
 pub use auto_destruct::watch_pid;
 pub use cli::Cli;
 pub use core::start_continuous_recording;

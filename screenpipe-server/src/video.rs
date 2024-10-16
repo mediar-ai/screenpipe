@@ -3,7 +3,7 @@ use crossbeam::queue::ArrayQueue;
 use image::ImageFormat::{self};
 use log::{debug, error};
 use log::{info, warn};
-use screenpipe_core::find_ffmpeg_path;
+use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -35,6 +35,7 @@ impl VideoCapture {
         monitor_id: u32,
         ignore_list: &[String],
         include_list: &[String],
+        languages: Vec<Language>,
     ) -> Self {
         info!("Starting new video capture");
         let fps = if fps.is_finite() && fps > 0.0 {
@@ -63,6 +64,7 @@ impl VideoCapture {
                 monitor_id,
                 &ignore_list_clone,
                 &include_list_clone,
+                languages.clone(),
             )
             .await;
         });

@@ -9,6 +9,7 @@ mod tests {
         default_output_device, list_audio_devices, pcm_decode, AudioInput, AudioTranscriptionEngine,
     };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
+    use screenpipe_core::Language;
     use std::path::PathBuf;
     use std::process::Command;
     use std::str::FromStr;
@@ -201,6 +202,7 @@ mod tests {
             None,
             &output_path_2.clone(),
             VadSensitivity::High,
+            vec![],
         )
         .await
         .unwrap();
@@ -267,6 +269,63 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
+    async fn test_audio_transcription_language() {
+        setup();
+        use std::sync::Arc;
+
+        // Setup
+        let whisper_model = Arc::new(tokio::sync::Mutex::new(
+            WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo).unwrap(),
+        ));
+        let vad_engine: Arc<tokio::sync::Mutex<Box<dyn VadEngine + Send>>> = Arc::new(
+            tokio::sync::Mutex::new(Box::new(SileroVad::new().await.unwrap())),
+        );
+        let output_path = Arc::new(PathBuf::from("test_output"));
+        let audio_data = screenpipe_audio::pcm_decode(&"test_data/Arifi.wav")
+            .expect("Failed to decode audio file");
+
+        let audio_input = AudioInput {
+            data: Arc::new(audio_data.0),
+            sample_rate: 44100, // hardcoded based on test data sample rate
+            channels: 1,
+            device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
+        };
+
+        let mut vad_engine_guard = vad_engine.lock().await;
+        let mut whisper_model_guard = whisper_model.lock().await;
+        let (transcription_result, _) = stt(
+            &audio_input,
+            &mut *whisper_model_guard,
+            Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
+            &mut **vad_engine_guard,
+            None,
+            &output_path,
+            true,
+            vec![],
+        )
+        .await
+        .unwrap();
+        drop(vad_engine_guard);
+        drop(whisper_model_guard);
+
+        debug!("Received transcription: {:?}", transcription_result);
+        // Check if we received a valid transcription
+        assert!(!transcription_result.is_empty(), "Transcription is empty");
+
+        println!("Received transcription: {}", transcription_result);
+
+        assert!(
+            transcription_result.contains("موسیقی")
+                || transcription_result.contains("تعال")
+                || transcription_result.contains("الحيوانات")
+        );
+
+        // Clean up
+        std::fs::remove_file("test_output").unwrap_or_default();
+    }
+
+    #[tokio::test]
+    #[ignore]
     async fn test_stt_speed() {
         setup();
 
@@ -306,6 +365,7 @@ mod tests {
             None,
             &output_path,
             true,
+            vec![Language::Arabic],
         )
         .await;
 

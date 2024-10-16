@@ -75,7 +75,12 @@ regex = "1.11.0"
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
-ort = { version = "2.0.0-rc.5", features = ["download-binaries", "copy-dylibs", "directml", "cuda"] }
+ort = { version = "2.0.0-rc.5", features = [
+  "download-binaries",
+  "copy-dylibs",
+  "directml",
+  "cuda",
+] }
 esaxx-rs = "0.1.10"
 samplerate = { version = "0.2.4" }
 libsamplerate-sys = "0.1.10"
@@ -108,5 +113,3 @@ harness = false
 [[bench]]
 name = "record_and_transcribe_benchmark"
 harness = false
-
-

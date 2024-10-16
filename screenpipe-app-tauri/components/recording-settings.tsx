@@ -15,7 +15,7 @@ import {
   Check,
   ChevronsUpDown,
   Eye,
-  HelpCircle,
+  HelpCircle, Languages,
   Mic,
   Monitor,
   X,
@@ -63,6 +63,7 @@ import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
+import { Language } from "@/lib/language";
 
 interface AudioDevice {
   name: string;
@@ -87,6 +88,7 @@ export function RecordingSettings({
   const { settings, updateSettings } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openMonitors, setOpenMonitors] = React.useState(false);
+  const [openLanguages, setOpenLanguages] = React.useState(false);
 
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
@@ -208,6 +210,7 @@ export function RecordingSettings({
         audioChunkDuration: localSettings.audioChunkDuration,
         analyticsEnabled: localSettings.analyticsEnabled,
         useChineseMirror: localSettings.useChineseMirror,
+        languages: localSettings.languages,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -304,6 +307,14 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, monitorIds: updatedMonitors });
   };
 
+  const handleLanguageChange = (currentValue: Language) => {
+    const updatedLanguages = localSettings.languages.includes(currentValue)
+    ? localSettings.languages.filter((id) => id !== currentValue)
+        : [...localSettings.languages, currentValue];
+
+    setLocalSettings({ ...localSettings, languages: updatedLanguages });
+  }
+
   const handleAudioDeviceChange = (currentValue: string) => {
     const updatedDevices = localSettings.audioDevices.includes(currentValue)
       ? localSettings.audioDevices.filter((device) => device !== currentValue)
@@ -375,6 +386,11 @@ export function RecordingSettings({
       localSettings.monitorIds.forEach((id) => args.push(`--monitor-id ${id}`));
     }
     if (
+        localSettings.languages.length > 0
+    ) {
+      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
+    }
+    if (
       localSettings.audioDevices.length > 0 &&
       localSettings.audioDevices[0] !== "default"
     ) {
@@ -415,6 +431,10 @@ export function RecordingSettings({
     }
     if (localSettings.audioChunkDuration !== 30) {
       args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
+    }
+
+    if(localSettings.languages.length > 0) {
+      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
     }
 
     return `${cliPath} ${args.join(" ")}`;
@@ -510,18 +530,18 @@ export function RecordingSettings({
           <CardContent className="space-y-4">
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="audioTranscriptionModel"
-                className="flex items-center space-x-2"
+                  htmlFor="audioTranscriptionModel"
+                  className="flex items-center space-x-2"
               >
-                <Mic className="h-4 w-4" />
+                <Mic className="h-4 w-4"/>
                 <span>audio transcription model</span>
               </Label>
               <Select
-                onValueChange={handleAudioTranscriptionModelChange}
-                defaultValue={localSettings.audioTranscriptionEngine}
+                  onValueChange={handleAudioTranscriptionModelChange}
+                  defaultValue={localSettings.audioTranscriptionEngine}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="select audio transcription engine" />
+                  <SelectValue placeholder="select audio transcription engine"/>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="deepgram">
@@ -541,15 +561,15 @@ export function RecordingSettings({
 
             <div className="flex flex-col space-y-2">
               <Label htmlFor="ocrModel" className="flex items-center space-x-2">
-                <Eye className="h-4 w-4" />
+                <Eye className="h-4 w-4"/>
                 <span>ocr model</span>
               </Label>
               <Select
-                onValueChange={handleOcrModelChange}
-                defaultValue={localSettings.ocrEngine}
+                  onValueChange={handleOcrModelChange}
+                  defaultValue={localSettings.ocrEngine}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="select ocr engine" />
+                  <SelectValue placeholder="select ocr engine"/>
                 </SelectTrigger>
                 <SelectContent>{renderOcrEngineOptions()}</SelectContent>
               </Select>
@@ -557,66 +577,66 @@ export function RecordingSettings({
 
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="monitorIds"
-                className="flex items-center space-x-2"
+                  htmlFor="monitorIds"
+                  className="flex items-center space-x-2"
               >
-                <Monitor className="h-4 w-4" />
+                <Monitor className="h-4 w-4"/>
                 <span>monitors</span>
               </Label>
               <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
                 <PopoverTrigger asChild>
                   <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openMonitors}
-                    className="w-full justify-between"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openMonitors}
+                      className="w-full justify-between"
                   >
                     {localSettings.monitorIds.length > 0
-                      ? `${localSettings.monitorIds.length} monitor(s) selected`
-                      : "select monitors"}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        ? `${localSettings.monitorIds.length} monitor(s) selected`
+                        : "select monitors"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-full p-0">
                   <Command>
-                    <CommandInput placeholder="search monitors..." />
+                    <CommandInput placeholder="search monitors..."/>
                     <CommandList>
                       <CommandEmpty>no monitor found.</CommandEmpty>
                       <CommandGroup>
                         {availableMonitors.map((monitor) => (
-                          <CommandItem
-                            key={monitor.id}
-                            value={monitor.id}
-                            onSelect={() =>
-                              handleMonitorChange(monitor.id.toString())
-                            }
-                          >
-                            <div className="flex items-center">
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  localSettings.monitorIds.includes(
-                                    monitor.id.toString()
-                                  )
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              {/* not selectable */}
-                              <span
-                                style={{
-                                  userSelect: "none",
-                                  WebkitUserSelect: "none",
-                                  MozUserSelect: "none",
-                                  msUserSelect: "none",
-                                }}
-                              >
+                            <CommandItem
+                                key={monitor.id}
+                                value={monitor.id}
+                                onSelect={() =>
+                                    handleMonitorChange(monitor.id.toString())
+                                }
+                            >
+                              <div className="flex items-center">
+                                <Check
+                                    className={cn(
+                                        "mr-2 h-4 w-4",
+                                        localSettings.monitorIds.includes(
+                                            monitor.id.toString()
+                                        )
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                    )}
+                                />
+                                {/* not selectable */}
+                                <span
+                                    style={{
+                                      userSelect: "none",
+                                      WebkitUserSelect: "none",
+                                      MozUserSelect: "none",
+                                      msUserSelect: "none",
+                                    }}
+                                >
                                 {monitor.id}. {monitor.name}{" "}
-                                {monitor.is_default ? "(default)" : ""} -{" "}
-                                {monitor.width}x{monitor.height}
+                                  {monitor.is_default ? "(default)" : ""} -{" "}
+                                  {monitor.width}x{monitor.height}
                               </span>
-                            </div>
-                          </CommandItem>
+                              </div>
+                            </CommandItem>
                         ))}
                       </CommandGroup>
                     </CommandList>
@@ -626,65 +646,133 @@ export function RecordingSettings({
             </div>
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="audioDevices"
-                className="flex items-center space-x-2"
+                  htmlFor="audioDevices"
+                  className="flex items-center space-x-2"
               >
-                <Mic className="h-4 w-4" />
+                <Mic className="h-4 w-4"/>
                 <span>audio devices</span>
               </Label>
               <Popover
-                open={openAudioDevices}
-                onOpenChange={setOpenAudioDevices}
+                  open={openAudioDevices}
+                  onOpenChange={setOpenAudioDevices}
               >
                 <PopoverTrigger asChild>
                   <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openAudioDevices}
-                    className="w-full justify-between"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openAudioDevices}
+                      className="w-full justify-between"
                   >
                     {localSettings.audioDevices.length > 0
-                      ? `${localSettings.audioDevices.length} device(s) selected`
-                      : "select audio devices"}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        ? `${localSettings.audioDevices.length} device(s) selected`
+                        : "select audio devices"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-full p-0">
                   <Command>
-                    <CommandInput placeholder="search audio devices..." />
+                    <CommandInput placeholder="search audio devices..."/>
                     <CommandList>
                       <CommandEmpty>no audio device found.</CommandEmpty>
                       <CommandGroup>
                         {availableAudioDevices.map((device) => (
-                          <CommandItem
-                            key={device.name}
-                            value={device.name}
-                            onSelect={handleAudioDeviceChange}
-                          >
-                            <div className="flex items-center">
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  localSettings.audioDevices.includes(
-                                    device.name
-                                  )
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              <span
-                                style={{
-                                  userSelect: "none",
-                                  WebkitUserSelect: "none",
-                                  MozUserSelect: "none",
-                                  msUserSelect: "none",
-                                }}
-                              >
+                            <CommandItem
+                                key={device.name}
+                                value={device.name}
+                                onSelect={handleAudioDeviceChange}
+                            >
+                              <div className="flex items-center">
+                                <Check
+                                    className={cn(
+                                        "mr-2 h-4 w-4",
+                                        localSettings.audioDevices.includes(
+                                            device.name
+                                        )
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                    )}
+                                />
+                                <span
+                                    style={{
+                                      userSelect: "none",
+                                      WebkitUserSelect: "none",
+                                      MozUserSelect: "none",
+                                      msUserSelect: "none",
+                                    }}
+                                >
                                 {device.name}{" "}
-                                {device.is_default ? "(default)" : ""}
+                                  {device.is_default ? "(default)" : ""}
                               </span>
-                            </div>
-                          </CommandItem>
+                              </div>
+                            </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label
+                  htmlFor="languages"
+                  className="flex items-center space-x-2"
+              >
+                <Languages className="h-4 w-4"/>
+                <span>languages</span>
+              </Label>
+              <Popover open={openLanguages} onOpenChange={setOpenLanguages}>
+                <PopoverTrigger asChild>
+                  <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openLanguages}
+                      className="w-full justify-between"
+                  >
+                    {localSettings.languages.length > 0
+                        ? `${localSettings.languages.join(", ")}`
+                        : "select languages"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0">
+                  <Command>
+                    <CommandInput placeholder="search languages..."/>
+                    <CommandList>
+                      <CommandEmpty>no language found.</CommandEmpty>
+                      <CommandGroup>
+                        {Object.entries(Language).map(([language, id]) => (
+                            <CommandItem
+                                key={language}
+                                value={language}
+                                onSelect={() =>
+                                    handleLanguageChange(id)
+                                }
+                            >
+                              <div className="flex items-center">
+                                <Check
+                                    className={cn(
+                                        "mr-2 h-4 w-4",
+                                        localSettings.languages.includes(
+                                            id
+                                        )
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                    )}
+                                />
+                                {/* not selectable */}
+                                <span
+                                    style={{
+                                      userSelect: "none",
+                                      WebkitUserSelect: "none",
+                                      MozUserSelect: "none",
+                                      msUserSelect: "none",
+                                    }}
+                                >
+                                {language}
+                              </span>
+                              </div>
+                            </CommandItem>
                         ))}
                       </CommandGroup>
                     </CommandList>
@@ -696,13 +784,13 @@ export function RecordingSettings({
             <div className="flex flex-col space-y-2">
               <div className="flex items-center space-x-2">
                 <Switch
-                  id="piiRemoval"
-                  checked={localSettings.usePiiRemoval}
-                  onCheckedChange={handlePiiRemovalChange}
+                    id="piiRemoval"
+                    checked={localSettings.usePiiRemoval}
+                    onCheckedChange={handlePiiRemovalChange}
                 />
                 <Label
-                  htmlFor="piiRemoval"
-                  className="flex items-center space-x-2"
+                    htmlFor="piiRemoval"
+                    className="flex items-center space-x-2"
                 >
                   <span>remove personal information (PII)</span>
                   <Badge variant="outline" className="ml-2">
@@ -711,13 +799,13 @@ export function RecordingSettings({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4 cursor-default" />
+                        <HelpCircle className="h-4 w-4 cursor-default"/>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>
                           removes sensitive information like credit card
                           numbers, emails, and phone numbers from OCR text
-                          <br />
+                          <br/>
                           before saving to the database or returning in search
                           results
                         </p>
@@ -729,8 +817,8 @@ export function RecordingSettings({
             </div>
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="restartInterval"
-                className="flex items-center space-x-2"
+                  htmlFor="restartInterval"
+                  className="flex items-center space-x-2"
               >
                 <span>restart interval (minutes)</span>
                 <Badge variant="outline" className="ml-2">
@@ -739,14 +827,14 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
+                      <HelpCircle className="h-4 w-4 cursor-default"/>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
                         set how often the recording process should restart.
-                        <br />
+                        <br/>
                         0 means no automatic restart.
-                        <br />
+                        <br/>
                         this can help mitigate potential memory leaks or other
                         issues.
                       </p>
@@ -755,32 +843,32 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
               <Input
-                id="restartInterval"
-                type="number"
-                min="0"
-                value={localSettings.restartInterval}
-                onChange={handleRestartIntervalChange}
-                className="w-full"
-                placeholder="Enter restart interval in minutes (0 to disable)"
+                  id="restartInterval"
+                  type="number"
+                  min="0"
+                  value={localSettings.restartInterval}
+                  onChange={handleRestartIntervalChange}
+                  className="w-full"
+                  placeholder="Enter restart interval in minutes (0 to disable)"
               />
             </div>
 
             <div className="flex flex-col space-y-2">
               <div className="flex items-center space-x-2">
                 <Switch
-                  id="disableAudio"
-                  checked={localSettings.disableAudio}
-                  onCheckedChange={handleDisableAudioChange}
+                    id="disableAudio"
+                    checked={localSettings.disableAudio}
+                    onCheckedChange={handleDisableAudioChange}
                 />
                 <Label
-                  htmlFor="disableAudio"
-                  className="flex items-center space-x-2"
+                    htmlFor="disableAudio"
+                    className="flex items-center space-x-2"
                 >
                   <span>disable audio recording</span>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4 cursor-default" />
+                        <HelpCircle className="h-4 w-4 cursor-default"/>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>
@@ -796,23 +884,23 @@ export function RecordingSettings({
 
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="ignoredWindows"
-                className="flex items-center space-x-2"
+                  htmlFor="ignoredWindows"
+                  className="flex items-center space-x-2"
               >
                 <span>ignored windows</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
+                      <HelpCircle className="h-4 w-4 cursor-default"/>
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
                         windows to ignore during screen recording
                         (case-insensitive), example:
-                        <br />
+                        <br/>
                         - &quot;bit&quot; will ignore &quot;Bitwarden&quot; and
                         &quot;bittorrent&quot;
-                        <br />- &quot;incognito&quot; will ignore tabs, windows
+                        <br/>- &quot;incognito&quot; will ignore tabs, windows
                         that contains the word &quot;incognito&quot;
                       </p>
                     </TooltipContent>
@@ -821,38 +909,38 @@ export function RecordingSettings({
               </Label>
               <div className="flex flex-wrap gap-2 mb-2">
                 {localSettings.ignoredWindows.map((window) => (
-                  <Badge
-                    key={window}
-                    variant="secondary"
-                    className="flex items-center gap-1"
-                  >
-                    {window}
-                    <X
-                      className="h-3 w-3 cursor-pointer"
-                      onClick={() => handleRemoveIgnoredWindow(window)}
-                    />
-                  </Badge>
+                    <Badge
+                        key={window}
+                        variant="secondary"
+                        className="flex items-center gap-1"
+                    >
+                      {window}
+                      <X
+                          className="h-3 w-3 cursor-pointer"
+                          onClick={() => handleRemoveIgnoredWindow(window)}
+                      />
+                    </Badge>
                 ))}
               </div>
               <div className="flex gap-2">
                 <Input
-                  id="ignoredWindows"
-                  placeholder="add window to ignore"
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter") {
-                      handleAddIgnoredWindow(e.currentTarget.value);
-                      e.currentTarget.value = "";
-                    }
-                  }}
+                    id="ignoredWindows"
+                    placeholder="add window to ignore"
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter") {
+                        handleAddIgnoredWindow(e.currentTarget.value);
+                        e.currentTarget.value = "";
+                      }
+                    }}
                 />
                 <Button
-                  onClick={() => {
-                    const input = document.getElementById(
-                      "ignoredWindows"
-                    ) as HTMLInputElement;
-                    handleAddIgnoredWindow(input.value);
-                    input.value = "";
-                  }}
+                    onClick={() => {
+                      const input = document.getElementById(
+                          "ignoredWindows"
+                      ) as HTMLInputElement;
+                      handleAddIgnoredWindow(input.value);
+                      input.value = "";
+                    }}
                 >
                   add
                 </Button>
@@ -861,23 +949,23 @@ export function RecordingSettings({
 
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="includedWindows"
-                className="flex items-center space-x-2"
+                  htmlFor="includedWindows"
+                  className="flex items-center space-x-2"
               >
                 <span>included windows</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
+                      <HelpCircle className="h-4 w-4 cursor-default"/>
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
                         windows to include during screen recording
                         (case-insensitive), example:
-                        <br />
+                        <br/>
                         - &quot;chrome&quot; will match &quot;Google
                         Chrome&quot;
-                        <br />- &quot;bitwarden&quot; will match
+                        <br/>- &quot;bitwarden&quot; will match
                         &quot;Bitwarden&quot; and &quot;bittorrent&quot;
                       </p>
                     </TooltipContent>
@@ -886,38 +974,38 @@ export function RecordingSettings({
               </Label>
               <div className="flex flex-wrap gap-2 mb-2">
                 {localSettings.includedWindows.map((window) => (
-                  <Badge
-                    key={window}
-                    variant="secondary"
-                    className="flex items-center gap-1"
-                  >
-                    {window}
-                    <X
-                      className="h-3 w-3 cursor-pointer"
-                      onClick={() => handleRemoveIncludedWindow(window)}
-                    />
-                  </Badge>
+                    <Badge
+                        key={window}
+                        variant="secondary"
+                        className="flex items-center gap-1"
+                    >
+                      {window}
+                      <X
+                          className="h-3 w-3 cursor-pointer"
+                          onClick={() => handleRemoveIncludedWindow(window)}
+                      />
+                    </Badge>
                 ))}
               </div>
               <div className="flex gap-2">
                 <Input
-                  id="includedWindows"
-                  placeholder="add window to include"
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter") {
-                      handleAddIncludedWindow(e.currentTarget.value);
-                      e.currentTarget.value = "";
-                    }
-                  }}
+                    id="includedWindows"
+                    placeholder="add window to include"
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter") {
+                        handleAddIncludedWindow(e.currentTarget.value);
+                        e.currentTarget.value = "";
+                      }
+                    }}
                 />
                 <Button
-                  onClick={() => {
-                    const input = document.getElementById(
-                      "includedWindows"
-                    ) as HTMLInputElement;
-                    handleAddIncludedWindow(input.value);
-                    input.value = "";
-                  }}
+                    onClick={() => {
+                      const input = document.getElementById(
+                          "includedWindows"
+                      ) as HTMLInputElement;
+                      handleAddIncludedWindow(input.value);
+                      input.value = "";
+                    }}
                 >
                   add
                 </Button>
@@ -930,15 +1018,15 @@ export function RecordingSettings({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
+                      <HelpCircle className="h-4 w-4 cursor-default"/>
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
                         adjust the recording frame rate. lower values save
-                        <br />
+                        <br/>
                         resources, higher values provide smoother recordings,
                         less likely to miss activity.
-                        <br />
+                        <br/>
                         (we do not use resources if your screen does not change
                         much)
                       </p>
@@ -948,13 +1036,13 @@ export function RecordingSettings({
               </Label>
               <div className="flex items-center space-x-4">
                 <Slider
-                  id="fps"
-                  min={0.1}
-                  max={10}
-                  step={0.1}
-                  value={[localSettings.fps]}
-                  onValueChange={handleFpsChange}
-                  className="flex-grow"
+                    id="fps"
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    value={[localSettings.fps]}
+                    onValueChange={handleFpsChange}
+                    className="flex-grow"
                 />
                 <span className="w-12 text-right">
                   {localSettings.fps.toFixed(1)}
@@ -964,24 +1052,24 @@ export function RecordingSettings({
 
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="vadSensitivity"
-                className="flex items-center space-x-2"
+                  htmlFor="vadSensitivity"
+                  className="flex items-center space-x-2"
               >
                 <span>vad sensitivity</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
+                      <HelpCircle className="h-4 w-4 cursor-default"/>
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
                         adjust the voice activity detection sensitivity.
-                        <br />
+                        <br/>
                         low: more sensitive, catches most speech but may have
                         more false positives.
-                        <br />
+                        <br/>
                         medium: balanced sensitivity.
-                        <br />
+                        <br/>
                         high (recommended): less sensitive, may miss some speech
                         but reduces false positives.
                       </p>
@@ -991,13 +1079,13 @@ export function RecordingSettings({
               </Label>
               <div className="flex items-center space-x-4">
                 <Slider
-                  id="vadSensitivity"
-                  min={0}
-                  max={2}
-                  step={1}
-                  value={[vadSensitivityToNumber(localSettings.vadSensitivity)]}
-                  onValueChange={handleVadSensitivityChange}
-                  className="flex-grow"
+                    id="vadSensitivity"
+                    min={0}
+                    max={2}
+                    step={1}
+                    value={[vadSensitivityToNumber(localSettings.vadSensitivity)]}
+                    onValueChange={handleVadSensitivityChange}
+                    className="flex-grow"
                 />
                 <span className="w-16 text-right">
                   {localSettings.vadSensitivity}
@@ -1012,24 +1100,24 @@ export function RecordingSettings({
 
             <div className="flex flex-col space-y-2">
               <Label
-                htmlFor="audioChunkDuration"
-                className="flex items-center space-x-2"
+                  htmlFor="audioChunkDuration"
+                  className="flex items-center space-x-2"
               >
                 <span>audio chunk duration (seconds)</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
+                      <HelpCircle className="h-4 w-4 cursor-default"/>
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
                         adjust the duration of each audio chunk.
-                        <br />
+                        <br/>
                         shorter durations may lower resource usage spikes,
-                        <br />
+                        <br/>
                         while longer durations may increase transcription
                         quality.
-                        <br />
+                        <br/>
                         deepgram in general works better than whisper if you
                         want higher quality transcription.
                       </p>
@@ -1039,13 +1127,13 @@ export function RecordingSettings({
               </Label>
               <div className="flex items-center space-x-4">
                 <Slider
-                  id="audioChunkDuration"
-                  min={5}
-                  max={3000}
-                  step={1}
-                  value={[localSettings.audioChunkDuration]}
-                  onValueChange={handleAudioChunkDurationChange}
-                  className="flex-grow"
+                    id="audioChunkDuration"
+                    min={5}
+                    max={3000}
+                    step={1}
+                    value={[localSettings.audioChunkDuration]}
+                    onValueChange={handleAudioChunkDurationChange}
+                    className="flex-grow"
                 />
                 <span className="w-12 text-right">
                   {localSettings.audioChunkDuration} s
@@ -1054,39 +1142,39 @@ export function RecordingSettings({
             </div>
             <div className="flex items-center space-x-2">
               <Switch
-                id="analytics-toggle"
-                checked={localSettings.analyticsEnabled}
-                onCheckedChange={handleAnalyticsToggle}
+                  id="analytics-toggle"
+                  checked={localSettings.analyticsEnabled}
+                  onCheckedChange={handleAnalyticsToggle}
               />
               <Label
-                htmlFor="analytics-toggle"
-                className="flex items-center space-x-2"
+                  htmlFor="analytics-toggle"
+                  className="flex items-center space-x-2"
               >
                 <span>enable telemetry</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
+                      <HelpCircle className="h-4 w-4 cursor-default"/>
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
                         telemetry helps us improve screenpipe.
-                        <br />
+                        <br/>
                         when enabled, we collect anonymous usage data such as
                         button clicks.
-                        <br />
+                        <br/>
                         we do not collect any screen data, microphone, query
                         data.
-                        <br />
+                        <br/>
                         do not collect any screen data, microphone, query data.
-                        <br />
+                        <br/>
                         read more on our data privacy policy at
-                        <br />
+                        <br/>
                         <a
-                          href="https://screenpi.pe/privacy"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
+                            href="https://screenpi.pe/privacy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
                         >
                           https://screenpi.pe/privacy
                         </a>
@@ -1098,28 +1186,28 @@ export function RecordingSettings({
             </div>
             <div className="flex items-center space-x-2">
               <Switch
-                id="chinese-mirror-toggle"
-                checked={localSettings.useChineseMirror}
-                onCheckedChange={handleChineseMirrorToggle}
+                  id="chinese-mirror-toggle"
+                  checked={localSettings.useChineseMirror}
+                  onCheckedChange={handleChineseMirrorToggle}
               />
               <Label
-                htmlFor="chinese-mirror-toggle"
-                className="flex items-center space-x-2"
+                  htmlFor="chinese-mirror-toggle"
+                  className="flex items-center space-x-2"
               >
                 <span>use chinese mirror for model downloads</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
+                      <HelpCircle className="h-4 w-4 cursor-default"/>
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
                         enable this option to use a chinese mirror for
-                        <br />
+                        <br/>
                         downloading Hugging Face models
-                        <br />
+                        <br/>
                         (e.g. Whisper, embedded Llama, etc.)
-                        <br />
+                        <br/>
                         which are blocked in mainland China.
                       </p>
                     </TooltipContent>
@@ -1140,7 +1228,7 @@ export function RecordingSettings({
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-x-auto">
-            <CodeBlock language="bash" value={generateCliCommand()} />
+            <CodeBlock language="bash" value={generateCliCommand()}/>
           </div>
           <DialogFooter>
             <Button onClick={handleCopyCliCommand}>Copy to Clipboard</Button>

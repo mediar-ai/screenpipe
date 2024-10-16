@@ -33,6 +33,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 dirs = "5.0.0"
+clap = "4.5.20"
 [features]
 default = ["pipes", "security"]
 llm = ["candle", "candle-nn", "candle-transformers", "tokenizers", "hf-hub"]
