@@ -90,4 +90,50 @@ Deno.test("Scheduler - multiple tasks", async () => {
   assertEquals(mockTask2.calls.length >= 1, true);
 });
 
-// deno test screenpipe-js/tests/scheduler.test.ts
+Deno.test("Scheduler - state persistence", async () => {
+  const tempDir = await Deno.makeTempDir();
+  const originalEnv = Deno.env.get("SCREENPIPE_DIR");
+  Deno.env.set("SCREENPIPE_DIR", tempDir);
+
+  const scheduler = pipe.scheduler;
+  const mockTask = spy(() => Promise.resolve());
+
+  scheduler.task("persistentTask").every("1 minute").do(mockTask);
+
+  // Mock Date as before
+  // ...
+
+  // Run scheduler for a short time
+  const schedulerPromise = scheduler.start();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  scheduler.stop();
+  await schedulerPromise;
+
+  // Create a new scheduler instance (simulating process restart)
+  const newScheduler = pipe.scheduler;
+  newScheduler.task("persistentTask").every("1 minute").do(mockTask);
+
+  // Verify that the task's next run time was loaded from the persistent state
+  const task = newScheduler["tasks"][0];
+  assertEquals(task.getNextRunTime().getTime() > Date.now(), true);
+
+  // Clean up
+  await Deno.remove(tempDir, { recursive: true });
+  if (originalEnv) {
+    Deno.env.set("SCREENPIPE_DIR", originalEnv);
+  } else {
+    Deno.env.delete("SCREENPIPE_DIR");
+  }
+});
+
+/* 
+
+export SCREENPIPE_DIR="$HOME/.screenpipe"
+export PIPE_ID="test-scheduler"
+export PIPE_FILE="pipe.ts"
+export PIPE_DIR="$SCREENPIPE_DIR/pipes/test-scheduler"
+
+
+deno test screenpipe-js/tests/scheduler.test.ts --allow-env --allow-read --allow-write
+
+*/

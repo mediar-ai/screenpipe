@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import process from "node:process";
 import cronParser from "npm:cron-parser";
 
@@ -251,17 +252,32 @@ export interface InboxMessageAction {
   action: string;
 }
 
+interface TaskState {
+  lastRunTime: number;
+  nextRunTime: number;
+}
+
+interface SchedulerState {
+  [taskName: string]: TaskState;
+}
+
 class Task {
   private _name: string;
   private _interval: string | number;
   private _time: string | null = null;
   private _handler: (() => Promise<void>) | null = null;
   private _nextRunTime: Date;
+  private _state?: TaskState;
 
-  constructor(name: string) {
+  constructor(name: string, state?: TaskState) {
     this._name = name;
     this._interval = 0;
-    this._nextRunTime = new Date(0); // Set to past date to run immediately
+    if (state) {
+      this._nextRunTime = new Date(state.nextRunTime);
+    } else {
+      this._nextRunTime = new Date(0);
+    }
+    this._state = state;
   }
 
   every(interval: string | number): Task {
@@ -332,9 +348,52 @@ class Task {
 class Scheduler {
   private tasks: Task[] = [];
   private running: boolean = false;
+  private state: SchedulerState = {};
+  private stateFilePath: string;
+
+  constructor() {
+    const pipeId = process.env.PIPE_ID;
+    if (!pipeId) {
+      throw new Error("PIPE_ID environment variable is not set");
+    }
+    this.stateFilePath = path.join(
+      process.env.SCREENPIPE_DIR || "",
+      "pipes",
+      pipeId,
+      "scheduler_state.json"
+    );
+    this.loadState();
+  }
+
+  private loadState() {
+    try {
+      if (fs.existsSync(this.stateFilePath)) {
+        const stateData = fs.readFileSync(this.stateFilePath, "utf8");
+        this.state = JSON.parse(stateData);
+      } else {
+        console.log("No existing state file found. Starting with empty state.");
+        this.state = {};
+      }
+    } catch (error) {
+      console.warn("Failed to load scheduler state:", error);
+      this.state = {};
+    }
+  }
+
+  private saveState() {
+    try {
+      const dir = path.dirname(this.stateFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(this.stateFilePath, JSON.stringify(this.state), "utf8");
+    } catch (error) {
+      console.error("Failed to save scheduler state:", error);
+    }
+  }
 
   task(name: string): Task {
-    const task = new Task(name);
+    const task = new Task(name, this.state[name]);
     this.tasks.push(task);
     return task;
   }
@@ -343,30 +402,17 @@ class Scheduler {
     this.running = true;
     while (this.running) {
       const now = new Date();
-      console.log(`Current time: ${now.toISOString()}`);
-      console.log(`Tasks: ${this.tasks.map((t) => t.getName()).join(", ")}`);
-
       for (const task of this.tasks) {
         if (task.getNextRunTime() <= now) {
-          console.log(
-            `Executing task: ${task.getName()} at ${now.toISOString()}`
-          );
           await task.execute();
-          console.log(
-            `Task ${task.getName()} executed, next run time: ${task
-              .getNextRunTime()
-              .toISOString()}`
-          );
-        } else {
-          console.log(
-            `Task ${task.getName()} not due yet. Next run time: ${task
-              .getNextRunTime()
-              .toISOString()}`
-          );
+          this.state[task.getName()] = {
+            lastRunTime: now.getTime(),
+            nextRunTime: task.getNextRunTime().getTime(),
+          };
+          this.saveState();
         }
       }
-
-      await this.sleep(100); // Check more frequently
+      await this.sleep(100);
     }
   }
 
