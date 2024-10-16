@@ -669,7 +669,6 @@ async function installOllamaSidecar() {
 		ollamaExe = 'ollama-x86_64-pc-windows-msvc.exe';
 		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-windows-amd64.zip`;
 	} else if (platform === 'macos') {
-		ollamaExe = `ollama-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
 		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-darwin`;
 	} else if (platform === 'linux') {
 		ollamaExe = 'ollama-x86_64-unknown-linux-gnu';
@@ -678,9 +677,10 @@ async function installOllamaSidecar() {
 		throw new Error('Unsupported platform');
 	}
 
-	const ollamaPath = path.join(ollamaDir, ollamaExe);
 
-	if (await fs.exists(ollamaPath)) {
+	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
+		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
+		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
 		console.log('Ollama sidecar already exists. Skipping installation.');
 		return;
 	}
@@ -704,12 +704,17 @@ async function installOllamaSidecar() {
 			await $`tar -xzf "${downloadPath}" -C "${ollamaDir}"`;
 			await fs.rename(path.join(ollamaDir, 'ollama'), path.join(ollamaDir, ollamaExe));
 		} else if (platform === 'macos') {
-			await fs.rename(downloadPath, path.join(ollamaDir, ollamaExe));
+			// just copy to both archs
+			await fs.copyFile(downloadPath, path.join(ollamaDir, "ollama-aarch64-apple-darwin"));
+			await fs.copyFile(downloadPath, path.join(ollamaDir, "ollama-x86_64-apple-darwin"));
 		}
 
 		console.log('Setting permissions...');
-		if (platform !== 'windows') {
+		if (platform === 'linux') {
 			await fs.chmod(path.join(ollamaDir, ollamaExe), '755');
+		} else if (platform === 'macos') {
+			await fs.chmod(path.join(ollamaDir, "ollama-aarch64-apple-darwin"), '755');
+			await fs.chmod(path.join(ollamaDir, "ollama-x86_64-apple-darwin"), '755');
 		}
 
 		console.log('Cleaning up...');
