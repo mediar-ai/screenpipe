@@ -153,21 +153,22 @@ Install 7zip: https://www.7-zip.org/download.html
 ```batch
 choco install pkgconfiglite deno
 winget install -e --id GnuWin32.UnZip
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+winget install -e --id Rustlang.Rustup
 cd V:\projects
 git clone https://github.com/mediar-ai/screenpipe
 cd V:\packages
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
-bootstrap-vcpkg.bat -disableMetrics
-vcpkg.exe integrate install --disable-metrics
-vcpkg.exe install ffmpeg
+./bootstrap-vcpkg.bat -disableMetrics
+./vcpkg.exe integrate install --disable-metrics
+./vcpkg.exe install ffmpeg
 
 SET PKG_CONFIG_PATH=V:\packages\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
 SET VCPKG_ROOT=V:\packages\vcpkg
 SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
 cd V:\projects\screenpipe
 
+rustup default stable
 cargo build --release --features cuda
 
 cd screenpipe-app-tauri
