@@ -16,7 +16,7 @@ serde_json = "1.0"
 screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
 screenpipe-core = { path = "../screenpipe-core", features = ["security"] }
-screenpipe-actions = { path = "../screenpipe-actions" }
+screenpipe-actions = { path = "../screenpipe-actions", optional = true }
 
 # Image processing
 image = { workspace = true }
@@ -114,7 +114,7 @@ metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 pipes = ["screenpipe-core/pipes", "tempfile", "url"]
 llm = ["screenpipe-core/llm"]
-beta = ["screenpipe-core/beta"]
+beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
 
 [[bin]]
 name = "screenpipe"
