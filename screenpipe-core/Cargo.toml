@@ -18,6 +18,7 @@ candle-nn = { workspace = true, optional = true }
 candle-transformers = { workspace = true, optional = true }
 tokenizers = { workspace = true, optional = true }
 hf-hub = { workspace = true, features = ["tokio"], optional = true }
+screenpipe-actions = { path = "../screenpipe-actions", optional = true }
 
 # pipes
 reqwest = { workspace = true }
@@ -42,6 +43,7 @@ security = ["dep:regex", "dep:lazy_static"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
+beta = ["dep:screenpipe-actions"]
 
 [build-dependencies]
 # Move this under the same feature flag

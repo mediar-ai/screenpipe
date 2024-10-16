@@ -1,7 +1,6 @@
 use std::{
-    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env
+    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env, io::Write
 };
-use std::io::Write;
 
 use clap::Parser;
 #[allow(unused_imports)]
@@ -106,8 +105,10 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+
     debug!("starting screenpipe server");
     let cli = Cli::parse();
+
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
@@ -392,7 +393,7 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌─────────────────────┬────────────────────────────────────┐");
+    println!("┌─────────────────────┬──────────────���─────���───────────────┐");
     println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
@@ -632,6 +633,20 @@ async fn main() -> anyhow::Result<()> {
 
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
+
+    #[cfg(feature = "beta")]
+    {
+        use screenpipe_actions::run; // Ensure this import is present
+
+        info!("beta feature enabled, starting screenpipe actions");
+
+        // Spawn the run function in a blocking task to avoid affecting the async runtime
+        tokio::spawn(async {
+            if let Err(e) = run().await {
+                eprintln!("Error running screenpipe actions: {}", e);
+            }
+        });
+    }
 
     tokio::select! {
         _ = handle => info!("recording completed"),
