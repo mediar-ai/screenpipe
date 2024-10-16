@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729104819123,
+  "lastUpdate": 1729105193594,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -16439,6 +16439,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1857509125,
             "range": "± 50613158",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78df26dbfc86bd9e2291cef4f0ff3e1ad09d095f",
+          "message": "Merge pull request #514 from EzraEllette/add-cursorrules-to-repo\n\nadd .cursorrules",
+          "timestamp": "2024-10-16T11:50:45-07:00",
+          "tree_id": "f33944ca209ddc5c0511e78677a29c1b8ce76b8e",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/78df26dbfc86bd9e2291cef4f0ff3e1ad09d095f"
+        },
+        "date": 1729105192604,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1893556146,
+            "range": "± 82132873",
             "unit": "ns/iter"
           }
         ]
