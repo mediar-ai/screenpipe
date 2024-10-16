@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729040920494,
+  "lastUpdate": 1729094711207,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -16229,6 +16229,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1858416917,
             "range": "± 64105649",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58390871652302323f3f8c7fb55f7eb604503031",
+          "message": "Merge pull request #510 from tonybenoy/main\n\nFix windows setup in documentation",
+          "timestamp": "2024-10-16T08:55:16-07:00",
+          "tree_id": "6c73d80436a7562540425057218b58bb2503fec8",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/58390871652302323f3f8c7fb55f7eb604503031"
+        },
+        "date": 1729094709395,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2001522166,
+            "range": "± 81649264",
             "unit": "ns/iter"
           }
         ]
