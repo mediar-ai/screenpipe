@@ -22,37 +22,39 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
   handleNextSlide,
 }) => {
   return (
-    <div className={`${className} w-full flex justify-center flex-col`}>
-      <DialogHeader className="px-2">
-        <div className="w-full inline-flex !mt-[-10px] justify-center">
-          <img
-            src="/128x128.png"
-            alt="screenpipe-logo"
-            width="72"
-            height="72"
-          />
-        </div>
-        <DialogTitle className="text-center !mt-[-3px] font-bold text-[30px] text-balance flex justify-center">
-          screenpipe usage instructions
+    <div className={`${className} w-full flex justify-center flex-col overflow-y-auto`}>
+      <DialogHeader className="flex flex-col px-2 justify-center items-center">
+        <img
+          className="w-24 h-24 justify-center"
+          src="/128x128.png"
+          alt="screenpipe-logo"
+        />
+        <DialogTitle className="text-center text-2xl">
+          screenpipe tips
         </DialogTitle>
-        <h1 className="text-center !mt-[-1px] text-lg">
-          before we begin, learn how to use screenpipe effectively!
-        </h1>
       </DialogHeader>
       <div className="flex justify-center">
         <div className="h-[1px] w-40 rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
         <div className="h-[1px] w-40 rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
       </div>
-      <div className="mt-2 w-full flex justify-around flex-col">
+      <div className="mt-2 w-full flex justify-around flex-col ">
         <div className="mx-4 mb-2">
           <h2 className="font-semibold text-md">search functionality:</h2>
           <p className="text-muted-foreground text-[14px]">
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
               on screenpipe&apos;s main menu,
             </span>
-            you&apos;ll find a search bar to query the 24/7 captured data. it
+            you&apos;ll find an advanced search interface to query your 24/7 screen & mic recordings. it
             lets you select specific results for ai summarization and chatting,
             providing valuable insights.
+            <br />
+            use cases:
+            <ul>
+              <li>- meeting or general conversation summaries</li>
+              <li>- activity summaries (youtube, browsing, etc.)</li>
+              <li>- education (lecture, tutorial, etc.)</li>
+              <li>- etc.</li>
+            </ul>
           </p>
         </div>
         <div className="flex justify-center">
@@ -66,7 +68,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
               screenpipe status menu serves
             </span>
             as a health and process monitor and allows you to adjust advanced
-            preferences for backend processes
+            preferences for the recording processes
           </p>
         </div>
         <div className="flex justify-center">
@@ -79,9 +81,8 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
               the settings menu,
             </span>
-            is where you can configure various options like monitor recorder
-            settings and ai preferences. this section lets you customize how
-            screenpipe interacts with llms
+            is where you can configure various options like recording
+            settings and ai preferences
           </p>
         </div>
         <div className="flex justify-center">
@@ -96,8 +97,8 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
             <span className="font-medium text-nowrap text-[14px] prose mr-1">
               this features of screenpipe
             </span>
-            tracks your meetings by analyzing specific keywords and generates
-            summaries for you using ai &amp; llms .
+            tracks your meetings and generates
+            summaries for you using ai
           </p>
         </div>
         <div className="mx-4">
@@ -107,10 +108,12 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
               this features of screenpipe
             </span>
             extend your 24/7 data through plugins you can install in seconds,
-            create, share and sell your own.
+            create, share and sell your own
           </p>
         </div>
       </div>
+
+      <div className="h-[100px] my-16" />
 
       <OnboardingNavigation
         className="mt-8"

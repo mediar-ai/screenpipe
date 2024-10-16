@@ -70,6 +70,8 @@ crossbeam = { workspace = true }
 dirs = "5.0.1"
 
 lazy_static = { version = "1.4.0" }
+realfft = "3.4.0"
+regex = "1.11.0"
 
 
 [target.'cfg(target_os = "windows")'.dependencies]

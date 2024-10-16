@@ -35,6 +35,7 @@ mod analytics;
 use crate::analytics::start_analytics;
 
 mod commands;
+mod llm_sidecar;
 mod server;
 mod sidecar;
 mod updates;
@@ -115,7 +116,9 @@ async fn main() {
             open_screen_capture_preferences,
             load_pipe_config,
             save_pipe_config,
-            reset_all_pipes
+            reset_all_pipes,
+            llm_sidecar::start_ollama_sidecar,
+            llm_sidecar::stop_ollama_sidecar,
         ])
         .setup(|app| {
             // Logging setup
@@ -138,31 +141,8 @@ async fn main() {
                 .with_writer(std::io::stdout)
                 .with_filter(EnvFilter::new("debug"));
 
-            // Initialize OpenTelemetry
-            // let tracer = opentelemetry_otlp::new_pipeline()
-            //     .tracing()
-            //     .with_exporter(
-            //         opentelemetry_otlp::new_exporter()
-            //             .http()
-            //             .with_endpoint("https://otel.highlight.io/v1/traces")
-            //     )
-            //     .with_trace_config(
-            //         trace::config()
-            //             .with_sampler(Sampler::AlwaysOn)
-            //             .with_resource(Resource::new(vec![opentelemetry::KeyValue::new(
-            //                 "service.name",
-            //                 "screenpipe-app",
-            //             )]))
-            //     )
-            //     .install_batch(opentelemetry::runtime::Tokio)
-            //     .expect("Failed to initialize OpenTelemetry tracer");
-
-            // // Create a tracing layer with the configured tracer
-            // let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-
             // Initialize the tracing subscriber with both layers
             tracing_subscriber::registry()
-                // .with(telemetry)
                 .with(file_layer)
                 .with(console_layer)
                 .init();
@@ -225,7 +205,8 @@ async fn main() {
                     }
                     "update_now" => {
                         use tauri_plugin_notification::NotificationExt;
-                        app_handle.notification()
+                        app_handle
+                            .notification()
                             .builder()
                             .title("screenpipe")
                             .body("installing latest version")
@@ -304,7 +285,12 @@ async fn main() {
                 });
 
             if is_analytics_enabled {
-                match start_analytics(unique_id, posthog_api_key, interval_hours, "http://localhost:3030".to_string()) {
+                match start_analytics(
+                    unique_id,
+                    posthog_api_key,
+                    interval_hours,
+                    "http://localhost:3030".to_string(),
+                ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
                     }

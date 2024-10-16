@@ -1,6 +1,8 @@
 import React from "react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { RainbowButton } from "../ui/rainbow-button";
+import { ArrowRight } from "lucide-react";
 
 interface OnboardingIntroProps {
   className?: string;
@@ -12,22 +14,18 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
   handleNextSlide,
 }) => (
   <div className={` flex justify-center items-center flex-col ${className}`}>
-    <DialogHeader className="px-2">
-      <div className="w-full !mt-[-10px] inline-flex justify-center">
-        <img
-          src="/128x128.png"
-          alt="screenpipe-logo"
-          width="72"
-          height="72"
-        />
-      </div>
-      <DialogTitle className="!mt-[-2px] font-bold text-nowrap text-center text-[24px] flex justify-center">
-        hey! we&apos;re excited to have you in the screenpipe community!
+    <DialogHeader className="flex flex-col px-2 justify-center items-center">
+      <img
+        className="w-24 h-24 justify-center"
+        src="/128x128.png"
+        alt="screenpipe-logo"
+      />
+      <DialogTitle className="text-center text-2xl">
+        where pixels become magic
       </DialogTitle>
-      <p className="text-center !mt-[0px] text-base">
-        get ready to discover all the amazing things our product has
-        to offer!!
-      </p>
+      <h2 className="text-center text-sm">
+        welcome to screenpipe, excited to have you here
+      </h2>
     </DialogHeader>
     <video
       width="600px"
@@ -39,14 +37,11 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
       <source src="/onboarding-screenpipe.mp4" type="video/mp4" />
       your browser does not support the video tag.
     </video>
-    <Button
-      className="mt-5 w-28 ml-auto float-right mr-20"
-      onClick={handleNextSlide}
-    >
+    <RainbowButton className="mt-4" onClick={handleNextSlide}>
       get started
-    </Button>
+      <ArrowRight className="w-4 h-4 ml-2" />
+    </RainbowButton>
   </div>
 );
 
 export default OnboardingIntro;
-

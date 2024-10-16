@@ -22,12 +22,11 @@ interface OnboardingAPISetupProps {
   handlePrevSlide: () => void;
 }
 
-const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({ 
+const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   className,
   handleNextSlide,
   handlePrevSlide,
 }) => {
-
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
@@ -59,33 +58,38 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
     setAreAllInputsFilled(
       aiUrl.trim() !== "" && openaiApiKey.trim() !== "" && aiModel.trim() !== ""
     );
-  }, [localSettings])
-  
+  }, [localSettings]);
+
   const validateInputs = async () => {
     const { aiUrl, openaiApiKey, aiModel } = localSettings;
-    const newErrors: {[key: string]: string } = {};
+    const newErrors: { [key: string]: string } = {};
     try {
       new URL(aiUrl);
       const apiKeyValidationResponse = await fetch(`${aiUrl}/models`, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
+          Authorization: `Bearer ${openaiApiKey}`,
         },
       });
       if (apiKeyValidationResponse.ok) {
         try {
-          const modelValidationResponse = await fetch(`${aiUrl}/models/${aiModel}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${openaiApiKey}`,
-            },
-          });
+          const modelValidationResponse = await fetch(
+            `${aiUrl}/models/${aiModel}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${openaiApiKey}`,
+              },
+            }
+          );
           if (!modelValidationResponse.ok) {
-            const contentType = modelValidationResponse.headers.get('content-type');
-            let errorMessage = 'unknown error';
-            if (contentType && contentType.includes('application/json')) {
+            const contentType =
+              modelValidationResponse.headers.get("content-type");
+            let errorMessage = "unknown error";
+            if (contentType && contentType.includes("application/json")) {
               const errorJson = await modelValidationResponse.json();
-              errorMessage = errorJson.error?.message || JSON.stringify(errorJson);
+              errorMessage =
+                errorJson.error?.message || JSON.stringify(errorJson);
             } else {
               errorMessage = await modelValidationResponse.text();
             }
@@ -95,9 +99,10 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
           errors.aiModel = `failed to validate ai model, please make sure ai url & api key is correct: ${error.message.toLowerCase()}`;
         }
       } else {
-        const contentType = apiKeyValidationResponse.headers.get('content-type');
-        let errorMessage = 'unknown error';
-        if (contentType && contentType.includes('application/json')) {
+        const contentType =
+          apiKeyValidationResponse.headers.get("content-type");
+        let errorMessage = "unknown error";
+        if (contentType && contentType.includes("application/json")) {
           const errorJson = await apiKeyValidationResponse.json();
           errorMessage = errorJson.error?.message || JSON.stringify(errorJson);
         } else {
@@ -115,21 +120,21 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         title: "api key validation error",
         description: newErrors[key],
         variant: "destructive",
-      })
+      });
     });
     return Object.keys(newErrors).length === 0;
   };
-  
+
   const handleValidationMoveNextSlide = async () => {
-    setIsValidating(true)
+    setIsValidating(true);
     const isValid = await validateInputs();
-    setIsValidating(false)
+    setIsValidating(false);
     if (isValid) {
       toast({
         title: "success",
         description: "ai setup completed successfully",
         variant: "default",
-      })
+      });
       handleNextSlide();
     }
   };
@@ -140,22 +145,17 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
 
   return (
     <div className={`flex h-[80%] flex-col ${className}`}>
-      <DialogHeader
-        className={`flex justify-center items-center`}
-      >
-        <div className="w-full !mt-[-10px] inline-flex justify-center">
-          <img
-            src="/128x128.png"
-            alt="screenpipe-logo"
-            width="72"
-            height="72"
-          />
-        </div>
-        <DialogTitle className="font-bold text-[28px] text-balance">
-          add api key to use ai-enhanced summarization
+      <DialogHeader className="flex flex-col px-2 justify-center items-center">
+        <img
+          className="w-24 h-24 justify-center"
+          src="/128x128.png"
+          alt="screenpipe-logo"
+        />
+        <DialogTitle className="text-center text-2xl">
+          setup your ai settings
         </DialogTitle>
       </DialogHeader>
-      <Card className="mt-2">
+      <Card className="mt-4">
         <CardHeader>
           <CardTitle className="text-center">setup api key</CardTitle>
         </CardHeader>
@@ -257,9 +257,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       </Card>
       <a
         onClick={() =>
-          open(
-            "https://github.com/ollama/ollama?tab=readme-ov-file#ollama",
-          )
+          open("https://github.com/ollama/ollama?tab=readme-ov-file#ollama")
         }
         href="#"
         className="mt-4 text-muted-foreground text-sm mr-auto ml-auto !text-center hover:underline"
@@ -267,24 +265,18 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         don&apos;t have api key ? set up ollama locally
         <ArrowUpRight className="inline w-4 h-4 ml-1 " />
       </a>
-      <OnboardingNavigation 
+      <OnboardingNavigation
         className="mt-8"
         isLoading={isValidating}
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={
-          areAllInputsFilled 
-          ? handleValidationMoveNextSlide
-          : handleNextSlide
+          areAllInputsFilled ? handleValidationMoveNextSlide : handleNextSlide
         }
         prevBtnText="previous"
-        nextBtnText={areAllInputsFilled 
-          ? "setup" 
-          : "i'll setup later"
-        }
+        nextBtnText={areAllInputsFilled ? "setup" : "i'll setup later"}
       />
     </div>
   );
 };
 
 export default OnboardingAPISetup;
-
