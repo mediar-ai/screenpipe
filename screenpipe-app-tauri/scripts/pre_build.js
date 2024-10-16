@@ -686,23 +686,27 @@ async function installOllamaSidecar() {
 	}
 
 	try {
+
+		// ! windows and linux not supported for now 
+
+		
 		await fs.mkdir(ollamaDir, { recursive: true });
 		const downloadPath = path.join(ollamaDir, path.basename(ollamaUrl));
 
 		console.log('Downloading Ollama...');
 		if (platform === 'windows') {
-			await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
+			// await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
 		} else {
 			await $`wget -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
 		}
 
 		console.log('Extracting Ollama...');
 		if (platform === 'windows') {
-			await $`powershell -command "Expand-Archive -Path '${downloadPath}' -DestinationPath '${ollamaDir}'"`;
-			await fs.rename(path.join(ollamaDir, 'ollama.exe'), path.join(ollamaDir, ollamaExe));
+			// await $`powershell -command "Expand-Archive -Path '${downloadPath}' -DestinationPath '${ollamaDir}'"`;
+			// await fs.rename(path.join(ollamaDir, 'ollama.exe'), path.join(ollamaDir, ollamaExe));
 		} else if (platform === 'linux') {
-			await $`tar -xzf "${downloadPath}" -C "${ollamaDir}"`;
-			await fs.rename(path.join(ollamaDir, 'ollama'), path.join(ollamaDir, ollamaExe));
+			// await $`tar -xzf "${downloadPath}" -C "${ollamaDir}"`;
+			// await fs.rename(path.join(ollamaDir, 'ollama'), path.join(ollamaDir, ollamaExe));
 		} else if (platform === 'macos') {
 			// just copy to both archs
 			await fs.copyFile(downloadPath, path.join(ollamaDir, "ollama-aarch64-apple-darwin"));
@@ -711,7 +715,7 @@ async function installOllamaSidecar() {
 
 		console.log('Setting permissions...');
 		if (platform === 'linux') {
-			await fs.chmod(path.join(ollamaDir, ollamaExe), '755');
+			// await fs.chmod(path.join(ollamaDir, ollamaExe), '755');
 		} else if (platform === 'macos') {
 			await fs.chmod(path.join(ollamaDir, "ollama-aarch64-apple-darwin"), '755');
 			await fs.chmod(path.join(ollamaDir, "ollama-x86_64-apple-darwin"), '755');
