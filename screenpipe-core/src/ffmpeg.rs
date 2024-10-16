@@ -96,6 +96,14 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
         debug!("Found ffmpeg after installation in PATH: {:?}", path);
         return Some(path);
     }
+   
+
+    let installation_dir = sidecar_dir().map_err(|e| e.to_string()).unwrap();
+    let ffmpeg_in_installation = installation_dir.join(EXECUTABLE_NAME);
+    if ffmpeg_in_installation.is_file() {
+        debug!("Found ffmpeg after installation in directory: {:?}", ffmpeg_in_installation);
+        return Some(ffmpeg_in_installation);
+    }
 
     error!("FFmpeg not found even after installation");
     None // Return None if ffmpeg is not found
