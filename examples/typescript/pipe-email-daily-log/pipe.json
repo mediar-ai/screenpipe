@@ -68,7 +68,7 @@
     },
     {
       "name": "appName",
-      "type": "string",
+      "type": "app",
       "default": "",
       "description": "Specific application name to filter the screen data, for example 'Chrome', 'Visual Studio Code', 'Slack', etc. Leave empty to include all applications"
     },

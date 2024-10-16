@@ -62,6 +62,7 @@ mod pipes {
             .arg("--allow-write")
             .arg("--allow-net")
             .arg("--allow-env")
+            .arg("--reload")
             .arg(&main_module)
             .envs(env_vars)
             .stdout(std::process::Stdio::piped())

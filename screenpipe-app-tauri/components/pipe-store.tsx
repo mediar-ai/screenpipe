@@ -493,6 +493,7 @@ const PipeDialog: React.FC = () => {
                   );
                 },
                 a({ href, children }) {
+                  console.log("Processing link:", href);
                   const isDirectVideo =
                     href?.match(/\.(mp4|webm|ogg)$/) ||
                     href?.includes("user-attachments/assets");
@@ -500,16 +501,16 @@ const PipeDialog: React.FC = () => {
                     /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
                   );
 
+                  console.log("Is direct video:", isDirectVideo);
+                  console.log("Is YouTube video:", !!youtubeMatch);
+
                   if (isDirectVideo) {
                     return (
-                      <video
+                      <RetryableVideo
                         src={href}
-                        controls
-                        className="max-w-full h-auto"
-                        style={{ maxHeight: "400px" }}
-                      >
-                        your browser does not support the video tag.
-                      </video>
+                        maxRetries={3}
+                        retryDelay={1000}
+                      />
                     );
                   } else if (youtubeMatch) {
                     const videoId = youtubeMatch[1];
@@ -527,6 +528,10 @@ const PipeDialog: React.FC = () => {
                     );
                   }
 
+                  // If it's not recognized as a video, log this info
+                  console.log(
+                    "Link not recognized as video, rendering as normal link"
+                  );
                   return (
                     <a href={href} target="_blank" rel="noopener noreferrer">
                       {children}
@@ -752,3 +757,34 @@ const PipeDialog: React.FC = () => {
 };
 
 export default PipeDialog;
+
+// Add this new component
+const RetryableVideo = ({ src, maxRetries = 3, retryDelay = 1000 }) => {
+  const [retries, setRetries] = useState(0);
+  const [key, setKey] = useState(0);
+
+  const handleError = (e) => {
+    console.error("Video loading error:", e);
+    if (retries < maxRetries) {
+      setTimeout(() => {
+        setRetries(retries + 1);
+        setKey(key + 1); // This forces a re-render of the video element
+      }, retryDelay);
+    }
+  };
+
+  return (
+    <video
+      key={key}
+      src={src}
+      controls
+      className="max-w-full h-auto"
+      style={{ maxHeight: "400px" }}
+      onError={handleError}
+      onLoadStart={() => console.log("Video load started:", src)}
+      onLoadedData={() => console.log("Video data loaded:", src)}
+    >
+      your browser does not support the video tag.
+    </video>
+  );
+};
