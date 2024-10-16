@@ -6,6 +6,44 @@ import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
 import {Language} from "@/lib/language";
 
+export type VadSensitivity = "low" | "medium" | "high";
+export type EmbeddedLLMConfig = {
+  enabled: boolean;
+  model: string;
+  port: number;
+};
+
+export interface Settings {
+  openaiApiKey: string;
+  deepgramApiKey: string;
+  isLoading: boolean;
+  aiModel: string;
+  installedPipes: Pipe[];
+  userId: string;
+  customPrompt: string;
+  devMode: boolean;
+  audioTranscriptionEngine: string;
+  ocrEngine: string;
+  monitorIds: string[];
+  audioDevices: string[];
+  usePiiRemoval: boolean;
+  restartInterval: number;
+  port: number;
+  dataDir: string;
+  disableAudio: boolean;
+  ignoredWindows: string[];
+  includedWindows: string[];
+  aiUrl: string;
+  aiMaxContextChars: number;
+  fps: number;
+  vadSensitivity: VadSensitivity;
+  analyticsEnabled: boolean;
+  audioChunkDuration: number; // new field
+  useChineseMirror: boolean; // Add this line
+  embeddedLLM: EmbeddedLLMConfig;
+  languages: Language[],
+}
+
 const defaultSettings: Settings = {
   openaiApiKey: "",
   deepgramApiKey: "7ed2a159a094337b01fd8178b914b7ae0e77822d", // for now we hardcode our key (dw about using it, we have bunch of credits)
@@ -40,38 +78,12 @@ const defaultSettings: Settings = {
   audioChunkDuration: 30, // default to 10 seconds
   useChineseMirror: false, // Add this line
   languages: [],
+  embeddedLLM: {
+    enabled: false,
+    model: "llama3.2:1b-instruct-q4_K_M",
+    port: 11438,
+  },
 };
-
-export type VadSensitivity = "low" | "medium" | "high";
-export interface Settings {
-  languages: Language[];
-  openaiApiKey: string;
-  deepgramApiKey: string;
-  isLoading: boolean;
-  aiModel: string;
-  installedPipes: Pipe[];
-  userId: string;
-  customPrompt: string;
-  devMode: boolean;
-  audioTranscriptionEngine: string;
-  ocrEngine: string;
-  monitorIds: string[];
-  audioDevices: string[];
-  usePiiRemoval: boolean;
-  restartInterval: number;
-  port: number;
-  dataDir: string;
-  disableAudio: boolean;
-  ignoredWindows: string[];
-  includedWindows: string[];
-  aiUrl: string;
-  aiMaxContextChars: number;
-  fps: number;
-  vadSensitivity: VadSensitivity;
-  analyticsEnabled: boolean;
-  audioChunkDuration: number; // new field
-  useChineseMirror: boolean; // Add this line
-}
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
 
@@ -129,8 +141,7 @@ export function useSettings() {
         console.log("savedDevMode", savedDevMode);
 
         const savedAudioTranscriptionEngine =
-          (await store!.get<string>("audioTranscriptionEngine")) ||
-          "deepgram";
+          (await store!.get<string>("audioTranscriptionEngine")) || "deepgram";
         const savedOcrEngine =
           (await store!.get<string>("ocrEngine")) || ocrModel;
         const savedMonitorIds = (await store!.get<string[]>("monitorIds")) || [
@@ -166,6 +177,13 @@ export function useSettings() {
           (await store!.get<number>("audioChunkDuration")) || 30;
         const savedUseChineseMirror =
           (await store!.get<boolean>("useChineseMirror")) || false;
+        const savedEmbeddedLLM = (await store!.get<EmbeddedLLMConfig>(
+          "embeddedLLM"
+        )) || {
+          enabled: false,
+          model: "llama3.2:1b-instruct-q4_K_M",
+          port: 11438,
+        };
         const savedLanguages =
             (await store!.get<Language[]>("languages")) || [];
         setSettings({
@@ -195,6 +213,7 @@ export function useSettings() {
           analyticsEnabled: savedAnalyticsEnabled,
           audioChunkDuration: savedAudioChunkDuration,
           useChineseMirror: savedUseChineseMirror,
+          embeddedLLM: savedEmbeddedLLM,
           languages: savedLanguages,
         });
       } catch (error) {

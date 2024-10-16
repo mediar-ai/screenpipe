@@ -58,8 +58,9 @@ async fn main() {
         // Add more test cases as needed
     ];
 
-    let whisper_model =
-        Arc::new(WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo).unwrap());
+    let whisper_model = Arc::new(Mutex::new(
+        WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo).unwrap(),
+    ));
     let vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>> =
         Arc::new(Mutex::new(Box::new(SileroVad::new().await.unwrap())));
     let output_path = Arc::new(PathBuf::from("test_output"));
@@ -84,18 +85,20 @@ async fn main() {
             };
 
             let mut vad_engine_guard = vad_engine.lock().await;
+            let mut whisper_model_guard = whisper_model.lock().await;
             let (transcription, _) = stt(
                 &audio_input,
-                &whisper_model,
+                &mut *whisper_model_guard,
                 Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 &mut **vad_engine_guard,
                 None,
                 &output_path,
                 true,
             )
-                .await
-                .unwrap();
+            .await
+            .unwrap();
             drop(vad_engine_guard);
+            drop(whisper_model_guard);
 
             let distance = levenshtein(expected_transcription, &transcription);
             let accuracy = 1.0 - (distance as f64 / expected_transcription.len() as f64);

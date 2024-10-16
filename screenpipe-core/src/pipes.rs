@@ -10,6 +10,7 @@ mod pipes {
 
     use anyhow::Result;
     use reqwest;
+    use std::fs;
     use std::future::Future;
     use std::path::Path;
     use std::pin::Pin;
@@ -53,7 +54,7 @@ mod pipes {
         ));
 
         // Execute Deno
-        let mut child = Command::new("deno")
+        let child_result = Command::new("deno")
             .arg("run")
             .arg("--config")
             .arg(pipe_dir.join("deno.json"))
@@ -65,7 +66,18 @@ mod pipes {
             .envs(env_vars)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            .spawn();
+
+        let mut child = match child_result {
+            Ok(child) => child,
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    anyhow::bail!("deno not found in system path. please install deno: https://deno.land/#installation");
+                } else {
+                    anyhow::bail!("failed to spawn deno process: {}", e);
+                }
+            }
+        };
 
         let stdout = child.stdout.take().expect("failed to get stdout");
         let stderr = child.stderr.take().expect("failed to get stderr");
@@ -155,12 +167,18 @@ mod pipes {
         while let Some(entry) = entries.next_entry().await? {
             let ty = entry.file_type().await?;
             let src_path = entry.path();
-            let dst_path = dst.as_ref().join(entry.file_name());
+            let file_name = entry.file_name();
 
-            if ty.is_dir() {
-                copy_dir_all_boxed(src_path, dst_path).await?;
+            if !is_hidden_file(&file_name) {
+                let dst_path = dst.as_ref().join(&file_name);
+
+                if ty.is_dir() {
+                    copy_dir_all_boxed(src_path, dst_path).await?;
+                } else {
+                    tokio::fs::copy(src_path, dst_path).await?;
+                }
             } else {
-                tokio::fs::copy(src_path, dst_path).await?;
+                info!("skipping hidden file: {:?}", file_name);
             }
         }
 
@@ -193,12 +211,15 @@ mod pipes {
 
         for item in contents.as_array().unwrap() {
             let file_name = item["name"].as_str().unwrap();
-            let download_url = item["download_url"].as_str().unwrap();
-
-            let file_content = client.get(download_url).send().await?.bytes().await?;
-            let file_path = dest_dir.join(file_name);
-            tokio::fs::write(&file_path, &file_content).await?;
-            info!("downloaded: {:?}", file_path);
+            if !is_hidden_file(std::ffi::OsStr::new(file_name)) {
+                let download_url = item["download_url"].as_str().unwrap();
+                let file_content = client.get(download_url).send().await?.bytes().await?;
+                let file_path = dest_dir.join(file_name);
+                tokio::fs::write(&file_path, &file_content).await?;
+                info!("downloaded: {:?}", file_path);
+            } else {
+                info!("skipping hidden file: {}", file_name);
+            }
         }
 
         Ok(())
@@ -229,15 +250,24 @@ mod pipes {
     }
 
     fn find_pipe_file(pipe_dir: &Path) -> anyhow::Result<PathBuf> {
-        for entry in std::fs::read_dir(pipe_dir)? {
+        for entry in fs::read_dir(pipe_dir)? {
             let entry = entry?;
             let file_name = entry.file_name();
             let file_name_str = file_name.to_str().unwrap();
-            if file_name_str == "pipe.js" || file_name_str == "pipe.ts" {
+            if (file_name_str == "pipe.js" || file_name_str == "pipe.ts")
+                && !is_hidden_file(&file_name)
+            {
                 return Ok(entry.path());
             }
         }
         anyhow::bail!("No pipe.js/pipe.ts found in the pipe/dist directory")
+    }
+
+    fn is_hidden_file(file_name: &std::ffi::OsStr) -> bool {
+        file_name
+            .to_str()
+            .map(|s| s.starts_with('.') || s == "Thumbs.db")
+            .unwrap_or(false)
     }
 }
 
