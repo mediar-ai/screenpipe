@@ -1,86 +1,7 @@
 use image::DynamicImage;
 use rusty_tesseract::{Args, DataOutput, Image};
-use screenpipe_core::Language;
+use screenpipe_core::{Language, TESSERACT_LANGUAGES};
 use std::collections::HashMap;
-
-pub const LANGUAGES: [(&str, &str); 76] = [
-    ("eng", "english"),
-    ("chi_sim", "chinese"),
-    ("deu", "german"),
-    ("spa", "spanish"),
-    ("rus", "russian"),
-    ("kor", "korean"),
-    ("fra", "french"),
-    ("jpn", "japanese"),
-    ("por", "portuguese"),
-    ("tur", "turkish"),
-    ("pol", "polish"),
-    ("cat", "catalan"),
-    ("nld", "dutch"),
-    ("ara", "arabic"),
-    ("swe", "swedish"),
-    ("ita", "italian"),
-    ("ind", "indonesian"),
-    ("hin", "hindi"),
-    ("fin", "finnish"),
-    ("vie", "vietnamese"),
-    ("heb", "hebrew"),
-    ("ukr", "ukrainian"),
-    ("ell", "greek"),
-    ("msa", "malay"),
-    ("ces", "czech"),
-    ("ron", "romanian"),
-    ("dan", "danish"),
-    ("hun", "hungarian"),
-    ("nor", "norwegian"),
-    ("tha", "thai"),
-    ("urd", "urdu"),
-    ("hrv", "croatian"),
-    ("bul", "bulgarian"),
-    ("lit", "lithuanian"),
-    ("lat", "latin"),
-    ("mal", "malayalam"),
-    ("cym", "welsh"),
-    ("slk", "slovak"),
-    ("fas", "persian"),
-    ("lav", "latvian"),
-    ("ben", "bengali"),
-    ("srp", "serbian"),
-    ("aze", "azerbaijani"),
-    ("slv", "slovenian"),
-    ("est", "estonian"),
-    ("mkd", "macedonian"),
-    ("nep", "nepali"),
-    ("mon", "mongolian"),
-    ("bos", "bosnian"),
-    ("kaz", "kazakh"),
-    ("sqi", "albanian"),
-    ("swa", "swahili"),
-    ("glg", "galician"),
-    ("mar", "marathi"),
-    ("pan", "punjabi"),
-    ("sin", "sinhala"),
-    ("khm", "khmer"),
-    ("afr", "afrikaans"),
-    ("bel", "belarusian"),
-    ("guj", "gujarati"),
-    ("amh", "amharic"),
-    ("yid", "yiddish"),
-    ("lao", "lao"),
-    ("uzb", "uzbek"),
-    ("fo", "faroese"),
-    ("pus", "pashto"),
-    ("mlt", "maltese"),
-    ("san", "sanskrit"),
-    ("lb", "luxembourgish"),
-    ("mya", "myanmar"),
-    ("bod", "tibetan"),
-    ("tgl", "tagalog"),
-    ("asm", "assamese"),
-    ("tat", "tatar"),
-    ("hau", "hausa"),
-    ("jav", "javanese"),
-];
 
 pub fn perform_ocr_tesseract(
     image: &DynamicImage,
@@ -88,7 +9,7 @@ pub fn perform_ocr_tesseract(
 ) -> (String, String, Option<f64>) {
     let language_string = match languages.is_empty() {
         true => "eng".to_string(),
-        _ => LANGUAGES
+        _ => TESSERACT_LANGUAGES
             .iter()
             .filter_map(|(key, val)| {
                 if let Some(_) = languages.iter().find(|l| l == &val) {

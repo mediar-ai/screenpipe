@@ -16,7 +16,7 @@ struct Cli {
     #[arg(long, default_value_t = 1.0)]
     fps: f32,
 
-    #[arg(short = 'l', long, value_enum(Language))]
+    #[arg(short = 'l', long, value_enum)]
     language: Vec<Language>,
 }
 

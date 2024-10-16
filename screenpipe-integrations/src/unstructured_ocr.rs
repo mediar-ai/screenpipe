@@ -3,9 +3,9 @@ use image::{codecs::png::PngEncoder, DynamicImage, ImageEncoder};
 use log::error;
 use reqwest::multipart::{Form, Part};
 use reqwest::Client;
-use screenpipe_core::Language;
+use screenpipe_core::{Language, TESSERACT_LANGUAGES};
 use serde_json;
-use serde_json::{to_string, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 use std::io::Cursor;
@@ -52,9 +52,15 @@ pub async fn perform_ocr_cloud(
     if !languages.is_empty() {
         form = form.text(
             "languages",
-            languages
+            TESSERACT_LANGUAGES
                 .iter()
-                .map(|l| l.to_string())
+                .filter_map(|(key, val)| {
+                    if let Some(_) = languages.iter().find(|l| l == &val) {
+                        Some(key.to_string())
+                    } else {
+                        None
+                    }
+                })
                 .collect::<Vec<String>>()
                 .join("+"),
         );

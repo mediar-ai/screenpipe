@@ -136,6 +136,7 @@ pub fn detect_language(
     let probs = candle_nn::ops::softmax(&logits, D::Minus1)?;
     let probs = probs.to_vec1::<f32>()?;
     let mut probs = LANGUAGES.iter().zip(probs.iter()).collect::<Vec<_>>();
+    probs.sort_by(|(_, p1), (_, p2)| p2.total_cmp(p1));
     if !languages.is_empty() {
         probs = languages
             .iter()

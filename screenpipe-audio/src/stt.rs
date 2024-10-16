@@ -66,8 +66,26 @@ async fn transcribe_with_deepgram(
     // Get the WAV data from the cursor
     let wav_data = cursor.into_inner();
 
+    let mut query_params = String::from("model=nova-2&smart_format=true");
+
+    if !languages.is_empty() {
+        query_params = [
+            query_params,
+            "&".into(),
+            languages
+                .iter()
+                .map(|lang| format!("detect_language={}", lang.as_lang_code()))
+                .collect::<Vec<String>>()
+                .join("&"),
+        ]
+        .concat();
+    }
+
     let response = client
-        .post("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true")
+        .post(format!(
+            "https://api.deepgram.com/v1/listen?{}",
+            query_params
+        ))
         .header("Content-Type", "audio/wav")
         .header("Authorization", format!("Token {}", api_key))
         .body(wav_data)
@@ -181,7 +199,12 @@ fn process_with_whisper(
     )?;
 
     debug!("detecting language");
-    let language_token = Some(multilingual::detect_language(model, tokenizer, &mel, languages.clone())?);
+    let language_token = Some(multilingual::detect_language(
+        model,
+        tokenizer,
+        &mel,
+        languages.clone(),
+    )?);
 
     debug!("initializing decoder");
     let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
@@ -378,7 +401,12 @@ pub async fn stt(
                         audio_input.device, e
                     );
                     // Fallback to Whisper
-                    process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages.clone())
+                    process_with_whisper(
+                        &mut *whisper_model,
+                        &speech_frames,
+                        &mel_filters,
+                        languages.clone(),
+                    )
                 }
             }
         } else {

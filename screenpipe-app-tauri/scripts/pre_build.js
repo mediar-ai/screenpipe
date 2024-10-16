@@ -418,7 +418,7 @@ async function getMostRecentBinaryPath(targetArch, paths) {
 /* ########## macOS ########## */
 if (platform == 'macos') {
 
-	const architectures = ['arm64', 'x86_64'];
+	const architectures = ['arm64', ''];
 
 	for (const arch of architectures) {
 		if (process.env['SKIP_SCREENPIPE_SETUP']) {
@@ -689,7 +689,7 @@ async function installOllamaSidecar() {
 
 		// ! windows and linux not supported for now 
 
-		
+
 		await fs.mkdir(ollamaDir, { recursive: true });
 		const downloadPath = path.join(ollamaDir, path.basename(ollamaUrl));
 
