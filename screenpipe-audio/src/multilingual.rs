@@ -122,10 +122,16 @@ pub fn detect_language(
         usize::min(seq_len, model.config().max_source_positions),
     )?;
     let device = mel.device();
-    let language_token_ids = LANGUAGES
+    let mut language_token_ids = LANGUAGES
         .iter()
         .map(|(t, _)| token_id(tokenizer, &format!("<|{t}|>")))
         .collect::<Result<Vec<_>>>()?;
+    if !languages.is_empty() {
+        language_token_ids = languages
+            .iter()
+            .map(|l| token_id(tokenizer, &format!("<|{}|>", l.as_lang_code())))
+            .collect::<Result<Vec<_>>>()?;
+    }
     let sot_token = token_id(tokenizer, SOT_TOKEN)?;
     let audio_features = model.encoder_forward(&mel, true)?;
     let tokens = Tensor::new(&[[sot_token]], device)?;
@@ -135,18 +141,23 @@ pub fn detect_language(
     let logits = logits.index_select(&language_token_ids, 0)?;
     let probs = candle_nn::ops::softmax(&logits, D::Minus1)?;
     let probs = probs.to_vec1::<f32>()?;
-    let mut probs = LANGUAGES.iter().zip(probs.iter()).collect::<Vec<_>>();
-    probs.sort_by(|(_, p1), (_, p2)| p2.total_cmp(p1));
-    if !languages.is_empty() {
-        probs = languages
+    let mut probabilities: Vec<(&str, &f32)>;
+    probabilities = match languages.is_empty() {
+        true => LANGUAGES
             .iter()
-            .map(|lang| probs[lang.to_owned() as usize])
-            .collect::<Vec<_>>();
-    }
-    for ((_lang_code, _language), _p) in probs.iter().take(5) {
-        // info!("{language}: {p}")
-    }
-    let language = token_id(tokenizer, &format!("<|{}|>", probs[0].0 .0))?;
-    info!("detected language: {:?}", probs[0].0);
+            .zip(probs.iter())
+            .map(|v| (v.0 .0, v.1))
+            .collect::<Vec<_>>(),
+        false => languages
+            .iter()
+            .map(|l| l.as_lang_code())
+            .zip(probs.iter())
+            .collect::<Vec<_>>(),
+    };
+
+    probabilities.sort_by(|(_, p1), (_, p2)| p2.total_cmp(p1));
+
+    let language = token_id(tokenizer, &format!("<|{}|>", probabilities[0].0))?;
+    info!("detected language: {:?}", probabilities[0].0);
     Ok(language)
 }
