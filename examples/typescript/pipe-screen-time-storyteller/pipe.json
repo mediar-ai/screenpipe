@@ -25,7 +25,7 @@
     {
       "name": "ollamaModel",
       "type": "string",
-      "default": "llama3.1",
+      "default": "llama3.2",
       "description": "Ollama model to use"
     },
     {
