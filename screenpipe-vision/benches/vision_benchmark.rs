@@ -21,6 +21,7 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
             get_default_monitor().await.id(),
             &[],
             &[],
+            vec![],
         )
         .await;
     });

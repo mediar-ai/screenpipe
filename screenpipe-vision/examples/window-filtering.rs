@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         continuous_capture(
             result_tx,
-            Duration::from_secs_f32(1.0 / 1.0),
+            Duration::from_secs(1),
             false,
             // if apple use apple otherwise if windows use windows native otherwise use tesseract
             if cfg!(target_os = "macos") {
@@ -52,6 +52,7 @@ async fn main() -> Result<()> {
             id,
             &cli.ignore,
             &cli.include,
+            vec![],
         )
         .await
     });
