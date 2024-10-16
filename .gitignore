@@ -41,3 +41,4 @@ onnxruntime-win-x64-gpu*/
 
 # ignore environment variables
 .env
+.aider*
