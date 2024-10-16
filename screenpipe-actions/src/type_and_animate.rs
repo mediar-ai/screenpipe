@@ -38,30 +38,30 @@ where
 pub async fn delete_characters(count: usize) -> Result<()> {
     tokio::task::spawn_blocking(move || {
         with_enigo(|enigo| {
-            for _ in 0..count {
-                enigo.key_click(Key::Backspace);
-                std::thread::sleep(Duration::from_millis(1));
-            }
+            enigo.key_sequence(&"\u{8}".repeat(count));
         });
     })
     .await?;
     Ok(())
 }
 
-pub async fn type_slowly(text: &str) -> Result<()> {
-    for c in text.chars() {
-        let c_clone = c;
-        tokio::task::spawn_blocking(move || {
-            with_enigo(|enigo| {
-                match c_clone {
-                    '\n' => enigo.key_click(Key::Return),
-                    ' ' => enigo.key_click(Key::Space),
-                    _ => enigo.key_click(Key::Layout(c_clone)),
+pub async fn type_slowly(text: String) -> Result<()> {
+    let text_len = text.len();
+    tokio::task::spawn_blocking(move || {
+        with_enigo(|enigo| {
+            for line in text.split('\n') {
+                if !line.is_empty() {
+                    enigo.key_sequence(line);
                 }
-            });
-        })
-        .await?;
-        sleep(Duration::from_millis(1)).await;
-    }
+                if text.contains('\n') {
+                    enigo.key_down(Key::Shift);
+                    enigo.key_click(Key::Return);
+                    enigo.key_up(Key::Shift);
+                }
+            }
+        });
+    })
+    .await?;
+    sleep(Duration::from_millis(text_len as u64)).await;
     Ok(())
 }
