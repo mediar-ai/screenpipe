@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tokio::task;
 use tokio::time::Instant;
 use tracing::{error, info};
+use std::string::ToString;
 
 pub async fn run() -> anyhow::Result<()> {
     info!("starting keystroke monitor. press '//' to print attributes for the current app and call openai.");
@@ -50,10 +51,12 @@ pub async fn run() -> anyhow::Result<()> {
             KeystrokeCommand::DoubleSlash => {
                 info!("double slash detected. calling ai...");
 
-                type_slowly("thinking").await?;
+                type_slowly("thinking".to_string()).await?;
                 let swift_output = run_swift_script().await?;
 
-                // Print the Swift output
+                // Use swift_output directly here
+                // For example, pass it to the LLM or process it further
+
                 info!("swift output: {}", swift_output);
 
                 let prompt = format!(
@@ -80,9 +83,9 @@ pub async fn run() -> anyhow::Result<()> {
                         delete_characters("thinking".len()).await?;
                         delete_characters(2).await?; // Delete the double slash
                         info!("ai response: {}", response);
-                        type_slowly("[GENERIC_RESPONSE]").await?;
-                        type_slowly("\n").await?;
-                        type_slowly(&response).await?;
+                        type_slowly("[GENERIC_RESPONSE]".to_string()).await?;
+                        type_slowly("\n".to_string()).await?;
+                        type_slowly(response).await?;
                     }
                     Err(e) => {
                         let duration = start.elapsed();
@@ -92,9 +95,9 @@ pub async fn run() -> anyhow::Result<()> {
                         continue; // skip the rest of the loop iteration
                     }
                 }
-                type_slowly("\n").await?;
-                type_slowly("\n").await?;
-                type_slowly("[RESPONSE_WITH_CONTEXT]").await?;
+                type_slowly("\n".to_string()).await?;
+                type_slowly("\n".to_string()).await?;
+                type_slowly("[RESPONSE_WITH_CONTEXT]".to_string()).await?;
 
                 let context = format!("Swift output: {}", swift_output);
                 let prompt = r#"Based on the following Swift output, find double slash '//' to see where users curor is, 
@@ -141,7 +144,7 @@ pub async fn run() -> anyhow::Result<()> {
                                     let truncated_result =
                                         search_result.chars().take(100).collect::<String>();
                                     let capitalized_query = query.to_uppercase();
-                                    type_slowly(&format!("[{}] ", capitalized_query)).await?;
+                                    type_slowly(format!("[{}] ", capitalized_query)).await?;
                                     info!("search result for '{}': {}", query, truncated_result);
                                     search_results.push(search_result);
                                 }
@@ -151,8 +154,8 @@ pub async fn run() -> anyhow::Result<()> {
                             }
                         }
 
-                        type_slowly("\n").await?;
-                        type_slowly("analyzing").await?;
+                        type_slowly("\n".to_string()).await?;
+                        type_slowly("analyzing".to_string()).await?;
 
                         // Final LLM call
                         let final_prompt = r#"Based on the desktop text and search results of my computer, draft a concise response.
@@ -182,7 +185,7 @@ pub async fn run() -> anyhow::Result<()> {
                                 info!("{:.1?} - final call_ai", duration);
                                 delete_characters("analyzing".len()).await?;
                                 info!("<<<llm final response>>>: {}", final_response);
-                                type_slowly(&final_response).await?;
+                                type_slowly(final_response).await?;
                             }
                             Err(e) => {
                                 error!("error in final openai call: {:?}", e);
