@@ -759,11 +759,19 @@ const PipeDialog: React.FC = () => {
 export default PipeDialog;
 
 // Add this new component
-const RetryableVideo = ({ src, maxRetries = 3, retryDelay = 1000 }) => {
+const RetryableVideo = ({
+  src,
+  maxRetries = 3,
+  retryDelay = 1000,
+}: {
+  src?: string;
+  maxRetries?: number;
+  retryDelay?: number;
+}) => {
   const [retries, setRetries] = useState(0);
   const [key, setKey] = useState(0);
 
-  const handleError = (e) => {
+  const handleError = (e: any) => {
     console.error("Video loading error:", e);
     if (retries < maxRetries) {
       setTimeout(() => {
