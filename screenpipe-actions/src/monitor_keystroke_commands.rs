@@ -1,4 +1,4 @@
-use rdev::{listen, Event, EventType};
+use rdev::{listen, Event, EventType, Key};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
@@ -48,21 +48,32 @@ fn handle_event(
     tx: &mpsc::Sender<KeystrokeCommand>,
     last_slash: &Arc<Mutex<Option<std::time::Instant>>>,
 ) -> anyhow::Result<()> {
-    if let EventType::KeyPress(key) = event.event_type {
-        info!("key: {:?}", key);
-        if key == rdev::Key::Slash || key == rdev::Key::Num7 {
-            // Check for both slash and minus
-            let mut last_slash_guard = last_slash.blocking_lock();
-            let now = std::time::Instant::now();
-            if let Some(last) = *last_slash_guard {
-                if now.duration_since(last).as_millis() < 500 {
-                    tx.blocking_send(KeystrokeCommand::DoubleSlash)?;
-                    *last_slash_guard = None;
-                    return Ok(());
+    static mut SHIFT_PRESSED: bool = false;
+
+    match event.event_type {
+        EventType::KeyPress(key) => {
+            if key == Key::ShiftLeft || key == Key::ShiftRight {
+                unsafe { SHIFT_PRESSED = true; }
+            } else if key == Key::Slash || (unsafe { SHIFT_PRESSED } && key == Key::Num7) {
+                // Monitoring for slash (/) or Shift+7 combination
+                let mut last_slash_guard = last_slash.blocking_lock();
+                let now = std::time::Instant::now();
+                if let Some(last) = *last_slash_guard {
+                    if now.duration_since(last).as_millis() < 500 {
+                        tx.blocking_send(KeystrokeCommand::DoubleSlash)?;
+                        *last_slash_guard = None;
+                        return Ok(());
+                    }
                 }
+                *last_slash_guard = Some(now);
             }
-            *last_slash_guard = Some(now);
-        }
+        },
+        EventType::KeyRelease(key) => {
+            if key == Key::ShiftLeft || key == Key::ShiftRight {
+                unsafe { SHIFT_PRESSED = false; }
+            }
+        },
+        _ => {}
     }
     Ok(())
 }
