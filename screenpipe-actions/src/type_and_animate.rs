@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use enigo::{Enigo, Key, KeyboardControllable};
 use serde::Serialize;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum EnigoCommand {
     TypeCharacter(char),
