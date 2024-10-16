@@ -1,3 +1,3 @@
 {
-    "imports": {}
+  "imports": { "cron-parser": "npm:cron-parser@^4.9.0" }
 }

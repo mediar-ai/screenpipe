@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import process from "node:process";
+import cronParser from "npm:cron-parser";
 
 // Type definitions
 export interface PipeConfig {
@@ -250,10 +251,174 @@ export interface InboxMessageAction {
   action: string;
 }
 
+class Task {
+  private _name: string;
+  private _interval: string | number;
+  private _time: string | null = null;
+  private _handler: (() => Promise<void>) | null = null;
+  private _nextRunTime: Date;
+
+  constructor(name: string) {
+    this._name = name;
+    this._interval = 0;
+    this._nextRunTime = new Date(0); // Set to past date to run immediately
+  }
+
+  every(interval: string | number): Task {
+    this._interval = interval;
+    return this;
+  }
+
+  at(time: string): Task {
+    this._time = time;
+    return this;
+  }
+
+  do(handler: () => Promise<void>): Task {
+    this._handler = handler;
+    return this;
+  }
+
+  getNextRunTime(): Date {
+    return this._nextRunTime;
+  }
+
+  async execute(): Promise<void> {
+    if (this._handler) {
+      await this._handler();
+      this._nextRunTime = this.calculateNextRunTime();
+    }
+  }
+
+  private calculateNextRunTime(): Date {
+    const now = new Date();
+    if (typeof this._interval === "number") {
+      return new Date(now.getTime() + this._interval);
+    }
+
+    const cronExpression = this.toCronExpression();
+    const interval = cronParser.parseExpression(cronExpression);
+    return interval.next().toDate();
+  }
+
+  private toCronExpression(): string {
+    if (typeof this._interval === "number") {
+      // Convert milliseconds to minutes for cron
+      const minutes = Math.floor(this._interval / 60000);
+      return `*/${minutes} * * * *`;
+    }
+
+    const [value, unit] = this._interval.split(" ");
+    switch (unit) {
+      case "minute":
+      case "minutes":
+        return `*/${value} * * * *`;
+      case "hour":
+      case "hours":
+        return `0 */${value} * * *`;
+      case "day":
+      case "days":
+        return `0 0 */${value} * *`;
+      default:
+        throw new Error(`Unsupported interval unit: ${unit}`);
+    }
+  }
+
+  getName(): string {
+    return this._name;
+  }
+}
+
+class Scheduler {
+  private tasks: Task[] = [];
+  private running: boolean = false;
+
+  task(name: string): Task {
+    const task = new Task(name);
+    this.tasks.push(task);
+    return task;
+  }
+
+  async start(): Promise<void> {
+    this.running = true;
+    while (this.running) {
+      const now = new Date();
+      console.log(`Current time: ${now.toISOString()}`);
+      console.log(`Tasks: ${this.tasks.map((t) => t.getName()).join(", ")}`);
+
+      for (const task of this.tasks) {
+        if (task.getNextRunTime() <= now) {
+          console.log(
+            `Executing task: ${task.getName()} at ${now.toISOString()}`
+          );
+          await task.execute();
+          console.log(
+            `Task ${task.getName()} executed, next run time: ${task
+              .getNextRunTime()
+              .toISOString()}`
+          );
+        } else {
+          console.log(
+            `Task ${task.getName()} not due yet. Next run time: ${task
+              .getNextRunTime()
+              .toISOString()}`
+          );
+        }
+      }
+
+      await this.sleep(100); // Check more frequently
+    }
+  }
+
+  stop(): void {
+    this.running = false;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}
+
+/**
+ * The pipe object is used to interact with the screenpipe higher level functions.
+ *
+ */
 export const pipe = {
+  /**
+   * Send a desktop notification to the user.
+   *
+   * @example
+   * ```typescript
+   * pipe.sendDesktopNotification({ title: "Task Completed", body: "Your task has been completed." });
+   * ```
+   */
   sendDesktopNotification,
+  /**
+   * Load the pipe configuration that can be set through the screenpipe app or the pipe.json file.
+   *
+   * @example
+   * ```typescript
+   * pipe.loadPipeConfig();
+   * ```
+   */
   loadPipeConfig,
+  /**
+   * Query the screenpipe API.
+   *
+   * @example
+   * ```typescript
+   * pipe.queryScreenpipe({ q: "squirrel", contentType: "ocr", limit: 10 });
+   * ```
+   */
   queryScreenpipe,
+  /**
+   * Send a notification to the user's AI inbox.
+   *
+   * @example
+   * ```typescript
+   * pipe.inbox.send({ title: "Task Completed", body: "Your task has been completed." });
+   * ```
+   */
   inbox: {
     send: async (message: InboxMessage): Promise<boolean> => {
       const notificationApiUrl =
@@ -271,4 +436,26 @@ export const pipe = {
       }
     },
   },
+  /**
+   * Scheduler for running tasks at specific times or intervals.
+   *
+   * @example
+   * ```typescript
+   * pipe.scheduler.task("dailyReport")
+   *   .every("1 day")
+   *   .at("00:00")
+   *   .do(async () => {
+   *     console.log("running daily report");
+   *   });
+   *
+   * pipe.scheduler.task("everyFiveMinutes")
+   *   .every("5 minutes")
+   *   .do(async () => {
+   *     console.log("running task every 5 minutes");
+   *   });
+   *
+   * pipe.scheduler.start();
+   * ```
+   */
+  scheduler: new Scheduler(),
 };
