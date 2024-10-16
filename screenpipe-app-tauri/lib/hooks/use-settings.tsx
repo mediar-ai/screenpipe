@@ -155,8 +155,6 @@ export function useSettings() {
         const savedDataDir = (await store!.get<string>("dataDir")) || "";
         const savedDisableAudio =
           (await store!.get<boolean>("disableAudio")) || false;
-        const savedIgnoredWindows =
-          (await store!.get<string[]>("ignoredWindows")) || [];
         const savedIncludedWindows =
           (await store!.get<string[]>("includedWindows")) || [];
         const savedAiUrl =
@@ -181,6 +179,32 @@ export function useSettings() {
           model: "llama3.2:1b-instruct-q4_K_M",
           port: 11438,
         };
+        const currentPlatform = await platform();
+        const defaultIgnoredWindows =
+          currentPlatform === "macos" // TODO: windows and linux
+            ? [
+                "bit",
+                ".env",
+                "Item-0",
+                "App Icon Window",
+                "Battery",
+                "Shortcuts",
+                "WiFi",
+                "BentoBox",
+                "Clock",
+                "Dock",
+                "DeepL",
+              ]
+            : [];
+
+        const savedIgnoredWindows = await store!.get<string[]>(
+          "ignoredWindows"
+        );
+        const finalIgnoredWindows =
+          savedIgnoredWindows && savedIgnoredWindows.length > 0
+            ? savedIgnoredWindows
+            : defaultIgnoredWindows;
+
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -199,7 +223,7 @@ export function useSettings() {
           port: savedPort,
           dataDir: savedDataDir,
           disableAudio: savedDisableAudio,
-          ignoredWindows: savedIgnoredWindows,
+          ignoredWindows: finalIgnoredWindows,
           includedWindows: savedIncludedWindows,
           aiUrl: savedAiUrl,
           aiMaxContextChars: savedAiMaxContextChars,

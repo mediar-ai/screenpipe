@@ -474,13 +474,14 @@ export function SearchChat() {
 
   const handleSearch = async (newOffset = 0, overrides: any = {}) => {
     setHasSearched(true);
-    setShowExamples(false); // Add this line
+    setShowExamples(false);
     setIsLoading(true);
     setOffset(newOffset);
     setProgress(0);
     setChatMessages([]);
     scrollToBottom();
     setResults([]);
+    setSimilarityThreshold(1); // Reset similarity threshold to 1
 
     posthog.capture("search", {
       contentType: overrides.contentType || contentType,
@@ -770,7 +771,7 @@ export function SearchChat() {
       <div className="flex flex-wrap items-center gap-4 mb-4">
         <div className="flex-grow space-y-2">
           <div className="flex items-center space-x-2">
-            <Label htmlFor="start-date">start date (local time)</Label>
+            <Label htmlFor="start-date">start date</Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -791,7 +792,7 @@ export function SearchChat() {
 
         <div className="flex-grow space-y-2">
           <div className="flex items-center space-x-2">
-            <Label htmlFor="end-date">end date (local time)</Label>
+            <Label htmlFor="end-date">end date</Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -811,7 +812,7 @@ export function SearchChat() {
         </div>
       </div>
 
-      <div className="flex space-x-2 justify-center">
+      <div className="flex mt-8 space-x-2 justify-center">
         <Badge
           variant="outline"
           className="cursor-pointer hover:bg-secondary"
@@ -1054,13 +1055,13 @@ export function SearchChat() {
       </Dialog>
 
       {isLoading ? (
-        <div className="my-12 flex justify-center">
+        <div className="my-8 flex justify-center">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       ) : (
         showExamples &&
         results.length === 0 && (
-          <div className="my-12 flex justify-center">
+          <div className="my-8 flex justify-center">
             <ExampleSearchCards onSelect={handleExampleSelect} />
           </div>
         )

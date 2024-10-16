@@ -29,7 +29,7 @@ const exampleSearches: ExampleSearch[] = [
     title: "summarize my mails",
     contentType: "ocr",
     windowName: "gmail",
-    limit: 30,
+    limit: 25,
     minLength: 50,
     startDate: new Date(new Date().setHours(0, 0, 0, 0)), // since midnight local time
   },
@@ -47,12 +47,12 @@ export function ExampleSearchCards({ onSelect }: ExampleSearchCardsProps) {
     switch (title) {
       case "summarize last hour meeting":
         return <Search className="mr-2 h-4 w-4" />;
-      case "summarize by mail":
+      case "summarize my mails":
         return <Mail className="mr-2 h-4 w-4" />;
-      case "time spent on apps last hour":
+      case "time spent last hour":
         return <Clock className="mr-2 h-4 w-4" />;
       default:
-        return null;
+        return <Search className="mr-2 h-4 w-4" />; // default icon
     }
   };
 
