@@ -1,7 +1,9 @@
-use tokio::sync::mpsc;
 use rdev::{listen, Event, EventType};
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tracing::error;
+use tracing::info;
 
 pub enum KeystrokeCommand {
     DoubleSlash,
@@ -32,7 +34,7 @@ impl KeystrokeMonitor {
             if let Err(error) = listen(move |event| {
                 let _ = handle_event(event, &tx, &last_slash);
             }) {
-                eprintln!("error: {:?}", error)
+                error!("error: {:?}", error)
             }
         });
 
@@ -44,10 +46,12 @@ impl KeystrokeMonitor {
 fn handle_event(
     event: Event,
     tx: &mpsc::Sender<KeystrokeCommand>,
-    last_slash: &Arc<Mutex<Option<std::time::Instant>>>
+    last_slash: &Arc<Mutex<Option<std::time::Instant>>>,
 ) -> anyhow::Result<()> {
     if let EventType::KeyPress(key) = event.event_type {
-        if key == rdev::Key::Slash {
+        info!("key: {:?}", key);
+        if key == rdev::Key::Slash || key == rdev::Key::Num7 {
+            // Check for both slash and minus
             let mut last_slash_guard = last_slash.blocking_lock();
             let now = std::time::Instant::now();
             if let Some(last) = *last_slash_guard {

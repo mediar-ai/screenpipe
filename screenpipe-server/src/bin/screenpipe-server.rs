@@ -17,14 +17,13 @@ use screenpipe_server::{
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
-use tokio::{runtime::Runtime, signal, sync::broadcast, task};
+use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 use tracing::{info, debug, error};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_appender::non_blocking::WorkerGuard;
-use screenpipe_actions::run; // Ensure this import is present
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -612,6 +611,8 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(feature = "beta")]
     {
+        use screenpipe_actions::run; // Ensure this import is present
+
         info!("beta feature enabled, starting screenpipe actions");
 
         // Spawn the run function in a blocking task to avoid affecting the async runtime

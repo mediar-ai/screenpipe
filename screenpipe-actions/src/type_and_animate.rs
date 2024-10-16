@@ -1,5 +1,4 @@
 use anyhow::Result;
-use tokio::sync::mpsc::Sender;
 use tokio::time::{sleep, Duration};
 use std::cell::RefCell;
 use enigo::{Enigo, Key, KeyboardControllable};
