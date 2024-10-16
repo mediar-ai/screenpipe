@@ -11,12 +11,7 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": [
-      "app",
-      "dmg",
-      "appimage",
-      "nsis"
-    ],
+    "targets": ["app", "dmg", "appimage", "nsis"],
     "externalBin": [],
     "icon": [
       "icons/32x32.png",
@@ -29,34 +24,16 @@
       "icons/icon.ico"
     ],
     "longDescription": "",
-    "resources": [
-      "assets/*"
-    ],
+    "resources": ["assets/*"],
     "shortDescription": "",
     "fileAssociations": [
       {
         "description": "Video files",
-        "ext": [
-          "mp4",
-          "mkv",
-          "avi",
-          "mov",
-          "wmv",
-          "webm"
-        ]
+        "ext": ["mp4", "mkv", "avi", "mov", "wmv", "webm"]
       },
       {
         "description": "Audio files",
-        "ext": [
-          "mp3",
-          "wav",
-          "aac",
-          "flac",
-          "oga",
-          "ogg",
-          "opic",
-          "opus"
-        ]
+        "ext": ["mp3", "wav", "aac", "flac", "oga", "ogg", "opic", "opus"]
       }
     ]
   },
@@ -75,7 +52,8 @@
   "app": {
     "trayIcon": {
       "id": "screenpipe_main",
-      "iconPath": "icons/32x32.png"
+      "iconPath": "icons/screenpipe-logo-tray-black.png",
+      "iconAsTemplate": true
     },
     "windows": [
       {
@@ -99,7 +77,7 @@
           "tauri://localhost",
           "http://tauri.localhost"
         ],
-        "media-src": "'self' mediadevices: asset: http://asset.localhost file: blob: tauri://localhost",
+        "media-src": "'self' mediadevices: asset: http://asset.localhost file: blob: tauri://localhost file: blob: https://youtu* file: blob: https://github*",
         "img-src": "'self' asset: http://asset.localhost blob: data: https://*.githubusercontent.com https://*.github.com https://github.com https://*.s3.amazonaws.com",
         "style-src": "'unsafe-inline' 'self' https://fonts.googleapis.com",
         "frame-src": "https://www.youtube.com"

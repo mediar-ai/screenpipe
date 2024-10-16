@@ -31,6 +31,10 @@ jobs:
           toolchain: stable
           override: true
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -41,8 +45,12 @@ jobs:
           mkdir -p target/debug/deps
           cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
-      - name: Run tests
+      - name: Run cargo tests
         run: cargo test
+
+      - name: Run deno tests
+        run: deno test --allow-env --allow-write --allow-read
+        working-directory: ./screenpipe-js
 
   test-windows:
     runs-on: windows-latest
@@ -60,6 +68,10 @@ jobs:
           profile: minimal
           toolchain: stable
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
 
@@ -74,8 +86,12 @@ jobs:
           mkdir -p target/debug/deps || true
           cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
-      - name: Run specific Windows OCR test
+      - name: Run specific Windows OCR cargo test
         run: cargo test test_process_ocr_task_windows
+
+      - name: Run deno tests
+        run: deno test --allow-env --allow-write --allow-read
+        working-directory: ./screenpipe-js
 
   test-macos:
     runs-on: macos-latest
@@ -93,6 +109,10 @@ jobs:
           profile: minimal
           toolchain: stable
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
 
@@ -109,8 +129,12 @@ jobs:
           mkdir -p target/debug/deps || true
           cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
-      - name: Run specific Apple OCR test
+      - name: Run specific Apple OCR cargo test
         shell: bash
         env:
           DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr
+
+      - name: Run deno tests
+        run: deno test --allow-env --allow-write --allow-read
+        working-directory: ./screenpipe-js

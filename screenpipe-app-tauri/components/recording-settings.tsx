@@ -59,6 +59,10 @@ import {
 } from "./ui/dialog";
 import { CodeBlock } from "./ui/codeblock";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
+import { platform } from "@tauri-apps/plugin-os";
+import posthog from "posthog-js";
+import { trace } from "@opentelemetry/api";
+import { initOpenTelemetry } from "@/lib/opentelemetry";
 
 interface AudioDevice {
   name: string;
@@ -76,11 +80,9 @@ interface MonitorDevice {
 export function RecordingSettings({
   localSettings,
   setLocalSettings,
-  currentPlatform,
 }: {
   localSettings: Settings;
   setLocalSettings: (settings: Settings) => void;
-  currentPlatform: string;
 }) {
   const { settings, updateSettings } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
@@ -98,9 +100,7 @@ export function RecordingSettings({
   const isDisabled = health?.status_code === 500;
   const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
   const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
-  console.log("localSettings", localSettings);
-  console.log("settings", settings);
-  console.log("availableMonitors", availableMonitors);
+
   useEffect(() => {
     const loadDevices = async () => {
       try {
@@ -180,7 +180,7 @@ export function RecordingSettings({
     };
 
     loadDevices();
-  }, [localSettings, setLocalSettings]);
+  }, [settings]);
 
   const handleUpdate = async () => {
     setIsUpdating(true);
@@ -205,9 +205,34 @@ export function RecordingSettings({
         deepgramApiKey: localSettings.deepgramApiKey,
         fps: localSettings.fps,
         vadSensitivity: localSettings.vadSensitivity,
+        audioChunkDuration: localSettings.audioChunkDuration,
+        analyticsEnabled: localSettings.analyticsEnabled,
+        useChineseMirror: localSettings.useChineseMirror,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
+
+      if (!localSettings.analyticsEnabled) {
+        posthog.capture("telemetry", {
+          enabled: false,
+        });
+        // disable opentelemetry
+        trace.disable();
+        posthog.opt_out_capturing();
+        console.log("telemetry disabled");
+      } else {
+        const isDebug = process.env.TAURI_ENV_DEBUG === "true";
+        if (!isDebug) {
+          posthog.opt_in_capturing();
+          posthog.capture("telemetry", {
+            enabled: true,
+          });
+          initOpenTelemetry("82688", new Date().toISOString());
+
+          // enable opentelemetry
+          console.log("telemetry enabled");
+        }
+      }
 
       await invoke("kill_all_sreenpipes");
 
@@ -327,6 +352,10 @@ export function RecordingSettings({
     return sensitivityMap[sensitivity];
   };
 
+  const handleAudioChunkDurationChange = (value: number[]) => {
+    setLocalSettings({ ...localSettings, audioChunkDuration: value[0] });
+  };
+
   const generateCliCommand = () => {
     const cliPath = getCliPath();
     let args = [];
@@ -380,6 +409,13 @@ export function RecordingSettings({
     if (localSettings.vadSensitivity !== "high") {
       args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
     }
+    
+    if (!localSettings.analyticsEnabled) {
+      args.push("--disable-telemetry");
+    }
+    if (localSettings.audioChunkDuration !== 30) {
+      args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
+    }
 
     return `${cliPath} ${args.join(" ")}`;
   };
@@ -391,6 +427,38 @@ export function RecordingSettings({
       title: "CLI command copied",
       description: "The CLI command has been copied to your clipboard.",
     });
+  };
+
+  const renderOcrEngineOptions = () => {
+    const currentPlatform = platform();
+    return (
+      <>
+        {/* <SelectItem value="unstructured">
+          <div className="flex items-center justify-between w-full space-x-2">
+            <span>unstructured</span>
+            <Badge variant="secondary">cloud</Badge>
+          </div>
+        </SelectItem> */}
+        {currentPlatform === "linux" && (
+          <SelectItem value="tesseract">tesseract</SelectItem>
+        )}
+        {currentPlatform === "windows" && (
+          <SelectItem value="windows-native">windows native</SelectItem>
+        )}
+        {currentPlatform === "macos" && (
+          <SelectItem value="apple-native">apple native</SelectItem>
+        )}
+      </>
+    );
+  };
+
+  const handleAnalyticsToggle = (checked: boolean) => {
+    const newValue = checked;
+    setLocalSettings({ ...localSettings, analyticsEnabled: newValue });
+  };
+
+  const handleChineseMirrorToggle = (checked: boolean) => {
+    setLocalSettings({ ...localSettings, useChineseMirror: checked });
   };
 
   return (
@@ -410,13 +478,33 @@ export function RecordingSettings({
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="text-center">recording settings</CardTitle>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setIsCopyDialogOpen(true)}
-              >
-                <IconCode className="h-4 w-4" />
-              </Button>
+              <div className="flex  space-x-2">
+                <div className="flex flex-col space-y-2">
+                  <Button
+                    onClick={handleUpdate}
+                    disabled={settings.devMode || isUpdating}
+                  >
+                    {isUpdating ? "updating..." : "save and restart"}
+                  </Button>
+                  {settings.devMode ? (
+                    <span className="text-xs text-gray-500 text-center">
+                      not available in dev mode, use CLI args in this case
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500 text-center">
+                      this will restart screenpipe recording process with new
+                      settings
+                    </span>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsCopyDialogOpen(true)}
+                >
+                  <IconCode className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -444,6 +532,9 @@ export function RecordingSettings({
                   </SelectItem>
                   <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
                   <SelectItem value="whisper-large">whisper-large</SelectItem>
+                  <SelectItem value="whisper-large-v3-turbo">
+                    whisper-large-turbo
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -460,25 +551,7 @@ export function RecordingSettings({
                 <SelectTrigger>
                   <SelectValue placeholder="select ocr engine" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unstructured">
-                    <div className="flex items-center justify-between w-full space-x-2">
-                      <span>unstructured</span>
-                      <Badge variant="secondary">cloud</Badge>
-                    </div>
-                  </SelectItem>
-                  {currentPlatform !== "macos" && (
-                    <SelectItem value="tesseract">tesseract</SelectItem>
-                  )}
-                  {currentPlatform === "windows" && (
-                    <SelectItem value="windows-native">
-                      windows native
-                    </SelectItem>
-                  )}
-                  {currentPlatform === "macos" && (
-                    <SelectItem value="apple-native">apple native</SelectItem>
-                  )}
-                </SelectContent>
+                <SelectContent>{renderOcrEngineOptions()}</SelectContent>
               </Select>
             </div>
 
@@ -938,18 +1011,120 @@ export function RecordingSettings({
             </div>
 
             <div className="flex flex-col space-y-2">
-              <Button
-                onClick={handleUpdate}
-                disabled={settings.devMode || isUpdating}
+              <Label
+                htmlFor="audioChunkDuration"
+                className="flex items-center space-x-2"
               >
-                {isUpdating ? "updating..." : "update"}
-              </Button>
-              <Label className="text-center">
-                <span className="text-xs text-gray-500">
-                  {settings.devMode
-                    ? "not available in dev mode, use CLI args in this case"
-                    : "this will restart screenpipe recording process with new settings"}
+                <span>audio chunk duration (seconds)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        adjust the duration of each audio chunk.
+                        <br />
+                        shorter durations may lower resource usage spikes,
+                        <br />
+                        while longer durations may increase transcription
+                        quality.
+                        <br />
+                        deepgram in general works better than whisper if you
+                        want higher quality transcription.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="audioChunkDuration"
+                  min={5}
+                  max={3000}
+                  step={1}
+                  value={[localSettings.audioChunkDuration]}
+                  onValueChange={handleAudioChunkDurationChange}
+                  className="flex-grow"
+                />
+                <span className="w-12 text-right">
+                  {localSettings.audioChunkDuration} s
                 </span>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="analytics-toggle"
+                checked={localSettings.analyticsEnabled}
+                onCheckedChange={handleAnalyticsToggle}
+              />
+              <Label
+                htmlFor="analytics-toggle"
+                className="flex items-center space-x-2"
+              >
+                <span>enable telemetry</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        telemetry helps us improve screenpipe.
+                        <br />
+                        when enabled, we collect anonymous usage data such as
+                        button clicks.
+                        <br />
+                        we do not collect any screen data, microphone, query
+                        data.
+                        <br />
+                        do not collect any screen data, microphone, query data.
+                        <br />
+                        read more on our data privacy policy at
+                        <br />
+                        <a
+                          href="https://screenpi.pe/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          https://screenpi.pe/privacy
+                        </a>
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="chinese-mirror-toggle"
+                checked={localSettings.useChineseMirror}
+                onCheckedChange={handleChineseMirrorToggle}
+              />
+              <Label
+                htmlFor="chinese-mirror-toggle"
+                className="flex items-center space-x-2"
+              >
+                <span>use chinese mirror for model downloads</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        enable this option to use a chinese mirror for
+                        <br />
+                        downloading Hugging Face models
+                        <br />
+                        (e.g. Whisper, embedded Llama, etc.)
+                        <br />
+                        which are blocked in mainland China.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </Label>
             </div>
           </CardContent>
@@ -960,7 +1135,7 @@ export function RecordingSettings({
           <DialogHeader>
             <DialogTitle>CLI command</DialogTitle>
             <DialogDescription>
-              You can use this CLI command to start Screenpipe with the current
+              you can use this CLI command to start screenpipe with the current
               settings.
             </DialogDescription>
           </DialogHeader>

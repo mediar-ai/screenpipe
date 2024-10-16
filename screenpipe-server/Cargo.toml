@@ -24,7 +24,12 @@ image = { workspace = true }
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Database
-sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chrono", "migrate"] }
+sqlx = { version = "0.7", features = [
+    "sqlite",
+    "runtime-tokio-native-tls",
+    "chrono",
+    "migrate",
+] }
 
 # Local Embeddings + STT
 candle = { workspace = true }
@@ -46,6 +51,7 @@ log = { workspace = true }
 env_logger = "0.10"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
 # Cli ! shouldn't be required if using as lib
 clap = { version = "4.3", features = ["derive"] }
 
@@ -56,7 +62,7 @@ sysinfo = "0.29.0"
 colored = "2.0"
 
 # Plugins
-tower = "0.4"
+tower = { version = "0.5", features = ["util"] }
 futures = "0.3.17"
 
 # Directory management
@@ -83,6 +89,10 @@ uuid = "1.5.0"
 
 tempfile = { version = "3.3.0", optional = true }
 url = { version = "2.2.0", optional = true }
+
+# Telemetry
+highlightio = { version = "1.0.2", features = ["tokio"] }
+
 [dev-dependencies]
 tempfile = "3.3.0"
 
@@ -101,14 +111,11 @@ name = "new_db_benchmark"
 harness = false
 
 [features]
-default = ["pipes"]
+default = []
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
-pipes = [
-    "screenpipe-core/pipes",
-    "tempfile",
-    "url",
-]
+pipes = ["screenpipe-core/pipes", "tempfile", "url"]
+llm = ["screenpipe-core/llm"]
 
 
 [[bin]]

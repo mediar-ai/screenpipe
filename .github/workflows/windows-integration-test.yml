@@ -1,0 +1,109 @@
+name: Windows CLI Integration Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Install dependencies
+      shell: pwsh
+      run: |
+        choco install ffmpeg openssl
+        echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Install Scream on Windows
+      shell: powershell
+      run: |
+        Invoke-WebRequest https://github.com/duncanthrax/scream/releases/download/4.0/Scream4.0.zip -OutFile Scream4.0.zip
+        Expand-Archive -Path Scream4.0.zip -DestinationPath Scream
+        openssl req -batch -verbose -x509 -newkey rsa -keyout ScreamCertificate.pvk -out ScreamCertificate.cer -nodes -extensions v3_req
+        openssl pkcs12 -export -nodes -in ScreamCertificate.cer -inkey ScreamCertificate.pvk -out ScreamCertificate.pfx -passout pass:
+
+    - name: Setup MSVC Dev Cmd
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Sign and Install Scream Driver on Windows
+      shell: powershell
+      run: |
+        signtool sign /v /fd SHA256 /f ScreamCertificate.pfx Scream\Install\driver\x64\Scream.cat
+        Import-Certificate -FilePath ScreamCertificate.cer -CertStoreLocation Cert:\LocalMachine\root
+        Import-Certificate -FilePath ScreamCertificate.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+        Scream\Install\helpers\devcon-x64.exe install Scream\Install\driver\x64\Scream.inf *Scream
+      timeout-minutes: 5
+
+    - name: Start Windows Audio Service
+      shell: powershell
+      run: net start audiosrv
+
+    - name: Build CLI
+      run: cargo build --release
+
+    - name: Run CLI and generate activity
+      shell: pwsh
+      run: |
+        $env:RUST_LOG = "debug"
+        $process = Start-Process -FilePath ".\target\release\screenpipe.exe" -ArgumentList "--debug" -PassThru -RedirectStandardOutput "screenpipe_output.log" -RedirectStandardError "screenpipe_error.log" -NoNewWindow
+        Start-Sleep -Seconds 10
+        
+        # Generate some screen activity
+        for ($i = 0; $i -lt 5; $i++) {
+          Start-Process "notepad.exe"
+          Start-Sleep -Seconds 2
+          Stop-Process -Name "notepad" -Force
+          Start-Sleep -Seconds 2
+        }
+        
+        # Generate some audio using PowerShell
+        [console]::beep(2000,1000)
+        
+        Start-Sleep -Seconds 30  # Allow more time for processing
+        Stop-Process -Id $process.Id -Force
+
+    - name: Check for crashes and captured data
+      shell: pwsh
+      run: |
+        if (Select-String -Path "screenpipe_output.log" -Pattern "panic" -Quiet) {
+          Write-Host "CLI crashed"
+          Get-Content "screenpipe_output.log"
+          exit 1
+        }
+        Write-Host "CLI ran successfully without crashing"
+        
+        $capturedFiles = Get-ChildItem -Path "$env:USERPROFILE\.screenpipe\data" -Recurse
+        if ($capturedFiles.Count -eq 0) {
+          Write-Host "No data was captured"
+          exit 1
+        }
+        Write-Host "Data captured successfully. File count: $($capturedFiles.Count)"
+        
+        if (Select-String -Path "screenpipe_error.log" -Pattern "no audio devices available" -Quiet) {
+          Write-Host "Audio device setup failed"
+          exit 1
+        }
+        
+        Get-Content "screenpipe_output.log" -Tail 100
+        Get-Content "screenpipe_error.log"
+
+    - name: Upload logs and data
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: windows-logs-and-data
+        path: |
+          screenpipe_output.log
+          screenpipe_error.log
+          ${{ env.USERPROFILE }}\.screenpipe\data\

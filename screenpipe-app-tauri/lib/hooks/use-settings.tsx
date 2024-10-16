@@ -1,51 +1,20 @@
 import { useState, useEffect } from "react";
-import { Store } from "@tauri-apps/plugin-store";
-import { localDataDir } from "@tauri-apps/api/path";
-import { join } from "@tauri-apps/api/path";
+import { createStore } from "@tauri-apps/plugin-store";
+import { localDataDir, join } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
 
-const defaultSettings: Settings = {
-  openaiApiKey: "",
-  deepgramApiKey: "7ed2a159a094337b01fd8178b914b7ae0e77822d", // for now we hardcode our key (dw about using it, we have bunch of credits)
-  useOllama: false,
-  ollamaUrl: "http://localhost:11434",
-  isLoading: true,
-  aiModel: "gpt-4o",
-  installedPipes: [],
-  userId: "",
-  customPrompt: `Rules:
-- You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
-- Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
-- Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
-- Always answer my question/intent, do not make up things
-
-`,
-  devMode: false,
-  audioTranscriptionEngine: "whisper-large",
-  ocrEngine: "default",
-  monitorIds: ["default"],
-  audioDevices: ["default"],
-  usePiiRemoval: false,
-  restartInterval: 0,
-  port: 3030,
-  dataDir: "default",
-  disableAudio: false,
-  ignoredWindows: [],
-  includedWindows: [],
-  aiUrl: "https://api.openai.com/v1",
-  aiMaxContextChars: 30000,
-  fps: 0.5,
-  vadSensitivity: "high",
+export type VadSensitivity = "low" | "medium" | "high";
+export type EmbeddedLLMConfig = {
+  enabled: boolean;
+  model: string;
+  port: number;
 };
 
-export type VadSensitivity = "low" | "medium" | "high";
 export interface Settings {
   openaiApiKey: string;
   deepgramApiKey: string;
-  useOllama: boolean;
-  ollamaUrl: string;
   isLoading: boolean;
   aiModel: string;
   installedPipes: Pipe[];
@@ -67,9 +36,53 @@ export interface Settings {
   aiMaxContextChars: number;
   fps: number;
   vadSensitivity: VadSensitivity;
+  analyticsEnabled: boolean;
+  audioChunkDuration: number; // new field
+  useChineseMirror: boolean; // Add this line
+  embeddedLLM: EmbeddedLLMConfig;
 }
 
-let store: Store | null = null;
+const defaultSettings: Settings = {
+  openaiApiKey: "",
+  deepgramApiKey: "7ed2a159a094337b01fd8178b914b7ae0e77822d", // for now we hardcode our key (dw about using it, we have bunch of credits)
+  isLoading: true,
+  aiModel: "gpt-4o",
+  installedPipes: [],
+  userId: "",
+  customPrompt: `Rules:
+- You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
+- Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
+- Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
+- Always answer my question/intent, do not make up things
+
+`,
+  devMode: false,
+  audioTranscriptionEngine: "deepgram",
+  ocrEngine: "default",
+  monitorIds: ["default"],
+  audioDevices: ["default"],
+  usePiiRemoval: false,
+  restartInterval: 0,
+  port: 3030,
+  dataDir: "default",
+  disableAudio: false,
+  ignoredWindows: [],
+  includedWindows: [],
+  aiUrl: "https://api.openai.com/v1",
+  aiMaxContextChars: 30000,
+  fps: 0.5,
+  vadSensitivity: "high",
+  analyticsEnabled: true,
+  audioChunkDuration: 30, // default to 10 seconds
+  useChineseMirror: false, // Add this line
+  embeddedLLM: {
+    enabled: false,
+    model: "llama3.2:1b-instruct-q4_K_M",
+    port: 11438,
+  },
+};
+
+let store: Awaited<ReturnType<typeof createStore>> | null = null;
 
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
@@ -88,10 +101,10 @@ export function useSettings() {
       const updatedSettings = { ...settings, [key]: defaultSettings[key] };
       setSettings(updatedSettings);
       await store!.set(key, defaultSettings[key]);
-      await store!.save();
+      // No need to call save() as we're using autoSave: true
     } catch (error) {
-      console.error(`Failed to reset setting ${key}:`, error);
-      // Revert local state if store update fails
+      console.error(`failed to reset setting ${key}:`, error);
+      // revert local state if store update fails
       setSettings(settings);
     }
   };
@@ -109,65 +122,69 @@ export function useSettings() {
           ? "windows-native"
           : "tesseract";
       try {
-        await store!.load();
-        const savedKey = ((await store!.get("openaiApiKey")) as string) || "";
+        console.log("loading settings", store);
+        // no need to call load() as it's done automatically
+        const savedKey = (await store!.get<string>("openaiApiKey")) || "";
         const savedDeepgramKey =
-          ((await store!.get("deepgramApiKey")) as string) ||
+          (await store!.get<string>("deepgramApiKey")) ||
           "7ed2a159a094337b01fd8178b914b7ae0e77822d";
-        const savedUseOllama =
-          ((await store!.get("useOllama")) as boolean) || false;
-        const savedOllamaUrl =
-          ((await store!.get("ollamaUrl")) as string) ||
-          "http://localhost:11434";
-        const savedAiModel =
-          ((await store!.get("aiModel")) as string) || "gpt-4o";
+        const savedAiModel = (await store!.get<string>("aiModel")) || "gpt-4o";
         const savedInstalledPipes =
-          ((await store!.get("installedPipes")) as Pipe[]) || [];
-        const savedUserId = ((await store!.get("userId")) as string) || "";
+          (await store!.get<Pipe[]>("installedPipes")) || [];
+        const savedUserId = (await store!.get<string>("userId")) || "";
         const savedCustomPrompt =
-          ((await store!.get("customPrompt")) as string) || "";
-        let savedDevMode = (await store!.get("devMode")) as boolean;
+          (await store!.get<string>("customPrompt")) || "";
+        const savedDevMode = (await store!.get<boolean>("devMode")) || false;
+        console.log("savedDevMode", savedDevMode);
 
-        savedDevMode = savedDevMode === true;
         const savedAudioTranscriptionEngine =
-          ((await store!.get("audioTranscriptionEngine")) as string) ||
-          "whisper-large";
+          (await store!.get<string>("audioTranscriptionEngine")) || "deepgram";
         const savedOcrEngine =
-          ((await store!.get("ocrEngine")) as string) || ocrModel;
-        const savedMonitorIds = ((await store!.get(
-          "monitorIds"
-        )) as string[]) || ["default"];
-        const savedAudioDevices = ((await store!.get(
+          (await store!.get<string>("ocrEngine")) || ocrModel;
+        const savedMonitorIds = (await store!.get<string[]>("monitorIds")) || [
+          "default",
+        ];
+        const savedAudioDevices = (await store!.get<string[]>(
           "audioDevices"
-        )) as string[]) || ["default"];
+        )) || ["default"];
         const savedUsePiiRemoval =
-          ((await store!.get("usePiiRemoval")) as boolean) || false;
+          (await store!.get<boolean>("usePiiRemoval")) || false;
         const savedRestartInterval =
-          ((await store!.get("restartInterval")) as number) || 0;
-        const savedPort = ((await store!.get("port")) as number) || 3030;
-        const savedDataDir = ((await store!.get("dataDir")) as string) || "";
+          (await store!.get<number>("restartInterval")) || 0;
+        const savedPort = (await store!.get<number>("port")) || 3030;
+        const savedDataDir = (await store!.get<string>("dataDir")) || "";
         const savedDisableAudio =
-          ((await store!.get("disableAudio")) as boolean) || false;
+          (await store!.get<boolean>("disableAudio")) || false;
         const savedIgnoredWindows =
-          ((await store!.get("ignoredWindows")) as string[]) || [];
+          (await store!.get<string[]>("ignoredWindows")) || [];
         const savedIncludedWindows =
-          ((await store!.get("includedWindows")) as string[]) || [];
+          (await store!.get<string[]>("includedWindows")) || [];
         const savedAiUrl =
-          ((await store!.get("aiUrl")) as string) ||
-          "https://api.openai.com/v1";
+          (await store!.get<string>("aiUrl")) || "https://api.openai.com/v1";
         const savedAiMaxContextChars =
-          ((await store!.get("aiMaxContextChars")) as number) || 30000;
+          (await store!.get<number>("aiMaxContextChars")) || 30000;
         const savedFps =
-          ((await store!.get("fps")) as number) ||
+          (await store!.get<number>("fps")) ||
           (platform() === "macos" ? 0.2 : 1);
         const savedVadSensitivity =
-          ((await store!.get("vadSensitivity")) as VadSensitivity) || "high";
+          (await store!.get<VadSensitivity>("vadSensitivity")) || "high";
+        const savedAnalyticsEnabled =
+          (await store!.get<boolean>("analyticsEnabled")) || true;
+        const savedAudioChunkDuration =
+          (await store!.get<number>("audioChunkDuration")) || 30;
+        const savedUseChineseMirror =
+          (await store!.get<boolean>("useChineseMirror")) || false;
+        const savedEmbeddedLLM = (await store!.get<EmbeddedLLMConfig>(
+          "embeddedLLM"
+        )) || {
+          enabled: false,
+          model: "llama3.2:1b-instruct-q4_K_M",
+          port: 11438,
+        };
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
-          useOllama: savedUseOllama,
           isLoading: false,
-          ollamaUrl: savedOllamaUrl,
           aiModel: savedAiModel,
           installedPipes: savedInstalledPipes,
           userId: savedUserId,
@@ -188,9 +205,13 @@ export function useSettings() {
           aiMaxContextChars: savedAiMaxContextChars,
           fps: savedFps,
           vadSensitivity: savedVadSensitivity,
+          analyticsEnabled: savedAnalyticsEnabled,
+          audioChunkDuration: savedAudioChunkDuration,
+          useChineseMirror: savedUseChineseMirror,
+          embeddedLLM: savedEmbeddedLLM,
         });
       } catch (error) {
-        console.error("Failed to load settings:", error);
+        console.error("failed to load settings:", error);
         setSettings((prevSettings) => ({ ...prevSettings, isLoading: false }));
       }
     };
@@ -203,28 +224,20 @@ export function useSettings() {
     }
 
     try {
-      // Only update the fields that are explicitly provided in newSettings
-      const updatedSettings = { ...settings };
-      for (const key in newSettings) {
-        if (Object.prototype.hasOwnProperty.call(newSettings, key)) {
-          // @ts-ignore
-          updatedSettings[key as keyof Settings] =
-            newSettings[key as keyof Settings]!;
-        }
-      }
-
+      const updatedSettings = { ...settings, ...newSettings };
       setSettings(updatedSettings);
-      // Only update the store for the fields that were changed
+
+      // update the store for the fields that were changed
       for (const key in newSettings) {
         if (Object.prototype.hasOwnProperty.call(newSettings, key)) {
           await store!.set(key, updatedSettings[key as keyof Settings]);
         }
       }
-
       await store!.save();
+      // no need to call save() as we're using autoSave: true
     } catch (error) {
-      console.error("Failed to update settings:", error);
-      // Revert local state if store update fails
+      console.error("failed to update settings:", error);
+      // revert local state if store update fails
       setSettings(settings);
     }
   };
@@ -235,5 +248,5 @@ export function useSettings() {
 async function initStore() {
   const dataDir = await localDataDir();
   const storePath = await join(dataDir, "screenpipe", "store.bin");
-  store = new Store(storePath);
+  store = await createStore(storePath);
 }

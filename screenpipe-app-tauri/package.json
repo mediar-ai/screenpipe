@@ -12,6 +12,14 @@
   "dependencies": {
     "@ai-sdk/openai": "^0.0.39",
     "@mlc-ai/web-llm": "^0.2.51",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/context-zone": "^1.22.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.49.1",
+    "@opentelemetry/instrumentation-fetch": "^0.53.0",
+    "@opentelemetry/instrumentation-xml-http-request": "^0.53.0",
+    "@opentelemetry/resources": "^1.26.0",
+    "@opentelemetry/sdk-trace-base": "^1.22.0",
+    "@opentelemetry/sdk-trace-web": "^1.22.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.1",
@@ -31,17 +39,16 @@
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.1.2",
-    "@sentry/nextjs": "^8.21.0",
-    "@tauri-apps/api": "^2.0.0-beta.15",
-    "@tauri-apps/plugin-cli": "2.0.0-beta.7",
-    "@tauri-apps/plugin-dialog": "2.0.0-beta.8",
-    "@tauri-apps/plugin-fs": "2.0.0-beta.7",
-    "@tauri-apps/plugin-notification": "2.0.0-beta.7",
-    "@tauri-apps/plugin-os": "2.0.0-beta.8",
-    "@tauri-apps/plugin-process": "^2.0.0-beta.8",
-    "@tauri-apps/plugin-shell": "2.0.0-beta.8",
-    "@tauri-apps/plugin-store": "2.0.0-beta.7",
-    "@tauri-apps/plugin-updater": "2.0.0-beta.7",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-cli": "2.0.0",
+    "@tauri-apps/plugin-dialog": "2.0.0",
+    "@tauri-apps/plugin-fs": "2.0.0",
+    "@tauri-apps/plugin-notification": "2.0.0",
+    "@tauri-apps/plugin-os": "2.0.0",
+    "@tauri-apps/plugin-process": "2.0.0",
+    "@tauri-apps/plugin-shell": "2.0.0",
+    "@tauri-apps/plugin-store": "^2.0.0",
+    "@tauri-apps/plugin-updater": "2.0.0",
     "@types/js-levenshtein": "^1.1.3",
     "ai": "^3.3",
     "ansi-to-html": "^0.7.2",
@@ -72,7 +79,7 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.13",
-    "@tauri-apps/cli": "2.0.0-beta.22",
+    "@tauri-apps/cli": "2.0.0",
     "@types/lodash": "^4.17.7",
     "@types/node": "^20",
     "@types/react": "^18",
@@ -84,5 +91,8 @@
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@8.15.8+sha512.d1a029e1a447ad90bc96cd58b0fad486d2993d531856396f7babf2d83eb1823bb83c5a3d0fc18f675b2d10321d49eb161fece36fe8134aa5823ecd215feed392"
+  "packageManager": "pnpm@8.15.8+sha512.d1a029e1a447ad90bc96cd58b0fad486d2993d531856396f7babf2d83eb1823bb83c5a3d0fc18f675b2d10321d49eb161fece36fe8134aa5823ecd215feed392",
+  "trustedDependencies": [
+    "@sentry/cli"
+  ]
 }

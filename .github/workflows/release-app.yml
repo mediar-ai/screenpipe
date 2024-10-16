@@ -36,15 +36,19 @@ jobs:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
             args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
+            tauri-args: "--target aarch64-apple-darwin"
           - platform: "macos-latest" # for Intel based macs.
             args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
+            tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
             args: "" # TODO CUDA, mkl
+            tauri-args: ""
           - platform: "windows-latest" # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
             pre-build-args: "" # --openblas
-            # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
+            tauri-args: "--target x86_64-pc-windows-msvc"
+          # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -88,7 +92,7 @@ jobs:
             screenpipe-app-tauri/src-tauri/openblas
             screenpipe-app-tauri/src-tauri/clblast
             screenpipe-app-tauri/src-tauri/tesseract-*
-          key: ${{ matrix.platform }}-${{ matrix.args }}-pre-build
+          key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build
 
       - uses: actions/cache@v3
         with:
@@ -120,14 +124,20 @@ jobs:
           ls . 
           bun install
 
-      # Run pre build
-      - name: Run pre_build.js on ${{ matrix.platform }}
+      # - name: Setup tmate session # HACK
+      #   if: matrix.platform == 'windows-latest'
+      #   uses: mxschmitt/action-tmate@v3
+
+      - name: Install wget on Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: sudo apt-get install -y wget
+
+      - name: Run pre_build.js
         shell: bash
         env:
-          SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
+          SKIP_SCREENPIPE_SETUP: true
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-          ls -R .
         working-directory: ./screenpipe-app-tauri
 
       - name: Verify Tesseract Installation
@@ -147,31 +157,22 @@ jobs:
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
-            # export V8_FROM_SOURCE=1
+            export V8_FLAGS="--max-old-space-size=8192" # https://github.com/denoland/deno_core/issues/916
           fi
           cargo build --release ${{ matrix.args }}
 
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
-
       # Run pre build again to copy the CLI into app
-      - name: Run pre_build.js on ${{ matrix.platform }}
+      - name: Run pre_build.js
         shell: bash
-        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./screenpipe-app-tauri
-
-      - name: Identify esaxx usage (Windows)
-        if: matrix.platform == 'windows-latest'
         run: |
-          cargo tree > cargo_tree_output.txt
-          findstr /i "esaxx" cargo_tree_output.txt
-        continue-on-error: true
+          bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        working-directory: ./screenpipe-app-tauri
 
       - name: Install vcpkg
         if: matrix.platform == 'windows-latest'
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: "5b1214315250939257ef5d62ecdcbca18cf4fb1c"
+          vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
         if: matrix.platform == 'windows-latest'
@@ -201,7 +202,7 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
         with:
-          args: ${{ matrix.args }}
+          args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 

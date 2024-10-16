@@ -1,5 +1,5 @@
 use anyhow::Result;
-use screenpipe_core::{download_pipe, run_pipe};
+use screenpipe_core::download_pipe;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::future::Future;
@@ -35,7 +35,7 @@ impl PipeManager {
             let pipe_id = id.to_string();
             let screenpipe_dir = self.screenpipe_dir.clone();
 
-            let future = run_pipe(pipe_id.clone(), screenpipe_dir);
+            let future = async move { screenpipe_core::run_pipe(&pipe_id, screenpipe_dir).await };
 
             self.update_config(
                 id,
@@ -121,19 +121,25 @@ impl PipeManager {
             config,
         }
     }
+
     pub async fn list_pipes(&self) -> Vec<PipeInfo> {
         let pipe_dir = self.screenpipe_dir.join("pipes");
         let mut pipe_infos = Vec::new();
 
         if let Ok(mut entries) = tokio::fs::read_dir(pipe_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
-                let pipe_id = entry.file_name().to_string_lossy().into_owned();
-                let config_path = entry.path().join("pipe.json");
-                pipe_infos.push(Self::load_pipe_info(pipe_id, config_path));
+                let file_name = entry.file_name();
+                let pipe_id = file_name.to_string_lossy();
+
+                // ignore hidden directories and files
+                if !pipe_id.starts_with('.') && entry.file_type().await.map(|ft| ft.is_dir()).unwrap_or(false) {
+                    let config_path = entry.path().join("pipe.json");
+                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path).await);
+                }
             }
         }
 
-        futures::future::join_all(pipe_infos).await
+        pipe_infos
     }
 
     pub async fn download_pipe(&self, url: &str) -> Result<String> {

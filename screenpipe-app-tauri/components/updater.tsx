@@ -23,9 +23,10 @@ Release notes: ${update.body}
 
     if (yes) {
       // on windows only - TODO shouldnt be necessary
-      // const os = platform();
-      // if (os === "windows") {
-      // await invoke("kill_all_sreenpipes");
+      const os = platform();
+      if (os === "windows") {
+        await invoke("kill_all_sreenpipes");
+      }
 
       const toastId = toast({
         title: "Updating...",

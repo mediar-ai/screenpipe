@@ -25,7 +25,6 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { DevSettings } from "./dev-dialog";
 import { Lock, Folder, FileText, Activity } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { homeDir } from "@tauri-apps/api/path";
@@ -65,8 +64,12 @@ ${cliInstructions}
 
   const logPath =
     os === "windows"
-      ? "%USERPROFILE%\\.screenpipe\\screenpipe.log"
-      : "$HOME/.screenpipe/screenpipe.log";
+      ? `%USERPROFILE%\\.screenpipe\\screenpipe.${
+          new Date().toISOString().split("T")[0]
+        }.log`
+      : `$HOME/.screenpipe/screenpipe.${
+          new Date().toISOString().split("T")[0]
+        }.log`;
 
   const dbPath =
     os === "windows"
@@ -122,8 +125,7 @@ const DevModeSettings = () => {
   const handleDevModeToggle = async (checked: boolean) => {
     try {
       await updateSettings({ devMode: checked });
-      setLocalSettings((prev) => ({ ...prev, devMode: checked }));
-      // ... rest of the function ...
+      setLocalSettings({ ...localSettings, devMode: checked });
     } catch (error) {
       console.error("Failed to update dev mode:", error);
       // Add error handling, e.g., show a toast notification
@@ -325,7 +327,6 @@ const DevModeSettings = () => {
               and ask ChatGPT for curl commands to interact with the API.
             </p>
           </div>
-          {/* <DevSettings /> */}
         </>
       )}
     </>
@@ -389,8 +390,12 @@ const HealthStatus = ({ className }: { className?: string }) => {
       const homeDirPath = await homeDir();
       const logPath =
         platform() === "windows"
-          ? `${homeDirPath}\\.screenpipe\\screenpipe.log`
-          : `${homeDirPath}/.screenpipe/screenpipe.log`;
+          ? `${homeDirPath}\\.screenpipe\\screenpipe.${
+              new Date().toISOString().split("T")[0]
+            }.log`
+          : `${homeDirPath}/.screenpipe/screenpipe.${
+              new Date().toISOString().split("T")[0]
+            }.log`;
       await open(logPath);
     } catch (error) {
       console.error("failed to open log file:", error);
@@ -419,7 +424,18 @@ const HealthStatus = ({ className }: { className?: string }) => {
     return "bg-red-500";
   };
 
-  if (!health) return null;
+  if (!health) {
+    return (
+      <Badge
+        variant="outline"
+        className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
+      >
+        <Activity className="mr-2 h-4 w-4" />
+        status{" "}
+        <span className="ml-1 w-2 h-2 rounded-full bg-yellow-500 inline-block animate-pulse" />
+      </Badge>
+    );
+  }
 
   const formatTimestamp = (timestamp: string | null) => {
     return timestamp ? new Date(timestamp).toLocaleString() : "n/a";
@@ -556,23 +572,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   recorder logs
                   <span>{isLogOpen ? "▲" : "▼"}</span>
                 </CollapsibleTrigger>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleOpenLogFile}
-                        className="ml-2"
-                      >
-                        <FileText className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>open log file</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <LogFileButton />
               </div>
               <CollapsibleContent>
                 <LogViewer className="mt-2" />
@@ -585,4 +585,48 @@ const HealthStatus = ({ className }: { className?: string }) => {
   );
 };
 
+export const LogFileButton = ({ className }: { className?: string }) => {
+  const { toast } = useToast();
+  const handleOpenLogFile = async () => {
+    try {
+      const homeDirPath = await homeDir();
+      const logPath =
+        platform() === "windows"
+          ? `${homeDirPath}\\.screenpipe\\screenpipe.${
+              new Date().toISOString().split("T")[0]
+            }.log`
+          : `${homeDirPath}/.screenpipe/screenpipe.${
+              new Date().toISOString().split("T")[0]
+            }.log`;
+      await open(logPath);
+    } catch (error) {
+      console.error("failed to open log file:", error);
+      toast({
+        title: "error",
+        description: "failed to open log file.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenLogFile}
+            className="ml-2"
+          >
+            <FileText className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>open log file</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
 export default HealthStatus;

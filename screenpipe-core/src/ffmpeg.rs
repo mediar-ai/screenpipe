@@ -16,9 +16,6 @@ const EXECUTABLE_NAME: &str = "ffmpeg";
 #[cfg(windows)]
 const EXECUTABLE_NAME: &str = "ffmpeg.exe";
 
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
-
 pub fn find_ffmpeg_path() -> Option<PathBuf> {
     debug!("Starting search for ffmpeg executable");
 

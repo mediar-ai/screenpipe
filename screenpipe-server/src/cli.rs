@@ -12,6 +12,8 @@ pub enum CliAudioTranscriptionEngine {
     WhisperTiny,
     #[clap(name = "whisper-large")]
     WhisperDistilLargeV3,
+    #[clap(name = "whisper-large-v3-turbo")]
+    WhisperLargeV3Turbo,
 }
 
 impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
@@ -21,6 +23,9 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
             CliAudioTranscriptionEngine::WhisperTiny => CoreAudioTranscriptionEngine::WhisperTiny,
             CliAudioTranscriptionEngine::WhisperDistilLargeV3 => {
                 CoreAudioTranscriptionEngine::WhisperDistilLargeV3
+            }
+            CliAudioTranscriptionEngine::WhisperLargeV3Turbo => {
+                CoreAudioTranscriptionEngine::WhisperLargeV3Turbo
             }
         }
     }
@@ -100,7 +105,7 @@ pub struct Cli {
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
     #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
-    pub fps: f64, // ! not crazy about this (unconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
+    pub fps: f64, // ! not crazy about this (inconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
     #[arg(short = 'd', long, default_value_t = 30)]
@@ -137,8 +142,9 @@ pub struct Cli {
     /// Audio transcription engine to use.
     /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
     /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
-    /// WhisperDistilLargeV3 is a local, lightweight transcription model (--a whisper-large), recommended for higher quality audio than tiny.
-    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperDistilLargeV3)]
+    /// WhisperDistilLargeV3 is a local, lightweight transcription model (-a whisper-large), recommended for higher quality audio than tiny.
+    /// WhisperLargeV3Turbo is a local, lightweight transcription model (-a whisper-large-v3-turbo), recommended for higher quality audio than tiny.
+    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperLargeV3Turbo)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// OCR engine to use.
@@ -212,8 +218,17 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = CliVadSensitivity::High)]
     pub vad_sensitivity: CliVadSensitivity,
 
+    /// Disable telemetry
+    #[arg(long, default_value_t = false)]
+    pub disable_telemetry: bool,
+
+    /// Enable Local LLM API
+    #[arg(long, default_value_t = false)]
+    pub enable_llm: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
+
 }
 
 #[derive(Subcommand)]
@@ -223,7 +238,8 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
-    // ... (other top-level commands if any)
+    /// Setup screenpipe environment
+    Setup,
 }
 
 

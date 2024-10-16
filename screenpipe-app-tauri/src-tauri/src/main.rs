@@ -3,45 +3,48 @@
 
 use commands::load_pipe_config;
 use commands::save_pipe_config;
-use sidecar::SidecarManager;
-use tauri::Config;
-use tokio::sync::mpsc;
 use serde_json::Value;
+use sidecar::SidecarManager;
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tauri::Config;
 use tauri::Manager;
-use tauri::Wry;
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
+    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState},
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_store::{with_store, StoreCollection};
+use tauri_plugin_store::StoreBuilder;
+use tokio::runtime::Handle;
+use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
+use updates::start_update_check;
 use uuid::Uuid;
 mod analytics;
 
 use crate::analytics::start_analytics;
 
 mod commands;
-mod sidecar;
+mod llm_sidecar;
 mod server;
+mod sidecar;
+mod updates;
 pub use commands::open_screen_capture_preferences;
-pub use commands::reset_screen_permissions;
 pub use commands::reset_all_pipes;
+pub use commands::reset_screen_permissions;
+pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
-pub use server::spawn_server;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -62,7 +65,7 @@ fn show_main_window(app_handle: &tauri::AppHandle) {
         let _ = tauri::WebviewWindowBuilder::new(
             app_handle,
             "main",
-            tauri::WebviewUrl::App("index.html".into())
+            tauri::WebviewUrl::App("index.html".into()),
         )
         .title("Screenpipe")
         .build();
@@ -75,7 +78,8 @@ async fn main() {
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
 
-    let app = tauri::Builder::default().on_window_event(|window, event| match event {
+    let app = tauri::Builder::default()
+        .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 window.hide().unwrap();
                 api.prevent_close();
@@ -103,6 +107,7 @@ async fn main() {
                 .set_focus()
                 .expect("Can't focus window!");
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -111,19 +116,19 @@ async fn main() {
             open_screen_capture_preferences,
             load_pipe_config,
             save_pipe_config,
-            reset_all_pipes
+            reset_all_pipes,
+            llm_sidecar::start_ollama_sidecar,
+            llm_sidecar::stop_ollama_sidecar,
         ])
         .setup(|app| {
             // Logging setup
             let app_handle = app.handle();
-            let base_dir = get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+            let base_dir =
+                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
 
             // Set up file appender
-            let file_appender = RollingFileAppender::new(
-                Rotation::NEVER,
-                base_dir.clone(),
-                "screenpipe-app.log",
-            );
+            let file_appender =
+                RollingFileAppender::new(Rotation::NEVER, base_dir.clone(), "screenpipe-app.log");
 
             // Create a custom layer for file logging
             let file_layer = tracing_subscriber::fmt::layer()
@@ -138,20 +143,9 @@ async fn main() {
 
             // Initialize the tracing subscriber with both layers
             tracing_subscriber::registry()
-                .with(sentry::integrations::tracing::layer())
                 .with(file_layer)
                 .with(console_layer)
                 .init();
-
-            // Initialize Sentry
-            let _guard = sentry::init((
-                "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
-                sentry::ClientOptions {
-                    release: sentry::release_name!(),
-                    traces_sample_rate: 0.2,
-                    ..Default::default()
-                }
-            ));
 
             // Windows-specific setup
             if cfg!(windows) {
@@ -172,7 +166,6 @@ async fn main() {
                 autostart_manager.is_enabled().unwrap()
             );
 
-
             info!("Local data directory: {}", base_dir.display());
 
             // PostHog analytics setup
@@ -184,12 +177,24 @@ async fn main() {
                 let _ = File::create(path.clone()).unwrap();
             }
 
+            // Set up update check
+            let update_manager = start_update_check(app_handle, 5)?;
+
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-                let show = MenuItemBuilder::with_id("show", "Show Screenpipe").build(app)?;
-                let quit = MenuItemBuilder::with_id("quit", "Quit Screenpipe").build(app)?;
-                let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
+                let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
+                let menu_divider = PredefinedMenuItem::separator(app)?;
+                let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
+                let menu = MenuBuilder::new(app)
+                    .items(&[
+                        &show,
+                        update_manager.update_now_menu_item_ref(),
+                        &menu_divider,
+                        &quit,
+                    ])
+                    .build()?;
                 let _ = main_tray.set_menu(Some(menu));
+
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
                         show_main_window(&app_handle);
@@ -197,6 +202,32 @@ async fn main() {
                     "quit" => {
                         println!("quit clicked");
                         app_handle.exit(0);
+                    }
+                    "update_now" => {
+                        use tauri_plugin_notification::NotificationExt;
+                        app_handle
+                            .notification()
+                            .builder()
+                            .title("screenpipe")
+                            .body("installing latest version")
+                            .show()
+                            .unwrap();
+
+                        tokio::task::block_in_place(move || {
+                            Handle::current().block_on(async move {
+                                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
+                                // bad UX: i use CLI and it kills my CLI because i updated app
+                                if let Err(err) = sidecar::kill_all_sreenpipes(
+                                    app_handle.state::<SidecarState>(),
+                                    app_handle.clone(),
+                                )
+                                .await
+                                {
+                                    error!("Failed to kill sidecar: {}", err);
+                                }
+                            });
+                        });
+                        update_manager.update_screenpipe();
                     }
                     _ => (),
                 });
@@ -221,67 +252,60 @@ async fn main() {
             }
 
             // Store setup and analytics initialization
-            let stores = app.state::<StoreCollection<Wry>>();
-            let _ = with_store(app.handle().clone(), stores.clone(), path.clone(), |store| {
-                if store.keys().count() == 0 {
-                    store.insert("analyticsEnabled".to_string(), Value::Bool(true))?;
-                    store.insert(
-                        "config".to_string(),
-                        serde_json::to_value(Config::default())?,
-                    )?;
-                    store.save()?;
-                }
-                Ok(())
-            });
+            let store = StoreBuilder::new(app.handle(), path.clone()).build();
 
-            let _ = with_store(app.handle().clone(), stores.clone(), path.clone(), |store| {
+            if store.keys().len() == 0 {
+                store.set("analyticsEnabled".to_string(), Value::Bool(true));
+                store.set(
+                    "config".to_string(),
+                    serde_json::to_value(Config::default())?,
+                );
                 store.save()?;
+            }
 
-                let is_analytics_enabled = store
-                    .get("analyticsEnabled")
-                    .unwrap_or(&Value::Bool(true))
-                    .as_bool()
-                    .unwrap_or(true);
+            store.save()?;
 
-                let unique_id = store
-                    .get("userId")
-                    .and_then(|v| v.as_str())
-                    .map(String::from)
-                    .unwrap_or_else(|| {
-                        let new_id = Uuid::new_v4().to_string();
-                        store
-                            .insert(
-                                "userId".to_string(),
-                                serde_json::Value::String(new_id.clone()),
-                            )
-                            .unwrap();
-                        store.save().unwrap();
-                        new_id
-                    });
+            let is_analytics_enabled = store
+                .get("analyticsEnabled")
+                .unwrap_or(Value::Bool(true))
+                .as_bool()
+                .unwrap_or(true);
 
-                if is_analytics_enabled {
-                    match start_analytics(unique_id, posthog_api_key, interval_hours) {
-                        Ok(analytics_manager) => {
-                            app.manage(analytics_manager);
-                        }
-                        Err(e) => {
-                            error!("Failed to start analytics: {}", e);
-                        }
+            let unique_id = store
+                .get("userId")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_else(|| {
+                    let new_id = Uuid::new_v4().to_string();
+                    store.set(
+                        "userId".to_string(),
+                        serde_json::Value::String(new_id.clone()),
+                    );
+                    store.save().unwrap();
+                    new_id
+                });
+
+            if is_analytics_enabled {
+                match start_analytics(
+                    unique_id,
+                    posthog_api_key,
+                    interval_hours,
+                    "http://localhost:3030".to_string(),
+                ) {
+                    Ok(analytics_manager) => {
+                        app.manage(analytics_manager);
+                    }
+                    Err(e) => {
+                        error!("Failed to start analytics: {}", e);
                     }
                 }
-
-                Ok(())
-            });
+            }
 
             // Dev mode check and sidecar spawn
 
-            let use_dev_mode = with_store(app.handle().clone(), stores.clone(), path.clone(), |store| {
-                Ok(store
-                    .get("devMode")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false))
-            })
-            .unwrap_or(false);
+            let use_dev_mode = store
+                .get("devMode")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
@@ -324,7 +348,7 @@ async fn main() {
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
-            
+
             // Add this to shut down the server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
                 let _ = server_shutdown_tx.send(());
@@ -342,7 +366,10 @@ async fn main() {
             }
         }
         #[cfg(target_os = "macos")]
-        tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+        tauri::RunEvent::Reopen {
+            has_visible_windows,
+            ..
+        } => {
             if !has_visible_windows {
                 show_main_window(&app_handle);
             }

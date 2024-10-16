@@ -4,14 +4,15 @@ use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
-use tauri::{Manager, State, Wry};
+use tauri::Emitter;
+use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_store::{with_store, StoreCollection};
+use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-use tauri::Emitter;
+
 #[tauri::command]
 pub async fn kill_all_sreenpipes(
     state: State<'_, SidecarState>,
@@ -78,124 +79,90 @@ pub async fn spawn_screenpipe(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    let stores = app.state::<StoreCollection<Wry>>();
     let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-    let sidecar = app.shell().sidecar("screenpipe").unwrap();
     let path = base_dir.join("store.bin");
+    let store = StoreBuilder::new(&app.clone(), path).build();
 
-    let audio_transcription_engine =
-        with_store(app.clone(), stores.clone(), path.clone(), |store| {
-            Ok(store
-                .get("audioTranscriptionEngine")
-                .and_then(|v| v.as_str().map(String::from)))
-        })
-        .map_err(|e| e.to_string())?
+    let audio_transcription_engine = store
+        .get("audioTranscriptionEngine")
+        .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
 
-    let ocr_engine = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("ocrEngine")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
+    let ocr_engine = store
+        .get("ocrEngine")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
 
-    let monitor_ids = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("monitorIds")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or_default();
+    let monitor_ids = store
+        .get("monitorIds")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
 
-    let audio_devices = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("audioDevices")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.to_vec()))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or_default();
+    let audio_devices = store
+        .get("audioDevices")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
 
-    let use_pii_removal = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("usePiiRemoval")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
-    let port = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030))
-    })
-    .map_err(|e| e.to_string())?;
-    let data_dir = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("dataDir")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
+    let use_pii_removal = store
+        .get("usePiiRemoval")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    let disable_audio = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("disableAudio")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
+    let port = store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030);
 
-    let ignored_windows = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("ignoredWindows")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect::<Vec<_>>())
-            .unwrap_or_default())
-    })
-    .map_err(|e| e.to_string())?;
+    let data_dir = store
+        .get("dataDir")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
 
-    let included_windows = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("includedWindows")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(String::from).collect::<Vec<_>>())
-            .unwrap_or_default())
-    })
-    .map_err(|e| e.to_string())?;
+    let disable_audio = store
+        .get("disableAudio")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
+    let ignored_windows = store
+        .get("ignoredWindows")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
 
+    let included_windows = store
+        .get("includedWindows")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
 
-    let deepgram_api_key = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("deepgramApiKey")
-            .and_then(|v| v.as_str().map(String::from)))
-    })
-    .map_err(|e| e.to_string())?
-    .unwrap_or(String::from("default"));
+    let deepgram_api_key = store
+        .get("deepgramApiKey")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
 
-    let fps = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("fps")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.2))
-    })
-    .map_err(|e| e.to_string())?;
+    let fps = store.get("fps").and_then(|v| v.as_f64()).unwrap_or(0.2);
 
-    let dev_mode = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("devMode")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false))
-    })
-    .map_err(|e| e.to_string())?;
+    let dev_mode = store
+        .get("devMode")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    let vad_sensitivity = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-        Ok(store
-            .get("vadSensitivity")
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or(String::from("high")))
-    })
-    .map_err(|e| e.to_string())?;
+    let vad_sensitivity = store
+        .get("vadSensitivity")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("high"));
+
+    let audio_chunk_duration = store
+        .get("audioChunkDuration")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(30);
+
+    let telemetry_enabled = store
+        .get("analyticsEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let use_chinese_mirror = store
+        .get("useChineseMirror")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
@@ -222,11 +189,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         let model = ocr_engine.as_str();
         args.push(model);
     }
-    // if monitor_id != "default" {
-    //     args.push("--monitor-id");
-    //     let id = monitor_id.as_str();
-    //     args.push(id);
-    // }
 
     if !monitor_ids.is_empty() && monitor_ids[0] != Value::String("default".to_string()) {
         for monitor in &monitor_ids {
@@ -259,14 +221,14 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if !ignored_windows.is_empty() {
         for window in &ignored_windows {
             args.push("--ignored-windows");
-            args.push(window);
+            args.push(window.as_str().unwrap());
         }
     }
 
     if !included_windows.is_empty() {
         for window in &included_windows {
             args.push("--included-windows");
-            args.push(window);
+            args.push(window.as_str().unwrap());
         }
     }
     let current_pid = std::process::id();
@@ -282,7 +244,33 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push(vad_sensitivity.as_str());
     }
 
+    let audio_chunk_duration_str = audio_chunk_duration.to_string();
+    if audio_chunk_duration != 30 {
+        args.push("--audio-chunk-duration");
+        args.push(audio_chunk_duration_str.as_str());
+    }
+
+    if !telemetry_enabled {
+        args.push("--disable-telemetry");
+    }
+
     // args.push("--debug");
+
+    // macos /Applications/screenpipe.app/Contents/MacOS/
+    // linux /usr/local/bin
+    // windows %LOCALAPPDATA%\\screenpipe
+    let screenpipe_path = app
+        .path()
+        .local_data_dir()
+        .unwrap_or_default()
+        .join("screenpipe");
+    let path_to_sidecars = if cfg!(windows) {
+        screenpipe_path.to_str().unwrap_or_default()
+    } else if cfg!(target_os = "macos") {
+        "/Applications/screenpipe.app/Contents/MacOS/"
+    } else {
+        "/usr/local/bin"
+    };
 
     if cfg!(windows) {
         let exe_dir = env::current_exe()
@@ -291,7 +279,19 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             .expect("Failed to get parent directory of executable")
             .to_path_buf();
         let tessdata_path = exe_dir.join("tessdata");
-        let c = sidecar.env("TESSDATA_PREFIX", tessdata_path).args(&args);
+        let mut c = app
+            .shell()
+            .sidecar("screenpipe")
+            .unwrap()
+            .env("TESSDATA_PREFIX", tessdata_path);
+
+        if use_chinese_mirror {
+            c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
+        }
+
+        c = c.env("PATH", path_to_sidecars);
+
+        let c = c.args(&args);
 
         let (_, child) = c.spawn().map_err(|e| {
             error!("Failed to spawn sidecar: {}", e);
@@ -303,7 +303,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         return Ok(child);
     }
 
-    let command = sidecar.args(&args);
+    let mut command = app.shell().sidecar("screenpipe").unwrap();
+
+    if use_chinese_mirror {
+        command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
+    }
+
+    // pass the sidecars PATH to the screenpipe process
+    command = command.env("PATH", path_to_sidecars);
+
+    let command = command.args(&args);
 
     let result = command.spawn();
     if let Err(e) = result {
@@ -325,7 +334,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
                 CommandEvent::Stderr(line) => {
                     let log_line = String::from_utf8(line).unwrap();
                     error!("Sidecar stderr: {}", log_line);
-                    app_handle.emit("sidecar_log", format!("ERROR: {}", log_line)).unwrap();
+                    app_handle
+                        .emit("sidecar_log", format!("ERROR: {}", log_line))
+                        .unwrap();
                 }
                 _ => {}
             }
@@ -395,33 +406,25 @@ impl SidecarManager {
             }
         }));
 
-
-
         Ok(())
     }
 
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
-        let stores = app.state::<StoreCollection<Wry>>();
         let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
         let path = base_dir.join("store.bin");
+        let store = StoreBuilder::new(&app.clone(), path).build();
 
-        let restart_interval = with_store(app.clone(), stores.clone(), path.clone(), |store| {
-            Ok(store
-                .get("restartInterval")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0))
-        })
-        .map_err(|e| e.to_string())?;
+        let restart_interval = store
+            .get("restartInterval")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
 
         debug!("restart_interval: {}", restart_interval);
 
-        let dev_mode = with_store(app.clone(), stores.clone(), path, |store| {
-            Ok(store
-                .get("devMode")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false))
-        })
-        .map_err(|e| e.to_string())?;
+        let dev_mode = store
+            .get("devMode")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         debug!("dev_mode: {}", dev_mode);
 

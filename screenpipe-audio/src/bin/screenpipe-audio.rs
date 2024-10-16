@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
     let deepgram_api_key = args.deepgram_api_key;
 
     let devices = if args.audio_device.is_empty() {
-        vec![default_input_device()?, default_output_device().await?]
+        vec![default_input_device()?, default_output_device()?]
     } else {
         args.audio_device
             .iter()

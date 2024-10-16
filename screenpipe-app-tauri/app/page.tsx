@@ -1,6 +1,5 @@
 "use client";
 
-import { ChatList } from "@/components/chat-list-openai-v2";
 import { Settings } from "@/components/settings";
 import { useSettings } from "@/lib/hooks/use-settings";
 import {
@@ -21,18 +20,17 @@ import UpdateNotification from "@/components/update-notification";
 import { usePostHog } from "posthog-js/react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
-import { DevSettings } from "@/components/dev-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchChat } from "@/components/search-chat";
 import { Separator } from "@/components/ui/separator";
+import Onboarding from "@/components/onboarding";
+import { useOnboarding } from "@/lib/hooks/use-onboarding";
+
 export default function Home() {
   const { settings } = useSettings();
   const posthog = usePostHog();
   const { toast } = useToast();
-
-  useEffect(() => {
-    checkForAppUpdates({ toast });
-  }, [toast]);
+  const { showOnboarding, setShowOnboarding } = useOnboarding();
 
   useEffect(() => {
     if (settings.userId) {
@@ -43,6 +41,7 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center">
       <NotificationHandler />
+      {showOnboarding && <Onboarding />}
       {/* <UpdateNotification checkIntervalHours={3} /> */}
       {/* <ScreenpipeInstanceChecker /> */}
       <Header />

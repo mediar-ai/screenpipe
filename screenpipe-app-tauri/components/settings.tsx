@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,25 +23,48 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 
-import { platform } from "@tauri-apps/plugin-os";
-import { Eye, EyeOff, HelpCircle, RefreshCw, Settings2 } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  HelpCircle,
+  RefreshCw,
+  Settings2,
+  Check,
+  X,
+  Play,
+  Loader2,
+} from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
+import { Switch } from "./ui/switch";
+import { Command } from "@tauri-apps/plugin-shell";
+import { LogFileButton } from "./screenpipe-status";
+import { platform } from "@tauri-apps/plugin-os";
+
+import { toast } from "@/components/ui/use-toast";
+import { invoke } from "@tauri-apps/api/core";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
-  const [currentPlatform, setCurrentPlatform] = React.useState<string>("");
   const [showApiKey, setShowApiKey] = React.useState(false);
+  const [ollamaStatus, setOllamaStatus] = useState<
+    "idle" | "running" | "error"
+  >("idle");
+  const [currentPlatform, setCurrentPlatform] = useState("unknown");
+
+  useEffect(() => {
+    setCurrentPlatform(platform());
+  }, []);
 
   const handleApiUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, aiUrl: newValue }));
+    setLocalSettings({ ...localSettings, aiUrl: newValue });
     updateSettings({ aiUrl: newValue });
   };
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, openaiApiKey: newValue }));
+    setLocalSettings({ ...localSettings, openaiApiKey: newValue });
     updateSettings({ openaiApiKey: newValue });
   };
 
@@ -49,13 +72,13 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, deepgramApiKey: newValue }));
+    setLocalSettings({ ...localSettings, deepgramApiKey: newValue });
     updateSettings({ deepgramApiKey: newValue });
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, aiModel: newValue }));
+    setLocalSettings({ ...localSettings, aiModel: newValue });
     updateSettings({ aiModel: newValue });
   };
 
@@ -63,7 +86,7 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, customPrompt: newValue }));
+    setLocalSettings({ ...localSettings, customPrompt: newValue });
     updateSettings({ customPrompt: newValue });
   };
 
@@ -73,27 +96,112 @@ export function Settings({ className }: { className?: string }) {
 
   const handleMaxContextCharsChange = (value: number[]) => {
     const newValue = value[0];
-    setLocalSettings((prev) => ({ ...prev, aiMaxContextChars: newValue }));
+    setLocalSettings({ ...localSettings, aiMaxContextChars: newValue });
     updateSettings({ aiMaxContextChars: newValue });
+  };
+
+  const handleEmbeddedLLMChange = (checked: boolean) => {
+    const newValue = { ...localSettings.embeddedLLM, enabled: checked };
+    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
+    updateSettings({ embeddedLLM: newValue });
+    if (!checked) {
+      setOllamaStatus("idle");
+    }
+  };
+
+  const handleEmbeddedLLMModelChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const newValue = { ...localSettings.embeddedLLM, model: e.target.value };
+    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
+    updateSettings({ embeddedLLM: newValue });
+  };
+
+  const handleEmbeddedLLMPortChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const newValue = {
+      ...localSettings.embeddedLLM,
+      port: parseInt(e.target.value, 10),
+    };
+    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
+    updateSettings({ embeddedLLM: newValue });
   };
 
   React.useEffect(() => {
     setLocalSettings(settings);
-    setCurrentPlatform(platform());
   }, [settings]);
+
+  const startOllamaSidecar = async () => {
+    setOllamaStatus("running");
+    toast({
+      title: "starting ai",
+      description: "initializing the embedded ai...",
+    });
+
+    try {
+      const result = await invoke<string>("start_ollama_sidecar", {
+        settings: {
+          enabled: localSettings.embeddedLLM.enabled,
+          model: localSettings.embeddedLLM.model,
+          port: localSettings.embeddedLLM.port,
+        },
+      });
+
+      setOllamaStatus("running");
+      toast({
+        title: "ai ready",
+        description: `${localSettings.embeddedLLM.model} is running.`,
+      });
+
+      // Show the LLM test result in a toast
+      toast({
+        title: `${localSettings.embeddedLLM.model} wants to tell you a joke.`,
+        description: result,
+        duration: 10000,
+      });
+    } catch (error) {
+      console.error("Error starting ai sidecar:", error);
+      setOllamaStatus("error");
+      toast({
+        title: "error starting ai",
+        description: "check the console for more details",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStopLLM = async () => {
+    try {
+      await invoke("stop_ollama_sidecar");
+      setOllamaStatus("idle");
+      toast({
+        title: "ai stopped",
+        description: "the embedded ai has been shut down",
+      });
+    } catch (error) {
+      console.error("error stopping ai:", error);
+      toast({
+        title: "error stopping ai",
+        description: "check the console for more details",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <Dialog
       onOpenChange={(open) => {
         if (!open) {
-          location.reload(); // ! HACK to properly refresh stuff (tood beter)
+          // hack bcs something does not update settings for some reason
+          window.location.reload();
         }
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost" className={className}>
-          <Settings2 className="mr-2 h-4 w-4" />
-          settings
+        <Button variant="ghost" size="icon" className={className}>
+          <Settings2 className="h-5 w-5" />
+          <span className="sr-only">settings</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
@@ -107,7 +215,6 @@ export function Settings({ className }: { className?: string }) {
           <RecordingSettings
             localSettings={localSettings}
             setLocalSettings={setLocalSettings}
-            currentPlatform={currentPlatform}
           />
 
           <Separator />
@@ -147,6 +254,11 @@ export function Settings({ className }: { className?: string }) {
                             for local providers like ollama usually it&apos;s
                             <pre className="bg-gray-100 p-1 rounded-md">
                               http://localhost:11434/v1
+                            </pre>
+                            <br />
+                            note: on windows, you may need to run ollama with:
+                            <pre className="bg-gray-100 p-1 rounded-md">
+                              OLLAMA_ORIGINS=* ollama run llama3.2
                             </pre>
                           </p>
                         </TooltipContent>
@@ -298,6 +410,142 @@ export function Settings({ className }: { className?: string }) {
                 for ollama, or any other provider, use the url running on your
                 local machine or elsewhere and the exact model name.
               </p>
+
+              {currentPlatform === "macos" && (
+                <>
+                  <Separator className="my-4" />
+
+                  <div className="w-full">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="flex items-center min-w-[80px] justify-end">
+                        <Label
+                          htmlFor="embeddedLLM"
+                          className="text-right mr-2"
+                        >
+                          embedded ai
+                        </Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="h-4 w-4 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="right"
+                              className="max-w-[300px]"
+                            >
+                              <p>
+                                enable this to use local ai features in
+                                screenpipe. you can use it through search or
+                                pipes for enhanced functionality without relying
+                                on external services.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Switch
+                          id="embeddedLLM"
+                          checked={localSettings.embeddedLLM.enabled}
+                          onCheckedChange={handleEmbeddedLLMChange}
+                        />
+                        <Button
+                          onClick={startOllamaSidecar}
+                          disabled={
+                            !localSettings.embeddedLLM.enabled ||
+                            ollamaStatus === "running"
+                          }
+                          className="ml-auto"
+                        >
+                          {ollamaStatus === "running" ? (
+                            <Check className="h-4 w-4 mr-2" />
+                          ) : ollamaStatus === "error" ? (
+                            <X className="h-4 w-4 mr-2" />
+                          ) : ollamaStatus === "idle" ? (
+                            <Play className="h-4 w-4 mr-2" />
+                          ) : (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          )}
+                          {ollamaStatus === "running"
+                            ? "running"
+                            : ollamaStatus === "error"
+                            ? "error"
+                            : "start llm"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={handleStopLLM}
+                          className="ml-auto"
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          stop llm
+                        </Button>
+                        <LogFileButton />
+                      </div>
+                    </div>
+                  </div>
+
+                  {localSettings.embeddedLLM.enabled && (
+                    <>
+                      <div className="w-full">
+                        <div className="flex items-center gap-4 mb-4">
+                          <Label
+                            htmlFor="embeddedLLMModel"
+                            className="min-w-[80px] text-right"
+                          >
+                            llm model
+                          </Label>
+                          <div className="flex-grow flex items-center">
+                            <Input
+                              id="embeddedLLMModel"
+                              value={localSettings.embeddedLLM.model}
+                              onChange={handleEmbeddedLLMModelChange}
+                              className="flex-grow"
+                              placeholder="enter embedded llm model"
+                            />
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <HelpCircle className="ml-2 h-4 w-4 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="right"
+                                  className="max-w-[300px]"
+                                >
+                                  <p>
+                                    supported models are the same as ollama.
+                                    check the ollama documentation for a list of
+                                    available models.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="w-full">
+                        <div className="flex items-center gap-4 mb-4">
+                          <Label
+                            htmlFor="embeddedLLMPort"
+                            className="min-w-[80px] text-right"
+                          >
+                            llm port
+                          </Label>
+                          <Input
+                            id="embeddedLLMPort"
+                            type="number"
+                            value={localSettings.embeddedLLM.port}
+                            onChange={handleEmbeddedLLMPortChange}
+                            className="flex-grow"
+                            placeholder="enter embedded llm port"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
 

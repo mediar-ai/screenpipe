@@ -1,7 +1,11 @@
 ### pipe-post-questions-on-reddit
+
+<img width="1312" alt="Screenshot 2024-10-12 at 14 09 01" src="https://github.com/user-attachments/assets/3e5abd07-0a3c-4c3b-8351-5107beb4fb10">
+
+
 GPT-4o (or local model) looks at your screen 24/7 and sends you emails with questions to post on Reddit based on your activity.
 
-
+Easily grow your followers, market your product, or be useful.
 
 https://github.com/user-attachments/assets/289d1809-6855-4336-807f-dd9ee7181324
 

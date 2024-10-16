@@ -15,8 +15,6 @@ import { MemoizedReactMarkdown } from "@/components/markdown";
 import { CodeBlock } from "@/components/ui/codeblock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { useSettings } from "@/lib/hooks/use-settings";
-import { invoke } from "@tauri-apps/api/core";
 import { toast } from "./ui/use-toast";
 import { Input } from "./ui/input";
 import {
@@ -51,6 +49,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { LogFileButton } from "./screenpipe-status";
 
 export interface Pipe {
   enabled: boolean;
@@ -67,6 +66,12 @@ interface CorePipe {
 }
 
 const corePipes: CorePipe[] = [
+  {
+    id: "pipe-post-questions-on-reddit",
+    description:
+      "get more followers, promote your content/product while being useful, without doing any work",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit",
+  },
   {
     id: "pipe-meeting-summary-by-email",
     description:
@@ -86,7 +91,6 @@ const corePipes: CorePipe[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log",
   },
 ];
-
 const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
@@ -385,7 +389,7 @@ const PipeDialog: React.FC = () => {
             {selectedPipe.enabled ? "disable" : "enable"}
           </Button>
 
-          {!selectedPipe.source.startsWith("https://") && (
+          {!selectedPipe.source?.startsWith("https://") && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -404,9 +408,9 @@ const PipeDialog: React.FC = () => {
             </TooltipProvider>
           )}
 
-          {selectedPipe.source.startsWith("http") && (
+          {selectedPipe.source?.startsWith("http") && (
             <Button
-              onClick={() => openUrl(selectedPipe.source, "_blank")}
+              onClick={() => openUrl(selectedPipe.source)}
               variant="outline"
             >
               <ExternalLink className="mr-2 h-4 w-4" />
@@ -424,12 +428,13 @@ const PipeDialog: React.FC = () => {
             <Heart className="mr-2 h-4 w-4" />
             support us
           </Button>
+          <LogFileButton />
         </div>
         <Separator className="my-4" />
 
         {selectedPipe.enabled && (
           <>
-            <Collapsible
+            {/* <Collapsible
               open={isLogOpen}
               onOpenChange={setIsLogOpen}
               className="w-full mt-4"
@@ -444,7 +449,7 @@ const PipeDialog: React.FC = () => {
                 <LogViewer className="mt-2" />
               </CollapsibleContent>
             </Collapsible>
-            <Separator className="my-4" />
+            <Separator className="my-4" /> */}
 
             <PipeConfigForm
               pipe={selectedPipe}
@@ -707,11 +712,7 @@ const PipeDialog: React.FC = () => {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    disabled={health?.status === "error"}
-                    size="sm"
-                    onClick={handleResetAllPipes}
-                  >
+                  <Button size="sm" onClick={handleResetAllPipes}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     reset all pipes
                   </Button>

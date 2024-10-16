@@ -107,9 +107,6 @@ export function SearchChat() {
 
   const floatingInputRef = useRef<HTMLInputElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const queryHistory = useInputHistory("search_query");
-  const appNameHistory = useInputHistory("app_name");
-  const windowNameHistory = useInputHistory("window_name");
 
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const lastScrollPosition = useRef(0);
@@ -119,7 +116,7 @@ export function SearchChat() {
   const [selectedResults, setSelectedResults] = useState<Set<number>>(
     new Set()
   );
-  const [similarityThreshold, setSimilarityThreshold] = useState(0.9);
+  const [similarityThreshold, setSimilarityThreshold] = useState(1);
   const [hoveredResult, setHoveredResult] = useState<number | null>(null);
 
   const [isCurlDialogOpen, setIsCurlDialogOpen] = useState(false);
@@ -201,6 +198,11 @@ export function SearchChat() {
   }, [debouncedThreshold, results]);
 
   const handleFilterDuplicates = async () => {
+    if (similarityThreshold === 1) {
+      setSelectedResults(new Set(results.map((_, index) => index)));
+      setSelectAll(true);
+      return;
+    }
     setIsFiltering(true);
     // simulate a delay to show loading state
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -438,9 +440,6 @@ export function SearchChat() {
 
   const handleSearch = async (newOffset = 0, overrides: any = {}) => {
     setHasSearched(true);
-    queryHistory.saveToHistory();
-    appNameHistory.saveToHistory();
-    windowNameHistory.saveToHistory();
 
     posthog.capture("search");
     setIsLoading(true);
