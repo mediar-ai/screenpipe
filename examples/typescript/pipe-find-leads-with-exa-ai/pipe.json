@@ -1,0 +1,94 @@
+{
+  "fields": [
+    {
+      "name": "exaApiKey",
+      "type": "string",
+      "default": "",
+      "description": "your exa ai api key"
+    },
+    {
+      "name": "interval",
+      "type": "number",
+      "default": 60,
+      "description": "Interval in seconds to read your screen data and extract structured logs (will be used to summarize and send an email). Increase this value if using audio."
+    },
+    {
+      "name": "summaryFrequency",
+      "type": "string",
+      "default": "daily",
+      "description": "Frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)"
+    },
+    {
+      "name": "emailTime",
+      "type": "time",
+      "default": "11:00",
+      "description": "Time to send daily summary email (used only if summaryFrequency is 'daily')"
+    },
+    {
+      "name": "emailAddress",
+      "type": "string",
+      "default": "",
+      "description": "Email address to send the daily summary to"
+    },
+    {
+      "name": "emailPassword",
+      "type": "string",
+      "default": "",
+      "description": "App specific password for your gmail account, https://support.google.com/accounts/answer/185833?hl=en"
+    },
+    {
+      "name": "aiUrl",
+      "type": "string",
+      "default": "https://api.openai.com/v1/chat/completions",
+      "description": "openai-compatible API URL"
+    },
+    {
+      "name": "aiModel",
+      "type": "string",
+      "default": "gpt-4o",
+      "description": "AI Model name"
+    },
+    {
+      "name": "aiApiKey",
+      "type": "string",
+      "default": "",
+      "description": "Your OpenAI API key"
+    },
+    {
+      "name": "pageSize",
+      "type": "number",
+      "default": 100,
+      "description": "Number of records to retrieve from screenpipe per page for structured extraction, keep in mind LLMs have a context window limit. Increase this value if using audio."
+    },
+    {
+      "name": "dailylogPrompt",
+      "type": "string",
+      "default": "",
+      "description": "additional prompt for the AI assistant that will be used to extract information from the screen data every specified amount of minutes"
+    },
+    {
+      "name": "customPrompt",
+      "type": "string",
+      "default": "my product is screenpipe, it records screens & mics 24/7 and connect it to AI, saves hours of work when dealing with CRMs, finding leads, etc.",
+      "description": "additional prompt for the AI assistant that will be used to generate a list of questions to post on reddit based on the logs previously extracted"
+    },
+    {
+      "name": "windowName",
+      "type": "window",
+      "default": "",
+      "description": "Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio"
+    },
+    {
+      "name": "appName",
+      "type": "app",
+      "default": "",
+      "description": "Specific app name to filter the screen data, for example 'gmail', 'slack', 'notion', 'google docs', etc. this will filter out audio"
+    },
+    {
+      "name": "contentType",
+      "type": "contentType",
+      "default": "all",
+      "description": "Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance."
+    }
+  ]
+}

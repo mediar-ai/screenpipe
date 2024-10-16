@@ -130,6 +130,10 @@ jobs:
       #   if: matrix.platform == 'windows-latest'
       #   uses: mxschmitt/action-tmate@v3
 
+      - name: Install wget on Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: sudo apt-get install -y wget
+
       - name: Run pre_build.js
         shell: bash
         env:
@@ -159,7 +163,6 @@ jobs:
             export V8_FLAGS="--max-old-space-size=8192" # https://github.com/denoland/deno_core/issues/916
           fi
           cargo build --release ${{ matrix.args }}
-
 
       # Run pre build again to copy the CLI into app
       - name: Run pre_build.js

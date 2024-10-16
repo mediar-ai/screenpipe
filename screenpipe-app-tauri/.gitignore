@@ -42,4 +42,5 @@ ffmpeg*
 *src-tauri/screenpipe* 
 *src-tauri/tesseract* 
 *src-tauri/deno* 
+*src-tauri/ollama* 
 
