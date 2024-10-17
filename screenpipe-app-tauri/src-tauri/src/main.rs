@@ -72,6 +72,9 @@ fn show_main_window(app_handle: &tauri::AppHandle) {
     }
 }
 
+// Add these imports at the top of the file
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
@@ -79,6 +82,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 window.hide().unwrap();
@@ -108,7 +112,7 @@ async fn main() {
                 .expect("Can't focus window!");
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::init())
+        // .plugin(tauri_plugin_global_shortcut::init())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -184,8 +188,10 @@ async fn main() {
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
-                let start_recording = MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
-                let stop_recording = MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
+                let start_recording =
+                    MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
+                let stop_recording =
+                    MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
                 let menu_divider = PredefinedMenuItem::separator(app)?;
                 let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app)
@@ -207,7 +213,12 @@ async fn main() {
                     "start_recording" => {
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                if let Err(err) = spawn_screenpipe(app_handle.state::<SidecarState>(), app_handle.clone()).await {
+                                if let Err(err) = spawn_screenpipe(
+                                    app_handle.state::<SidecarState>(),
+                                    app_handle.clone(),
+                                )
+                                .await
+                                {
                                     error!("Failed to start recording: {}", err);
                                 }
                             });
@@ -216,7 +227,12 @@ async fn main() {
                     "stop_recording" => {
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                if let Err(err) = kill_all_sreenpipes(app_handle.state::<SidecarState>(), app_handle.clone()).await {
+                                if let Err(err) = kill_all_sreenpipes(
+                                    app_handle.state::<SidecarState>(),
+                                    app_handle.clone(),
+                                )
+                                .await
+                                {
                                     error!("Failed to stop recording: {}", err);
                                 }
                             });
@@ -360,27 +376,67 @@ async fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
-            let shortcut_manager = app.shortcut_manager();
-            let app_handle = app.handle().clone();
+            // let shortcut_manager = app.shortcut_manager();
+            // let app_handle = app.handle().clone();
 
-            shortcut_manager
-                .register("CommandOrControl+Shift+R", move || {
-                    let app_handle = app_handle.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let state = app_handle.state::<SidecarState>();
-                        let mut manager = state.0.lock().await;
-                        if let Some(manager) = manager.as_mut() {
-                            if manager.child.is_some() {
-                                if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
-                                    error!("Failed to stop recording: {}", err);
+            // shortcut_manager
+            //     .register("CommandOrControl+Shift+R", move || {
+            //         let app_handle = app_handle.clone();
+            //         tauri::async_runtime::spawn(async move {
+            //             let state = app_handle.state::<SidecarState>();
+            //             let mut manager = state.0.lock().await;
+            //             if let Some(manager) = manager.as_mut() {
+            //                 if manager.child.is_some() {
+            //                     if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
+            //                         error!("Failed to stop recording: {}", err);
+            //                     }
+            //                 } else if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
+            //                     error!("Failed to start recording: {}", err);
+            //                 }
+            //             }
+            //         });
+            //     })
+            //     .unwrap();
+
+            #[cfg(desktop)]
+            {
+                let toggle_recording_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyR);
+                let app_handle = app.handle().clone();
+                app.handle().plugin(
+                    tauri_plugin_global_shortcut::Builder::new().with_handler(move |_app, shortcut, event| {
+                        if shortcut == &toggle_recording_shortcut {
+                            match event.state() {
+                                tauri_plugin_global_shortcut::ShortcutState::Pressed => {
+                                    let app_handle = app_handle.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        let state = app_handle.state::<SidecarState>();
+                                        let is_recording = {
+                                            let manager = state.0.lock().await;
+                                            manager.as_ref().map(|m| m.is_recording).unwrap_or(false)
+                                        };
+            
+                                        if is_recording {
+                                            if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                                                error!("failed to stop recording: {}", err);
+                                            }
+                                        } else {
+                                            if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
+                                                error!("failed to start recording: {}", err);
+                                            }
+                                        }
+                                    });
                                 }
-                            } else if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
-                                error!("Failed to start recording: {}", err);
+                                tauri_plugin_global_shortcut::ShortcutState::Released => {
+                                    // do nothing on release
+                                }
                             }
                         }
-                    });
-                })
-                .unwrap();
+                    })
+                    .build(),
+                )?;
+            
+                app.global_shortcut().register(toggle_recording_shortcut)?;
+            }
 
             Ok(())
         })
