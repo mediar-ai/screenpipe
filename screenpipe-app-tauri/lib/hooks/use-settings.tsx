@@ -4,6 +4,7 @@ import { localDataDir, join } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
+import {Language} from "@/lib/language";
 
 export type VadSensitivity = "low" | "medium" | "high";
 export type EmbeddedLLMConfig = {
@@ -40,6 +41,8 @@ export interface Settings {
   audioChunkDuration: number; // new field
   useChineseMirror: boolean; // Add this line
   embeddedLLM: EmbeddedLLMConfig;
+  languages: Language[];
+  enableBeta: boolean;
 }
 
 const defaultSettings: Settings = {
@@ -75,11 +78,13 @@ const defaultSettings: Settings = {
   analyticsEnabled: true,
   audioChunkDuration: 30, // default to 10 seconds
   useChineseMirror: false, // Add this line
+  languages: [],
   embeddedLLM: {
     enabled: false,
     model: "llama3.2:1b-instruct-q4_K_M",
     port: 11438,
   },
+  enableBeta: false,
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -155,8 +160,6 @@ export function useSettings() {
         const savedDataDir = (await store!.get<string>("dataDir")) || "";
         const savedDisableAudio =
           (await store!.get<boolean>("disableAudio")) || false;
-        const savedIgnoredWindows =
-          (await store!.get<string[]>("ignoredWindows")) || [];
         const savedIncludedWindows =
           (await store!.get<string[]>("includedWindows")) || [];
         const savedAiUrl =
@@ -181,6 +184,38 @@ export function useSettings() {
           model: "llama3.2:1b-instruct-q4_K_M",
           port: 11438,
         };
+
+        const savedLanguages =
+            (await store!.get<Language[]>("languages")) || [];
+
+        const currentPlatform = await platform();
+        const defaultIgnoredWindows =
+          currentPlatform === "macos" // TODO: windows and linux
+            ? [
+                "bit",
+                ".env",
+                "Item-0",
+                "App Icon Window",
+                "Battery",
+                "Shortcuts",
+                "WiFi",
+                "BentoBox",
+                "Clock",
+                "Dock",
+                "DeepL",
+              ]
+            : [];
+
+        const savedIgnoredWindows = await store!.get<string[]>(
+          "ignoredWindows"
+        );
+        const finalIgnoredWindows =
+          savedIgnoredWindows && savedIgnoredWindows.length > 0
+            ? savedIgnoredWindows
+            : defaultIgnoredWindows;
+
+        const savedEnableBeta = (await store!.get<boolean>("enableBeta")) || false;
+
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -199,7 +234,7 @@ export function useSettings() {
           port: savedPort,
           dataDir: savedDataDir,
           disableAudio: savedDisableAudio,
-          ignoredWindows: savedIgnoredWindows,
+          ignoredWindows: finalIgnoredWindows,
           includedWindows: savedIncludedWindows,
           aiUrl: savedAiUrl,
           aiMaxContextChars: savedAiMaxContextChars,
@@ -209,6 +244,8 @@ export function useSettings() {
           audioChunkDuration: savedAudioChunkDuration,
           useChineseMirror: savedUseChineseMirror,
           embeddedLLM: savedEmbeddedLLM,
+          languages: savedLanguages,
+          enableBeta: savedEnableBeta,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

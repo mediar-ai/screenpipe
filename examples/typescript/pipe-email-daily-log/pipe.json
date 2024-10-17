@@ -57,14 +57,20 @@
     {
       "name": "summaryPrompt",
       "type": "string",
-      "default": "You are an AI assistant tasked with summarizing information that has previously been extracted from screen data (OCR) by another AI assistant. Analyze the following structured data extracted from my screen data and summarize my daily activity, this will be send as a mail to my email address.",
-      "description": "Summary prompt for the AI assistant that will be used to summarize the logs previously extracted and send a mail"
+      "default": "You are an AI assistant tasked with summarizing information that has previously been extracted from screen data (OCR) by another AI assistant. Analyze the following structured data extracted from my screen data and summarize my daily activity. This summary will be sent as an email to my address. Additionally, based on the activities and patterns observed, suggest 10 possible action items or tasks for the next day. These should be practical, relevant, and aimed at improving productivity or addressing any pending matters identified in the daily summary.",
+      "description": "Summary prompt for the AI assistant that will be used to summarize the logs previously extracted, suggest action items for the next day, and send an email"
     },
     {
       "name": "windowName",
       "type": "window",
       "default": "",
       "description": "Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio"
+    },
+    {
+      "name": "appName",
+      "type": "app",
+      "default": "",
+      "description": "Specific application name to filter the screen data, for example 'Chrome', 'Visual Studio Code', 'Slack', etc. Leave empty to include all applications"
     },
     {
       "name": "contentType",

@@ -25,7 +25,7 @@ mod tests {
         let rgb_image = image.to_rgb8();
         println!("RGB image dimensions: {:?}", rgb_image.dimensions());
 
-        let result = perform_ocr_apple(&image);
+        let result = perform_ocr_apple(&image, vec![]);
 
         println!("OCR text: {:?}", result);
         assert!(
@@ -34,7 +34,7 @@ mod tests {
             result
         );
     }
-// # 中文测试
+    // # 中文测试
     #[tokio::test]
     async fn test_apple_native_ocr_chinese() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -45,11 +45,11 @@ mod tests {
         let image = image::open(&path).expect("Failed to open Chinese test image");
         println!("Image dimensions: {:?}", image.dimensions());
 
-        let result = perform_ocr_apple(&image);
+        let result = perform_ocr_apple(&image, vec![]);
 
         println!("OCR text: {:?}", result);
         assert!(
-            result.contains("管理分支"),  // 替换为您的测试图像中的实际中文文本
+            result.contains("管理分支"), // 替换为您的测试图像中的实际中文文本
             "OCR failed to recognize Chinese text: {:?}",
             result
         );

@@ -162,6 +162,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let languages = store
+        .get("languages")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
+
+    let enable_beta = store
+        .get("enableBeta")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -194,6 +204,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         for monitor in &monitor_ids {
             args.push("--monitor-id");
             args.push(monitor.as_str().unwrap());
+        }
+    }
+
+    if !languages.is_empty() && languages[0] != Value::String("default".to_string()) {
+        for language in &languages {
+            args.push("--language");
+            args.push(language.as_str().unwrap());
         }
     }
 
@@ -252,6 +269,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if !telemetry_enabled {
         args.push("--disable-telemetry");
+    }
+
+    if enable_beta {
+        args.push("--enable-beta");
     }
 
     // args.push("--debug");

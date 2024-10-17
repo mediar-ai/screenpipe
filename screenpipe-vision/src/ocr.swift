@@ -3,11 +3,25 @@ import CoreImage
 import Foundation
 import Vision
 
+extension String {
+    /// Create UnsafeMutableBufferPointer holding a null-terminated UTF8 copy of the string
+    public func unsafeUTF8Copy() -> UnsafeMutableBufferPointer<CChar> { self.utf8CString.unsafeCopy() }
+}
+
+extension Collection {
+    /// Creates an UnsafeMutableBufferPointer with enough space to hold the elements of self.
+    public func unsafeCopy() -> UnsafeMutableBufferPointer<Self.Element> {
+        let copy = UnsafeMutableBufferPointer<Self.Element>.allocate(capacity: self.underestimatedCount)
+        _ = copy.initialize(from: self)
+        return copy
+    }
+}
+
 // TODO: how can we use Metal to speed this up?
 
 @available(macOS 10.15, *)
 @_cdecl("perform_ocr")
-public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int, height: Int)
+public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int, height: Int, languages: UnsafePointer<UnsafePointer<CChar>?>, languagesCount: Int)
   -> UnsafeMutablePointer<CChar>? {
   return autoreleasepool {
 
@@ -92,7 +106,22 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
       }
     }
 
-    textRequest.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+    // Convert C string array to Swift string array
+    var recognitionLanguages: [String] = []
+    for i in 0..<languagesCount {
+      if let langCString = languages[i] {
+        if let langString = String(cString: langCString, encoding: .utf8) {
+          recognitionLanguages.append(langString)
+        }
+      }
+    }
+
+    // If no languages are provided, use a default set
+    if recognitionLanguages.isEmpty {
+      recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+    }
+
+    textRequest.recognitionLanguages = recognitionLanguages
     textRequest.recognitionLevel = .accurate
     textRequest.usesLanguageCorrection = true
 

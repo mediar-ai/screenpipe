@@ -1,12 +1,11 @@
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::{ops::softmax, VarBuilder};
+use candle_transformers::models::whisper::{self as m, Config};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, error, info};
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
-
-use candle_transformers::models::whisper::{self as m, Config};
 
 #[derive(Clone)]
 pub struct WhisperModel {
@@ -56,11 +55,14 @@ impl WhisperModel {
         debug!("Parsing config and tokenizer");
         let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-
+        // tokenizer.with_pre_tokenizer(PreT)
         debug!("Loading model weights");
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], m::DTYPE, &device)? };
-        let model = Model::Normal(m::model::Whisper::load(&vb, config.clone())?);
+        let whisper = m::model::Whisper::load(&vb, config.clone())?;
+
+        let model = Model::Normal(whisper);
+
         debug!("WhisperModel initialization complete");
         Ok(Self {
             model,
@@ -178,6 +180,7 @@ impl<'a> Decoder<'a> {
             None => anyhow::bail!("unable to find any non-speech token"),
             Some(n) => n,
         };
+
         Ok(Self {
             model,
             rng: rand::rngs::StdRng::seed_from_u64(seed),
@@ -260,6 +263,7 @@ impl<'a> Decoder<'a> {
             };
 
             tokens.push(next_token);
+
             let prob = softmax(&logits, candle::D::Minus1)?
                 .i(next_token as usize)?
                 .to_scalar::<f32>()? as f64;

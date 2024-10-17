@@ -3,6 +3,7 @@ use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as C
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use clap::ValueEnum;
 use screenpipe_audio::vad_engine::VadEngineEnum;
+use screenpipe_core::Language;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
@@ -178,6 +179,9 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub monitor_id: Vec<u32>,
 
+    #[arg(short = 'l', long, value_enum)]
+    pub language: Vec<Language>,
+
     /// Enable PII removal from OCR text property that is saved to db and returned in search results
     #[arg(long, default_value_t = false)]
     pub use_pii_removal: bool,
@@ -225,6 +229,10 @@ pub struct Cli {
     /// Enable Local LLM API
     #[arg(long, default_value_t = false)]
     pub enable_llm: bool,
+
+    /// Enable beta features
+    #[arg(long, default_value_t = false)]
+    pub enable_beta: bool,
 
     #[command(subcommand)]
     pub command: Option<Command>,

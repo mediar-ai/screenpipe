@@ -25,6 +25,7 @@ use std::{
 use hound::{WavSpec, WavWriter};
 use regex::Regex;
 use reqwest::Client;
+use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
 
@@ -38,6 +39,7 @@ async fn transcribe_with_deepgram(
     audio_data: &[f32],
     device: &str,
     sample_rate: u32,
+    languages: Vec<Language>,
 ) -> Result<String> {
     debug!("starting deepgram transcription");
     let client = Client::new();
@@ -64,8 +66,26 @@ async fn transcribe_with_deepgram(
     // Get the WAV data from the cursor
     let wav_data = cursor.into_inner();
 
+    let mut query_params = String::from("model=nova-2&smart_format=true");
+
+    if !languages.is_empty() {
+        query_params = [
+            query_params,
+            "&".into(),
+            languages
+                .iter()
+                .map(|lang| format!("detect_language={}", lang.as_lang_code()))
+                .collect::<Vec<String>>()
+                .join("&"),
+        ]
+        .concat();
+    }
+
     let response = client
-        .post("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true")
+        .post(format!(
+            "https://api.deepgram.com/v1/listen?{}",
+            query_params
+        ))
         .header("Content-Type", "audio/wav")
         .header("Authorization", format!("Token {}", api_key))
         .body(wav_data)
@@ -127,6 +147,7 @@ pub fn stt_sync(
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>, // Changed type here
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
+    languages: Vec<Language>,
 ) -> Result<(String, String)> {
     let audio_input = audio_input.clone();
     let mut whisper_model = whisper_model.clone();
@@ -145,6 +166,7 @@ pub fn stt_sync(
             deepgram_api_key,
             &output_path,
             false,
+            languages,
         ))
     });
 
@@ -155,6 +177,7 @@ fn process_with_whisper(
     whisper_model: &mut WhisperModel,
     speech_frames: &[f32],
     mel_filters: &[f32],
+    languages: Vec<Language>,
 ) -> Result<String> {
     let model = &mut whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
@@ -176,7 +199,12 @@ fn process_with_whisper(
     )?;
 
     debug!("detecting language");
-    let language_token = Some(multilingual::detect_language(model, tokenizer, &mel)?);
+    let language_token = Some(multilingual::detect_language(
+        model,
+        tokenizer,
+        &mel,
+        languages.clone(),
+    )?);
 
     debug!("initializing decoder");
     let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
@@ -249,6 +277,7 @@ fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut 
     (s_time, e_time)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn stt(
     audio_input: &AudioInput,
     whisper_model: &mut WhisperModel,
@@ -257,6 +286,7 @@ pub async fn stt(
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
     skip_encoding: bool,
+    languages: Vec<Language>,
 ) -> Result<(String, String)> {
     let model = &whisper_model.model;
 
@@ -360,6 +390,7 @@ pub async fn stt(
                 &speech_frames,
                 &audio_input.device.name,
                 audio_input.sample_rate,
+                languages.clone(),
             )
             .await
             {
@@ -370,12 +401,17 @@ pub async fn stt(
                         audio_input.device, e
                     );
                     // Fallback to Whisper
-                    process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters)
+                    process_with_whisper(
+                        &mut *whisper_model,
+                        &speech_frames,
+                        &mel_filters,
+                        languages.clone(),
+                    )
                 }
             }
         } else {
             // Existing Whisper implementation
-            process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters)
+            process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
         };
 
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
@@ -476,6 +512,7 @@ pub async fn create_whisper_channel(
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
     vad_sensitivity: VadSensitivity,
+    languages: Vec<Language>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
@@ -522,7 +559,7 @@ pub async fn create_whisper_channel(
                                 #[cfg(target_os = "macos")]
                                 {
                                     autoreleasepool(|| {
-                                        match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
+                                        match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
                                             Ok((transcription, path)) => TranscriptionResult {
                                                 input: input.clone(),
                                                 transcription: Some(transcription),
@@ -548,7 +585,7 @@ pub async fn create_whisper_channel(
                                     unreachable!("This code should not be reached on non-macOS platforms")
                                 }
                             } else {
-                                match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path) {
+                                match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
                                     Ok((transcription, path)) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),

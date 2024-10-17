@@ -16,6 +16,7 @@ import {
   ChevronsUpDown,
   Eye,
   HelpCircle,
+  Languages,
   Mic,
   Monitor,
   X,
@@ -63,6 +64,7 @@ import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
+import { Language } from "@/lib/language";
 
 interface AudioDevice {
   name: string;
@@ -87,6 +89,7 @@ export function RecordingSettings({
   const { settings, updateSettings } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openMonitors, setOpenMonitors] = React.useState(false);
+  const [openLanguages, setOpenLanguages] = React.useState(false);
 
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
@@ -100,6 +103,15 @@ export function RecordingSettings({
   const isDisabled = health?.status_code === 500;
   const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
   const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
+  const [isMacOS, setIsMacOS] = useState(false);
+
+  useEffect(() => {
+    const checkPlatform = async () => {
+      const currentPlatform = await platform();
+      setIsMacOS(currentPlatform === "macos");
+    };
+    checkPlatform();
+  }, []);
 
   useEffect(() => {
     const loadDevices = async () => {
@@ -208,6 +220,8 @@ export function RecordingSettings({
         audioChunkDuration: localSettings.audioChunkDuration,
         analyticsEnabled: localSettings.analyticsEnabled,
         useChineseMirror: localSettings.useChineseMirror,
+        languages: localSettings.languages,
+        enableBeta: localSettings.enableBeta,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -304,6 +318,14 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, monitorIds: updatedMonitors });
   };
 
+  const handleLanguageChange = (currentValue: Language) => {
+    const updatedLanguages = localSettings.languages.includes(currentValue)
+      ? localSettings.languages.filter((id) => id !== currentValue)
+      : [...localSettings.languages, currentValue];
+
+    setLocalSettings({ ...localSettings, languages: updatedLanguages });
+  };
+
   const handleAudioDeviceChange = (currentValue: string) => {
     const updatedDevices = localSettings.audioDevices.includes(currentValue)
       ? localSettings.audioDevices.filter((device) => device !== currentValue)
@@ -374,6 +396,9 @@ export function RecordingSettings({
     ) {
       localSettings.monitorIds.forEach((id) => args.push(`--monitor-id ${id}`));
     }
+    if (localSettings.languages.length > 0) {
+      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
+    }
     if (
       localSettings.audioDevices.length > 0 &&
       localSettings.audioDevices[0] !== "default"
@@ -409,12 +434,16 @@ export function RecordingSettings({
     if (localSettings.vadSensitivity !== "high") {
       args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
     }
-    
+
     if (!localSettings.analyticsEnabled) {
       args.push("--disable-telemetry");
     }
     if (localSettings.audioChunkDuration !== 30) {
       args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
+    }
+
+    if (localSettings.languages.length > 0) {
+      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
     }
 
     return `${cliPath} ${args.join(" ")}`;
@@ -459,6 +488,10 @@ export function RecordingSettings({
 
   const handleChineseMirrorToggle = (checked: boolean) => {
     setLocalSettings({ ...localSettings, useChineseMirror: checked });
+  };
+
+  const handleEnableBetaToggle = (checked: boolean) => {
+    setLocalSettings({ ...localSettings, enableBeta: checked });
   };
 
   return (
@@ -682,6 +715,70 @@ export function RecordingSettings({
                               >
                                 {device.name}{" "}
                                 {device.is_default ? "(default)" : ""}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="languages"
+                className="flex items-center space-x-2"
+              >
+                <Languages className="h-4 w-4" />
+                <span>languages</span>
+              </Label>
+              <Popover open={openLanguages} onOpenChange={setOpenLanguages}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openLanguages}
+                    className="w-full justify-between"
+                  >
+                    {localSettings.languages.length > 0
+                      ? `${localSettings.languages.join(", ")}`
+                      : "select languages"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0">
+                  <Command>
+                    <CommandInput placeholder="search languages..." />
+                    <CommandList>
+                      <CommandEmpty>no language found.</CommandEmpty>
+                      <CommandGroup>
+                        {Object.entries(Language).map(([language, id]) => (
+                          <CommandItem
+                            key={language}
+                            value={language}
+                            onSelect={() => handleLanguageChange(id)}
+                          >
+                            <div className="flex items-center">
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  localSettings.languages.includes(id)
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              {/* not selectable */}
+                              <span
+                                style={{
+                                  userSelect: "none",
+                                  WebkitUserSelect: "none",
+                                  MozUserSelect: "none",
+                                  msUserSelect: "none",
+                                }}
+                              >
+                                {language}
                               </span>
                             </div>
                           </CommandItem>
@@ -1127,6 +1224,51 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
             </div>
+            {isMacOS && (
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="enable-beta-toggle"
+                  checked={localSettings.enableBeta}
+                  onCheckedChange={handleEnableBetaToggle}
+                />
+                <Label
+                  htmlFor="enable-beta-toggle"
+                  className="flex items-center space-x-2"
+                >
+                  <span>enable beta features</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4 cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>
+                          ⚠️ uses screenpipe cloud ⚠️
+                          <br />
+                          • we provide free ChatGPT credits
+                          <br />
+                          • may have privacy implications read our data privacy
+                          policy at
+                          <br />
+                          <a
+                            href="https://screenpi.pe/privacy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            https://screenpi.pe/privacy
+                          </a>
+                          <br />
+                          enables experimental features like double slash
+                          <br />
+                          (only tested on US or German qwertz keyboards)
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -7,13 +7,13 @@ use screenpipe_vision::{
     continuous_capture, monitor::get_default_monitor, CaptureResult, OcrEngine,
 };
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::channel;
 use tokio_tungstenite::tungstenite::Message;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
-use std::collections::HashMap;
 
 #[derive(Clone, Serialize)]
 struct SimplifiedResult {
@@ -98,6 +98,7 @@ async fn main() -> Result<()> {
             id,
             &cli.ignored_windows,
             &cli.included_windows,
+            vec![],
         )
         .await
     });
@@ -156,7 +157,7 @@ async fn run_websocket_server(
                 timestamp: result.timestamp.elapsed().as_secs(),
             };
             let _ = tx_clone.send(simplified);
-            
+
             // resubscribe to get only the latest message
             let _ = tx_clone.subscribe().resubscribe();
         }

@@ -21,7 +21,7 @@
     {
       "name": "ollamaModel",
       "type": "string",
-      "default": "nemotron-mini:4b-instruct-q4_K_M",
+      "default": "llama3.2:3b-instruct-q4_K_M",
       "description": "ollama model"
     },
     {

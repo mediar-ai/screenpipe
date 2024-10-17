@@ -10,6 +10,7 @@ use screenpipe_audio::{
     AudioInput, AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
 };
 use screenpipe_core::pii_removal::remove_pii;
+use screenpipe_core::Language;
 use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
@@ -43,6 +44,7 @@ pub async fn start_continuous_recording(
     include_windows: &[String],
     deepgram_api_key: Option<String>,
     vad_sensitivity: CliVadSensitivity,
+    languages: Vec<Language>,
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -66,6 +68,7 @@ pub async fn start_continuous_recording(
             deepgram_api_key,
             &PathBuf::from(output_path.as_ref()),
             VadSensitivity::from(vad_sensitivity),
+            languages.clone(),
         )
         .await?
     };
@@ -92,6 +95,8 @@ pub async fn start_continuous_recording(
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
 
+                let languages = languages.clone();
+
                 debug!("Starting video recording for monitor {}", monitor_id);
                 vision_handle.spawn(async move {
                     record_video(
@@ -107,6 +112,7 @@ pub async fn start_continuous_recording(
                         &ignored_windows_video,
                         &include_windows_video,
                         video_chunk_duration,
+                        languages.clone(),
                     )
                     .await
                 })
@@ -177,6 +183,7 @@ async fn record_video(
     ignored_windows: &[String],
     include_windows: &[String],
     video_chunk_duration: Duration,
+    languages: Vec<Language>,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -202,6 +209,7 @@ async fn record_video(
         monitor_id,
         ignored_windows,
         include_windows,
+        languages,
     );
 
     while is_running.load(Ordering::SeqCst) {
@@ -386,6 +394,7 @@ async fn record_audio(
             }
 
             transcription.transcription = current_transcript.clone();
+            previous_transcript = current_transcript.unwrap();
             // Process the audio result
             match process_audio_result(
                 &db,
@@ -398,10 +407,7 @@ async fn record_audio(
             .await
             {
                 Err(e) => error!("Error processing audio result: {}", e),
-                Ok(id) => {
-                    previous_transcript = current_transcript.unwrap();
-                    previous_transcript_id = id
-                }
+                Ok(id) => previous_transcript_id = id,
             }
         }
 
@@ -427,6 +433,7 @@ async fn process_audio_result(
 
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
+    let mut chunk_id: Option<i64> = None;
 
     info!(
         "device {} inserting audio chunk: {:?}",
@@ -437,12 +444,7 @@ async fn process_audio_result(
             .update_audio_transcription(id, previous_transcript.as_str())
             .await
         {
-            Ok(audio_chunk_id) => {
-                debug!(
-                    "Inserted audio transcription for chunk {} from device {} using {}",
-                    audio_chunk_id, result.input.device, transcription_engine
-                );
-            }
+            Ok(_) => {}
             Err(e) => error!(
                 "Failed to update transcription for {}: audio_chunk_id {}",
                 result.input.device, e
@@ -475,6 +477,7 @@ async fn process_audio_result(
                     "Inserted audio transcription for chunk {} from device {} using {}",
                     audio_chunk_id, result.input.device, transcription_engine
                 );
+                chunk_id = Some(audio_chunk_id);
             }
         }
         Err(e) => error!(
@@ -482,5 +485,5 @@ async fn process_audio_result(
             result.input.device, e
         ),
     }
-    Ok(None)
+    Ok(chunk_id)
 }

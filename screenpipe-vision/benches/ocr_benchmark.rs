@@ -82,7 +82,7 @@ fn bench_apple_vision_ocr(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("Performance", ""), |b| {
         b.iter(|| {
-            let result = perform_ocr_apple(black_box(&image));
+            let result = perform_ocr_apple(black_box(&image), vec![]);
             assert!(!result.is_empty(), "OCR failed");
         })
     });
@@ -104,7 +104,7 @@ fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
 
             for _ in 0..iters {
                 let start = std::time::Instant::now();
-                let result = perform_ocr_apple(black_box(&image));
+                let result = perform_ocr_apple(black_box(&image), vec![]);
                 total_duration += start.elapsed();
 
                 let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
@@ -151,7 +151,7 @@ fn bench_tesseract_ocr(c: &mut Criterion) {
 
 // TODO fix windows
 // Windows OCR benchmark (Windows only)
-#[cfg(target_os = "windows")] 
+#[cfg(target_os = "windows")]
 fn bench_windows_ocr(c: &mut Criterion) {
     let image = load_test_image(); // Load the image once
     let mut group = c.benchmark_group("Windows OCR");

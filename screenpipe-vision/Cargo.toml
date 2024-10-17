@@ -35,6 +35,9 @@ clap = { version = "4.0", features = ["derive"] }
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
 
+# Lanuage specification
+screenpipe-core = { path = "../screenpipe-core" }
+
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 

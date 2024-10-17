@@ -3,6 +3,7 @@ use image::{codecs::png::PngEncoder, DynamicImage, ImageEncoder};
 use log::error;
 use reqwest::multipart::{Form, Part};
 use reqwest::Client;
+use screenpipe_core::{Language, TESSERACT_LANGUAGES};
 use serde_json;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -14,7 +15,10 @@ use std::path::PathBuf;
 use tempfile::NamedTempFile;
 use tokio::time::{timeout, Duration};
 
-pub async fn perform_ocr_cloud(image: &DynamicImage) -> Result<(String, String, Option<f64>)> {
+pub async fn perform_ocr_cloud(
+    image: &DynamicImage,
+    languages: Vec<Language>,
+) -> Result<(String, String, Option<f64>)> {
     let api_key = match env::var("UNSTRUCTURED_API_KEY") {
         Ok(key) => key,
         Err(_) => {
@@ -40,10 +44,27 @@ pub async fn perform_ocr_cloud(image: &DynamicImage) -> Result<(String, String, 
         .mime_str("image/png")
         .unwrap();
 
-    let form = Form::new()
+    let mut form = Form::new()
         .part("files", part)
         .text("strategy", "auto")
         .text("coordinates", "true");
+
+    if !languages.is_empty() {
+        form = form.text(
+            "languages",
+            TESSERACT_LANGUAGES
+                .iter()
+                .filter_map(|(key, val)| {
+                    if let Some(_) = languages.iter().find(|l| l == &val) {
+                        Some(key.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join("+"),
+        );
+    }
 
     let client = reqwest::Client::new();
     let response = match timeout(
