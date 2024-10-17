@@ -4893,6 +4893,61 @@
           "const": "fs:write-files"
         },
         {
+          "description": "No features are enabled by default, as we believe\nthe shortcuts can be inherently dangerous and it is\napplication specific if specific shortcuts should be\nregistered or unregistered.\n",
+          "type": "string",
+          "const": "global-shortcut:default"
+        },
+        {
+          "description": "Enables the is_registered command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:allow-is-registered"
+        },
+        {
+          "description": "Enables the register command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:allow-register"
+        },
+        {
+          "description": "Enables the register_all command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:allow-register-all"
+        },
+        {
+          "description": "Enables the unregister command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:allow-unregister"
+        },
+        {
+          "description": "Enables the unregister_all command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:allow-unregister-all"
+        },
+        {
+          "description": "Denies the is_registered command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:deny-is-registered"
+        },
+        {
+          "description": "Denies the register command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:deny-register"
+        },
+        {
+          "description": "Denies the register_all command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:deny-register-all"
+        },
+        {
+          "description": "Denies the unregister command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:deny-unregister"
+        },
+        {
+          "description": "Denies the unregister_all command without any pre-configured scope.",
+          "type": "string",
+          "const": "global-shortcut:deny-unregister-all"
+        },
+        {
           "description": "This permission set configures which\nnotification features are by default exposed.\n\n#### Granted Permissions\n\nIt allows all notification related features.\n\n",
           "type": "string",
           "const": "notification:default"

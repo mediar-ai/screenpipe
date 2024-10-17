@@ -22,6 +22,7 @@ pub async fn kill_all_sreenpipes(
 
     let mut manager = state.0.lock().await;
     if let Some(manager) = manager.as_mut() {
+        manager.is_recording = false;
         if let Some(child) = manager.child.take() {
             if let Err(e) = child.kill() {
                 error!("Failed to kill child process: {}", e);
@@ -372,11 +373,12 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     Ok(child)
 }
 pub struct SidecarManager {
-    child: Option<CommandChild>,
+    pub child: Option<CommandChild>,
     last_restart: Instant,
     restart_interval: Arc<Mutex<Duration>>,
     restart_task: Option<JoinHandle<()>>,
     dev_mode: Arc<Mutex<bool>>,
+    pub is_recording: bool,
 }
 
 impl SidecarManager {
@@ -387,6 +389,7 @@ impl SidecarManager {
             restart_interval: Arc::new(Mutex::new(Duration::from_secs(0))),
             restart_task: None,
             dev_mode: Arc::new(Mutex::new(false)),
+            is_recording: false,
         }
     }
 
@@ -430,6 +433,7 @@ impl SidecarManager {
             }
         }));
 
+        self.is_recording = true;
         Ok(())
     }
 
