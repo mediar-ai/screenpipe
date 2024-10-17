@@ -4,7 +4,7 @@ use reqwest;
 use std::string::ToString;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tempfile::NamedTempFile;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::task;
@@ -417,11 +417,22 @@ func printAllAttributeValuesForCurrentApp() {
 printAllAttributeValuesForCurrentApp()
 "#;
 
-    let temp_file = NamedTempFile::new()?;
-    tokio::fs::write(temp_file.path(), script_content).await?;
-
     info!("running swift script");
-    let output = Command::new("swift").arg(temp_file.path()).output().await?;
+    let mut child = Command::new("swift")
+        .arg("-") // Read from stdin
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+
+    // Write to stdin
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(script_content.as_bytes()).await?;
+        stdin.flush().await?;
+    }
+
+    // Wait for the command to complete and get the output
+    let output = child.wait_with_output().await?;
 
     let duration = start.elapsed();
     info!("{:.1?} - run_swift_script", duration);
