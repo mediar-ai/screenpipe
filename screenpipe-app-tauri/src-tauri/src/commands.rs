@@ -78,7 +78,6 @@ pub async fn save_pipe_config(pipe_name: String, config: Value) -> Result<(), St
     Ok(())
 }
 
-
 #[tauri::command]
 pub async fn reset_all_pipes() -> Result<(), String> {
     info!("Resetting all pipes");
@@ -99,4 +98,3 @@ pub async fn reset_all_pipes() -> Result<(), String> {
 
     Ok(())
 }
-

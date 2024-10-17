@@ -43,6 +43,7 @@
     "@tauri-apps/plugin-cli": "2.0.0",
     "@tauri-apps/plugin-dialog": "2.0.0",
     "@tauri-apps/plugin-fs": "2.0.0",
+    "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "@tauri-apps/plugin-notification": "2.0.0",
     "@tauri-apps/plugin-os": "2.0.0",
     "@tauri-apps/plugin-process": "2.0.0",
