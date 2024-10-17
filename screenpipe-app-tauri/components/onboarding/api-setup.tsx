@@ -54,8 +54,12 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
 
   useEffect(() => {
     const { aiUrl, openaiApiKey, aiModel } = localSettings;
+    const isApiKeyRequired = aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" && aiUrl !== "http://localhost:11434/v1";
+    
     setAreAllInputsFilled(
-      aiUrl.trim() !== "" && openaiApiKey.trim() !== "" && aiModel.trim() !== ""
+      aiUrl.trim() !== "" && 
+      aiModel.trim() !== "" && 
+      (!isApiKeyRequired || openaiApiKey.trim() !== "")
     );
   }, [localSettings]);
 

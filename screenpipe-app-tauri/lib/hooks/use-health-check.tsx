@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface HealthCheckResponse {
   status: string;
@@ -15,8 +15,9 @@ export function useHealthCheck() {
   const [isServerDown, setIsServerDown] = useState(false);
   const baseCheckInterval = 5000; // 5 seconds
   const maxCheckInterval = 60000; // 1 minute
+  const [restartKey, setRestartKey] = useState(0);
 
-  const fetchHealth = async () => {
+  const fetchHealth = useCallback(async () => {
     try {
       const response = await fetch("http://localhost:3030/health");
       if (!response.ok) {
@@ -46,7 +47,11 @@ export function useHealthCheck() {
         });
       }
     }
-  };
+  }, [health, isServerDown]);
+
+  const forceRestartHealthCheck = useCallback(() => {
+    setRestartKey((prevKey) => prevKey + 1);
+  }, []);
 
   useEffect(() => {
     fetchHealth();
@@ -58,7 +63,7 @@ export function useHealthCheck() {
     );
 
     return () => clearInterval(interval);
-  }, [isServerDown]);
+  }, [isServerDown, fetchHealth, restartKey]);
 
-  return { health, isServerDown };
+  return { health, isServerDown, forceRestartHealthCheck };
 }

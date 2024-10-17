@@ -156,15 +156,7 @@ const Onboarding: React.FC = () => {
     }
   }, [showOnboarding]);
 
-  useEffect(() => {
-    const checkFirstTimeUser = async () => {
-      const isFirstTime = await localforage.getItem<boolean>("isFirstTimeUser");
-      if (isFirstTime === null) {
-        setShowOnboarding(true);
-      }
-    };
-    checkFirstTimeUser();
-  }, []);
+
 
   useEffect(() => {
     if (error) {
