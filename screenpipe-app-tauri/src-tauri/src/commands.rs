@@ -103,10 +103,10 @@ pub async fn reset_all_pipes() -> Result<(), String> {
 #[tauri::command]
 pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool) {
     if let Some(window) = app_handle.get_webview_window("main") {
-        info!("Showing main window");
         let _ = window.set_visible_on_all_workspaces(overlay);
         let _ = window.set_always_on_top(overlay);
         let _ = window.show();
+
         if !overlay {
             let _ = window.set_focus();
         }
@@ -126,7 +126,7 @@ pub fn update_show_screenpipe_shortcut(
     app_handle: tauri::AppHandle<tauri::Wry>,
     new_shortcut: String,
 ) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
     app_handle
         .global_shortcut()
