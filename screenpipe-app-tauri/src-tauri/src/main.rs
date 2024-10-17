@@ -59,8 +59,9 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
 
 fn show_main_window(app_handle: &tauri::AppHandle) {
     if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_visible_on_all_workspaces(true);
+        let _ = window.set_always_on_top(true);
         let _ = window.show();
-        let _ = window.set_focus();
     } else {
         let _ = tauri::WebviewWindowBuilder::new(
             app_handle,
@@ -81,6 +82,8 @@ async fn main() {
     let app = tauri::Builder::default()
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
+                let _ = window.set_visible_on_all_workspaces(false);
+                let _ = window.set_always_on_top(false);
                 window.hide().unwrap();
                 api.prevent_close();
             }
@@ -177,6 +180,29 @@ async fn main() {
                 let _ = File::create(path.clone()).unwrap();
             }
 
+            // Setup Shortcuts
+            use tauri_plugin_global_shortcut::{
+                Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+            };
+
+            let show_window_shortcut =
+                Shortcut::new(Some(Modifiers::META.union(Modifiers::SHIFT)), Code::KeyZ);
+
+            app_handle.plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_handler(move |app_handle, shortcut, event| {
+                        println!("{:?}", shortcut);
+                        if shortcut == &show_window_shortcut
+                            && event.state() == ShortcutState::Pressed
+                        {
+                            show_main_window(app_handle);
+                        }
+                    })
+                    .build(),
+            )?;
+
+            app.global_shortcut().register(show_window_shortcut)?;
+
             // Set up update check
             let update_manager = start_update_check(app_handle, 5)?;
 
@@ -197,7 +223,7 @@ async fn main() {
 
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
-                        show_main_window(&app_handle);
+                        show_main_window(app_handle);
                     }
                     "quit" => {
                         println!("quit clicked");
@@ -335,7 +361,7 @@ async fn main() {
 
             // Add this custom activate handler
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Regular);
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             Ok(())
         })
