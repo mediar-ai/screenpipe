@@ -70,7 +70,7 @@ const slideFlow: Record<
         selectedOptions?.includes("personalUse") &&
         selectedPersonalization === "withoutAI"
       )
-        return "devOrNonDev";
+        return "instructions";
       return "instructions";
     },
     prev: () => "selection",
@@ -320,7 +320,7 @@ const Onboarding: React.FC = () => {
             <OnboardingInstructions
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
+              handleNextSlide={handleEnd}
               handlePrevSlide={handlePrevSlide}
             />
           )}

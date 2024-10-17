@@ -25,7 +25,7 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Lock, Folder, FileText, Activity } from "lucide-react";
+import { Lock, Folder, FileText, Activity, Wrench } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { homeDir } from "@tauri-apps/api/path";
 import LogViewer from "./log-viewer-v2";
@@ -34,6 +34,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Command } from "@tauri-apps/plugin-shell";
 
 const getDebuggingCommands = (os: string | null) => {
   let cliInstructions = "";
@@ -339,6 +340,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [isMac, setIsMac] = useState(false);
   const { settings } = useSettings();
   const [isLogOpen, setIsLogOpen] = useState(false);
+  const [isFixingSetup, setIsFixingSetup] = useState(false);
 
   useEffect(() => {
     setIsMac(platform() === "macos");
@@ -385,29 +387,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
     }
   };
 
-  const handleOpenLogFile = async () => {
-    try {
-      const homeDirPath = await homeDir();
-      const logPath =
-        platform() === "windows"
-          ? `${homeDirPath}\\.screenpipe\\screenpipe.${
-              new Date().toISOString().split("T")[0]
-            }.log`
-          : `${homeDirPath}/.screenpipe/screenpipe.${
-              new Date().toISOString().split("T")[0]
-            }.log`;
-      await open(logPath);
-    } catch (error) {
-      console.error("failed to open log file:", error);
-      toast({
-        title: "error",
-        description: "failed to open log file.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
-  };
-
   const getStatusColor = (
     status: string,
     frameStatus: string,
@@ -422,6 +401,70 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
     if (isVisionOk && isAudioOk) return "bg-green-500";
     return "bg-red-500";
+  };
+
+  const handleFixSetup = async () => {
+    setIsFixingSetup(true);
+    const toastId = toast({
+      title: "fixing setup permissions",
+      description: "this may take a few minutes...",
+      duration: Infinity,
+    });
+
+    try {
+      const args = ["setup"];
+      if (settings.enableBeta) {
+        args.push("--enable-beta");
+      }
+      console.log("args", args);
+      const command = Command.sidecar("screenpipe", args);
+      const child = await command.spawn();
+
+      const outputPromise = new Promise<string>((resolve, reject) => {
+        command.on("close", (data) => {
+          if (data.code !== 0) {
+            reject(new Error(`Command failed with code ${data.code}`));
+          }
+        });
+        command.on("error", (error) => reject(new Error(error)));
+        command.stdout.on("data", (line) => {
+          console.log(line);
+          if (line.includes("screenpipe setup complete")) {
+            resolve("ok");
+          }
+        });
+      });
+
+      const timeoutPromise = new Promise(
+        (_, reject) =>
+          setTimeout(() => reject(new Error("Setup timed out")), 900000) // 15 minutes
+      );
+
+      const result = await Promise.race([outputPromise, timeoutPromise]);
+
+      if (result === "ok") {
+        toastId.update({
+          id: toastId.id,
+          title: "setup fixed",
+          description: "screenpipe setup permissions have been fixed.",
+          duration: 5000,
+        });
+      } else {
+        throw new Error("setup failed or timed out");
+      }
+    } catch (error) {
+      console.error("error fixing setup:", error);
+      toastId.update({
+        id: toastId.id,
+        title: "error",
+        description: "please try again or check the logs for more info.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      setIsFixingSetup(false);
+      toastId.dismiss();
+    }
   };
 
   if (!health) {
@@ -537,8 +580,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
 3. if the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn
 4. last, here are some [FAQ](https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot`}
               </MarkdownWithExternalLinks>
-              {isMac && (
-                <div className="absolute top-[6.5em] right-0">
+              <div className="absolute top-[6.5em] right-0 flex flex-col space-y-2">
+                {isMac && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -556,8 +599,29 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                </div>
-              )}
+                )}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        onClick={handleFixSetup}
+                        className="flex-shrink-0"
+                        disabled={isFixingSetup}
+                      >
+                        <Wrench className="h-4 w-4 mr-2" />
+                        {isFixingSetup ? "fixing..." : "screenpipe autofix"}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        this will try to request permissions, download models,
+                        etc.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             </div>
             <Separator className="my-4" />
             <DevModeSettings />

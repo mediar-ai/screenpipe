@@ -9,14 +9,13 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device, trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel, AudioDevice, DeviceControl
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
-use screenpipe_vision::core::trigger_screen_capture_permission;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
@@ -137,6 +136,9 @@ async fn main() -> anyhow::Result<()> {
                         info!("Keyboard permission requested. Please grant permission if prompted.");
                     }
                 }
+                use screenpipe_audio::{trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel};
+                use screenpipe_vision::core::trigger_screen_capture_permission;
+
                 // Trigger audio permission request
                 if let Err(e) = trigger_audio_permission() {
                     error!("Failed to trigger audio permission: {:?}", e);
@@ -654,6 +656,8 @@ async fn main() -> anyhow::Result<()> {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
+            // sleep for 5 seconds 
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("watched pid {} has stopped, initiating shutdown", pid);
                 let _ = shutdown_tx_clone.send(());

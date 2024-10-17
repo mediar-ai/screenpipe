@@ -2,13 +2,21 @@
   /*TODO: setup screenpipe status  <10-10-24, @tribhuwan-kumar>*/
 }
 
-import React, { useState, useEffect } from "react";
-import { ArrowUpRight, Check } from "lucide-react";
+import React, { useState } from "react";
+import { ArrowUpRight, Check, HelpCircle } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
-import { spinner } from "@/components/spinner";
 import { Command } from "@tauri-apps/plugin-shell";
-import { Separator } from "../ui/separator";
+import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
+import {
+  TooltipProvider,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "../ui/tooltip";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { Label } from "../ui/label";
 
 interface OnboardingStatusProps {
   className?: string;
@@ -22,69 +30,54 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   handleNextSlide,
 }) => {
   const [status, setStatus] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [useChineseMirror, setUseChineseMirror] = useState(false);
+  const { updateSettings } = useSettings();
 
-  useEffect(() => {
-    let isMounted = true;
-    let child: Awaited<ReturnType<Command<any>["spawn"]>> | null = null;
+  const startSetup = async () => {
+    setIsLoading(true);
+    setStatus(null);
 
-    const checkStatus = async () => {
-      try {
-        const command = Command.sidecar("screenpipe", ["setup"]);
+    try {
+      const command = Command.sidecar("screenpipe", ["setup"]);
 
-        const timeoutPromise = new Promise(
-          (_, reject) =>
-            setTimeout(
-              () => reject(new Error("Status check timed out")),
-              900000
-            ) // 15 minutes
-        );
+      const timeoutPromise = new Promise(
+        (_, reject) =>
+          setTimeout(() => reject(new Error("status check timed out")), 900000) // 15 minutes
+      );
 
-        const outputPromise = new Promise<string>((resolve, reject) => {
-          command.on("close", (data) => {
-            if (data.code !== 0) {
-              reject(new Error(`Command failed with code ${data.code}`));
-            }
-          });
-          command.on("error", (error) => reject(new Error(error)));
-          command.stdout.on("data", (line) => {
-            console.log(line);
-            if (line.includes("screenpipe setup complete")) {
-              resolve("ok");
-            }
-          });
+      const outputPromise = new Promise<string>((resolve, reject) => {
+        command.on("close", (data) => {
+          if (data.code !== 0) {
+            reject(new Error(`command failed with code ${data.code}`));
+          }
         });
-
-        child = await command.spawn();
-
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 2000)); // add 2s delay for fast connections
-          const result = await Promise.race([outputPromise, timeoutPromise]);
-          if (isMounted) {
-            setStatus(result as string);
+        command.on("error", (error) => reject(new Error(error)));
+        command.stdout.on("data", (line) => {
+          console.log(line);
+          if (line.includes("screenpipe setup complete")) {
+            resolve("ok");
           }
-        } catch (error) {
-          console.error("Error or timeout:", error);
-          if (isMounted) {
-            setStatus("error");
-          }
-        }
+        });
+      });
+
+      const child = await command.spawn();
+
+      try {
+        const result = await Promise.race([outputPromise, timeoutPromise]);
+        setStatus(result as string);
       } catch (error) {
-        console.error("Error checking status:", error);
-        if (isMounted) {
-          setStatus("error");
-        }
+        console.error("error or timeout:", error);
+        setStatus("error");
+      } finally {
+        setIsLoading(false);
       }
-    };
-
-    checkStatus();
-
-    return () => {
-      isMounted = false;
-      if (child) {
-        child.kill().catch(console.error);
-      }
-    };
-  }, []);
+    } catch (error) {
+      console.error("error checking status:", error);
+      setStatus("error");
+      setIsLoading(false);
+    }
+  };
 
   const handleNext = () => {
     setStatus(null);
@@ -94,6 +87,56 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const handlePrev = () => {
     setStatus(null);
     handlePrevSlide();
+  };
+
+  const handleChineseMirrorToggle = async (checked: boolean) => {
+    setUseChineseMirror(checked);
+    updateSettings({ useChineseMirror: checked });
+  };
+
+  const runSetup = async () => {
+    setIsLoading(true);
+    setStatus(null);
+
+    try {
+      const command = Command.sidecar("screenpipe", ["setup"]);
+
+      const timeoutPromise = new Promise(
+        (_, reject) =>
+          setTimeout(() => reject(new Error("setup timed out")), 900000) // 15 minutes
+      );
+
+      const outputPromise = new Promise<string>((resolve, reject) => {
+        command.on("close", (data) => {
+          if (data.code !== 0) {
+            reject(new Error(`command failed with code ${data.code}`));
+          }
+        });
+        command.on("error", (error) => reject(new Error(error)));
+        command.stdout.on("data", (line) => {
+          console.log(line);
+          if (line.includes("screenpipe setup complete")) {
+            resolve("ok");
+          }
+        });
+      });
+
+      const child = await command.spawn();
+
+      try {
+        const result = await Promise.race([outputPromise, timeoutPromise]);
+        setStatus(result as string);
+      } catch (error) {
+        console.error("error or timeout:", error);
+        setStatus("error");
+      } finally {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error("error checking status:", error);
+      setStatus("error");
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -115,7 +158,6 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           this may take a few minutes depending on your internet connection
         </h2>
       </DialogHeader>
-      <div className="my-8" />
       <div className="mt-4 text-sm text-zinc-600 mx-auto">
         <p className="mb-2 text-center">how screenpipe works:</p>
         <ul className="list-disc list-inside text-left">
@@ -132,19 +174,55 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         if encountering any issues, you can proceed to the next step and it will
         setup screenpipe when starting the recording process
       </p>
-      {status === null ? (
-        <svg
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          viewBox="0 0 24 24"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          xmlns="http://www.w3.org/2000/svg"
-          className="size-5 animate-spin stroke-zinc-400 mx-auto mt-4"
+      <div className="flex items-center space-x-2 mt-4">
+        <Switch
+          id="chinese-mirror-toggle"
+          checked={useChineseMirror}
+          onCheckedChange={handleChineseMirrorToggle}
+        />
+        <Label
+          htmlFor="chinese-mirror-toggle"
+          className="flex items-center space-x-2"
         >
-          <path d="M12 3v3m6.366-.366-2.12 2.12M21 12h-3m.366 6.366-2.12-2.12M12 21v-3m-6.366.366 2.12-2.12M3 12h3m-.366-6.366 2.12 2.12"></path>
-        </svg>
+          <span>use chinese mirror for model downloads</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <HelpCircle className="h-4 w-4 cursor-default" />
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>
+                  enable this option to use a chinese mirror for
+                  <br />
+                  downloading hugging face models
+                  <br />
+                  (e.g. whisper, embedded llama, etc.)
+                  <br />
+                  which are blocked in mainland china.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </Label>
+      </div>
+      {status === null ? (
+        <Button onClick={startSetup} disabled={isLoading} className="mt-4">
+          {isLoading ? (
+            <svg
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              viewBox="0 0 24 24"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              xmlns="http://www.w3.org/2000/svg"
+              className="size-5 animate-spin stroke-zinc-400 mr-2"
+            >
+              <path d="M12 3v3m6.366-.366-2.12 2.12M21 12h-3m.366 6.366-2.12-2.12M12 21v-3m-6.366.366 2.12-2.12M3 12h3m-.366-6.366 2.12 2.12"></path>
+            </svg>
+          ) : null}
+          {isLoading ? "setting up..." : "start setup"}
+        </Button>
       ) : status === "ok" ? (
         <div className="flex flex-col items-center mt-4">
           <Check className="size-5 stroke-zinc-400" />

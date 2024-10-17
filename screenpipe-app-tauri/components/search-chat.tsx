@@ -78,9 +78,11 @@ import { encode, removeDuplicateSelections } from "@/lib/utils";
 import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
 export function SearchChat() {
   // Search state
+  const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ContentItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -748,28 +750,70 @@ export function SearchChat() {
             value={windowName}
             onChange={setWindowName}
             placeholder="filter by window name"
-            className="w-full"
+            className="w-3/4"
           />
           <Button
             variant="outline"
             size="icon"
             onClick={() => setIsQueryParamsDialogOpen(true)}
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="h-4 w-12" />
           </Button>
-          <Button onClick={() => handleSearch(0)} disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                searching...
-              </>
-            ) : (
-              <>
-                <Search className="mr-2 h-4 w-4" />
-                search
-              </>
-            )}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    onClick={() => handleSearch(0)}
+                    disabled={
+                      isLoading || !health || health?.status === "error"
+                    }
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        searching...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="mr-2 h-4 w-4" />
+                        search
+                      </>
+                    )}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {health?.status === "error" && (
+                <TooltipContent>
+                  <p>screenpipe is not running...</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="icon">
+                <IconCode className="h-4 w-12" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>curl command</DialogTitle>
+                <DialogDescription>
+                  you can use this curl command to make the same search request
+                  from the command line.
+                  <br />
+                  <br />
+                  <span className="text-xs text-gray-500">
+                    note: you need to have `jq` installed to use the command.
+                  </span>{" "}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="overflow-x-auto">
+                <CodeBlock language="bash" value={generateCurlCommand()} />
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

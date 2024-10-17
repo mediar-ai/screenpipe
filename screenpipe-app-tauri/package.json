@@ -6,7 +6,7 @@
     "start": "next start",
     "lint": "next lint",
     "build": "next build",
-    "tauri": "tauri",
+    "tauri": "echo '\u001b[33mWarning: did you run bun scripts/pre_build.js and ALL other instructions carefully listed in https://docs.screenpi.pe/docs/getting-started ?\u001b[0m' && tauri",
     "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg} node_modules"
   },
   "dependencies": {
