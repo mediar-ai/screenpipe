@@ -86,7 +86,7 @@ const defaultSettings: Settings = {
     port: 11438,
   },
   enableBeta: false,
-  showScreenpipeShortcut: "super+alt+s",
+  showScreenpipeShortcut: "Super+Alt+S",
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -220,7 +220,7 @@ export function useSettings() {
           (await store!.get<boolean>("enableBeta")) || false;
 
         const savedShowScreenpipeShortcut =
-          (await store!.get<string>("showScreenpipeShortcut")) || "super+alt+s";
+          (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
 
         setSettings({
           openaiApiKey: savedKey,

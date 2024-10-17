@@ -44,7 +44,8 @@ import { platform } from "@tauri-apps/plugin-os";
 
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
-
+import { unregister, register } from "@tauri-apps/plugin-global-shortcut";
+import { registerShortcuts } from "@/lib/shortcuts";
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
@@ -83,15 +84,17 @@ export function Settings({ className }: { className?: string }) {
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const key = event.target.value.toUpperCase();
-    setNonModifierKey(key.toLowerCase());
+    setNonModifierKey(key);
   };
 
   const handleSetShortcut = () => {
-    const newShortcut = [...selectedModifiers, nonModifierKey]
-      .join("+")
-      .toLowerCase();
+    const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
     setLocalSettings({ ...localSettings, showScreenpipeShortcut: newShortcut });
     updateSettings({ showScreenpipeShortcut: newShortcut });
+    registerShortcuts({
+      showScreenpipeShortcut: newShortcut,
+    });
+
     setSelectedModifiers([]);
     setNonModifierKey("");
   };

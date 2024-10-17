@@ -3,6 +3,7 @@
 
 use commands::load_pipe_config;
 use commands::save_pipe_config;
+use commands::show_main_window;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use std::env;
@@ -57,25 +58,6 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     Ok(local_data_dir)
 }
 
-fn show_main_window(app_handle: &tauri::AppHandle, overlay: bool) {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.set_visible_on_all_workspaces(overlay);
-        let _ = window.set_always_on_top(overlay);
-        let _ = window.show();
-        if !overlay {
-            let _ = window.set_focus();
-        }
-    } else {
-        let _ = tauri::WebviewWindowBuilder::new(
-            app_handle,
-            "main",
-            tauri::WebviewUrl::App("index.html".into()),
-        )
-        .title("Screenpipe")
-        .build();
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
@@ -114,6 +96,7 @@ async fn main() {
                 .expect("Can't focus window!");
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -125,6 +108,7 @@ async fn main() {
             reset_all_pipes,
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
+            commands::update_show_screenpipe_shortcut,
         ])
         .setup(|app| {
             // Logging setup
@@ -271,29 +255,9 @@ async fn main() {
 
             store.save()?;
 
-            // Setup Shortcuts
-            use tauri_plugin_global_shortcut::{
-                Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
-            };
-
-            let show_window_shortcut = store
-                .get("showWindowShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or("super+alt+s".to_string())
-                .parse::<Shortcut>()
-                .unwrap();
-
-            app_handle.plugin(
-                tauri_plugin_global_shortcut::Builder::new()
-                    .with_handler(move |app_handle, shortcut, event| {
-                        if shortcut == &show_window_shortcut {
-                            show_main_window(app_handle, true);
-                        }
-                    })
-                    .build(),
-            )?;
-
-            app.global_shortcut().register(show_window_shortcut)?;
+            // Ensure state is managed before calling update_show_screenpipe_shortcut
+            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
+            app.manage(sidecar_manager.clone());
 
             let is_analytics_enabled = store
                 .get("analyticsEnabled")
@@ -336,9 +300,6 @@ async fn main() {
                 .get("devMode")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-
-            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
-            app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
 

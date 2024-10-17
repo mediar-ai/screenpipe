@@ -4,6 +4,7 @@
 // }
 
 use serde_json::Value;
+use tauri::Manager;
 use tracing::info;
 
 #[tauri::command]
@@ -95,6 +96,54 @@ pub async fn reset_all_pipes() -> Result<(), String> {
     tokio::fs::create_dir_all(&pipes_path)
         .await
         .map_err(|e| format!("Failed to recreate pipes directory: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        info!("Showing main window");
+        let _ = window.set_visible_on_all_workspaces(overlay);
+        let _ = window.set_always_on_top(overlay);
+        let _ = window.show();
+        if !overlay {
+            let _ = window.set_focus();
+        }
+    } else {
+        let _ = tauri::WebviewWindowBuilder::new(
+            app_handle,
+            "main",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .title("Screenpipe")
+        .build();
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn update_show_screenpipe_shortcut(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    new_shortcut: String,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    app_handle
+        .global_shortcut()
+        .unregister_all()
+        .map_err(|e| e.to_string())?;
+
+    let show_window_shortcut = new_shortcut.parse::<Shortcut>().unwrap();
+
+    app_handle
+        .global_shortcut()
+        .on_shortcut(
+            show_window_shortcut,
+            move |app_handle, _event, _shortcut| {
+                show_main_window(app_handle, true);
+            },
+        )
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
