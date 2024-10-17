@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729185266902,
+  "lastUpdate": 1729193459418,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -16949,6 +16949,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1897094958,
             "range": "± 35648039",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "4f418af75fa52625835178ba2bf63e96dcab278b",
+          "message": "fix: settings shouldn't be usable until loading finished\n\nrefactor: how onboarding is done, properly setup screenpipe before starting\n\nfix: few issues on onboarding\n\nfix: issue with auto destruct in app due to path env var\n\nchore: better ai provider ux",
+          "timestamp": "2024-10-17T12:22:32-07:00",
+          "tree_id": "952e3a2d173771c275f11cef4c8954d2d6f3fa1c",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/4f418af75fa52625835178ba2bf63e96dcab278b"
+        },
+        "date": 1729193457905,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2774894354,
+            "range": "± 373230973",
             "unit": "ns/iter"
           }
         ]
