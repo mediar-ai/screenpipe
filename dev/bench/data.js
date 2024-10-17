@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729200266017,
+  "lastUpdate": 1729200271515,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -17009,6 +17009,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1972747042,
             "range": "± 104324972",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "matthew.heartful@gmail.com",
+            "name": "Matthew Diakonov",
+            "username": "m13v"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e015a8ac6a6f5c3cce2d599ffaff7a628e5b043f",
+          "message": "refactor: streaming in cloudflare worker (#518)",
+          "timestamp": "2024-10-17T14:16:49-07:00",
+          "tree_id": "d99bce37b0e6a23e2f6947da535688937e8ae585",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e015a8ac6a6f5c3cce2d599ffaff7a628e5b043f"
+        },
+        "date": 1729200269613,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1936453333,
+            "range": "± 64904228",
             "unit": "ns/iter"
           }
         ]
