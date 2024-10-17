@@ -402,7 +402,7 @@ async fn main() {
             {
                 let toggle_recording_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyR);
                 let app_handle = app.handle().clone();
-                app.handle().plugin(
+                match app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new().with_handler(move |_app, shortcut, event| {
                         if shortcut == &toggle_recording_shortcut {
                             match event.state() {
@@ -433,9 +433,15 @@ async fn main() {
                         }
                     })
                     .build(),
-                )?;
-            
-                app.global_shortcut().register(toggle_recording_shortcut)?;
+                ) {
+                    Ok(_) => {
+                        match app.global_shortcut().register(toggle_recording_shortcut) {
+                            Ok(_) => debug!("Global shortcut registered successfully"),
+                            Err(e) => error!("Failed to register global shortcut: {}", e),
+                        }
+                    },
+                    Err(e) => error!("Failed to initialize global shortcut plugin: {}", e),
+                }
             }
 
             Ok(())
