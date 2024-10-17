@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 import { Badge } from "@/components/ui/badge"; // Add this import
+import { parseKeyboardShortcut } from "@/lib/utils"; // Add this import
 
 import {
   Eye,
@@ -52,6 +53,51 @@ export function Settings({ className }: { className?: string }) {
     "idle" | "running" | "error"
   >("idle");
   const [currentPlatform, setCurrentPlatform] = useState("unknown");
+
+  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+  const [nonModifierKey, setNonModifierKey] = useState<string>("");
+  const [currentShortcut, setCurrentShortcut] = useState<string>(
+    settings.showScreenpipeShortcut
+  );
+
+  useEffect(() => {
+    setCurrentShortcut(settings.showScreenpipeShortcut);
+
+    const parts = settings.showScreenpipeShortcut.split("+");
+    const modifiers = parts.slice(0, -1);
+    const key = parts.slice(-1)[0];
+
+    setSelectedModifiers(modifiers);
+    setNonModifierKey(key);
+  }, [settings.showScreenpipeShortcut]);
+
+  const toggleModifier = (modifier: string) => {
+    setSelectedModifiers((prev) =>
+      prev.includes(modifier)
+        ? prev.filter((m) => m !== modifier)
+        : [...prev, modifier]
+    );
+  };
+
+  const handleNonModifierKeyChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const key = event.target.value.toUpperCase();
+    setNonModifierKey(key.toLowerCase());
+  };
+
+  const handleSetShortcut = () => {
+    const newShortcut = [...selectedModifiers, nonModifierKey]
+      .join("+")
+      .toLowerCase();
+    setLocalSettings({ ...localSettings, showScreenpipeShortcut: newShortcut });
+    updateSettings({ showScreenpipeShortcut: newShortcut });
+    setSelectedModifiers([]);
+    setNonModifierKey("");
+  };
+
+  const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
+  const isShortcutChanged = newShortcut !== currentShortcut;
 
   useEffect(() => {
     setCurrentPlatform(platform());
@@ -605,6 +651,53 @@ export function Settings({ className }: { className?: string }) {
                   deepgram&apos;s website
                 </a>{" "}
                 or DM us on discord, it&apos;s on us!
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">Shortcuts</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <h2 className="text-lg font-semibold mb-4">
+                Set Shortcut for Screenpipe Overlay
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Use the following options to set a keyboard shortcut for showing
+                the Screenpipe overlay.
+              </p>
+              <div className="flex items-center gap-2 mb-4">
+                {["ctrl", "alt", "shift", "super"].map((modifier) => (
+                  <label key={modifier} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedModifiers.includes(modifier)}
+                      onChange={() => toggleModifier(modifier)}
+                    />
+                    <span className="ml-2">
+                      {parseKeyboardShortcut(modifier)}
+                    </span>
+                  </label>
+                ))}
+                <input
+                  type="text"
+                  value={nonModifierKey}
+                  onChange={handleNonModifierKeyChange}
+                  placeholder="Enter key"
+                  className="border p-1"
+                />
+                <button
+                  onClick={handleSetShortcut}
+                  className={`btn btn-primary ${
+                    !isShortcutChanged ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                  disabled={!isShortcutChanged}
+                >
+                  Set Shortcut
+                </button>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground text-center">
+                Current Shortcut: {parseKeyboardShortcut(currentShortcut)}
               </p>
             </CardContent>
           </Card>
