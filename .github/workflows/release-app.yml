@@ -162,7 +162,7 @@ jobs:
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
             export V8_FLAGS="--max-old-space-size=8192" # https://github.com/denoland/deno_core/issues/916
           fi
-          cargo build --release ${{ matrix.args }}
+          cargo build --release -p screenpipe-server ${{ matrix.args }}
 
       # Run pre build again to copy the CLI into app
       - name: Run pre_build.js

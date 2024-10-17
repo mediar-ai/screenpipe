@@ -369,6 +369,11 @@ export function SearchChat() {
       });
       console.log("openai", settings.openaiApiKey, settings.aiUrl);
 
+      posthog.capture("ai_search", {
+        ai_url: settings.aiUrl,
+        model: settings.aiModel,
+      });
+
       const model = settings.aiModel;
       const customPrompt = settings.customPrompt || "";
 

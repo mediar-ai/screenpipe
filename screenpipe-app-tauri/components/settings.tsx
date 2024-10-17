@@ -43,6 +43,13 @@ import { platform } from "@tauri-apps/plugin-os";
 
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
@@ -190,6 +197,11 @@ export function Settings({ className }: { className?: string }) {
     }
   };
 
+  const handleAiUrlChange = (newValue: string) => {
+    setLocalSettings({ ...localSettings, aiUrl: newValue });
+    updateSettings({ aiUrl: newValue });
+  };
+
   return (
     <Dialog
       onOpenChange={(open) => {
@@ -228,44 +240,82 @@ export function Settings({ className }: { className?: string }) {
               <div className="w-full">
                 <div className="flex items-center gap-4 mb-4">
                   <Label htmlFor="aiUrl" className="min-w-[80px] text-right">
-                    ai url
+                    ai provider
                   </Label>
                   <div className="flex-grow flex items-center">
-                    <Input
-                      id="aiUrl"
+                    <Select
+                      onValueChange={handleAiUrlChange}
                       value={localSettings.aiUrl}
-                      onChange={handleApiUrlChange}
-                      className="flex-grow"
-                      placeholder="enter ai url"
-                      type="url"
-                    />
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
-                        </TooltipTrigger>
-                        <TooltipContent side="left">
-                          <p>
-                            the url of your ai provider&apos;s api endpoint. for
-                            openai:{" "}
-                            <pre className="bg-gray-100 p-1 rounded-md">
-                              https://api.openai.com/v1
-                            </pre>
-                            <br />
-                            for local providers like ollama usually it&apos;s
-                            <pre className="bg-gray-100 p-1 rounded-md">
-                              http://localhost:11434/v1
-                            </pre>
-                            <br />
-                            note: on windows, you may need to run ollama with:
-                            <pre className="bg-gray-100 p-1 rounded-md">
-                              OLLAMA_ORIGINS=* ollama run llama3.2
-                            </pre>
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select AI provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="https://api.openai.com/v1">
+                          openai
+                        </SelectItem>
+                        <SelectItem value="http://localhost:11434/v1">
+                          ollama (local)
+                        </SelectItem>
+                        <SelectItem value="https://ai-proxy.i-f9f.workers.dev/v1">
+                          screenpipe cloud
+                        </SelectItem>
+                        <SelectItem value="custom">custom</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
+                  {localSettings.aiUrl === "custom" && (
+                    <div className="flex items-center gap-4 mb-4 mt-2">
+                      <Label
+                        htmlFor="customAiUrl"
+                        className="min-w-[80px] text-right"
+                      >
+                        custom url
+                      </Label>
+                      <Input
+                        id="customAiUrl"
+                        value={localSettings.aiUrl}
+                        onChange={(e) => handleAiUrlChange(e.target.value)}
+                        className="flex-grow"
+                        placeholder="Enter custom AI URL"
+                        type="url"
+                      />
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="left">
+                            <p>
+                              choose your ai provider. for local providers like
+                              ollama, make sure it&apos;s running on your
+                              machine.
+                              <br />
+                              note: on windows, you may need to run ollama with:
+                              <pre className="bg-gray-100 p-1 rounded-md">
+                                OLLAMA_ORIGINS=* ollama run llama3.2
+                              </pre>
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  )}
+                  {localSettings.aiUrl ===
+                    "https://ai-proxy.i-f9f.workers.dev/v1" && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      screenpipe cloud doesn&apos;t require an API key.
+                      <br />
+                      note: using this option may involve sending data to our
+                      servers.
+                      <br />
+                      please review our{" "}
+                      <a href="#" className="text-primary hover:underline">
+                        data privacy policy
+                      </a>{" "}
+                      for more information.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="w-full">
