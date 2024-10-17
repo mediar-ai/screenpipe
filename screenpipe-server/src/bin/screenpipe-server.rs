@@ -9,13 +9,14 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device, vad_engine::SileroVad, whisper::WhisperModel, AudioDevice, DeviceControl
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device, trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::core::trigger_screen_capture_permission;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
@@ -122,7 +123,36 @@ async fn main() -> anyhow::Result<()> {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
             }
-            Command::Setup => {
+            #[allow(unused_variables)]
+            Command::Setup { enable_beta } => {
+                #[cfg(feature = "beta")]
+                if enable_beta {
+                    use screenpipe_actions::type_and_animate::trigger_keyboard_permission;
+
+                    // Trigger keyboard permission request
+                    if let Err(e) = trigger_keyboard_permission() {
+                        error!("Failed to trigger keyboard permission: {:?}", e);
+                        error!("Please grant keyboard permission manually in System Preferences.");
+                    } else {
+                        info!("Keyboard permission requested. Please grant permission if prompted.");
+                    }
+                }
+                // Trigger audio permission request
+                if let Err(e) = trigger_audio_permission() {
+                    error!("Failed to trigger audio permission: {:?}", e);
+                    error!("Please grant microphone permission manually in System Preferences.");
+                } else {
+                    info!("Audio permission requested. Please grant permission if prompted.");
+                }
+
+                // Trigger screen capture permission request
+                if let Err(e) = trigger_screen_capture_permission() {
+                    error!("Failed to trigger screen capture permission: {:?}", e);
+                    error!("Please grant screen recording permission manually in System Preferences.");
+                } else {
+                    info!("Screen capture permission requested. Please grant permission if prompted.");
+                }
+
                 // this command just download models and stuff (useful to have specific step to display in UI)
 
                 // ! should prob skip if deepgram?
@@ -130,7 +160,7 @@ async fn main() -> anyhow::Result<()> {
                 // ! assuming silero is used
                 SileroVad::new().await.unwrap();
 
-                println!("screenpipe setup complete");
+                info!("screenpipe setup complete");
                 // TODO: ffmpeg sidecar thing here
                 return Ok(());
             }

@@ -231,6 +231,7 @@ pub struct Cli {
     pub enable_llm: bool,
 
     /// Enable beta features
+    #[cfg(feature = "beta")]
     #[arg(long, default_value_t = false)]
     pub enable_beta: bool,
 
@@ -247,7 +248,12 @@ pub enum Command {
         subcommand: PipeCommand,
     },
     /// Setup screenpipe environment
-    Setup,
+    Setup {
+        /// Enable beta features
+        // #[cfg(feature = "beta")] // ! TODO
+        #[arg(long, default_value_t = false)]
+        enable_beta: bool,
+    },
 }
 
 

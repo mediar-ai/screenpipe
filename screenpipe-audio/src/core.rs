@@ -418,3 +418,27 @@ pub fn default_output_device() -> Result<AudioDevice> {
         return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
 }
+
+pub fn trigger_audio_permission() -> Result<()> {
+    let host = cpal::default_host();
+    let device = host
+        .default_input_device()
+        .ok_or_else(|| anyhow!("No default input device found"))?;
+
+    let config = device.default_input_config()?;
+
+    // Attempt to build an input stream, which should trigger the permission request
+    let _stream = device.build_input_stream(
+        &config.into(),
+        |_data: &[f32], _: &cpal::InputCallbackInfo| {
+            // Do nothing, we just want to trigger the permission request
+        },
+        |err| eprintln!("Error in audio stream: {}", err),
+        None,
+    )?;
+
+    // We don't actually need to start the stream
+    // The mere attempt to build it should trigger the permission request
+
+    Ok(())
+}
