@@ -1,6 +1,7 @@
 use crate::type_and_animate::{delete_characters, type_slowly, EnigoCommand};
 use crate::{call_ai, run_keystroke_monitor, KeystrokeCommand};
 use reqwest;
+use std::path::Path;
 use std::string::ToString;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -418,7 +419,24 @@ printAllAttributeValuesForCurrentApp()
 "#;
 
     info!("running swift script");
-    let mut child = Command::new("swift")
+
+    // Check multiple possible Swift paths
+    let swift_paths = [
+        "/usr/bin/swift",          // Common path for both Intel and Apple Silicon
+        "/usr/local/bin/swift",    // Possible alternative location
+        "/opt/homebrew/bin/swift", // Homebrew path on Apple Silicon
+    ];
+
+    let swift_path = swift_paths
+        .iter()
+        .find(|&path| Path::new(path).exists())
+        .ok_or_else(|| {
+            anyhow::anyhow!("Swift executable not found in any of the expected locations")
+        })?;
+
+    info!("using swift at: {}", swift_path);
+
+    let mut child = Command::new(swift_path)
         .arg("-") // Read from stdin
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())

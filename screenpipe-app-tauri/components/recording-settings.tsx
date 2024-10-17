@@ -1243,18 +1243,23 @@ export function RecordingSettings({
                       </TooltipTrigger>
                       <TooltipContent side="right">
                         <p>
-                          ⚠️ uses our hosted AI service (powered by OpenAI) ⚠️
+                          ⚠️ uses screenpipe cloud ⚠️
                           <br />
                           • we provide free ChatGPT credits
                           <br />
-                          • may have privacy implications (data sent to our
-                          servers)
+                          • may have privacy implications read our data privacy
+                          policy at
+                          <br />
+                          <a
+                            href="https://screenpi.pe/privacy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            https://screenpi.pe/privacy
+                          </a>
                           <br />
                           enables experimental features like double slash
-                          <br />
-                          which you can use to autocomplete anywhere
-                          <br />
-                          by pressing twice on slash or stop it with pressing q
                           <br />
                           (only tested on US or German qwertz keyboards)
                         </p>
