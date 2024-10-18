@@ -17,6 +17,7 @@ mod pipes {
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tracing::{debug, error, info};
     use url::Url;
+    use which::which;
 
     // Update this function near the top of the file
     fn sanitize_pipe_name(name: &str) -> String {
@@ -275,6 +276,75 @@ mod pipes {
             .to_str()
             .map(|s| s.starts_with('.') || s == "Thumbs.db")
             .unwrap_or(false)
+    }
+
+    #[cfg(not(windows))]
+    const DENO_EXECUTABLE_NAME: &str = "deno";
+
+    #[cfg(windows)]
+    const DENO_EXECUTABLE_NAME: &str = "deno.exe";
+
+    pub fn find_deno() -> Option<PathBuf> {
+        debug!("starting search for deno executable");
+
+        // check if `deno` is in the PATH environment variable
+        if let Ok(path) = which(DENO_EXECUTABLE_NAME) {
+            debug!("found deno in PATH: {:?}", path);
+            return Some(path);
+        }
+        debug!("deno not found in PATH");
+
+        // check in current working directory
+        if let Ok(cwd) = std::env::current_dir() {
+            debug!("current working directory: {:?}", cwd);
+            let deno_in_cwd = cwd.join(DENO_EXECUTABLE_NAME);
+            if deno_in_cwd.is_file() && deno_in_cwd.exists() {
+                debug!("found deno in current working directory: {:?}", deno_in_cwd);
+                return Some(deno_in_cwd);
+            }
+            debug!("deno not found in current working directory");
+        }
+
+        // check in the same folder as the executable
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_folder) = exe_path.parent() {
+                debug!("executable folder: {:?}", exe_folder);
+                let deno_in_exe_folder = exe_folder.join(DENO_EXECUTABLE_NAME);
+                if deno_in_exe_folder.exists() {
+                    debug!("found deno in executable folder: {:?}", deno_in_exe_folder);
+                    return Some(deno_in_exe_folder);
+                }
+                debug!("deno not found in executable folder");
+
+                // platform-specific checks
+                #[cfg(target_os = "macos")]
+                {
+                    let resources_folder = exe_folder.join("../Resources");
+                    debug!("resources folder: {:?}", resources_folder);
+                    let deno_in_resources = resources_folder.join(DENO_EXECUTABLE_NAME);
+                    if deno_in_resources.exists() {
+                        debug!("found deno in resources folder: {:?}", deno_in_resources);
+                        return Some(deno_in_resources);
+                    }
+                    debug!("deno not found in resources folder");
+                }
+
+                #[cfg(target_os = "linux")]
+                {
+                    let lib_folder = exe_folder.join("lib");
+                    debug!("lib folder: {:?}", lib_folder);
+                    let deno_in_lib = lib_folder.join(DENO_EXECUTABLE_NAME);
+                    if deno_in_lib.exists() {
+                        debug!("found deno in lib folder: {:?}", deno_in_lib);
+                        return Some(deno_in_lib);
+                    }
+                    debug!("deno not found in lib folder");
+                }
+            }
+        }
+
+        error!("deno not found");
+        None // return None if deno is not found
     }
 }
 

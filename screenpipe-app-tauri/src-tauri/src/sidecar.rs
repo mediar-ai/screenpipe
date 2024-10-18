@@ -310,9 +310,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
-        let current_path = env::var("PATH").unwrap_or_default();
-        let new_path = format!("{};{}", path_to_sidecars, current_path);
-        c = c.env("PATH", new_path);
+        // let current_path = env::var("PATH").unwrap_or_default();
+        // let new_path = format!("{};{}", path_to_sidecars, current_path);
+        // c = c.env("PATH", new_path);
 
         let c = c.args(&args);
 
@@ -332,9 +332,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
     }
 
-    let current_path = env::var("PATH").unwrap_or_default();
-    let new_path = format!("{}:{}", path_to_sidecars, current_path);
-    command = command.env("PATH", new_path);
+    // let current_path = env::var("PATH").unwrap_or_default();
+    // let new_path = format!("{}:{}", path_to_sidecars, current_path);
+    // command = command.env("PATH", new_path);
 
     let command = command.args(&args);
 
