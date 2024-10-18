@@ -58,10 +58,10 @@ jobs:
             args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
-          - platform: "big-linux" # Ubuntu x86_64
+          - platform: "ubuntu-22.04" # Ubuntu x86_64
             args: "" # TODO CUDA, mkl
             tauri-args: ""
-          - platform: "big-windows" # Windows x86_64
+          - platform: "windows-latest" # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
