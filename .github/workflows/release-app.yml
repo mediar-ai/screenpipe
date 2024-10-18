@@ -11,13 +11,26 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      commit_hash:
+        description: 'Commit hash to build from (optional)'
+        required: false
+      version:
+        description: 'Version to set in Cargo.toml (required if commit_hash is provided)'
+        required: false
 
 jobs:
   draft:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_hash || github.ref }}
+
+      - name: Update version in Cargo.toml
+        if: github.event.inputs.commit_hash && github.event.inputs.version
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
 
       - name: create draft release
         uses: crabnebula-dev/cloud-release@v0
@@ -53,6 +66,13 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_hash || github.ref }}
+
+      - name: Update version in Cargo.toml
+        if: github.event.inputs.commit_hash && github.event.inputs.version
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
 
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
