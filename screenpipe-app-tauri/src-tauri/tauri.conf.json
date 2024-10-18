@@ -80,7 +80,7 @@
         "media-src": "'self' mediadevices: asset: http://asset.localhost file: blob: tauri://localhost file: blob: https://youtu* file: blob: https://github*",
         "img-src": "'self' asset: http://asset.localhost blob: data: https://*.githubusercontent.com https://*.github.com https://github.com https://*.s3.amazonaws.com",
         "style-src": "'unsafe-inline' 'self' https://fonts.googleapis.com",
-        "frame-src": "https://www.youtube.com"
+        "frame-src": "https://www.youtube.com http://localhost:3000"
       }
     },
     "macOSPrivateApi": true

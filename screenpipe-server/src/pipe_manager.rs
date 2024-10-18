@@ -14,6 +14,7 @@ pub struct PipeInfo {
     pub enabled: bool,
     pub config: Value,
     pub source: String,
+    pub port: Option<u16>,
 }
 
 pub struct PipeManager {
@@ -28,7 +29,7 @@ impl PipeManager {
     pub async fn start_pipe(
         &self,
         id: &str,
-    ) -> Result<impl Future<Output = Result<(), anyhow::Error>>> {
+    ) -> Result<impl Future<Output = Result<Option<u16>, anyhow::Error>>> {
         let pipes = self.list_pipes().await;
 
         if let Some(_) = pipes.iter().find(|pipe| pipe.id == id) {
@@ -118,7 +119,11 @@ impl PipeManager {
                 .as_str()
                 .unwrap_or("")
                 .to_string(),
-            config,
+            config: config.clone(),
+            port: config
+                .get("port")
+                .and_then(Value::as_u64)
+                .and_then(|p| u16::try_from(p).ok()),
         }
     }
 
@@ -132,7 +137,13 @@ impl PipeManager {
                 let pipe_id = file_name.to_string_lossy();
 
                 // ignore hidden directories and files
-                if !pipe_id.starts_with('.') && entry.file_type().await.map(|ft| ft.is_dir()).unwrap_or(false) {
+                if !pipe_id.starts_with('.')
+                    && entry
+                        .file_type()
+                        .await
+                        .map(|ft| ft.is_dir())
+                        .unwrap_or(false)
+                {
                     let config_path = entry.path().join("pipe.json");
                     pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path).await);
                 }

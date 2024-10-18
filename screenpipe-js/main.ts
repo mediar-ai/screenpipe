@@ -99,10 +99,10 @@ export interface PaginationInfo {
 /**
  * Structure of the response from a Screenpipe query.
  */
-export interface ScreenpipeResponse {
-  data: ContentItem[];
-  pagination: PaginationInfo;
-}
+  export interface ScreenpipeResponse {
+    data: ContentItem[];
+    pagination: PaginationInfo;
+  }
 
 /**
  * Parsed config
