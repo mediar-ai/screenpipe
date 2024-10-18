@@ -13,10 +13,10 @@ on:
   workflow_dispatch:
     inputs:
       commit_hash:
-        description: 'Commit hash to build from (optional)'
+        description: "Commit hash to build from (optional)"
         required: false
       version:
-        description: 'Version to set in Cargo.toml (required if commit_hash is provided)'
+        description: "Version to set in Cargo.toml (required if commit_hash is provided)"
         required: false
 
 jobs:
@@ -30,7 +30,11 @@ jobs:
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version
         run: |
-          sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          else
+            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          fi
 
       - name: create draft release
         uses: crabnebula-dev/cloud-release@v0
@@ -72,7 +76,11 @@ jobs:
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version
         run: |
-          sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          else
+            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          fi
 
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
