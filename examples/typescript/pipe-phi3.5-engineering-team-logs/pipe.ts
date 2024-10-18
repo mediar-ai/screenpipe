@@ -64,8 +64,24 @@ async function syncLogToNotion(
     });
 
     console.log("engineering log synced to notion successfully");
+
+    // Create markdown table for inbox
+    const markdownTable = `
+| Title | Description | Tags |
+|-------|-------------|------|
+| ${logEntry.title} | ${logEntry.description} | ${logEntry.tags.join(", ")} |
+    `.trim();
+
+    await pipe.inbox.send({
+      title: "engineering log synced",
+      body: `new engineering log entry:\n\n${markdownTable}`,
+    });
   } catch (error) {
     console.error("error syncing engineering log to notion:", error);
+    await pipe.inbox.send({
+      title: "engineering log error",
+      body: `error syncing engineering log to notion: ${error}`,
+    });
   }
 }
 

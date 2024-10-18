@@ -164,7 +164,7 @@ mod pipes {
             .arg("--allow-write")
             .arg("--allow-net")
             .arg("--allow-env")
-            .arg("--reload")
+            .arg("--reload=https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-js/main.ts")
             .arg(&main_module)
             .envs(env_vars)
             .stdout(std::process::Stdio::piped())
@@ -198,9 +198,9 @@ mod pipes {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                if line.contains("Download") {
-                    // Log download messages as info instead of error
-                    debug!("[pipe][download][{}] {}", pipe_clone, line);
+                if line.contains("Download") || line.starts_with("Task dev ") {
+                    // Log download messages and task start messages as info instead of error
+                    debug!("[pipe][info][{}] {}", pipe_clone, line);
                 } else {
                     // Keep other messages as errors
                     error!("[pipe][error][{}] {}", pipe_clone, line);
