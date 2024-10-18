@@ -188,6 +188,11 @@
     "os:allow-os-type",
     "core:path:default",
     "process:default",
-    "store:default"
+    "store:default",
+    "global-shortcut:allow-is-registered",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister"
+
   ]
 }
+
