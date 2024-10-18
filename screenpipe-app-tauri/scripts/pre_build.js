@@ -681,7 +681,7 @@ async function installOllamaSidecar() {
 	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
 		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
-		console.log('Ollama sidecar already exists. Skipping installation.');
+		console.log('ollama sidecar already exists. skipping installation.');
 		return;
 	}
 
@@ -726,9 +726,9 @@ async function installOllamaSidecar() {
 			await fs.unlink(downloadPath);
 		}
 
-		console.log('Ollama sidecar installed successfully');
+		console.log('ollama sidecar installed successfully');
 	} catch (error) {
-		console.error('Error installing Ollama sidecar:', error);
+		console.error('error installing ollama sidecar:', error);
 		throw error;
 	}
 }
