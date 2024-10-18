@@ -110,11 +110,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     let port = store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030);
 
-    let data_dir = store
-        .get("dataDir")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
-
     let disable_audio = store
         .get("disableAudio")
         .and_then(|v| v.as_bool())
@@ -180,12 +175,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if fps != 0.2 {
         args.push("--fps");
         args.push(fps_str.as_str());
-    }
-
-    if data_dir != "default" {
-        args.push("--data-dir");
-        let dir = data_dir.as_str();
-        args.push(dir);
     }
 
     if audio_transcription_engine != "default" {

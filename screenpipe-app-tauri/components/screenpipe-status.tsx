@@ -134,7 +134,6 @@ const DevModeSettings = () => {
   };
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { forceRestartHealthCheck } = useHealthCheck();
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -150,7 +149,6 @@ const DevModeSettings = () => {
     try {
       await invoke("spawn_screenpipe");
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      forceRestartHealthCheck(); // Add this line
       toastId.update({
         id: toastId.id,
         title: "screenpipe started",
@@ -182,7 +180,6 @@ const DevModeSettings = () => {
     try {
       await invoke("kill_all_sreenpipes");
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      forceRestartHealthCheck(); // Add this line
       toastId.update({
         id: toastId.id,
         title: "screenpipe stopped",
