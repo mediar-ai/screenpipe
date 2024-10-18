@@ -217,6 +217,8 @@ impl<'a> Decoder<'a> {
         let mut sum_logprob = 0f64;
         let mut last_token_was_timestamp = false;
 
+        let mut token_history = Vec::new(); // Track recent tokens
+
         for i in 0..sample_len {
             let tokens_t = Tensor::new(tokens.as_slice(), mel.device())?;
             let tokens_t = tokens_t.unsqueeze(0)?;
@@ -247,13 +249,19 @@ impl<'a> Decoder<'a> {
             } else {
                 logits
             };
+
+            // Apply repetition penalty
+            let mut logits_v: Vec<f32> = logits.to_vec1()?;
+            apply_repetition_penalty(&mut logits_v, &token_history, 1.0); // Adjust penalty as needed
+
             let next_token = if t > 0f64 {
-                let prs = softmax(&(&logits / t)?, 0)?;
-                let logits_v: Vec<f32> = prs.to_vec1()?;
-                let distr = rand::distributions::WeightedIndex::new(&logits_v)?;
+                let logits_tensor = Tensor::new(logits_v.as_slice(), logits.device())?;
+                let scaled_logits = (&logits_tensor / t)?;
+                let prs = softmax(&scaled_logits, 0)?;
+                let prs_vec: Vec<f32> = prs.to_vec1()?;
+                let distr = rand::distributions::WeightedIndex::new(&prs_vec)?;
                 distr.sample(&mut self.rng) as u32
             } else {
-                let logits_v: Vec<f32> = logits.to_vec1()?;
                 logits_v
                     .iter()
                     .enumerate()
@@ -263,6 +271,7 @@ impl<'a> Decoder<'a> {
             };
 
             tokens.push(next_token);
+            token_history.push(next_token); // Add to history
 
             let prob = softmax(&logits, candle::D::Minus1)?
                 .i(next_token as usize)?
@@ -400,6 +409,14 @@ pub enum Task {
     Transcribe,
     #[allow(dead_code)]
     Translate,
+}
+
+fn apply_repetition_penalty(logits: &mut [f32], token_history: &[u32], penalty: f32) {
+    for &token in token_history {
+        if let Some(logit) = logits.get_mut(token as usize) {
+            *logit -= penalty;
+        }
+    }
 }
 
 // ... (keep any other helper functions or structs that are specific to Whisper)
