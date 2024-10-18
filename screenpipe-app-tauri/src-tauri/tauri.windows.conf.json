@@ -2,13 +2,15 @@
     "bundle": {
         "externalBin": [
             "screenpipe",
-            "deno"
+            "deno",
+            "ollama"
         ],
         "resources": {
             "ffmpeg\\bin\\x64\\*": "./",
             "ffmpeg\\lib\\*": "./",
             "tesseract\\*": "./",
-            "onnxruntime*\\lib\\*.dll": "./"
+            "onnxruntime*\\lib\\*.dll": "./",
+            "lib\\*": "./"
         }
     }
 }
