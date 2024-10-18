@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729222038404,
+  "lastUpdate": 1729270723975,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -17339,6 +17339,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1929409583,
             "range": "± 38228727",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50280365+EzraEllette@users.noreply.github.com",
+            "name": "Ezra Ellette",
+            "username": "EzraEllette"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "929ed254447f10c9cd6d674914258eaf67eeee79",
+          "message": "Whisper-repeat-penalty (#528)\n\n* add repeat penalty to whisper decoder\r\n\r\n* add eot_token to skip condition",
+          "timestamp": "2024-10-18T09:51:14-07:00",
+          "tree_id": "93ea266b0522622ae0033626ef518967af677d1d",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/929ed254447f10c9cd6d674914258eaf67eeee79"
+        },
+        "date": 1729270722940,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1908862375,
+            "range": "± 13224887",
             "unit": "ns/iter"
           }
         ]
