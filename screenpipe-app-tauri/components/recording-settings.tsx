@@ -66,6 +66,7 @@ import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
+import { CliCommandDialog } from "./cli-command-dialog";
 
 interface AudioDevice {
   name: string;
@@ -102,8 +103,6 @@ export function RecordingSettings({
   const [isUpdating, setIsUpdating] = useState(false);
   const { health } = useHealthCheck();
   const isDisabled = health?.status_code === 500;
-  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
-  const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
   const [isMacOS, setIsMacOS] = useState(false);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
 
@@ -377,86 +376,6 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, audioChunkDuration: value[0] });
   };
 
-  const generateCliCommand = () => {
-    const cliPath = getCliPath();
-    let args = [];
-
-    if (localSettings.audioTranscriptionEngine !== "default") {
-      args.push(
-        `--audio-transcription-engine ${localSettings.audioTranscriptionEngine}`
-      );
-    }
-    if (localSettings.ocrEngine !== "default") {
-      args.push(`--ocr-engine ${localSettings.ocrEngine}`);
-    }
-    if (
-      localSettings.monitorIds.length > 0 &&
-      localSettings.monitorIds[0] !== "default"
-    ) {
-      localSettings.monitorIds.forEach((id) => args.push(`--monitor-id ${id}`));
-    }
-    if (localSettings.languages.length > 0) {
-      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
-    }
-    if (
-      localSettings.audioDevices.length > 0 &&
-      localSettings.audioDevices[0] !== "default"
-    ) {
-      localSettings.audioDevices.forEach((device) =>
-        args.push(`--audio-device "${device}"`)
-      );
-    }
-    if (localSettings.usePiiRemoval) {
-      args.push("--use-pii-removal");
-    }
-    if (localSettings.restartInterval > 0) {
-      args.push(`--restart-interval ${localSettings.restartInterval}`);
-    }
-    if (localSettings.disableAudio) {
-      args.push("--disable-audio");
-    }
-    localSettings.ignoredWindows.forEach((window) =>
-      args.push(`--ignored-windows "${window}"`)
-    );
-    localSettings.includedWindows.forEach((window) =>
-      args.push(`--included-windows "${window}"`)
-    );
-    if (
-      localSettings.deepgramApiKey &&
-      localSettings.deepgramApiKey !== "default"
-    ) {
-      args.push(`--deepgram-api-key "${localSettings.deepgramApiKey}"`);
-    }
-    if (localSettings.fps !== 0.2) {
-      args.push(`--fps ${localSettings.fps}`);
-    }
-    if (localSettings.vadSensitivity !== "high") {
-      args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
-    }
-
-    if (!localSettings.analyticsEnabled) {
-      args.push("--disable-telemetry");
-    }
-    if (localSettings.audioChunkDuration !== 30) {
-      args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
-    }
-
-    if (localSettings.languages.length > 0) {
-      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
-    }
-
-    return `${cliPath} ${args.join(" ")}`;
-  };
-
-  const handleCopyCliCommand = () => {
-    const command = generateCliCommand();
-    copyToClipboard(command);
-    toast({
-      title: "CLI command copied",
-      description: "The CLI command has been copied to your clipboard.",
-    });
-  };
-
   const renderOcrEngineOptions = () => {
     const currentPlatform = platform();
     return (
@@ -622,7 +541,7 @@ export function RecordingSettings({
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="text-center">recording settings</CardTitle>
-              <div className="flex  space-x-2">
+              <div className="flex space-x-2">
                 <div className="flex flex-col space-y-2">
                   <Button
                     onClick={handleUpdate}
@@ -641,13 +560,7 @@ export function RecordingSettings({
                     </span>
                   )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setIsCopyDialogOpen(true)}
-                >
-                  <IconCode className="h-4 w-4" />
-                </Button>
+                <CliCommandDialog localSettings={localSettings} />
               </div>
             </div>
           </CardHeader>
@@ -1388,23 +1301,6 @@ export function RecordingSettings({
           </CardContent>
         </Card>
       </div>
-      <Dialog open={isCopyDialogOpen} onOpenChange={setIsCopyDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>CLI command</DialogTitle>
-            <DialogDescription>
-              you can use this CLI command to start screenpipe with the current
-              settings.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="overflow-x-auto">
-            <CodeBlock language="bash" value={generateCliCommand()} />
-          </div>
-          <DialogFooter>
-            <Button onClick={handleCopyCliCommand}>Copy to Clipboard</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

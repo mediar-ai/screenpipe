@@ -264,23 +264,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-beta");
     }
 
-    // args.push("--debug");
 
-    // macos /Applications/screenpipe.app/Contents/MacOS/
-    // linux /usr/local/bin
-    // windows %LOCALAPPDATA%\\screenpipe
-    let screenpipe_path = app
-        .path()
-        .local_data_dir()
-        .unwrap_or_default()
-        .join("screenpipe");
-    let path_to_sidecars = if cfg!(windows) {
-        screenpipe_path.to_str().unwrap_or_default()
-    } else if cfg!(target_os = "macos") {
-        "/Applications/screenpipe.app/Contents/MacOS/"
-    } else {
-        "/usr/local/bin"
-    };
 
     if cfg!(windows) {
         let exe_dir = env::current_exe()
@@ -299,9 +283,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
-        // let current_path = env::var("PATH").unwrap_or_default();
-        // let new_path = format!("{};{}", path_to_sidecars, current_path);
-        // c = c.env("PATH", new_path);
+
 
         let c = c.args(&args);
 
@@ -320,10 +302,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if use_chinese_mirror {
         command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
     }
-
-    // let current_path = env::var("PATH").unwrap_or_default();
-    // let new_path = format!("{}:{}", path_to_sidecars, current_path);
-    // command = command.env("PATH", new_path);
 
     let command = command.args(&args);
 

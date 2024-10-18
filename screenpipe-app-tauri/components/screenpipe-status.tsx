@@ -35,6 +35,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Command } from "@tauri-apps/plugin-shell";
+import { CliCommandDialog } from "./cli-command-dialog";
 
 const getDebuggingCommands = (os: string | null) => {
   let cliInstructions = "";
@@ -204,17 +205,22 @@ const DevModeSettings = () => {
   return (
     <>
       <div className="w-full my-4">
-        <div className="flex  justify-around">
-          <Card className="p-4 ">
+        <div className="flex justify-around">
+          <Card className="p-4 relative">
             <CardContent>
               <div className="flex flex-col space-y-2">
-                <div className="flex items-center space-x-2">
-                  <Label htmlFor="dev-mode">enable dev mode</Label>
-                  <Switch
-                    id="dev-mode"
-                    checked={localSettings.devMode}
-                    onCheckedChange={handleDevModeToggle}
-                  />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Label htmlFor="dev-mode">enable dev mode</Label>
+                    <Switch
+                      id="dev-mode"
+                      checked={localSettings.devMode}
+                      onCheckedChange={handleDevModeToggle}
+                    />
+                  </div>
+                  <div className="absolute top-2 right-2">
+                    <CliCommandDialog localSettings={localSettings} />
+                  </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
                   on = use CLI for more control
@@ -346,7 +352,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
     setIsMac(platform() === "macos");
   }, []);
 
-  const handleResetScreenPermissions = async () => {
+  const openScreenPermissions = async () => {
     const toastId = toast({
       title: "opening permissions",
       description: "please wait...",
@@ -394,13 +400,29 @@ const HealthStatus = ({ className }: { className?: string }) => {
     audioDisabled: boolean
   ) => {
     if (status === "loading") return "bg-yellow-500";
-
     const isVisionOk = frameStatus === "ok" || frameStatus === "disabled";
     const isAudioOk =
       audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
+    return isVisionOk && isAudioOk ? "bg-green-500" : "bg-red-500";
+  };
 
-    if (isVisionOk && isAudioOk) return "bg-green-500";
-    return "bg-red-500";
+  const getStatusMessage = (
+    status: string,
+    frameStatus: string,
+    audioStatus: string,
+    audioDisabled: boolean
+  ) => {
+    if (status === "loading")
+      return "screenpipe is starting up. this may take a few minutes...";
+
+    let issues = [];
+    if (frameStatus !== "ok" && frameStatus !== "disabled")
+      issues.push("screen recording");
+    if (!audioDisabled && audioStatus !== "ok" && audioStatus !== "disabled")
+      issues.push("audio recording");
+
+    if (issues.length === 0) return "screenpipe is running smoothly";
+    return `there might be an issue with ${issues.join(" and ")}`;
   };
 
   const handleFixSetup = async () => {
@@ -484,28 +506,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
     return timestamp ? new Date(timestamp).toLocaleString() : "n/a";
   };
 
-  const getStatusMessage = (
-    status: string,
-    frameStatus: string,
-    audioStatus: string,
-    audioDisabled: boolean
-  ) => {
-    if (status === "loading")
-      return "the application is still initializing. please wait...";
-
-    let unhealthySystems = [];
-    if (frameStatus !== "ok" && frameStatus !== "disabled")
-      unhealthySystems.push("vision");
-    if (!audioDisabled && audioStatus !== "ok" && audioStatus !== "disabled")
-      unhealthySystems.push("audio");
-
-    if (unhealthySystems.length === 0)
-      return "all systems are functioning normally";
-    return `some systems are not functioning properly: ${unhealthySystems.join(
-      ", "
-    )}`;
-  };
-
   const statusColor = getStatusColor(
     health.status,
     health.frame_status,
@@ -540,88 +540,104 @@ const HealthStatus = ({ className }: { className?: string }) => {
           aria-describedby="status-dialog-description"
         >
           <DialogHeader className="flex flex-row items-center justify-between">
-            <DialogTitle>{health.status} status</DialogTitle>
-
-            <Button
-              variant="outline"
-              onClick={handleOpenDataDir}
-              className="flex-shrink-0"
-            >
-              <Folder className="h-4 w-4 mr-2" />
-              open data dir
-            </Button>
-          </DialogHeader>
-          <div className="flex-grow overflow-auto">
-            <p className="text-sm mb-2">
-              {statusMessage}
-              {health.status === "loading" && (
-                <span className="ml-1 text-xs">(up to 3m)</span>
-              )}
-            </p>
-            <p className="text-xs mb-1">frame: {health.frame_status}</p>
-            <p className="text-xs mb-1">
-              audio: {settings.disableAudio ? "disabled" : health.audio_status}
-            </p>
-            <p className="text-xs mb-1">
-              last frame: {formatTimestamp(health.last_frame_timestamp)}
-            </p>
-            <p className="text-xs mb-1">
-              last audio:{" "}
-              {settings.disableAudio
-                ? "n/a"
-                : formatTimestamp(health.last_audio_timestamp)}
-            </p>
-            <div className="text-xs mt-2 relative">
-              <p className="font-bold mb-1">troubleshooting instructions:</p>
-              <MarkdownWithExternalLinks className="prose prose-sm">
-                {`if you're experiencing issues, please try the following steps:
-1. restart screenpipe
-2. reset your screenpipe OS audio/screen recording permissions
-3. if the problem persists, please contact support at [louis@screenpi.pe](mailto:louis@screenpi.pe) or @louis030195 on Discord, X, or LinkedIn
-4. last, here are some [FAQ](https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md) with visuals to help you troubleshoot`}
-              </MarkdownWithExternalLinks>
-              <div className="absolute top-[6.5em] right-0 flex flex-col space-y-2">
-                {isMac && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          onClick={handleResetScreenPermissions}
-                          className="flex-shrink-0"
-                        >
-                          <Lock className="h-4 w-4 mr-2" />
-                          open permissions
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>open screen capture permissions</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+            <DialogTitle>screenpipe status</DialogTitle>
+            <div className="flex space-x-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleFixSetup}
+                      disabled={isFixingSetup}
+                    >
+                      <Wrench className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>try fixing setup</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              {isMac && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="outline"
-                        onClick={handleFixSetup}
-                        className="flex-shrink-0"
-                        disabled={isFixingSetup}
+                        size="icon"
+                        onClick={openScreenPermissions}
                       >
-                        <Wrench className="h-4 w-4 mr-2" />
-                        {isFixingSetup ? "fixing..." : "screenpipe autofix"}
+                        <Lock className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>
-                        this will try to request permissions, download models,
-                        etc.
-                      </p>
+                      <p>open screen permissions</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              </div>
+              )}
+              <Button
+                variant="outline"
+                onClick={handleOpenDataDir}
+                className="flex-shrink-0"
+              >
+                <Folder className="h-4 w-4 mr-2" />
+                view saved data
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-grow overflow-auto">
+            <p className="text-sm mb-2 font-semibold">{statusMessage}</p>
+            <div className="text-xs mb-4">
+              <p>screen recording: {health.frame_status}</p>
+              <p>
+                audio recording:{" "}
+                {settings.disableAudio ? "turned off" : health.audio_status}
+              </p>
+              <p>
+                last screen capture:{" "}
+                {formatTimestamp(health.last_frame_timestamp)}
+              </p>
+              <p>
+                last audio capture:{" "}
+                {settings.disableAudio
+                  ? "n/a"
+                  : formatTimestamp(health.last_audio_timestamp)}
+              </p>
+            </div>
+            <div className="text-sm mt-4">
+              <p className="font-semibold mb-2">
+                if you&apos;re having issues:
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>try restarting screenpipe</li>
+                <li>
+                  check your computer&apos;s screen and audio recording
+                  permissions
+                </li>
+                <li>
+                  if problems continue, contact support at{" "}
+                  <a
+                    href="mailto:louis@screenpi.pe"
+                    className="hover:underline"
+                  >
+                    louis@screenpi.pe
+                  </a>
+                </li>
+                <li>
+                  view our{" "}
+                  <a
+                    href="https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                  >
+                    FAQ page
+                  </a>{" "}
+                  for more help
+                </li>
+              </ol>
             </div>
             <Separator className="my-4" />
             <DevModeSettings />
