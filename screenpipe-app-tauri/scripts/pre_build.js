@@ -234,12 +234,16 @@ async function copyFile(src, dest) {
 /* ########## Linux ########## */
 if (platform == 'linux') {
 	// Install APT packages
-	await $`sudo apt-get update`
-	if (hasFeature('opencl')) {
-		config.linux.aptPackages.push('libclblast-dev')
-	}
-	for (const name of config.linux.aptPackages) {
-		await $`sudo apt-get install -y ${name}`
+	try {
+		await $`sudo apt-get update`
+		if (hasFeature('opencl')) {
+			config.linux.aptPackages.push('libclblast-dev')
+		}
+		for (const name of config.linux.aptPackages) {
+			await $`sudo apt-get install -y ${name}`
+		}
+	} catch (error) {
+		console.error("Error installing apps via apt, %s", error.message);
 	}
 
 	// Copy screenpipe binary
@@ -248,6 +252,7 @@ if (platform == 'linux') {
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
+		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
 		'/home/runner/work/screenpipe/screenpipe/target/release/screenpipe',
 	];
