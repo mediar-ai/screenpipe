@@ -51,11 +51,11 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
-            args: "--target aarch64-apple-darwin --features metal,beta"
+            args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin"
           - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin --features metal,beta"
+            args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: "big-linux" # Ubuntu x86_64
