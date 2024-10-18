@@ -379,7 +379,7 @@ pub async fn stt(
             // Deepgram implementation
             let api_key = deepgram_api_key
                 .clone()
-                .unwrap_or_else(|| get_deepgram_api_key());
+                .unwrap_or_else(get_deepgram_api_key);
             info!(
                 "device: {}, using deepgram api key: {}...",
                 audio_input.device,

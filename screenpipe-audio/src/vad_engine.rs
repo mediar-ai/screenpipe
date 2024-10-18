@@ -19,9 +19,9 @@ pub enum VadSensitivity {
 impl VadSensitivity {
     pub fn min_speech_ratio(&self) -> f32 {
         match self {
-            VadSensitivity::Low => 0.01,     // 1% of frames must be speech
+            VadSensitivity::Low => 0.01,    // 1% of frames must be speech
             VadSensitivity::Medium => 0.05, // 5% of frames must be speech
-            VadSensitivity::High => 0.2,   // 20% of frames must be speech
+            VadSensitivity::High => 0.2,    // 20% of frames must be speech
         }
     }
 }
@@ -91,7 +91,7 @@ impl VadEngine for WebRtcVad {
             .map_err(|e| anyhow::anyhow!("WebRTC VAD error: {:?}", e))?;
 
         if !result {
-            return Ok(VadStatus::Silence)
+            return Ok(VadStatus::Silence);
         }
 
         Ok(VadStatus::Speech)
@@ -269,9 +269,7 @@ impl VadEngine for SileroVad {
         }
 
         match status {
-            VadStatus::Unknown => {
-                Ok(VadStatus::Unknown)
-            },
+            VadStatus::Unknown => Ok(VadStatus::Unknown),
             // this is super misleading
             _ => Ok(VadStatus::Silence),
         }
