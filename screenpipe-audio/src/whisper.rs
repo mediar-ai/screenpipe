@@ -353,7 +353,7 @@ impl<'a> Decoder<'a> {
                 let mut tokens_to_decode = vec![];
                 let mut prev_timestamp_s = 0f32;
                 for &token in segment.dr.tokens.iter() {
-                    if token == self.sot_token {
+                    if token == self.sot_token || token == self.eot_token {
                         continue;
                     }
                     if token > self.no_timestamps_token {
