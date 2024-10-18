@@ -273,10 +273,12 @@ export function RecordingSettings({
   };
 
   const handleAddIgnoredWindow = (value: string) => {
-    if (value && !localSettings.ignoredWindows.includes(value)) {
+    const lowerCaseValue = value.toLowerCase();
+    if (value && !localSettings.ignoredWindows.map(w => w.toLowerCase()).includes(lowerCaseValue)) {
       setLocalSettings({
         ...localSettings,
         ignoredWindows: [...localSettings.ignoredWindows, value],
+        includedWindows: localSettings.includedWindows.filter(w => w.toLowerCase() !== lowerCaseValue),
       });
     }
   };
@@ -289,10 +291,12 @@ export function RecordingSettings({
   };
 
   const handleAddIncludedWindow = (value: string) => {
-    if (value && !localSettings.includedWindows.includes(value)) {
+    const lowerCaseValue = value.toLowerCase();
+    if (value && !localSettings.includedWindows.map(w => w.toLowerCase()).includes(lowerCaseValue)) {
       setLocalSettings({
         ...localSettings,
         includedWindows: [...localSettings.includedWindows, value],
+        ignoredWindows: localSettings.ignoredWindows.filter(w => w.toLowerCase() !== lowerCaseValue),
       });
     }
   };

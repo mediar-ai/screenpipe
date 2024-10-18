@@ -189,21 +189,48 @@ export function useSettings() {
             (await store!.get<Language[]>("languages")) || [];
 
         const currentPlatform = await platform();
+        const ignoredWindowsInAllOS = [
+          "bit",
+          "VPN",
+          "Trash",
+          "Private",
+          "Incognito",
+          "Wallpaper",
+          "Settings",
+          "Keepass",
+          "Recorder",
+          "Vaults",
+          "OBS Studio",
+        ];
         const defaultIgnoredWindows =
-          currentPlatform === "macos" // TODO: windows and linux
+          currentPlatform === "macos"
             ? [
-                "bit",
-                ".env",
-                "Item-0",
-                "App Icon Window",
-                "Battery",
-                "Shortcuts",
-                "WiFi",
-                "BentoBox",
-                "Clock",
-                "Dock",
-                "DeepL",
-              ]
+              ...ignoredWindowsInAllOS,
+              ".env",
+              "Item-0",
+              "App Icon Window",
+              "Battery",
+              "Shortcuts",
+              "WiFi",
+              "BentoBox",
+              "Clock",
+              "Dock",
+              "DeepL",
+            ]
+            : currentPlatform === "windows" 
+            ? [
+              ...ignoredWindowsInAllOS,
+              "Nvidia",
+              "Control Panel",
+              "System Properties",
+            ]
+            : currentPlatform === "linux"
+            ? [
+              ...ignoredWindowsInAllOS,
+              "Info center",
+              "Discover",
+              "Parted",
+            ]
             : [];
 
         const savedIgnoredWindows = await store!.get<string[]>(
