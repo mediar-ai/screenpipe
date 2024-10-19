@@ -70,7 +70,7 @@ const slideFlow: Record<
         selectedOptions?.includes("personalUse") &&
         selectedPersonalization === "withoutAI"
       )
-        return "devOrNonDev";
+        return "instructions";
       return "instructions";
     },
     prev: () => "selection",
@@ -156,15 +156,7 @@ const Onboarding: React.FC = () => {
     }
   }, [showOnboarding]);
 
-  useEffect(() => {
-    const checkFirstTimeUser = async () => {
-      const isFirstTime = await localforage.getItem<boolean>("isFirstTimeUser");
-      if (isFirstTime === null) {
-        setShowOnboarding(true);
-      }
-    };
-    checkFirstTimeUser();
-  }, []);
+
 
   useEffect(() => {
     if (error) {
@@ -320,7 +312,7 @@ const Onboarding: React.FC = () => {
             <OnboardingInstructions
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
+              handleNextSlide={handleEnd}
               handlePrevSlide={handlePrevSlide}
             />
           )}

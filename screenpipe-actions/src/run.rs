@@ -1,10 +1,11 @@
 use crate::type_and_animate::{delete_characters, type_slowly, EnigoCommand};
 use crate::{call_ai, run_keystroke_monitor, KeystrokeCommand};
 use reqwest;
+use std::path::Path;
 use std::string::ToString;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tempfile::NamedTempFile;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::task;
@@ -417,11 +418,39 @@ func printAllAttributeValuesForCurrentApp() {
 printAllAttributeValuesForCurrentApp()
 "#;
 
-    let temp_file = NamedTempFile::new()?;
-    tokio::fs::write(temp_file.path(), script_content).await?;
-
     info!("running swift script");
-    let output = Command::new("swift").arg(temp_file.path()).output().await?;
+
+    // Check multiple possible Swift paths
+    let swift_paths = [
+        "/usr/bin/swift",          // Common path for both Intel and Apple Silicon
+        "/usr/local/bin/swift",    // Possible alternative location
+        "/opt/homebrew/bin/swift", // Homebrew path on Apple Silicon
+    ];
+
+    let swift_path = swift_paths
+        .iter()
+        .find(|&path| Path::new(path).exists())
+        .ok_or_else(|| {
+            anyhow::anyhow!("Swift executable not found in any of the expected locations")
+        })?;
+
+    info!("using swift at: {}", swift_path);
+
+    let mut child = Command::new(swift_path)
+        .arg("-") // Read from stdin
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+
+    // Write to stdin
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(script_content.as_bytes()).await?;
+        stdin.flush().await?;
+    }
+
+    // Wait for the command to complete and get the output
+    let output = child.wait_with_output().await?;
 
     let duration = start.elapsed();
     info!("{:.1?} - run_swift_script", duration);

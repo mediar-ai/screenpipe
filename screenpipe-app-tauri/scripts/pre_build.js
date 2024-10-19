@@ -234,12 +234,16 @@ async function copyFile(src, dest) {
 /* ########## Linux ########## */
 if (platform == 'linux') {
 	// Install APT packages
-	await $`sudo apt-get update`
-	if (hasFeature('opencl')) {
-		config.linux.aptPackages.push('libclblast-dev')
-	}
-	for (const name of config.linux.aptPackages) {
-		await $`sudo apt-get install -y ${name}`
+	try {
+		await $`sudo apt-get update`
+		if (hasFeature('opencl')) {
+			config.linux.aptPackages.push('libclblast-dev')
+		}
+		for (const name of config.linux.aptPackages) {
+			await $`sudo apt-get install -y ${name}`
+		}
+	} catch (error) {
+		console.error("Error installing apps via apt, %s", error.message);
 	}
 
 	// Copy screenpipe binary
@@ -248,6 +252,7 @@ if (platform == 'linux') {
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
+		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
 		'/home/runner/work/screenpipe/screenpipe/target/release/screenpipe',
 	];
@@ -681,7 +686,7 @@ async function installOllamaSidecar() {
 	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
 		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
-		console.log('Ollama sidecar already exists. Skipping installation.');
+		console.log('ollama sidecar already exists. skipping installation.');
 		return;
 	}
 
@@ -726,9 +731,9 @@ async function installOllamaSidecar() {
 			await fs.unlink(downloadPath);
 		}
 
-		console.log('Ollama sidecar installed successfully');
+		console.log('ollama sidecar installed successfully');
 	} catch (error) {
-		console.error('Error installing Ollama sidecar:', error);
+		console.error('error installing ollama sidecar:', error);
 		throw error;
 	}
 }

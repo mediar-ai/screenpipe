@@ -22,7 +22,8 @@ pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Resu
     let mut body = json!({
         "model": "gpt-4o",
         "messages": messages,
-        "temperature": 0.2
+        "temperature": 0.2,
+        "stream": false
     });
 
     if expect_json {

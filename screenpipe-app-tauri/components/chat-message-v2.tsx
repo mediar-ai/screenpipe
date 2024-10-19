@@ -35,7 +35,8 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
       >
         {message.role === "user" ? (
           <IconUser />
-        ) : !settings.aiUrl.includes("openai") ? (
+        ) : !settings.aiUrl.includes("openai") ||
+          !settings.aiUrl.includes("worker") ? (
           <>🦙</>
         ) : (
           <IconOpenAI />

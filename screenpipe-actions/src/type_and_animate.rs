@@ -60,7 +60,8 @@ pub async fn type_slowly(text: String, stop_signal: Arc<AtomicBool>) -> Result<(
                     with_enigo(|enigo| {
                         enigo.key_sequence(&char.to_string());
                     });
-                }).await?;
+                })
+                .await?;
                 sleep(Duration::from_millis(50)).await;
             }
         }
@@ -74,9 +75,19 @@ pub async fn type_slowly(text: String, stop_signal: Arc<AtomicBool>) -> Result<(
                     enigo.key_click(Key::Return);
                     enigo.key_up(Key::Shift);
                 });
-            }).await?;
+            })
+            .await?;
         }
     }
     sleep(Duration::from_millis(text_len as u64)).await;
+    Ok(())
+}
+
+pub fn trigger_keyboard_permission() -> anyhow::Result<()> {
+    with_enigo(|enigo| {
+        // Perform a no-op key press to trigger the permission request
+        enigo.key_down(enigo::Key::Shift);
+        enigo.key_up(enigo::Key::Shift);
+    });
     Ok(())
 }

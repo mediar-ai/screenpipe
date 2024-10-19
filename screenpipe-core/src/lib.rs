@@ -31,4 +31,7 @@ pub mod pii_removal;
 #[cfg(feature = "security")]
 pub use pii_removal::*;
 
+pub mod network;
+pub use network::*;
+
 pub use language::{Language, TESSERACT_LANGUAGES};

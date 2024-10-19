@@ -65,6 +65,8 @@ import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
+import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
+import { CliCommandDialog } from "./cli-command-dialog";
 
 interface AudioDevice {
   name: string;
@@ -101,9 +103,8 @@ export function RecordingSettings({
   const [isUpdating, setIsUpdating] = useState(false);
   const { health } = useHealthCheck();
   const isDisabled = health?.status_code === 500;
-  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
-  const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
   const [isMacOS, setIsMacOS] = useState(false);
+  const [isSetupRunning, setIsSetupRunning] = useState(false);
 
   useEffect(() => {
     const checkPlatform = async () => {
@@ -221,6 +222,7 @@ export function RecordingSettings({
         analyticsEnabled: localSettings.analyticsEnabled,
         useChineseMirror: localSettings.useChineseMirror,
         languages: localSettings.languages,
+        enableBeta: localSettings.enableBeta,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -337,11 +339,8 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, usePiiRemoval: checked });
   };
 
-  const handleRestartIntervalChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const newValue = parseInt(e.target.value, 10);
-    setLocalSettings({ ...localSettings, restartInterval: newValue });
+  const handleRestartIntervalChange = (value: number[]) => {
+    setLocalSettings({ ...localSettings, restartInterval: value[0] });
   };
 
   const handleDisableAudioChange = (checked: boolean) => {
@@ -377,86 +376,6 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, audioChunkDuration: value[0] });
   };
 
-  const generateCliCommand = () => {
-    const cliPath = getCliPath();
-    let args = [];
-
-    if (localSettings.audioTranscriptionEngine !== "default") {
-      args.push(
-        `--audio-transcription-engine ${localSettings.audioTranscriptionEngine}`
-      );
-    }
-    if (localSettings.ocrEngine !== "default") {
-      args.push(`--ocr-engine ${localSettings.ocrEngine}`);
-    }
-    if (
-      localSettings.monitorIds.length > 0 &&
-      localSettings.monitorIds[0] !== "default"
-    ) {
-      localSettings.monitorIds.forEach((id) => args.push(`--monitor-id ${id}`));
-    }
-    if (localSettings.languages.length > 0) {
-      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
-    }
-    if (
-      localSettings.audioDevices.length > 0 &&
-      localSettings.audioDevices[0] !== "default"
-    ) {
-      localSettings.audioDevices.forEach((device) =>
-        args.push(`--audio-device "${device}"`)
-      );
-    }
-    if (localSettings.usePiiRemoval) {
-      args.push("--use-pii-removal");
-    }
-    if (localSettings.restartInterval > 0) {
-      args.push(`--restart-interval ${localSettings.restartInterval}`);
-    }
-    if (localSettings.disableAudio) {
-      args.push("--disable-audio");
-    }
-    localSettings.ignoredWindows.forEach((window) =>
-      args.push(`--ignored-windows "${window}"`)
-    );
-    localSettings.includedWindows.forEach((window) =>
-      args.push(`--included-windows "${window}"`)
-    );
-    if (
-      localSettings.deepgramApiKey &&
-      localSettings.deepgramApiKey !== "default"
-    ) {
-      args.push(`--deepgram-api-key "${localSettings.deepgramApiKey}"`);
-    }
-    if (localSettings.fps !== 0.2) {
-      args.push(`--fps ${localSettings.fps}`);
-    }
-    if (localSettings.vadSensitivity !== "high") {
-      args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
-    }
-
-    if (!localSettings.analyticsEnabled) {
-      args.push("--disable-telemetry");
-    }
-    if (localSettings.audioChunkDuration !== 30) {
-      args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
-    }
-
-    if (localSettings.languages.length > 0) {
-      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
-    }
-
-    return `${cliPath} ${args.join(" ")}`;
-  };
-
-  const handleCopyCliCommand = () => {
-    const command = generateCliCommand();
-    copyToClipboard(command);
-    toast({
-      title: "CLI command copied",
-      description: "The CLI command has been copied to your clipboard.",
-    });
-  };
-
   const renderOcrEngineOptions = () => {
     const currentPlatform = platform();
     return (
@@ -485,12 +404,124 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, analyticsEnabled: newValue });
   };
 
-  const handleChineseMirrorToggle = (checked: boolean) => {
+  const handleChineseMirrorToggle = async (checked: boolean) => {
     setLocalSettings({ ...localSettings, useChineseMirror: checked });
+    if (checked) {
+      // Trigger setup when the toggle is turned on
+      await runSetup();
+    }
   };
 
-  const handleEnableBetaToggle = (checked: boolean) => {
+  const runSetup = async () => {
+    setIsSetupRunning(true);
+    try {
+      const command = ShellCommand.sidecar("screenpipe", ["setup"]);
+      const child = await command.spawn();
+
+      toast({
+        title: "Setting up Chinese mirror",
+        description: "This may take a few minutes...",
+      });
+
+      const outputPromise = new Promise<string>((resolve, reject) => {
+        command.on("close", (data) => {
+          if (data.code !== 0) {
+            reject(new Error(`Command failed with code ${data.code}`));
+          }
+        });
+        command.on("error", (error) => reject(new Error(error)));
+        command.stdout.on("data", (line) => {
+          console.log(line);
+          if (line.includes("screenpipe setup complete")) {
+            resolve("ok");
+          }
+        });
+      });
+
+      const timeoutPromise = new Promise(
+        (_, reject) =>
+          setTimeout(() => reject(new Error("Setup timed out")), 900000) // 15 minutes
+      );
+
+      const result = await Promise.race([outputPromise, timeoutPromise]);
+
+      if (result === "ok") {
+        toast({
+          title: "Chinese mirror setup complete",
+          description: "You can now use the Chinese mirror for downloads.",
+        });
+      } else {
+        throw new Error("Setup failed or timed out");
+      }
+    } catch (error) {
+      console.error("Error setting up Chinese mirror:", error);
+      toast({
+        title: "Error setting up Chinese mirror",
+        description: "Please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+      // Revert the toggle if setup fails
+      setLocalSettings({ ...localSettings, useChineseMirror: false });
+    } finally {
+      setIsSetupRunning(false);
+    }
+  };
+
+  const handleEnableBetaToggle = async (checked: boolean) => {
     setLocalSettings({ ...localSettings, enableBeta: checked });
+
+    if (checked) {
+      try {
+        const command = ShellCommand.sidecar("screenpipe", ["setup"]);
+        const child = await command.spawn();
+
+        toast({
+          title: "setting up beta features",
+          description: "this may take a few minutes...",
+        });
+
+        const outputPromise = new Promise<string>((resolve, reject) => {
+          command.on("close", (data) => {
+            if (data.code !== 0) {
+              reject(new Error(`command failed with code ${data.code}`));
+            }
+          });
+          command.on("error", (error) => reject(new Error(error)));
+          command.stdout.on("data", (line) => {
+            console.log(line);
+            if (line.includes("screenpipe setup complete")) {
+              resolve("ok");
+            }
+          });
+        });
+
+        const timeoutPromise = new Promise(
+          (_, reject) =>
+            setTimeout(() => reject(new Error("setup timed out")), 900000) // 15 minutes
+        );
+
+        const result = await Promise.race([outputPromise, timeoutPromise]);
+
+        if (result === "ok") {
+          toast({
+            title: "beta features setup complete",
+            description: "you can now use the beta features.",
+          });
+        } else {
+          throw new Error("setup failed or timed out");
+        }
+      } catch (error) {
+        console.error("error setting up beta features:", error);
+        toast({
+          title: "error setting up beta features",
+          description:
+            "please try again or check the logs for more information.",
+          variant: "destructive",
+        });
+        // Revert the toggle if setup fails
+        setLocalSettings({ ...localSettings, enableBeta: false });
+      }
+    }
   };
 
   return (
@@ -510,7 +541,7 @@ export function RecordingSettings({
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="text-center">recording settings</CardTitle>
-              <div className="flex  space-x-2">
+              <div className="flex space-x-2">
                 <div className="flex flex-col space-y-2">
                   <Button
                     onClick={handleUpdate}
@@ -529,13 +560,7 @@ export function RecordingSettings({
                     </span>
                   )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setIsCopyDialogOpen(true)}
-                >
-                  <IconCode className="h-4 w-4" />
-                </Button>
+                <CliCommandDialog localSettings={localSettings} />
               </div>
             </div>
           </CardHeader>
@@ -839,26 +864,31 @@ export function RecordingSettings({
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
-                        set how often the recording process should restart.
+                        (not recommended) set how often the recording process
+                        should restart.
                         <br />
-                        0 means no automatic restart.
+                        30 minutes is the minimum interval.
                         <br />
-                        this can help mitigate potential memory leaks or other
-                        issues.
+                        this can help mitigate potential issues.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </Label>
-              <Input
-                id="restartInterval"
-                type="number"
-                min="0"
-                value={localSettings.restartInterval}
-                onChange={handleRestartIntervalChange}
-                className="w-full"
-                placeholder="Enter restart interval in minutes (0 to disable)"
-              />
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="restartInterval"
+                  min={30}
+                  max={1440} // 24 hours
+                  step={30}
+                  value={[localSettings.restartInterval]}
+                  onValueChange={handleRestartIntervalChange}
+                  className="flex-grow"
+                />
+                <span className="w-16 text-right">
+                  {localSettings.restartInterval} min
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-col space-y-2">
@@ -1202,7 +1232,7 @@ export function RecordingSettings({
                 htmlFor="chinese-mirror-toggle"
                 className="flex items-center space-x-2"
               >
-                <span>use chinese mirror for model downloads</span>
+                <span>Use Chinese mirror for model downloads</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
@@ -1210,7 +1240,7 @@ export function RecordingSettings({
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
-                        enable this option to use a chinese mirror for
+                        Enable this option to use a Chinese mirror for
                         <br />
                         downloading Hugging Face models
                         <br />
@@ -1242,18 +1272,23 @@ export function RecordingSettings({
                       </TooltipTrigger>
                       <TooltipContent side="right">
                         <p>
-                          ⚠️ uses our hosted AI service (powered by OpenAI) ⚠️
+                          ⚠️ uses screenpipe cloud ⚠️
                           <br />
                           • we provide free ChatGPT credits
                           <br />
-                          • may have privacy implications (data sent to our
-                          servers)
+                          • may have privacy implications read our data privacy
+                          policy at
+                          <br />
+                          <a
+                            href="https://screenpi.pe/privacy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            https://screenpi.pe/privacy
+                          </a>
                           <br />
                           enables experimental features like double slash
-                          <br />
-                          which you can use to autocomplete anywhere
-                          <br />
-                          by pressing twice on slash or stop it with pressing q
                           <br />
                           (only tested on US or German qwertz keyboards)
                         </p>
@@ -1266,23 +1301,6 @@ export function RecordingSettings({
           </CardContent>
         </Card>
       </div>
-      <Dialog open={isCopyDialogOpen} onOpenChange={setIsCopyDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>CLI command</DialogTitle>
-            <DialogDescription>
-              you can use this CLI command to start screenpipe with the current
-              settings.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="overflow-x-auto">
-            <CodeBlock language="bash" value={generateCliCommand()} />
-          </div>
-          <DialogFooter>
-            <Button onClick={handleCopyCliCommand}>Copy to Clipboard</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
