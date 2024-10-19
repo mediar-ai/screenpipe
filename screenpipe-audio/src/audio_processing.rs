@@ -79,7 +79,7 @@ pub fn average_noise_spectrum(audio: &[f32]) -> f32 {
     total_sum / audio.len() as f32
 }
 
-pub fn converge_to_mono(audio: &[f32], channels: u16) -> Vec<f32> {
+pub fn stereo_to_mono(audio: &[f32], channels: u16) -> Vec<f32> {
     let mut mono = audio.to_vec();
 
     if channels > 1 {
