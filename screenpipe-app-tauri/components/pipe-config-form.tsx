@@ -391,7 +391,9 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
           </MemoizedReactMarkdown>
         </div>
       ))}
-      <Button type="submit">save configuration</Button>
+      {config?.fields && config.fields.length > 0 && (
+        <Button type="submit">save configuration</Button>
+      )}
     </form>
   );
 };

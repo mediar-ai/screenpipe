@@ -29,11 +29,9 @@ pub fn spectral_subtraction(audio: &[f32], d: f32) -> Result<Vec<f32>> {
 
     let mut y = r2c.make_output_vec();
 
-    let mut padded_audio: [f32; 1600] = [0.0; 1600];
+    let mut padded_audio = audio.to_vec();
 
-    for i in 0..audio.len() {
-        padded_audio[i] = audio[i];
-    }
+    padded_audio.append(&mut vec![0.0f32; window_size - audio.len()]);
 
     let mut indata = padded_audio;
     r2c.process(&mut indata, &mut y)?;

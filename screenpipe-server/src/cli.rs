@@ -196,7 +196,7 @@ pub struct Cli {
 
     /// List of windows to ignore (by title) for screen recording - we use contains to match, example:
     /// --ignored-windows "Spotify" --ignored-windows "Bit" will ignore both "Bitwarden" and "Bittorrent"
-    /// --ignored-windows "porn" will ignore "pornhub" and "youporn"
+    /// --ignored-windows "x" will ignore "Home / X" and "SpaceX"
     #[arg(long)]
     pub ignored_windows: Vec<String>,
 

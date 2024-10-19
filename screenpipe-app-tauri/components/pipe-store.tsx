@@ -96,7 +96,6 @@ const PipeDialog: React.FC = () => {
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const { health } = useHealthCheck();
-  const [isLogOpen, setIsLogOpen] = useState(false);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -431,6 +430,16 @@ const PipeDialog: React.FC = () => {
           <LogFileButton />
         </div>
         <Separator className="my-4" />
+
+        {selectedPipe && selectedPipe.enabled && selectedPipe?.config?.port && (
+          <div className="mt-4 h-[400px]">
+            <h3 className="text-xl font-semibold mb-2">pipe ui</h3>
+            <iframe
+              src={`http://localhost:${selectedPipe.config.port}`}
+              className="w-full h-full border-0"
+            />
+          </div>
+        )}
 
         {selectedPipe.enabled && (
           <>

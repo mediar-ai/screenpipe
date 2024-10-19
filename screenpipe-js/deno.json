@@ -1,3 +1,6 @@
 {
-  "imports": { "cron-parser": "npm:cron-parser@^4.9.0" }
+  "lock": false,
+  "imports": {
+    "cron-parser": "npm:cron-parser@^4.9.0"
+  }
 }
