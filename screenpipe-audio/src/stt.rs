@@ -315,12 +315,7 @@ pub async fn stt(
         audio_input.data.as_ref().to_vec()
     };
 
-    let audio_data = if audio_input.device.device_type == DeviceType::Input {
-        normalize_v2(&audio_data)
-    } else {
-        // ! for some reason buggy on output devices
-        audio_data
-    };
+    let audio_data = normalize_v2(&audio_data);
 
     let frame_size = 1600; // 100ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
@@ -427,7 +422,7 @@ pub async fn stt(
         encode_single_audio(
             bytemuck::cast_slice(&audio_input.data),
             audio_input.sample_rate,
-            audio_input.channels,
+            1,
             &file_path.into(),
         )?;
     }
