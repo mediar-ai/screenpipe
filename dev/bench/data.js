@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729357515377,
+  "lastUpdate": 1729361544794,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -17669,6 +17669,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1899116270,
             "range": "± 60075559",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3e8aa37c9bf1310362c1eb490069dd30330aa034",
+          "message": "Merge pull request #534 from EzraEllette/fix-display-audio\n\nfix: converge interleaved audio samples",
+          "timestamp": "2024-10-19T11:05:11-07:00",
+          "tree_id": "612d1eb0389dda00c2a00e7d5ae739de5ef97a99",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/3e8aa37c9bf1310362c1eb490069dd30330aa034"
+        },
+        "date": 1729361542835,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1982689146,
+            "range": "± 180346277",
             "unit": "ns/iter"
           }
         ]
