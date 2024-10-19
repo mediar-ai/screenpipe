@@ -63,12 +63,17 @@ async fn main() {
     let _ = fix_path_env::fix();
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
-
+    #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.set_always_on_top(false);
                 let _ = window.set_visible_on_all_workspaces(false);
+                if cfg!(target_os = "macos") {
+                    let _ = window
+                        .app_handle()
+                        .set_activation_policy(tauri::ActivationPolicy::Regular);
+                }
                 window.hide().unwrap();
                 api.prevent_close();
             }

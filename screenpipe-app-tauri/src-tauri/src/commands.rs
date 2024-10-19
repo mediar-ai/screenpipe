@@ -107,6 +107,10 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
         let _ = window.set_always_on_top(overlay);
         let _ = window.show();
 
+        if overlay && cfg!(target_os = "macos") {
+            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        }
+
         if !overlay {
             let _ = window.set_focus();
         }
