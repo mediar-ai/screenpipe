@@ -5,6 +5,8 @@ use commands::load_pipe_config;
 use commands::save_pipe_config;
 use serde_json::Value;
 use sidecar::SidecarManager;
+use tauri::Emitter;
+use tauri_plugin_notification::NotificationExt;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -82,7 +84,6 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 window.hide().unwrap();
@@ -213,13 +214,20 @@ async fn main() {
                     "start_recording" => {
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                if let Err(err) = spawn_screenpipe(
-                                    app_handle.state::<SidecarState>(),
-                                    app_handle.clone(),
-                                )
-                                .await
-                                {
+                                let state = app_handle.state::<SidecarState>();
+                                if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
                                     error!("Failed to start recording: {}", err);
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Failed to start recording")
+                                        .show();
+                                    let _ = app_handle.emit("recording_failed", "Failed to start recording");
+                                } else {
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Recording started")
+                                        .show();
+                                    let _ = app_handle.emit("recording_started", "Recording started");
                                 }
                             });
                         });
@@ -227,13 +235,20 @@ async fn main() {
                     "stop_recording" => {
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                if let Err(err) = kill_all_sreenpipes(
-                                    app_handle.state::<SidecarState>(),
-                                    app_handle.clone(),
-                                )
-                                .await
-                                {
+                                let state = app_handle.state::<SidecarState>();
+                                if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
                                     error!("Failed to stop recording: {}", err);
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Failed to stop recording")
+                                        .show();
+                                    let _ = app_handle.emit("recording_failed", "Failed to stop recording");
+                                } else {
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Recording stopped")
+                                        .show();
+                                    let _ = app_handle.emit("recording_stopped", "Recording stopped");
                                 }
                             });
                         });
@@ -243,7 +258,6 @@ async fn main() {
                         app_handle.exit(0);
                     }
                     "update_now" => {
-                        use tauri_plugin_notification::NotificationExt;
                         app_handle
                             .notification()
                             .builder()
@@ -254,14 +268,8 @@ async fn main() {
 
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
-                                // bad UX: i use CLI and it kills my CLI because i updated app
-                                if let Err(err) = sidecar::kill_all_sreenpipes(
-                                    app_handle.state::<SidecarState>(),
-                                    app_handle.clone(),
-                                )
-                                .await
-                                {
+                                let state = app_handle.state::<SidecarState>();
+                                if let Err(err) = sidecar::kill_all_sreenpipes(state, app_handle.clone()).await {
                                     error!("Failed to kill sidecar: {}", err);
                                 }
                             });
@@ -282,7 +290,7 @@ async fn main() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             } else {
-                                show_main_window(&app);
+                                show_main_window(app);
                             }
                         }
                     }
@@ -376,32 +384,13 @@ async fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
-            // let shortcut_manager = app.shortcut_manager();
-            // let app_handle = app.handle().clone();
-
-            // shortcut_manager
-            //     .register("CommandOrControl+Shift+R", move || {
-            //         let app_handle = app_handle.clone();
-            //         tauri::async_runtime::spawn(async move {
-            //             let state = app_handle.state::<SidecarState>();
-            //             let mut manager = state.0.lock().await;
-            //             if let Some(manager) = manager.as_mut() {
-            //                 if manager.child.is_some() {
-            //                     if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
-            //                         error!("Failed to stop recording: {}", err);
-            //                     }
-            //                 } else if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
-            //                     error!("Failed to start recording: {}", err);
-            //                 }
-            //             }
-            //         });
-            //     })
-            //     .unwrap();
 
             #[cfg(desktop)]
             {
                 let toggle_recording_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyR);
                 let app_handle = app.handle().clone();
+                let event_app_handle = app_handle.clone(); // Clone for event emission
+
                 match app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new().with_handler(move |_app, shortcut, event| {
                         if shortcut == &toggle_recording_shortcut {
@@ -410,24 +399,42 @@ async fn main() {
                                     let app_handle = app_handle.clone();
                                     tauri::async_runtime::spawn(async move {
                                         let state = app_handle.state::<SidecarState>();
-                                        let is_recording = {
-                                            let manager = state.0.lock().await;
-                                            manager.as_ref().map(|m| m.is_recording).unwrap_or(false)
-                                        };
-            
-                                        if is_recording {
-                                            if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
-                                                error!("failed to stop recording: {}", err);
-                                            }
-                                        } else {
-                                            if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
-                                                error!("failed to start recording: {}", err);
+                                        let manager = state.0.lock().await;
+                                        if let Some(manager) = manager.as_ref() {
+                                            if manager.child.is_some() {
+                                                if let Err(err) = kill_all_sreenpipes(state.clone(), app_handle.clone()).await {
+                                                    error!("Failed to stop recording: {}", err);
+                                                    let _ = app_handle.notification().builder()
+                                                        .title("Screenpipe")
+                                                        .body("Failed to stop recording")
+                                                        .show();
+                                                        let _ = app_handle.emit("recording_failed", "Failed to stop recording");
+                                                } else {
+                                                    let _ = app_handle.notification().builder()
+                                                        .title("Screenpipe")
+                                                        .body("Recording stopped")
+                                                        .show();
+                                                        let _ = app_handle.emit("recording_stopped", "Recording stopped");
+                                                }
+                                            } else if let Err(err) = spawn_screenpipe(state.clone(), app_handle.clone()).await {
+                                                error!("Failed to start recording: {}", err);
+                                                let _ = app_handle.notification().builder()
+                                                    .title("Screenpipe")
+                                                    .body("Failed to start recording")
+                                                    .show();
+                                                    let _ = app_handle.emit("recording_failed", "Failed to start recording");
+                                            } else {
+                                                let _ = app_handle.notification().builder()
+                                                    .title("Screenpipe")
+                                                    .body("Recording started")
+                                                    .show();
+                                                    let _ = app_handle.emit("recording_started", "Recording started");
                                             }
                                         }
                                     });
                                 }
                                 tauri_plugin_global_shortcut::ShortcutState::Released => {
-                                    // do nothing on release
+                                    // Do nothing on release
                                 }
                             }
                         }
@@ -435,12 +442,25 @@ async fn main() {
                     .build(),
                 ) {
                     Ok(_) => {
-                        match app.global_shortcut().register(toggle_recording_shortcut) {
-                            Ok(_) => debug!("Global shortcut registered successfully"),
-                            Err(e) => error!("Failed to register global shortcut: {}", e),
+                        match event_app_handle.global_shortcut().register(toggle_recording_shortcut) {
+                            Ok(_) => {
+                                debug!("Global shortcut registered successfully");
+                                let _ = event_app_handle.emit("shortcut_registered", "Ctrl+Shift+R");
+                            },
+                            Err(e) => {
+                                error!("Failed to register global shortcut: {}", e);
+                                if e.to_string().contains("already in use") {
+                                    let _ = event_app_handle.emit("shortcut_conflict", "Ctrl+Shift+R");
+                                } else {
+                                    let _ = event_app_handle.emit("shortcut_registration_failed", e.to_string());
+                                }
+                            },
                         }
                     },
-                    Err(e) => error!("Failed to initialize global shortcut plugin: {}", e),
+                    Err(e) => {
+                        error!("Failed to initialize global shortcut plugin: {}", e);
+                        let _ = event_app_handle.emit("shortcut_plugin_init_failed", e.to_string());
+                    },
                 }
             }
 
