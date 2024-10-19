@@ -1,4 +1,4 @@
-use crate::audio_processing::stereo_to_mono;
+use crate::audio_processing::audio_to_mono;
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -203,7 +203,7 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let mono = stereo_to_mono(bytemuck::cast_slice(data), channels);
+                        let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
 
                         let _ = audio_queue_clone.push(mono);
                     }
@@ -218,7 +218,7 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let mono = stereo_to_mono(bytemuck::cast_slice(data), channels);
+                        let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
 
                         let _ = audio_queue_clone.push(mono);
                     }
@@ -233,7 +233,7 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let mono = stereo_to_mono(bytemuck::cast_slice(data), channels);
+                        let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
 
                         let _ = audio_queue_clone.push(mono);
                     }
@@ -248,7 +248,7 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let mono = stereo_to_mono(data, channels);
+                        let mono = audio_to_mono(data, channels);
 
                         let _ = audio_queue_clone.push(mono);
                     }

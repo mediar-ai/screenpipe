@@ -79,18 +79,20 @@ pub fn average_noise_spectrum(audio: &[f32]) -> f32 {
     total_sum / audio.len() as f32
 }
 
-pub fn stereo_to_mono(audio: &[f32], channels: u16) -> Vec<f32> {
-    let mut mono = audio.to_vec();
+pub fn audio_to_mono(audio: &[f32], channels: u16) -> Vec<f32> {
+    let mut mono_samples = Vec::with_capacity(audio.len() / channels as usize);
 
-    if channels > 1 {
-        mono = audio
-            .chunks(2)
-            .map(|x| {
-                let (left, right) = (x[0], x[1]);
-                (left + right) / 2.0
-            })
-            .collect::<Vec<f32>>();
+    // Iterate over the audio slice in chunks, each containing `channels` samples
+    for chunk in audio.chunks(channels as usize) {
+        // Sum the samples from all channels in the current chunk
+        let sum: f32 = chunk.iter().sum();
+
+        // Calculate the averagechannelsono sample
+        let mono_sample = sum / channels as f32;
+
+        // Store the computed mono sample
+        mono_samples.push(mono_sample);
     }
 
-    mono
+    mono_samples
 }
