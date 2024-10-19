@@ -422,7 +422,7 @@ pub async fn stt(
         encode_single_audio(
             bytemuck::cast_slice(&audio_input.data),
             audio_input.sample_rate,
-            audio_input.channels,
+            1,
             &file_path.into(),
         )?;
     }
