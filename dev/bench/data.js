@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729297407368,
+  "lastUpdate": 1729357515377,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -17639,6 +17639,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2058523396,
             "range": "± 61321001",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18fbf24120e36769f3688c28f9a90d6e2bb778f5",
+          "message": "Merge pull request #533 from devnoname120/fix-wget-config-interference\n\nfix: build: ignore ~/.wgetrc to avoid interference",
+          "timestamp": "2024-10-19T09:57:02-07:00",
+          "tree_id": "068ee0ef68d449d0ef5cae60640d43c7b482cadc",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/18fbf24120e36769f3688c28f9a90d6e2bb778f5"
+        },
+        "date": 1729357514549,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1899116270,
+            "range": "± 60075559",
             "unit": "ns/iter"
           }
         ]
