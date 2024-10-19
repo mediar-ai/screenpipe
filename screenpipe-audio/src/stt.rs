@@ -3,7 +3,7 @@ use crate::{
     encode_single_audio, multilingual,
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
     whisper::{Decoder, WhisperModel},
-    AudioDevice, AudioTranscriptionEngine, DeviceType,
+    AudioDevice, AudioTranscriptionEngine,
 };
 use anyhow::Result;
 use candle::Tensor;
