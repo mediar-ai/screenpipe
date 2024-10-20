@@ -25,12 +25,19 @@ import { SearchChat } from "@/components/search-chat";
 import { Separator } from "@/components/ui/separator";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
+import { registerShortcuts } from "@/lib/shortcuts";
 
 export default function Home() {
   const { settings } = useSettings();
   const posthog = usePostHog();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
+
+  useEffect(() => {
+    registerShortcuts({
+      showScreenpipeShortcut: settings.showScreenpipeShortcut,
+    });
+  }, [settings.showScreenpipeShortcut]);
 
   useEffect(() => {
     if (settings.userId) {

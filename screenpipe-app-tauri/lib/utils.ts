@@ -100,3 +100,24 @@ export const removeDuplicateSelections = (
 
   return newSelectedResults;
 };
+
+export function parseKeyboardShortcut(shortcut: string): string {
+  if (typeof window !== "undefined") {
+    const os = platform();
+
+    return shortcut
+      .split("+")
+      .map((key) => {
+        const lowercaseKey = key.toLowerCase().trim();
+        if (lowercaseKey === "super") {
+          return os === "macos" ? "⌘" : "⊞";
+        }
+        if (lowercaseKey === "ctrl") return "⌃";
+        if (lowercaseKey === "alt") return os === "macos" ? "⌥" : "Alt";
+        if (lowercaseKey === "shift") return "⇧";
+        return key.charAt(0).toUpperCase() + key.slice(1);
+      })
+      .join(" + ");
+  }
+  return "";
+}

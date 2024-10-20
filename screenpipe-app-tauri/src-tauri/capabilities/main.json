@@ -2,9 +2,7 @@
   "identifier": "migrated",
   "description": "permissions that were migrated from v1",
   "local": true,
-  "windows": [
-    "main"
-  ],
+  "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:default",
@@ -35,6 +33,11 @@
     "fs:allow-read-text-file",
     "fs:allow-create",
     "fs:allow-mkdir",
+    "global-shortcut:allow-is-registered",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-unregister-all",
+    "global-shortcut:default",
     {
       "identifier": "fs:scope",
       "allow": [
@@ -126,11 +129,7 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": [
-            "pipe",
-            "purge",
-            "-y"
-          ],
+          "args": ["pipe", "purge", "-y"],
           "sidecar": true
         }
       ]
@@ -141,9 +140,7 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": [
-            "setup"
-          ],
+          "args": ["setup"],
           "sidecar": true
         }
       ]
@@ -154,9 +151,7 @@
         {
           "name": "ollama",
           "cmd": "ollama",
-          "args": [
-            "serve"
-          ],
+          "args": ["serve"],
           "sidecar": true
         }
       ]
