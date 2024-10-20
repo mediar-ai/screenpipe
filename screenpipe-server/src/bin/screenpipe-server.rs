@@ -483,7 +483,15 @@ async fn main() -> anyhow::Result<()> {
     // Function to truncate and pad strings
     fn format_cell(s: &str, width: usize) -> String {
         if s.len() > width {
-            format!("{}...", &s[..width - 3])
+            let mut max_pos = 0;
+            for (i, c) in s.char_indices() {
+                if i + c.len_utf8() > width - 3 {
+                    break;
+                }
+                max_pos = i + c.len_utf8();
+            }
+    
+            format!("{}...", &s[..max_pos])
         } else {
             format!("{:<width$}", s, width = width)
         }
