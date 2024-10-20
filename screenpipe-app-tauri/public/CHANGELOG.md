@@ -1,15 +1,13 @@
 ### New Features
-- **Onboarding Completion Feature**: Easily finalize the onboarding process within the app, ensuring a seamless start to your journey.
-- **AI Inbox Integration**: Enhance message management with the new AI inbox feature.
+- **Whisper Turbo as Default**: Boost message transmission with the new default Whisper Turbo mode, ensuring faster communication within the app.
 
 ### Improvements
-- **Enhanced Speech-to-Text Accuracy**: Experience a 4% boost in transcription accuracy, making speech-to-text results even more reliable.
-- **Audio Normalization**: Tailor your experience by selecting the duration of audio chunks directly from the user interface.
+- **Transcription Accuracy Enhancement**: Experience a remarkable 10% improvement in transcription accuracy, making text conversion more precise and reliable.
+- **Enhanced Pipe Functionality**: Improved the functionality of the Reddit pipe feature, making it easier to transfer content between your inbox and Reddit seamlessly.
 
 ### Fixes
-- **Enhanced Build Stability**: Numerous fixes applied to boost the stability of the build process, ensuring a smoother workflow for all.
-- **Windows Build Enhancements**: Resolved various issues related to the Windows build, now ensuring consistent usage of H.264 video encoding across all platforms.
+- **CI Pipeline Stability**: Resolved issues affecting the continuous integration pipeline to ensure smoother testing and deployment processes.
+- **Markdown Writing in Reddit Pipe**: Fixed a bug that prevented proper Markdown writing when using the Reddit pipe feature, ensuring content is displayed correctly.
 
 ### Others
-- **Optimized Development Workflow**: Improved tracking and monitoring by transitioning from Sentry to OpenTelemetry for enhanced efficiency.
-- **Documentation Clarity**: Updated installation steps in the documentation for clear guidance on setting up Deno CLI.
+- **Updated Brew Version**: Updated Brew to version 0.1.95 for both x86_64 and aarch64 Apple Darwin systems, ensuring compatibility and optimized performance.
