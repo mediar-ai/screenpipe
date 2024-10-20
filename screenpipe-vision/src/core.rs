@@ -8,6 +8,7 @@ use crate::monitor::get_monitor_by_id;
 use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image, save_text_files};
+use anyhow::{anyhow, Result};
 use image::DynamicImage;
 use log::{debug, error};
 use screenpipe_core::Language;
@@ -18,6 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Sender;
+use xcap::Monitor;
 
 pub struct CaptureResult {
     pub image: DynamicImage,
@@ -289,4 +291,17 @@ fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
         });
 
     parsed_output
+}
+
+pub fn trigger_screen_capture_permission() -> Result<()> {
+    // Get the primary monitor
+    let monitor = Monitor::all().map_err(|e| anyhow!("Failed to get monitor: {}", e))?;
+
+    // Attempt to capture a screenshot, which should trigger the permission request
+    let _screenshot = monitor.first().unwrap().capture_image()?;
+
+    // We don't need to do anything with the screenshot
+    // The mere attempt to capture it should trigger the permission request
+
+    Ok(())
 }

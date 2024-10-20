@@ -29,11 +29,9 @@ pub fn spectral_subtraction(audio: &[f32], d: f32) -> Result<Vec<f32>> {
 
     let mut y = r2c.make_output_vec();
 
-    let mut padded_audio: [f32; 1600] = [0.0; 1600];
+    let mut padded_audio = audio.to_vec();
 
-    for i in 0..audio.len() {
-        padded_audio[i] = audio[i];
-    }
+    padded_audio.append(&mut vec![0.0f32; window_size - audio.len()]);
 
     let mut indata = padded_audio;
     r2c.process(&mut indata, &mut y)?;
@@ -79,4 +77,22 @@ pub fn average_noise_spectrum(audio: &[f32]) -> f32 {
     }
 
     total_sum / audio.len() as f32
+}
+
+pub fn audio_to_mono(audio: &[f32], channels: u16) -> Vec<f32> {
+    let mut mono_samples = Vec::with_capacity(audio.len() / channels as usize);
+
+    // Iterate over the audio slice in chunks, each containing `channels` samples
+    for chunk in audio.chunks(channels as usize) {
+        // Sum the samples from all channels in the current chunk
+        let sum: f32 = chunk.iter().sum();
+
+        // Calculate the averagechannelsono sample
+        let mono_sample = sum / channels as f32;
+
+        // Store the computed mono sample
+        mono_samples.push(mono_sample);
+    }
+
+    mono_samples
 }

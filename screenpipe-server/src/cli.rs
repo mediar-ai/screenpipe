@@ -196,7 +196,7 @@ pub struct Cli {
 
     /// List of windows to ignore (by title) for screen recording - we use contains to match, example:
     /// --ignored-windows "Spotify" --ignored-windows "Bit" will ignore both "Bitwarden" and "Bittorrent"
-    /// --ignored-windows "porn" will ignore "pornhub" and "youporn"
+    /// --ignored-windows "x" will ignore "Home / X" and "SpaceX"
     #[arg(long)]
     pub ignored_windows: Vec<String>,
 
@@ -231,6 +231,7 @@ pub struct Cli {
     pub enable_llm: bool,
 
     /// Enable beta features
+    #[cfg(feature = "beta")]
     #[arg(long, default_value_t = false)]
     pub enable_beta: bool,
 
@@ -247,7 +248,12 @@ pub enum Command {
         subcommand: PipeCommand,
     },
     /// Setup screenpipe environment
-    Setup,
+    Setup {
+        /// Enable beta features
+        // #[cfg(feature = "beta")] // ! TODO
+        #[arg(long, default_value_t = false)]
+        enable_beta: bool,
+    },
 }
 
 

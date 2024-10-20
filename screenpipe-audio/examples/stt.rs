@@ -3,6 +3,7 @@ use screenpipe_audio::stt::stt;
 use screenpipe_audio::vad_engine::{SileroVad, VadEngine};
 use screenpipe_audio::whisper::WhisperModel;
 use screenpipe_audio::{AudioInput, AudioTranscriptionEngine};
+use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::Arc;
 use strsim::levenshtein;
@@ -94,6 +95,7 @@ async fn main() {
                 None,
                 &output_path,
                 true,
+                vec![Language::English],
             )
             .await
             .unwrap();

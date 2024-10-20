@@ -13,6 +13,7 @@ interface SqlAutocompleteInputProps {
   type: "app" | "window";
   icon: React.ReactNode;
   className?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 export function SqlAutocompleteInput({
@@ -23,6 +24,7 @@ export function SqlAutocompleteInput({
   type,
   icon,
   className,
+  onKeyDown,
 }: SqlAutocompleteInputProps) {
   const { items, isLoading } = useSqlAutocomplete(type);
   const [open, setOpen] = useState(false);
@@ -91,6 +93,8 @@ export function SqlAutocompleteInput({
             onFocus={() => setOpen(true)}
             className="pl-10 pr-8 w-full"
             autoCorrect="off"
+            aria-autocomplete="none"
+            onKeyDown={onKeyDown}
           />
           {inputValue && (
             <button

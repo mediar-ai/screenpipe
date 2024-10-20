@@ -307,12 +307,29 @@ async fn main() {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
+            // if first time user do t start sidecar yet
+            let mut is_first_time_user = store
+                .get("isFirstTimeUser")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+
+            // double-check if they have any files in the data dir
+            let data_dir =
+                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+            let has_files = fs::read_dir(data_dir.join("data"))
+                .map(|mut entries| entries.next().is_some())
+                .unwrap_or(false);
+
+            if has_files {
+                is_first_time_user = false;
+            }
+
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
 
-            if !use_dev_mode {
+            if !use_dev_mode && !is_first_time_user {
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager.lock().await;
                     if let Err(e) = manager.spawn(&app_handle).await {

@@ -110,11 +110,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     let port = store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030);
 
-    let data_dir = store
-        .get("dataDir")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
-
     let disable_audio = store
         .get("disableAudio")
         .and_then(|v| v.as_bool())
@@ -180,12 +175,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if fps != 0.2 {
         args.push("--fps");
         args.push(fps_str.as_str());
-    }
-
-    if data_dir != "default" {
-        args.push("--data-dir");
-        let dir = data_dir.as_str();
-        args.push(dir);
     }
 
     if audio_transcription_engine != "default" {
@@ -275,23 +264,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-beta");
     }
 
-    // args.push("--debug");
 
-    // macos /Applications/screenpipe.app/Contents/MacOS/
-    // linux /usr/local/bin
-    // windows %LOCALAPPDATA%\\screenpipe
-    let screenpipe_path = app
-        .path()
-        .local_data_dir()
-        .unwrap_or_default()
-        .join("screenpipe");
-    let path_to_sidecars = if cfg!(windows) {
-        screenpipe_path.to_str().unwrap_or_default()
-    } else if cfg!(target_os = "macos") {
-        "/Applications/screenpipe.app/Contents/MacOS/"
-    } else {
-        "/usr/local/bin"
-    };
 
     if cfg!(windows) {
         let exe_dir = env::current_exe()
@@ -310,7 +283,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
-        c = c.env("PATH", path_to_sidecars);
+
 
         let c = c.args(&args);
 
@@ -329,9 +302,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if use_chinese_mirror {
         command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
     }
-
-    // pass the sidecars PATH to the screenpipe process
-    command = command.env("PATH", path_to_sidecars);
 
     let command = command.args(&args);
 

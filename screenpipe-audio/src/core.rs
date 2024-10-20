@@ -1,3 +1,4 @@
+use crate::audio_processing::audio_to_mono;
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -126,7 +127,7 @@ async fn get_device_and_config(
 
         #[cfg(target_os = "macos")]
         {
-            if audio_device.device_type == DeviceType::Output {
+            if is_output_device {
                 if let Ok(screen_capture_host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
                 {
                     devices = screen_capture_host.input_devices()?;
@@ -165,7 +166,8 @@ pub async fn record_and_transcribe(
 ) -> Result<()> {
     let (cpal_audio_device, config) = get_device_and_config(&audio_device).await?;
     let sample_rate = config.sample_rate().0;
-    let channels = config.channels() as u16;
+    let channels = config.channels();
+
     debug!(
         "Audio device config: sample_rate={}, channels={}",
         sample_rate, channels
@@ -201,7 +203,9 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let _ = audio_queue_clone.push(bytemuck::cast_slice(data).to_vec());
+                        let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+
+                        let _ = audio_queue_clone.push(mono);
                     }
                 },
                 error_callback,
@@ -214,7 +218,9 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let _ = audio_queue_clone.push(bytemuck::cast_slice(data).to_vec());
+                        let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+
+                        let _ = audio_queue_clone.push(mono);
                     }
                 },
                 error_callback,
@@ -227,7 +233,9 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let _ = audio_queue_clone.push(bytemuck::cast_slice(data).to_vec());
+                        let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+
+                        let _ = audio_queue_clone.push(mono);
                     }
                 },
                 error_callback,
@@ -240,7 +248,9 @@ pub async fn record_and_transcribe(
                         .upgrade()
                         .map_or(false, |arc| arc.load(Ordering::Relaxed))
                     {
-                        let _ = audio_queue_clone.push(data.to_vec());
+                        let mono = audio_to_mono(data, channels);
+
+                        let _ = audio_queue_clone.push(mono);
                     }
                 },
                 error_callback,
@@ -417,4 +427,28 @@ pub fn default_output_device() -> Result<AudioDevice> {
             .ok_or_else(|| anyhow!("No default output device found"))?;
         return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
+}
+
+pub fn trigger_audio_permission() -> Result<()> {
+    let host = cpal::default_host();
+    let device = host
+        .default_input_device()
+        .ok_or_else(|| anyhow!("No default input device found"))?;
+
+    let config = device.default_input_config()?;
+
+    // Attempt to build an input stream, which should trigger the permission request
+    let _stream = device.build_input_stream(
+        &config.into(),
+        |_data: &[f32], _: &cpal::InputCallbackInfo| {
+            // Do nothing, we just want to trigger the permission request
+        },
+        |err| eprintln!("Error in audio stream: {}", err),
+        None,
+    )?;
+
+    // We don't actually need to start the stream
+    // The mere attempt to build it should trigger the permission request
+
+    Ok(())
 }

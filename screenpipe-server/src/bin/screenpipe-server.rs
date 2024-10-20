@@ -9,7 +9,7 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device, vad_engine::SileroVad, whisper::WhisperModel, AudioDevice, DeviceControl
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
@@ -122,7 +122,39 @@ async fn main() -> anyhow::Result<()> {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
             }
-            Command::Setup => {
+            #[allow(unused_variables)]
+            Command::Setup { enable_beta } => {
+                #[cfg(feature = "beta")]
+                if enable_beta {
+                    use screenpipe_actions::type_and_animate::trigger_keyboard_permission;
+
+                    // Trigger keyboard permission request
+                    if let Err(e) = trigger_keyboard_permission() {
+                        error!("Failed to trigger keyboard permission: {:?}", e);
+                        error!("Please grant keyboard permission manually in System Preferences.");
+                    } else {
+                        info!("Keyboard permission requested. Please grant permission if prompted.");
+                    }
+                }
+                use screenpipe_audio::{trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel};
+                use screenpipe_vision::core::trigger_screen_capture_permission;
+
+                // Trigger audio permission request
+                if let Err(e) = trigger_audio_permission() {
+                    error!("Failed to trigger audio permission: {:?}", e);
+                    error!("Please grant microphone permission manually in System Preferences.");
+                } else {
+                    info!("Audio permission requested. Please grant permission if prompted.");
+                }
+
+                // Trigger screen capture permission request
+                if let Err(e) = trigger_screen_capture_permission() {
+                    error!("Failed to trigger screen capture permission: {:?}", e);
+                    error!("Please grant screen recording permission manually in System Preferences.");
+                } else {
+                    info!("Screen capture permission requested. Please grant permission if prompted.");
+                }
+
                 // this command just download models and stuff (useful to have specific step to display in UI)
 
                 // ! should prob skip if deepgram?
@@ -130,7 +162,7 @@ async fn main() -> anyhow::Result<()> {
                 // ! assuming silero is used
                 SileroVad::new().await.unwrap();
 
-                println!("screenpipe setup complete");
+                info!("screenpipe setup complete");
                 // TODO: ffmpeg sidecar thing here
                 return Ok(());
             }
@@ -451,7 +483,15 @@ async fn main() -> anyhow::Result<()> {
     // Function to truncate and pad strings
     fn format_cell(s: &str, width: usize) -> String {
         if s.len() > width {
-            format!("{}...", &s[..width - 3])
+            let mut max_pos = 0;
+            for (i, c) in s.char_indices() {
+                if i + c.len_utf8() > width - 3 {
+                    break;
+                }
+                max_pos = i + c.len_utf8();
+            }
+    
+            format!("{}...", &s[..max_pos])
         } else {
             format!("{:<width$}", s, width = width)
         }
@@ -624,6 +664,8 @@ async fn main() -> anyhow::Result<()> {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
+            // sleep for 5 seconds 
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("watched pid {} has stopped, initiating shutdown", pid);
                 let _ = shutdown_tx_clone.send(());
