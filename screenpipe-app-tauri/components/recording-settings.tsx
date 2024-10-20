@@ -11,6 +11,7 @@ import {
 } from "./ui/select";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import {
   Check,
   ChevronsUpDown,
@@ -19,6 +20,7 @@ import {
   Languages,
   Mic,
   Monitor,
+  AppWindowMac,
   X,
 } from "lucide-react";
 import { cn, getCliPath } from "@/lib/utils";
@@ -92,6 +94,8 @@ export function RecordingSettings({
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openMonitors, setOpenMonitors] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
+  const [windowsForIgnore, setWindowsForIgnore] = useState("");
+  const [windowsForInclude, setWindowsForInclude] = useState("");
 
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
@@ -272,10 +276,12 @@ export function RecordingSettings({
   };
 
   const handleAddIgnoredWindow = (value: string) => {
-    if (value && !localSettings.ignoredWindows.includes(value)) {
+    const lowerCaseValue = value.toLowerCase();
+    if (value && !localSettings.ignoredWindows.map(w => w.toLowerCase()).includes(lowerCaseValue)) {
       setLocalSettings({
         ...localSettings,
         ignoredWindows: [...localSettings.ignoredWindows, value],
+        includedWindows: localSettings.includedWindows.filter(w => w.toLowerCase() !== lowerCaseValue),
       });
     }
   };
@@ -288,10 +294,12 @@ export function RecordingSettings({
   };
 
   const handleAddIncludedWindow = (value: string) => {
-    if (value && !localSettings.includedWindows.includes(value)) {
+    const lowerCaseValue = value.toLowerCase();
+    if (value && !localSettings.includedWindows.map(w => w.toLowerCase()).includes(lowerCaseValue)) {
       setLocalSettings({
         ...localSettings,
         includedWindows: [...localSettings.includedWindows, value],
+        ignoredWindows: localSettings.ignoredWindows.filter(w => w.toLowerCase() !== lowerCaseValue),
       });
     }
   };
@@ -961,23 +969,26 @@ export function RecordingSettings({
                 ))}
               </div>
               <div className="flex gap-2">
-                <Input
+                <SqlAutocompleteInput
                   id="ignoredWindows"
-                  placeholder="add window to ignore"
-                  onKeyPress={(e) => {
+                  type="window"
+                  icon={<AppWindowMac className="h-4 w-4" />}
+                  value={windowsForIgnore}
+                  onChange={(value) => setWindowsForIgnore(value)}
+                  placeholder="add windows to ignore"
+                  className="flex-grow"
+                  onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      handleAddIgnoredWindow(e.currentTarget.value);
-                      e.currentTarget.value = "";
+                      e.preventDefault();
+                      handleAddIgnoredWindow(windowsForIgnore);
+                      setWindowsForIgnore("");
                     }
                   }}
                 />
                 <Button
                   onClick={() => {
-                    const input = document.getElementById(
-                      "ignoredWindows"
-                    ) as HTMLInputElement;
-                    handleAddIgnoredWindow(input.value);
-                    input.value = "";
+                    handleAddIgnoredWindow(windowsForIgnore);
+                    setWindowsForIgnore("");
                   }}
                 >
                   add
@@ -1026,23 +1037,26 @@ export function RecordingSettings({
                 ))}
               </div>
               <div className="flex gap-2">
-                <Input
+                <SqlAutocompleteInput
                   id="includedWindows"
+                  type="window"
+                  icon={<AppWindowMac className="h-4 w-4" />}
+                  value={windowsForInclude}
+                  onChange={(value) => setWindowsForInclude(value)}
                   placeholder="add window to include"
-                  onKeyPress={(e) => {
+                  className="flex-grow"
+                  onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      handleAddIncludedWindow(e.currentTarget.value);
-                      e.currentTarget.value = "";
+                      e.preventDefault();
+                      handleAddIncludedWindow(windowsForInclude);
+                      setWindowsForInclude("");
                     }
                   }}
                 />
                 <Button
                   onClick={() => {
-                    const input = document.getElementById(
-                      "includedWindows"
-                    ) as HTMLInputElement;
-                    handleAddIncludedWindow(input.value);
-                    input.value = "";
+                    handleAddIncludedWindow(windowsForInclude);
+                    setWindowsForInclude("");
                   }}
                 >
                   add
