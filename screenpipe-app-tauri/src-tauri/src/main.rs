@@ -69,11 +69,10 @@ async fn main() {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.set_always_on_top(false);
                 let _ = window.set_visible_on_all_workspaces(false);
-                if cfg!(target_os = "macos") {
+                #[cfg(target_os = "macos")]
                     let _ = window
                         .app_handle()
                         .set_activation_policy(tauri::ActivationPolicy::Regular);
-                }
                 window.hide().unwrap();
                 api.prevent_close();
             }

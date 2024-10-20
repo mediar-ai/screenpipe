@@ -103,13 +103,15 @@ pub async fn reset_all_pipes() -> Result<(), String> {
 #[tauri::command]
 pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool) {
     if let Some(window) = app_handle.get_webview_window("main") {
+        #[cfg(target_os = "macos")]
+        if overlay {
+            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        }
+
         let _ = window.set_visible_on_all_workspaces(overlay);
         let _ = window.set_always_on_top(overlay);
         let _ = window.show();
 
-        if overlay && cfg!(target_os = "macos") {
-            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-        }
 
         if !overlay {
             let _ = window.set_focus();
