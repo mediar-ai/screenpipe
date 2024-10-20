@@ -13,6 +13,9 @@ on:
   workflow_dispatch:
 
 jobs:
+  generate_changelog:
+    uses: ./.github/workflows/generate-changelog.yml
+
   draft:
     runs-on: ubuntu-latest
 
@@ -26,7 +29,7 @@ jobs:
           api-key: ${{ secrets.CN_API_KEY }}
 
   publish-tauri:
-    needs: draft
+    needs: [draft, generate_changelog]
     permissions:
       contents: write
     strategy:
