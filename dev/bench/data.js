@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729460880733,
+  "lastUpdate": 1729460889346,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -17879,6 +17879,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1986241125,
             "range": "± 72516012",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f933db2c5fb745c9286655b104130cffde07341c",
+          "message": "Merge pull request #546 from eltociear/patch-4\n\ndocs: ceate README-ja_JP.md",
+          "timestamp": "2024-10-20T14:40:11-07:00",
+          "tree_id": "c9646ad6c0c6674520e333b8cb7c3b999e0a7318",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/f933db2c5fb745c9286655b104130cffde07341c"
+        },
+        "date": 1729460887831,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1941554895,
+            "range": "± 50231621",
             "unit": "ns/iter"
           }
         ]
