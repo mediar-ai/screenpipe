@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729461062474,
+  "lastUpdate": 1729461832920,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18029,6 +18029,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1902452791,
             "range": "± 8480400",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50280365+EzraEllette@users.noreply.github.com",
+            "name": "Ezra Ellette",
+            "username": "EzraEllette"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d940bd9bd9edc861db8ffe6ba729efbfe813b16",
+          "message": "feat: show screenpipe on shortcut press (#524)",
+          "timestamp": "2024-10-20T14:55:23-07:00",
+          "tree_id": "be7b6f0f5a64b163fbbee239c2fbd6fa61fc6dba",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/8d940bd9bd9edc861db8ffe6ba729efbfe813b16"
+        },
+        "date": 1729461831649,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1946447333,
+            "range": "± 89366807",
             "unit": "ns/iter"
           }
         ]
