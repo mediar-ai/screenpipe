@@ -45,7 +45,6 @@ import { platform } from "@tauri-apps/plugin-os";
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 
-import { unregister, register } from "@tauri-apps/plugin-global-shortcut";
 import { registerShortcuts } from "@/lib/shortcuts";
 
 import {
@@ -94,19 +93,38 @@ export function Settings({ className }: { className?: string }) {
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const key = event.target.value.toUpperCase();
-    setNonModifierKey(key);
+    const validKeys = /^[A-Z0-9]$|^F([1-9]|1[0-2])$/; // Alphanumeric or F1-F12
+    if (validKeys.test(key) || key === "") {
+      setNonModifierKey(key);
+    }
   };
 
   const handleSetShortcut = () => {
-    const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
+    if (selectedModifiers.length === 0 || nonModifierKey === "") {
+      // Don't update if no modifiers and no key are selected
+      toast({
+        title: "invalid shortcut",
+        description: "please select at least one modifier and a key",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newShortcut = [...selectedModifiers, nonModifierKey]
+      .filter(Boolean)
+      .join("+");
     setLocalSettings({ ...localSettings, showScreenpipeShortcut: newShortcut });
     updateSettings({ showScreenpipeShortcut: newShortcut });
     registerShortcuts({
       showScreenpipeShortcut: newShortcut,
     });
 
-    setSelectedModifiers([]);
-    setNonModifierKey("");
+    setCurrentShortcut(newShortcut);
+
+    toast({
+      title: "shortcut updated",
+      description: `new shortcut set to: ${parseKeyboardShortcut(newShortcut)}`,
+    });
   };
 
   const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
@@ -838,15 +856,15 @@ export function Settings({ className }: { className?: string }) {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-center">Shortcuts</CardTitle>
+              <CardTitle className="text-center">shortcuts</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center">
               <h2 className="text-lg font-semibold mb-4">
-                Set Shortcut for Screenpipe Overlay
+                set shortcut for screenpipe overlay
               </h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Use the following options to set a keyboard shortcut for showing
-                the Screenpipe overlay.
+                use the following options to set a keyboard shortcut for showing
+                the screenpipe overlay.
               </p>
               <div className="flex items-center gap-2 mb-4">
                 {["ctrl", "alt", "shift", "super"].map((modifier) => (
@@ -865,7 +883,7 @@ export function Settings({ className }: { className?: string }) {
                   type="text"
                   value={nonModifierKey}
                   onChange={handleNonModifierKeyChange}
-                  placeholder="Enter key"
+                  placeholder="enter key"
                   className="border p-1"
                 />
                 <button
@@ -875,11 +893,11 @@ export function Settings({ className }: { className?: string }) {
                   }`}
                   disabled={!isShortcutChanged}
                 >
-                  Set Shortcut
+                  set shortcut
                 </button>
               </div>
               <p className="mt-2 text-sm text-muted-foreground text-center">
-                Current Shortcut: {parseKeyboardShortcut(currentShortcut)}
+                current shortcut: {parseKeyboardShortcut(currentShortcut)}
               </p>
             </CardContent>
           </Card>
