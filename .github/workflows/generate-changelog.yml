@@ -1,0 +1,24 @@
+name: Generate CHANGELOG.md
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  generate-changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Changelog
+        run: .github/scripts/generate_changelog_md.sh
+      
+      - name: Commit Changelog
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_author: Author <actions@github.com>
+          commit_message: "docs: add changelog for $CURRENT_RELEASE"
+          branch: ${{ github.ref }}
