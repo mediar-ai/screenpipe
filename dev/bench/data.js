@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729366985384,
+  "lastUpdate": 1729460640587,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -17789,6 +17789,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2814993375,
             "range": "± 502857643",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "118052427+tribhuwan-kumar@users.noreply.github.com",
+            "name": "tribhuwan",
+            "username": "tribhuwan-kumar"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e201a05cf64ca12fbfd81f493a82f6dcdefe3a83",
+          "message": "feat: add ignored windows (#545)\n\n* chore: add windows to ignore in each os and fix ignore and exclude conflict in app\r\n\r\n* feat: add autocompletion inputs for ignoring and including windows, add default ignored windows",
+          "timestamp": "2024-10-20T14:36:41-07:00",
+          "tree_id": "5744ff0307826f5b71961c249f6b818295ba1429",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e201a05cf64ca12fbfd81f493a82f6dcdefe3a83"
+        },
+        "date": 1729460639409,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1897331062,
+            "range": "± 66737529",
             "unit": "ns/iter"
           }
         ]
