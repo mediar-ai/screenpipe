@@ -39,7 +39,7 @@ import {
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
 import { Command } from "@tauri-apps/plugin-shell";
-import { LogFileButton } from "./screenpipe-status";
+import { LogFileButton } from "./log-file-button";
 import { platform } from "@tauri-apps/plugin-os";
 
 import { toast } from "@/components/ui/use-toast";

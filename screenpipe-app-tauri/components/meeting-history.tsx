@@ -177,9 +177,9 @@ export default function MeetingHistory() {
     console.log("fetching meetings...");
     setLoading(true);
     try {
-      // Always fetch from the last 24 hours
+      // Always fetch from the last 7x24 hours
       const startTime = new Date(
-        Date.now() - 24 * 60 * 60 * 1000
+        Date.now() - 7 * 24 * 60 * 60 * 1000
       ).toISOString();
       console.log("searching from:", startTime);
 
