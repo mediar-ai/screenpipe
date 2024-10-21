@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729540581143,
+  "lastUpdate": 1729543991742,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18239,6 +18239,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1896117520,
             "range": "± 27178226",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "e78e652e79d637276b67c03be905b2c74b5f6b14",
+          "message": "fix: make sure backend properly start when non dev mode at app boot",
+          "timestamp": "2024-10-21T13:43:34-07:00",
+          "tree_id": "11db06a8945c8f15384611c970f756790e4df0f2",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e78e652e79d637276b67c03be905b2c74b5f6b14"
+        },
+        "date": 1729543990584,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1904625708,
+            "range": "± 49434426",
             "unit": "ns/iter"
           }
         ]
