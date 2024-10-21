@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729469585452,
+  "lastUpdate": 1729525280052,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18149,6 +18149,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2065535374,
             "range": "± 60464868",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "97999b59b7ffe4bb9d38668be9aee0cdfd70fff6",
+          "message": "Merge pull request #549 from somethingwentwell/update-macos-docs\n\ndocs: add mac manual prebuild",
+          "timestamp": "2024-10-21T08:32:39-07:00",
+          "tree_id": "b3c1f4fea10fc51343314a4c5828c42ab58a66fd",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/97999b59b7ffe4bb9d38668be9aee0cdfd70fff6"
+        },
+        "date": 1729525278664,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1925018687,
+            "range": "± 88473700",
             "unit": "ns/iter"
           }
         ]
