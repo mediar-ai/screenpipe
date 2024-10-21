@@ -7,11 +7,6 @@ use commands::show_main_window;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use tauri::Emitter;
-use tauri_plugin_global_shortcut::Code;
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
-use tauri_plugin_global_shortcut::Modifiers;
-use tauri_plugin_global_shortcut::Shortcut;
-use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_notification::NotificationExt;
 use std::env;
 use std::fs;
@@ -120,6 +115,7 @@ async fn main() {
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
+            commands::update_recording_shortcut, // Add this line
         ])
         .setup(|app| {
             // Logging setup
@@ -184,11 +180,17 @@ async fn main() {
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
+                let start_recording =
+                    MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
+                let stop_recording =
+                    MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
                 let menu_divider = PredefinedMenuItem::separator(app)?;
                 let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app)
                     .items(&[
                         &show,
+                        &start_recording,
+                        &stop_recording,
                         update_manager.update_now_menu_item_ref(),
                         &menu_divider,
                         &quit,
@@ -400,66 +402,6 @@ async fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
-            #[cfg(desktop)]
-            {
-                let toggle_recording_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyR);
-                let app_handle = app.handle().clone();
-                let event_app_handle = app_handle.clone();
-
-                match app.handle().plugin(
-                    tauri_plugin_global_shortcut::Builder::new().with_handler(move |_app, shortcut, event| {
-                        if shortcut == &toggle_recording_shortcut && matches!(event.state(), ShortcutState::Pressed) {
-                            let app_handle = app_handle.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let state = app_handle.state::<SidecarState>();
-                                let manager = state.0.lock().await;
-                                
-                                let (action, result) = match manager.as_ref().and_then(|m| m.child.as_ref()) {
-                                    Some(_) => ("stop", kill_all_sreenpipes(state.clone(), app_handle.clone()).await),
-                                    None => ("start", spawn_screenpipe(state.clone(), app_handle.clone()).await),
-                                };
-
-                                let (title, body, event) = match result {
-                                    Ok(_) => ("Screenpipe", format!("Recording {action}ped"), format!("recording{action}ed")),
-                                    Err(err) => {
-                                        error!("Failed to {} recording: {}", action, err);
-                                        ("Screenpipe", format!("Failed to {} recording", action), "recording_failed".to_string())
-                                    }
-                                };
-
-                                let _ = app_handle.notification().builder()
-                                    .title(title)
-                                    .body(body.clone())
-                                    .show();
-                                let _ = app_handle.emit(&event, body);
-                            });
-                        }
-                    })
-                    .build(),
-                ) {
-                    Ok(_) => {
-                        match event_app_handle.global_shortcut().register(toggle_recording_shortcut) {
-                            Ok(_) => {
-                                debug!("Global shortcut registered successfully");
-                                let _ = event_app_handle.emit("shortcut_registered", "Ctrl+Shift+R");
-                            },
-                            Err(e) => {
-                                error!("Failed to register global shortcut: {}", e);
-                                let event = if e.to_string().contains("already in use") {
-                                    "shortcut_conflict"
-                                } else {
-                                    "shortcut_registration_failed"
-                                };
-                                let _ = event_app_handle.emit(event, e.to_string());
-                            },
-                        }
-                    },
-                    Err(e) => {
-                        error!("Failed to initialize global shortcut plugin: {}", e);
-                        let _ = event_app_handle.emit("shortcut_plugin_init_failed", e.to_string());
-                    },
-                }
-            }
 
             Ok(())
         })
