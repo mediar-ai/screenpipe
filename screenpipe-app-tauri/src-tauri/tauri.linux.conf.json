@@ -2,7 +2,11 @@
     "bundle": {
         "externalBin": [
             "screenpipe",
-            "deno"
+            "deno",
+            "ollama"
+        ],
+        "resources": [
+            "lib/ollama/*"
         ],
         "linux": {
             "deb": {
