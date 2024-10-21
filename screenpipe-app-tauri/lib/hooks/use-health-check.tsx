@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface HealthCheckResponse {
   status: string;
@@ -10,32 +10,47 @@ interface HealthCheckResponse {
   message: string;
 }
 
+function isHealthChanged(
+  oldHealth: HealthCheckResponse | null,
+  newHealth: HealthCheckResponse
+): boolean {
+  if (!oldHealth) return true;
+  return (
+    oldHealth.status !== newHealth.status ||
+    oldHealth.status_code !== newHealth.status_code ||
+    oldHealth.last_frame_timestamp !== newHealth.last_frame_timestamp ||
+    oldHealth.last_audio_timestamp !== newHealth.last_audio_timestamp ||
+    oldHealth.frame_status !== newHealth.frame_status ||
+    oldHealth.audio_status !== newHealth.audio_status ||
+    oldHealth.message !== newHealth.message
+  );
+}
+
 export function useHealthCheck() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isServerDown, setIsServerDown] = useState(false);
-  const baseCheckInterval = 5000; // 5 seconds
-  const maxCheckInterval = 60000; // 1 minute
+  const pollInterval = 1000; // 1 second
+  const healthRef = useRef(health);
 
-  const fetchHealth = async () => {
+  const fetchHealth = useCallback(async () => {
     try {
-      const response = await fetch("http://localhost:3030/health");
+      const response = await fetch("http://localhost:3030/health", {
+        cache: "no-store",
+      });
       if (!response.ok) {
         throw new Error(`http error! status: ${response.status}`);
       }
       const data: HealthCheckResponse = await response.json();
-      if (
-        !health ||
-        health.status !== data.status ||
-        health.status_code !== data.status_code ||
-        health.message !== data.message
-      ) {
+      if (isHealthChanged(healthRef.current, data)) {
         setHealth(data);
+        healthRef.current = data;
       }
       setIsServerDown(false);
     } catch (error) {
+      console.error("health check error:", error);
       if (!isServerDown) {
         setIsServerDown(true);
-        setHealth({
+        const errorHealth: HealthCheckResponse = {
           last_frame_timestamp: null,
           last_audio_timestamp: null,
           frame_status: "error",
@@ -43,22 +58,19 @@ export function useHealthCheck() {
           status: "error",
           status_code: 500,
           message: "failed to fetch health status. server might be down.",
-        });
+        };
+        setHealth(errorHealth);
+        healthRef.current = errorHealth;
       }
     }
-  };
+  }, [isServerDown]);
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(
-      () => {
-        fetchHealth();
-      },
-      isServerDown ? maxCheckInterval : baseCheckInterval
-    );
+    const interval = setInterval(fetchHealth, pollInterval);
 
     return () => clearInterval(interval);
-  }, [isServerDown]);
+  }, [fetchHealth]);
 
-  return { health, isServerDown };
+  return { health, isServerDown, refetchHealth: fetchHealth };
 }

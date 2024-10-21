@@ -76,7 +76,7 @@ for users preferring full control or customization, building the app manually fr
    ./target/release/screenpipe
    ```
 
-6. to build the desktop app:
+6a. to build the desktop app (with pre_build script):
 
 add this to your vscode settings in the root of the project `.vscode/settings.json`:
 
@@ -105,6 +105,57 @@ add this to your vscode settings in the root of the project `.vscode/settings.js
 cd screenpipe-app-tauri
 bun install
 bun scripts/pre_build.js # <- this is important to copy the CLI into the app
+bun tauri build
+```
+
+6b. to build the desktop app - M-Series (copy cli & binaries mannually):
+
+```bash
+# Define variables
+SCREENPIPE_PATH="/your/full/path/to/screenpipe" # <- Replace with the actual path
+HOME_DENO_BIN="$HOME/.deno/bin/deno"
+TARGET_RELEASE="$SCREENPIPE_PATH/target/release/screenpipe-vision"
+SRC_TAURI="$SCREENPIPE_PATH/screenpipe-app-tauri/src-tauri"
+FFMPEG_PATH="/opt/homebrew/opt/ffmpeg/bin/ffmpeg"
+FFMPEG_PACKAGE="ffmpeg-7.0-macOS-default"
+AVBUILD_FFMPEG_URL="https://master.dl.sourceforge.net/project/avbuild/macOS/$FFMPEG_PACKAGE.tar.xz"
+OLLAMA_VERSION="v0.3.13"
+OLLAMA_DOWNLOAD_URL="https://github.com/ollama/ollama/releases/download/$OLLAMA_VERSION/ollama-darwin"
+
+# Change directory to screenpipe-app-tauri
+cd screenpipe-app-tauri
+
+# Install using bun
+bun install
+
+# Export SCREENPIPE_PATH
+export SCREENPIPE_PATH=$SCREENPIPE_PATH
+
+# Copy deno binary
+cp $HOME_DENO_BIN $SRC_TAURI/deno-aarch64-apple-darwin
+
+# Copy screenpipe-vision
+cp $TARGET_RELEASE $SRC_TAURI/screenpipe-aarch64-apple-darwin
+
+# Copy ffmpeg binary
+cp $FFMPEG_PATH $SRC_TAURI/ffmpeg-aarch64-apple-darwin
+
+# Download and extract AVBUILD ffmpeg
+wget -nc $AVBUILD_FFMPEG_URL -O $SRC_TAURI/$FFMPEG_PACKAGE.tar.xz
+tar xf $SRC_TAURI/$FFMPEG_PACKAGE.tar.xz -C $SRC_TAURI
+mv $SRC_TAURI/$FFMPEG_PACKAGE $SRC_TAURI/ffmpeg
+rm $SRC_TAURI/$FFMPEG_PACKAGE.tar.xz
+
+# Update dynamic libraries paths using install_name_tool
+install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib $SRC_TAURI/screenpipe-aarch64-apple-darwin
+install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib $SRC_TAURI/screenpipe-aarch64-apple-darwin
+install_name_tool -add_rpath @executable_path/../Frameworks $SRC_TAURI/screenpipe-aarch64-apple-darwin
+
+# Download and set permissions for ollama
+wget --no-config -q --show-progress $OLLAMA_DOWNLOAD_URL -O $SRC_TAURI/ollama-aarch64-apple-darwin
+chmod 755 $SRC_TAURI/ollama-aarch64-apple-darwin
+
+# Build the project using tauri
 bun tauri build
 ```
 

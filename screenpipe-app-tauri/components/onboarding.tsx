@@ -12,6 +12,7 @@ import OnboardingDevConfig from "@/components/onboarding/dev-configuration";
 import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import OnboardingInstructions from "@/components/onboarding/explain-instructions";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 const setFirstTimeUserFlag = async () => {
   await localforage.setItem("isFirstTimeUser", false);
@@ -139,6 +140,7 @@ const Onboarding: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const { showOnboarding, setShowOnboarding } = useOnboarding();
+  const { updateSettings } = useSettings();
 
   useEffect(() => {
     setIsVisible(true);
@@ -155,8 +157,6 @@ const Onboarding: React.FC = () => {
       setTimeout(hideCloseButton, 100);
     }
   }, [showOnboarding]);
-
-
 
   useEffect(() => {
     if (error) {
@@ -233,6 +233,9 @@ const Onboarding: React.FC = () => {
   const handleEnd = async () => {
     setShowOnboarding(false);
     await setFirstTimeUserFlag();
+    updateSettings({
+      isFirstTimeUser: false,
+    });
   };
 
   return (

@@ -3,6 +3,7 @@
 
 use commands::load_pipe_config;
 use commands::save_pipe_config;
+use commands::show_main_window;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use std::env;
@@ -57,30 +58,21 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     Ok(local_data_dir)
 }
 
-fn show_main_window(app_handle: &tauri::AppHandle) {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-    } else {
-        let _ = tauri::WebviewWindowBuilder::new(
-            app_handle,
-            "main",
-            tauri::WebviewUrl::App("index.html".into()),
-        )
-        .title("Screenpipe")
-        .build();
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
-
+    #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
+                let _ = window.set_always_on_top(false);
+                let _ = window.set_visible_on_all_workspaces(false);
+                #[cfg(target_os = "macos")]
+                let _ = window
+                    .app_handle()
+                    .set_activation_policy(tauri::ActivationPolicy::Regular);
                 window.hide().unwrap();
                 api.prevent_close();
             }
@@ -108,6 +100,7 @@ async fn main() {
                 .expect("Can't focus window!");
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -119,6 +112,7 @@ async fn main() {
             reset_all_pipes,
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
+            commands::update_show_screenpipe_shortcut,
         ])
         .setup(|app| {
             // Logging setup
@@ -197,7 +191,7 @@ async fn main() {
 
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
-                        show_main_window(&app_handle);
+                        show_main_window(app_handle, false);
                     }
                     "quit" => {
                         println!("quit clicked");
@@ -243,7 +237,7 @@ async fn main() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             } else {
-                                show_main_window(&app);
+                                show_main_window(&app, true);
                             }
                         }
                     }
@@ -264,6 +258,10 @@ async fn main() {
             }
 
             store.save()?;
+
+            // Ensure state is managed before calling update_show_screenpipe_shortcut
+            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
+            app.manage(sidecar_manager.clone());
 
             let is_analytics_enabled = store
                 .get("analyticsEnabled")
@@ -314,20 +312,34 @@ async fn main() {
                 .unwrap_or(true);
 
             // double-check if they have any files in the data dir
-            let data_dir =
-                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
-            let has_files = fs::read_dir(data_dir.join("data"))
+            let data_dir = app
+                .path()
+                .home_dir()
+                .expect("Failed to ensure local data directory");
+
+            info!("data_dir: {}", data_dir.display());
+            let has_files = fs::read_dir(data_dir.join(".screenpipe").join("data"))
                 .map(|mut entries| entries.next().is_some())
                 .unwrap_or(false);
 
+            info!("has_files: {}", has_files);
+
             if has_files {
                 is_first_time_user = false;
+                // Update the store with the new value
+                store.set("isFirstTimeUser".to_string(), Value::Bool(false));
+                store.save().unwrap();
             }
 
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
+
+            info!(
+                "will start sidecar: {}",
+                !use_dev_mode && !is_first_time_user
+            );
 
             if !use_dev_mode && !is_first_time_user {
                 tauri::async_runtime::spawn(async move {
@@ -350,7 +362,6 @@ async fn main() {
             let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
             app.manage(server_shutdown_tx);
 
-            // Add this custom activate handler
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
@@ -388,7 +399,7 @@ async fn main() {
             ..
         } => {
             if !has_visible_windows {
-                show_main_window(&app_handle);
+                show_main_window(&app_handle, false);
             }
         }
         _ => {}

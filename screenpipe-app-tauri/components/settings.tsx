@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 import { Badge } from "@/components/ui/badge"; // Add this import
+import { parseKeyboardShortcut } from "@/lib/utils"; // Add this import
 
 import {
   Eye,
@@ -38,11 +39,14 @@ import {
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
 import { Command } from "@tauri-apps/plugin-shell";
-import { LogFileButton } from "./screenpipe-status";
+import { LogFileButton } from "./log-file-button";
 import { platform } from "@tauri-apps/plugin-os";
 
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
+
+import { registerShortcuts } from "@/lib/shortcuts";
+
 import {
   Select,
   SelectContent,
@@ -59,6 +63,72 @@ export function Settings({ className }: { className?: string }) {
     "idle" | "running" | "error"
   >("idle");
   const [currentPlatform, setCurrentPlatform] = useState("unknown");
+
+  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+  const [nonModifierKey, setNonModifierKey] = useState<string>("");
+  const [currentShortcut, setCurrentShortcut] = useState<string>(
+    settings.showScreenpipeShortcut
+  );
+
+  useEffect(() => {
+    setCurrentShortcut(settings.showScreenpipeShortcut);
+
+    const parts = settings.showScreenpipeShortcut.split("+");
+    const modifiers = parts.slice(0, -1);
+    const key = parts.slice(-1)[0];
+
+    setSelectedModifiers(modifiers);
+    setNonModifierKey(key);
+  }, [settings.showScreenpipeShortcut]);
+
+  const toggleModifier = (modifier: string) => {
+    setSelectedModifiers((prev) =>
+      prev.includes(modifier)
+        ? prev.filter((m) => m !== modifier)
+        : [...prev, modifier]
+    );
+  };
+
+  const handleNonModifierKeyChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const key = event.target.value.toUpperCase();
+    const validKeys = /^[A-Z0-9]$|^F([1-9]|1[0-2])$/; // Alphanumeric or F1-F12
+    if (validKeys.test(key) || key === "") {
+      setNonModifierKey(key);
+    }
+  };
+
+  const handleSetShortcut = () => {
+    if (selectedModifiers.length === 0 || nonModifierKey === "") {
+      // Don't update if no modifiers and no key are selected
+      toast({
+        title: "invalid shortcut",
+        description: "please select at least one modifier and a key",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newShortcut = [...selectedModifiers, nonModifierKey]
+      .filter(Boolean)
+      .join("+");
+    setLocalSettings({ ...localSettings, showScreenpipeShortcut: newShortcut });
+    updateSettings({ showScreenpipeShortcut: newShortcut });
+    registerShortcuts({
+      showScreenpipeShortcut: newShortcut,
+    });
+
+    setCurrentShortcut(newShortcut);
+
+    toast({
+      title: "shortcut updated",
+      description: `new shortcut set to: ${parseKeyboardShortcut(newShortcut)}`,
+    });
+  };
+
+  const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
+  const isShortcutChanged = newShortcut !== currentShortcut;
 
   useEffect(() => {
     setCurrentPlatform(platform());
@@ -781,6 +851,53 @@ export function Settings({ className }: { className?: string }) {
                   deepgram&apos;s website
                 </a>{" "}
                 or DM us on discord, it&apos;s on us!
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">shortcuts</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <h2 className="text-lg font-semibold mb-4">
+                set shortcut for screenpipe overlay
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                use the following options to set a keyboard shortcut for showing
+                the screenpipe overlay.
+              </p>
+              <div className="flex items-center gap-2 mb-4">
+                {["ctrl", "alt", "shift", "super"].map((modifier) => (
+                  <label key={modifier} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedModifiers.includes(modifier)}
+                      onChange={() => toggleModifier(modifier)}
+                    />
+                    <span className="ml-2">
+                      {parseKeyboardShortcut(modifier)}
+                    </span>
+                  </label>
+                ))}
+                <input
+                  type="text"
+                  value={nonModifierKey}
+                  onChange={handleNonModifierKeyChange}
+                  placeholder="enter key"
+                  className="border p-1"
+                />
+                <button
+                  onClick={handleSetShortcut}
+                  className={`btn btn-primary ${
+                    !isShortcutChanged ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                  disabled={!isShortcutChanged}
+                >
+                  set shortcut
+                </button>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground text-center">
+                current shortcut: {parseKeyboardShortcut(currentShortcut)}
               </p>
             </CardContent>
           </Card>

@@ -4,7 +4,7 @@ import { localDataDir, join } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
-import {Language} from "@/lib/language";
+import { Language } from "@/lib/language";
 
 export type VadSensitivity = "low" | "medium" | "high";
 export type EmbeddedLLMConfig = {
@@ -43,6 +43,7 @@ export interface Settings {
   embeddedLLM: EmbeddedLLMConfig;
   languages: Language[];
   enableBeta: boolean;
+  showScreenpipeShortcut: string;
 }
 
 const defaultSettings: Settings = {
@@ -85,6 +86,7 @@ const defaultSettings: Settings = {
     port: 11438,
   },
   enableBeta: false,
+  showScreenpipeShortcut: "Super+Alt+S",
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -186,7 +188,7 @@ export function useSettings() {
         };
 
         const savedLanguages =
-            (await store!.get<Language[]>("languages")) || [];
+          (await store!.get<Language[]>("languages")) || [];
 
         const currentPlatform = await platform();
         const ignoredWindowsInAllOS = [
@@ -241,7 +243,11 @@ export function useSettings() {
             ? savedIgnoredWindows
             : defaultIgnoredWindows;
 
-        const savedEnableBeta = (await store!.get<boolean>("enableBeta")) || false;
+        const savedEnableBeta =
+          (await store!.get<boolean>("enableBeta")) || false;
+
+        const savedShowScreenpipeShortcut =
+          (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
 
         setSettings({
           openaiApiKey: savedKey,
@@ -273,6 +279,7 @@ export function useSettings() {
           embeddedLLM: savedEmbeddedLLM,
           languages: savedLanguages,
           enableBeta: savedEnableBeta,
+          showScreenpipeShortcut: savedShowScreenpipeShortcut,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

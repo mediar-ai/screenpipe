@@ -162,6 +162,16 @@ async fn main() -> anyhow::Result<()> {
                 // ! assuming silero is used
                 SileroVad::new().await.unwrap();
 
+                // Check if FFmpeg is working properly
+                match check_ffmpeg().await {
+                    Ok(_) => info!("FFmpeg is working properly"),
+                    Err(e) => {
+                        error!("FFmpeg check failed: {}", e);
+                        error!("Please ensure FFmpeg is installed correctly and is in your PATH");
+                        return Err(e.into());
+                    }
+                }
+
                 info!("screenpipe setup complete");
                 // TODO: ffmpeg sidecar thing here
                 return Ok(());
@@ -792,5 +802,22 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
             }
         },
     }
+    Ok(())
+}
+
+// Add this function near the end of the file
+async fn check_ffmpeg() -> anyhow::Result<()> {
+    // TODO: this should also check if it can properly encode mp4 etc
+    use tokio::process::Command;
+
+    let output = Command::new("ffmpeg")
+        .arg("-version")
+        .output().await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("FFmpeg check failed: {}", stderr));
+    }
+
     Ok(())
 }

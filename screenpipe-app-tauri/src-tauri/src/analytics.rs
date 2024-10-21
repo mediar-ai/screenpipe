@@ -1,12 +1,12 @@
 use log::{error, info};
 use reqwest::Client;
+use serde_derive::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::{System, SystemExt};
 use tokio::sync::Mutex;
 use tokio::time::interval;
-use serde_derive::Deserialize;
 
 pub struct AnalyticsManager {
     client: Client,
@@ -19,7 +19,12 @@ pub struct AnalyticsManager {
 }
 
 impl AnalyticsManager {
-    pub fn new(posthog_api_key: String, distinct_id: String, interval_hours: u64, local_api_base_url: String) -> Self {
+    pub fn new(
+        posthog_api_key: String,
+        distinct_id: String,
+        interval_hours: u64,
+        local_api_base_url: String,
+    ) -> Self {
         Self {
             client: Client::new(),
             posthog_api_key,
@@ -82,7 +87,7 @@ impl AnalyticsManager {
                 if let Err(e) = self.send_event("app_still_running", None).await {
                     error!("failed to send periodic posthog event: {}", e);
                 }
-                
+
                 // Track enabled pipes
                 if let Err(e) = self.track_enabled_pipes().await {
                     error!("failed to track enabled pipes: {}", e);
@@ -93,11 +98,7 @@ impl AnalyticsManager {
 
     async fn track_enabled_pipes(&self) -> Result<(), Box<dyn std::error::Error>> {
         let pipes_url = format!("{}/pipes/list", self.local_api_base_url);
-        let pipes: Vec<PipeInfo> = self.client.get(&pipes_url)
-            .send()
-            .await?
-            .json()
-            .await?;
+        let pipes: Vec<PipeInfo> = self.client.get(&pipes_url).send().await?.json().await?;
 
         let enabled_pipes: Vec<String> = pipes
             .into_iter()
@@ -110,7 +111,8 @@ impl AnalyticsManager {
             "enabled_pipe_count": enabled_pipes.len(),
         });
 
-        self.send_event("enabled_pipes_hourly", Some(properties)).await
+        self.send_event("enabled_pipes_hourly", Some(properties))
+            .await
     }
 }
 
