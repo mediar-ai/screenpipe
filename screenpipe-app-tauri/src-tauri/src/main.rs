@@ -4,6 +4,7 @@
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
+use llm_sidecar::EmbeddedLLMSettings;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use std::env;
@@ -34,6 +35,7 @@ use uuid::Uuid;
 mod analytics;
 
 use crate::analytics::start_analytics;
+use crate::llm_sidecar::LLMSidecar;
 
 mod commands;
 mod llm_sidecar;
@@ -364,6 +366,30 @@ async fn main() {
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
+
+            // LLM Sidecar setup
+            let embedded_llm: EmbeddedLLMSettings = store
+                .get("embeddedLLM")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_else(|| EmbeddedLLMSettings {
+                    enabled: false,
+                    model: "llama3.2:3b-instruct-q4_K_M".to_string(),
+                    port: 11438,
+                });
+
+            if embedded_llm.enabled {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match LLMSidecar::new(embedded_llm).start(app_handle).await {
+                        Ok(result) => {
+                            info!("LLM Sidecar started successfully: {}", result);
+                        }
+                        Err(e) => {
+                            error!("Failed to start LLM Sidecar: {}", e);
+                        }
+                    }
+                });
+            }
 
             Ok(())
         })

@@ -7,10 +7,19 @@ import posthog from "posthog-js";
 import { Language } from "@/lib/language";
 
 export type VadSensitivity = "low" | "medium" | "high";
+
+export type AIProviderType =
+  | "native-ollama"
+  | "openai"
+  | "custom"
+  | "embedded"
+  | "screenpipe-cloud";
+
 export type EmbeddedLLMConfig = {
   enabled: boolean;
   model: string;
   port: number;
+  type: AIProviderType;
 };
 
 export interface Settings {
@@ -264,7 +273,6 @@ export function useSettings() {
 
         const savedShowScreenpipeShortcut =
           (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
-
 
         let savedIsFirstTimeUser = await store!.get<boolean>("isFirstTimeUser");
         if (savedIsFirstTimeUser === null) {

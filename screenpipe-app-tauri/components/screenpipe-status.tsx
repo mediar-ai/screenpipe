@@ -207,96 +207,137 @@ const HealthStatus = ({ className }: { className?: string }) => {
       title: "try fixing setup",
       description: "attempt to automatically fix common setup issues",
       action: (
-        <Button
-          variant="outline"
-          onClick={handleFixSetup}
-          disabled={isFixingSetup}
-        >
-          <Wrench className="mr-2 h-4 w-4" />
-          {isFixingSetup ? "fixing..." : "fix setup"}
-        </Button>
+        <div className="flex flex-col items-center">
+          <Button
+            variant="outline"
+            onClick={handleFixSetup}
+            disabled={isFixingSetup}
+          >
+            <Wrench className="mr-2 h-4 w-4" />
+            {isFixingSetup ? "fixing..." : "fix setup"}
+          </Button>
+          <p className="text-xs mt-2 text-gray-500">
+            this will download AI models, check permissions, and dependencies
+          </p>
+        </div>
       ),
     },
     {
       title: "restart screenpipe recording",
       description: "click stop and start again",
       action: (
-        <Button
-          variant="outline"
-          onClick={async () => {
-            const toastId = toast({
-              title: "stopping screenpipe",
-              description: "please wait...",
-              duration: Infinity,
-            });
-            try {
-              await invoke("kill_all_sreenpipes");
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              toastId.update({
-                id: toastId.id,
-                title: "screenpipe stopped",
-                description: "screenpipe is now stopped.",
-                duration: 3000,
+        <div className="flex flex-col items-center">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const toastId = toast({
+                title: "restarting screenpipe",
+                description: "please wait...",
+                duration: Infinity,
               });
-            } catch (error) {
-              console.error("failed to stop screenpipe:", error);
-              toastId.update({
-                id: toastId.id,
-                title: "error",
-                description: "failed to stop screenpipe.",
-                variant: "destructive",
-                duration: 3000,
-              });
-            } finally {
-              toastId.dismiss();
-            }
-          }}
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          restart recording
-        </Button>
+              try {
+                await invoke("kill_all_sreenpipes");
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                toastId.dismiss();
+                toastId.update({
+                  id: toastId.id,
+                  title: "screenpipe stopped",
+                  description: "screenpipe is now stopped.",
+                  duration: 3000,
+                });
+                await invoke("spawn_screenpipe");
+
+                toastId.dismiss();
+                toastId.update({
+                  id: toastId.id,
+                  title: "screenpipe started",
+                  description: "screenpipe is now started.",
+                  duration: 3000,
+                });
+              } catch (error) {
+                console.error("failed to stop screenpipe:", error);
+                toastId.update({
+                  id: toastId.id,
+                  title: "error",
+                  description: "failed to stop screenpipe.",
+                  variant: "destructive",
+                  duration: 3000,
+                });
+              } finally {
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                toastId.dismiss();
+              }
+            }}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            restart recording
+          </Button>
+          <p className="text-xs mt-2 text-gray-500">
+            this will stop and start the recording process
+          </p>
+        </div>
       ),
     },
     {
       title: "check permissions",
       description: "ensure screen and audio recording permissions are granted",
       action: isMac ? (
-        <Button variant="outline" onClick={openScreenPermissions}>
-          <Lock className="mr-2 h-4 w-4" />
-          open screen permissions
-        </Button>
+        <div className="flex flex-col items-center">
+          <Button variant="outline" onClick={openScreenPermissions}>
+            <Lock className="mr-2 h-4 w-4" />
+            open screen permissions
+          </Button>
+          <p className="text-xs mt-2 text-gray-500">
+            opens system preferences for screen recording
+          </p>
+        </div>
       ) : null,
     },
     {
       title: "contact support",
       description: "if the issue persists, reach out to our support team",
       action: (
-        <div className="flex flex-col space-y-2 ">
+        <div className="flex flex-col space-y-2 items-center">
           <div className="flex items-center space-x-2 justify-center">
             <p className="text-sm">please share your logs with support:</p>
             <LogFileButton />
           </div>
-          <Button
-            variant="outline"
-            onClick={() => open("mailto:louis@screenpi.pe")}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            email founders
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => open("https://cal.com/louis030195/screenpipe")}
-          >
-            <Activity className="mr-2 h-4 w-4" />
-            book a call w founders
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => open("https://discord.gg/dU9EBuw7Uq")}
-          >
-            <HelpCircle className="mr-2 h-4 w-4" />
-            join our discord
-          </Button>
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              onClick={() => open("mailto:louis@screenpi.pe")}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              email founders
+            </Button>
+            <p className="text-xs mt-2 text-gray-500">
+              we&apos;ll respond within 24 hours
+            </p>
+          </div>
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              onClick={() => open("https://cal.com/louis030195/screenpipe")}
+            >
+              <Activity className="mr-2 h-4 w-4" />
+              book a call w founders
+            </Button>
+            <p className="text-xs mt-2 text-gray-500">
+              schedule a 15-minute troubleshooting call
+            </p>
+          </div>
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              onClick={() => open("https://discord.gg/dU9EBuw7Uq")}
+            >
+              <HelpCircle className="mr-2 h-4 w-4" />
+              join our discord
+            </Button>
+            <p className="text-xs mt-2 text-gray-500">
+              we&apos;re more responsive on discord (or the community)
+            </p>
+          </div>
         </div>
       ),
     },
@@ -349,7 +390,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent
-          className="max-w-4xl max-h-[100vh] flex flex-col p-8"
+          className="max-w-4xl max-h-[90vh] flex flex-col p-8"
           aria-describedby="status-dialog-description"
         >
           <DialogHeader className="flex flex-row items-center justify-between">

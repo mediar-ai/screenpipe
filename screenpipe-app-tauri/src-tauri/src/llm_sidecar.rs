@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::time::Duration;
 use tauri::Emitter;
+use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -36,12 +38,26 @@ impl LLMSidecar {
         self.status = OllamaStatus::Running;
         app.emit("ollama_status", &self.status)?;
 
+        // Get the resource directory path
+        let resource_path = app.path().resource_dir().unwrap();
+
+        // Append the resource path to CUDA_PATH
+        let cuda_path = env::var("CUDA_PATH").unwrap_or_default();
+        let new_cuda_path = format!("{}:{}", cuda_path, resource_path.display());
+
         info!("Starting Ollama serve command...");
         let serve_command = app.shell().sidecar("ollama").unwrap();
-        let serve_command = serve_command.args(&["serve"]).env(
-            "OLLAMA_HOST",
-            &format!("http://localhost:{}", self.settings.port),
-        );
+        let serve_command = serve_command
+            .args(&["serve"])
+            .env(
+                "OLLAMA_HOST",
+                &format!("http://localhost:{}", self.settings.port),
+            )
+            .env("CUDA_PATH", &new_cuda_path);
+
+        #[cfg(target_os = "windows")]
+        let serve_command = serve_command.env("OLLAMA_ORIGINS", "*");
+
         let (_, _child) = serve_command
             .spawn()
             .map_err(|e| {
@@ -56,7 +72,13 @@ impl LLMSidecar {
         // now ollama run the model
 
         let model_command = app.shell().sidecar("ollama").unwrap();
-        let model_command = model_command.args(&["run", &self.settings.model]);
+        let model_command = model_command
+            .args(&["run", &self.settings.model])
+            .env("CUDA_PATH", &new_cuda_path);
+
+        #[cfg(target_os = "windows")]
+        let model_command = model_command.env("OLLAMA_ORIGINS", "*");
+
         let (_, _child) = model_command
             .spawn()
             .map_err(|e| {
