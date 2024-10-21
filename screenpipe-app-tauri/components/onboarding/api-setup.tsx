@@ -209,7 +209,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
             <br />
             note: on windows, you may need to run ollama with:
             <pre className="bg-gray-100 p-1 rounded-md">
-              OLLAMA_ORIGINS=* ollama run llama2
+              OLLAMA_ORIGINS=* ollama run llama3.2:3b-instruct-q4_K_M
             </pre>
           </p>
         );
@@ -221,7 +221,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
             <br />
             note: on windows, you may need to run ollama with:
             <pre className="bg-gray-100 p-1 rounded-md">
-              OLLAMA_ORIGINS=* ollama run llama2
+              OLLAMA_ORIGINS=* ollama run llama3.2:3b-instruct-q4_K_M
             </pre>
           </p>
         );
@@ -402,8 +402,8 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
                   className="flex-grow"
                   placeholder={
                     localSettings.aiUrl === "http://localhost:11434/v1"
-                      ? "e.g., llama2:7b-chat"
-                      : "e.g., gpt-4"
+                      ? "e.g., llama3.2:3b-instruct-q4_K_M"
+                      : "e.g., gpt-4o"
                   }
                   autoCorrect="off"
                   autoCapitalize="off"

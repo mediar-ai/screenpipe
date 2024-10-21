@@ -295,6 +295,18 @@ after editing the configuration, rebuild your system using:
 
 </MotionDiv>
 
+<MotionDiv delay={2.6}>
+
+### important note for developers
+
+if you encounter key-related errors when building from source, especially for the desktop app, you may need to sign your updates. this is particularly important for our production builds and ensuring secure update processes.
+
+for detailed instructions on signing updates, please refer to the [tauri updater documentation](https://v2.tauri.app/plugin/updater/#signing-updates).
+
+you can probably remove the updater config in your fork if you don't need it.
+
+</MotionDiv>
+
 ### other options 
 
 - check this [docker setup](https://github.com/sabrehagen/desktop-environment/blob/d273442143260b414c581d7a53be0618ca822bc0/docker/Dockerfile#L409-L421)

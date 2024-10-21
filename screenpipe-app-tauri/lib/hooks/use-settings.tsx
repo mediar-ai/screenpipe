@@ -19,7 +19,6 @@ export type EmbeddedLLMConfig = {
   enabled: boolean;
   model: string;
   port: number;
-  type: AIProviderType;
 };
 
 export interface Settings {
@@ -42,6 +41,7 @@ export interface Settings {
   disableAudio: boolean;
   ignoredWindows: string[];
   includedWindows: string[];
+  aiProviderType: AIProviderType;
   aiUrl: string;
   aiMaxContextChars: number;
   fps: number;
@@ -82,6 +82,7 @@ const defaultSettings: Settings = {
   disableAudio: false,
   ignoredWindows: [],
   includedWindows: [],
+  aiProviderType: "openai",
   aiUrl: "https://api.openai.com/v1",
   aiMaxContextChars: 30000,
   fps: 0.5,
@@ -278,6 +279,8 @@ export function useSettings() {
         if (savedIsFirstTimeUser === null) {
           savedIsFirstTimeUser = true;
         }
+        const savedAiProviderType =
+          (await store!.get<AIProviderType>("aiProviderType")) || "openai";
 
         setSettings({
           openaiApiKey: savedKey,
@@ -299,6 +302,7 @@ export function useSettings() {
           disableAudio: savedDisableAudio,
           ignoredWindows: finalIgnoredWindows,
           includedWindows: savedIncludedWindows,
+          aiProviderType: savedAiProviderType,
           aiUrl: savedAiUrl,
           aiMaxContextChars: savedAiMaxContextChars,
           fps: savedFps,

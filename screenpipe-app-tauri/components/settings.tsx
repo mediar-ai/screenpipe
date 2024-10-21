@@ -291,11 +291,11 @@ export function Settings({ className }: { className?: string }) {
 
     setLocalSettings({
       ...localSettings,
-      embeddedLLM: { ...localSettings.embeddedLLM, type: newValue },
+      aiProviderType: newValue,
       aiUrl: newUrl,
     });
     updateSettings({
-      embeddedLLM: { ...localSettings.embeddedLLM, type: newValue },
+      aiProviderType: newValue,
       aiUrl: newUrl,
     });
   };
@@ -366,7 +366,7 @@ export function Settings({ className }: { className?: string }) {
             <br />
             note: on windows, you may need to run ollama with:
             <pre className="bg-gray-100 p-1 rounded-md">
-              OLLAMA_ORIGINS=* ollama run llama2
+              OLLAMA_ORIGINS=* ollama run llama3.2:3b-instruct-q4_K_M
             </pre>
           </p>
         );
@@ -386,7 +386,7 @@ export function Settings({ className }: { className?: string }) {
             <br />
             note: on windows, you may need to run ollama with:
             <pre className="bg-gray-100 p-1 rounded-md">
-              OLLAMA_ORIGINS=* ollama run llama2
+              OLLAMA_ORIGINS=* ollama run llama3.2:3b-instruct-q4_K_M
             </pre>
           </p>
         );
@@ -519,7 +519,7 @@ export function Settings({ className }: { className?: string }) {
                   <div className="flex-grow flex items-center">
                     <Select
                       onValueChange={handleAiProviderChange}
-                      value={localSettings.embeddedLLM.type}
+                      value={localSettings.aiProviderType}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select AI provider" />
@@ -551,7 +551,7 @@ export function Settings({ className }: { className?: string }) {
                   </TooltipProvider>
                 </div>
               </div>
-              {localSettings.embeddedLLM.type === "custom" && (
+              {localSettings.aiProviderType === "custom" && (
                 <div className="w-full">
                   <div className="flex items-center gap-4 mb-4">
                     <Label
@@ -616,7 +616,7 @@ export function Settings({ className }: { className?: string }) {
                   </div>
                 </div>
               )}
-              {localSettings.embeddedLLM.type !== "embedded" && (
+              {localSettings.aiProviderType !== "embedded" && (
                 <div className="w-full">
                   <div className="flex items-center gap-4 mb-4">
                     <Label
@@ -632,9 +632,9 @@ export function Settings({ className }: { className?: string }) {
                         onChange={handleModelChange}
                         className="flex-grow"
                         placeholder={
-                          localSettings.embeddedLLM.type === "native-ollama"
-                            ? "e.g., llama2:7b-chat"
-                            : "e.g., gpt-4"
+                          localSettings.aiProviderType === "native-ollama"
+                            ? "e.g., llama3.2:3b-instruct-q4_K_M"
+                            : "e.g., gpt-4o"
                         }
                         autoCorrect="off"
                         autoCapitalize="off"
