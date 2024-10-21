@@ -207,7 +207,7 @@ export const DevModeSettings = () => {
     <>
       <div className="w-full my-4">
         <div className="flex justify-around">
-          <Card className="p-4 relative">
+          <Card className="p-8 relative">
             <CardContent>
               <div className="flex flex-col space-y-2">
                 <div className="flex items-center justify-between">
@@ -234,10 +234,10 @@ export const DevModeSettings = () => {
           </Card>
 
           <div className="relative">
-            <Badge className="text-xs absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
+            <Badge className="bg-white text-gray-800 hover:bg-white/80 text-xs absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
               expert only
             </Badge>
-            <Card className="p-4">
+            <Card className="p-8">
               <CardContent>
                 <div className="flex items-center space-x-2">
                   <div className="flex flex-col items-center w-full">

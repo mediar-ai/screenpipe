@@ -70,9 +70,9 @@ async fn main() {
                 let _ = window.set_always_on_top(false);
                 let _ = window.set_visible_on_all_workspaces(false);
                 #[cfg(target_os = "macos")]
-                    let _ = window
-                        .app_handle()
-                        .set_activation_policy(tauri::ActivationPolicy::Regular);
+                let _ = window
+                    .app_handle()
+                    .set_activation_policy(tauri::ActivationPolicy::Regular);
                 window.hide().unwrap();
                 api.prevent_close();
             }
@@ -312,20 +312,34 @@ async fn main() {
                 .unwrap_or(true);
 
             // double-check if they have any files in the data dir
-            let data_dir =
-                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
-            let has_files = fs::read_dir(data_dir.join("data"))
+            let data_dir = app
+                .path()
+                .home_dir()
+                .expect("Failed to ensure local data directory");
+
+            info!("data_dir: {}", data_dir.display());
+            let has_files = fs::read_dir(data_dir.join(".screenpipe").join("data"))
                 .map(|mut entries| entries.next().is_some())
                 .unwrap_or(false);
 
+            info!("has_files: {}", has_files);
+
             if has_files {
                 is_first_time_user = false;
+                // Update the store with the new value
+                store.set("isFirstTimeUser".to_string(), Value::Bool(false));
+                store.save().unwrap();
             }
 
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
+
+            info!(
+                "will start sidecar: {}",
+                !use_dev_mode && !is_first_time_user
+            );
 
             if !use_dev_mode && !is_first_time_user {
                 tauri::async_runtime::spawn(async move {
