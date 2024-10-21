@@ -658,8 +658,6 @@ export function Settings({ className }: { className?: string }) {
                 local machine or elsewhere and the exact model name.
               </p>
 
-              {currentPlatform === "macos" && (
-                <>
                   <Separator className="my-4" />
 
                   <div className="w-full">
@@ -796,8 +794,6 @@ export function Settings({ className }: { className?: string }) {
                       </div>
                     </>
                   )}
-                </>
-              )}
             </CardContent>
           </Card>
 
