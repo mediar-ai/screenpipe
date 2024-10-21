@@ -44,6 +44,7 @@ export interface Settings {
   languages: Language[];
   enableBeta: boolean;
   showScreenpipeShortcut: string;
+  isFirstTimeUser: boolean;
 }
 
 const defaultSettings: Settings = {
@@ -87,6 +88,7 @@ const defaultSettings: Settings = {
   },
   enableBeta: false,
   showScreenpipeShortcut: "Super+Alt+S",
+  isFirstTimeUser: true,
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -263,6 +265,12 @@ export function useSettings() {
         const savedShowScreenpipeShortcut =
           (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
 
+
+        let savedIsFirstTimeUser = await store!.get<boolean>("isFirstTimeUser");
+        if (savedIsFirstTimeUser === null) {
+          savedIsFirstTimeUser = true;
+        }
+
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -294,6 +302,7 @@ export function useSettings() {
           languages: savedLanguages,
           enableBeta: savedEnableBeta,
           showScreenpipeShortcut: savedShowScreenpipeShortcut,
+          isFirstTimeUser: savedIsFirstTimeUser,
         });
       } catch (error) {
         console.error("failed to load settings:", error);
