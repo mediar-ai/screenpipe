@@ -183,10 +183,11 @@ jobs:
 
       - name: Build CLI
         shell: bash
-        env:
-          CARGO_PROFILE_RELEASE_LTO: "true"
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+        # TODO: too slow 
+        # env:
+        #   CARGO_PROFILE_RELEASE_LTO: "true"
+        #   CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
+        #   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -236,10 +237,10 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
-          # optimize for release
-          CARGO_PROFILE_RELEASE_LTO: true
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: z
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+          # TODO: too slow 
+          # CARGO_PROFILE_RELEASE_LTO: true
+          # CARGO_PROFILE_RELEASE_OPT_LEVEL: z
+          # CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
