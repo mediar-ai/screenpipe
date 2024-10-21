@@ -60,12 +60,12 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 - [2024/10] screenpipe can now be used in China without VPN, and supports Chinese OCR
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
 - [2024/09] 150 users run screenpipe 24/7!
-- [2024/09] Released our [documentation](https://docs.screenpi.pe/)
-- [2024/08] Anyone can now [create, share, install pipes](https://docs.screenpi.pe/docs/plugins) (plugins) from the app interface based on a github repo/dir
-- [2024/08] We're running bounties! Contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
-- [2024/08] We released Apple & Windows Native OCR.
-- [2024/07] 🎁 Screenpipe won Friends (the AI necklace) hackathon at AGI House (integrations soon)
-- [2024/07] **We just launched the desktop app! [Download now!](https://screenpi.pe)**
+- [2024/09] released our [documentation](https://docs.screenpi.pe/)
+- [2024/08] anyone can now [create, share, install pipes](https://docs.screenpi.pe/docs/plugins) (plugins) from the app interface based on a github repo/dir
+- [2024/08] we're running bounties! contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
+- [2024/08] we released Apple & Windows Native OCR.
+- [2024/07] 🎁 screenpipe won Friends (the AI necklace) hackathon at AGI House (integrations soon)
+- [2024/07] **we just launched the desktop app! [Download now!](https://screenpi.pe)**
 
 ---
 
