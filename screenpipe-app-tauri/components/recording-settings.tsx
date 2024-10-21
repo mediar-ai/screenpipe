@@ -277,11 +277,18 @@ export function RecordingSettings({
 
   const handleAddIgnoredWindow = (value: string) => {
     const lowerCaseValue = value.toLowerCase();
-    if (value && !localSettings.ignoredWindows.map(w => w.toLowerCase()).includes(lowerCaseValue)) {
+    if (
+      value &&
+      !localSettings.ignoredWindows
+        .map((w) => w.toLowerCase())
+        .includes(lowerCaseValue)
+    ) {
       setLocalSettings({
         ...localSettings,
         ignoredWindows: [...localSettings.ignoredWindows, value],
-        includedWindows: localSettings.includedWindows.filter(w => w.toLowerCase() !== lowerCaseValue),
+        includedWindows: localSettings.includedWindows.filter(
+          (w) => w.toLowerCase() !== lowerCaseValue
+        ),
       });
     }
   };
@@ -295,11 +302,18 @@ export function RecordingSettings({
 
   const handleAddIncludedWindow = (value: string) => {
     const lowerCaseValue = value.toLowerCase();
-    if (value && !localSettings.includedWindows.map(w => w.toLowerCase()).includes(lowerCaseValue)) {
+    if (
+      value &&
+      !localSettings.includedWindows
+        .map((w) => w.toLowerCase())
+        .includes(lowerCaseValue)
+    ) {
       setLocalSettings({
         ...localSettings,
         includedWindows: [...localSettings.includedWindows, value],
-        ignoredWindows: localSettings.ignoredWindows.filter(w => w.toLowerCase() !== lowerCaseValue),
+        ignoredWindows: localSettings.ignoredWindows.filter(
+          (w) => w.toLowerCase() !== lowerCaseValue
+        ),
       });
     }
   };
@@ -1286,7 +1300,7 @@ export function RecordingSettings({
                       </TooltipTrigger>
                       <TooltipContent side="right">
                         <p>
-                          ⚠️ uses screenpipe cloud ⚠️
+                          ⚠️ uses screenpipe cloud and may break screenpipe ⚠️
                           <br />
                           • we provide free ChatGPT credits
                           <br />
@@ -1302,7 +1316,15 @@ export function RecordingSettings({
                             https://screenpi.pe/privacy
                           </a>
                           <br />
-                          enables experimental features like double slash
+                          enables experimental features like{" "}
+                          <a
+                            href="https://x.com/m13v_/status/1843868614165967343"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary underline"
+                          >
+                            double slash
+                          </a>
                           <br />
                           (only tested on US or German qwertz keyboards)
                         </p>
