@@ -47,6 +47,30 @@ const NotificationHandler: React.FC = () => {
       });
     };
 
+    listen<string>("recording_failed", (event) => {
+      console.log(`recording failed ${event.payload}`);
+      sendNotification({
+        title: "Screenpipe",
+        body: event.payload,
+      });
+    });
+
+    listen<string>("recording_started", (event) => {
+      console.log(`recording started ${event.payload}`);
+      sendNotification({
+        title: "Screenpipe",
+        body: event.payload,
+      });
+    });
+
+    listen<string>("recording_stopped", (event) => {
+      console.log(`recording stopped ${event.payload}`);
+      sendNotification({
+        title: "Screenpipe",
+        body: event.payload,
+      });
+    });
+
     checkAndRequestPermission();
   }, []);
 

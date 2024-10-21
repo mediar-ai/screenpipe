@@ -204,6 +204,48 @@ async fn main() {
                         println!("quit clicked");
                         app_handle.exit(0);
                     }
+                    "start_recording" => {
+                        tokio::task::block_in_place(move || {
+                            Handle::current().block_on(async move {
+                                let state = app_handle.state::<SidecarState>();
+                                if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
+                                    error!("Failed to start recording: {}", err);
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Failed to start recording")
+                                        .show();
+                                    let _ = app_handle.emit("recording_failed", "Failed to start recording");
+                                } else {
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Recording started")
+                                        .show();
+                                    let _ = app_handle.emit("recording_started", "Recording started");
+                                }
+                            });
+                        });
+                    }
+                    "stop_recording" => {
+                        tokio::task::block_in_place(move || {
+                            Handle::current().block_on(async move {
+                                let state = app_handle.state::<SidecarState>();
+                                if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                                    error!("Failed to stop recording: {}", err);
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Failed to stop recording")
+                                        .show();
+                                    let _ = app_handle.emit("recording_failed", "Failed to stop recording");
+                                } else {
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Recording stopped")
+                                        .show();
+                                    let _ = app_handle.emit("recording_stopped", "Recording stopped");
+                                }
+                            });
+                        });
+                    }
                     "update_now" => {
                         use tauri_plugin_notification::NotificationExt;
                         app_handle
