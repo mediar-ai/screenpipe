@@ -70,6 +70,13 @@ export function Settings({ className }: { className?: string }) {
     settings.showScreenpipeShortcut
   );
 
+  const [recordingShortcut, setRecordingShortcut] = useState<string>(
+    settings.recordingShortcut
+  );
+
+  const [recordingModifiers, setRecordingModifiers] = useState<string[]>([]);
+  const [recordingKey, setRecordingKey] = useState<string>("");
+
   useEffect(() => {
     setCurrentShortcut(settings.showScreenpipeShortcut);
 
@@ -80,6 +87,15 @@ export function Settings({ className }: { className?: string }) {
     setSelectedModifiers(modifiers);
     setNonModifierKey(key);
   }, [settings.showScreenpipeShortcut]);
+
+  useEffect(() => {
+    const parts = recordingShortcut.split("+");
+    const modifiers = parts.slice(0, -1);
+    const key = parts.slice(-1)[0];
+
+    setRecordingModifiers(modifiers);
+    setRecordingKey(key);
+  }, [recordingShortcut]);
 
   const toggleModifier = (modifier: string) => {
     setSelectedModifiers((prev) =>
@@ -117,6 +133,7 @@ export function Settings({ className }: { className?: string }) {
     updateSettings({ showScreenpipeShortcut: newShortcut });
     registerShortcuts({
       showScreenpipeShortcut: newShortcut,
+      toggleRecordingShortcut: recordingShortcut,
     });
 
     setCurrentShortcut(newShortcut);
@@ -395,6 +412,53 @@ export function Settings({ className }: { className?: string }) {
     if (isCustomUrl) return "custom";
     return localSettings.aiUrl;
   };
+
+  const toggleRecordingModifier = (modifier: string) => {
+    setRecordingModifiers((prev) =>
+      prev.includes(modifier)
+        ? prev.filter((m) => m !== modifier)
+        : [...prev, modifier]
+    );
+  };
+
+  const handleRecordingKeyChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const key = event.target.value.toUpperCase();
+    const validKeys = /^[A-Z0-9]$|^F([1-9]|1[0-2])$/; // Alphanumeric or F1-F12
+    if (validKeys.test(key) || key === "") {
+      setRecordingKey(key);
+    }
+  };
+
+  const handleSetRecordingShortcut = () => {
+    if (recordingModifiers.length === 0 || recordingKey === "") {
+      toast({
+        title: "invalid shortcut",
+        description: "please select at least one modifier and a key",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newShortcut = [...recordingModifiers, recordingKey]
+      .filter(Boolean)
+      .join("+");
+    setRecordingShortcut(newShortcut);
+    updateSettings({ recordingShortcut: newShortcut });
+    registerShortcuts({
+      showScreenpipeShortcut: settings.showScreenpipeShortcut,
+      toggleRecordingShortcut: newShortcut,
+    });
+
+    toast({
+      title: "shortcut updated",
+      description: `new recording shortcut set to: ${parseKeyboardShortcut(newShortcut)}`,
+    });
+  };
+
+  const newRecordingShortcut = [...recordingModifiers, recordingKey].join("+");
+  const isRecordingShortcutChanged = newRecordingShortcut !== recordingShortcut;
 
   return (
     <Dialog
@@ -898,6 +962,52 @@ export function Settings({ className }: { className?: string }) {
               </div>
               <p className="mt-2 text-sm text-muted-foreground text-center">
                 current shortcut: {parseKeyboardShortcut(currentShortcut)}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">recording shortcut</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <h2 className="text-lg font-semibold mb-4">
+                set shortcut for toggling recording
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                use the following options to set a keyboard shortcut for starting/stopping recording.
+              </p>
+              <div className="flex items-center gap-2 mb-4">
+                {["ctrl", "alt", "shift", "super"].map((modifier) => (
+                  <label key={modifier} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={recordingModifiers.includes(modifier)}
+                      onChange={() => toggleRecordingModifier(modifier)}
+                    />
+                    <span className="ml-2">
+                      {parseKeyboardShortcut(modifier)}
+                    </span>
+                  </label>
+                ))}
+                <input
+                  type="text"
+                  value={recordingKey}
+                  onChange={handleRecordingKeyChange}
+                  placeholder="enter key"
+                  className="border p-1"
+                />
+                <button
+                  onClick={handleSetRecordingShortcut}
+                  className={`btn btn-primary ${
+                    !isRecordingShortcutChanged ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                  disabled={!isRecordingShortcutChanged}
+                >
+                  set shortcut
+                </button>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground text-center">
+                current recording shortcut: {parseKeyboardShortcut(recordingShortcut)}
               </p>
             </CardContent>
           </Card>
