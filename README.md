@@ -55,7 +55,7 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 
 ---
 
-*Latest News* 🔥
+*news* 🔥
 - [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)
 - [2024/10] screenpipe can now be used in China without VPN, and supports Chinese OCR
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
@@ -69,22 +69,20 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 
 ---
 
-# 24/7 Screen & Audio Capture
+# 24/7 local AI screen & audio capture
 
-Library to build personalized AI powered by what you've seen, said, or heard. Works with Ollama. Alternative to Rewind.ai. Open. Secure. You own your data. Rust.  
-We are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
+library to build personalized AI powered by what you've seen, said, or heard. works with Ollama. alternative to Rewind.ai. open. secure. you own your data. rust.  
+we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
 
 ![diagram](./content/diagram2.png)
 
-# Why?
+# why?
 
-Building a reliable stream of audio and screenshot data, where a user simply clicks a button and the script runs in the background 24/7, collecting and extracting data from screen and audio input/output, can be frustrating. 
+AI is dumb and always will be without the context of your activity or the activity of others in your environment.
 
-There are numerous use cases that can be built on top of this layer. To simplify life for other developers, we decided to solve this non-trivial problem. It's still in its early stages, but it works end-to-end. We're working on this full-time and would love to hear your feedback and suggestions.
+## get started
 
-## Get started
-
-There are multiple ways to install screenpipe:
+there are multiple ways to install screenpipe:
 - as a CLI for technical users
 - as a [paid desktop app](https://screenpi.pe/onboarding) with 1 year updates, priority support, and priority features
 - as a free forever desktop app (but you need to build it yourself). We're 100% OSS.
@@ -107,9 +105,9 @@ screenpipe has a plugin system called "pipe" which lets you run code in a sandbo
 ![GitHub Star History (10)](https://github.com/user-attachments/assets/5d5c9672-d2d3-4e4c-8734-a7e0c2fee246)
 
 
-## Contributing
+## contributing
 
-Contributions are welcome! If you'd like to contribute, please read [CONTRIBUTING.md](CONTRIBUTING.md).
+contributions are welcome! if you'd like to contribute, please read [CONTRIBUTING.md](CONTRIBUTING.md).
 
    <a href="https://console.algora.io/org/mediar-ai/bounties?status=completed">
        <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dcompleted" alt="Rewarded Bounties">
