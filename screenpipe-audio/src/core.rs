@@ -3,7 +3,6 @@ use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
-use crossbeam::queue::ArrayQueue;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,7 +10,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, thread};
-use tokio::sync::{self, broadcast, oneshot, Mutex};
+use tokio::sync::{broadcast, oneshot};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
@@ -336,12 +335,13 @@ pub fn trigger_audio_permission() -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone)]
 pub struct AudioStream {
     pub device: Arc<AudioDevice>,
     pub device_config: cpal::SupportedStreamConfig,
     transmitter: Arc<tokio::sync::broadcast::Sender<Vec<f32>>>,
     stream_control: mpsc::Sender<StreamControl>,
-    stream_thread: thread::JoinHandle<()>,
+    stream_thread: Option<Arc<tokio::sync::Mutex<Option<thread::JoinHandle<()>>>>>,
 }
 
 enum StreamControl {
@@ -363,7 +363,7 @@ impl AudioStream {
         let config_clone = config.clone();
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
 
-        let stream_thread = thread::spawn(move || {
+        let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn(move || {
             let device = device_clone;
             let config = config_clone;
             let error_callback = move |err: StreamError| {
@@ -398,14 +398,14 @@ impl AudioStream {
                 drop(stream);
                 response.send(()).ok();
             }
-        });
+        }))));
 
         Ok(AudioStream {
             device,
             device_config: config,
             transmitter: Arc::new(tx_clone),
             stream_control: stream_control_tx,
-            stream_thread,
+            stream_thread: Some(stream_thread),
         })
     }
 
@@ -413,13 +413,26 @@ impl AudioStream {
         self.transmitter.subscribe()
     }
 
-    pub async fn stop(self) -> Result<()> {
+    pub async fn stop(mut self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         self.stream_control.send(StreamControl::Stop(tx))?;
         rx.await?;
-        self.stream_thread
-            .join()
-            .map_err(|_| anyhow!("Failed to join stream thread"))?;
+
+        if let Some(thread_arc) = self.stream_thread.take() {
+            let thread_handle = tokio::task::spawn_blocking(move || {
+                let mut thread_guard = thread_arc.blocking_lock();
+                if let Some(join_handle) = thread_guard.take() {
+                    join_handle
+                        .join()
+                        .map_err(|_| anyhow!("failed to join stream thread"))
+                } else {
+                    Ok(())
+                }
+            });
+
+            thread_handle.await??;
+        }
+
         Ok(())
     }
 }
