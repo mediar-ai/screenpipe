@@ -4,7 +4,7 @@ use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
-use screenpipe_audio::vad_engine::{create_vad_engine, VadSensitivity};
+use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioStream;
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
@@ -97,12 +97,6 @@ pub async fn start_continuous_recording(
             Ok(())
         })]
     };
-
-    // let vad_engine = if audio_disabled {
-    //     None
-    // } else {
-    //     create_vad_engine(VadEngineEnum::from(vad_engine)).await
-    // };
 
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled

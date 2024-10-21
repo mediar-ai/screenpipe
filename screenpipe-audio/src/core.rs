@@ -169,38 +169,49 @@ pub async fn record_and_transcribe(
     let mut receiver = audio_stream.subscribe().await;
 
     info!(
-        "Starting continuous recording for {} ({}s segments)",
+        "starting continuous recording for {} ({}s segments)",
         audio_stream.device.to_string(),
         duration.as_secs()
     );
 
+    const OVERLAP_SECONDS: usize = 2;
+    let mut collected_audio = Vec::new();
+    let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
+    // let channels = audio_stream.device_config.channels() as usize;
+    let overlap_samples = OVERLAP_SECONDS * sample_rate; // audio is mono otherwise * by # of channels
+
     while is_running.load(Ordering::Relaxed) {
-        let mut collected_audio = Vec::new();
         let start_time = tokio::time::Instant::now();
 
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
                 Ok(Ok(chunk)) => collected_audio.extend(chunk),
-                Ok(Err(e)) => error!("Error receiving audio data: {}", e),
+                Ok(Err(e)) => error!("error receiving audio data: {}", e),
                 Err(_) => {} // Timeout, continue loop
             }
         }
 
         if !collected_audio.is_empty() {
-            debug!("Sending audio segment to audio model");
+            debug!("sending audio segment to audio model");
             if let Err(e) = whisper_sender.send(AudioInput {
-                data: Arc::new(collected_audio),
+                data: Arc::new(collected_audio.clone()),
                 device: audio_stream.device.clone(),
                 sample_rate: audio_stream.device_config.sample_rate().0,
                 channels: audio_stream.device_config.channels(),
             }) {
-                error!("Failed to send audio to audio model: {}", e);
+                error!("failed to send audio to audio model: {}", e);
             }
-            debug!("Sent audio segment to audio model");
+            debug!("sent audio segment to audio model");
+
+            // Reset collected audio to the last two seconds of recorded audio
+            if collected_audio.len() > overlap_samples {
+                collected_audio =
+                    collected_audio.split_off(collected_audio.len() - overlap_samples);
+            }
         }
     }
 
-    info!("Stopped recording for {}", audio_stream.device.to_string());
+    info!("stopped recording for {}", audio_stream.device.to_string());
     Ok(())
 }
 
@@ -342,11 +353,11 @@ impl AudioStream {
         device: Arc<AudioDevice>,
         is_running: Arc<AtomicBool>,
     ) -> Result<Self> {
-        let (tx, _) = broadcast::channel::<Vec<f32>>(100);
+        let (tx, _) = broadcast::channel::<Vec<f32>>(1000);
         let tx_clone = tx.clone();
         let (cpal_audio_device, config) = get_device_and_config(&device).await?;
         let channels = config.channels();
-        let is_running_weak = Arc::downgrade(&is_running);
+
         let is_running_weak_2 = Arc::downgrade(&is_running);
         let device_clone = device.clone();
         let config_clone = config.clone();
