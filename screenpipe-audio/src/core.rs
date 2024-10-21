@@ -376,17 +376,56 @@ impl AudioStream {
                 }
             };
 
-            let stream = cpal_audio_device
-                .build_input_stream(
-                    &config.into(),
-                    move |data: &[f32], _: &_| {
-                        let mono = audio_to_mono(data, channels);
-                        let _ = tx.send(mono);
-                    },
-                    error_callback,
-                    None,
-                )
-                .expect("Failed to build input stream");
+            let stream = match config.sample_format() {
+                cpal::SampleFormat::F32 => cpal_audio_device
+                    .build_input_stream(
+                        &config.into(),
+                        move |data: &[f32], _: &_| {
+                            let mono = audio_to_mono(data, channels);
+                            let _ = tx.send(mono);
+                        },
+                        error_callback,
+                        None,
+                    )
+                    .expect("Failed to build input stream"),
+                cpal::SampleFormat::I16 => cpal_audio_device
+                    .build_input_stream(
+                        &config.into(),
+                        move |data: &[i16], _: &_| {
+                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+                            let _ = tx.send(mono);
+                        },
+                        error_callback,
+                        None,
+                    )
+                    .expect("Failed to build input stream"),
+                cpal::SampleFormat::I32 => cpal_audio_device
+                    .build_input_stream(
+                        &config.into(),
+                        move |data: &[i32], _: &_| {
+                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+                            let _ = tx.send(mono);
+                        },
+                        error_callback,
+                        None,
+                    )
+                    .expect("Failed to build input stream"),
+                cpal::SampleFormat::I8 => cpal_audio_device
+                    .build_input_stream(
+                        &config.into(),
+                        move |data: &[i8], _: &_| {
+                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+                            let _ = tx.send(mono);
+                        },
+                        error_callback,
+                        None,
+                    )
+                    .expect("Failed to build input stream"),
+                _ => {
+                    error!("unsupported sample format: {}", config.sample_format());
+                    return;
+                }
+            };
 
             if let Err(e) = stream.play() {
                 error!("failed to play stream for {}: {}", device.to_string(), e);
