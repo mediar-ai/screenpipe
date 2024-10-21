@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729545338691,
+  "lastUpdate": 1729547453580,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18329,6 +18329,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1892412500,
             "range": "± 45864681",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "974625e3d41f7e5fcb8bfb0d5e3e88e7952422c2",
+          "message": "Merge pull request #529 from Neptune650/add_ollama\n\nRestore ollama Windows and Linux support",
+          "timestamp": "2024-10-21T14:41:50-07:00",
+          "tree_id": "023d22bcf82af42ef5ff53db707b5d48295f71c4",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/974625e3d41f7e5fcb8bfb0d5e3e88e7952422c2"
+        },
+        "date": 1729547452452,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2053053687,
+            "range": "± 323006710",
             "unit": "ns/iter"
           }
         ]
