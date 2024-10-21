@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729547453580,
+  "lastUpdate": 1729550742287,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18359,6 +18359,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2053053687,
             "range": "± 323006710",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "96c7ac71de054da0bd99eeea3625f3120b72e96d",
+          "message": "feat: embedded AI on windows & linux with cuda",
+          "timestamp": "2024-10-21T15:37:13-07:00",
+          "tree_id": "ec2ccbb7c2103aed927c9905678ee77dfab99c32",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/96c7ac71de054da0bd99eeea3625f3120b72e96d"
+        },
+        "date": 1729550740546,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1913620187,
+            "range": "± 45854590",
             "unit": "ns/iter"
           }
         ]
