@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729621827040,
+  "lastUpdate": 1729621880958,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18899,6 +18899,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1912122979,
             "range": "± 43642893",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fc43cab7ec9d9aeb866acc00a25807e9843eec13",
+          "message": "Merge pull request #561 from EzraEllette/feat-filter-meeting-audio-devices\n\nadd audio device selection to meetings",
+          "timestamp": "2024-10-22T11:23:17-07:00",
+          "tree_id": "358ac396915f7cd5cffcbb61f244aaf07ee3982a",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/fc43cab7ec9d9aeb866acc00a25807e9843eec13"
+        },
+        "date": 1729621878703,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 3132223812,
+            "range": "± 207012382",
             "unit": "ns/iter"
           }
         ]
