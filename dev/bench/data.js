@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729634678392,
+  "lastUpdate": 1729640306061,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19079,6 +19079,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1915331250,
             "range": "± 100770541",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "c26c1173c7c857b59ed27baff46ee7efdf1779a0",
+          "message": "fix: reduce build size on linux",
+          "timestamp": "2024-10-22T16:30:09-07:00",
+          "tree_id": "b0ae459f7779aa3fa96c92f51c425f846f599c22",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/c26c1173c7c857b59ed27baff46ee7efdf1779a0"
+        },
+        "date": 1729640304655,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 3095878020,
+            "range": "± 270102739",
             "unit": "ns/iter"
           }
         ]
