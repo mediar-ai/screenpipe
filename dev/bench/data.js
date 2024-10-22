@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729563152753,
+  "lastUpdate": 1729565860009,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18539,6 +18539,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 3127436333,
             "range": "± 243531473",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "a8dad7410412ceb69a66c86661a36c861ce4f6fd",
+          "message": "fix: remove tesseract from windows",
+          "timestamp": "2024-10-21T19:49:21-07:00",
+          "tree_id": "ff31257cc866eb18318ce100c70f8ac1550a8733",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/a8dad7410412ceb69a66c86661a36c861ce4f6fd"
+        },
+        "date": 1729565858664,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2900476312,
+            "range": "± 55341110",
             "unit": "ns/iter"
           }
         ]
