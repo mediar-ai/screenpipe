@@ -596,19 +596,14 @@ async function installOllamaSidecar() {
 			await fs.unlink(downloadPath);
 		}
 
-		if (platform === 'linux') {
+		if (platform === 'windows') {
 			// Remove older library versions to save storage
-			const libDir = path.join(ollamaDir, 'lib/ollama');
+			const libDir = path.join(ollamaDir, 'lib', 'ollama');
 			const oldLibs = [
-				'libcublas.so.11',
-				'libcublas.so.11.5.1.109',
-				'libcublasLt.so.11',
-				'libcublasLt.so.11.5.1.109',
-				'libcudart.so.11.0',
-				'libcudart.so.11.3.109',
-				'libggml_cuda_v11.so',
-				'libhipblas.so.2',
-				'librocblas.so.4'
+				'cublas64_11.dll',
+				'cublasLt64_11.dll',
+				'cudart64_110.dll',
+				'ggml_cuda_v11.dll',
 			];
 
 			for (const lib of oldLibs) {
@@ -619,7 +614,6 @@ async function installOllamaSidecar() {
 					console.warn(`failed to remove ${lib}:`, error.message);
 				}
 			}
-
 		}
 
 		console.log('ollama sidecar installed successfully');
