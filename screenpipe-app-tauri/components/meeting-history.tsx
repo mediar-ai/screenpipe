@@ -432,6 +432,19 @@ export default function MeetingHistory() {
     }
   }
 
+  function formatTimestamp(timestamp: string): string {
+    const date = new Date(timestamp);
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZoneName: "short",
+    }).format(date);
+  }
+
   function processMeetings(transcriptions: AudioTranscription[]): Meeting[] {
     console.log("processing transcriptions:", transcriptions);
     let meetings: Meeting[] = [];
@@ -465,7 +478,7 @@ export default function MeetingHistory() {
           meetingGroup: meetingGroup,
           meetingStart: trans.content.timestamp,
           meetingEnd: trans.content.timestamp,
-          fullTranscription: `${trans.content.timestamp} [${
+          fullTranscription: `${formatTimestamp(trans.content.timestamp)} [${
             trans.content.deviceType?.toLowerCase() === "input"
               ? "you"
               : trans.content.deviceType?.toLowerCase() === "output"
@@ -893,7 +906,7 @@ export default function MeetingHistory() {
                                     meeting.selectedDevices.has(s.deviceName)
                                   )
                                   .map((s) => {
-                                    return `${s.timestamp} [${
+                                    return `${formatTimestamp(s.timestamp)} [${
                                       s.deviceType?.toLowerCase() === "input"
                                         ? "you"
                                         : "others"
@@ -917,7 +930,7 @@ export default function MeetingHistory() {
                               .map((s, i) => (
                                 <React.Fragment key={i}>
                                   <span className="font-bold">
-                                    {`${s.timestamp} [${
+                                    {`${formatTimestamp(s.timestamp)} [${
                                       s.deviceType?.toLowerCase() === "input"
                                         ? "you"
                                         : "others"
