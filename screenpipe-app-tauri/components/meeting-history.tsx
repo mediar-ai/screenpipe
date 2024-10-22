@@ -86,10 +86,10 @@ async function getItem(key: string): Promise<any> {
 }
 
 interface MeetingSegment {
-  start: string;
-  end: string;
+  timestamp: string;
   transcription: string;
   deviceName: string;
+  deviceType: string;
 }
 
 interface Meeting {
@@ -478,10 +478,10 @@ export default function MeetingHistory() {
           selectedDevices: new Set([trans.content.deviceName]),
           segments: [
             {
-              start: trans.content.timestamp,
-              end: trans.content.timestamp,
+              timestamp: trans.content.timestamp,
               transcription: trans.content.transcription,
               deviceName: trans.content.deviceName,
+              deviceType: trans.content.deviceType,
             },
           ],
           deviceNames: new Set([trans.content.deviceName]),
@@ -497,10 +497,10 @@ export default function MeetingHistory() {
         }] ${trans.content.transcription}\n`;
         currentMeeting.selectedDevices.add(trans.content.deviceName);
         currentMeeting.segments.push({
-          start: trans.content.timestamp,
-          end: trans.content.timestamp,
+          timestamp: trans.content.timestamp,
           transcription: trans.content.transcription,
           deviceName: trans.content.deviceName,
+          deviceType: trans.content.deviceType,
         });
         currentMeeting.deviceNames.add(trans.content.deviceName);
       }
@@ -892,7 +892,13 @@ export default function MeetingHistory() {
                                   .filter((s) =>
                                     meeting.selectedDevices.has(s.deviceName)
                                   )
-                                  .map((s) => s.transcription)
+                                  .map((s) => {
+                                    return `${s.timestamp} [${
+                                      s.deviceType?.toLowerCase() === "input"
+                                        ? "you"
+                                        : "others"
+                                    }]`;
+                                  })
                                   .join("\n"),
                                 "transcription"
                               )
@@ -908,8 +914,19 @@ export default function MeetingHistory() {
                               .filter((s) =>
                                 meeting.selectedDevices.has(s.deviceName)
                               )
-                              .map((s) => s.transcription)
-                              .join("\n")}
+                              .map((s, i) => (
+                                <React.Fragment key={i}>
+                                  <span className="font-bold">
+                                    {`${s.timestamp} [${
+                                      s.deviceType?.toLowerCase() === "input"
+                                        ? "you"
+                                        : "others"
+                                    }]`}
+                                  </span>{" "}
+                                  {s.transcription}
+                                  {"\n"}
+                                </React.Fragment>
+                              ))}
                           </pre>
                         </div>
                         <div className="relative">
