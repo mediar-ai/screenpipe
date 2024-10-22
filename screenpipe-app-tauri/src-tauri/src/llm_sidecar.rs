@@ -48,8 +48,8 @@ impl LLMSidecar {
         let new_cuda_path = format!("{}:{}", cuda_path, resource_path.display());
 
         info!("Starting Ollama serve command...");
-        let serve_command = app.shell().sidecar("ollama").unwrap();
-        let serve_command = serve_command
+        let mut serve_command = app.shell().sidecar("ollama").unwrap();
+        serve_command = serve_command
             .args(&["serve"])
             .env(
                 "OLLAMA_HOST",
@@ -72,8 +72,8 @@ impl LLMSidecar {
 
         // Now run the model
         info!("Starting Ollama model...");
-        let model_command = app.shell().sidecar("ollama").unwrap();
-        let model_command = model_command
+        let mut model_command = app.shell().sidecar("ollama").unwrap();
+        model_command = model_command
             .args(&["run", &self.settings.model])
             .env("CUDA_PATH", &new_cuda_path);
 
