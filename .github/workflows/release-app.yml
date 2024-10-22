@@ -170,20 +170,9 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
-      - name: Verify Tesseract Installation
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          $env:PATH += ";${{ github.workspace }}\screenpipe-app-tauri\src-tauri\tesseract"
-          tesseract --version
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Tesseract is not properly installed or not in PATH"
-            exit 1
-          }
-
       - name: Build CLI
         shell: bash
-        # TODO: too slow 
+        # TODO: too slow
         # env:
         #   CARGO_PROFILE_RELEASE_LTO: "true"
         #   CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
@@ -237,7 +226,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
-          # TODO: too slow 
+          # TODO: too slow
           # CARGO_PROFILE_RELEASE_LTO: true
           # CARGO_PROFILE_RELEASE_OPT_LEVEL: z
           # CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
