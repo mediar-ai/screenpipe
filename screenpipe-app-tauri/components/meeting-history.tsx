@@ -45,6 +45,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ValueOf } from "next/dist/shared/lib/constants";
+import { Checkbox } from "./ui/checkbox";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -83,6 +85,13 @@ async function getItem(key: string): Promise<any> {
   return null;
 }
 
+interface MeetingSegment {
+  start: string;
+  end: string;
+  transcription: string;
+  deviceName: string;
+}
+
 interface Meeting {
   meetingGroup: number;
   meetingStart: string;
@@ -92,6 +101,9 @@ interface Meeting {
   participants: string | null;
   summary: string | null;
   mergedWith?: number[]; // Array of meeting groups merged with this one
+  selectedDevices: Set<string>;
+  deviceNames: Set<string>;
+  segments: MeetingSegment[];
 }
 
 interface AudioContent {
@@ -267,7 +279,9 @@ export default function MeetingHistory() {
         },
         {
           role: "user" as const,
-          content: `${enhancedPrompt}:\n\n${meeting.fullTranscription}`,
+          content: `${enhancedPrompt}:\n\n${meeting.segments
+            .map((s) => s.transcription)
+            .join("\n")}`,
         },
       ];
 
@@ -461,6 +475,16 @@ export default function MeetingHistory() {
           name: null,
           participants: null,
           summary: null,
+          selectedDevices: new Set([trans.content.deviceName]),
+          segments: [
+            {
+              start: trans.content.timestamp,
+              end: trans.content.timestamp,
+              transcription: trans.content.transcription,
+              deviceName: trans.content.deviceName,
+            },
+          ],
+          deviceNames: new Set([trans.content.deviceName]),
         };
       } else if (currentMeeting) {
         currentMeeting.meetingEnd = trans.content.timestamp;
@@ -471,6 +495,14 @@ export default function MeetingHistory() {
             ? "others"
             : "unknown"
         }] ${trans.content.transcription}\n`;
+        currentMeeting.selectedDevices.add(trans.content.deviceName);
+        currentMeeting.segments.push({
+          start: trans.content.timestamp,
+          end: trans.content.timestamp,
+          transcription: trans.content.transcription,
+          deviceName: trans.content.deviceName,
+        });
+        currentMeeting.deviceNames.add(trans.content.deviceName);
       }
     });
 
@@ -584,6 +616,11 @@ export default function MeetingHistory() {
         nextMeeting.meetingGroup,
         ...(nextMeeting.mergedWith || []),
       ],
+      segments: [...currentMeeting.segments, ...nextMeeting.segments],
+      selectedDevices: new Set([
+        ...Array.from(currentMeeting.selectedDevices),
+        ...Array.from(nextMeeting.selectedDevices),
+      ]),
     };
 
     updatedMeetings[index] = mergedMeeting;
@@ -591,6 +628,29 @@ export default function MeetingHistory() {
     setMeetings(updatedMeetings);
     setItem("meetings", updatedMeetings);
   };
+
+  const handleDeviceToggle = useCallback(
+    (meetingGroup: number, deviceName: string, isChecked: boolean) => {
+      setMeetings((prevMeetings) => {
+        return prevMeetings.map((meeting) => {
+          if (meeting.meetingGroup === meetingGroup) {
+            const updatedSelectedDevices = new Set(meeting.selectedDevices);
+            if (isChecked) {
+              updatedSelectedDevices.add(deviceName);
+            } else {
+              updatedSelectedDevices.delete(deviceName);
+            }
+            return {
+              ...meeting,
+              selectedDevices: updatedSelectedDevices,
+            };
+          }
+          return meeting;
+        });
+      });
+    },
+    []
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -717,24 +777,60 @@ export default function MeetingHistory() {
                   <React.Fragment key={index}>
                     <Card className="relative">
                       <CardHeader>
-                        <CardTitle className="text-lg font-semibold flex flex-wrap items-center gap-2">
-                          meeting {meeting.meetingGroup}
-                          {meeting.mergedWith &&
-                            meeting.mergedWith.length > 0 && (
-                              <>
-                                <Badge variant="secondary">merged</Badge>
-                                {meeting.mergedWith.map((mergedGroupId) => (
-                                  <Badge key={mergedGroupId} variant="outline">
-                                    meeting {mergedGroupId}
-                                  </Badge>
-                                ))}
-                              </>
-                            )}
-                        </CardTitle>
-                        <CardDescription>
-                          {formatDate(meeting.meetingStart)} -{" "}
-                          {formatDate(meeting.meetingEnd)}
-                        </CardDescription>
+                        <div className="grid grid-cols-2">
+                          <div>
+                            <CardTitle className="text-lg font-semibold flex flex-wrap items-center gap-2">
+                              meeting {meeting.meetingGroup}
+                              {meeting.mergedWith &&
+                                meeting.mergedWith.length > 0 && (
+                                  <>
+                                    <Badge variant="secondary">merged</Badge>
+                                    {meeting.mergedWith.map((mergedGroupId) => (
+                                      <Badge
+                                        key={mergedGroupId}
+                                        variant="outline"
+                                      >
+                                        meeting {mergedGroupId}
+                                      </Badge>
+                                    ))}
+                                  </>
+                                )}
+                            </CardTitle>
+                            <CardDescription>
+                              {formatDate(meeting.meetingStart)} -{" "}
+                              {formatDate(meeting.meetingEnd)}
+                            </CardDescription>
+                          </div>
+                          <div className="mb-4 text-end">
+                            <h4 className="font-semibold mb-2">Devices:</h4>
+                            <div className="flex flex-wrap gap-4 justify-end">
+                              {Array.from(meeting.deviceNames).map(
+                                (deviceName) => (
+                                  <label
+                                    key={deviceName}
+                                    className="flex items-center space-x-2"
+                                  >
+                                    <Checkbox
+                                      checked={meeting.selectedDevices.has(
+                                        deviceName
+                                      )}
+                                      onCheckedChange={(checked) =>
+                                        handleDeviceToggle(
+                                          meeting.meetingGroup,
+                                          deviceName,
+                                          checked as boolean
+                                        )
+                                      }
+                                    />
+                                    <span className="text-sm">
+                                      {deviceName}
+                                    </span>
+                                  </label>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </CardHeader>
                       <CardContent>
                         <div className="mb-4">
@@ -788,14 +884,17 @@ export default function MeetingHistory() {
                           </div>
                         </div>
                         <div className="mb-4 relative">
-                          <h4 className="font-semibold mb-2">
-                            full transcription:
-                          </h4>
+                          <h4 className="font-semibold mb-2">transcription:</h4>
                           <Button
                             onClick={() =>
                               copyWithToast(
-                                meeting.fullTranscription,
-                                "full transcription"
+                                meeting.segments
+                                  .filter((s) =>
+                                    meeting.selectedDevices.has(s.deviceName)
+                                  )
+                                  .map((s) => s.transcription)
+                                  .join("\n"),
+                                "transcription"
                               )
                             }
                             className="absolute top-0 right-0 p-1 h-6 w-6"
@@ -805,7 +904,12 @@ export default function MeetingHistory() {
                             <Copy className="h-4 w-4" />
                           </Button>
                           <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
-                            {meeting.fullTranscription}
+                            {meeting.segments
+                              .filter((s) =>
+                                meeting.selectedDevices.has(s.deviceName)
+                              )
+                              .map((s) => s.transcription)
+                              .join("\n")}
                           </pre>
                         </div>
                         <div className="relative">
