@@ -384,7 +384,9 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     // last, add devices that are listed in .devices() which are not already in the devices vector
     let other_devices = host.devices().unwrap();
     for device in other_devices {
-        if !devices.iter().any(|d| d.name == device.name().unwrap()) {
+        if !devices.iter().any(|d| d.name == device.name().unwrap())
+            && should_include_output_device(&device.name().unwrap())
+        {
             // TODO: not sure if it can be input, usually aggregate or multi output
             devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
         }
