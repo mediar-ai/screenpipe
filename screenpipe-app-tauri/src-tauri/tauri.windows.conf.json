@@ -10,7 +10,7 @@
             "ffmpeg\\lib\\*": "./",
             "tesseract\\*": "./",
             "onnxruntime*\\lib\\*.dll": "./",
-            "lib\\*": "./"
+            "lib\\ollama\\*": "./"
         }
     }
 }
