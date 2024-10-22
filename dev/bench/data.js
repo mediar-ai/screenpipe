@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729558511607,
+  "lastUpdate": 1729560982226,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18479,6 +18479,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2115506291,
             "range": "± 326544409",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b0ad5c625279ed9f76ba66acf3dfd66855ab3d70",
+          "message": "Merge pull request #558 from Neptune650/patch-1\n\nFix Windows builds with Ollama",
+          "timestamp": "2024-10-21T18:28:24-07:00",
+          "tree_id": "73e728009aa3864e682311868d88c4c6645b5b20",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b0ad5c625279ed9f76ba66acf3dfd66855ab3d70"
+        },
+        "date": 1729560980083,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2157413500,
+            "range": "± 58670491",
             "unit": "ns/iter"
           }
         ]
