@@ -234,17 +234,18 @@ async function copyFile(src, dest) {
 if (platform == 'linux') {
 	// Install APT packages
 	try {
-		await $`sudo apt-get update`
+		await $`sudo apt-get update`;
 
 		for (const name of config.linux.aptPackages) {
-			await $`sudo apt-get install -y ${name}`
+			await $`sudo apt-get install -y ${name}`;
 		}
 	} catch (error) {
-		console.error("Error installing apps via apt, %s", error.message);
+		console.error("error installing apps via apt, %s", error.message);
 	}
 
+
 	// Copy screenpipe binary
-	console.log('Copying screenpipe binary for Linux...');
+	console.log('copying screenpipe binary for linux...');
 	const potentialPaths = [
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
@@ -276,8 +277,6 @@ if (platform == 'linux') {
 		// uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
 	}
-
-
 }
 
 /* ########## Windows ########## */
@@ -595,6 +594,32 @@ async function installOllamaSidecar() {
 		console.log('Cleaning up...');
 		if (platform !== 'macos') {
 			await fs.unlink(downloadPath);
+		}
+
+		if (platform === 'linux') {
+			// Remove older library versions to save storage
+			const libDir = path.join(ollamaDir, 'lib/ollama');
+			const oldLibs = [
+				'libcublas.so.11',
+				'libcublas.so.11.5.1.109',
+				'libcublasLt.so.11',
+				'libcublasLt.so.11.5.1.109',
+				'libcudart.so.11.0',
+				'libcudart.so.11.3.109',
+				'libggml_cuda_v11.so',
+				'libhipblas.so.2',
+				'librocblas.so.4'
+			];
+
+			for (const lib of oldLibs) {
+				try {
+					await fs.unlink(path.join(libDir, lib));
+					console.log(`removed old library: ${lib}`);
+				} catch (error) {
+					console.warn(`failed to remove ${lib}:`, error.message);
+				}
+			}
+
 		}
 
 		console.log('ollama sidecar installed successfully');
