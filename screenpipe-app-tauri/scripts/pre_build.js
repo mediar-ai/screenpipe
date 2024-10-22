@@ -27,6 +27,7 @@ const config = {
 		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
 		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 
+		// TODO unused dead code?
 		openBlasName: 'OpenBLAS-0.3.26-x64',
 		openBlasUrl: 'https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.26/OpenBLAS-0.3.26-x64.zip',
 
@@ -40,7 +41,6 @@ const config = {
 			'tesseract-ocr',
 			'libtesseract-dev',
 			'ffmpeg',
-			'libopenblas-dev', // Runtime
 			'pkg-config',
 			'build-essential',
 			'libglib2.0-dev',
@@ -53,8 +53,6 @@ const config = {
 			'libavfilter-dev',
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
-			'libomp-dev', // OpenMP in ggml.ai
-			'libstdc++-12-dev', //ROCm
 			'libxdo-dev',
 		],
 	},
@@ -237,9 +235,7 @@ if (platform == 'linux') {
 	// Install APT packages
 	try {
 		await $`sudo apt-get update`
-		if (hasFeature('opencl')) {
-			config.linux.aptPackages.push('libclblast-dev')
-		}
+
 		for (const name of config.linux.aptPackages) {
 			await $`sudo apt-get install -y ${name}`
 		}
@@ -496,89 +492,7 @@ if (platform == 'macos') {
 
 }
 
-// ! TODO remove all this dead code?
 
-// Nvidia
-let cudaPath
-if (hasFeature('cuda')) {
-	if (process.env['CUDA_PATH']) {
-		cudaPath = process.env['CUDA_PATH']
-	} else if (platform === 'windows') {
-		const cudaRoot = 'C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\'
-		cudaPath = 'C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5'
-		if (await fs.exists(cudaRoot)) {
-			const folders = await fs.readdir(cudaRoot)
-			if (folders.length > 0) {
-				cudaPath = cudaPath.replace('v12.5', folders[0])
-			}
-		}
-	}
-
-	if (process.env.GITHUB_ENV) {
-		console.log('CUDA_PATH', cudaPath)
-	}
-
-	if (platform === 'windows') {
-		const windowsConfig = {
-			bundle: {
-				resources: {
-					'ffmpeg\\bin\\x64\\*': './',
-					'openblas\\bin\\*.dll': './',
-					[`${cudaPath}\\bin\\cudart64_*`]: './',
-					[`${cudaPath}\\bin\\cublas64_*`]: './',
-					[`${cudaPath}\\bin\\cublasLt64_*`]: './',
-					'onnxruntime*\\lib\\*.dll': './',
-				},
-				externalBin: [
-					'screenpipe'
-				]
-			},
-		}
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(windowsConfig, null, 4))
-	}
-	if (platform === 'linux') {
-		// Add cuda toolkit depends package
-		const tauriConfigContent = await fs.readFile('tauri.linux.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.linux.deb.depends.push('nvidia-cuda-toolkit')
-		await fs.writeFile('tauri.linux.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-if (hasFeature('opencl')) {
-	if (platform === 'windows') {
-		const tauriConfigContent = await fs.readFile('tauri.windows.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.resources['clblast\\bin\\*.dll'] = './'
-		tauriConfig.bundle.resources['C:\\vcpkg\\packages\\opencl_x64-windows\\bin\\*.dll'] = './'
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-// OpenBlas
-if (hasFeature('openblas')) {
-	if (platform === 'windows') {
-		const tauriConfigContent = await fs.readFile('tauri.windows.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.resources['openblas\\bin\\*.dll'] = './'
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-// ROCM
-let rocmPath = '/opt/rocm'
-if (hasFeature('rocm')) {
-	if (process.env.GITHUB_ENV) {
-		console.log('ROCM_PATH', rocmPath)
-	}
-	if (platform === 'linux') {
-		// Add rocm toolkit depends package
-		const tauriConfigContent = await fs.readFile('tauri.linux.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.linux.deb.depends.push('rocm')
-		await fs.writeFile('tauri.linux.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
 
 // Development hints
 if (!process.env.GITHUB_ENV) {
@@ -594,22 +508,6 @@ if (!process.env.GITHUB_ENV) {
 		console.log(`$env:OPENBLAS_PATH = "${exports.openBlas}"`)
 		console.log(`$env:LIBCLANG_PATH = "${exports.libClang}"`)
 		console.log(`$env:PATH += "${exports.cmake}"`)
-		if (hasFeature('older-cpu')) {
-			console.log(`$env:WHISPER_NO_AVX = "ON"`)
-			console.log(`$env:WHISPER_NO_AVX2 = "ON"`)
-			console.log(`$env:WHISPER_NO_FMA = "ON"`)
-			console.log(`$env:WHISPER_NO_F16C = "ON"`)
-		}
-		if (hasFeature('cuda')) {
-			console.log(`$env:CUDA_PATH = "${cudaPath}"`)
-		}
-		if (hasFeature('opencl')) {
-			console.log(`$env:CLBlast_DIR = "${exports.clblast}"`)
-		}
-		if (hasFeature('rocm')) {
-			console.log(`$env:ROCM_VERSION = "6.1.2"`)
-			console.log(`$env:ROCM_PATH = "${rocmPath}"`)
-		}
 	}
 	if (!process.env.GITHUB_ENV) {
 		console.log('bun tauri build')
@@ -632,13 +530,6 @@ if (process.env.GITHUB_ENV) {
 		const openblas = `OPENBLAS_PATH=${exports.openBlas}\n`
 		console.log('Adding ENV', openblas)
 		await fs.appendFile(process.env.GITHUB_ENV, openblas)
-
-		if (hasFeature('opencl')) {
-			const clblast = `CLBlast_DIR=${exports.clblast}\n`
-			console.log('Adding ENV', clblast)
-			await fs.appendFile(process.env.GITHUB_ENV, clblast)
-		}
-
 	}
 }
 

@@ -310,6 +310,13 @@ you can probably remove the updater config in your fork if you don't need it.
 ### other options 
 
 - check this [docker setup](https://github.com/sabrehagen/desktop-environment/blob/d273442143260b414c581d7a53be0618ca822bc0/docker/Dockerfile#L409-L421)
+- use 
+```bash
+export CARGO_PROFILE_RELEASE_LTO=true
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=z
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+``` 
+to build a faster and smaller release but takes longer to build
 
 ## for businesses 
 

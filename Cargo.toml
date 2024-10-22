@@ -41,6 +41,7 @@ criterion = { version = "0.5.1", features = ["async_tokio"] }
 vcpkg = "0.2"
 
 [patch.crates-io]
+# enables chinese mirror (hf is banned in china)
 hf-hub = { git = "https://github.com/king-jingxiang/hf-hub" }
 
 [workspace.metadata.vcpkg]
@@ -48,3 +49,13 @@ git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
 
+[profile.release]
+# default settings
+lto = false
+
+# add release-lto profile for people that want high performance
+[profile.release-lto]
+inherits = "release"
+lto = true
+opt-level = "z"
+codegen-units = 1

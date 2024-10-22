@@ -13,8 +13,7 @@
                 "depends": [
                     "tesseract-ocr",
                     "libtesseract-dev",
-                    "ffmpeg",
-                    "libopenblas-dev"
+                    "ffmpeg"
                 ]
             }
         }
