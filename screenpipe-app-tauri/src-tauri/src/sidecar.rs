@@ -1,6 +1,7 @@
 use crate::{get_base_dir, SidecarState};
 use serde_json::Value;
 use std::env;
+use std::os::windows::process::CommandExt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
@@ -41,8 +42,10 @@ pub async fn kill_all_sreenpipes(
         }
         #[cfg(target_os = "windows")]
         {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::process::Command::new("taskkill")
                 .args(&["/F", "/IM", "screenpipe.exe"])
+                .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .await
         }
