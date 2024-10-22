@@ -122,9 +122,13 @@ async fn main() {
             let base_dir =
                 get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
 
-            // Set up file appender
-            let file_appender =
-                RollingFileAppender::new(Rotation::NEVER, base_dir.clone(), "screenpipe-app.log");
+            // Set up rolling file appender
+            let file_appender = RollingFileAppender::builder()
+                .rotation(Rotation::DAILY)
+                .filename_prefix("screenpipe-app")
+                .filename_suffix("log")
+                .max_log_files(5)
+                .build(&app.path().home_dir().unwrap().join(".screenpipe"))?;
 
             // Create a custom layer for file logging
             let file_layer = tracing_subscriber::fmt::layer()

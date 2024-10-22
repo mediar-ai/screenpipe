@@ -505,7 +505,7 @@ if (process.env.GITHUB_ENV) {
 // Modify the installOllamaSidecar function
 async function installOllamaSidecar() {
 	const ollamaDir = path.join(__dirname, '..', 'src-tauri');
-	const ollamaVersion = 'v0.3.13';
+	const ollamaVersion = 'v0.3.14';
 
 	let ollamaExe, ollamaUrl;
 

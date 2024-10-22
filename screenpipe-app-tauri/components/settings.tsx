@@ -212,10 +212,15 @@ export function Settings({ className }: { className?: string }) {
     setOllamaStatus("running");
     toast({
       title: "starting ai",
-      description: "initializing the embedded ai...",
+      description:
+        "downloading and initializing the embedded ai, may take a while (check $HOME/.ollama/models)...",
     });
 
     try {
+      console.log(
+        "starting ollama sidecar with settings:",
+        localSettings.embeddedLLM
+      );
       const result = await invoke<string>("start_ollama_sidecar", {
         settings: {
           enabled: localSettings.embeddedLLM.enabled,
@@ -812,7 +817,7 @@ export function Settings({ className }: { className?: string }) {
                           <X className="h-4 w-4 mr-2" />
                           stop ai
                         </Button>
-                        <LogFileButton />
+                        <LogFileButton isAppLog={true} />
                         <Badge>{embeddedAIStatus}</Badge>
                       </>
                     )}

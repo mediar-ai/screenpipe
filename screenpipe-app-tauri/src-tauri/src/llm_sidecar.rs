@@ -2,8 +2,10 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::Duration;
+use tauri::async_runtime::Receiver;
 use tauri::Emitter;
 use tauri::Manager;
+use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -56,41 +58,64 @@ impl LLMSidecar {
             .env("CUDA_PATH", &new_cuda_path);
 
         #[cfg(target_os = "windows")]
-        let serve_command = serve_command.env("OLLAMA_ORIGINS", "*");
+        {
+            serve_command = serve_command.env("OLLAMA_ORIGINS", "*");
+        }
 
-        let (_, _child) = serve_command
-            .spawn()
-            .map_err(|e| {
-                error!("Failed to spawn sidecar: {}", e);
-                e.to_string()
-            })
-            .unwrap();
+        let (mut receiver, _) = serve_command.spawn()?;
+
+        // Stream logs for serve command
+        self.stream_logs("ollama-serve", &mut receiver).await?;
 
         info!("Waiting for Ollama server to start...");
         self.wait_for_server().await?;
 
-        // now ollama run the model
-
+        // Now run the model
+        info!("Starting Ollama model...");
         let model_command = app.shell().sidecar("ollama").unwrap();
         let model_command = model_command
             .args(&["run", &self.settings.model])
             .env("CUDA_PATH", &new_cuda_path);
 
         #[cfg(target_os = "windows")]
-        let model_command = model_command.env("OLLAMA_ORIGINS", "*");
+        {
+            model_command = model_command.env("OLLAMA_ORIGINS", "*");
+        }
 
-        let (_, _child) = model_command
-            .spawn()
-            .map_err(|e| {
-                error!("Failed to spawn sidecar: {}", e);
-                e.to_string()
-            })
-            .unwrap();
+        let (mut receiver, _) = model_command.spawn()?;
+
+        // Stream logs for model command
+        self.stream_logs("ollama-model", &mut receiver).await?;
 
         info!("Testing Ollama model...");
         let test_result = self.test_model().await?;
 
         Ok(test_result)
+    }
+
+    async fn stream_logs(&self, prefix: &str, rx: &mut Receiver<CommandEvent>) -> Result<()> {
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line) => {
+                    info!("[{}][stdout] {}", prefix, String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Stderr(line) => {
+                    info!("[{}][stderr] {}", prefix, String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Error(e) => {
+                    error!("[{}][error] {}", prefix, e);
+                }
+                CommandEvent::Terminated(payload) => {
+                    info!(
+                        "[{}][terminated] code: {:?}, signal: {:?}",
+                        prefix, payload.code, payload.signal
+                    );
+                    break;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     async fn wait_for_server(&self) -> Result<()> {
