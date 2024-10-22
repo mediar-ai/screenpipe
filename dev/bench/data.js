@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729613358629,
+  "lastUpdate": 1729621827040,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18869,6 +18869,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2697528375,
             "range": "± 153987763",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "85a60f648621a35e373c97fb99ec3ba0ce15bdc6",
+          "message": "bump ollama embedded version, improve UX, new WIP pipe, other stuff",
+          "timestamp": "2024-10-22T11:21:25-07:00",
+          "tree_id": "3363348585c09d11e1e32f1319a3b96661e0a870",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/85a60f648621a35e373c97fb99ec3ba0ce15bdc6"
+        },
+        "date": 1729621825303,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1912122979,
+            "range": "± 43642893",
             "unit": "ns/iter"
           }
         ]
