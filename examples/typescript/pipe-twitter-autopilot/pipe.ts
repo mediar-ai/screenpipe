@@ -22,7 +22,7 @@ async function extractKeywords(
     ${JSON.stringify(screenData)}
 
     Return a JSON object with a single array of strings, here are a few examples:
-    - { keywords: ["screen", "software", "developer", "product", "design"] }
+    - { "keywords": ["screen", "software", "developer", "product", "design"] }
 
   `;
 
@@ -42,26 +42,15 @@ async function fetchRelevantTweets(
   keywords: string[],
   twitterClient: TwitterApi
 ): Promise<TweetV2[]> {
-  const query = `(${keywords.join(" OR ")}) (lang:en OR from:louis030195 OR to:louis030195)`;
+  const query = `${keywords.join(" OR ")} lang:en`;
   const tweets = await twitterClient.v2.search(query, {
     max_results: 10,
     "tweet.fields": ["id", "text", "author_id"],
     "user.fields": ["id", "username", "location"],
     expansions: ["author_id"],
   });
-  
-  // Filter tweets based on US location or related to your account
-  const filteredTweets = tweets.data.data.filter(tweet => {
-    const author = tweets.includes?.users?.find(user => user.id === tweet.author_id);
-    return (
-      author?.location?.toLowerCase().includes("united states") ||
-      author?.location?.toLowerCase().includes("usa") ||
-      author?.username === "louis030195" ||
-      tweet.text.toLowerCase().includes("@louis030195")
-    );
-  });
 
-  return filteredTweets;
+  return tweets.data.data;
 }
 
 async function generateTwitterSuggestions(
