@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729610401170,
+  "lastUpdate": 1729610412566,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18809,6 +18809,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1948703291,
             "range": "± 122550562",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d5a1b3fbd59c65b953722ed30d33db77cddc463a",
+          "message": "Merge pull request #559 from EzraEllette/osx-output-device-filtering\n\nfilter incompatible devices from list_audio_devices",
+          "timestamp": "2024-10-22T08:11:57-07:00",
+          "tree_id": "222bfc2c40f16a4749049d11cbea2f256e154d34",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/d5a1b3fbd59c65b953722ed30d33db77cddc463a"
+        },
+        "date": 1729610410539,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1910278583,
+            "range": "± 116278823",
             "unit": "ns/iter"
           }
         ]
