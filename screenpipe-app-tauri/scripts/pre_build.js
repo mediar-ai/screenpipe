@@ -15,24 +15,14 @@ const platform = {
 }[os.platform()]
 const cwd = process.cwd()
 console.log('cwd', cwd)
-function hasFeature(name) {
-	return process.argv.includes(`--${name}`) || process.argv.includes(name)
-}
+
 
 const config = {
 	ffmpegRealname: 'ffmpeg',
-	openblasRealname: 'openblas',
-	clblastRealname: 'clblast',
 	windows: {
 		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
 		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 
-		// TODO unused dead code?
-		openBlasName: 'OpenBLAS-0.3.26-x64',
-		openBlasUrl: 'https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.26/OpenBLAS-0.3.26-x64.zip',
-
-		clblastName: 'CLBlast-1.6.2-windows-x64',
-		clblastUrl: 'https://github.com/CNugteren/CLBlast/releases/download/1.6.2/CLBlast-1.6.2-windows-x64.zip',
 
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
@@ -88,8 +78,6 @@ async function findWget() {
 // Export for Github actions
 const exports = {
 	ffmpeg: path.join(cwd, config.ffmpegRealname),
-	openBlas: path.join(cwd, config.openblasRealname),
-	clblast: path.join(cwd, config.clblastRealname, 'lib/cmake/CLBlast'),
 	libClang: 'C:\\Program Files\\LLVM\\bin',
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
@@ -345,25 +333,7 @@ if (platform == 'windows') {
 		console.log('ONNX Runtime libraries for Windows already exists.')
 	}
 
-	// Setup OpenBlas
-	if (!(await fs.exists(config.openblasRealname)) && hasFeature('openblas')) {
-		await $`${wgetPath} --no-config -nc --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.openBlasName}.zip -o${config.openblasRealname}`
-		await $`rm ${config.windows.openBlasName}.zip`
-		fs.cp(path.join(config.openblasRealname, 'include'), path.join(config.openblasRealname, 'lib'), { recursive: true, force: true })
-		// It tries to link only openblas.lib but our is libopenblas.lib`
-		fs.cp(path.join(config.openblasRealname, 'lib/libopenblas.lib'), path.join(config.openblasRealname, 'lib/openblas.lib'))
-	}
 
-	// Setup CLBlast
-	if (!(await fs.exists(config.clblastRealname)) && !hasFeature('cuda')) {
-		await $`${wgetPath} --no-config -nc --show-progress ${config.windows.clblastUrl} -O ${config.windows.clblastName}.zip`
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.zip` // 7z file inside
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.7z` // Inner folder
-		await $`mv ${config.windows.clblastName} ${config.clblastRealname}`
-		await $`rm ${config.windows.clblastName}.zip`
-		await $`rm ${config.windows.clblastName}.7z`
-	}
 
 	// Setup vcpkg packages with environment variables set inline
 	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
@@ -604,11 +574,20 @@ async function installOllamaSidecar() {
 				'cublasLt64_11.dll',
 				'cudart64_110.dll',
 				'ggml_cuda_v11.dll',
+				'rocblas',
+				'rocblas.dll',
+				'ggml_rocm.dll'
 			];
 
 			for (const lib of oldLibs) {
 				try {
-					await fs.unlink(path.join(libDir, lib));
+					const libPath = path.join(libDir, lib);
+					const stat = await fs.stat(libPath);
+					if (stat.isDirectory()) {
+						await fs.rm(libPath, { recursive: true, force: true });
+					} else {
+						await fs.unlink(libPath);
+					}
 					console.log(`removed old library: ${lib}`);
 				} catch (error) {
 					console.warn(`failed to remove ${lib}:`, error.message);
@@ -645,4 +624,5 @@ if (action?.includes('--build' || action.includes('--dev'))) {
 	await $`bun install`
 	await $`bunx tauri ${action.includes('--dev') ? 'dev' : 'build'}`
 }
+
 
