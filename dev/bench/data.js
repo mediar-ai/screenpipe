@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729610076073,
+  "lastUpdate": 1729610401170,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -18779,6 +18779,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2720118041,
             "range": "± 330579200",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5ddbb13c2b7aef09b3dd070fd26ea53fc8aafebc",
+          "message": "Merge pull request #565 from sravan1946/docs-edit-button\n\nFix the `edit this page` button in docs",
+          "timestamp": "2024-10-22T08:10:14-07:00",
+          "tree_id": "8067d162d7a6626aae044a757710c1cba331c6a4",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/5ddbb13c2b7aef09b3dd070fd26ea53fc8aafebc"
+        },
+        "date": 1729610398994,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1948703291,
+            "range": "± 122550562",
             "unit": "ns/iter"
           }
         ]
