@@ -136,10 +136,10 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libayatana-appindicator3-dev
+          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
@@ -158,7 +158,7 @@ jobs:
       #   uses: mxschmitt/action-tmate@v3
 
       - name: Install wget on Linux
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: sudo apt-get install -y wget
 
       - name: Run pre_build.js
@@ -193,17 +193,17 @@ jobs:
         working-directory: ./screenpipe-app-tauri
 
       - name: Install vcpkg
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
