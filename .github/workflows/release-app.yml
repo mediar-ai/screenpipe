@@ -97,8 +97,15 @@ jobs:
 
       - uses: actions/cache@v3
         with:
-          path: "**/node_modules"
-          key: ${{ runner.os }}-modules-${{ hashFiles('**/bun.lockb') }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/${{ matrix.target }}/release/deps
+            target/${{ matrix.target }}/release/build
+          key: ${{ matrix.platform }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}-v1
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-v1-
 
       - name: Cache Homebrew packages
         if: matrix.platform == 'macos-latest'
@@ -122,18 +129,6 @@ jobs:
             screenpipe-app-tauri/src-tauri/ffmpeg
             screenpipe-app-tauri/src-tauri/tesseract-*
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build
-
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
