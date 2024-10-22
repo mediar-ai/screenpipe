@@ -5,6 +5,7 @@ use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
 use screenpipe_audio::vad_engine::VadSensitivity;
+use screenpipe_audio::AudioStream;
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
     AudioInput, AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
@@ -46,34 +47,6 @@ pub async fn start_continuous_recording(
     vad_sensitivity: CliVadSensitivity,
     languages: Vec<Language>,
 ) -> Result<()> {
-    let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
-        // Create a dummy channel if no audio devices are available, e.g. audio disabled
-        let (input_sender, _): (
-            crossbeam::channel::Sender<AudioInput>,
-            crossbeam::channel::Receiver<AudioInput>,
-        ) = crossbeam::channel::bounded(100);
-        let (_, output_receiver): (
-            crossbeam::channel::Sender<TranscriptionResult>,
-            crossbeam::channel::Receiver<TranscriptionResult>,
-        ) = crossbeam::channel::bounded(100);
-        (
-            input_sender,
-            output_receiver,
-            Arc::new(AtomicBool::new(false)),
-        )
-    } else {
-        create_whisper_channel(
-            audio_transcription_engine.clone(),
-            VadEngineEnum::from(vad_engine),
-            deepgram_api_key,
-            &PathBuf::from(output_path.as_ref()),
-            VadSensitivity::from(vad_sensitivity),
-            languages.clone(),
-        )
-        .await?
-    };
-    let whisper_sender_clone = whisper_sender.clone();
-    let db_manager_audio = Arc::clone(&db);
     // Initialize friend wearable loop
     if let Some(uid) = &friend_wearable_uid {
         tokio::spawn(initialize_friend_wearable_loop(
@@ -124,6 +97,35 @@ pub async fn start_continuous_recording(
             Ok(())
         })]
     };
+
+    let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
+        // Create a dummy channel if no audio devices are available, e.g. audio disabled
+        let (input_sender, _): (
+            crossbeam::channel::Sender<AudioInput>,
+            crossbeam::channel::Receiver<AudioInput>,
+        ) = crossbeam::channel::bounded(100);
+        let (_, output_receiver): (
+            crossbeam::channel::Sender<TranscriptionResult>,
+            crossbeam::channel::Receiver<TranscriptionResult>,
+        ) = crossbeam::channel::bounded(100);
+        (
+            input_sender,
+            output_receiver,
+            Arc::new(AtomicBool::new(false)),
+        )
+    } else {
+        create_whisper_channel(
+            audio_transcription_engine.clone(),
+            VadEngineEnum::from(vad_engine),
+            deepgram_api_key,
+            &PathBuf::from(output_path.as_ref()),
+            VadSensitivity::from(vad_sensitivity),
+            languages.clone(),
+        )
+        .await?
+    };
+    let whisper_sender_clone = whisper_sender.clone();
+    let db_manager_audio = Arc::clone(&db);
 
     let audio_task = if !audio_disabled {
         audio_handle.spawn(async move {
@@ -292,77 +294,45 @@ async fn record_audio(
 
             let handle = tokio::spawn(async move {
                 let audio_device_clone = Arc::clone(&audio_device);
-                let error = Arc::new(AtomicBool::new(false));
+                // let error = Arc::new(AtomicBool::new(false));
                 debug!(
                     "Starting audio capture thread for device: {}",
                     &audio_device
                 );
 
-                let error_clone = Arc::clone(&error);
-                let mut iteration = 0;
-                loop {
-                    let device_control_clone = Arc::clone(&device_control);
-                    let whisper_sender_clone = whisper_sender_clone.clone();
-                    let error_clone = Arc::clone(&error_clone);
-                    if error_clone.load(Ordering::Relaxed) {
-                        break;
+                let audio_stream = match AudioStream::from_device(
+                    audio_device_clone.clone(),
+                    Arc::new(AtomicBool::new(device_control.clone().is_running)),
+                )
+                .await
+                {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        error!("Failed to create audio stream: {}", e);
+                        return;
                     }
-                    let audio_device = Arc::clone(&audio_device_clone);
-                    iteration += 1;
-                    tokio::spawn(async move {
-                        debug!(
-                            "Starting iteration {} for device {}",
-                            iteration, audio_device
-                        );
+                };
 
-                        // let error_clone = Arc::clone(&error_clone);
-                        // let whisper_sender_clone_2 = whisper_sender_clone.clone();
-                        let audio_device_clone = audio_device.clone();
-                        // let audio_device_clone_2 = audio_device.clone();
+                let audio_stream = Arc::new(audio_stream);
+                let device_control_clone = Arc::clone(&device_control);
+                let whisper_sender_clone = whisper_sender_clone.clone();
+                let audio_device = Arc::clone(&audio_device_clone);
+                let record_handle = tokio::spawn(async move {
+                    let _ = record_and_transcribe(
+                        audio_stream,
+                        chunk_duration,
+                        whisper_sender_clone.clone(),
+                        Arc::new(AtomicBool::new(device_control_clone.is_running)),
+                    )
+                    .await;
+                });
 
-                        debug!(
-                            "Starting record_and_transcribe for device {} (iteration {})",
-                            audio_device_clone, iteration
-                        );
-                        let result = record_and_transcribe(
-                            audio_device,
-                            // audio_device_clone,
-                            chunk_duration,
-                            whisper_sender_clone.clone(),
-                            // whisper_sender_clone_2.clone(),
-                            Arc::new(AtomicBool::new(device_control_clone.is_running)),
-                        )
-                        .await;
-                        info!(
-                            "Finished record_and_transcribe for device {} (iteration {})",
-                            audio_device_clone, iteration
-                        );
+                // let live_transcription_handle = tokio::spawn(async move {
+                //     let _ = live_transcription(audio_stream, whisper_sender_clone.clone()).await;
+                // });
 
-                        match result {
-                            Ok(file_path) => {
-                                info!(
-                                    "Recording complete for device {} (iteration {}): {:?}",
-                                    audio_device_clone, iteration, file_path
-                                );
-                            }
-                            Err(e) => {
-                                error!(
-                                "Error in record_and_transcribe for device {} (iteration {}): {}, stopping thread",
-                                audio_device_clone, iteration, e
-                            );
-                                error_clone.store(true, Ordering::Relaxed);
-                            }
-                        }
-                        info!(
-                            "Finished iteration {} for device {}",
-                            iteration, &audio_device_clone
-                        );
-                    });
-
-                    tokio::time::sleep(chunk_duration - OVERLAP_DURATION).await;
-                }
-
-                info!("Exiting audio capture thread for device: {}", &audio_device);
+                record_handle.await.unwrap();
+                info!("exiting audio capture thread for device: {}", &audio_device);
             });
 
             handles.insert(device_id, handle);
