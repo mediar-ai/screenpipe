@@ -78,7 +78,10 @@ we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis
 
 # why?
 
-AI is dumb and always will be without the context of your activity or the activity of others in your environment.
+super intelligence + your whole life and team life activity data = magic
+ 
+AI is progressing so fast it will be able to ingest months of recordings of your life and company within next year, we're building the foundations for it to happen
+
 
 ## get started
 
