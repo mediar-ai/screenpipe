@@ -224,6 +224,10 @@ jobs:
           # CARGO_PROFILE_RELEASE_LTO: true
           # CARGO_PROFILE_RELEASE_OPT_LEVEL: z
           # CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+          # reduce build size on linux
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"

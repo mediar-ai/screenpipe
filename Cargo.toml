@@ -49,13 +49,3 @@ git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
 
-[profile.release]
-# default settings
-lto = false
-
-# add release-lto profile for people that want high performance
-[profile.release-lto]
-inherits = "release"
-lto = true
-opt-level = "z"
-codegen-units = 1
