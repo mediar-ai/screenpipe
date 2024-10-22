@@ -321,7 +321,6 @@ if (platform == 'windows') {
 		// process.exit(1);
 	}
 
-
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`${wgetPath} --no-config --tries=10 --retry-connrefused --waitretry=10 --secure-protocol=auto --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
@@ -330,28 +329,6 @@ if (platform == 'windows') {
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
 	}
-
-	// Setup Tesseract
-	const tesseractName = 'tesseract-setup'
-	const tesseractUrl = 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe'
-	const tesseractInstaller = `${tesseractName}.exe`
-
-	if (!(await fs.exists('tesseract'))) {
-		console.log('Setting up Tesseract for Windows...')
-		await $`${wgetPath} --no-config -nc --no-check-certificate --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
-		await $`"${process.cwd()}\\${tesseractInstaller}" /S /D=C:\\Program Files\\Tesseract-OCR`
-		await $`rm ${tesseractInstaller}`
-		// Replace the mv command with xcopy
-		await $`xcopy "C:\\Program Files\\Tesseract-OCR" tesseract /E /I /H /Y`
-		// Optionally, remove the original directory if needed
-		// await $`rmdir "C:\\Program Files\\Tesseract-OCR" /S /Q`
-		console.log('Tesseract for Windows set up successfully.')
-	} else {
-		console.log('Tesseract for Windows already exists.')
-	}
-
-	// Add Tesseract to PATH
-	process.env.PATH = `${process.cwd()}\\tesseract;${process.env.PATH}`
 
 	// Setup ONNX Runtime
 	const onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
@@ -519,6 +496,8 @@ if (platform == 'macos') {
 
 }
 
+// ! TODO remove all this dead code?
+
 // Nvidia
 let cudaPath
 if (hasFeature('cuda')) {
@@ -548,7 +527,6 @@ if (hasFeature('cuda')) {
 					[`${cudaPath}\\bin\\cudart64_*`]: './',
 					[`${cudaPath}\\bin\\cublas64_*`]: './',
 					[`${cudaPath}\\bin\\cublasLt64_*`]: './',
-					'tesseract\\*': './',
 					'onnxruntime*\\lib\\*.dll': './',
 				},
 				externalBin: [
@@ -757,3 +735,4 @@ if (action?.includes('--build' || action.includes('--dev'))) {
 	await $`bun install`
 	await $`bunx tauri ${action.includes('--dev') ? 'dev' : 'build'}`
 }
+
