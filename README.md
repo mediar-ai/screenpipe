@@ -78,10 +78,11 @@ we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis
 
 # why?
 
-super intelligence + your whole life and team life activity data = magic
+super intelligence + activity data from your life and your team = magic
  
-AI is progressing so fast it will be able to ingest months of recordings of your life and company within next year, we're building the foundations for it to happen
+AI is progressing so fast that it will be able to ingest months of recordings of your life and business by next year, and we're building the foundations to make it happen.
 
+start recording your screen today ... or be left behind 
 
 ## get started
 
