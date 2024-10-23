@@ -276,6 +276,7 @@ export function Settings({ className }: { className?: string }) {
 
   const handleAiProviderChange = (newValue: AIProviderType) => {
     let newUrl = "";
+    let newModel = localSettings.aiModel;
     switch (newValue) {
       case "openai":
         newUrl = "https://api.openai.com/v1";
@@ -285,6 +286,7 @@ export function Settings({ className }: { className?: string }) {
         break;
       case "embedded":
         newUrl = `http://localhost:${localSettings.embeddedLLM.port}/v1`;
+        newModel = localSettings.embeddedLLM.model;
         break;
       case "screenpipe-cloud":
         newUrl = "https://ai-proxy.i-f9f.workers.dev/v1";
@@ -298,10 +300,12 @@ export function Settings({ className }: { className?: string }) {
       ...localSettings,
       aiProviderType: newValue,
       aiUrl: newUrl,
+      aiModel: newModel,
     });
     updateSettings({
       aiProviderType: newValue,
       aiUrl: newUrl,
+      aiModel: newModel,
     });
   };
 
