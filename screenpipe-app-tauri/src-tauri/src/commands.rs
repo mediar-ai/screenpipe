@@ -8,6 +8,8 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use tracing::info;
 use tracing::{debug, error};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use std::str::FromStr;
 
 #[tauri::command]
 pub fn open_screen_capture_preferences() {
@@ -129,19 +131,40 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
     }
 }
 
+fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
+    let parts: Vec<&str> = shortcut.split('+').collect();
+    let (modifiers, key) = parts.split_at(parts.len() - 1);
+
+    let mut modifier_flags = Modifiers::empty();
+    for modifier in modifiers {
+        match modifier.to_lowercase().as_str() {
+            "ctrl" | "control" => modifier_flags |= Modifiers::CONTROL,
+            "alt" | "option" => modifier_flags |= Modifiers::ALT,
+            "shift" => modifier_flags |= Modifiers::SHIFT,
+            "super" | "meta" | "cmd" | "command" => modifier_flags |= Modifiers::META,
+            _ => return Err(format!("Invalid modifier: {}", modifier)),
+        }
+    }
+
+    let code = match Code::from_str(key[0]) {
+        Ok(code) => code,
+        Err(_) => return Err(format!("Invalid key: {}", key[0])),
+    };
+
+    Ok(Shortcut::new(Some(modifier_flags), code))
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub fn update_show_screenpipe_shortcut(
     app_handle: tauri::AppHandle<tauri::Wry>,
     new_shortcut: String,
 ) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-
     app_handle
         .global_shortcut()
         .unregister_all()
         .map_err(|e| e.to_string())?;
 
-    let show_window_shortcut = new_shortcut.parse::<Shortcut>().unwrap();
+    let show_window_shortcut = parse_shortcut(&new_shortcut)?;
 
     app_handle
         .global_shortcut()
@@ -161,14 +184,12 @@ pub fn update_recording_shortcut(
     app_handle: tauri::AppHandle,
     new_shortcut: String,
 ) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-
     // Unregister the old shortcut
     if let Err(e) = app_handle.global_shortcut().unregister_all() {
         error!("Failed to unregister old shortcut: {}", e);
     }
 
-    let recording_shortcut = new_shortcut.parse::<Shortcut>().map_err(|e| e.to_string())?;
+    let recording_shortcut = parse_shortcut(&new_shortcut)?;
 
     app_handle
         .global_shortcut()

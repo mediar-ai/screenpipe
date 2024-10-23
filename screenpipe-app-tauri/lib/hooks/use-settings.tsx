@@ -310,10 +310,8 @@ export function useSettings() {
         }
       }
       await store!.save();
-      // no need to call save() as we're using autoSave: true
     } catch (error) {
       console.error("failed to update settings:", error);
-      // revert local state if store update fails
       setSettings(settings);
     }
   };

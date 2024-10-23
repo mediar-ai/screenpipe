@@ -21,9 +21,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
-import { Slider } from "@/components/ui/slider"; // Add this import
-import { Badge } from "@/components/ui/badge"; // Add this import
-import { parseKeyboardShortcut } from "@/lib/utils"; // Add this import
+import { Slider } from "@/components/ui/slider"; 
+import { Badge } from "@/components/ui/badge"; 
+import { parseKeyboardShortcut } from "@/lib/utils";
 
 import {
   Eye,
@@ -987,3 +987,4 @@ export function Settings({ className }: { className?: string }) {
     </Dialog>
   );
 }
+
