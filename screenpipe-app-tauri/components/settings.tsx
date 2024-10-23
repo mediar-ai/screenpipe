@@ -188,9 +188,17 @@ export function Settings({ className }: { className?: string }) {
   const handleEmbeddedLLMModelChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const newValue = { ...localSettings.embeddedLLM, model: e.target.value };
-    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
-    updateSettings({ embeddedLLM: newValue });
+    const newModel = e.target.value;
+    const newEmbeddedLLM = { ...localSettings.embeddedLLM, model: newModel };
+    setLocalSettings({
+      ...localSettings,
+      embeddedLLM: newEmbeddedLLM,
+      aiModel: newModel, // Update the general AI model as well
+    });
+    updateSettings({
+      embeddedLLM: newEmbeddedLLM,
+      aiModel: newModel, // Update the general AI model in the global settings
+    });
   };
 
   const handleEmbeddedLLMPortChange = (
