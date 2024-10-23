@@ -235,8 +235,6 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.platform == 'windows-latest' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
           # Enable incremental compilation for Windows
           CARGO_INCREMENTAL: ${{ matrix.platform == 'windows-latest' && '1' || '0' }}
-          # Limit parallel jobs on Windows
-          CARGO_BUILD_JOBS: ${{ matrix.platform == 'windows-latest' && '4' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
