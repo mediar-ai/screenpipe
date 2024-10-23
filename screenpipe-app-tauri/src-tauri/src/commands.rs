@@ -200,6 +200,6 @@ pub fn update_recording_shortcut(
         })
         .map_err(|e| e.to_string())?;
 
-    debug!("New recording shortcut registered successfully");
+    debug!("new recording shortcut registered successfully");
     Ok(())
 }
