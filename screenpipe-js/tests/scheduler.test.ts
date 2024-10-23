@@ -125,15 +125,3 @@ Deno.test("Scheduler - state persistence", async () => {
     Deno.env.delete("SCREENPIPE_DIR");
   }
 });
-
-/* 
-
-export SCREENPIPE_DIR="$HOME/.screenpipe"
-export PIPE_ID="test-scheduler"
-export PIPE_FILE="pipe.ts"
-export PIPE_DIR="$SCREENPIPE_DIR/pipes/test-scheduler"
-
-
-deno test screenpipe-js/tests/scheduler.test.ts --allow-env --allow-read --allow-write
-
-*/
