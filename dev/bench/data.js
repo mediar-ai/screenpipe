@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729652550368,
+  "lastUpdate": 1729652622634,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19349,6 +19349,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1915883417,
             "range": "± 99063215",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e021f3a760bcf0e44b137b81e6e63db4d23b3eec",
+          "message": "Merge pull request #564 from ABucket/main\n\nUse VCPKG_ROOT environment variable for vcpkg path in windows build script",
+          "timestamp": "2024-10-22T19:55:06-07:00",
+          "tree_id": "7811a8830b7c5cbba90f64cc96090153b7b4beb9",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/e021f3a760bcf0e44b137b81e6e63db4d23b3eec"
+        },
+        "date": 1729652621480,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2220478208,
+            "range": "± 196626057",
             "unit": "ns/iter"
           }
         ]
