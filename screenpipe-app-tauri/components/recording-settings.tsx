@@ -1260,7 +1260,7 @@ export function RecordingSettings({
                 htmlFor="chinese-mirror-toggle"
                 className="flex items-center space-x-2"
               >
-                <span>Use Chinese mirror for model downloads</span>
+                <span>use chinese mirror for model downloads</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
@@ -1268,7 +1268,7 @@ export function RecordingSettings({
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       <p>
-                        Enable this option to use a Chinese mirror for
+                        enable this option to use a chinese mirror for
                         <br />
                         downloading Hugging Face models
                         <br />
