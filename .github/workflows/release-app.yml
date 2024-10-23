@@ -203,6 +203,15 @@ jobs:
         with:
           version: "10.0"
 
+      - name: Free Disk Space (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo swapoff -a
+          sudo rm -f /swapfile
+          sudo apt clean
+          docker rmi $(docker image ls -aq)
+          df -h
+
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
