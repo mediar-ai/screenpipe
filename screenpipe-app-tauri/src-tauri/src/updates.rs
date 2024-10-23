@@ -1,13 +1,16 @@
+use crate::get_base_dir;
 use crate::kill_all_sreenpipes;
 use crate::SidecarState;
 use anyhow::Error;
 use log::{error, info};
+use std::fs::File;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};
 use tauri::{Manager, Wry};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::MessageDialogButtons;
+use tauri_plugin_store::StoreBuilder;
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -19,11 +22,22 @@ pub struct UpdatesManager {
     app: tauri::AppHandle,
     update_menu_item: MenuItem<Wry>,
     update_installed: Arc<Mutex<bool>>,
+    store: tauri_plugin_store::Store<Wry>,
 }
 
 impl UpdatesManager {
     pub fn new(app: &tauri::AppHandle, interval_minutes: u64) -> Result<Self, Error> {
+        let base_dir =
+            get_base_dir(app.app_handle(), None).expect("Failed to ensure local data directory");
+        let path = base_dir.join("store.bin");
+        if !path.exists() {
+            let _ = File::create(path.clone()).unwrap();
+        }
+
+        // Store setup and analytics initialization
+        let store = StoreBuilder::new(app.app_handle(), path.clone()).build();
         Ok(Self {
+            store,
             interval: Duration::from_secs(interval_minutes * 60),
             update_available: Arc::new(Mutex::new(false)),
             update_installed: Arc::new(Mutex::new(false)),
@@ -38,6 +52,17 @@ impl UpdatesManager {
         &self,
         show_dialog: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
+        let use_dev_mode = self
+            .store
+            .get("devMode")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        if use_dev_mode {
+            info!("dev mode is enabled, skipping update check");
+            return Result::Ok(false);
+        }
+
         if let Some(update) = self.app.updater()?.check().await? {
             *self.update_available.lock().await = true;
 
