@@ -9,6 +9,7 @@ use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioDevice;
+use screenpipe_audio::AudioStream;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
 use screenpipe_core::Language;
@@ -112,9 +113,13 @@ async fn main() -> Result<()> {
             tokio::spawn(async move {
                 let device_control_clone = Arc::clone(&device_control);
                 let device_clone_2 = Arc::clone(&device_clone);
+                let audio_stream =
+                    AudioStream::from_device(device_clone_2, device_control_clone.clone())
+                        .await
+                        .unwrap();
 
                 record_and_transcribe(
-                    device_clone_2,
+                    Arc::new(audio_stream),
                     chunk_duration,
                     whisper_sender,
                     device_control_clone,

@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { platform } from "@tauri-apps/plugin-os";
@@ -25,7 +26,16 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Lock, Folder, FileText, Activity, Wrench } from "lucide-react";
+import {
+  Lock,
+  Folder,
+  FileText,
+  Activity,
+  Wrench,
+  RefreshCw,
+  HardDrive,
+  HelpCircle,
+} from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { homeDir } from "@tauri-apps/api/path";
 import LogViewer from "./log-viewer-v2";
@@ -36,309 +46,10 @@ import {
 } from "@/components/ui/collapsible";
 import { Command } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
-
-const getDebuggingCommands = (os: string | null) => {
-  let cliInstructions = "";
-
-  if (os === "windows") {
-    cliInstructions =
-      "# 1. Open Command Prompt as admin (search for 'cmd' in the Start menu, right click, 'Run as admin')\n# 2. Navigate to: %LOCALAPPDATA%\\screenpipe\\\n#    Type: cd %LOCALAPPDATA%\\screenpipe\n";
-  } else if (os === "macos") {
-    cliInstructions =
-      "# 1. Open Terminal\n# 2. Navigate to: /Applications/screenpipe.app/Contents/MacOS/\n#    Type: cd /Applications/screenpipe.app/Contents/MacOS/\n";
-  } else if (os === "linux") {
-    cliInstructions =
-      "# 1. Open Terminal\n# 2. Navigate to: /usr/local/bin/\n#    Type: cd /usr/local/bin/\n";
-  } else {
-    cliInstructions =
-      "# OS not recognized. Please check the documentation for your specific operating system.\n";
-  }
-
-  const baseInstructions = `# First, view the Screenpipe CLI arguments:
-${cliInstructions}
-# 3. Run: screenpipe -h
-# 4. Choose your preferred setup and start Screenpipe:
-#    (Replace [YOUR_ARGS] with your chosen arguments)
-#    Example: screenpipe --fps 1 `;
-
-  const dataDir =
-    os === "windows" ? "%USERPROFILE%\\.screenpipe" : "$HOME/.screenpipe";
-
-  const logPath =
-    os === "windows"
-      ? `%USERPROFILE%\\.screenpipe\\screenpipe.${
-          new Date().toISOString().split("T")[0]
-        }.log`
-      : `$HOME/.screenpipe/screenpipe.${
-          new Date().toISOString().split("T")[0]
-        }.log`;
-
-  const dbPath =
-    os === "windows"
-      ? "%USERPROFILE%\\.screenpipe\\db.sqlite"
-      : "$HOME/.screenpipe/db.sqlite";
-
-  const baseCommand =
-    baseInstructions +
-    dataDir +
-    (os === "windows"
-      ? "\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir %USERPROFILE%\\.screenpipe --ocr-engine windows-native\n"
-      : "") +
-    "\n\n# 5. If you've already started Screenpipe, try these debugging commands:\n";
-
-  if (os === "windows") {
-    return (
-      baseCommand +
-      `# Stream the log:
-type "${logPath}"
-
-# Scroll the logs:
-more "${logPath}"
-
-# View last 10 frames:
-sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-
-# View last 10 audio transcriptions:
-sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
-    );
-  } else if (os === "macos" || os === "linux") {
-    return (
-      baseCommand +
-      `# Stream the log:
-tail -f "${logPath}"
-
-# Scroll the logs:
-less "${logPath}"
-
-# View last 10 frames:
-sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-
-# View last 10 audio transcriptions:
-sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
-    );
-  } else {
-    return "OS not recognized. \n\nPlease check the documentation for your specific operating system.";
-  }
-};
-
-const DevModeSettings = () => {
-  const { settings, updateSettings } = useSettings();
-  const [localSettings, setLocalSettings] = useState(settings);
-  const handleDevModeToggle = async (checked: boolean) => {
-    try {
-      await updateSettings({ devMode: checked });
-      setLocalSettings({ ...localSettings, devMode: checked });
-    } catch (error) {
-      console.error("Failed to update dev mode:", error);
-      // Add error handling, e.g., show a toast notification
-    }
-  };
-  const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
-
-  useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
-
-  const handleStartScreenpipe = async () => {
-    setIsLoading(true);
-    const toastId = toast({
-      title: "starting screenpipe",
-      description: "please wait...",
-      duration: Infinity,
-    });
-    try {
-      await invoke("spawn_screenpipe");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      toastId.update({
-        id: toastId.id,
-        title: "screenpipe started",
-        description: "screenpipe is now running.",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error("failed to start screenpipe:", error);
-      toastId.update({
-        id: toastId.id,
-        title: "error",
-        description: "failed to start screenpipe.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    } finally {
-      toastId.dismiss();
-      setIsLoading(false);
-    }
-  };
-
-  const handleStopScreenpipe = async () => {
-    setIsLoading(true);
-    const toastId = toast({
-      title: "stopping screenpipe",
-      description: "please wait...",
-      duration: Infinity,
-    });
-    try {
-      await invoke("kill_all_sreenpipes");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      toastId.update({
-        id: toastId.id,
-        title: "screenpipe stopped",
-        description: "screenpipe is now stopped.",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error("failed to stop screenpipe:", error);
-      toastId.update({
-        id: toastId.id,
-        title: "error",
-        description: "failed to stop screenpipe.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    } finally {
-      toastId.dismiss();
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="w-full my-4">
-        <div className="flex justify-around">
-          <Card className="p-4 relative">
-            <CardContent>
-              <div className="flex flex-col space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Label htmlFor="dev-mode">enable dev mode</Label>
-                    <Switch
-                      id="dev-mode"
-                      checked={localSettings.devMode}
-                      onCheckedChange={handleDevModeToggle}
-                    />
-                  </div>
-                  <div className="absolute top-2 right-2">
-                    <CliCommandDialog localSettings={localSettings} />
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  on = use CLI for more control
-                  <br />
-                  in dev mode, backend won&apos;t <br />
-                  auto start when starting the app
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="relative">
-            <Badge className="text-xs absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
-              expert only
-            </Badge>
-            <Card className="p-4">
-              <CardContent>
-                <div className="flex items-center space-x-2">
-                  <div className="flex flex-col items-center w-full">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            onClick={handleStopScreenpipe}
-                            disabled={isLoading}
-                            className="text-xs w-full"
-                          >
-                            stop
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>stop screenpipe backend</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <div className="flex flex-col items-center w-full">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            onClick={handleStartScreenpipe}
-                            disabled={isLoading}
-                            className="text-xs w-full"
-                          >
-                            start
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>start screenpipe backend</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="flex flex-col items-center">
-                <p className="text-sm text-muted-foreground">
-                  start or stop screenpipe backend
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  (auto started when dev mode is off)
-                </p>
-              </CardFooter>
-            </Card>
-          </div>
-        </div>
-      </div>
-      {/* vertical separator */}
-      <Separator orientation="vertical" />
-      {settings.devMode === true && (
-        <>
-          <p className="font-bold my-2">
-            did you run screenpipe backend? either click start on the right, or
-            thru CLI 👇
-          </p>
-          <CodeBlock language="bash" value={getDebuggingCommands(platform())} />
-
-          <div className="mt-4 text-sm text-gray-500">
-            <p>or, for more advanced queries:</p>
-            <ol className="list-decimal list-inside mt-2">
-              <li>
-                <a
-                  href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/db.rs"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline"
-                >
-                  go to the database schema
-                </a>
-              </li>
-              <li>Copy the entire page (Cmd+A, Cmd+C)</li>
-              <li>Paste into ChatGPT (Cmd+V)</li>
-              <li>
-                ask: &quot;give me 10 sqlite query CLI to look up my data. My db
-                is in $HOME/.screenpipe/db.sqlite&quot;
-              </li>
-            </ol>
-            <p className="mt-2">
-              or if you prefer using curl, follow the same steps with the{" "}
-              <a
-                href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/server.rs"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:underline"
-              >
-                server.rs file
-              </a>{" "}
-              and ask ChatGPT for curl commands to interact with the API.
-            </p>
-          </div>
-        </>
-      )}
-    </>
-  );
-};
+import { LogFileButton } from "./log-file-button";
+import { DevModeSettings } from "./dev-mode-settings";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 
 const HealthStatus = ({ className }: { className?: string }) => {
   const { health } = useHealthCheck();
@@ -347,6 +58,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const { settings } = useSettings();
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isFixingSetup, setIsFixingSetup] = useState(false);
+  const [isTroubleshootOpen, setIsTroubleshootOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
     setIsMac(platform() === "macos");
@@ -489,6 +202,147 @@ const HealthStatus = ({ className }: { className?: string }) => {
     }
   };
 
+  const troubleshootingSteps = [
+    {
+      title: "try fixing setup",
+      description: "attempt to automatically fix common setup issues",
+      action: (
+        <div className="flex flex-col items-center">
+          <Button
+            variant="outline"
+            onClick={handleFixSetup}
+            disabled={isFixingSetup}
+          >
+            <Wrench className="mr-2 h-4 w-4" />
+            {isFixingSetup ? "fixing..." : "fix setup"}
+          </Button>
+          <p className="text-xs mt-2 text-gray-500">
+            this will download AI models, check permissions, and dependencies
+          </p>
+        </div>
+      ),
+    },
+    {
+      title: "restart screenpipe recording",
+      description: "click stop and start again",
+      action: (
+        <div className="flex flex-col items-center">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const toastId = toast({
+                title: "restarting screenpipe",
+                description: "please wait...",
+                duration: Infinity,
+              });
+              try {
+                await invoke("kill_all_sreenpipes");
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                toastId.dismiss();
+                toastId.update({
+                  id: toastId.id,
+                  title: "screenpipe stopped",
+                  description: "screenpipe is now stopped.",
+                  duration: 3000,
+                });
+                await invoke("spawn_screenpipe");
+
+                toastId.dismiss();
+                toastId.update({
+                  id: toastId.id,
+                  title: "screenpipe started",
+                  description: "screenpipe is now started.",
+                  duration: 3000,
+                });
+              } catch (error) {
+                console.error("failed to stop screenpipe:", error);
+                toastId.update({
+                  id: toastId.id,
+                  title: "error",
+                  description: "failed to stop screenpipe.",
+                  variant: "destructive",
+                  duration: 3000,
+                });
+              } finally {
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                toastId.dismiss();
+              }
+            }}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            restart recording
+          </Button>
+          <p className="text-xs mt-2 text-gray-500">
+            this will stop and start the recording process
+          </p>
+        </div>
+      ),
+    },
+    {
+      title: "check permissions",
+      description: "ensure screen and audio recording permissions are granted",
+      action: isMac ? (
+        <div className="flex flex-col items-center">
+          <Button variant="outline" onClick={openScreenPermissions}>
+            <Lock className="mr-2 h-4 w-4" />
+            open screen permissions
+          </Button>
+          <p className="text-xs mt-2 text-gray-500">
+            opens system preferences for screen recording
+          </p>
+        </div>
+      ) : null,
+    },
+    {
+      title: "contact support",
+      description: "if the issue persists, reach out to our support team",
+      action: (
+        <div className="flex flex-col space-y-2 items-center">
+          <div className="flex items-center space-x-2 justify-center">
+            <p className="text-sm">please share your logs with support:</p>
+            <LogFileButton />
+          </div>
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              onClick={() => open("mailto:louis@screenpi.pe")}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              email founders
+            </Button>
+            <p className="text-xs mt-2 text-gray-500">
+              we&apos;ll respond within 24 hours
+            </p>
+          </div>
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              onClick={() => open("https://cal.com/louis030195/screenpipe")}
+            >
+              <Activity className="mr-2 h-4 w-4" />
+              book a call w founders
+            </Button>
+            <p className="text-xs mt-2 text-gray-500">
+              schedule a 15-minute troubleshooting call
+            </p>
+          </div>
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              onClick={() => open("https://discord.gg/dU9EBuw7Uq")}
+            >
+              <HelpCircle className="mr-2 h-4 w-4" />
+              join our discord
+            </Button>
+            <p className="text-xs mt-2 text-gray-500">
+              we&apos;re more responsive on discord (or the community)
+            </p>
+          </div>
+        </div>
+      ),
+    },
+  ];
+
   if (!health) {
     return (
       <Badge
@@ -536,47 +390,12 @@ const HealthStatus = ({ className }: { className?: string }) => {
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent
-          className="max-w-3xl max-h-[80vh] flex flex-col p-8"
+          className="max-w-4xl max-h-[90vh] flex flex-col p-8"
           aria-describedby="status-dialog-description"
         >
           <DialogHeader className="flex flex-row items-center justify-between">
             <DialogTitle>screenpipe status</DialogTitle>
             <div className="flex space-x-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleFixSetup}
-                      disabled={isFixingSetup}
-                    >
-                      <Wrench className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>try fixing setup</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              {isMac && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={openScreenPermissions}
-                      >
-                        <Lock className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>open screen permissions</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
               <Button
                 variant="outline"
                 onClick={handleOpenDataDir}
@@ -584,6 +403,13 @@ const HealthStatus = ({ className }: { className?: string }) => {
               >
                 <Folder className="h-4 w-4 mr-2" />
                 view saved data
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsTroubleshootOpen(true)}
+              >
+                <Wrench className="h-4 w-4 mr-2" />
+                troubleshoot
               </Button>
             </div>
           </DialogHeader>
@@ -606,40 +432,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   : formatTimestamp(health.last_audio_timestamp)}
               </p>
             </div>
-            <div className="text-sm mt-4">
-              <p className="font-semibold mb-2">
-                if you&apos;re having issues:
-              </p>
-              <ol className="list-decimal list-inside space-y-1">
-                <li>try restarting screenpipe</li>
-                <li>
-                  check your computer&apos;s screen and audio recording
-                  permissions
-                </li>
-                <li>
-                  if problems continue, contact support at{" "}
-                  <a
-                    href="mailto:louis@screenpi.pe"
-                    className="hover:underline"
-                  >
-                    louis@screenpi.pe
-                  </a>
-                </li>
-                <li>
-                  view our{" "}
-                  <a
-                    href="https://github.com/mediar-ai/screenpipe/blob/main/content/docs/NOTES.md"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline"
-                  >
-                    FAQ page
-                  </a>{" "}
-                  for more help
-                </li>
-              </ol>
-            </div>
-            <Separator className="my-4" />
+
+            <Separator className="my-12" />
             <DevModeSettings />
 
             <Collapsible
@@ -661,52 +455,57 @@ const HealthStatus = ({ className }: { className?: string }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isTroubleshootOpen} onOpenChange={setIsTroubleshootOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              troubleshooting guide
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-6">
+            <div className="mb-16">
+              <h3 className="text-2xl font-bold mb-4 text-center">
+                {troubleshootingSteps[currentStep].title}
+              </h3>
+              <p className="text-xl text-center mb-4">
+                {troubleshootingSteps[currentStep].description}
+              </p>
+              {troubleshootingSteps[currentStep].action && (
+                <div className="flex justify-center">
+                  {troubleshootingSteps[currentStep].action}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-between items-center">
+              <Button
+                variant="outline"
+                onClick={() => setCurrentStep((prev) => Math.max(0, prev - 1))}
+                disabled={currentStep === 0}
+              >
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                previous
+              </Button>
+              <span className="text-sm text-gray-500">
+                {currentStep + 1} / {troubleshootingSteps.length}
+              </span>
+              <Button
+                onClick={() =>
+                  setCurrentStep((prev) =>
+                    Math.min(troubleshootingSteps.length - 1, prev + 1)
+                  )
+                }
+                disabled={currentStep === troubleshootingSteps.length - 1}
+              >
+                next
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
 
-export const LogFileButton = ({ className }: { className?: string }) => {
-  const { toast } = useToast();
-  const handleOpenLogFile = async () => {
-    try {
-      const homeDirPath = await homeDir();
-      const logPath =
-        platform() === "windows"
-          ? `${homeDirPath}\\.screenpipe\\screenpipe.${
-              new Date().toISOString().split("T")[0]
-            }.log`
-          : `${homeDirPath}/.screenpipe/screenpipe.${
-              new Date().toISOString().split("T")[0]
-            }.log`;
-      await open(logPath);
-    } catch (error) {
-      console.error("failed to open log file:", error);
-      toast({
-        title: "error",
-        description: "failed to open log file.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
-  };
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleOpenLogFile}
-            className="ml-2"
-          >
-            <FileText className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>open log file</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
 export default HealthStatus;

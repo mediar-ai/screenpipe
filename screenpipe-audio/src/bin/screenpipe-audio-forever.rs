@@ -9,6 +9,7 @@ use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioDevice;
+use screenpipe_audio::AudioStream;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
 use screenpipe_core::Language;
@@ -96,33 +97,40 @@ async fn main() -> Result<()> {
         languages,
     )
     .await?;
+
+    let whisper_sender_clone = whisper_sender.clone();
     // Spawn threads for each device
     let _recording_threads: Vec<_> = devices
         .into_iter()
         .enumerate()
         .map(|(i, device)| {
-            let device = Arc::new(device);
-            let whisper_sender = whisper_sender.clone();
+            let whisper_sender = whisper_sender_clone.clone();
+            async move {
+                let device = Arc::new(device);
+                let device_control = Arc::new(AtomicBool::new(true));
 
-            let device_control = Arc::new(AtomicBool::new(true));
+                let audio_stream = AudioStream::from_device(device.clone(), device_control.clone())
+                    .await
+                    .unwrap();
 
-            tokio::spawn(async move {
-                loop {
-                    let result = record_and_transcribe(
-                        Arc::clone(&device),
-                        chunk_duration,
-                        whisper_sender.clone(),
-                        Arc::clone(&device_control),
-                    )
-                    .await;
+                tokio::spawn(async move {
+                    loop {
+                        let result = record_and_transcribe(
+                            Arc::new(audio_stream.clone()),
+                            chunk_duration,
+                            whisper_sender.clone(),
+                            Arc::clone(&device_control),
+                        )
+                        .await;
 
-                    if let Err(e) = result {
-                        eprintln!("Error in recording thread {}: {:?}", i, e);
-                        // Optionally add a short delay before retrying
-                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        if let Err(e) = result {
+                            eprintln!("Error in recording thread {}: {:?}", i, e);
+                            // Optionally add a short delay before retrying
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        }
                     }
-                }
-            })
+                })
+            }
         })
         .collect();
 

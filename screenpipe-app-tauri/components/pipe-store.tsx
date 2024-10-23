@@ -49,7 +49,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { LogFileButton } from "./screenpipe-status";
+import { LogFileButton } from "./log-file-button";
 
 export interface Pipe {
   enabled: boolean;

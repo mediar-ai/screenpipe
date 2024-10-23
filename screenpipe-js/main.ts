@@ -99,10 +99,10 @@ export interface PaginationInfo {
 /**
  * Structure of the response from a Screenpipe query.
  */
-  export interface ScreenpipeResponse {
-    data: ContentItem[];
-    pagination: PaginationInfo;
-  }
+export interface ScreenpipeResponse {
+  data: ContentItem[];
+  pagination: PaginationInfo;
+}
 
 /**
  * Parsed config
@@ -348,25 +348,22 @@ class Task {
 class Scheduler {
   private tasks: Task[] = [];
   private running: boolean = false;
-  private state: SchedulerState = {};
-  private stateFilePath: string;
-
-  constructor() {
-    const pipeId = process.env.PIPE_ID;
-    if (!pipeId) {
-      throw new Error("PIPE_ID environment variable is not set");
-    }
-    this.stateFilePath = path.join(
-      process.env.SCREENPIPE_DIR || "",
-      "pipes",
-      pipeId,
-      "scheduler_state.json"
-    );
-    this.loadState();
-  }
+  private state: SchedulerState | null = null;
+  private stateFilePath: string = '';
 
   private loadState() {
     try {
+      const pipeId = process.env.PIPE_ID;
+      if (!pipeId) {
+        throw new Error("PIPE_ID environment variable is not set");
+      }
+      this.stateFilePath = path.join(
+        process.env.SCREENPIPE_DIR || "",
+        "pipes",
+        pipeId,
+        "scheduler_state.json"
+      );
+
       if (fs.existsSync(this.stateFilePath)) {
         const stateData = fs.readFileSync(this.stateFilePath, "utf8");
         this.state = JSON.parse(stateData);
@@ -381,6 +378,7 @@ class Scheduler {
   }
 
   private saveState() {
+    if (this.state === null) this.loadState();
     try {
       const dir = path.dirname(this.stateFilePath);
       if (!fs.existsSync(dir)) {
@@ -393,19 +391,21 @@ class Scheduler {
   }
 
   task(name: string): Task {
-    const task = new Task(name, this.state[name]);
+    if (this.state === null) this.loadState();
+    const task = new Task(name, this.state![name]);
     this.tasks.push(task);
     return task;
   }
 
   async start(): Promise<void> {
+    if (this.state === null) this.loadState();
     this.running = true;
     while (this.running) {
       const now = new Date();
       for (const task of this.tasks) {
         if (task.getNextRunTime() <= now) {
           await task.execute();
-          this.state[task.getName()] = {
+          this.state![task.getName()] = {
             lastRunTime: now.getTime(),
             nextRunTime: task.getNextRunTime().getTime(),
           };
@@ -423,6 +423,16 @@ class Scheduler {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+}
+
+export type InputAction =
+  | { type: "WriteText"; data: string }
+  | { type: "KeyPress"; data: string }
+  | { type: "MouseMove"; data: { x: number; y: number } }
+  | { type: "MouseClick"; data: "left" | "right" | "middle" };
+
+interface InputControlResponse {
+  success: boolean;
 }
 
 /**
@@ -504,4 +514,64 @@ export const pipe = {
    * ```
    */
   scheduler: new Scheduler(),
+  /**
+   * Experimental input control methods.
+   * Use with caution as these directly manipulate input devices.
+   */
+  input: {
+    /**
+     * Simulate typing text.
+     * @example
+     * pipe.input.type("Hello, Screenpipe!");
+     */
+    type: (text: string): Promise<boolean> => {
+      return sendInputControl({ type: "WriteText", data: text });
+    },
+
+    /**
+     * Simulate a key press.
+     * @example
+     * pipe.input.press("enter");
+     */
+    press: (key: string): Promise<boolean> => {
+      return sendInputControl({ type: "KeyPress", data: key });
+    },
+
+    /**
+     * Move the mouse to absolute coordinates.
+     * @example
+     * pipe.input.moveMouse(100, 200);
+     */
+    moveMouse: (x: number, y: number): Promise<boolean> => {
+      return sendInputControl({ type: "MouseMove", data: { x, y } });
+    },
+
+    /**
+     * Simulate a mouse click.
+     * @example
+     * pipe.input.click("left");
+     */
+    click: (button: "left" | "right" | "middle"): Promise<boolean> => {
+      return sendInputControl({ type: "MouseClick", data: button });
+    },
+  },
 };
+
+async function sendInputControl(action: InputAction): Promise<boolean> {
+  const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+  try {
+    const response = await fetch(`${apiUrl}/experimental/input_control`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data: InputControlResponse = await response.json();
+    return data.success;
+  } catch (error) {
+    console.error("failed to control input:", error);
+    return false;
+  }
+}

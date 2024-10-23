@@ -9,11 +9,12 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, ChildStdin, Command};
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::time::{sleep, timeout};
+use tokio::io::BufReader;
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
+use tokio::sync::mpsc::channel;
+use tokio::time::sleep;
 
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
@@ -142,195 +143,6 @@ impl VideoCapture {
         }
     }
 }
-async fn save_frames_as_video(
-    frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
-    output_path: &str,
-    fps: f64,
-    new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
-    monitor_id: u32,
-    video_chunk_duration: Duration,
-) {
-    debug!("Starting save_frames_as_video function");
-    let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).ceil() as usize;
-    let mut frame_count = 0;
-    let (sender, mut receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel(512);
-    let sender = Arc::new(sender);
-    let mut current_ffmpeg: Option<Child> = None;
-    let mut current_stdin: Option<ChildStdin> = None;
-
-    loop {
-        if frame_count >= frames_per_video || current_ffmpeg.is_none() {
-            debug!("Starting new FFmpeg process");
-            // Close previous FFmpeg process if exists
-            if let Some(child) = current_ffmpeg.take() {
-                drop(current_stdin.take()); // Ensure stdin is closed
-                let output = child
-                    .wait_with_output()
-                    .await
-                    .expect("ffmpeg process failed");
-                debug!("FFmpeg process exited with status: {}", output.status);
-                if !output.status.success() {
-                    error!("FFmpeg stderr: {}", String::from_utf8_lossy(&output.stderr));
-                }
-            }
-            // Reset frame count
-            frame_count = 0;
-
-            // Wait for at least one frame before starting a new FFmpeg process
-            let first_frame = loop {
-                if let Some(result) = frame_queue.pop() {
-                    debug!("Got first frame for new chunk");
-                    break result;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            };
-
-            // Encode the first frame
-            let mut buffer = Vec::new();
-            first_frame
-                .image
-                .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
-                .expect("Failed to encode first frame");
-
-            let time = Utc::now();
-            let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
-            // Start new FFmpeg process with a new output file
-            let output_file = PathBuf::from(output_path)
-                .join(format!("monitor_{}_{}.mp4", monitor_id, formatted_time))
-                .to_str()
-                .expect("Failed to create valid path")
-                .to_string();
-
-            // Call the callback with the new video chunk file path
-            new_chunk_callback(&output_file);
-
-            match start_ffmpeg_process(&output_file, fps).await {
-                Ok(mut child) => {
-                    let mut stdin = child.stdin.take().expect("Failed to open stdin");
-                    let stderr = child.stderr.take().expect("Failed to open stderr");
-                    let stdout = child.stdout.take().expect("Failed to open stdout");
-
-                    // Write the first frame to FFmpeg
-                    stdin
-                        .write_all(&buffer)
-                        .await
-                        .expect("Failed to write first frame to ffmpeg");
-                    frame_count += 1;
-
-                    // Spawn a task to log FFmpeg's stderr
-                    tokio::spawn(async move {
-                        let reader = BufReader::new(stderr);
-                        let mut lines = reader.lines();
-                        while let Ok(Some(line)) = lines.next_line().await {
-                            debug!("FFmpeg: {}", line);
-                        }
-                    });
-
-                    // Log FFmpeg's stdout
-                    tokio::spawn(async move {
-                        let reader = BufReader::new(stdout);
-                        let mut lines = reader.lines();
-                        while let Ok(Some(line)) = lines.next_line().await {
-                            debug!("FFmpeg: {}", line);
-                        }
-                    });
-
-                    current_ffmpeg = Some(child);
-                    current_stdin = Some(stdin);
-                    debug!("New FFmpeg process started for file: {}", output_file);
-                }
-                Err(e) => {
-                    error!("Failed to start FFmpeg process: {}", e);
-                    // Handle the error appropriately, maybe try to restart or exit
-                }
-            }
-        }
-
-        if let Some(result) = frame_queue.pop() {
-            debug!("Processing frame in video.rs"); // {}", frame_count + 1
-            let sender = Arc::clone(&sender);
-
-            tokio::spawn(async move {
-                let mut buffer = Vec::new();
-                match result
-                    .image
-                    .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
-                {
-                    Ok(_) => {
-                        sender
-                            .send(buffer)
-                            .await
-                            .expect("Failed to send encoded frame");
-                    }
-                    Err(e) => error!("Failed to encode image as PNG: {}", e),
-                }
-            });
-        } else {
-            // debug!("No frames in queue, waiting...");
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-
-        const MAX_RETRIES: usize = 3;
-        const RETRY_DELAY: Duration = Duration::from_millis(100);
-
-        // Write encoded frames to FFmpeg
-        let write_timeout = Duration::from_secs_f64(1.0 / fps);
-        while let Ok(Some(buffer)) = timeout(write_timeout, receiver.recv()).await {
-            if let Some(stdin) = current_stdin.as_mut() {
-                let mut retries = 0;
-                while retries < MAX_RETRIES {
-                    match stdin.write_all(&buffer).await {
-                        Ok(_) => {
-                            frame_count += 1;
-                            debug!("Wrote frame {} to FFmpeg", frame_count);
-                            break;
-                        }
-                        Err(e) => {
-                            retries += 1;
-                            if retries >= MAX_RETRIES {
-                                error!(
-                                    "Failed to write frame to ffmpeg after {} retries: {}",
-                                    MAX_RETRIES, e
-                                );
-                                // Consider breaking the outer loop or handling this failure
-                                break;
-                            } else {
-                                warn!(
-                                    "Failed to write frame to ffmpeg (attempt {}): {}. Retrying...",
-                                    retries, e
-                                );
-                                sleep(RETRY_DELAY).await;
-                            }
-                        }
-                    }
-                }
-                frame_count += 1;
-                debug!("Wrote frame {} to FFmpeg", frame_count);
-
-                // Calculate frames per flush based on fps
-                let frames_per_flush = (fps.max(0.1) * 1.0).ceil() as usize;
-
-                // Flush every calculated number of frames
-                if frame_count % frames_per_flush == 0 {
-                    debug!("Flushing FFmpeg input after {} frames", frames_per_flush);
-                    if let Err(e) = stdin.flush().await {
-                        error!("Failed to flush FFmpeg input: {}", e);
-                    }
-                }
-                // Break the loop if we've written enough frames for this chunk
-                if frame_count >= frames_per_video {
-                    debug!("finished writing frames for this chunk");
-                    break;
-                }
-            }
-        }
-
-        // Yield to other tasks periodically
-        tokio::task::yield_now().await;
-    }
-}
-
-use std::env;
 
 async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
@@ -388,3 +200,200 @@ async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyh
 
     Ok(child)
 }
+
+async fn write_frame_to_ffmpeg(stdin: &mut ChildStdin, buffer: &[u8]) -> Result<(), anyhow::Error> {
+    stdin.write_all(buffer).await?;
+    Ok(())
+}
+
+async fn log_ffmpeg_output(stream: impl AsyncBufReadExt + Unpin, stream_name: &str) {
+    let reader = BufReader::new(stream);
+    let mut lines = reader.lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        debug!("FFmpeg {}: {}", stream_name, line);
+    }
+}
+
+async fn save_frames_as_video(
+    frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
+    output_path: &str,
+    fps: f64,
+    new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
+    monitor_id: u32,
+    video_chunk_duration: Duration,
+) {
+    debug!("Starting save_frames_as_video function");
+    let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).ceil() as usize;
+    let mut frame_count = 0;
+    let mut current_ffmpeg: Option<Child> = None;
+    let mut current_stdin: Option<ChildStdin> = None;
+
+    loop {
+        if frame_count >= frames_per_video || current_ffmpeg.is_none() {
+            if let Some(child) = current_ffmpeg.take() {
+                finish_ffmpeg_process(child, current_stdin.take()).await;
+            }
+
+            frame_count = 0;
+            let first_frame = wait_for_first_frame(frame_queue).await;
+            let buffer = encode_frame(&first_frame);
+
+            let output_file = create_output_file(output_path, monitor_id);
+            new_chunk_callback(&output_file);
+
+            match start_ffmpeg_process(&output_file, fps).await {
+                Ok(mut child) => {
+                    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+                    spawn_ffmpeg_loggers(child.stderr.take(), child.stdout.take());
+
+                    if let Err(e) = write_frame_to_ffmpeg(&mut stdin, &buffer).await {
+                        error!("Failed to write first frame to ffmpeg: {}", e);
+                        continue;
+                    }
+                    frame_count += 1;
+
+                    current_ffmpeg = Some(child);
+                    current_stdin = Some(stdin);
+                    debug!("New FFmpeg process started for file: {}", output_file);
+                }
+                Err(e) => {
+                    error!("Failed to start FFmpeg process: {}", e);
+                    continue;
+                }
+            }
+        }
+
+        process_frames(
+            frame_queue,
+            &mut current_stdin,
+            &mut frame_count,
+            frames_per_video,
+            fps,
+        )
+        .await;
+
+        tokio::task::yield_now().await;
+    }
+}
+
+async fn wait_for_first_frame(
+    frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
+) -> Arc<CaptureResult> {
+    loop {
+        if let Some(result) = frame_queue.pop() {
+            debug!("Got first frame for new chunk");
+            return result;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
+    let mut buffer = Vec::new();
+    frame
+        .image
+        .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
+        .expect("Failed to encode frame");
+    buffer
+}
+
+fn create_output_file(output_path: &str, monitor_id: u32) -> String {
+    let time = Utc::now();
+    let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
+    PathBuf::from(output_path)
+        .join(format!("monitor_{}_{}.mp4", monitor_id, formatted_time))
+        .to_str()
+        .expect("Failed to create valid path")
+        .to_string()
+}
+
+fn spawn_ffmpeg_loggers(stderr: Option<ChildStderr>, stdout: Option<ChildStdout>) {
+    if let Some(stderr) = stderr {
+        tokio::spawn(log_ffmpeg_output(BufReader::new(stderr), "stderr"));
+    }
+    if let Some(stdout) = stdout {
+        tokio::spawn(log_ffmpeg_output(BufReader::new(stdout), "stdout"));
+    }
+}
+
+async fn process_frames(
+    frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
+    current_stdin: &mut Option<ChildStdin>,
+    frame_count: &mut usize,
+    frames_per_video: usize,
+    fps: f64,
+) {
+    let write_timeout = Duration::from_secs_f64(1.0 / fps);
+    while *frame_count < frames_per_video {
+        if let Some(frame) = frame_queue.pop() {
+            let buffer = encode_frame(&frame);
+            if let Some(stdin) = current_stdin.as_mut() {
+                if let Err(e) = write_frame_with_retry(stdin, &buffer).await {
+                    error!("Failed to write frame to ffmpeg after max retries: {}", e);
+                    break;
+                }
+                *frame_count += 1;
+                debug!("Wrote frame {} to FFmpeg", frame_count);
+
+                flush_ffmpeg_input(stdin, *frame_count, fps).await;
+            }
+        } else {
+            tokio::time::sleep(write_timeout).await;
+        }
+    }
+}
+
+async fn write_frame_with_retry(
+    stdin: &mut ChildStdin,
+    buffer: &[u8],
+) -> Result<(), anyhow::Error> {
+    const MAX_RETRIES: usize = 3;
+    const RETRY_DELAY: Duration = Duration::from_millis(100);
+
+    let mut retries = 0;
+    while retries < MAX_RETRIES {
+        match stdin.write_all(buffer).await {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                retries += 1;
+                if retries >= MAX_RETRIES {
+                    return Err(anyhow::anyhow!("Failed to write frame to ffmpeg: {}", e));
+                } else {
+                    warn!(
+                        "Failed to write frame to ffmpeg (attempt {}): {}. Retrying...",
+                        retries, e
+                    );
+                    sleep(RETRY_DELAY).await;
+                }
+            }
+        }
+    }
+    Err(anyhow::anyhow!(
+        "Failed to write frame to ffmpeg after max retries"
+    ))
+}
+
+async fn flush_ffmpeg_input(stdin: &mut ChildStdin, frame_count: usize, fps: f64) {
+    let frames_per_flush = (fps.max(0.1) * 1.0).ceil() as usize;
+    if frame_count % frames_per_flush == 0 {
+        debug!("Flushing FFmpeg input after {} frames", frames_per_flush);
+        if let Err(e) = stdin.flush().await {
+            error!("Failed to flush FFmpeg input: {}", e);
+        }
+    }
+}
+
+async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
+    drop(stdin); // Ensure stdin is closed
+    match child.wait_with_output().await {
+        Ok(output) => {
+            debug!("FFmpeg process exited with status: {}", output.status);
+            if !output.status.success() {
+                error!("FFmpeg stderr: {}", String::from_utf8_lossy(&output.stderr));
+            }
+        }
+        Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
+    }
+}
+
+use std::env;

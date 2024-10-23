@@ -4,6 +4,7 @@
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
+use llm_sidecar::EmbeddedLLMSettings;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use tauri::Emitter;
@@ -36,6 +37,7 @@ use uuid::Uuid;
 mod analytics;
 
 use crate::analytics::start_analytics;
+use crate::llm_sidecar::LLMSidecar;
 
 mod commands;
 mod llm_sidecar;
@@ -72,9 +74,9 @@ async fn main() {
                 let _ = window.set_always_on_top(false);
                 let _ = window.set_visible_on_all_workspaces(false);
                 #[cfg(target_os = "macos")]
-                    let _ = window
-                        .app_handle()
-                        .set_activation_policy(tauri::ActivationPolicy::Regular);
+                let _ = window
+                    .app_handle()
+                    .set_activation_policy(tauri::ActivationPolicy::Regular);
                 window.hide().unwrap();
                 api.prevent_close();
             }
@@ -123,9 +125,13 @@ async fn main() {
             let base_dir =
                 get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
 
-            // Set up file appender
-            let file_appender =
-                RollingFileAppender::new(Rotation::NEVER, base_dir.clone(), "screenpipe-app.log");
+            // Set up rolling file appender
+            let file_appender = RollingFileAppender::builder()
+                .rotation(Rotation::DAILY)
+                .filename_prefix("screenpipe-app")
+                .filename_suffix("log")
+                .max_log_files(5)
+                .build(&app.path().home_dir().unwrap().join(".screenpipe"))?;
 
             // Create a custom layer for file logging
             let file_layer = tracing_subscriber::fmt::layer()
@@ -363,20 +369,34 @@ async fn main() {
                 .unwrap_or(true);
 
             // double-check if they have any files in the data dir
-            let data_dir =
-                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
-            let has_files = fs::read_dir(data_dir.join("data"))
+            let data_dir = app
+                .path()
+                .home_dir()
+                .expect("Failed to ensure local data directory");
+
+            info!("data_dir: {}", data_dir.display());
+            let has_files = fs::read_dir(data_dir.join(".screenpipe").join("data"))
                 .map(|mut entries| entries.next().is_some())
                 .unwrap_or(false);
 
+            info!("has_files: {}", has_files);
+
             if has_files {
                 is_first_time_user = false;
+                // Update the store with the new value
+                store.set("isFirstTimeUser".to_string(), Value::Bool(false));
+                store.save().unwrap();
             }
 
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
+
+            info!(
+                "will start sidecar: {}",
+                !use_dev_mode && !is_first_time_user
+            );
 
             if !use_dev_mode && !is_first_time_user {
                 tauri::async_runtime::spawn(async move {
@@ -401,6 +421,31 @@ async fn main() {
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
+
+
+            // LLM Sidecar setup
+            let embedded_llm: EmbeddedLLMSettings = store
+                .get("embeddedLLM")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_else(|| EmbeddedLLMSettings {
+                    enabled: false,
+                    model: "llama3.2:3b-instruct-q4_K_M".to_string(),
+                    port: 11438,
+                });
+
+            if embedded_llm.enabled {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match LLMSidecar::new(embedded_llm).start(app_handle).await {
+                        Ok(result) => {
+                            info!("LLM Sidecar started successfully: {}", result);
+                        }
+                        Err(e) => {
+                            error!("Failed to start LLM Sidecar: {}", e);
+                        }
+                    }
+                });
+            }
 
 
             Ok(())

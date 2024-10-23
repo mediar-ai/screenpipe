@@ -11,7 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettings, AIProviderType } from "@/lib/hooks/use-settings";
 import {
   Tooltip,
   TooltipContent,
@@ -41,7 +41,7 @@ import {
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
 import { Command } from "@tauri-apps/plugin-shell";
-import { LogFileButton } from "./screenpipe-status";
+import { LogFileButton } from "./log-file-button";
 import { platform } from "@tauri-apps/plugin-os";
 
 import { toast } from "@/components/ui/use-toast";
@@ -56,6 +56,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useInterval } from "@/lib/hooks/use-interval";
 
 // Add this interface at the top of your file
 interface Hotkey {
@@ -102,6 +103,9 @@ export function Settings({ className }: { className?: string }) {
   const [currentShortcut, setCurrentShortcut] = useState<string>(
     settings.showScreenpipeShortcut
   );
+  const [embeddedAIStatus, setEmbeddedAIStatus] = useState<
+    "idle" | "running" | "error"
+  >("idle");
 
   const [recordingShortcut, setRecordingShortcut] = useState<string>(
     settings.recordingShortcut
@@ -258,9 +262,17 @@ export function Settings({ className }: { className?: string }) {
   const handleEmbeddedLLMModelChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const newValue = { ...localSettings.embeddedLLM, model: e.target.value };
-    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
-    updateSettings({ embeddedLLM: newValue });
+    const newModel = e.target.value;
+    const newEmbeddedLLM = { ...localSettings.embeddedLLM, model: newModel };
+    setLocalSettings({
+      ...localSettings,
+      embeddedLLM: newEmbeddedLLM,
+      aiModel: newModel, // Update the general AI model as well
+    });
+    updateSettings({
+      embeddedLLM: newEmbeddedLLM,
+      aiModel: newModel, // Update the general AI model in the global settings
+    });
   };
 
   const handleEmbeddedLLMPortChange = (
@@ -282,10 +294,15 @@ export function Settings({ className }: { className?: string }) {
     setOllamaStatus("running");
     toast({
       title: "starting ai",
-      description: "initializing the embedded ai...",
+      description:
+        "downloading and initializing the embedded ai, may take a while (check $HOME/.ollama/models)...",
     });
 
     try {
+      console.log(
+        "starting ollama sidecar with settings:",
+        localSettings.embeddedLLM
+      );
       const result = await invoke<string>("start_ollama_sidecar", {
         settings: {
           enabled: localSettings.embeddedLLM.enabled,
@@ -295,6 +312,7 @@ export function Settings({ className }: { className?: string }) {
       });
 
       setOllamaStatus("running");
+      setEmbeddedAIStatus("running");
       toast({
         title: "ai ready",
         description: `${localSettings.embeddedLLM.model} is running.`,
@@ -309,6 +327,7 @@ export function Settings({ className }: { className?: string }) {
     } catch (error) {
       console.error("Error starting ai sidecar:", error);
       setOllamaStatus("error");
+      setEmbeddedAIStatus("error");
       toast({
         title: "error starting ai",
         description: "check the console for more details",
@@ -321,12 +340,14 @@ export function Settings({ className }: { className?: string }) {
     try {
       await invoke("stop_ollama_sidecar");
       setOllamaStatus("idle");
+      setEmbeddedAIStatus("idle");
       toast({
         title: "ai stopped",
         description: "the embedded ai has been shut down",
       });
     } catch (error) {
       console.error("error stopping ai:", error);
+      setEmbeddedAIStatus("error");
       toast({
         title: "error stopping ai",
         description: "check the console for more details",
@@ -335,24 +356,56 @@ export function Settings({ className }: { className?: string }) {
     }
   };
 
+  const handleAiProviderChange = (newValue: AIProviderType) => {
+    let newUrl = "";
+    let newModel = localSettings.aiModel;
+    switch (newValue) {
+      case "openai":
+        newUrl = "https://api.openai.com/v1";
+        break;
+      case "native-ollama":
+        newUrl = "http://localhost:11434/v1";
+        break;
+      case "embedded":
+        newUrl = `http://localhost:${localSettings.embeddedLLM.port}/v1`;
+        newModel = localSettings.embeddedLLM.model;
+        break;
+      case "screenpipe-cloud":
+        newUrl = "https://ai-proxy.i-f9f.workers.dev/v1";
+        break;
+      case "custom":
+        newUrl = localSettings.aiUrl; // Keep the existing custom URL
+        break;
+    }
+
+    setLocalSettings({
+      ...localSettings,
+      aiProviderType: newValue,
+      aiUrl: newUrl,
+      aiModel: newModel,
+    });
+    updateSettings({
+      aiProviderType: newValue,
+      aiUrl: newUrl,
+      aiModel: newModel,
+    });
+  };
+
   const handleAiUrlChange = (newValue: string) => {
     if (newValue === "custom") {
       setLocalSettings({ ...localSettings, aiUrl: "" });
+    } else if (newValue === "embedded") {
+      setLocalSettings({ ...localSettings, aiUrl: "embedded" });
     } else {
       setLocalSettings({ ...localSettings, aiUrl: newValue });
     }
     updateSettings({ aiUrl: newValue });
   };
 
-  const handleCustomUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, aiUrl: newValue });
-    updateSettings({ aiUrl: newValue });
-  };
-
   const isApiKeyRequired =
     localSettings.aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
-    localSettings.aiUrl !== "http://localhost:11434/v1";
+    localSettings.aiUrl !== "http://localhost:11434/v1" &&
+    localSettings.aiUrl !== "embedded";
 
   const getProviderTooltipContent = () => {
     switch (localSettings.aiUrl) {
@@ -404,8 +457,16 @@ export function Settings({ className }: { className?: string }) {
             <br />
             note: on windows, you may need to run ollama with:
             <pre className="bg-gray-100 p-1 rounded-md">
-              OLLAMA_ORIGINS=* ollama run llama2
+              OLLAMA_ORIGINS=* ollama run llama3.2:3b-instruct-q4_K_M
             </pre>
+          </p>
+        );
+      case "embedded":
+        return (
+          <p>
+            use the embedded ai provided by screenpipe.
+            <br />
+            no api key required. model is predefined.
           </p>
         );
       default:
@@ -416,7 +477,7 @@ export function Settings({ className }: { className?: string }) {
             <br />
             note: on windows, you may need to run ollama with:
             <pre className="bg-gray-100 p-1 rounded-md">
-              OLLAMA_ORIGINS=* ollama run llama2
+              OLLAMA_ORIGINS=* ollama run llama3.2:3b-instruct-q4_K_M
             </pre>
           </p>
         );
@@ -452,6 +513,10 @@ export function Settings({ className }: { className?: string }) {
             </a>
           </p>
         );
+      case "embedded":
+        return (
+          <p>the model for embedded ai is predefined and cannot be changed.</p>
+        );
       default:
         return (
           <p>enter the model name appropriate for your custom AI provider.</p>
@@ -463,13 +528,45 @@ export function Settings({ className }: { className?: string }) {
     "https://api.openai.com/v1",
     "http://localhost:11434/v1",
     "https://ai-proxy.i-f9f.workers.dev/v1",
+    "embedded",
   ].includes(localSettings.aiUrl);
 
   const getSelectValue = () => {
     if (isCustomUrl) return "custom";
+    if (localSettings.aiUrl === "embedded" && embeddedAIStatus !== "running") {
+      // Fallback to a default option if embedded AI is selected but not running
+      return "https://ai-proxy.i-f9f.workers.dev/v1";
+    }
     return localSettings.aiUrl;
   };
 
+
+  // Add this function to check the embedded AI status
+  const checkEmbeddedAIStatus = useCallback(async () => {
+    if (localSettings.embeddedLLM.enabled) {
+      try {
+        const response = await fetch(
+          `http://localhost:${localSettings.embeddedLLM.port}/api/tags`,
+          {
+            method: "GET",
+          }
+        );
+        if (response.ok) {
+          setEmbeddedAIStatus("running");
+        } else {
+          setEmbeddedAIStatus("error");
+        }
+      } catch (error) {
+        console.error("Error checking embedded AI status:", error);
+        setEmbeddedAIStatus("error");
+      }
+    } else {
+      setEmbeddedAIStatus("idle");
+    }
+  }, [localSettings.embeddedLLM.enabled, localSettings.embeddedLLM.port]);
+
+  // Use the useInterval hook to periodically check the status
+  useInterval(checkEmbeddedAIStatus, 10000); // Check every 10 seconds
 
 
   return (
@@ -514,23 +611,24 @@ export function Settings({ className }: { className?: string }) {
                   </Label>
                   <div className="flex-grow flex items-center">
                     <Select
-                      onValueChange={handleAiUrlChange}
-                      value={getSelectValue()}
+                      onValueChange={handleAiProviderChange}
+                      value={localSettings.aiProviderType}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select AI provider" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="https://api.openai.com/v1">
-                          openai
-                        </SelectItem>
-                        <SelectItem value="http://localhost:11434/v1">
+                        <SelectItem value="openai">openai</SelectItem>
+                        <SelectItem value="native-ollama">
                           ollama (local)
                         </SelectItem>
-                        <SelectItem value="https://ai-proxy.i-f9f.workers.dev/v1">
+                        <SelectItem value="screenpipe-cloud">
                           screenpipe cloud
                         </SelectItem>
                         <SelectItem value="custom">custom</SelectItem>
+                        {embeddedAIStatus === "running" && (
+                          <SelectItem value="embedded">embedded ai</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -546,7 +644,7 @@ export function Settings({ className }: { className?: string }) {
                   </TooltipProvider>
                 </div>
               </div>
-              {isCustomUrl && (
+              {localSettings.aiProviderType === "custom" && (
                 <div className="w-full">
                   <div className="flex items-center gap-4 mb-4">
                     <Label
@@ -558,7 +656,11 @@ export function Settings({ className }: { className?: string }) {
                     <Input
                       id="customAiUrl"
                       value={localSettings.aiUrl}
-                      onChange={handleCustomUrlChange}
+                      onChange={(e) => {
+                        const newUrl = e.target.value;
+                        setLocalSettings({ ...localSettings, aiUrl: newUrl });
+                        updateSettings({ aiUrl: newUrl });
+                      }}
                       className="flex-grow"
                       placeholder="enter custom ai url"
                       autoCorrect="off"
@@ -607,39 +709,44 @@ export function Settings({ className }: { className?: string }) {
                   </div>
                 </div>
               )}
-              <div className="w-full">
-                <div className="flex items-center gap-4 mb-4">
-                  <Label htmlFor="aiModel" className="min-w-[80px] text-right">
-                    ai model
-                  </Label>
-                  <div className="flex-grow relative">
-                    <Input
-                      id="aiModel"
-                      value={localSettings.aiModel}
-                      onChange={handleModelChange}
-                      className="flex-grow"
-                      placeholder={
-                        localSettings.aiUrl === "http://localhost:11434/v1"
-                          ? "e.g., llama2:7b-chat"
-                          : "e.g., gpt-4"
-                      }
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      autoComplete="off"
-                    />
+              {localSettings.aiProviderType !== "embedded" && (
+                <div className="w-full">
+                  <div className="flex items-center gap-4 mb-4">
+                    <Label
+                      htmlFor="aiModel"
+                      className="min-w-[80px] text-right"
+                    >
+                      ai model
+                    </Label>
+                    <div className="flex-grow relative">
+                      <Input
+                        id="aiModel"
+                        value={localSettings.aiModel}
+                        onChange={handleModelChange}
+                        className="flex-grow"
+                        placeholder={
+                          localSettings.aiProviderType === "native-ollama"
+                            ? "e.g., llama3.2:3b-instruct-q4_K_M"
+                            : "e.g., gpt-4o"
+                        }
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          {getModelTooltipContent()}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
-                      </TooltipTrigger>
-                      <TooltipContent side="left">
-                        {getModelTooltipContent()}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
                 </div>
-              </div>
+              )}
 
               <div className="w-full">
                 <div className="flex items-center gap-4 mb-4">
@@ -734,55 +841,45 @@ export function Settings({ className }: { className?: string }) {
                 local machine or elsewhere and the exact model name.
               </p>
 
-              {currentPlatform === "macos" && (
-                <>
-                  <Separator className="my-4" />
+              <Separator className="my-4" />
 
-                  <div className="w-full">
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="flex items-center min-w-[80px] justify-end">
-                        <Label
-                          htmlFor="embeddedLLM"
-                          className="text-right mr-2"
-                        >
-                          embedded ai
-                        </Label>
-                        <Badge variant="outline" className="ml-2">
-                          experimental
-                        </Badge>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <HelpCircle className="h-4 w-4 cursor-help ml-2" />
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="right"
-                              className="max-w-[300px]"
-                            >
-                              <p>
-                                enable this to use local ai features in
-                                screenpipe. this is an experimental feature that
-                                may be unstable or change in future updates. you
-                                can use it through search or pipes for enhanced
-                                functionality without relying on external
-                                services.
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <Switch
-                          id="embeddedLLM"
-                          checked={localSettings.embeddedLLM.enabled}
-                          onCheckedChange={handleEmbeddedLLMChange}
-                        />
+              <div className="w-full">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="flex items-center min-w-[80px] justify-end">
+                    <Label htmlFor="embeddedLLM" className="text-right mr-2">
+                      embedded ai
+                    </Label>
+                    <Badge variant="outline" className="ml-2">
+                      experimental
+                    </Badge>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 cursor-help ml-2" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-[300px]">
+                          <p>
+                            enable this to use local ai features in screenpipe.
+                            this is an experimental feature that may be unstable
+                            or change in future updates. you can use it through
+                            search or pipes for enhanced functionality without
+                            relying on external services.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Switch
+                      id="embeddedLLM"
+                      checked={localSettings.embeddedLLM.enabled}
+                      onCheckedChange={handleEmbeddedLLMChange}
+                    />
+                    {localSettings.embeddedLLM.enabled && (
+                      <>
                         <Button
                           onClick={startOllamaSidecar}
-                          disabled={
-                            !localSettings.embeddedLLM.enabled ||
-                            ollamaStatus === "running"
-                          }
+                          disabled={ollamaStatus === "running"}
                           className="ml-auto"
                         >
                           {ollamaStatus === "running" ? (
@@ -808,70 +905,71 @@ export function Settings({ className }: { className?: string }) {
                           <X className="h-4 w-4 mr-2" />
                           stop ai
                         </Button>
-                        <LogFileButton />
+                        <LogFileButton isAppLog={true} />
+                        <Badge>{embeddedAIStatus}</Badge>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {localSettings.embeddedLLM.enabled && (
+                <>
+                  <div className="w-full">
+                    <div className="flex items-center gap-4 mb-4">
+                      <Label
+                        htmlFor="embeddedLLMModel"
+                        className="min-w-[80px] text-right"
+                      >
+                        llm model
+                      </Label>
+                      <div className="flex-grow flex items-center">
+                        <Input
+                          id="embeddedLLMModel"
+                          value={localSettings.embeddedLLM.model}
+                          onChange={handleEmbeddedLLMModelChange}
+                          className="flex-grow"
+                          placeholder="enter embedded llm model"
+                        />
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="ml-2 h-4 w-4 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="right"
+                              className="max-w-[300px]"
+                            >
+                              <p>
+                                supported models are the same as ollama. check
+                                the ollama documentation for a list of available
+                                models.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </div>
                   </div>
 
-                  {localSettings.embeddedLLM.enabled && (
-                    <>
-                      <div className="w-full">
-                        <div className="flex items-center gap-4 mb-4">
-                          <Label
-                            htmlFor="embeddedLLMModel"
-                            className="min-w-[80px] text-right"
-                          >
-                            llm model
-                          </Label>
-                          <div className="flex-grow flex items-center">
-                            <Input
-                              id="embeddedLLMModel"
-                              value={localSettings.embeddedLLM.model}
-                              onChange={handleEmbeddedLLMModelChange}
-                              className="flex-grow"
-                              placeholder="enter embedded llm model"
-                            />
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <HelpCircle className="ml-2 h-4 w-4 cursor-help" />
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="right"
-                                  className="max-w-[300px]"
-                                >
-                                  <p>
-                                    supported models are the same as ollama.
-                                    check the ollama documentation for a list of
-                                    available models.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="w-full">
-                        <div className="flex items-center gap-4 mb-4">
-                          <Label
-                            htmlFor="embeddedLLMPort"
-                            className="min-w-[80px] text-right"
-                          >
-                            llm port
-                          </Label>
-                          <Input
-                            id="embeddedLLMPort"
-                            type="number"
-                            value={localSettings.embeddedLLM.port}
-                            onChange={handleEmbeddedLLMPortChange}
-                            className="flex-grow"
-                            placeholder="enter embedded llm port"
-                          />
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <div className="w-full">
+                    <div className="flex items-center gap-4 mb-4">
+                      <Label
+                        htmlFor="embeddedLLMPort"
+                        className="min-w-[80px] text-right"
+                      >
+                        llm port
+                      </Label>
+                      <Input
+                        id="embeddedLLMPort"
+                        type="number"
+                        value={localSettings.embeddedLLM.port}
+                        onChange={handleEmbeddedLLMPortChange}
+                        className="flex-grow"
+                        placeholder="enter embedded llm port"
+                      />
+                    </div>
+                  </div>
                 </>
               )}
             </CardContent>

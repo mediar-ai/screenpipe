@@ -35,7 +35,7 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliOcrEngine {
     Unstructured,
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     Tesseract,
     #[cfg(target_os = "windows")]
     WindowsNative,
@@ -47,7 +47,7 @@ impl From<CliOcrEngine> for CoreOcrEngine {
     fn from(cli_engine: CliOcrEngine) -> Self {
         match cli_engine {
             CliOcrEngine::Unstructured => CoreOcrEngine::Unstructured,
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             CliOcrEngine::Tesseract => CoreOcrEngine::Tesseract,
             #[cfg(target_os = "windows")]
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
