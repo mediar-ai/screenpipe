@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729651088986,
+  "lastUpdate": 1729652519373,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19289,6 +19289,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1954109416,
             "range": "± 39458772",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d279acb05cb8a636b7e543cf3e89ce2ffd6ea9de",
+          "message": "Merge pull request #568 from ologbonowiwi/fix/linux-integration-tests\n\ntest: fix integration and deno tests",
+          "timestamp": "2024-10-22T19:54:02-07:00",
+          "tree_id": "6109896f3116852f27d2d317f4e1651f2740884c",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/d279acb05cb8a636b7e543cf3e89ce2ffd6ea9de"
+        },
+        "date": 1729652518534,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2143226250,
+            "range": "± 130214576",
             "unit": "ns/iter"
           }
         ]
