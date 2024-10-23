@@ -348,25 +348,22 @@ class Task {
 class Scheduler {
   private tasks: Task[] = [];
   private running: boolean = false;
-  private state: SchedulerState = {};
-  private stateFilePath: string;
-
-  constructor() {
-    const pipeId = process.env.PIPE_ID;
-    if (!pipeId) {
-      throw new Error("PIPE_ID environment variable is not set");
-    }
-    this.stateFilePath = path.join(
-      process.env.SCREENPIPE_DIR || "",
-      "pipes",
-      pipeId,
-      "scheduler_state.json"
-    );
-    this.loadState();
-  }
+  private state: SchedulerState | null = null;
+  private stateFilePath: string = '';
 
   private loadState() {
     try {
+      const pipeId = process.env.PIPE_ID;
+      if (!pipeId) {
+        throw new Error("PIPE_ID environment variable is not set");
+      }
+      this.stateFilePath = path.join(
+        process.env.SCREENPIPE_DIR || "",
+        "pipes",
+        pipeId,
+        "scheduler_state.json"
+      );
+
       if (fs.existsSync(this.stateFilePath)) {
         const stateData = fs.readFileSync(this.stateFilePath, "utf8");
         this.state = JSON.parse(stateData);
@@ -381,6 +378,7 @@ class Scheduler {
   }
 
   private saveState() {
+    if (this.state === null) this.loadState();
     try {
       const dir = path.dirname(this.stateFilePath);
       if (!fs.existsSync(dir)) {
@@ -393,19 +391,21 @@ class Scheduler {
   }
 
   task(name: string): Task {
-    const task = new Task(name, this.state[name]);
+    if (this.state === null) this.loadState();
+    const task = new Task(name, this.state![name]);
     this.tasks.push(task);
     return task;
   }
 
   async start(): Promise<void> {
+    if (this.state === null) this.loadState();
     this.running = true;
     while (this.running) {
       const now = new Date();
       for (const task of this.tasks) {
         if (task.getNextRunTime() <= now) {
           await task.execute();
-          this.state[task.getName()] = {
+          this.state![task.getName()] = {
             lastRunTime: now.getTime(),
             nextRunTime: task.getNextRunTime().getTime(),
           };
