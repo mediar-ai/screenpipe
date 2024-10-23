@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import process from "node:process";
 import cronParser from "npm:cron-parser";
+// @ts-types="npm:@types/node-cron"
+import cron, { type ScheduledTask } from "npm:node-cron";
 
 // Type definitions
 export interface PipeConfig {
@@ -252,32 +254,17 @@ export interface InboxMessageAction {
   action: string;
 }
 
-interface TaskState {
-  lastRunTime: number;
-  nextRunTime: number;
-}
-
-interface SchedulerState {
-  [taskName: string]: TaskState;
-}
 
 class Task {
   private _name: string;
   private _interval: string | number;
   private _time: string | null = null;
   private _handler: (() => Promise<void>) | null = null;
-  private _nextRunTime: Date;
-  private _state?: TaskState;
+  private _cronTask: ScheduledTask | null = null;
 
-  constructor(name: string, state?: TaskState) {
+  constructor(name: string) {
     this._name = name;
     this._interval = 0;
-    if (state) {
-      this._nextRunTime = new Date(state.nextRunTime);
-    } else {
-      this._nextRunTime = new Date(0);
-    }
-    this._state = state;
   }
 
   every(interval: string | number): Task {
@@ -295,37 +282,33 @@ class Task {
     return this;
   }
 
-  getNextRunTime(): Date {
-    return this._nextRunTime;
-  }
-
-  async execute(): Promise<void> {
-    if (this._handler) {
-      await this._handler();
-      this._nextRunTime = this.calculateNextRunTime();
-    }
-  }
-
-  private calculateNextRunTime(): Date {
-    const now = new Date();
-    if (typeof this._interval === "number") {
-      return new Date(now.getTime() + this._interval);
+  schedule(): void {
+    if (!this._handler) {
+      throw new Error(`No handler defined for task: ${this._name}`);
     }
 
     const cronExpression = this.toCronExpression();
-    const interval = cronParser.parseExpression(cronExpression);
-    return interval.next().toDate();
+
+    this._cronTask = cron.schedule(cronExpression, this._handler, {
+      name: this._name,
+    });
+  }
+
+  stop(): void {
+    return this._cronTask!.stop();
   }
 
   private toCronExpression(): string {
     if (typeof this._interval === "number") {
-      // Convert milliseconds to minutes for cron
       const minutes = Math.floor(this._interval / 60000);
       return `*/${minutes} * * * *`;
     }
 
     const [value, unit] = this._interval.split(" ");
     switch (unit) {
+      case "second":
+      case "seconds":
+        return `*/${value} * * * * *`;
       case "minute":
       case "minutes":
         return `*/${value} * * * *`;
@@ -339,89 +322,24 @@ class Task {
         throw new Error(`Unsupported interval unit: ${unit}`);
     }
   }
-
-  getName(): string {
-    return this._name;
-  }
 }
 
 class Scheduler {
   private tasks: Task[] = [];
-  private running: boolean = false;
-  private state: SchedulerState | null = null;
-  private stateFilePath: string = '';
-
-  private loadState() {
-    try {
-      const pipeId = process.env.PIPE_ID;
-      if (!pipeId) {
-        throw new Error("PIPE_ID environment variable is not set");
-      }
-      this.stateFilePath = path.join(
-        process.env.SCREENPIPE_DIR || "",
-        "pipes",
-        pipeId,
-        "scheduler_state.json"
-      );
-
-      if (fs.existsSync(this.stateFilePath)) {
-        const stateData = fs.readFileSync(this.stateFilePath, "utf8");
-        this.state = JSON.parse(stateData);
-      } else {
-        console.log("No existing state file found. Starting with empty state.");
-        this.state = {};
-      }
-    } catch (error) {
-      console.warn("Failed to load scheduler state:", error);
-      this.state = {};
-    }
-  }
-
-  private saveState() {
-    if (this.state === null) this.loadState();
-    try {
-      const dir = path.dirname(this.stateFilePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(this.stateFilePath, JSON.stringify(this.state), "utf8");
-    } catch (error) {
-      console.error("Failed to save scheduler state:", error);
-    }
-  }
 
   task(name: string): Task {
-    if (this.state === null) this.loadState();
-    const task = new Task(name, this.state![name]);
+    const task = new Task(name);
     this.tasks.push(task);
     return task;
   }
 
-  async start(): Promise<void> {
-    if (this.state === null) this.loadState();
-    this.running = true;
-    while (this.running) {
-      const now = new Date();
-      for (const task of this.tasks) {
-        if (task.getNextRunTime() <= now) {
-          await task.execute();
-          this.state![task.getName()] = {
-            lastRunTime: now.getTime(),
-            nextRunTime: task.getNextRunTime().getTime(),
-          };
-          this.saveState();
-        }
-      }
-      await this.sleep(100);
-    }
+  start() {
+    this.tasks.forEach((task) => task.schedule());
   }
 
   stop(): void {
-    this.running = false;
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    cron.getTasks().forEach((task) => task.stop());
+    this.tasks = [];
   }
 }
 
