@@ -1,0 +1,15 @@
+{
+  "fields": [
+    {
+      "name": "interval",
+      "type": "number",
+      "default": 30,
+      "description": "interval in seconds to process meeting data"
+    },
+    {
+      "name": "anthropicApiKey",
+      "type": "string",
+      "description": "Anthropic API key for Claude"
+    }
+  ]
+}

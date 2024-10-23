@@ -91,6 +91,9 @@ uuid = "1.5.0"
 tempfile = { version = "3.3.0", optional = true }
 url = { version = "2.2.0", optional = true }
 
+
+enigo = { version = "0.2.1", optional = true }
+
 [dev-dependencies]
 tempfile = "3.3.0"
 
@@ -115,6 +118,7 @@ cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 pipes = ["screenpipe-core/pipes", "tempfile", "url"]
 llm = ["screenpipe-core/llm"]
 beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
+experimental = ["enigo"]
 
 [[bin]]
 name = "screenpipe"

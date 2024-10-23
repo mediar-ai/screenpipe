@@ -99,10 +99,10 @@ export interface PaginationInfo {
 /**
  * Structure of the response from a Screenpipe query.
  */
-  export interface ScreenpipeResponse {
-    data: ContentItem[];
-    pagination: PaginationInfo;
-  }
+export interface ScreenpipeResponse {
+  data: ContentItem[];
+  pagination: PaginationInfo;
+}
 
 /**
  * Parsed config
@@ -425,6 +425,16 @@ class Scheduler {
   }
 }
 
+export type InputAction =
+  | { type: "WriteText"; data: string }
+  | { type: "KeyPress"; data: string }
+  | { type: "MouseMove"; data: { x: number; y: number } }
+  | { type: "MouseClick"; data: "left" | "right" | "middle" };
+
+interface InputControlResponse {
+  success: boolean;
+}
+
 /**
  * The pipe object is used to interact with the screenpipe higher level functions.
  *
@@ -504,4 +514,64 @@ export const pipe = {
    * ```
    */
   scheduler: new Scheduler(),
+  /**
+   * Experimental input control methods.
+   * Use with caution as these directly manipulate input devices.
+   */
+  input: {
+    /**
+     * Simulate typing text.
+     * @example
+     * pipe.input.type("Hello, Screenpipe!");
+     */
+    type: (text: string): Promise<boolean> => {
+      return sendInputControl({ type: "WriteText", data: text });
+    },
+
+    /**
+     * Simulate a key press.
+     * @example
+     * pipe.input.press("enter");
+     */
+    press: (key: string): Promise<boolean> => {
+      return sendInputControl({ type: "KeyPress", data: key });
+    },
+
+    /**
+     * Move the mouse to absolute coordinates.
+     * @example
+     * pipe.input.moveMouse(100, 200);
+     */
+    moveMouse: (x: number, y: number): Promise<boolean> => {
+      return sendInputControl({ type: "MouseMove", data: { x, y } });
+    },
+
+    /**
+     * Simulate a mouse click.
+     * @example
+     * pipe.input.click("left");
+     */
+    click: (button: "left" | "right" | "middle"): Promise<boolean> => {
+      return sendInputControl({ type: "MouseClick", data: button });
+    },
+  },
 };
+
+async function sendInputControl(action: InputAction): Promise<boolean> {
+  const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+  try {
+    const response = await fetch(`${apiUrl}/experimental/input_control`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data: InputControlResponse = await response.json();
+    return data.success;
+  } catch (error) {
+    console.error("failed to control input:", error);
+    return false;
+  }
+}

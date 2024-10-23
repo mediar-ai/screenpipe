@@ -269,7 +269,6 @@ async fn record_audio(
     friend_wearable_uid: Option<String>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<()> {
-    const OVERLAP_DURATION: Duration = Duration::from_secs(2);
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
