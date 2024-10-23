@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729654317906,
+  "lastUpdate": 1729699163508,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19409,6 +19409,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2824651000,
             "range": "± 259696013",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b4fdfccfbd52b28ab5f2c6cdd34fcb3b127a3389",
+          "message": "Merge pull request #569 from ologbonowiwi/refactor/use-node-cron-for-scheduling-jobs\n\nrefactor: replace internal runtime with `node-cron` to manage scheduled jobs",
+          "timestamp": "2024-10-23T08:50:17-07:00",
+          "tree_id": "4cedfb46becdcca7aede3114ec04d77b264e1862",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b4fdfccfbd52b28ab5f2c6cdd34fcb3b127a3389"
+        },
+        "date": 1729699162039,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1927233833,
+            "range": "± 240843232",
             "unit": "ns/iter"
           }
         ]
