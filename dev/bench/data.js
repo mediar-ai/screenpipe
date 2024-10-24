@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729740238263,
+  "lastUpdate": 1729784563478,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19499,6 +19499,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1964802395,
             "range": "± 102804924",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f76d0d36800874ec19881853fef1309c83d4d90b",
+          "message": "Merge pull request #576 from TanGentleman/patch-1\n\noptimize window validation logic",
+          "timestamp": "2024-10-24T08:34:18-07:00",
+          "tree_id": "6877513c399029db727a256d72249b92f75bc617",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/f76d0d36800874ec19881853fef1309c83d4d90b"
+        },
+        "date": 1729784562012,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2016212250,
+            "range": "± 103900324",
             "unit": "ns/iter"
           }
         ]
