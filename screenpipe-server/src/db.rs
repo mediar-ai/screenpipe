@@ -329,11 +329,13 @@ impl DatabaseManager {
         text_json: &str,
         app_name: &str,
         window_name: &str,
-        ocr_engine: Arc<OcrEngine>,
+        ocr_engine: impl Into<OcrEngine>,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
         const MAX_RETRIES: u32 = 3;
         const TIMEOUT_DURATION: TokioDuration = TokioDuration::from_secs(10);
+
+        let ocr_engine_str = ocr_engine.into().to_string();
 
         for attempt in 1..=MAX_RETRIES {
             match timeout(
@@ -344,7 +346,7 @@ impl DatabaseManager {
                     text_json,
                     app_name,
                     window_name,
-                    Arc::clone(&ocr_engine),
+                    &ocr_engine_str,
                     focused,
                 ),
             )
@@ -394,7 +396,7 @@ impl DatabaseManager {
         text_json: &str,
         app_name: &str,
         window_name: &str,
-        ocr_engine: Arc<OcrEngine>,
+        ocr_engine: &str,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
         let display_window_name = if window_name.chars().count() > 20 {
@@ -419,7 +421,7 @@ impl DatabaseManager {
             .bind(text)
             .bind(text_json)
             .bind(app_name)
-            .bind(format!("{:?}", *ocr_engine))
+            .bind(ocr_engine)
             .bind(window_name)
             .bind(focused)
             .execute(&mut *tx)

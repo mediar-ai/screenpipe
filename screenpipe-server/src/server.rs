@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query, State, Json},
     http::StatusCode,
     response::Json as JsonResponse,
     routing::{get, post},
@@ -18,6 +18,7 @@ use crate::{
     pipe_manager::{PipeInfo, PipeManager},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
     ContentType, DatabaseManager, SearchResult,
+    video::{start_ffmpeg_process, write_frame_to_ffmpeg, finish_ffmpeg_process}
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
@@ -863,6 +864,194 @@ async fn execute_raw_sql(
     }
 }
 
+#[derive(Deserialize)]
+pub struct AddContentRequest {
+    pub device_name: String, // Moved device_name to the top level
+    #[serde(flatten)]
+    pub content: AddContentData, // The actual content (either Frame or Transcription)
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", content = "data")]
+pub enum AddContentData {
+    Frames(Vec<FrameContent>),
+    Transcription(AudioTranscription),
+}
+#[derive(Deserialize)]
+pub struct FrameContent {
+    pub file_path: String,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub app_name: Option<String>,
+    pub window_name: Option<String>,
+    pub ocr_results: Option<Vec<OCRResult>>, 
+    pub tags: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OCRResult {
+    pub text: String,
+    pub text_json: Option<String>,
+    pub ocr_engine: Option<String>,
+    pub focused: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct AudioTranscription {
+    pub transcription: String,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub transcription_engine: String,
+}
+
+#[derive(Serialize)]
+pub struct AddContentResponse {
+    pub success: bool,
+    pub message: Option<String>,
+}
+
+async fn add_frame_to_db(
+    state: &AppState,
+    frame: &FrameContent,
+    device_name: &str,
+) -> Result<(), anyhow::Error> {
+    let db = &state.db;
+
+    let frame_id = db.insert_frame(
+        device_name.to_string(),
+        frame.file_path.clone(),
+        frame.timestamp.unwrap_or_else(Utc::now),
+        frame.app_name.clone(),
+        frame.window_name.clone(),
+    ).await?;
+
+    if let Some(ocr_results) = frame.ocr_results {
+        for ocr in ocr_results {
+            db.insert_ocr_text(
+                frame_id,
+                ocr.text,
+                ocr.text_json,
+                frame.app_name,
+                frame.window_name,
+                ocr.ocr_engine,
+                false
+            ).await?;
+        }
+    }
+
+    if let Some(tags) = frame.tags {
+        db.add_tags(frame_id, TagContentType::Vision, tags).await?;
+    }
+
+    Ok(())
+}
+
+fn encode_frame_from_file_path(file_path: &str) -> Result<Vec<u8>> {
+    let image = image::open(file_path)?;
+    let mut buffer = Vec::new();
+    Ok(buffer)
+}
+
+async fn write_frames_to_video(
+    frames: &Vec<FrameContent>,
+    video_file_path: &str,
+    fps: f64,
+) -> Result<()> {
+    let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps).await?;
+    let mut ffmpeg_stdin = ffmpeg_child.stdin.take().expect("Failed to open stdin for FFmpeg");
+
+    for frame in frames {
+        let encoded_frame = encode_frame_from_file_path(&frame.file_path)?;
+        if let Err(e) = write_frame_to_ffmpeg(&mut ffmpeg_stdin, &encoded_frame).await {
+            error!("Failed to write frame to FFmpeg: {}", e);
+            return Err(e);
+        }
+    }
+
+    finish_ffmpeg_process(ffmpeg_child, Some(ffmpeg_stdin)).await;
+    Ok(())
+}
+
+async fn add_transcription_to_db(
+    state: &AppState,
+    transcription: &AudioTranscription,
+    device_name: &str,
+) -> Result<(), anyhow::Error> {
+    let db = &state.db;
+
+    db.insert_audio_transcription(
+        -1, // No associated audio chunk
+        &transcription.transcription,
+        -1,
+        transcription.transcription_engine,
+        device_name,
+    ).await?;
+
+    Ok(())
+}
+
+pub(crate) async fn add_to_database(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AddContentRequest>,
+) -> Result<JsonResponse<AddContentResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+    let mut success_messages = Vec::new();
+
+    match &payload.content {
+        AddContentData::Frames(frames) => {
+            if !frames.is_empty() {
+                let time = Utc::now();
+                let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
+                let video_file_path = PathBuf::from(output_path)
+                    .join(format!("{}_{}.mp4", device_name, formatted_time))
+                    .to_str()
+                    .expect("Failed to create valid path")
+                    .to_string();
+
+                if let Err(e) = state.db.insert_video_chunk(&video_file_path, &device_name).await {
+                    error!("Failed to insert video chunk for device {}: {}", device_name, e);
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to insert video chunk: {}", e)})),
+                    ));
+                }
+
+                if let Err(e) = write_frames_to_video(frames.clone(), &video_file_path, MAX_FPS).await {
+                    error!("Failed to write frames to video file {}: {}", video_file_path, e);
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to write frames to video: {}", e)})),
+                    ));
+                }
+
+                for frame in frames {
+                    if let Err(e) = add_frame_to_db(&state, frame, &device_name).await {
+                        error!("Failed to add frame content for device {}: {}", device_name, e);
+                    }
+                }
+
+                success_messages.push("Frames added successfully".to_string());
+            }
+        }
+        AddContentData::Transcription(transcription) => {
+            if let Err(e) = add_transcription_to_db(&state, transcription, &device_name).await {
+                error!("Failed to add transcription for device {}: {}", device_name, e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({"error": format!("Failed to add transcription: {}", e)})),
+                ));
+            }
+    
+            success_messages.push("Transcription added successfully".to_string());
+        }
+    }
+
+    Ok(JsonResponse(AddContentResponse {
+        success: true,
+        message: Some(success_messages.join(", ")),
+    }))
+}
+
+
+
 #[cfg(feature = "experimental")]
 async fn input_control_handler(
     JsonResponse(payload): JsonResponse<InputControlRequest>,
@@ -966,7 +1155,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
-        .route("/raw_sql", post(execute_raw_sql));
+        .route("/raw_sql", post(execute_raw_sql))
+        .route("/add", post(add_to_database));
 
     #[cfg(feature = "llm")]
     let router = router.route("/llm/chat", post(llm_chat_handler));
