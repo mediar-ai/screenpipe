@@ -1,5 +1,6 @@
 use screenpipe_core::find_ffmpeg_path;
 use std::io::Write;
+use std::sync::Arc;
 use std::{
     path::PathBuf,
     process::{Command, Stdio},
@@ -7,10 +8,10 @@ use std::{
 use tracing::{debug, error};
 
 pub fn encode_single_audio(
-    data: &[u8],
+    data: &[f32],
     sample_rate: u32,
     channels: u16,
-    output_path: &PathBuf,
+    output_path: Arc<PathBuf>,
 ) -> anyhow::Result<()> {
     debug!("Starting FFmpeg process");
 
@@ -47,7 +48,7 @@ pub fn encode_single_audio(
     debug!("FFmpeg process spawned");
     let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
 
-    stdin.write_all(data)?;
+    stdin.write_all(bytemuck::cast_slice(data))?;
 
     debug!("Dropping stdin");
     drop(stdin);

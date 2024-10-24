@@ -1,16 +1,20 @@
-use crate::audio_processing::audio_to_mono;
-use crate::AudioInput;
+use crate::audio_processing::{audio_frames_to_speech_frames, audio_to_mono, AudioInput};
+use crate::vad_engine::VadEngine;
 use anyhow::{anyhow, Result};
+use chrono::Utc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::{fmt, thread};
 use tokio::sync::{broadcast, oneshot};
+use tracing::debug;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
@@ -164,6 +168,7 @@ pub async fn record_and_transcribe(
     duration: Duration,
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
     is_running: Arc<AtomicBool>,
+    data_dir: Arc<PathBuf>,
 ) -> Result<()> {
     let mut receiver = audio_stream.subscribe().await;
 
@@ -174,7 +179,7 @@ pub async fn record_and_transcribe(
     );
 
     const OVERLAP_SECONDS: usize = 2;
-    let mut collected_audio = Vec::new();
+    let mut collected_audio = Vec::<AudioSegment>::new();
     let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
     // let channels = audio_stream.device_config.channels() as usize;
     let overlap_samples = OVERLAP_SECONDS * sample_rate; // audio is mono otherwise * by # of channels
@@ -184,7 +189,7 @@ pub async fn record_and_transcribe(
 
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
-                Ok(Ok(chunk)) => collected_audio.extend(chunk),
+                Ok(Ok(segment)) => collected_audio.push(segment),
                 Ok(Err(e)) => error!("error receiving audio data: {}", e),
                 Err(_) => {} // Timeout, continue loop
             }
@@ -192,11 +197,17 @@ pub async fn record_and_transcribe(
 
         if !collected_audio.is_empty() {
             debug!("sending audio segment to audio model");
+            let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+            let sanitized_device_name = audio_stream.device.to_string().replace(['/', '\\'], "_");
+            let file_path =
+                data_dir.join(format!("{}_{}.mp4", sanitized_device_name, new_file_name));
+            let file_path_clone = Arc::new(file_path);
             if let Err(e) = whisper_sender.send(AudioInput {
                 data: Arc::new(collected_audio.clone()),
                 device: audio_stream.device.clone(),
                 sample_rate: audio_stream.device_config.sample_rate().0,
                 channels: audio_stream.device_config.channels(),
+                output_path: file_path_clone,
             }) {
                 error!("failed to send audio to audio model: {}", e);
             }
@@ -337,13 +348,22 @@ pub fn trigger_audio_permission() -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Debug)]
+pub struct AudioSegment {
+    pub frames: Arc<Vec<f32>>,
+    pub speech_frames: Arc<Vec<f32>>,
+}
+
 #[derive(Clone)]
 pub struct AudioStream {
     pub device: Arc<AudioDevice>,
     pub device_config: cpal::SupportedStreamConfig,
-    transmitter: Arc<tokio::sync::broadcast::Sender<Vec<f32>>>,
+    transmitter: Arc<tokio::sync::broadcast::Sender<AudioSegment>>,
     stream_control: mpsc::Sender<StreamControl>,
     stream_thread: Option<Arc<tokio::sync::Mutex<Option<thread::JoinHandle<()>>>>>,
+    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
+    buffer: Arc<Mutex<Vec<f32>>>,
+    buffer_duration: Duration,
 }
 
 enum StreamControl {
@@ -354,16 +374,24 @@ impl AudioStream {
     pub async fn from_device(
         device: Arc<AudioDevice>,
         is_running: Arc<AtomicBool>,
+        vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
+        buffer_duration: Duration,
     ) -> Result<Self> {
-        let (tx, _) = broadcast::channel::<Vec<f32>>(1000);
+        let (tx, _) = broadcast::channel::<AudioSegment>(1000);
         let tx_clone = tx.clone();
         let (cpal_audio_device, config) = get_device_and_config(&device).await?;
         let channels = config.channels();
 
         let is_running_weak_2 = Arc::downgrade(&is_running);
         let device_clone = device.clone();
+        let device_clone2 = device_clone.clone();
         let config_clone = config.clone();
+        let config_clone2 = config_clone.clone();
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
+        let vad_engine_clone = vad_engine.clone();
+
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let buffer_clone = buffer.clone();
 
         let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn(move || {
             let device = device_clone;
@@ -378,50 +406,53 @@ impl AudioStream {
                 }
             };
 
+            // TODO: shouldnt we bytemuck::cast_slice(data) ?
+            let data_callback = move |data: &[f32], _: &_| {
+                let mono = audio_to_mono(data, channels);
+
+                // Add data to buffer
+                let mut buffer = buffer_clone.lock().unwrap();
+                buffer.extend_from_slice(&mono);
+
+                const CHUNK_DURATION_MS: f32 = 100.0;
+                let buffer_duration_ms =
+                    (buffer.len() as f32 / config_clone2.sample_rate().0 as f32) * 1000.0;
+                if buffer_duration_ms < CHUNK_DURATION_MS {
+                    return;
+                }
+
+                // Process with VAD and audio processing
+                let mut vad = vad_engine_clone.lock().unwrap();
+                if let Ok(Some(speech_frames)) = audio_frames_to_speech_frames(
+                    &buffer,
+                    device_clone2.clone(),
+                    config_clone2.sample_rate().0,
+                    &mut *vad,
+                ) {
+                    debug!("sending speech frames length: {}", speech_frames.len());
+                    let speech_segment = AudioSegment {
+                        frames: Arc::new(std::mem::take(&mut *buffer)),
+                        speech_frames: Arc::new(speech_frames),
+                    };
+                    let _ = tx.send(speech_segment);
+                }
+
+                // No need to clear the buffer as we've taken ownership of it
+                buffer.clear();
+            };
+
             let stream = match config.sample_format() {
                 cpal::SampleFormat::F32 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[f32], _: &_| {
-                            let mono = audio_to_mono(data, channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
+                    .build_input_stream(&config.into(), data_callback, error_callback, None)
                     .expect("Failed to build input stream"),
                 cpal::SampleFormat::I16 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i16], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
+                    .build_input_stream(&config.into(), data_callback, error_callback, None)
                     .expect("Failed to build input stream"),
                 cpal::SampleFormat::I32 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i32], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
+                    .build_input_stream(&config.into(), data_callback, error_callback, None)
                     .expect("Failed to build input stream"),
                 cpal::SampleFormat::I8 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i8], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
+                    .build_input_stream(&config.into(), data_callback, error_callback, None)
                     .expect("Failed to build input stream"),
                 _ => {
                     error!("unsupported sample format: {}", config.sample_format());
@@ -447,10 +478,13 @@ impl AudioStream {
             transmitter: Arc::new(tx_clone),
             stream_control: stream_control_tx,
             stream_thread: Some(stream_thread),
+            vad_engine,
+            buffer,
+            buffer_duration,
         })
     }
 
-    pub async fn subscribe(&self) -> broadcast::Receiver<Vec<f32>> {
+    pub async fn subscribe(&self) -> broadcast::Receiver<AudioSegment> {
         self.transmitter.subscribe()
     }
 

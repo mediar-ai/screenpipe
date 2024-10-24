@@ -209,7 +209,7 @@ mod tests {
         let output_path_2 = output_path.clone();
         let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
             Arc::new(AudioTranscriptionEngine::WhisperTiny),
-            VadEngineEnum::WebRtc,
+            VadEngineEnum::Silero,
             None,
             &output_path_2.clone(),
             VadSensitivity::High,

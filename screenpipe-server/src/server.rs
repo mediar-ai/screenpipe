@@ -1,16 +1,16 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{
+        ws::{Message, WebSocket},
+        Path, Query, State, WebSocketUpgrade,
+    },
     http::StatusCode,
-    response::Json as JsonResponse,
+    response::{IntoResponse, Json as JsonResponse},
     routing::{get, post},
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
 use futures::future::{try_join, try_join_all};
-#[cfg(feature = "llm")]
-use screenpipe_core::LLM;
-#[cfg(feature = "llm")]
-use screenpipe_core::{ChatRequest, ChatResponse};
+
 use screenpipe_vision::monitor::list_monitors;
 
 use crate::{
@@ -24,7 +24,7 @@ use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
-    DeviceType,
+    DeviceType, TranscriptionResult,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -36,7 +36,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::broadcast};
 use tower_http::trace::TraceLayer;
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -54,10 +54,7 @@ pub struct AppState {
     pub pipe_manager: Arc<PipeManager>,
     pub vision_disabled: bool,
     pub audio_disabled: bool,
-    #[cfg(feature = "llm")]
-    pub llm_enabled: bool,
-    #[cfg(feature = "llm")]
-    pub llm: Option<LLM>,
+    pub transcription_sender: Arc<broadcast::Sender<TranscriptionResult>>,
 }
 
 // Update the SearchQuery struct
@@ -706,10 +703,7 @@ pub struct Server {
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
     audio_disabled: bool,
-    #[cfg(feature = "llm")]
-    enable_llm: bool,
-    #[cfg(feature = "llm")]
-    llm: Option<LLM>,
+    transcription_sender: Arc<broadcast::Sender<TranscriptionResult>>,
 }
 
 impl Server {
@@ -723,8 +717,7 @@ impl Server {
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
         audio_disabled: bool,
-        #[cfg(feature = "llm")] enable_llm: bool,
-        #[cfg(feature = "llm")] llm: Option<LLM>,
+        transcription_sender: Arc<broadcast::Sender<TranscriptionResult>>,
     ) -> Self {
         Server {
             db,
@@ -735,10 +728,7 @@ impl Server {
             pipe_manager,
             vision_disabled,
             audio_disabled,
-            #[cfg(feature = "llm")]
-            enable_llm,
-            #[cfg(feature = "llm")]
-            llm,
+            transcription_sender,
         }
     }
 
@@ -760,10 +750,7 @@ impl Server {
             pipe_manager: self.pipe_manager,
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
-            #[cfg(feature = "llm")]
-            llm_enabled: self.enable_llm,
-            #[cfg(feature = "llm")]
-            llm: self.llm,
+            transcription_sender: self.transcription_sender,
         });
 
         let app = create_router()
@@ -775,15 +762,15 @@ impl Server {
             )
             .with_state(app_state);
 
-        info!("Server starting on {}", self.addr);
+        info!("server starting on {}", self.addr);
 
         match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
             Ok(_) => {
-                info!("Server stopped gracefully");
+                info!("server stopped gracefully");
                 Ok(())
             }
             Err(e) => {
-                error!("Server error: {}", e);
+                error!("server error: {}", e);
                 Err(e)
             }
         }
@@ -800,40 +787,6 @@ async fn merge_frames_handler(
         Ok(response) => Ok(JsonResponse(response)),
         Err(e) => {
             error!("Failed to merge frames: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": e.to_string()})),
-            ))
-        }
-    }
-}
-
-#[cfg(feature = "llm")]
-async fn llm_chat_handler(
-    State(state): State<Arc<AppState>>,
-    JsonResponse(payload): JsonResponse<ChatRequest>,
-) -> Result<JsonResponse<ChatResponse>, (StatusCode, JsonResponse<Value>)> {
-    if payload.stream {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            JsonResponse(json!({"error": "Stream not supported"})),
-        ));
-    }
-
-    let llm = match &state.llm {
-        Some(llm) => llm,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                JsonResponse(json!({"error": "LLM is not enabled"})),
-            ))
-        }
-    };
-
-    match llm.chat(payload) {
-        Ok(res) => Ok(JsonResponse(res)),
-        Err(e) => {
-            error!("Failed to chat: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({"error": e.to_string()})),
@@ -859,6 +812,25 @@ async fn execute_raw_sql(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({"error": e.to_string()})),
             ))
+        }
+    }
+}
+
+async fn transcriptions_ws_handler(
+    ws: WebSocketUpgrade,
+    axum::extract::State(app_state): axum::extract::State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_transcriptions_socket(socket, app_state))
+}
+
+async fn handle_transcriptions_socket(mut socket: WebSocket, app_state: Arc<AppState>) {
+    let mut receiver = app_state.transcription_sender.subscribe();
+
+    while let Ok(transcription) = receiver.recv().await {
+        let msg = serde_json::to_string(&transcription.transcription)
+            .unwrap_or_else(|_| "{}".to_string());
+        if socket.send(Message::Text(msg)).await.is_err() {
+            break;
         }
     }
 }
@@ -966,10 +938,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
-        .route("/raw_sql", post(execute_raw_sql));
-
-    #[cfg(feature = "llm")]
-    let router = router.route("/llm/chat", post(llm_chat_handler));
+        .route("/raw_sql", post(execute_raw_sql))
+        .route("/ws/audio/transcriptions", get(transcriptions_ws_handler));
 
     #[cfg(feature = "experimental")]
     let router = router.route("/experimental/input_control", post(input_control_handler));
@@ -1186,4 +1156,3 @@ MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
 
 */
-

@@ -7,6 +7,8 @@ use screenpipe_audio::default_output_device;
 use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
+use screenpipe_audio::vad_engine::SileroVad;
+use screenpipe_audio::vad_engine::VadEngine;
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioStream;
@@ -16,6 +18,7 @@ use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 #[derive(Parser, Debug)]
@@ -90,13 +93,15 @@ async fn main() -> Result<()> {
     let chunk_duration = Duration::from_secs_f32(args.audio_chunk_duration);
     let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
         Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
-        VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
         args.deepgram_api_key,
         &PathBuf::from("output.mp4"),
-        VadSensitivity::Medium,
         languages,
     )
     .await?;
+
+    let mut vad_engine: Box<dyn VadEngine + Send> = Box::new(SileroVad::new().await?);
+    vad_engine.set_sensitivity(VadSensitivity::High.into());
+    let vad_engine = Arc::new(Mutex::new(vad_engine));
 
     let whisper_sender_clone = whisper_sender.clone();
     // Spawn threads for each device
@@ -105,13 +110,18 @@ async fn main() -> Result<()> {
         .enumerate()
         .map(|(i, device)| {
             let whisper_sender = whisper_sender_clone.clone();
+            let vad_engine_clone = vad_engine.clone();
+
             async move {
                 let device = Arc::new(device);
                 let device_control = Arc::new(AtomicBool::new(true));
-
-                let audio_stream = AudioStream::from_device(device.clone(), device_control.clone())
-                    .await
-                    .unwrap();
+                let audio_stream = AudioStream::from_device(
+                    device.clone(),
+                    device_control.clone(),
+                    vad_engine_clone,
+                )
+                .await
+                .unwrap();
 
                 tokio::spawn(async move {
                     loop {

@@ -291,9 +291,6 @@ async fn main() -> anyhow::Result<()> {
 
     let vision_control_server_clone = vision_control.clone();
 
-    // Before the loop starts, clone friend_wearable_uid
-    let friend_wearable_uid = cli.friend_wearable_uid.clone();
-
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
@@ -317,10 +314,9 @@ async fn main() -> anyhow::Result<()> {
     let vision_handle = vision_runtime.handle().clone();
 
     let db_clone = Arc::clone(&db);
-    let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
+    let data_dir_clone = Arc::new(local_data_dir.join("data"));
     let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
-    let friend_wearable_uid_clone: Option<String> = friend_wearable_uid.clone(); // Clone here
     let monitor_ids_clone = monitor_ids.clone();
     let ignored_windows_clone = cli.ignored_windows.clone();
     let included_windows_clone = cli.included_windows.clone();
@@ -333,7 +329,11 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
+    // Create a broadcast channel with a capacity of 100 subscribers
+    let (transcription_sender, _) = broadcast::channel(100);
+    let transcription_sender = Arc::new(transcription_sender);
 
+    let transcription_sender_clone = transcription_sender.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -342,7 +342,7 @@ async fn main() -> anyhow::Result<()> {
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
-                    output_path_clone.clone(),
+                    data_dir_clone.clone(),
                     fps,
                     audio_chunk_duration, // use the new setting
                     Duration::from_secs(cli.video_chunk_duration),
@@ -352,7 +352,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.save_text_files,
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
-                    friend_wearable_uid_clone.clone(),
                     monitor_ids_clone.clone(),
                     cli.use_pii_removal,
                     cli.disable_vision,
@@ -364,6 +363,7 @@ async fn main() -> anyhow::Result<()> {
                     cli.deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
                     languages.clone(),
+                    transcription_sender_clone.clone(),
                 );
 
                 let result = tokio::select! {
@@ -385,25 +385,14 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
-    #[cfg(feature = "llm")]
-    debug!("LLM initializing");
 
-    #[cfg(feature = "llm")]
-    let llm = {
-        match cli.enable_llm {
-            true => Some(screenpipe_core::LLM::new(screenpipe_core::ModelName::Llama)?),
-            false => None,
-        }
-        }; 
-
-    #[cfg(feature = "llm")]
-    debug!("LLM initialized");
 
     let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
         if req.uri().path() == "/search" {
             // Track search requests
         }
     };
+
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
@@ -413,11 +402,7 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
-        #[cfg(feature = "llm")]
-        cli.enable_llm,
-        #[cfg(feature = "llm")]
-        llm,
-
+        transcription_sender,
     );
 
     let mut pipe_futures = FuturesUnordered::new();

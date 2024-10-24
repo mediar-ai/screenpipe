@@ -27,7 +27,7 @@ pub struct VideoCapture {
 
 impl VideoCapture {
     pub fn new(
-        output_path: &str,
+        data_dir: Arc<PathBuf>,
         fps: f64,
         video_chunk_duration: Duration,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
@@ -124,11 +124,10 @@ impl VideoCapture {
 
         let video_frame_queue_clone = video_frame_queue.clone();
 
-        let output_path = output_path.to_string();
         let _video_thread = tokio::spawn(async move {
             save_frames_as_video(
                 &video_frame_queue_clone,
-                &output_path,
+                Arc::clone(&data_dir),
                 fps,
                 new_chunk_callback_clone,
                 monitor_id,
@@ -216,7 +215,7 @@ async fn log_ffmpeg_output(stream: impl AsyncBufReadExt + Unpin, stream_name: &s
 
 async fn save_frames_as_video(
     frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
-    output_path: &str,
+    data_dir: Arc<PathBuf>,
     fps: f64,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
     monitor_id: u32,
@@ -238,7 +237,7 @@ async fn save_frames_as_video(
             let first_frame = wait_for_first_frame(frame_queue).await;
             let buffer = encode_frame(&first_frame);
 
-            let output_file = create_output_file(output_path, monitor_id);
+            let output_file = create_output_file(Arc::clone(&data_dir), monitor_id);
             new_chunk_callback(&output_file);
 
             match start_ffmpeg_process(&output_file, fps).await {
@@ -297,10 +296,10 @@ fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
     buffer
 }
 
-fn create_output_file(output_path: &str, monitor_id: u32) -> String {
+fn create_output_file(data_dir: Arc<PathBuf>, monitor_id: u32) -> String {
     let time = Utc::now();
     let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
-    PathBuf::from(output_path)
+    data_dir
         .join(format!("monitor_{}_{}.mp4", monitor_id, formatted_time))
         .to_str()
         .expect("Failed to create valid path")

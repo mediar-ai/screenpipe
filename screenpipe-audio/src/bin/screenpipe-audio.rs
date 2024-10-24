@@ -7,15 +7,17 @@ use screenpipe_audio::default_output_device;
 use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
+use screenpipe_audio::vad_engine::SileroVad;
+use screenpipe_audio::vad_engine::VadEngine;
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioStream;
 use screenpipe_audio::AudioTranscriptionEngine;
-use screenpipe_audio::VadEngineEnum;
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 #[derive(Parser, Debug)]
@@ -94,13 +96,16 @@ async fn main() -> Result<()> {
     let output_path = PathBuf::from("output.mp4");
     let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
         Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
-        VadEngineEnum::WebRtc, // Or VadEngineEnum::WebRtc, hardcoded for now
         deepgram_api_key,
         &output_path,
-        VadSensitivity::Medium,
         languages,
     )
     .await?;
+
+    let mut vad_engine: Box<dyn VadEngine + Send> = Box::new(SileroVad::new().await?);
+    vad_engine.set_sensitivity(VadSensitivity::High.into());
+    let vad_engine = Arc::new(Mutex::new(vad_engine));
+
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()
@@ -109,14 +114,17 @@ async fn main() -> Result<()> {
             let whisper_sender = whisper_sender.clone();
             let device_control = Arc::new(AtomicBool::new(true));
             let device_clone = Arc::clone(&device);
-
+            let vad_engine_clone = vad_engine.clone();
             tokio::spawn(async move {
                 let device_control_clone = Arc::clone(&device_control);
                 let device_clone_2 = Arc::clone(&device_clone);
-                let audio_stream =
-                    AudioStream::from_device(device_clone_2, device_control_clone.clone())
-                        .await
-                        .unwrap();
+                let audio_stream = AudioStream::from_device(
+                    device_clone_2,
+                    device_control_clone.clone(),
+                    vad_engine_clone,
+                )
+                .await
+                .unwrap();
 
                 record_and_transcribe(
                     Arc::new(audio_stream),

@@ -30,7 +30,6 @@ clap = { version = "4.3", features = ["derive"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Local Embeddings + STT
-# TODO: feature metal, cuda, etc. see https://github.com/huggingface/candle/blob/main/candle-core/Cargo.toml
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
@@ -54,9 +53,6 @@ bytemuck = "1.16.1"
 
 # Async
 tokio = { workspace = true }
-
-# Detect speech/silence
-webrtc-vad = "0.4.0"
 
 # Deepgram
 reqwest = { workspace = true }

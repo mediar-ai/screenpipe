@@ -58,8 +58,6 @@ impl From<CliOcrEngine> for CoreOcrEngine {
 }
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliVadEngine {
-    #[clap(name = "webrtc")]
-    WebRtc,
     #[clap(name = "silero")]
     Silero,
 }
@@ -67,7 +65,6 @@ pub enum CliVadEngine {
 impl From<CliVadEngine> for VadEngineEnum {
     fn from(cli_engine: CliVadEngine) -> Self {
         match cli_engine {
-            CliVadEngine::WebRtc => VadEngineEnum::WebRtc,
             CliVadEngine::Silero => VadEngineEnum::Silero,
         }
     }
@@ -191,7 +188,7 @@ pub struct Cli {
     pub disable_vision: bool,
 
     /// VAD engine to use for speech detection
-    #[arg(long, value_enum, default_value_t = CliVadEngine::Silero)] // Silero or WebRtc
+    #[arg(long, value_enum, default_value_t = CliVadEngine::Silero)]
     pub vad_engine: CliVadEngine,
 
     /// List of windows to ignore (by title) for screen recording - we use contains to match, example:

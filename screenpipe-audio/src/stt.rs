@@ -1,24 +1,19 @@
 use crate::{
-    audio_processing::normalize_v2,
-    encode_single_audio, multilingual,
-    vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
+    audio_processing::AudioInput,
+    multilingual,
     whisper::{Decoder, WhisperModel},
-    AudioDevice, AudioTranscriptionEngine,
+    AudioTranscriptionEngine,
 };
 use anyhow::Result;
 use candle::Tensor;
-use candle_transformers::models::whisper::{self as m, audio};
-use chrono::Utc;
+use candle_transformers::models::whisper::audio;
 use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
-use rubato::{
-    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
-};
+
 use std::collections::HashSet;
 use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -144,28 +139,20 @@ pub fn stt_sync(
     audio_input: &AudioInput,
     whisper_model: &mut WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>, // Changed type here
     deepgram_api_key: Option<String>,
-    output_path: &PathBuf,
     languages: Vec<Language>,
-) -> Result<(String, String)> {
+) -> Result<String> {
     let audio_input = audio_input.clone();
     let mut whisper_model = whisper_model.clone();
-    let output_path = output_path.clone();
-    let vad_engine = vad_engine.clone(); // Clone the Arc to move into the closure
 
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let mut vad_engine_guard = vad_engine.lock().unwrap();
 
         rt.block_on(stt(
             &audio_input,
             &mut whisper_model,
             audio_transcription_engine,
-            &mut **vad_engine_guard, // Obtain &mut dyn VadEngine
             deepgram_api_key,
-            &output_path,
-            false,
             languages,
         ))
     });
@@ -250,8 +237,8 @@ fn extract_time_tokens(text: &str, token_regex: &Regex) -> (String, String) {
         .map(|m| m.as_str())
         .collect::<Vec<&str>>();
 
-    let start = tokens.first().unwrap().to_string();
-    let end = tokens.last().unwrap().to_string();
+    let start = tokens.first().unwrap_or_else(|| &"").to_string();
+    let end = tokens.last().unwrap_or_else(|| &"").to_string();
 
     (start, end)
 }
@@ -282,12 +269,9 @@ pub async fn stt(
     audio_input: &AudioInput,
     whisper_model: &mut WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    vad_engine: &mut dyn VadEngine,
     deepgram_api_key: Option<String>,
-    output_path: &PathBuf,
-    skip_encoding: bool,
     languages: Vec<Language>,
-) -> Result<(String, String)> {
+) -> Result<String> {
     let model = &whisper_model.model;
 
     debug!("Loading mel filters");
@@ -299,74 +283,16 @@ pub async fn stt(
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
-    let audio_data = if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
-        info!(
-            "device: {}, resampling from {} Hz to {} Hz",
-            audio_input.device,
-            audio_input.sample_rate,
-            m::SAMPLE_RATE
-        );
-        resample(
-            audio_input.data.as_ref(),
-            audio_input.sample_rate,
-            m::SAMPLE_RATE as u32,
-        )?
-    } else {
-        audio_input.data.as_ref().to_vec()
-    };
+    let speech_frames = audio_input
+        .data
+        .iter()
+        .flat_map(|segment| segment.speech_frames.iter().copied())
+        .collect::<Vec<_>>();
 
-    let audio_data = normalize_v2(&audio_data);
+    info!("speech frames length: {}", speech_frames.len());
 
-    let frame_size = 1600; // 100ms frame size for 16kHz audio
-    let mut speech_frames = Vec::new();
-    let mut total_frames = 0;
-    let mut speech_frame_count = 0;
-
-    let mut noise = 0.;
-
-    for chunk in audio_data.chunks(frame_size) {
-        total_frames += 1;
-        match vad_engine.audio_type(chunk) {
-            Ok(status) => match status {
-                VadStatus::Speech => {
-                    let processed_audio = spectral_subtraction(chunk, noise)?;
-                    speech_frames.extend(processed_audio);
-                    speech_frame_count += 1;
-                }
-                VadStatus::Unknown => {
-                    noise = average_noise_spectrum(chunk);
-                }
-                _ => {}
-            },
-            Err(e) => {
-                debug!("VAD failed for chunk: {:?}", e);
-            }
-        }
-    }
-
-    let speech_duration_ms = speech_frame_count * 100; // Each frame is 100ms
-    let speech_ratio = speech_frame_count as f32 / total_frames as f32;
-    let min_speech_ratio = vad_engine.get_min_speech_ratio();
-
-    info!(
-        "device: {}, total audio frames processed: {}, frames that include speech: {}, speech duration: {}ms, speech ratio: {:.2}, min required ratio: {:.2}",
-        audio_input.device,
-        total_frames,
-        speech_frame_count,
-        speech_duration_ms,
-        speech_ratio,
-        min_speech_ratio
-    );
-
-    // If no speech frames detected or speech ratio is too low, skip processing
-    if speech_frames.is_empty() || speech_ratio < min_speech_ratio {
-        debug!(
-            "device: {}, insufficient speech detected (ratio: {:.2}, min required: {:.2}), skipping audio processing",
-            audio_input.device,
-            speech_ratio,
-            min_speech_ratio
-        );
-        return Ok(("".to_string(), "".to_string()));
+    if speech_frames.len() == 0 {
+        return Ok(String::new());
     }
 
     let transcription: Result<String> =
@@ -409,63 +335,11 @@ pub async fn stt(
             process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
         };
 
-    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-    let sanitized_device_name = audio_input.device.to_string().replace(['/', '\\'], "_");
-    let file_path = PathBuf::from(output_path)
-        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
-        .to_str()
-        .expect("Failed to create valid path")
-        .to_string();
-    let file_path_clone = file_path.clone();
-    // Run FFmpeg in a separate task
-    if !skip_encoding {
-        encode_single_audio(
-            bytemuck::cast_slice(&audio_input.data),
-            audio_input.sample_rate,
-            1,
-            &file_path.into(),
-        )?;
-    }
-
-    Ok((transcription?, file_path_clone))
-}
-
-fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
-    debug!("Resampling audio");
-    let params = SincInterpolationParameters {
-        sinc_len: 256,
-        f_cutoff: 0.95,
-        interpolation: SincInterpolationType::Linear,
-        oversampling_factor: 256,
-        window: WindowFunction::BlackmanHarris2,
-    };
-
-    let mut resampler = SincFixedIn::<f32>::new(
-        to_sample_rate as f64 / from_sample_rate as f64,
-        2.0,
-        params,
-        input.len(),
-        1,
-    )?;
-
-    let waves_in = vec![input.to_vec()];
-    debug!("Performing resampling");
-    let waves_out = resampler.process(&waves_in, None)?;
-    debug!("Resampling complete");
-    Ok(waves_out.into_iter().next().unwrap())
-}
-
-#[derive(Debug, Clone)]
-pub struct AudioInput {
-    pub data: Arc<Vec<f32>>,
-    pub sample_rate: u32,
-    pub channels: u16,
-    pub device: Arc<AudioDevice>,
+    Ok(transcription?)
 }
 
 #[derive(Debug, Clone)]
 pub struct TranscriptionResult {
-    pub path: String,
     pub input: AudioInput,
     pub transcription: Option<String>,
     pub timestamp: u64,
@@ -497,16 +371,11 @@ impl TranscriptionResult {
     }
 }
 
-use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
 use std::sync::atomic::{AtomicBool, Ordering};
-use vad_rs::VadStatus;
 
 pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    vad_engine: VadEngineEnum,
     deepgram_api_key: Option<String>,
-    output_path: &PathBuf,
-    vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
@@ -522,15 +391,9 @@ pub async fn create_whisper_channel(
         crossbeam::channel::Sender<TranscriptionResult>,
         crossbeam::channel::Receiver<TranscriptionResult>,
     ) = crossbeam::channel::bounded(20);
-    let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
-        VadEngineEnum::WebRtc => Box::new(WebRtcVad::new()),
-        VadEngineEnum::Silero => Box::new(SileroVad::new().await?),
-    };
-    vad_engine.set_sensitivity(vad_sensitivity);
-    let vad_engine = Arc::new(Mutex::new(vad_engine));
+
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
-    let output_path = output_path.clone();
 
     tokio::spawn(async move {
         loop {
@@ -554,11 +417,10 @@ pub async fn create_whisper_channel(
                                 #[cfg(target_os = "macos")]
                                 {
                                     autoreleasepool(|| {
-                                        match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
-                                            Ok((transcription, path)) => TranscriptionResult {
+                                        match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone()) {
+                                            Ok(transcription) => TranscriptionResult {
                                                 input: input.clone(),
                                                 transcription: Some(transcription),
-                                                path,
                                                 timestamp,
                                                 error: None,
                                             },
@@ -567,7 +429,6 @@ pub async fn create_whisper_channel(
                                                 TranscriptionResult {
                                                     input: input.clone(),
                                                     transcription: None,
-                                                    path: "".to_string(),
                                                     timestamp,
                                                     error: Some(e.to_string()),
                                                 }
@@ -580,11 +441,10 @@ pub async fn create_whisper_channel(
                                     unreachable!("This code should not be reached on non-macOS platforms")
                                 }
                             } else {
-                                match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
-                                    Ok((transcription, path)) => TranscriptionResult {
+                                match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone()) {
+                                    Ok(transcription) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),
-                                        path,
                                         timestamp,
                                         error: None,
                                     },
@@ -593,7 +453,6 @@ pub async fn create_whisper_channel(
                                         TranscriptionResult {
                                             input: input.clone(),
                                             transcription: None,
-                                            path: "".to_string(),
                                             timestamp,
                                             error: Some(e.to_string()),
                                         }
