@@ -47,7 +47,7 @@ this section guides you through submitting an enhancement suggestion for screen 
 
 ### rust styleguide
 
-all rust code must adhere to [rust style guide](https://github.com/rust-lang/style-team/blob/master/guide/guide.md).
+all rust code must adhere to [rust style guide](https://github.com/rust-lang/rust/tree/4f2f477fded0a47b21ed3f6aeddeafa5db8bf518/src/doc/style-guide/src).
 
 we follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) folder structure.
 
