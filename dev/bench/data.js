@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729740120225,
+  "lastUpdate": 1729740238263,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19469,6 +19469,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1914359333,
             "range": "± 46290368",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b98ade6765deb2bdf08109402450e34fb54e0b7f",
+          "message": "Merge pull request #577 from TanGentleman/patch-2\n\nFix CONTRIBUTING.md dead hyperlink",
+          "timestamp": "2024-10-23T20:14:45-07:00",
+          "tree_id": "6f7bddb5f979c8e441ca9547870cf68d8c4352b4",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/b98ade6765deb2bdf08109402450e34fb54e0b7f"
+        },
+        "date": 1729740236523,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1964802395,
+            "range": "± 102804924",
             "unit": "ns/iter"
           }
         ]
