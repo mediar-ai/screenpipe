@@ -190,15 +190,22 @@ async fn record_video(
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
     let rt = Handle::current();
-    let new_chunk_callback = move |file_path: &str| {
+    let device_name = Arc::new(format!("monitor_{}", monitor_id));
+
+    let new_chunk_callback = {
         let db_chunk_callback = Arc::clone(&db_chunk_callback);
-        let file_path = file_path.to_string();
-        rt.spawn(async move {
-            if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path).await {
-                error!("Failed to insert new video chunk: {}", e);
-            }
-            debug!("record_video: Inserted new video chunk: {}", file_path);
-        });
+        let device_name = Arc::clone(&device_name);
+        move |file_path: &str| {
+            let file_path = file_path.to_string();
+            let db_chunk_callback = Arc::clone(&db_chunk_callback);
+            let device_name = Arc::clone(&device_name);
+            rt.spawn(async move {
+                if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path, &device_name).await {
+                    error!("Failed to insert new video chunk: {}", e);
+                }
+                debug!("record_video: Inserted new video chunk: {}", file_path);
+            });
+        }
     };
 
     let video_capture = VideoCapture::new(
@@ -217,7 +224,7 @@ async fn record_video(
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
-                match db.insert_frame().await {
+                match db.insert_frame(&device_name).await {
                     Ok(frame_id) => {
                         let text_json =
                             serde_json::to_string(&window_result.text_json).unwrap_or_default();

@@ -260,10 +260,11 @@ impl DatabaseManager {
         Ok(affected as i64)
     }
 
-    pub async fn insert_video_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
+    pub async fn insert_video_chunk(&self, file_path: &str, device_name: &str) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        let id = sqlx::query("INSERT INTO video_chunks (file_path) VALUES (?1)")
+        let id = sqlx::query("INSERT INTO video_chunks (file_path, device_name) VALUES (?1, ?2)")
             .bind(file_path)
+            .bind(device_name)
             .execute(&mut *tx)
             .await?
             .last_insert_rowid();
@@ -271,13 +272,14 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_frame(&self) -> Result<i64, sqlx::Error> {
+    pub async fn insert_frame(&self, device_name: &str) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
 
         // Get the most recent video_chunk_id
         let video_chunk_id: Option<i64> =
-            sqlx::query_scalar("SELECT id FROM video_chunks ORDER BY id DESC LIMIT 1")
+            sqlx::query_scalar("SELECT id FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1")
+                .bind(device_name)
                 .fetch_optional(&mut *tx)
                 .await?;
         debug!("Fetched most recent video_chunk_id: {:?}", video_chunk_id);

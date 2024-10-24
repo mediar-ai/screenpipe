@@ -1,0 +1,1 @@
+ALTER TABLE video_chunks ADD COLUMN device_name TEXT NOT NULL DEFAULT '';
