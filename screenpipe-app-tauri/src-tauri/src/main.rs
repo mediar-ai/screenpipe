@@ -7,6 +7,8 @@ use commands::show_main_window;
 use llm_sidecar::EmbeddedLLMSettings;
 use serde_json::Value;
 use sidecar::SidecarManager;
+use tauri::Emitter;
+use tauri_plugin_notification::NotificationExt;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -115,6 +117,7 @@ async fn main() {
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
+            commands::update_recording_shortcut, // Add this line
         ])
         .setup(|app| {
             // Logging setup
@@ -183,11 +186,17 @@ async fn main() {
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
+                let start_recording =
+                    MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
+                let stop_recording =
+                    MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
                 let menu_divider = PredefinedMenuItem::separator(app)?;
                 let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app)
                     .items(&[
                         &show,
+                        &start_recording,
+                        &stop_recording,
                         update_manager.update_now_menu_item_ref(),
                         &menu_divider,
                         &quit,
@@ -202,6 +211,48 @@ async fn main() {
                     "quit" => {
                         println!("quit clicked");
                         app_handle.exit(0);
+                    }
+                    "start_recording" => {
+                        tokio::task::block_in_place(move || {
+                            Handle::current().block_on(async move {
+                                let state = app_handle.state::<SidecarState>();
+                                if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
+                                    error!("Failed to start recording: {}", err);
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Failed to start recording")
+                                        .show();
+                                    let _ = app_handle.emit("recording_failed", "Failed to start recording");
+                                } else {
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Recording started")
+                                        .show();
+                                    let _ = app_handle.emit("recording_started", "Recording started");
+                                }
+                            });
+                        });
+                    }
+                    "stop_recording" => {
+                        tokio::task::block_in_place(move || {
+                            Handle::current().block_on(async move {
+                                let state = app_handle.state::<SidecarState>();
+                                if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                                    error!("Failed to stop recording: {}", err);
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Failed to stop recording")
+                                        .show();
+                                    let _ = app_handle.emit("recording_failed", "Failed to stop recording");
+                                } else {
+                                    let _ = app_handle.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Recording stopped")
+                                        .show();
+                                    let _ = app_handle.emit("recording_stopped", "Recording stopped");
+                                }
+                            });
+                        });
                     }
                     "update_now" => {
                         use tauri_plugin_notification::NotificationExt;
@@ -371,6 +422,7 @@ async fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
+
             // LLM Sidecar setup
             let embedded_llm: EmbeddedLLMSettings = store
                 .get("embeddedLLM")
@@ -394,6 +446,7 @@ async fn main() {
                     }
                 });
             }
+
 
             Ok(())
         })

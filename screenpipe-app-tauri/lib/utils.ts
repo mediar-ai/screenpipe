@@ -105,24 +105,21 @@ export function parseKeyboardShortcut(shortcut: string): string {
   if (typeof window !== "undefined") {
     const os = platform();
 
-    const uniqueKeys = new Set(
-      shortcut
-        .toLowerCase()
-        .split("+")
-        .map((key) => key.trim())
-    );
+    const parts = shortcut.split('+');
+    const modifiers = parts.slice(0, -1);
+    const key = parts[parts.length - 1];
 
-    return Array.from(uniqueKeys)
-      .map((key) => {
-        if (key === "super") {
-          return os === "macos" ? "⌘" : "⊞";
-        }
-        if (key === "ctrl") return "⌃";
-        if (key === "alt") return os === "macos" ? "⌥" : "Alt";
-        if (key === "shift") return "⇧";
-        return key.charAt(0).toUpperCase() + key.slice(1);
-      })
-      .join(" + ");
+    const modifierSymbols = modifiers.map(mod => {
+      switch (mod.toLowerCase()) {
+        case 'meta': return os === "macos" ? "⌘" : "⊞";
+        case 'ctrl': return "⌃";
+        case 'alt': return os === "macos" ? "⌥" : "Alt";
+        case 'shift': return "⇧";
+        default: return mod;
+      }
+    });
+
+    return [...modifierSymbols, key].join(" + ");
   }
   return "";
 }

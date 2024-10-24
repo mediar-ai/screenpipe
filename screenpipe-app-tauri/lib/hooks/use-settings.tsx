@@ -53,6 +53,7 @@ export interface Settings {
   languages: Language[];
   enableBeta: boolean;
   showScreenpipeShortcut: string;
+  recordingShortcut: string;
   isFirstTimeUser: boolean;
 }
 
@@ -98,6 +99,7 @@ const defaultSettings: Settings = {
   },
   enableBeta: false,
   showScreenpipeShortcut: "Super+Alt+S",
+  recordingShortcut: "Ctrl+Shift+R",
   isFirstTimeUser: true,
 };
 
@@ -275,12 +277,16 @@ export function useSettings() {
         const savedShowScreenpipeShortcut =
           (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
 
+
+        const savedRecordingShortcut = (await store!.get<string>("recordingShortcut")) || "Ctrl+Shift+R";
+
         let savedIsFirstTimeUser = await store!.get<boolean>("isFirstTimeUser");
         if (savedIsFirstTimeUser === null) {
           savedIsFirstTimeUser = true;
         }
         const savedAiProviderType =
           (await store!.get<AIProviderType>("aiProviderType")) || "openai";
+
 
         setSettings({
           openaiApiKey: savedKey,
@@ -314,7 +320,11 @@ export function useSettings() {
           languages: savedLanguages,
           enableBeta: savedEnableBeta,
           showScreenpipeShortcut: savedShowScreenpipeShortcut,
+
+          recordingShortcut: savedRecordingShortcut,
+
           isFirstTimeUser: savedIsFirstTimeUser,
+
         });
       } catch (error) {
         console.error("failed to load settings:", error);
@@ -345,10 +355,8 @@ export function useSettings() {
         }
       }
       await store!.save();
-      // no need to call save() as we're using autoSave: true
     } catch (error) {
       console.error("failed to update settings:", error);
-      // revert local state if store update fails
       setSettings(settings);
     }
   };

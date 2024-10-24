@@ -4,8 +4,12 @@
 // }
 
 use serde_json::Value;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 use tracing::info;
+use tracing::{debug, error};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use std::str::FromStr;
 
 #[tauri::command]
 pub fn open_screen_capture_preferences() {
@@ -127,19 +131,40 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
     }
 }
 
+fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
+    let parts: Vec<&str> = shortcut.split('+').collect();
+    let (modifiers, key) = parts.split_at(parts.len() - 1);
+
+    let mut modifier_flags = Modifiers::empty();
+    for modifier in modifiers {
+        match modifier.to_lowercase().as_str() {
+            "ctrl" | "control" => modifier_flags |= Modifiers::CONTROL,
+            "alt" | "option" => modifier_flags |= Modifiers::ALT,
+            "shift" => modifier_flags |= Modifiers::SHIFT,
+            "super" | "meta" | "cmd" | "command" => modifier_flags |= Modifiers::META,
+            _ => return Err(format!("Invalid modifier: {}", modifier)),
+        }
+    }
+
+    let code = match Code::from_str(key[0]) {
+        Ok(code) => code,
+        Err(_) => return Err(format!("Invalid key: {}", key[0])),
+    };
+
+    Ok(Shortcut::new(Some(modifier_flags), code))
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub fn update_show_screenpipe_shortcut(
     app_handle: tauri::AppHandle<tauri::Wry>,
     new_shortcut: String,
 ) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-
     app_handle
         .global_shortcut()
         .unregister_all()
         .map_err(|e| e.to_string())?;
 
-    let show_window_shortcut = new_shortcut.parse::<Shortcut>().unwrap();
+    let show_window_shortcut = parse_shortcut(&new_shortcut)?;
 
     app_handle
         .global_shortcut()
@@ -151,5 +176,51 @@ pub fn update_show_screenpipe_shortcut(
         )
         .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn update_recording_shortcut(
+    app_handle: tauri::AppHandle,
+    new_shortcut: String,
+) -> Result<(), String> {
+    // Unregister the old shortcut
+    if let Err(e) = app_handle.global_shortcut().unregister_all() {
+        error!("Failed to unregister old shortcut: {}", e);
+    }
+
+    let recording_shortcut = parse_shortcut(&new_shortcut)?;
+
+    app_handle
+        .global_shortcut()
+        .on_shortcut(recording_shortcut, move |app_handle, _event, _shortcut| {
+            let app_handle = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<crate::SidecarState>();
+                let manager = state.0.lock().await;
+                
+                let (action, result) = match manager.as_ref().and_then(|m| m.child.as_ref()) {
+                    Some(_) => ("stop", crate::kill_all_sreenpipes(state.clone(), app_handle.clone()).await),
+                    None => ("start", crate::spawn_screenpipe(state.clone(), app_handle.clone()).await),
+                };
+
+                let (title, body, event) = match result {
+                    Ok(_) => ("Screenpipe", format!("Recording {action}ped"), format!("recording{action}ed")),
+                    Err(err) => {
+                        error!("Failed to {} recording: {}", action, err);
+                        ("Screenpipe", format!("Failed to {} recording", action), "recording_failed".to_string())
+                    }
+                };
+
+                let _ = app_handle.emit(&event, body.clone());
+                let _ = app_handle.notification().builder()
+                    .title(title)
+                    .body(body)
+                    .show();
+            });
+        })
+        .map_err(|e| e.to_string())?;
+
+    debug!("new recording shortcut registered successfully");
     Ok(())
 }
