@@ -863,6 +863,46 @@ async fn execute_raw_sql(
     }
 }
 
+// #[derive(Deserialize)]
+// #[serde(tag = "type", content = "data")]
+// pub enum AddContentRequest {
+//     Frame(FrameContent),
+//     Transcription(AudioTranscription),
+// }
+
+// #[derive(Deserialize)]
+// pub struct FrameContent {
+//     pub frame_id: i64,
+//     pub file_path: String,
+//     pub timestamp: Option<DateTime<Utc>>,
+//     pub app_name: Option<String>,
+//     pub window_name: Option<String>,
+//     pub ocr_results: Option<Vec<OCRContent>>, 
+//     pub tags: Option<Vec<String>>, =
+// }
+
+// #[derive(Deserialize)]
+// pub struct AudioTranscription {
+//     pub transcription: String,
+//     pub timestamp: Option<DateTime<Utc>>,
+//     pub file_path: String,
+//     pub tags: Option<Vec<String>>, 
+//     pub device_name: Option<String>,
+// }
+
+// #[derive(Serialize)]
+// pub struct AddContentResponse {
+//     pub success: bool,
+//     pub message: Option<String>,
+// }
+
+// pub(crate) async fn add_to_database(
+//     State(state): State<Arc<AppState>>,
+//     Json(payload): Json<AddContentRequest>,
+// ) -> Result<JsonResponse<AddContentResponse>, (StatusCode, JsonResponse<Value>)> {
+
+// }
+
 #[cfg(feature = "experimental")]
 async fn input_control_handler(
     JsonResponse(payload): JsonResponse<InputControlRequest>,
@@ -967,6 +1007,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
         .route("/raw_sql", post(execute_raw_sql));
+        // .route("/add", post(add_to_database));
 
     #[cfg(feature = "llm")]
     let router = router.route("/llm/chat", post(llm_chat_handler));

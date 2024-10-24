@@ -14,8 +14,8 @@ mod tests {
     #[tokio::test]
     async fn test_insert_and_search_ocr() {
         let db = setup_test_db().await;
-        let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame().await.unwrap();
+        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let frame_id = db.insert_frame("test_device").await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello, world!",
@@ -140,8 +140,8 @@ mod tests {
         let db = setup_test_db().await;
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame().await.unwrap();
+        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let frame_id = db.insert_frame("test_device").await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
@@ -203,8 +203,8 @@ mod tests {
         let start_time = Utc::now();
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id1 = db.insert_frame().await.unwrap();
+        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let frame_id1 = db.insert_frame("test_device").await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
@@ -238,7 +238,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame().await.unwrap();
+        let frame_id2 = db.insert_frame("test_device").await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
@@ -355,8 +355,8 @@ mod tests {
         let start_time = Utc::now();
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id1 = db.insert_frame().await.unwrap();
+        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let frame_id1 = db.insert_frame("test_device").await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
@@ -388,7 +388,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame().await.unwrap();
+        let frame_id2 = db.insert_frame("test_device").await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
