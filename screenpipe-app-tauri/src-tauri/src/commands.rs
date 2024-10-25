@@ -132,26 +132,90 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
 }
 
 fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
+    debug!("Starting to parse shortcut: {}", shortcut);
+
     let parts: Vec<&str> = shortcut.split('+').collect();
+    debug!("Split shortcut into parts: {:?}", parts);
+
+    if parts.is_empty() {
+        return Err("Empty shortcut".to_string());
+    }
+
     let (modifiers, key) = parts.split_at(parts.len() - 1);
+    debug!("Modifiers: {:?}, Key: {:?}", modifiers, key);
+
+    if key.is_empty() {
+        return Err("No key specified".to_string());
+    }
 
     let mut modifier_flags = Modifiers::empty();
     for modifier in modifiers {
+        debug!("Processing modifier: {}", modifier);
         match modifier.to_lowercase().as_str() {
-            "ctrl" | "control" => modifier_flags |= Modifiers::CONTROL,
-            "alt" | "option" => modifier_flags |= Modifiers::ALT,
-            "shift" => modifier_flags |= Modifiers::SHIFT,
-            "super" | "meta" | "cmd" | "command" => modifier_flags |= Modifiers::META,
-            _ => return Err(format!("Invalid modifier: {}", modifier)),
+            "ctrl" | "control" => {
+                debug!("Adding CONTROL modifier");
+                modifier_flags |= Modifiers::CONTROL;
+            },
+            "alt" | "option" => {
+                debug!("Adding ALT modifier");
+                modifier_flags |= Modifiers::ALT;
+            },
+            "shift" => {
+                debug!("Adding SHIFT modifier");
+                modifier_flags |= Modifiers::SHIFT;
+            },
+            "super" | "meta" | "cmd" | "command" => {
+                debug!("Adding META modifier");
+                modifier_flags |= Modifiers::META;
+            },
+            _ => {
+                let err = format!("Invalid modifier: {}", modifier);
+                error!("{}", err);
+                return Err(err);
+            }
         }
     }
 
-    let code = match Code::from_str(key[0]) {
-        Ok(code) => code,
-        Err(_) => return Err(format!("Invalid key: {}", key[0])),
+    debug!("Final modifier flags: {:?}", modifier_flags);
+
+    // Handle the key part
+    let key = key[0].trim();
+    let key_str = if key.len() == 1 && key.chars().next().unwrap().is_ascii_alphabetic() {
+        format!("Key{}", key.to_uppercase())
+    } else {
+        // Handle special keys
+        match key.to_uppercase().as_str() {
+            "SPACE" => "Space".to_string(),
+            "ENTER" | "RETURN" => "Enter".to_string(),
+            "ESC" | "ESCAPE" => "Escape".to_string(),
+            "TAB" => "Tab".to_string(),
+            "UP" => "ArrowUp".to_string(),
+            "DOWN" => "ArrowDown".to_string(),
+            "LEFT" => "ArrowLeft".to_string(),
+            "RIGHT" => "ArrowRight".to_string(),
+            k if k.starts_with("F") && k[1..].parse::<u8>().is_ok() => k.to_string(),
+            k => {
+                if k.len() == 1 && k.chars().next().unwrap().is_ascii_digit() {
+                    format!("Digit{}", k)
+                } else {
+                    k.to_string()
+                }
+            }
+        }
     };
 
-    Ok(Shortcut::new(Some(modifier_flags), code))
+    debug!("Attempting to parse key code: {}", key_str);
+    match Code::from_str(&key_str) {
+        Ok(code) => {
+            debug!("Successfully parsed key code: {:?}", code);
+            Ok(Shortcut::new(Some(modifier_flags), code))
+        }
+        Err(e) => {
+            let err = format!("Failed to parse key code '{}': {:?}", key_str, e);
+            error!("{}", err);
+            Err(err)
+        }
+    }
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -223,4 +287,93 @@ pub fn update_recording_shortcut(
 
     debug!("new recording shortcut registered successfully");
     Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn register_shortcuts(
+    show_screenpipe_shortcut: String,
+    toggle_recording_shortcut: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    debug!("Registering shortcuts - Show: {}, Record: {}", 
+           show_screenpipe_shortcut, toggle_recording_shortcut);
+
+    // Unregister existing shortcuts first
+    match app_handle.global_shortcut().unregister_all() {
+        Ok(_) => debug!("Successfully unregistered existing shortcuts"),
+        Err(e) => {
+            error!("Failed to unregister shortcuts: {}", e);
+            // Continue anyway as the error might be that no shortcuts were registered
+        }
+    }
+
+    // Parse shortcuts
+    debug!("Parsing show screenpipe shortcut");
+    let show_window_shortcut = parse_shortcut(&show_screenpipe_shortcut)?;
+    debug!("Parsing recording shortcut");
+    let recording_shortcut = parse_shortcut(&toggle_recording_shortcut)?;
+
+    let app_handle_clone = app_handle.clone();
+    debug!("Registering show screenpipe shortcut");
+    if let Err(e) = app_handle.global_shortcut().on_shortcut(
+        show_window_shortcut,
+        move |app_handle, _event, _shortcut| {
+            show_main_window(&app_handle_clone, true);
+        },
+    ) {
+        let err = format!("Failed to register show shortcut: {}", e);
+        error!("{}", err);
+        // Try to unregister all shortcuts before returning error
+        let _ = app_handle.global_shortcut().unregister_all();
+        return Err(err);
+    }
+
+    let app_handle_clone = app_handle.clone();
+    debug!("Registering recording shortcut");
+    if let Err(e) = app_handle.global_shortcut().on_shortcut(
+        recording_shortcut,
+        move |app_handle, _event, _shortcut| {
+            let app_handle = app_handle_clone.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<crate::SidecarState>();
+                let manager = state.0.lock().await;
+                
+                let (action, result) = match manager.as_ref().and_then(|m| m.child.as_ref()) {
+                    Some(_) => ("stop", crate::kill_all_sreenpipes(state.clone(), app_handle.clone()).await),
+                    None => ("start", crate::spawn_screenpipe(state.clone(), app_handle.clone()).await),
+                };
+
+                let (title, body, event) = match result {
+                    Ok(_) => ("Screenpipe", format!("Recording {action}ped"), format!("recording{action}ed")),
+                    Err(err) => {
+                        error!("Failed to {} recording: {}", action, err);
+                        ("Screenpipe", format!("Failed to {} recording", action), "recording_failed".to_string())
+                    }
+                };
+
+                let _ = app_handle.emit(&event, body.clone());
+                let _ = app_handle.notification().builder()
+                    .title(title)
+                    .body(body)
+                    .show();
+            });
+        },
+    ) {
+        let err = format!("Failed to register recording shortcut: {}", e);
+        error!("{}", err);
+        // Try to unregister all shortcuts before returning error
+        let _ = app_handle.global_shortcut().unregister_all();
+        return Err(err);
+    }
+
+    debug!("Successfully registered all shortcuts");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn unregister_all_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
+    app_handle
+        .global_shortcut()
+        .unregister_all()
+        .map_err(|e| format!("Failed to unregister shortcuts: {}", e))
 }

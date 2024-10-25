@@ -79,6 +79,13 @@ const formatActionName = (action: string): string => {
   }
 };
 
+// Add this type and function near the top of your file
+type Platform = 'macos' | 'windows' | 'linux';
+
+function isPlatform(value: string): value is Platform {
+  return ['macos', 'windows', 'linux'].includes(value);
+}
+
 // Define a type for our shortcuts
 type ShortcutAction = 'startRecording' | 'showScreenpipe' ; // Add more actions as needed
 
@@ -88,6 +95,10 @@ const ACTION_DISPLAY: Record<ShortcutAction, string> = {
   showScreenpipe: 'show screenpipe',
   // Add more mappings as needed
 };
+
+// At the top of the file, add this import
+import type { Settings as SettingsType } from "@/lib/hooks/use-settings";
+import { ShortcutDisplay } from "./shortcut-display";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
@@ -147,16 +158,52 @@ export function Settings({ className }: { className?: string }) {
     if (listeningFor) {
       e.preventDefault();
 
-      const modifiers = [];
-      if (e.metaKey) modifiers.push('Meta');
-      if (e.ctrlKey) modifiers.push('Ctrl');
-      if (e.altKey) modifiers.push('Alt');
-      if (e.shiftKey) modifiers.push('Shift');
+      // Skip if only modifier keys are pressed
+      const isModifierKey = [
+        'Alt', 'AltLeft', 'AltRight',
+        'Control', 'ControlLeft', 'ControlRight',
+        'Meta', 'MetaLeft', 'MetaRight',
+        'Shift', 'ShiftLeft', 'ShiftRight'
+      ].includes(e.code);
 
-      const key = e.code.replace('Key', '');
-      const newShortcut = [...modifiers, key].join('+');
+      if (isModifierKey) {
+        return;
+      }
 
-      setTempShortcut(newShortcut);
+      const currentPlatform = platform();
+      const isMac = currentPlatform === 'macos';
+      setCurrentPlatform(currentPlatform);
+
+      // Handle modifiers in correct order
+      const modifiers: string[] = [];
+      
+      // On Mac: Command (Meta) -> Option (Alt) -> Shift -> Control
+      if (isMac) {
+        if (e.metaKey) modifiers.push('Meta');  // Will be displayed as ⌘
+        if (e.altKey) modifiers.push('Alt');    // Will be displayed as ⌥
+        if (e.shiftKey) modifiers.push('Shift'); // Will be displayed as ⇧
+        if (e.ctrlKey) modifiers.push('Ctrl');   // Will be displayed as ⌃
+      } else {
+        // On Windows/Linux: Control -> Alt -> Shift
+        if (e.ctrlKey || e.metaKey) modifiers.push('Ctrl');
+        if (e.altKey) modifiers.push('Alt');
+        if (e.shiftKey) modifiers.push('Shift');
+      }
+
+      // Format the key code properly
+      let key = e.code;
+      if (key.startsWith('Key')) {
+        key = key.slice(3);
+      } else if (key.startsWith('Digit')) {
+        key = key.slice(5);
+      }
+      
+      if (key && modifiers.length > 0) {
+        const newShortcut = [...modifiers, key].join('+');
+        console.log('Setting new shortcut:', newShortcut);
+        setTempShortcut(newShortcut);
+        console.log('tempShortcut:', tempShortcut);
+      }
     }
   }, [listeningFor]);
 
@@ -175,32 +222,82 @@ export function Settings({ className }: { className?: string }) {
     setTempShortcut('');
   };
 
+  // Add cleanup effect
+  useEffect(() => {
+    if (!listeningFor) {
+      setTempShortcut('');
+    }
+  }, [listeningFor]);
 
-  const handleSetShortcut = (action: ShortcutAction) => {
-    if (tempShortcut) {
-      setShortcuts(prev => ({ ...prev, [action]: tempShortcut }));
+
+  const handleSetShortcut = async (action: ShortcutAction) => {
+    if (!tempShortcut) return;
+
+    try {
+      console.log(`Attempting to set ${action} shortcut to:`, tempShortcut);
+      
+      // Update local state first
+      setShortcuts(prev => {
+        console.log("Updating local shortcuts state:", { ...prev, [action]: tempShortcut });
+        return { ...prev, [action]: tempShortcut };
+      });
       
       // Update settings based on the action
+      const settingsUpdate: Partial<SettingsType> = {};
       switch(action) {
         case 'startRecording':
-          updateSettings({ recordingShortcut: tempShortcut });
+          settingsUpdate.recordingShortcut = tempShortcut;
           break;
         case 'showScreenpipe':
-          updateSettings({ showScreenpipeShortcut: tempShortcut });
+          settingsUpdate.showScreenpipeShortcut = tempShortcut;
           break;
-        // Add more cases as needed
       }
+      
+      console.log("Updating settings with:", settingsUpdate);
+      await updateSettings(settingsUpdate);
 
-      registerShortcuts({
-        showScreenpipeShortcut: action === 'showScreenpipe' ? tempShortcut : shortcuts.showScreenpipe,
-        toggleRecordingShortcut: action === 'startRecording' ? tempShortcut : shortcuts.startRecording,
+      // Register new shortcuts
+      const shortcutConfig = {
+        show_screenpipe_shortcut: action === 'showScreenpipe' ? tempShortcut : shortcuts.showScreenpipe,
+        toggle_recording_shortcut: action === 'startRecording' ? tempShortcut : shortcuts.startRecording,
+      };
+      console.log("Registering shortcuts with config:", shortcutConfig);
+      
+      await registerShortcuts(shortcutConfig).catch((error) => {
+        console.error('Failed to register shortcuts. Full error:', error);
+        setShortcuts(prev => ({ ...prev, [action]: shortcuts[action] }));
+        throw error;
       });
 
+      console.log("Successfully updated shortcut");
       toast({
         title: "shortcut updated",
-        description: `new ${ACTION_DISPLAY[action]} shortcut set to: ${parseKeyboardShortcut(tempShortcut)}`,
+        description: `new ${ACTION_DISPLAY[action]} shortcut set to: ${parseKeyboardShortcut(tempShortcut, isPlatform(currentPlatform) ? currentPlatform : undefined)}`,
       });
+    } catch (error) {
+      console.error('Failed to update shortcut. Full error:', error);
+      if (error instanceof Error) {
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+      }
+      
+      // Show more specific error message
+      let errorMessage = "Failed to update shortcut";
+      if (error instanceof Error && error.message.includes("not found")) {
+        errorMessage = "Shortcut registration is not available. Please restart the app.";
+      } else {
+        errorMessage = "The shortcut combination might be invalid or already in use";
+      }
+      
+      toast({
+        title: "failed to update shortcut",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      
+      setShortcuts(prev => ({ ...prev, [action]: shortcuts[action] }));
     }
+
     setListeningFor(null);
     setTempShortcut('');
   };
@@ -1042,7 +1139,7 @@ export function Settings({ className }: { className?: string }) {
                       {listeningFor === action ? (
                         <div className="border border-blue-300 rounded-lg text-gray-500 w-full h-[2.5rem] bg-gray-100 flex items-center justify-between px-2 overflow-hidden">
                           <span className="truncate text-sm">
-                            {tempShortcut ? parseKeyboardShortcut(tempShortcut) : 'listening...'}
+                            {tempShortcut ? parseKeyboardShortcut(tempShortcut, isPlatform(currentPlatform) ? currentPlatform : undefined) : 'listening...'}
                           </span>
                           <div className="flex items-center gap-1 ml-2">
                             {tempShortcut && (
@@ -1068,9 +1165,7 @@ export function Settings({ className }: { className?: string }) {
                           onClick={() => setListeningFor(action)}
                           className="w-full h-[2.5rem] justify-between overflow-hidden"
                         >
-                          <span className="truncate text-sm">
-                            {shortcuts[action] ? parseKeyboardShortcut(shortcuts[action]) : 'none'}
-                          </span>
+                          <ShortcutDisplay shortcut={shortcuts[action] || 'none'} />
                           <span className="ml-2 text-xs text-gray-400">edit</span>
                         </Button>
                       )}

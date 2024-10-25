@@ -1,4 +1,4 @@
-import { platform } from "@tauri-apps/plugin-os";
+import { platform, type Platform } from "@tauri-apps/plugin-os";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { ContentItem } from "./screenpipe";
@@ -101,25 +101,25 @@ export const removeDuplicateSelections = (
   return newSelectedResults;
 };
 
-export function parseKeyboardShortcut(shortcut: string): string {
-  if (typeof window !== "undefined") {
-    const os = platform();
+export function parseKeyboardShortcut(shortcut: string, platformOverride?: Platform): string {
+  if (!shortcut || shortcut === 'none') return 'none';
 
-    const parts = shortcut.split('+');
-    const modifiers = parts.slice(0, -1);
-    const key = parts[parts.length - 1];
+  const parts = shortcut.split('+');
+  const modifiers = parts.slice(0, -1);
+  const key = parts[parts.length - 1];
+  const isMac = platformOverride === 'macos';
 
-    const modifierSymbols = modifiers.map(mod => {
+  const modifierSymbols = modifiers.map(mod => {
       switch (mod.toLowerCase()) {
-        case 'meta': return os === "macos" ? "⌘" : "⊞";
+        case 'meta': return isMac ? "⌘" : "⊞";
         case 'ctrl': return "⌃";
-        case 'alt': return os === "macos" ? "⌥" : "Alt";
+        case 'alt': return isMac ? "⌥" : "Alt";
         case 'shift': return "⇧";
         default: return mod;
       }
     });
 
-    return [...modifierSymbols, key].join(" + ");
-  }
-  return "";
+  return [...modifierSymbols, key].join(" + ");
 }
+
+

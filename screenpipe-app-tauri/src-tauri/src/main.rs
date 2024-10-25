@@ -117,7 +117,9 @@ async fn main() {
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
-            commands::update_recording_shortcut, // Add this line
+            commands::update_recording_shortcut,
+            commands::register_shortcuts,
+            commands::unregister_all_shortcuts,  
         ])
         .setup(|app| {
             // Logging setup
@@ -488,3 +490,4 @@ async fn main() {
         _ => {}
     });
 }
+

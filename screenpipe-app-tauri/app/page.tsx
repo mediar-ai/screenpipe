@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import NotificationHandler from "@/components/notification-handler";
 import ScreenpipeInstanceChecker from "@/components/screenpipe-instance-checker";
 import Header from "@/components/header";
@@ -26,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { registerShortcuts } from "@/lib/shortcuts";
+import { debounce } from 'lodash';
 
 export default function Home() {
   const { settings } = useSettings();
@@ -33,12 +34,33 @@ export default function Home() {
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
 
+  // Create a debounced version of registerShortcuts
+  const debouncedRegisterShortcuts = useCallback(
+    debounce(async (config) => {
+      try {
+        await registerShortcuts(config);
+      } catch (error) {
+        console.error('Failed to register shortcuts:', error);
+      }
+    }, 1000),
+    []
+  );
+
   useEffect(() => {
-    registerShortcuts({
-      showScreenpipeShortcut: settings.showScreenpipeShortcut,
-      toggleRecordingShortcut: settings.recordingShortcut,
-    });
-  }, [settings.showScreenpipeShortcut, settings.recordingShortcut]);
+    if (!settings.isLoading) {
+      const config = {
+        show_screenpipe_shortcut: settings.showScreenpipeShortcut,
+        toggle_recording_shortcut: settings.recordingShortcut,
+      };
+      
+      debouncedRegisterShortcuts(config);
+
+      // Cleanup function
+      return () => {
+        debouncedRegisterShortcuts.cancel();
+      };
+    }
+  }, [settings.showScreenpipeShortcut, settings.recordingShortcut, settings.isLoading, debouncedRegisterShortcuts]);
 
   useEffect(() => {
     if (settings.userId) {
