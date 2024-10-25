@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729872865933,
+  "lastUpdate": 1729873159547,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19649,6 +19649,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1932454437,
             "range": "± 65210728",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "cf2b374a65252734f840fc6430e8221d6c5a4bda",
+          "message": "chore: add check for shortuts to avoid crashing app and fallback to defualt",
+          "timestamp": "2024-10-25T09:09:28-07:00",
+          "tree_id": "880cee1b67ea14a4def7a4f920b9f51aac48de07",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/cf2b374a65252734f840fc6430e8221d6c5a4bda"
+        },
+        "date": 1729873157835,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 3797799958,
+            "range": "± 884692319",
             "unit": "ns/iter"
           }
         ]
