@@ -171,7 +171,7 @@ pub async fn record_and_transcribe(
     println!("successfully subscribed to audio stream");
 
     // Add timeout to prevent infinite waiting
-    let timeout = Duration::from_secs(10);
+    let timeout = Duration::from_secs(1000);
 
     loop {
         println!("waiting for audio segment");
@@ -179,7 +179,8 @@ pub async fn record_and_transcribe(
             Ok(Ok(segment)) => {
                 println!("received audio segment, length: {}", segment.frames.len());
                 let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-                let sanitized_device_name = audio_stream.device.to_string().replace(['/', '\\'], "_");
+                let sanitized_device_name =
+                    audio_stream.device.to_string().replace(['/', '\\'], "_");
                 let file_path =
                     data_dir.join(format!("{}_{}.mp4", sanitized_device_name, new_file_name));
                 let file_path_clone = Arc::new(file_path);
@@ -524,7 +525,7 @@ impl AudioStream {
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
 
         let samples: Vec<f32> = decoder.map(|x: i16| x as f32 / i16::MAX as f32).collect();
-        info!("loaded {} samples from wav file", samples.len());
+        println!("loaded {} samples from wav file", samples.len());
 
         let device = Arc::new(AudioDevice::new(
             "test_device".to_string(),
@@ -540,15 +541,16 @@ impl AudioStream {
         );
 
         let chunk_size = (sample_rate as f32 * 3.0) as usize; // 3 seconds chunks
-        info!("chunk size: {}", chunk_size);
+        println!("chunk size: {}", chunk_size);
 
         let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn({
+            thread::sleep(Duration::from_secs(3));
             let tx = tx.clone();
             move || {
-                info!("starting test audio stream thread");
+                // println!("starting test audio stream thread");
 
                 for chunk in samples.chunks(chunk_size) {
-                    info!("processing chunk of {} samples", chunk.len());
+                    // println!("processing chunk of {} samples", chunk.len());
 
                     let mut vad = vad_engine.lock().unwrap();
                     if let Ok(Some(speech_frames)) = audio_frames_to_speech_frames(
@@ -557,28 +559,28 @@ impl AudioStream {
                         sample_rate,
                         &mut *vad,
                     ) {
-                        info!("sending {} speech frames", speech_frames.len());
+                        println!("sending {} speech frames", speech_frames.len());
                         let speech_segment = AudioSegment {
                             frames: Arc::new(chunk.to_vec()),
                             speech_frames: Arc::new(speech_frames),
                         };
 
                         match tx.send(speech_segment) {
-                            Ok(n) => info!("successfully sent audio segment to {} receivers", n),
-                            Err(e) => error!("failed to send audio segment: {}", e),
+                            Ok(n) => println!("successfully sent audio segment to {} receivers", n),
+                            Err(e) => println!("failed to send audio segment: {}", e),
                         }
                     }
 
                     thread::sleep(Duration::from_millis(100));
 
                     if let Ok(StreamControl::Stop(response)) = stream_control_rx.try_recv() {
-                        info!("received stop signal, ending processing");
+                        println!("received stop signal, ending processing");
                         response.send(()).ok();
                         return;
                     }
                 }
 
-                info!("finished processing all chunks");
+                println!("finished processing all chunks");
             }
         }))));
 
@@ -606,9 +608,23 @@ pub mod tests {
         sync::{Arc, Mutex},
     };
     use strsim::levenshtein;
+    use tracing::{info, Level};
+    use tracing_subscriber::{fmt, EnvFilter};
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_transcription_accuracy_direct() {
+        // init tracing logs thing
+        // fmt()
+        //     .with_env_filter(
+        //         EnvFilter::builder()
+        //             .with_default_directive(Level::DEBUG.into())
+        //             .parse_lossy("screenpipe_audio=debug"),
+        //     )
+        //     .with_target(false) // Removes the target from logs
+        //     .with_thread_ids(true) // Adds thread IDs to logs
+        //     .with_file(true) // Adds file name to logs
+        //     .with_line_number(true) // Adds line numbers to logs
+        //     .init();
         println!("starting transcription accuracy test");
 
         // Setup test cases
@@ -686,13 +702,18 @@ pub mod tests {
             );
             println!("audio stream created successfully");
 
-            println!("starting recording and transcription");
             let whisper_sender_clone = whisper_sender.clone();
             let handle = tokio::spawn(async move {
-                record_and_transcribe(audio_stream.clone(), whisper_sender_clone, data_dir)
+                println!("abcd");
+                match record_and_transcribe(audio_stream.clone(), whisper_sender_clone, data_dir)
                     .await
-                    .unwrap();
+                {
+                    Ok(_) => println!("record_and_transcribe completed successfully"),
+                    Err(e) => println!("record_and_transcribe error: {}", e),
+                }
             });
+
+            tokio::time::sleep(Duration::from_secs(3)).await;
 
             let mut full_transcription = String::new();
             println!("collecting transcriptions from broadcast channel");
@@ -701,106 +722,95 @@ pub mod tests {
             let mut buffer_frames: HashMap<String, (Vec<String>, Vec<f32>)> = HashMap::new();
 
             loop {
-                crossbeam::select! {
-                    recv(whisper_receiver) -> result => {
-                        match result {
-                            Ok(mut transcription) => {
-                                info!(
-                                    "device {} received transcription {:?}",
-                                    transcription.input.device, transcription.transcription
-                                );
+                while let Ok(mut transcription) = whisper_receiver.recv() {
+                    println!(
+                        "device {} received transcription {:?}",
+                        transcription.input.device, transcription.transcription
+                    );
 
-                                // Get device-specific previous transcript
-                                let device_id = transcription.input.device.to_string();
-                                let (previous_transcript, _) = device_transcripts
-                                    .entry(device_id.clone())
-                                    .or_insert((String::new(), None));
+                    // Get device-specific previous transcript
+                    let device_id = transcription.input.device.to_string();
+                    let (previous_transcript, _) = device_transcripts
+                        .entry(device_id.clone())
+                        .or_insert((String::new(), None));
 
-                                // Process with device-specific state
-                                let mut current_transcript: Option<String> =
-                                    transcription.transcription.clone();
-                                if let Some((_, current)) =
-                                    transcription.cleanup_overlap(previous_transcript.clone())
-                                {
-                                    current_transcript = Some(current);
-                                }
+                    // Process with device-specific state
+                    let mut current_transcript: Option<String> =
+                        transcription.transcription.clone();
+                    if let Some((_, current)) =
+                        transcription.cleanup_overlap(previous_transcript.clone())
+                    {
+                        current_transcript = Some(current);
+                    }
 
-                                transcription.transcription = current_transcript.clone();
-                                *previous_transcript = current_transcript.unwrap_or_default();
-                                // buffer frames & transcript unless we have reached the chunk duration
-                                let frames = buffer_frames
-                                    .entry(device_id.clone())
-                                    .or_insert((Vec::new(), Vec::new()));
+                    transcription.transcription = current_transcript.clone();
+                    *previous_transcript = current_transcript.unwrap_or_default();
+                    // buffer frames & transcript unless we have reached the chunk duration
+                    let frames = buffer_frames
+                        .entry(device_id.clone())
+                        .or_insert((Vec::new(), Vec::new()));
 
-                                // Buffer both transcription and frames
-                                if let Some(transcript) = transcription.transcription {
-                                    frames.0.push(transcript);
-                                }
-                                frames.1.extend(
-                                    transcription
-                                        .input
-                                        .data
-                                        .iter()
-                                        .flat_map(|segment| segment.frames.iter())
-                                        .copied(), // Add .copied() to get owned f32 values
-                                );
+                    // Buffer both transcription and frames
+                    if let Some(transcript) = transcription.transcription {
+                        frames.0.push(transcript);
+                    }
+                    frames.1.extend(
+                        transcription
+                            .input
+                            .data
+                            .iter()
+                            .flat_map(|segment| segment.frames.iter())
+                            .copied(), // Add .copied() to get owned f32 values
+                    );
 
-                                // Check if we've reached the chunk duration
-                                let total_frames = frames.1.len();
-                                let frames_per_chunk = (Duration::from_secs(3).as_secs_f32()
-                                    * transcription.input.sample_rate as f32)
-                                    as usize;
+                    // Check if we've reached the chunk duration
+                    let total_frames = frames.1.len();
+                    let frames_per_chunk = (Duration::from_secs(3).as_secs_f32()
+                        * transcription.input.sample_rate as f32)
+                        as usize;
 
-                                if total_frames < frames_per_chunk {
-                                    info!(
-                                        "buffering frames until encoding & saving to db: {}/{}",
-                                        total_frames, frames_per_chunk
-                                    );
-                                    continue; // Wait for more frames
-                                }
+                    if total_frames < frames_per_chunk {
+                        println!(
+                            "buffering frames until encoding & saving to db: {}/{}",
+                            total_frames, frames_per_chunk
+                        );
+                        continue; // Wait for more frames
+                    }
 
-                                // We have enough frames, process them but keep remainder
-                                let (mut buffered_transcripts, mut frames_to_process) = buffer_frames
-                                    .get_mut(&device_id)
-                                    .map(|f| (std::mem::take(&mut f.0), std::mem::take(&mut f.1)))
-                                    .unwrap_or_default();
+                    // We have enough frames, process them but keep remainder
+                    let (mut buffered_transcripts, mut frames_to_process) = buffer_frames
+                        .get_mut(&device_id)
+                        .map(|f| (std::mem::take(&mut f.0), std::mem::take(&mut f.1)))
+                        .unwrap_or_default();
 
-                                // Split frames at chunk boundary
-                                let remainder_frames = frames_to_process.split_off(frames_per_chunk);
+                    // Split frames at chunk boundary
+                    let remainder_frames = frames_to_process.split_off(frames_per_chunk);
 
-                                // Keep the last transcript if there are remaining frames
-                                let remainder_transcript = if !remainder_frames.is_empty() {
-                                    buffered_transcripts.pop()
-                                } else {
-                                    None
-                                };
+                    // Keep the last transcript if there are remaining frames
+                    let remainder_transcript = if !remainder_frames.is_empty() {
+                        buffered_transcripts.pop()
+                    } else {
+                        None
+                    };
 
-                                // Put remainder back in buffer
-                                if !remainder_frames.is_empty() || remainder_transcript.is_some() {
-                                    if let Some(buffer) = buffer_frames.get_mut(&device_id) {
-                                        if let Some(transcript) = remainder_transcript {
-                                            buffer.0.push(transcript);
-                                        }
-                                        buffer.1 = remainder_frames;
-                                    }
-                                }
-
-                                // Join transcripts with spaces
-                                let combined_transcript = buffered_transcripts.join(" ");
-                                full_transcription = combined_transcript;
+                    // Put remainder back in buffer
+                    if !remainder_frames.is_empty() || remainder_transcript.is_some() {
+                        if let Some(buffer) = buffer_frames.get_mut(&device_id) {
+                            if let Some(transcript) = remainder_transcript {
+                                buffer.0.push(transcript);
                             }
-                            Err(e) => {
-                                error!("error receiving transcription: {}", e);
-                                break;
-                            }
+                            buffer.1 = remainder_frames;
                         }
                     }
-                    default(Duration::from_millis(100)) => {
-                        // Check exit condition
-                        if full_transcription.split_whitespace().count() >= 10 {
-                            break;
-                        }
-                    }
+
+                    // Join transcripts with spaces
+                    let combined_transcript = buffered_transcripts.join(" ");
+                    full_transcription = combined_transcript;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                if full_transcription.split_whitespace().count() >= 10 {
+                    println!("full transcription: {}", full_transcription);
+                    break;
                 }
             }
             let distance = levenshtein(expected_transcription, &full_transcription);
