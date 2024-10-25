@@ -1,0 +1,10 @@
+{
+    "imports": {
+        "fs": "node:fs",
+        "screenpipe": "https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-js/main.ts",
+        "ai": "npm:ai",
+        "ollama-ai-provider": "npm:ollama-ai-provider",
+        "zod": "npm:zod",
+        "twitter-api-v2": "npm:twitter-api-v2"
+    }
+}

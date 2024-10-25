@@ -15,23 +15,14 @@ const platform = {
 }[os.platform()]
 const cwd = process.cwd()
 console.log('cwd', cwd)
-function hasFeature(name) {
-	return process.argv.includes(`--${name}`) || process.argv.includes(name)
-}
+
 
 const config = {
 	ffmpegRealname: 'ffmpeg',
-	openblasRealname: 'openblas',
-	clblastRealname: 'clblast',
 	windows: {
 		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
 		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 
-		openBlasName: 'OpenBLAS-0.3.26-x64',
-		openBlasUrl: 'https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.26/OpenBLAS-0.3.26-x64.zip',
-
-		clblastName: 'CLBlast-1.6.2-windows-x64',
-		clblastUrl: 'https://github.com/CNugteren/CLBlast/releases/download/1.6.2/CLBlast-1.6.2-windows-x64.zip',
 
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu', 'onnxruntime-gpu:arm64-windows'],
 	},
@@ -40,7 +31,6 @@ const config = {
 			'tesseract-ocr',
 			'libtesseract-dev',
 			'ffmpeg',
-			'libopenblas-dev', // Runtime
 			'pkg-config',
 			'build-essential',
 			'libglib2.0-dev',
@@ -53,8 +43,7 @@ const config = {
 			'libavfilter-dev',
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
-			'libomp-dev', // OpenMP in ggml.ai
-			'libstdc++-12-dev', //ROCm
+			'libxdo-dev',
 		],
 	},
 	macos: {
@@ -89,8 +78,6 @@ async function findWget() {
 // Export for Github actions
 const exports = {
 	ffmpeg: path.join(cwd, config.ffmpegRealname),
-	openBlas: path.join(cwd, config.openblasRealname),
-	clblast: path.join(cwd, config.clblastRealname, 'lib/cmake/CLBlast'),
 	libClang: 'C:\\Program Files\\LLVM\\bin',
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
@@ -235,19 +222,18 @@ async function copyFile(src, dest) {
 if (platform == 'linux') {
 	// Install APT packages
 	try {
-		await $`sudo apt-get update`
-		if (hasFeature('opencl')) {
-			config.linux.aptPackages.push('libclblast-dev')
-		}
+		await $`sudo apt-get update`;
+
 		for (const name of config.linux.aptPackages) {
-			await $`sudo apt-get install -y ${name}`
+			await $`sudo apt-get install -y ${name}`;
 		}
 	} catch (error) {
-		console.error("Error installing apps via apt, %s", error.message);
+		console.error("error installing apps via apt, %s", error.message);
 	}
 
+
 	// Copy screenpipe binary
-	console.log('Copying screenpipe binary for Linux...');
+	console.log('copying screenpipe binary for linux...');
 	const potentialPaths = [
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
@@ -279,8 +265,6 @@ if (platform == 'linux') {
 		// uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
 	}
-
-
 }
 
 /* ########## Windows ########## */
@@ -320,7 +304,6 @@ if (platform == 'windows') {
 		// process.exit(1);
 	}
 
-
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`${wgetPath} --no-config --tries=10 --retry-connrefused --waitretry=10 --secure-protocol=auto --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
@@ -329,28 +312,6 @@ if (platform == 'windows') {
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
 	}
-
-	// Setup Tesseract
-	const tesseractName = 'tesseract-setup'
-	const tesseractUrl = 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe'
-	const tesseractInstaller = `${tesseractName}.exe`
-
-	if (!(await fs.exists('tesseract'))) {
-		console.log('Setting up Tesseract for Windows...')
-		await $`${wgetPath} --no-config -nc --no-check-certificate --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
-		await $`"${process.cwd()}\\${tesseractInstaller}" /S /D=C:\\Program Files\\Tesseract-OCR`
-		await $`rm ${tesseractInstaller}`
-		// Replace the mv command with xcopy
-		await $`xcopy "C:\\Program Files\\Tesseract-OCR" tesseract /E /I /H /Y`
-		// Optionally, remove the original directory if needed
-		// await $`rmdir "C:\\Program Files\\Tesseract-OCR" /S /Q`
-		console.log('Tesseract for Windows set up successfully.')
-	} else {
-		console.log('Tesseract for Windows already exists.')
-	}
-
-	// Add Tesseract to PATH
-	process.env.PATH = `${process.cwd()}\\tesseract;${process.env.PATH}`
 
 	// Setup ONNX Runtime
 	let onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
@@ -381,25 +342,7 @@ if (platform == 'windows') {
 		}
 	}
 
-	// Setup OpenBlas
-	if (!(await fs.exists(config.openblasRealname)) && hasFeature('openblas')) {
-		await $`${wgetPath} --no-config -nc --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.openBlasName}.zip -o${config.openblasRealname}`
-		await $`rm ${config.windows.openBlasName}.zip`
-		fs.cp(path.join(config.openblasRealname, 'include'), path.join(config.openblasRealname, 'lib'), { recursive: true, force: true })
-		// It tries to link only openblas.lib but our is libopenblas.lib`
-		fs.cp(path.join(config.openblasRealname, 'lib/libopenblas.lib'), path.join(config.openblasRealname, 'lib/openblas.lib'))
-	}
 
-	// Setup CLBlast
-	if (!(await fs.exists(config.clblastRealname)) && !hasFeature('cuda')) {
-		await $`${wgetPath} --no-config -nc --show-progress ${config.windows.clblastUrl} -O ${config.windows.clblastName}.zip`
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.zip` // 7z file inside
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.7z` // Inner folder
-		await $`mv ${config.windows.clblastName} ${config.clblastRealname}`
-		await $`rm ${config.windows.clblastName}.zip`
-		await $`rm ${config.windows.clblastName}.7z`
-	}
 
 	// Setup vcpkg packages with environment variables set inline
 	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages} --allow-unsupported`.quiet()
@@ -527,88 +470,7 @@ if (platform == 'macos') {
 
 }
 
-// Nvidia
-let cudaPath
-if (hasFeature('cuda')) {
-	if (process.env['CUDA_PATH']) {
-		cudaPath = process.env['CUDA_PATH']
-	} else if (platform === 'windows') {
-		const cudaRoot = 'C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\'
-		cudaPath = 'C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5'
-		if (await fs.exists(cudaRoot)) {
-			const folders = await fs.readdir(cudaRoot)
-			if (folders.length > 0) {
-				cudaPath = cudaPath.replace('v12.5', folders[0])
-			}
-		}
-	}
 
-	if (process.env.GITHUB_ENV) {
-		console.log('CUDA_PATH', cudaPath)
-	}
-
-	if (platform === 'windows') {
-		const windowsConfig = {
-			bundle: {
-				resources: {
-					'ffmpeg\\bin\\x64\\*': './',
-					'openblas\\bin\\*.dll': './',
-					[`${cudaPath}\\bin\\cudart64_*`]: './',
-					[`${cudaPath}\\bin\\cublas64_*`]: './',
-					[`${cudaPath}\\bin\\cublasLt64_*`]: './',
-					'tesseract\\*': './',
-					'onnxruntime*\\lib\\*.dll': './',
-				},
-				externalBin: [
-					'screenpipe'
-				]
-			},
-		}
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(windowsConfig, null, 4))
-	}
-	if (platform === 'linux') {
-		// Add cuda toolkit depends package
-		const tauriConfigContent = await fs.readFile('tauri.linux.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.linux.deb.depends.push('nvidia-cuda-toolkit')
-		await fs.writeFile('tauri.linux.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-if (hasFeature('opencl')) {
-	if (platform === 'windows') {
-		const tauriConfigContent = await fs.readFile('tauri.windows.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.resources['clblast\\bin\\*.dll'] = './'
-		tauriConfig.bundle.resources['C:\\vcpkg\\packages\\opencl_x64-windows\\bin\\*.dll'] = './'
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-// OpenBlas
-if (hasFeature('openblas')) {
-	if (platform === 'windows') {
-		const tauriConfigContent = await fs.readFile('tauri.windows.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.resources['openblas\\bin\\*.dll'] = './'
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-// ROCM
-let rocmPath = '/opt/rocm'
-if (hasFeature('rocm')) {
-	if (process.env.GITHUB_ENV) {
-		console.log('ROCM_PATH', rocmPath)
-	}
-	if (platform === 'linux') {
-		// Add rocm toolkit depends package
-		const tauriConfigContent = await fs.readFile('tauri.linux.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.linux.deb.depends.push('rocm')
-		await fs.writeFile('tauri.linux.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
 
 // Development hints
 if (!process.env.GITHUB_ENV) {
@@ -624,22 +486,6 @@ if (!process.env.GITHUB_ENV) {
 		console.log(`$env:OPENBLAS_PATH = "${exports.openBlas}"`)
 		console.log(`$env:LIBCLANG_PATH = "${exports.libClang}"`)
 		console.log(`$env:PATH += "${exports.cmake}"`)
-		if (hasFeature('older-cpu')) {
-			console.log(`$env:WHISPER_NO_AVX = "ON"`)
-			console.log(`$env:WHISPER_NO_AVX2 = "ON"`)
-			console.log(`$env:WHISPER_NO_FMA = "ON"`)
-			console.log(`$env:WHISPER_NO_F16C = "ON"`)
-		}
-		if (hasFeature('cuda')) {
-			console.log(`$env:CUDA_PATH = "${cudaPath}"`)
-		}
-		if (hasFeature('opencl')) {
-			console.log(`$env:CLBlast_DIR = "${exports.clblast}"`)
-		}
-		if (hasFeature('rocm')) {
-			console.log(`$env:ROCM_VERSION = "6.1.2"`)
-			console.log(`$env:ROCM_PATH = "${rocmPath}"`)
-		}
 	}
 	if (!process.env.GITHUB_ENV) {
 		console.log('bun tauri build')
@@ -662,20 +508,13 @@ if (process.env.GITHUB_ENV) {
 		const openblas = `OPENBLAS_PATH=${exports.openBlas}\n`
 		console.log('Adding ENV', openblas)
 		await fs.appendFile(process.env.GITHUB_ENV, openblas)
-
-		if (hasFeature('opencl')) {
-			const clblast = `CLBlast_DIR=${exports.clblast}\n`
-			console.log('Adding ENV', clblast)
-			await fs.appendFile(process.env.GITHUB_ENV, clblast)
-		}
-
 	}
 }
 
 // Modify the installOllamaSidecar function
 async function installOllamaSidecar() {
 	const ollamaDir = path.join(__dirname, '..', 'src-tauri');
-	const ollamaVersion = 'v0.3.13';
+	const ollamaVersion = 'v0.3.14';
 
 	let ollamaExe, ollamaUrl;
 
@@ -700,27 +539,23 @@ async function installOllamaSidecar() {
 	}
 
 	try {
-
-		// ! windows and linux not supported for now 
-
-		
 		await fs.mkdir(ollamaDir, { recursive: true });
 		const downloadPath = path.join(ollamaDir, path.basename(ollamaUrl));
 
 		console.log('Downloading Ollama...');
 		if (platform === 'windows') {
-			// await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
+			await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
 		} else {
 			await $`wget --no-config -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
 		}
 
 		console.log('Extracting Ollama...');
 		if (platform === 'windows') {
-			// await $`powershell -command "Expand-Archive -Path '${downloadPath}' -DestinationPath '${ollamaDir}'"`;
-			// await fs.rename(path.join(ollamaDir, 'ollama.exe'), path.join(ollamaDir, ollamaExe));
+			await $`powershell -command "Expand-Archive -Path '${downloadPath}' -DestinationPath '${ollamaDir}'"`;
+			await fs.rename(path.join(ollamaDir, 'ollama.exe'), path.join(ollamaDir, ollamaExe));
 		} else if (platform === 'linux') {
-			// await $`tar -xzf "${downloadPath}" -C "${ollamaDir}"`;
-			// await fs.rename(path.join(ollamaDir, 'ollama'), path.join(ollamaDir, ollamaExe));
+			await $`tar -xzf "${downloadPath}" -C "${ollamaDir}"`;
+			await fs.rename(path.join(ollamaDir, 'bin/ollama'), path.join(ollamaDir, ollamaExe));
 		} else if (platform === 'macos') {
 			// just copy to both archs
 			await fs.copyFile(downloadPath, path.join(ollamaDir, "ollama-aarch64-apple-darwin"));
@@ -729,7 +564,7 @@ async function installOllamaSidecar() {
 
 		console.log('Setting permissions...');
 		if (platform === 'linux') {
-			// await fs.chmod(path.join(ollamaDir, ollamaExe), '755');
+			await fs.chmod(path.join(ollamaDir, ollamaExe), '755');
 		} else if (platform === 'macos') {
 			await fs.chmod(path.join(ollamaDir, "ollama-aarch64-apple-darwin"), '755');
 			await fs.chmod(path.join(ollamaDir, "ollama-x86_64-apple-darwin"), '755');
@@ -738,6 +573,35 @@ async function installOllamaSidecar() {
 		console.log('Cleaning up...');
 		if (platform !== 'macos') {
 			await fs.unlink(downloadPath);
+		}
+
+		if (platform === 'windows') {
+			// Remove older library versions to save storage
+			const libDir = path.join(ollamaDir, 'lib', 'ollama');
+			const oldLibs = [
+				'cublas64_11.dll',
+				'cublasLt64_11.dll',
+				'cudart64_110.dll',
+				'ggml_cuda_v11.dll',
+				'rocblas',
+				'rocblas.dll',
+				'ggml_rocm.dll'
+			];
+
+			for (const lib of oldLibs) {
+				try {
+					const libPath = path.join(libDir, lib);
+					const stat = await fs.stat(libPath);
+					if (stat.isDirectory()) {
+						await fs.rm(libPath, { recursive: true, force: true });
+					} else {
+						await fs.unlink(libPath);
+					}
+					console.log(`removed old library: ${lib}`);
+				} catch (error) {
+					console.warn(`failed to remove ${lib}:`, error.message);
+				}
+			}
 		}
 
 		console.log('ollama sidecar installed successfully');

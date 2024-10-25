@@ -14,17 +14,24 @@ import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 
-export const LogFileButton = ({ className }: { className?: string }) => {
+export const LogFileButton = ({
+  className,
+  isAppLog = false,
+}: {
+  className?: string;
+  isAppLog?: boolean;
+}) => {
   const { toast } = useToast();
   const { copyToClipboard } = useCopyToClipboard({ timeout: 3000 });
 
   const getLogFilePath = async () => {
     const homeDirPath = await homeDir();
+    const logFileName = isAppLog ? "screenpipe-app" : "screenpipe";
     return platform() === "windows"
-      ? `${homeDirPath}\\.screenpipe\\screenpipe.${
+      ? `${homeDirPath}\\.screenpipe\\${logFileName}.${
           new Date().toISOString().split("T")[0]
         }.log`
-      : `${homeDirPath}/.screenpipe/screenpipe.${
+      : `${homeDirPath}/.screenpipe/${logFileName}.${
           new Date().toISOString().split("T")[0]
         }.log`;
   };
@@ -32,6 +39,7 @@ export const LogFileButton = ({ className }: { className?: string }) => {
   const handleOpenLogFile = async () => {
     try {
       const logPath = await getLogFilePath();
+      console.log("opening log file:", logPath);
       await open(logPath);
     } catch (error) {
       console.error("failed to open log file:", error);
@@ -80,7 +88,7 @@ export const LogFileButton = ({ className }: { className?: string }) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>open log file</p>
+            <p>open {isAppLog ? "app " : ""}log file</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

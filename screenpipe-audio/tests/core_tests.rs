@@ -6,7 +6,8 @@ mod tests {
     use screenpipe_audio::vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
     use screenpipe_audio::whisper::WhisperModel;
     use screenpipe_audio::{
-        default_output_device, list_audio_devices, pcm_decode, AudioInput, AudioTranscriptionEngine,
+        default_output_device, list_audio_devices, pcm_decode, AudioInput, AudioStream,
+        AudioTranscriptionEngine,
     };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
     use screenpipe_core::Language;
@@ -55,11 +56,17 @@ mod tests {
         let output_path = PathBuf::from(format!("test_output_{}.mp4", time));
         let (sender, receiver) = crossbeam::channel::bounded(100);
         let is_running = Arc::new(AtomicBool::new(true));
+        let is_running_clone = Arc::clone(&is_running);
+
+        let audio_stream = AudioStream::from_device(device_spec, is_running_clone)
+            .await
+            .unwrap();
 
         // Act
         let start_time = Instant::now();
         println!("Starting record_and_transcribe");
-        let result = record_and_transcribe(device_spec, duration, sender, is_running).await;
+        let result =
+            record_and_transcribe(Arc::new(audio_stream), duration, sender, is_running).await;
         println!("record_and_transcribe completed");
         let elapsed_time = start_time.elapsed();
 
@@ -106,6 +113,10 @@ mod tests {
         let is_running = Arc::new(AtomicBool::new(true));
         let is_running_clone = Arc::clone(&is_running);
 
+        let audio_stream = AudioStream::from_device(device_spec, is_running_clone.clone())
+            .await
+            .unwrap();
+
         // interrupt in 10 seconds
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(10)).await;
@@ -115,7 +126,7 @@ mod tests {
         // Act
         let start_time = Instant::now();
 
-        record_and_transcribe(device_spec, duration, sender, is_running)
+        record_and_transcribe(Arc::new(audio_stream), duration, sender, is_running)
             .await
             .unwrap();
 
@@ -211,8 +222,12 @@ mod tests {
         let recording_thread = tokio::spawn(async move {
             let device_spec = Arc::clone(&device_spec);
             let whisper_sender = whisper_sender.clone();
+            let audio_stream = AudioStream::from_device(device_spec, is_running.clone())
+                .await
+                .unwrap();
+
             record_and_transcribe(
-                device_spec,
+                Arc::new(audio_stream),
                 Duration::from_secs(15),
                 whisper_sender,
                 is_running,

@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: create draft release
-        uses: crabnebula-dev/cloud-release@v0
+        uses: crabnebula-dev/cloud-release@v0.2.0
         with:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
@@ -102,8 +102,15 @@ jobs:
 
       - uses: actions/cache@v3
         with:
-          path: "**/node_modules"
-          key: ${{ runner.os }}-modules-${{ hashFiles('**/bun.lockb') }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/${{ matrix.target }}/release/deps
+            target/${{ matrix.target }}/release/build
+          key: ${{ matrix.platform }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}-v1
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-v1-
 
       - name: Cache Homebrew packages
         if: matrix.platform == 'macos-latest'
@@ -128,20 +135,8 @@ jobs:
             screenpipe-app-tauri/src-tauri/tesseract-*
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build
 
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
@@ -170,7 +165,7 @@ jobs:
       #   uses: mxschmitt/action-tmate@v3
 
       - name: Install wget on Linux
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: sudo apt-get install -y wget
 
       - name: Run pre_build.js
@@ -181,23 +176,13 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
-      - name: Verify Tesseract Installation
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          $env:PATH += ";${{ github.workspace }}\screenpipe-app-tauri\src-tauri\tesseract"
-          tesseract --version
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Tesseract is not properly installed or not in PATH"
-            exit 1
-          }
-
       - name: Build CLI
         shell: bash
-        env:
-          CARGO_PROFILE_RELEASE_LTO: "true"
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+        # TODO: too slow
+        # env:
+        #   CARGO_PROFILE_RELEASE_LTO: "true"
+        #   CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
+        #   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -230,20 +215,29 @@ jobs:
         working-directory: ./screenpipe-app-tauri
 
       - name: Install vcpkg
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
+
+      - name: Free Disk Space (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo swapoff -a
+          sudo rm -f /swapfile
+          sudo apt clean
+          docker rmi $(docker image ls -aq)
+          df -h
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
@@ -262,17 +256,19 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
-          # optimize for release
-          CARGO_PROFILE_RELEASE_LTO: true
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: z
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+          # Optimize for build speed on Windows
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.platform == 'windows-latest' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.platform == 'windows-latest' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.platform == 'windows-latest' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
+          # Enable incremental compilation for Windows
+          CARGO_INCREMENTAL: ${{ matrix.platform == 'windows-latest' && '1' || '0' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0
+        uses: crabnebula-dev/cloud-release@v0.2.0
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}

@@ -35,11 +35,11 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
       >
         {message.role === "user" ? (
           <IconUser />
-        ) : !settings.aiUrl.includes("openai") ||
-          !settings.aiUrl.includes("worker") ? (
-          <>🦙</>
-        ) : (
+        ) : settings.aiUrl.includes("openai") ||
+          settings.aiUrl.includes("worker") ? (
           <IconOpenAI />
+        ) : (
+          <>🦙</>
         )}
       </div>
       <div className="flex-1 px-1 ml-4 space-y-2 overflow-hidden w-[96em]">

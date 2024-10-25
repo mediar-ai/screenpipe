@@ -40,6 +40,10 @@ use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
+// At the top of the file, add:
+#[cfg(feature = "experimental")]
+use enigo::{Enigo, Key, Settings};
+
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub vision_control: Arc<AtomicBool>,
@@ -504,7 +508,9 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     let audio_status = if state.audio_disabled {
         "disabled"
-    } else if now.signed_duration_since(state.app_start_time) < chrono::Duration::from_std(app_start_threshold).unwrap() {
+    } else if now.signed_duration_since(state.app_start_time)
+        < chrono::Duration::from_std(app_start_threshold).unwrap()
+    {
         "ok" // Consider audio healthy if app started recently
     } else {
         match last_audio {
@@ -857,30 +863,94 @@ async fn execute_raw_sql(
     }
 }
 
-#[cfg(not(feature = "llm"))]
-pub fn create_router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/search", get(search))
-        .route("/audio/list", get(api_list_audio_devices))
-        .route("/vision/list", post(api_list_monitors))
-        .route(
-            "/tags/:content_type/:id",
-            post(add_tags).delete(remove_tags),
+#[cfg(feature = "experimental")]
+async fn input_control_handler(
+    JsonResponse(payload): JsonResponse<InputControlRequest>,
+) -> Result<JsonResponse<InputControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    use enigo::{Keyboard, Mouse};
+
+    info!("input control handler {:?}", payload);
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("failed to initialize enigo: {}", e)})),
         )
-        .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
-        .route("/pipes/list", get(list_pipes_handler))
-        .route("/pipes/download", post(download_pipe_handler))
-        .route("/pipes/enable", post(run_pipe_handler))
-        .route("/pipes/disable", post(stop_pipe_handler))
-        .route("/pipes/update", post(update_pipe_config_handler))
-        .route("/experimental/frames/merge", post(merge_frames_handler))
-        .route("/health", get(health_check))
-        .route("/raw_sql", post(execute_raw_sql))
+    })?;
+
+    match payload.action {
+        InputAction::KeyPress(key) => {
+            let _ = enigo.key(key_from_string(&key).unwrap(), enigo::Direction::Press);
+        }
+        InputAction::MouseMove { x, y } => {
+            let _ = enigo.move_mouse(x, y, enigo::Coordinate::Abs);
+        }
+        InputAction::MouseClick(button) => {
+            let _ = enigo.button(
+                mouse_button_from_string(&button).unwrap(),
+                enigo::Direction::Press,
+            );
+        }
+        InputAction::WriteText(text) => {
+            let _ = enigo.text(&text);
+        }
+    }
+
+    Ok(JsonResponse(InputControlResponse { success: true }))
 }
 
-#[cfg(feature = "llm")]
+#[cfg(feature = "experimental")]
+fn key_from_string(key: &str) -> Result<Key, (StatusCode, JsonResponse<Value>)> {
+    match key {
+        "enter" => Ok(Key::Return),
+        "space" => Ok(Key::Space),
+        // Add more key mappings as needed
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": format!("Unsupported key: {}", key)})),
+        )),
+    }
+}
+
+#[cfg(feature = "experimental")]
+fn mouse_button_from_string(
+    button: &str,
+) -> Result<enigo::Button, (StatusCode, JsonResponse<Value>)> {
+    match button {
+        "left" => Ok(enigo::Button::Left),
+        "right" => Ok(enigo::Button::Right),
+        // Add more button mappings as needed
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": format!("Unsupported mouse button: {}", button)})),
+        )),
+    }
+}
+
+// Add these new structs:
+#[cfg(feature = "experimental")]
+#[derive(Deserialize, Debug)]
+struct InputControlRequest {
+    action: InputAction,
+}
+
+#[cfg(feature = "experimental")]
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type", content = "data")]
+enum InputAction {
+    KeyPress(String),
+    MouseMove { x: i32, y: i32 },
+    MouseClick(String),
+    WriteText(String),
+}
+
+#[cfg(feature = "experimental")]
+#[derive(Serialize)]
+struct InputControlResponse {
+    success: bool,
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
-    Router::new()
+    let router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
         .route("/vision/list", post(api_list_monitors))
@@ -896,9 +966,17 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
-        .route("/raw_sql", post(execute_raw_sql))
-        .route("/llm/chat", post(llm_chat_handler))
+        .route("/raw_sql", post(execute_raw_sql));
+
+    #[cfg(feature = "llm")]
+    let router = router.route("/llm/chat", post(llm_chat_handler));
+
+    #[cfg(feature = "experimental")]
+    let router = router.route("/experimental/input_control", post(input_control_handler));
+
+    router
 }
+
 /*
 
 Curl commands for reference:
@@ -1108,3 +1186,4 @@ MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
 
 */
+
