@@ -30,15 +30,15 @@ impl ResourceMonitor {
         let resource_log_file = if env::var("SAVE_RESOURCE_USAGE").is_ok() {
             let now = Local::now();
             let filename = format!("resource_usage_{}.json", now.format("%Y%m%d_%H%M%S"));
-            info!("Resource usage data will be saved to file: {}", filename);
+            info!("resource usage data will be saved to file: {}", filename);
 
             // Initialize the file with an empty JSON array
             if let Ok(mut file) = File::create(&filename) {
                 if let Err(e) = file.write_all(b"[]") {
-                    error!("Failed to initialize JSON file: {}", e);
+                    error!("failed to initialize JSON file: {}", e);
                 }
             } else {
-                error!("Failed to create JSON file: {}", filename);
+                error!("failed to create JSON file: {}", filename);
             }
 
             Some(filename)
@@ -79,18 +79,18 @@ impl ResourceMonitor {
             let log_message = if cfg!(target_os = "macos") {
                 if let Some(npu_usage) = self.get_npu_usage() {
                     format!(
-                        "Runtime: {}s, Total Memory: {:.0}% ({:.0} GB / {:.0} GB), Total CPU: {:.0}%, NPU: {:.0}%",
+                        "runtime: {}s, total memory: {:.0}% ({:.0} GB / {:.0} GB), total cpu: {:.0}%, npu: {:.0}%",
                         runtime.as_secs(), memory_usage_percent, total_memory_gb, system_total_memory, total_cpu, npu_usage
                     )
                 } else {
                     format!(
-                        "Runtime: {}s, Total Memory: {:.0}% ({:.0} GB / {:.0} GB), Total CPU: {:.0}%, NPU: N/A",
+                        "runtime: {}s, total memory: {:.0}% ({:.0} GB / {:.0} GB), total cpu: {:.0}%, npu: N/A",
                         runtime.as_secs(), memory_usage_percent, total_memory_gb, system_total_memory, total_cpu
                     )
                 }
             } else {
                 format!(
-                    "Runtime: {}s, Total Memory: {:.0}% ({:.2} GB / {:.2} GB), Total CPU: {:.0}%",
+                    "runtime: {}s, total memory: {:.0}% ({:.2} GB / {:.2} GB), total cpu: {:.0}%",
                     runtime.as_secs(),
                     memory_usage_percent,
                     total_memory_gb,
@@ -124,20 +124,20 @@ impl ResourceMonitor {
                                     if let Err(e) =
                                         file.write_all(json_array.to_string().as_bytes())
                                     {
-                                        error!("Failed to write JSON data to file: {}", e);
+                                        error!("failed to write JSON data to file: {}", e);
                                     }
                                 } else {
-                                    error!("Failed to truncate and seek file: {}", filename);
+                                    error!("failed to truncate and seek file: {}", filename);
                                 }
                             }
                         } else {
-                            error!("Failed to parse JSON from file: {}", filename);
+                            error!("failed to parse JSON from file: {}", filename);
                         }
                     } else {
-                        error!("Failed to read JSON file: {}", filename);
+                        error!("failed to read JSON file: {}", filename);
                     }
                 } else {
-                    error!("Failed to open JSON file: {}", filename);
+                    error!("failed to open JSON file: {}", filename);
                 }
             }
         }

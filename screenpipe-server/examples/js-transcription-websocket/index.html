@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>screenpipe transcription websocket</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #fff;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        #transcriptions {
+            border: 1px solid #333;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            background: #111;
+        }
+        .error {
+            color: #ff4444;
+        }
+        .status {
+            color: #44ff44;
+        }
+        h1 {
+            font-size: 16px;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>screenpipe transcription websocket</h1>
+    <div id="transcriptions"></div>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:3035/ws/audio/transcriptions');
+        const transcriptionsDiv = document.getElementById('transcriptions');
+
+        function addMessage(text, className = '') {
+            const p = document.createElement('p');
+            p.textContent = `[${new Date().toISOString()}] ${text}`;
+            if (className) p.className = className;
+            transcriptionsDiv.appendChild(p);
+            transcriptionsDiv.scrollTop = transcriptionsDiv.scrollHeight;
+        }
+
+        ws.addEventListener('open', () => {
+            addMessage('connected to websocket server', 'status');
+        });
+
+        ws.addEventListener('message', (event) => {
+            addMessage(`${event.data}`);
+            console.log('received transcription:', event.data);
+        });
+
+        ws.addEventListener('error', (event) => {
+            addMessage(`error: ${event}`, 'error');
+            console.error('websocket error:', event);
+        });
+
+        ws.addEventListener('close', () => {
+            addMessage('disconnected from websocket server', 'error');
+        });
+    </script>
+</body>
+</html>

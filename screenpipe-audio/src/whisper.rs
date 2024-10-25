@@ -345,7 +345,7 @@ impl<'a> Decoder<'a> {
                 dr,
             };
             if self.timestamps {
-                info!(
+                debug!(
                     "{:.1}s -- {:.1}s",
                     segment.start,
                     segment.start + segment.duration,
@@ -363,7 +363,7 @@ impl<'a> Decoder<'a> {
                                 .tokenizer
                                 .decode(&tokens_to_decode, true)
                                 .map_err(E::msg)?;
-                            info!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
+                            debug!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
                             tokens_to_decode.clear()
                         }
                         prev_timestamp_s = timestamp_s;
@@ -377,12 +377,12 @@ impl<'a> Decoder<'a> {
                         .decode(&tokens_to_decode, true)
                         .map_err(E::msg)?;
                     if !text.is_empty() {
-                        info!("  {:.1}s-...: {}", prev_timestamp_s, text);
+                        debug!("  {:.1}s-...: {}", prev_timestamp_s, text);
                     }
                     tokens_to_decode.clear()
                 }
             } else {
-                info!(
+                debug!(
                     "{:.1}s -- {:.1}s: {}",
                     segment.start,
                     segment.start + segment.duration,
@@ -390,7 +390,7 @@ impl<'a> Decoder<'a> {
                 )
             }
             if self.verbose {
-                info!("{seek}: {segment:?}, in {:?}", start.elapsed());
+                debug!("{seek}: {segment:?}, in {:?}", start.elapsed());
             }
             segments.push(segment)
         }

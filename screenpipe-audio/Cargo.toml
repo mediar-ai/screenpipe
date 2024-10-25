@@ -30,7 +30,6 @@ clap = { version = "4.3", features = ["derive"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Local Embeddings + STT
-# TODO: feature metal, cuda, etc. see https://github.com/huggingface/candle/blob/main/candle-core/Cargo.toml
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
@@ -54,9 +53,6 @@ bytemuck = "1.16.1"
 
 # Async
 tokio = { workspace = true }
-
-# Detect speech/silence
-webrtc-vad = "0.4.0"
 
 # Deepgram
 reqwest = { workspace = true }
@@ -97,14 +93,15 @@ memory-stats = "1.0"
 strsim = "0.10.0"
 futures = "0.3.31"
 tracing-subscriber = "0.3.16"
+tokio-tungstenite = "0.24.0"
+futures-util = "0.3.31"
+
+
 [features]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 
-[[bin]]
-name = "screenpipe-audio"
-path = "src/bin/screenpipe-audio.rs"
 
 [[bench]]
 name = "pcm_decode_benchmark"
