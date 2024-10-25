@@ -156,27 +156,30 @@ async fn get_device_and_config(
     Ok((cpal_audio_device, config))
 }
 
-pub fn record_and_transcribe(
+pub async fn record_and_transcribe(
     audio_stream: Arc<AudioStream>,
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
     data_dir: Arc<PathBuf>,
-) -> Result<tokio::task::JoinHandle<()>> {
-    info!(
+) -> Result<()> {
+    println!(
         "starting continuous recording for {}",
         audio_stream.device.to_string()
     );
 
-    let handle = tokio::spawn(async move {
-        let mut receiver = audio_stream.subscribe();
+    let mut receiver = audio_stream.subscribe();
 
-        println!("yo"); // This line isn't being reached
-        loop {
-            info!("waiting for audio segment");
-            while let Ok(segment) = receiver.recv().await {
-                info!("sending audio segment to audio model");
+    println!("successfully subscribed to audio stream");
+
+    // Add timeout to prevent infinite waiting
+    let timeout = Duration::from_secs(10);
+
+    loop {
+        println!("waiting for audio segment");
+        match tokio::time::timeout(timeout, receiver.recv()).await {
+            Ok(Ok(segment)) => {
+                println!("received audio segment, length: {}", segment.frames.len());
                 let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-                let sanitized_device_name =
-                    audio_stream.device.to_string().replace(['/', '\\'], "_");
+                let sanitized_device_name = audio_stream.device.to_string().replace(['/', '\\'], "_");
                 let file_path =
                     data_dir.join(format!("{}_{}.mp4", sanitized_device_name, new_file_name));
                 let file_path_clone = Arc::new(file_path);
@@ -188,14 +191,20 @@ pub fn record_and_transcribe(
                     channels: audio_stream.device_config.channels(),
                     output_path: file_path_clone,
                 }) {
-                    error!("failed to send audio to audio model: {}", e);
+                    println!("failed to send audio to audio model: {}", e);
                 }
-                info!("sent audio segment to audio model");
+                println!("sent audio segment to audio model");
+            }
+            Ok(Err(e)) => {
+                println!("error receiving from broadcast channel: {}", e);
+                // Consider if you want to break the loop here
+            }
+            Err(_) => {
+                println!("timeout waiting for audio segment");
+                // Consider if you want to break the loop here
             }
         }
-    });
-
-    Ok(handle)
+    }
 }
 
 pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
@@ -509,13 +518,13 @@ impl AudioStream {
         let channels = decoder.channels();
 
         let (tx, _rx) = broadcast::channel::<AudioSegment>(1000);
-        let tx = Arc::new(tx); // Make tx an Arc to share between threads
+        let tx = Arc::new(tx);
         let tx_clone = tx.clone();
 
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
 
         let samples: Vec<f32> = decoder.map(|x: i16| x as f32 / i16::MAX as f32).collect();
-        println!("loaded {} samples from wav file", samples.len()); // Debug log
+        info!("loaded {} samples from wav file", samples.len());
 
         let device = Arc::new(AudioDevice::new(
             "test_device".to_string(),
@@ -530,22 +539,17 @@ impl AudioStream {
             cpal::SampleFormat::F32,
         );
 
-        // Process samples in chunks and send them immediately
         let chunk_size = (sample_rate as f32 * 3.0) as usize; // 3 seconds chunks
-        println!("chunk size: {}", chunk_size);
+        info!("chunk size: {}", chunk_size);
 
         let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn({
-            // wait 5 seconds before starting
-            // thread::sleep(Duration::from_secs(5));
             let tx = tx.clone();
             move || {
-                println!("starting test audio stream thread");
+                info!("starting test audio stream thread");
 
-                // Process samples in chunks
                 for chunk in samples.chunks(chunk_size) {
-                    println!("processing chunk of {} samples", chunk.len());
+                    info!("processing chunk of {} samples", chunk.len());
 
-                    // Process with VAD
                     let mut vad = vad_engine.lock().unwrap();
                     if let Ok(Some(speech_frames)) = audio_frames_to_speech_frames(
                         chunk,
@@ -553,34 +557,28 @@ impl AudioStream {
                         sample_rate,
                         &mut *vad,
                     ) {
-                        println!("sending {} speech frames", speech_frames.len());
+                        info!("sending {} speech frames", speech_frames.len());
                         let speech_segment = AudioSegment {
                             frames: Arc::new(chunk.to_vec()),
                             speech_frames: Arc::new(speech_frames),
                         };
 
                         match tx.send(speech_segment) {
-                            Ok(n) => println!("successfully sent audio segment to {} receivers", n),
-                            Err(e) => println!("failed to send audio segment: {}", e),
+                            Ok(n) => info!("successfully sent audio segment to {} receivers", n),
+                            Err(e) => error!("failed to send audio segment: {}", e),
                         }
-                    } else {
-                        println!("no speech frames detected in chunk");
                     }
 
-                    // Add a small delay to prevent overwhelming the channel
-                    thread::sleep(Duration::from_millis(10));
+                    thread::sleep(Duration::from_millis(100));
 
-                    // Check for stop signal
                     if let Ok(StreamControl::Stop(response)) = stream_control_rx.try_recv() {
-                        println!("received stop signal, ending processing");
+                        info!("received stop signal, ending processing");
                         response.send(()).ok();
                         return;
                     }
                 }
 
-                println!("finished processing all chunks");
-                return;
-                // No need to send stop signal, just return
+                info!("finished processing all chunks");
             }
         }))));
 
@@ -689,9 +687,12 @@ pub mod tests {
             println!("audio stream created successfully");
 
             println!("starting recording and transcription");
-            let handle =
-                record_and_transcribe(audio_stream.clone(), whisper_sender.clone(), data_dir)
+            let whisper_sender_clone = whisper_sender.clone();
+            let handle = tokio::spawn(async move {
+                record_and_transcribe(audio_stream.clone(), whisper_sender_clone, data_dir)
+                    .await
                     .unwrap();
+            });
 
             let mut full_transcription = String::new();
             println!("collecting transcriptions from broadcast channel");
