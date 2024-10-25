@@ -24,7 +24,7 @@ const config = {
 		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 
 
-		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
+		vcpkgPackages: ['opencl', 'onnxruntime-gpu', 'onnxruntime-gpu:arm64-windows'],
 	},
 	linux: {
 		aptPackages: [
@@ -314,29 +314,38 @@ if (platform == 'windows') {
 	}
 
 	// Setup ONNX Runtime
-	const onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
-	const onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
-	const onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`
-	if (!(await fs.exists(onnxRuntimeName))) {
-		console.log('Setting up ONNX Runtime libraries for Windows...')
-		try {
-			await $`${wgetPath} --no-config -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
-			await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
-			await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
-			console.log('ONNX Runtime libraries for Windows set up successfully.')
-		} catch (error) {
-			console.error('Error downloading or extracting ONNX Runtime:', error);
-			console.log('Attempting alternative download method...');
-			// Add alternative download method here
+	let onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
+	let onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
+	let onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`;
+
+	// Run twice, once for ARM64, once for x64
+	for (let x = 0; x < 2; x++) {
+		if (x == 1) {
+			onnxRuntimeName = "onnxruntime-win-arm64-1.19.2"
+			onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
+			onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`;
 		}
-	} else {
-		console.log('ONNX Runtime libraries for Windows already exists.')
+		if (!(await fs.exists(onnxRuntimeName))) {
+			console.log('Setting up ONNX Runtime libraries for Windows...')
+			try {
+				await $`${wgetPath} --no-config -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
+				await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
+				await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
+				console.log('ONNX Runtime libraries for Windows set up successfully.')
+			} catch (error) {
+				console.error('Error downloading or extracting ONNX Runtime:', error);
+				console.log('Attempting alternative download method...');
+				// Add alternative download method here
+			}
+		} else {
+			console.log('ONNX Runtime libraries for Windows already exists.')
+		}
 	}
 
 
 
 	// Setup vcpkg packages with environment variables set inline
-	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
+	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages} --allow-unsupported`.quiet()
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {
@@ -624,5 +633,3 @@ if (action?.includes('--build' || action.includes('--dev'))) {
 	await $`bun install`
 	await $`bunx tauri ${action.includes('--dev') ? 'dev' : 'build'}`
 }
-
-
