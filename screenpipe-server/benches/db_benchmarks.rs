@@ -13,7 +13,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
     let mut rng = rand::thread_rng();
 
     for _ in 0..size {
-        let _video_id = db.insert_video_chunk("test_video.mp4").await.unwrap();
+        let _video_id = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
         let frame_id = db.insert_frame().await.unwrap();
         let ocr_text = format!("OCR text {}", rng.gen::<u32>());
         let text_json = format!(r#"{{"text": "{}"}}"#, ocr_text);
