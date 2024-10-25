@@ -23,6 +23,7 @@ use reqwest::Client;
 use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
+use std::sync::Mutex;
 
 // Replace the get_deepgram_api_key function with this:
 fn get_deepgram_api_key() -> String {
@@ -141,9 +142,11 @@ pub fn stt_sync(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
+    overlap_buffer: Arc<Mutex<Vec<f32>>>,
 ) -> Result<String> {
     let audio_input = audio_input.clone();
     let mut whisper_model = whisper_model.clone();
+    // info!("overlap buffer length: {}", overlap_buffer.lock().unwrap().len());
 
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -154,6 +157,7 @@ pub fn stt_sync(
             audio_transcription_engine,
             deepgram_api_key,
             languages,
+            &mut overlap_buffer.lock().unwrap(), // Lock the mutex to get a mutable reference
         ))
     });
 
@@ -264,17 +268,17 @@ fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut 
     (s_time, e_time)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn stt(
     audio_input: &AudioInput,
     whisper_model: &mut WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
+    overlap_buffer: &mut Vec<f32>,
 ) -> Result<String> {
     let model = &whisper_model.model;
 
-    debug!("Loading mel filters");
+    info!("Loading mel filters");
     let mel_bytes = match model.config().num_mel_bins {
         80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
         128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
@@ -283,16 +287,31 @@ pub async fn stt(
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
-    let speech_frames = audio_input
-        .data
-        .iter()
-        .flat_map(|segment| segment.speech_frames.iter().copied())
-        .collect::<Vec<_>>();
+    // Combine overlap buffer with new speech frames
+    let mut speech_frames = overlap_buffer.clone();
+    speech_frames.extend(
+        audio_input
+            .data
+            .iter()
+            .flat_map(|segment| segment.speech_frames.iter().copied()),
+    );
 
-    info!("speech frames length: {}", speech_frames.len());
+    // info!("speech frames length: {}", speech_frames.len());
 
-    if speech_frames.len() == 0 {
+    if speech_frames.is_empty() {
         return Ok(String::new());
+    }
+
+    // Update overlap buffer with the last few seconds of speech frames
+    const OVERLAP_SECONDS: usize = 2;
+    let overlap_samples = OVERLAP_SECONDS * 16000;
+    // info!("overlap samples length: {}, speech frames length: {}", overlap_samples, speech_frames.len());
+    if speech_frames.len() > overlap_samples {
+        *overlap_buffer = speech_frames.split_off(speech_frames.len() - overlap_samples);
+        // info!("overlap buffer length: {}", overlap_buffer.len());
+    } else {
+        overlap_buffer.clear();
+        // info!("overlap buffer cleared");
     }
 
     let transcription: Result<String> =
@@ -396,12 +415,13 @@ pub async fn create_whisper_channel(
     let shutdown_flag_clone = shutdown_flag.clone();
 
     tokio::spawn(async move {
+        let overlap_buffer = Arc::new(Mutex::new(Vec::new())); // Initialize with Arc<Mutex<Vec<f32>>>
         loop {
             if shutdown_flag_clone.load(Ordering::Relaxed) {
-                info!("Whisper channel shutting down");
+                info!("whisper channel shutting down");
                 break;
             }
-            debug!("Waiting for input from input_receiver");
+            info!("waiting for input from input_receiver");
 
             crossbeam::select! {
                 recv(input_receiver) -> input_result => {
@@ -417,7 +437,7 @@ pub async fn create_whisper_channel(
                                 #[cfg(target_os = "macos")]
                                 {
                                     autoreleasepool(|| {
-                                        match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone()) {
+                                        match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), overlap_buffer.clone()) {
                                             Ok(transcription) => TranscriptionResult {
                                                 input: input.clone(),
                                                 transcription: Some(transcription),
@@ -441,7 +461,7 @@ pub async fn create_whisper_channel(
                                     unreachable!("This code should not be reached on non-macOS platforms")
                                 }
                             } else {
-                                match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone()) {
+                                match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), overlap_buffer.clone()) {
                                     Ok(transcription) => TranscriptionResult {
                                         input: input.clone(),
                                         transcription: Some(transcription),

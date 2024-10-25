@@ -20,6 +20,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use tokio::sync::broadcast;
     use tower::ServiceExt; // for `oneshot` and `ready`
 
     // Before the test function, add:
@@ -42,6 +43,7 @@ mod tests {
             pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
             vision_disabled: false,
             audio_disabled: false,
+            transcription_sender: Arc::new(broadcast::Sender::new(2)),
         });
 
         let router = create_router();

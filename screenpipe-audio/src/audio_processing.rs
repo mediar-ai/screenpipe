@@ -125,12 +125,6 @@ pub fn audio_frames_to_speech_frames(
     vad_engine: &mut Box<dyn VadEngine + Send>,
 ) -> Result<Option<Vec<f32>>> {
     let audio_data = if sample_rate != m::SAMPLE_RATE as u32 {
-        debug!(
-            "device: {}, resampling from {} Hz to {} Hz",
-            device,
-            sample_rate,
-            m::SAMPLE_RATE
-        );
         resample(data.as_ref(), sample_rate, m::SAMPLE_RATE as u32)?
     } else {
         data.to_vec()
@@ -200,7 +194,6 @@ pub fn audio_frames_to_speech_frames(
 }
 
 fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
-    debug!("Resampling audio");
     let params = SincInterpolationParameters {
         sinc_len: 256,
         f_cutoff: 0.95,
@@ -218,8 +211,6 @@ fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result
     )?;
 
     let waves_in = vec![input.to_vec()];
-    debug!("Performing resampling");
     let waves_out = resampler.process(&waves_in, None)?;
-    debug!("Resampling complete");
     Ok(waves_out.into_iter().next().unwrap())
 }

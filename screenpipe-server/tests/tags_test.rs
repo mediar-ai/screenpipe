@@ -11,6 +11,7 @@ use serde_json::json;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
+use tokio::sync::broadcast;
 use tower::ServiceExt;
 
 use screenpipe_server::{
@@ -35,6 +36,7 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         app_start_time: Utc::now(),
         screenpipe_dir: PathBuf::from(""),
         pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
+        transcription_sender: Arc::new(broadcast::Sender::new(2)),
     });
 
     let app = create_router().with_state(app_state.clone());

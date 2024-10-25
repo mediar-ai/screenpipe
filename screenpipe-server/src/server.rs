@@ -8,7 +8,6 @@ use axum::{
     routing::{get, post},
     serve, Router,
 };
-use crossbeam::queue::SegQueue;
 use futures::future::{try_join, try_join_all};
 
 use screenpipe_vision::monitor::list_monitors;
@@ -23,20 +22,22 @@ use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
-    DeviceType, TranscriptionResult,
+    default_input_device, default_output_device, list_audio_devices, AudioStream, DeviceType,
+    TranscriptionResult,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
     net::SocketAddr,
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
 
-use tokio::{net::TcpListener, sync::broadcast};
+use tokio::{
+    net::TcpListener,
+    sync::{broadcast, Mutex},
+};
 use tower_http::trace::TraceLayer;
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -47,8 +48,7 @@ use enigo::{Enigo, Key, Settings};
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub vision_control: Arc<AtomicBool>,
-    pub audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
-    pub devices_status: HashMap<AudioDevice, DeviceControl>,
+    pub audio_streams: Arc<Mutex<Vec<Arc<AudioStream>>>>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -698,7 +698,7 @@ pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    audio_streams: Arc<Mutex<Vec<Arc<AudioStream>>>>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -712,7 +712,7 @@ impl Server {
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
         vision_control: Arc<AtomicBool>,
-        audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+        audio_streams: Arc<Mutex<Vec<Arc<AudioStream>>>>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
@@ -723,7 +723,7 @@ impl Server {
             db,
             addr,
             vision_control,
-            audio_devices_control,
+            audio_streams,
             screenpipe_dir,
             pipe_manager,
             vision_disabled,
@@ -732,19 +732,14 @@ impl Server {
         }
     }
 
-    pub async fn start<F>(
-        self,
-        device_status: HashMap<AudioDevice, DeviceControl>,
-        api_plugin: F,
-    ) -> Result<(), std::io::Error>
+    pub async fn start<F>(self, api_plugin: F) -> Result<(), std::io::Error>
     where
         F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
     {
         let app_state = Arc::new(AppState {
             db: self.db,
             vision_control: self.vision_control,
-            audio_devices_control: self.audio_devices_control,
-            devices_status: device_status,
+            audio_streams: self.audio_streams,
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
@@ -824,6 +819,7 @@ async fn transcriptions_ws_handler(
 }
 
 async fn handle_transcriptions_socket(mut socket: WebSocket, app_state: Arc<AppState>) {
+    info!("new websocket connection");
     let mut receiver = app_state.transcription_sender.subscribe();
 
     while let Ok(transcription) = receiver.recv().await {

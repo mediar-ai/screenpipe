@@ -186,7 +186,7 @@ impl SileroVad {
                 self.speech_start_time = Some(now);
             }
             self.last_speech_time = Some(now);
-            self.speech_duration += Duration::from_millis(100); // Assuming 20ms chunks
+            self.speech_duration += Duration::from_millis(100);
             self.silence_duration = Duration::from_millis(0);
 
             if self.speech_duration > Duration::from_millis(700) {

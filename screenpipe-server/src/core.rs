@@ -1,17 +1,11 @@
-use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use chrono::Utc;
-use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
 use screenpipe_audio::audio_processing::AudioInput;
 use screenpipe_audio::encode::encode_single_audio;
-use screenpipe_audio::vad_engine::{SileroVad, VadEngine};
-use screenpipe_audio::{
-    create_whisper_channel, AudioDevice, AudioTranscriptionEngine, DeviceControl,
-    TranscriptionResult,
-};
+use screenpipe_audio::{create_whisper_channel, AudioTranscriptionEngine, TranscriptionResult};
 use screenpipe_audio::{record_and_transcribe, AudioStream};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
@@ -19,10 +13,10 @@ use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinHandle;
 
 pub async fn start_continuous_recording(
@@ -32,7 +26,7 @@ pub async fn start_continuous_recording(
     audio_chunk_duration: Duration,
     video_chunk_duration: Duration,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    audio_streams: Arc<Mutex<Vec<Arc<AudioStream>>>>,
     audio_disabled: bool,
     save_text_files: bool,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
@@ -40,13 +34,11 @@ pub async fn start_continuous_recording(
     monitor_ids: Vec<u32>,
     use_pii_removal: bool,
     vision_disabled: bool,
-    vad_engine: CliVadEngine,
     vision_handle: &Handle,
     audio_handle: &Handle,
     ignored_windows: &[String],
     include_windows: &[String],
     deepgram_api_key: Option<String>,
-    vad_sensitivity: CliVadSensitivity,
     languages: Vec<Language>,
     transcription_sender: Arc<broadcast::Sender<TranscriptionResult>>,
 ) -> Result<()> {
@@ -115,29 +107,28 @@ pub async fn start_continuous_recording(
         .await?
     };
 
-    let mut vad_engine: Box<dyn VadEngine + Send> = match vad_engine {
-        CliVadEngine::Silero => Box::new(SileroVad::new().await?),
-    };
-    vad_engine.set_sensitivity(vad_sensitivity.into());
-    let vad_engine = Arc::new(Mutex::new(vad_engine));
-
     let whisper_sender_clone = whisper_sender.clone();
     let db_manager_audio = Arc::clone(&db);
-
+    let audio_streams_clone = audio_streams.lock().await.clone();
     let audio_task = if !audio_disabled {
         audio_handle.spawn(async move {
-            record_audio(
+            let result = record_audio(
                 db_manager_audio,
                 audio_chunk_duration,
                 whisper_sender,
                 whisper_receiver,
-                audio_devices_control,
+                Arc::new(audio_streams_clone),
                 audio_transcription_engine,
-                vad_engine,
                 data_dir,
                 transcription_sender,
             )
-            .await
+            .await;
+
+            // Signal shutdown before dropping
+            whisper_shutdown_flag.store(true, Ordering::Relaxed);
+            drop(whisper_sender_clone);
+
+            result
         })
     } else {
         audio_handle.spawn(async move {
@@ -158,14 +149,6 @@ pub async fn start_continuous_recording(
     if let Err(e) = audio_task.await {
         error!("Audio recording error: {:?}", e);
     }
-
-    // Shutdown the whisper channel
-    whisper_shutdown_flag.store(true, Ordering::Relaxed);
-    drop(whisper_sender_clone); // Close the sender channel
-
-    // TODO: process any remaining audio chunks
-    // TODO: wait a bit for whisper to finish processing
-    // TODO: any additional cleanup like device controls to release
 
     info!("Stopped recording");
     Ok(())
@@ -263,9 +246,8 @@ async fn record_audio(
     chunk_duration: Duration,
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
     whisper_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
-    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    audio_streams: Arc<Vec<Arc<AudioStream>>>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     data_dir: Arc<PathBuf>,
     transcription_sender: Arc<broadcast::Sender<TranscriptionResult>>,
 ) -> Result<()> {
@@ -276,87 +258,37 @@ async fn record_audio(
     // Clone data_dir once, outside all loops
     let data_dir_clone = Arc::clone(&data_dir);
 
-    loop {
-        while let Some((audio_device, device_control)) = audio_devices_control.pop() {
-            let vad_engine_clone = vad_engine.clone();
-            let data_dir_clone = Arc::clone(&data_dir_clone);
+    for audio_stream in audio_streams.iter() {
+        let data_dir_clone = Arc::clone(&data_dir_clone);
+        info!("received audio device: {}", &audio_stream.device);
+        let device_id = audio_stream.device.to_string();
+        info!("about to spawn task for device: {}", device_id);
 
-            debug!("Received audio device: {}", &audio_device);
-            let device_id = audio_device.to_string();
+        let whisper_sender_clone = whisper_sender.clone();
+        let audio_stream = audio_stream.clone();
 
-            if !device_control.is_running {
-                info!("Device control signaled stop for device {}", &audio_device);
-                if let Some(handle) = handles.remove(&device_id) {
-                    handle.abort();
-                    info!("Stopped thread for device {}", &audio_device);
-                }
-                continue;
-            }
+        // let handle = tokio::spawn(async move {
+        info!("inside spawned task for device: {}", &audio_stream.device);
+        info!(
+            "starting audio capture thread for device: {}",
+            &audio_stream.device.name
+        );
 
-            let whisper_sender_clone = whisper_sender.clone();
+        let handle = record_and_transcribe(audio_stream, whisper_sender_clone, data_dir_clone)?;
 
-            let audio_device = Arc::new(audio_device);
-            let device_control = Arc::new(device_control);
-            let handle = tokio::spawn(async move {
-                // Use data_dir_clone here
-                let audio_device_clone = Arc::clone(&audio_device);
-                // let error = Arc::new(AtomicBool::new(false));
-                debug!(
-                    "Starting audio capture thread for device: {}",
-                    &audio_device
-                );
+        info!("spawned task for device: {}", device_id);
+        handles.insert(device_id, handle);
+    }
 
-                let audio_stream = match AudioStream::from_device(
-                    audio_device_clone.clone(),
-                    Arc::new(AtomicBool::new(device_control.clone().is_running)),
-                    vad_engine_clone,
-                    Duration::from_millis(100),
-                )
-                .await
-                {
-                    Ok(stream) => stream,
-                    Err(e) => {
-                        error!("Failed to create audio stream: {}", e);
-                        return;
-                    }
-                };
-
-                let audio_stream = Arc::new(audio_stream);
-                let device_control_clone = Arc::clone(&device_control);
-                let whisper_sender_clone = whisper_sender_clone.clone();
-                let audio_device = Arc::clone(&audio_device_clone);
-
-                let stt_handle = tokio::spawn(async move {
-                    let _ = record_and_transcribe(
-                        audio_stream,
-                        chunk_duration,
-                        whisper_sender_clone.clone(),
-                        Arc::new(AtomicBool::new(device_control_clone.is_running)),
-                        data_dir_clone.clone(),
-                    )
-                    .await;
-                });
-
-                // let live_transcription_handle = tokio::spawn(async move {
-                //     let _ = live_transcription(audio_stream, whisper_sender_clone.clone()).await;
-                // });
-
-                stt_handle.await.unwrap();
-                info!("exiting audio capture thread for device: {}", &audio_device);
-            });
-
-            handles.insert(device_id, handle);
+    handles.retain(|device_id, handle| {
+        if handle.is_finished() {
+            info!("handle for device {} has finished", device_id);
+            false
+        } else {
+            true
         }
-
-        handles.retain(|device_id, handle| {
-            if handle.is_finished() {
-                info!("Handle for device {} has finished", device_id);
-                false
-            } else {
-                true
-            }
-        });
-
+    });
+    loop {
         while let Ok(mut transcription) = whisper_receiver.try_recv() {
             info!(
                 "device {} received transcription {:?}",
@@ -365,7 +297,8 @@ async fn record_audio(
 
             // Broadcast the transcription // TODO: should also broadcast updates below somehow good ux
             if let Err(e) = transcription_sender.send(transcription.clone()) {
-                error!("failed to broadcast transcription: {}", e);
+                // do nothing, it means there is no subscriber yet most of the time
+                debug!("no subscribers for transcription broadcast: {}", e);
             }
 
             // Get device-specific previous transcript
@@ -469,7 +402,6 @@ async fn record_audio(
                 data_dir_clone.join(format!("{}_{}.mp4", sanitized_device_name, new_file_name));
             encode_single_audio(&frames_to_process, sample_rate, 1, Arc::new(file_path)).unwrap();
         }
-
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
