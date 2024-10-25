@@ -167,8 +167,9 @@ pub fn record_and_transcribe(
     );
 
     let handle = tokio::spawn(async move {
-        let mut receiver = audio_stream.subscribe().await;
+        let mut receiver = audio_stream.subscribe();
 
+        println!("yo"); // This line isn't being reached
         loop {
             info!("waiting for audio segment");
             while let Ok(segment) = receiver.recv().await {
@@ -464,7 +465,7 @@ impl AudioStream {
         })
     }
 
-    pub async fn subscribe(&self) -> broadcast::Receiver<AudioSegment> {
+    pub fn subscribe(&self) -> broadcast::Receiver<AudioSegment> {
         self.transmitter.subscribe()
     }
 
@@ -489,5 +490,332 @@ impl AudioStream {
         }
 
         Ok(())
+    }
+
+    // Add this near other AudioStream related code
+    #[cfg(test)]
+    pub async fn from_wav_file(
+        wav_path: &str,
+        vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
+    ) -> Result<Self> {
+        use rodio::Decoder;
+        use rodio::Source;
+        use std::fs::File;
+        use std::io::BufReader;
+
+        let file = BufReader::new(File::open(wav_path)?);
+        let decoder = Decoder::new(file)?;
+        let sample_rate = decoder.sample_rate();
+        let channels = decoder.channels();
+
+        let (tx, _rx) = broadcast::channel::<AudioSegment>(1000);
+        let tx = Arc::new(tx); // Make tx an Arc to share between threads
+        let tx_clone = tx.clone();
+
+        let (stream_control_tx, stream_control_rx) = mpsc::channel();
+
+        let samples: Vec<f32> = decoder.map(|x: i16| x as f32 / i16::MAX as f32).collect();
+        println!("loaded {} samples from wav file", samples.len()); // Debug log
+
+        let device = Arc::new(AudioDevice::new(
+            "test_device".to_string(),
+            DeviceType::Input,
+        ));
+        let device_clone = device.clone();
+
+        let config = cpal::SupportedStreamConfig::new(
+            channels,
+            cpal::SampleRate(sample_rate),
+            cpal::SupportedBufferSize::Unknown,
+            cpal::SampleFormat::F32,
+        );
+
+        // Process samples in chunks and send them immediately
+        let chunk_size = (sample_rate as f32 * 3.0) as usize; // 3 seconds chunks
+        println!("chunk size: {}", chunk_size);
+
+        let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn({
+            // wait 5 seconds before starting
+            // thread::sleep(Duration::from_secs(5));
+            let tx = tx.clone();
+            move || {
+                println!("starting test audio stream thread");
+
+                // Process samples in chunks
+                for chunk in samples.chunks(chunk_size) {
+                    println!("processing chunk of {} samples", chunk.len());
+
+                    // Process with VAD
+                    let mut vad = vad_engine.lock().unwrap();
+                    if let Ok(Some(speech_frames)) = audio_frames_to_speech_frames(
+                        chunk,
+                        device_clone.clone(),
+                        sample_rate,
+                        &mut *vad,
+                    ) {
+                        println!("sending {} speech frames", speech_frames.len());
+                        let speech_segment = AudioSegment {
+                            frames: Arc::new(chunk.to_vec()),
+                            speech_frames: Arc::new(speech_frames),
+                        };
+
+                        match tx.send(speech_segment) {
+                            Ok(n) => println!("successfully sent audio segment to {} receivers", n),
+                            Err(e) => println!("failed to send audio segment: {}", e),
+                        }
+                    } else {
+                        println!("no speech frames detected in chunk");
+                    }
+
+                    // Add a small delay to prevent overwhelming the channel
+                    thread::sleep(Duration::from_millis(10));
+
+                    // Check for stop signal
+                    if let Ok(StreamControl::Stop(response)) = stream_control_rx.try_recv() {
+                        println!("received stop signal, ending processing");
+                        response.send(()).ok();
+                        return;
+                    }
+                }
+
+                println!("finished processing all chunks");
+                return;
+                // No need to send stop signal, just return
+            }
+        }))));
+
+        Ok(AudioStream {
+            device,
+            device_config: config,
+            transmitter: tx_clone,
+            stream_control: stream_control_tx,
+            stream_thread: Some(stream_thread),
+        })
+    }
+}
+
+// Add this at the end of the file
+#[cfg(test)]
+pub mod tests {
+    use crate::{create_whisper_channel, vad_engine::SileroVad};
+
+    use super::*;
+
+    use screenpipe_core::Language;
+    use std::{
+        collections::HashMap,
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    };
+    use strsim::levenshtein;
+
+    #[tokio::test]
+    async fn test_transcription_accuracy_direct() {
+        println!("starting transcription accuracy test");
+
+        // Setup test cases
+        let test_cases = vec![
+            (
+                "test_data/accuracy1.wav",
+                r#"yo louis, here's the tldr of that mind-blowing meeting:
+        - bob's cat walked across his keyboard 3 times. productivity increased by 200%.
+        - sarah's virtual background glitched, revealing she was actually on a beach. no one noticed.
+        - you successfully pretended to be engaged while scrolling twitter. achievement unlocked!
+        - 7 people said "you're on mute" in perfect synchronization. new world record.
+        - meeting could've been an email. shocking.
+        key takeaway: we're all living in a simulation, and the devs are laughing.
+        peace out, llama3.2:3b-instruct-q4_K_M"#,
+            ),
+            (
+                "test_data/accuracy2.wav",
+                r#"bro - got some good stuff from screenpipe here's the lowdown on your day, you productivity ninja:
+        - absolutely demolished that 2-hour coding sesh on the new feature. the keyboard is still smoking, bro!
+        - crushed 3 client calls like a boss. they're probably writing love letters to you as we speak, make sure to close john tomorrow 8.00 am according to our notes, let the cash flow in!
+        - spent 45 mins on slack. 90% memes, 10% actual work. perfectly balanced, as all things should be
+        - watched a rust tutorial. way to flex those brain muscles, you nerd!
+        overall, you're killing it! 80% of your time on high-value tasks. the other 20%? probably spent admiring your own reflection, you handsome devil.
+        PS: seriously, quit tiktok. your FBI agent is getting bored watching you scroll endlessly.
+        what's the plan for tomorrow? more coding? more memes? world domination?
+        generated by your screenpipe ai assistant (who's definitely not planning to take over the world... yet)"#,
+            ),
+            (
+                "test_data/accuracy3.wav",
+                r#"again, screenpipe allows you to get meeting summaries, locally, without leaking data to OpenAI, with any apps, like WhatsApp, Meet, Zoom, etc. and it's open source at github.com/mediar-ai/screenpipe"#,
+            ),
+            (
+                "test_data/accuracy4.wav",
+                r#"Eventually but, I mean, I feel like but, I mean, first, I mean, you think your your vision smart will be interesting because, yeah, you install once. You pay us, you install once. That that yours. So, basically, all the time Microsoft explained, you know, MS Office, long time ago, you just buy the the the software that you can using there forever unless you wanna you wanna update upgrade is the better version. Right? So it's a little bit, you know"#,
+            ),
+            (
+                "test_data/accuracy5.wav",
+                r#"Thank you. Yeah. So I cannot they they took it, refresh because of my one set top top time. And, also, second thing is, your byte was stolen. By the time?"#,
+            ),
+            // Add more test cases as needed
+        ];
+
+        println!("initialized {} test cases", test_cases.len());
+        let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo);
+        println!("using engine: {}", engine);
+
+        // Create channels
+        println!("creating whisper channel");
+        let (whisper_sender, whisper_receiver, _shutdown) =
+            create_whisper_channel(engine.clone(), None, vec![Language::English])
+                .await
+                .expect("Failed to create whisper channel");
+        println!("whisper channel created successfully");
+
+        for (idx, (audio_file, expected_transcription)) in test_cases.iter().enumerate() {
+            println!(
+                "processing test case {}/{}: {}",
+                idx + 1,
+                test_cases.len(),
+                audio_file
+            );
+
+            let data_dir = Arc::new(PathBuf::from("/tmp/sp-test"));
+            println!("using data directory: {:?}", data_dir);
+
+            println!("initializing vad engine");
+            let vad = SileroVad::new().await.unwrap();
+            println!("vad engine initialized");
+
+            println!("creating audio stream from file: {}", audio_file);
+            let audio_stream = Arc::new(
+                AudioStream::from_wav_file(audio_file, Arc::new(Mutex::new(Box::new(vad))))
+                    .await
+                    .expect("Failed to create audio stream"),
+            );
+            println!("audio stream created successfully");
+
+            println!("starting recording and transcription");
+            let handle =
+                record_and_transcribe(audio_stream.clone(), whisper_sender.clone(), data_dir)
+                    .unwrap();
+
+            let mut full_transcription = String::new();
+            println!("collecting transcriptions from broadcast channel");
+
+            let mut device_transcripts: HashMap<String, (String, Option<i64>)> = HashMap::new();
+            let mut buffer_frames: HashMap<String, (Vec<String>, Vec<f32>)> = HashMap::new();
+
+            loop {
+                crossbeam::select! {
+                    recv(whisper_receiver) -> result => {
+                        match result {
+                            Ok(mut transcription) => {
+                                info!(
+                                    "device {} received transcription {:?}",
+                                    transcription.input.device, transcription.transcription
+                                );
+
+                                // Get device-specific previous transcript
+                                let device_id = transcription.input.device.to_string();
+                                let (previous_transcript, _) = device_transcripts
+                                    .entry(device_id.clone())
+                                    .or_insert((String::new(), None));
+
+                                // Process with device-specific state
+                                let mut current_transcript: Option<String> =
+                                    transcription.transcription.clone();
+                                if let Some((_, current)) =
+                                    transcription.cleanup_overlap(previous_transcript.clone())
+                                {
+                                    current_transcript = Some(current);
+                                }
+
+                                transcription.transcription = current_transcript.clone();
+                                *previous_transcript = current_transcript.unwrap_or_default();
+                                // buffer frames & transcript unless we have reached the chunk duration
+                                let frames = buffer_frames
+                                    .entry(device_id.clone())
+                                    .or_insert((Vec::new(), Vec::new()));
+
+                                // Buffer both transcription and frames
+                                if let Some(transcript) = transcription.transcription {
+                                    frames.0.push(transcript);
+                                }
+                                frames.1.extend(
+                                    transcription
+                                        .input
+                                        .data
+                                        .iter()
+                                        .flat_map(|segment| segment.frames.iter())
+                                        .copied(), // Add .copied() to get owned f32 values
+                                );
+
+                                // Check if we've reached the chunk duration
+                                let total_frames = frames.1.len();
+                                let frames_per_chunk = (Duration::from_secs(3).as_secs_f32()
+                                    * transcription.input.sample_rate as f32)
+                                    as usize;
+
+                                if total_frames < frames_per_chunk {
+                                    info!(
+                                        "buffering frames until encoding & saving to db: {}/{}",
+                                        total_frames, frames_per_chunk
+                                    );
+                                    continue; // Wait for more frames
+                                }
+
+                                // We have enough frames, process them but keep remainder
+                                let (mut buffered_transcripts, mut frames_to_process) = buffer_frames
+                                    .get_mut(&device_id)
+                                    .map(|f| (std::mem::take(&mut f.0), std::mem::take(&mut f.1)))
+                                    .unwrap_or_default();
+
+                                // Split frames at chunk boundary
+                                let remainder_frames = frames_to_process.split_off(frames_per_chunk);
+
+                                // Keep the last transcript if there are remaining frames
+                                let remainder_transcript = if !remainder_frames.is_empty() {
+                                    buffered_transcripts.pop()
+                                } else {
+                                    None
+                                };
+
+                                // Put remainder back in buffer
+                                if !remainder_frames.is_empty() || remainder_transcript.is_some() {
+                                    if let Some(buffer) = buffer_frames.get_mut(&device_id) {
+                                        if let Some(transcript) = remainder_transcript {
+                                            buffer.0.push(transcript);
+                                        }
+                                        buffer.1 = remainder_frames;
+                                    }
+                                }
+
+                                // Join transcripts with spaces
+                                let combined_transcript = buffered_transcripts.join(" ");
+                                full_transcription = combined_transcript;
+                            }
+                            Err(e) => {
+                                error!("error receiving transcription: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                    default(Duration::from_millis(100)) => {
+                        // Check exit condition
+                        if full_transcription.split_whitespace().count() >= 10 {
+                            break;
+                        }
+                    }
+                }
+            }
+            let distance = levenshtein(expected_transcription, &full_transcription);
+            let accuracy = 1.0 - (distance as f64 / expected_transcription.len() as f64);
+
+            println!("=== Test Results for {} ===", audio_file);
+            println!("Expected length: {}", expected_transcription.len());
+            println!("Actual length: {}", full_transcription.len());
+            println!("Levenshtein distance: {}", distance);
+            println!("Accuracy: {:.2}%", accuracy * 100.0);
+            println!("Expected: {}", expected_transcription);
+            println!("Actual: {}", full_transcription);
+
+            println!("waiting for recording task to complete");
+            handle.await.expect("Recording task failed");
+            println!("test case completed");
+        }
     }
 }

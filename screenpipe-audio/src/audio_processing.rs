@@ -14,6 +14,8 @@ use rubato::{
 };
 use tracing::debug;
 
+// ! TODO: should optimise speed of these stuff
+
 pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
     let rms = (audio.iter().map(|&x| x * x).sum::<f32>() / audio.len() as f32).sqrt();
     let peak = audio

@@ -4,7 +4,6 @@ use std::{path::PathBuf, process::Command};
 use strsim::levenshtein;
 use tokio::time::sleep;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tracing::debug;
 
 #[tokio::test]
 async fn test_transcription_accuracy() {
