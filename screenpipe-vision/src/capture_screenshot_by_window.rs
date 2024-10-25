@@ -100,40 +100,36 @@ fn is_valid_window(
     ignore_list: &[String],
     include_list: &[String],
 ) -> bool {
-    let monitor_match = window.current_monitor().id() == monitor.id();
-    let not_minimized = !window.is_minimized();
-    let not_window_server = window.app_name() != "Window Server";
-    let not_contexts = window.app_name() != "Contexts";
-    let has_title = !window.title().is_empty();
-    let included = include_list.is_empty()
-        || include_list.iter().any(|include| {
-            window
-                .app_name()
-                .to_lowercase()
-                .contains(&include.to_lowercase())
-                || window
-                    .title()
-                    .to_lowercase()
-                    .contains(&include.to_lowercase())
-        });
-    let not_ignored = !ignore_list.iter().any(|ignore| {
-        window
-            .app_name()
-            .to_lowercase()
-            .contains(&ignore.to_lowercase())
-            || window
-                .title()
-                .to_lowercase()
-                .contains(&ignore.to_lowercase())
-    });
+    // Early returns for simple checks
+    if window.current_monitor().id() != monitor.id() 
+        || window.is_minimized() 
+        || window.app_name() == "Window Server"
+        || window.app_name() == "Contexts"
+        || window.title().is_empty() {
+        return false;
+    }
 
-    monitor_match
-        && not_minimized
-        && not_window_server
-        && not_contexts
-        && has_title
-        && not_ignored
-        && included
+    // Cache lowercase strings to avoid multiple conversions
+    let app_name_lower = window.app_name().to_lowercase();
+    let title_lower = window.title().to_lowercase();
+
+    // Check ignore list first (might exit early)
+    if ignore_list.iter().any(|ignore| {
+        let ignore_lower = ignore.to_lowercase();
+        app_name_lower.contains(&ignore_lower) || title_lower.contains(&ignore_lower)
+    }) {
+        return false;
+    }
+
+    // If include list is empty, return true
+    if include_list.is_empty() {
+        return true;
+    }
+
+    return include_list.iter().any(|include| {
+        let include_lower = include.to_lowercase();
+        app_name_lower.contains(&include_lower) || title_lower.contains(&include_lower)
+    });
 }
 
 async fn retry_with_backoff<F, T, E>(

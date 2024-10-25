@@ -116,7 +116,6 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
         let _ = window.set_always_on_top(overlay);
         let _ = window.show();
 
-
         if !overlay {
             let _ = window.set_focus();
         }
@@ -130,6 +129,7 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
         .build();
     }
 }
+
 
 fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
     debug!("Starting to parse shortcut: {}", shortcut);
@@ -218,11 +218,15 @@ fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
     }
 }
 
+const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
+
+
 #[tauri::command(rename_all = "snake_case")]
 pub fn update_show_screenpipe_shortcut(
     app_handle: tauri::AppHandle<tauri::Wry>,
     new_shortcut: String,
 ) -> Result<(), String> {
+
     app_handle
         .global_shortcut()
         .unregister_all()
@@ -230,15 +234,55 @@ pub fn update_show_screenpipe_shortcut(
 
     let show_window_shortcut = parse_shortcut(&new_shortcut)?;
 
-    app_handle
-        .global_shortcut()
-        .on_shortcut(
-            show_window_shortcut,
-            move |app_handle, _event, _shortcut| {
-                show_main_window(app_handle, true);
-            },
-        )
-        .map_err(|e| e.to_string())?;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    // Unregister all existing shortcuts
+    if let Err(e) = app_handle.global_shortcut().unregister_all() {
+        info!("failed to unregister shortcuts: {}", e);
+        // Continue execution to try setting the default shortcut
+    }
+
+    // Try to parse the new shortcut, fall back to default if it fails
+    let shortcut_str = match new_shortcut.parse::<Shortcut>() {
+        Ok(s) => new_shortcut,
+        Err(e) => {
+            info!(
+                "invalid shortcut '{}': {}, falling back to default",
+                new_shortcut, e
+            );
+            DEFAULT_SHORTCUT.to_string()
+        }
+    };
+
+    // Parse the shortcut string (will be either new_shortcut or default)
+    let show_window_shortcut = match shortcut_str.parse::<Shortcut>() {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!("failed to parse shortcut: {}", e));
+        }
+    };
+
+    // Register the new shortcut
+    if let Err(e) = app_handle.global_shortcut().on_shortcut(
+        show_window_shortcut,
+        move |app_handle, _event, _shortcut| {
+            show_main_window(app_handle, true);
+        },
+    ) {
+        info!("failed to register shortcut: {}", e);
+
+        // Try to register the default shortcut as fallback
+        if let Ok(default_shortcut) = DEFAULT_SHORTCUT.parse::<Shortcut>() {
+            let _ = app_handle.global_shortcut().on_shortcut(
+                default_shortcut,
+                move |app_handle, _event, _shortcut| {
+                    show_main_window(app_handle, true);
+                },
+            );
+        }
+
+        return Err("failed to set shortcut, reverted to default".to_string());
+    }
 
     Ok(())
 }
