@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729871981883,
+  "lastUpdate": 1729872865933,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19619,6 +19619,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1897510583,
             "range": "± 68055932",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "54302513+cparish312@users.noreply.github.com",
+            "name": "cparish312",
+            "username": "cparish312"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ec6ba71dbcb2c77e5e79ea19469d3bbbf3797224",
+          "message": "fix: properly insert frames & video chunks per device name (#579)",
+          "timestamp": "2024-10-25T09:03:27-07:00",
+          "tree_id": "8813405bf95094a1dff9aed2a104838e7842599e",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/ec6ba71dbcb2c77e5e79ea19469d3bbbf3797224"
+        },
+        "date": 1729872863764,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1932454437,
+            "range": "± 65210728",
             "unit": "ns/iter"
           }
         ]
