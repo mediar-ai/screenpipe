@@ -173,7 +173,12 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 info!("screenpipe setup complete");
-                // TODO: ffmpeg sidecar thing here
+                if let Some(ffmpeg_path) = find_ffmpeg_path() {
+                    println!("ffmpeg found at: {:?}", ffmpeg_path);
+                } else {
+                    eprintln!("failed to find or install ffmpeg.");
+                    return Err(anyhow::anyhow!("ffmpeg installation failed"));
+                }
                 return Ok(());
             }
         }
