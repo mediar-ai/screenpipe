@@ -53,6 +53,10 @@ we follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) fold
 
 ## additional notes
 
+### try to keep files small (under 600 lines of code)
+
+AI is quite bad when files are big, we should try to keep small so we move faster (also it's nice for humans too 🤓)
+
 ### ai system prompt
 
 i use cursor with this prompt to help me with the code:
