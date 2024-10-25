@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::constants::AUDIO_CONFIG;
 use crate::core::AudioSegment;
 use crate::vad_engine::{SpeechBoundary, VadEngine};
 use crate::AudioDevice;
@@ -22,8 +23,8 @@ pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
         .iter()
         .fold(0.0f32, |max, &sample| max.max(sample.abs()));
 
-    let target_rms = 0.2; // Adjust as needed
-    let target_peak = 0.95; // Adjust as needed
+    let target_rms = AUDIO_CONFIG.target_rms;
+    let target_peak = AUDIO_CONFIG.target_peak;
 
     let rms_scaling = target_rms / rms;
     let peak_scaling = target_peak / peak;
@@ -38,7 +39,7 @@ pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
 
 pub fn spectral_subtraction(audio: &[f32], d: f32) -> Result<Vec<f32>> {
     let mut real_planner = RealFftPlanner::<f32>::new();
-    let window_size = 1600; // 16k sample rate - 100ms
+    let window_size = AUDIO_CONFIG.window_size; // 16k sample rate - 100ms
     let r2c = real_planner.plan_fft_forward(window_size);
 
     let mut y = r2c.make_output_vec();
@@ -120,6 +121,19 @@ pub struct AudioInput {
     pub output_path: Arc<PathBuf>,
 }
 
+// impl default for audio input
+impl Default for AudioInput {
+    fn default() -> Self {
+        AudioInput {
+            data: Arc::new(Vec::new()),
+            sample_rate: 0,
+            channels: 0,
+            device: Arc::new(AudioDevice::default()),
+            output_path: Arc::new(PathBuf::new()),
+        }
+    }
+}
+
 pub fn audio_frames_to_speech_frames(
     data: &[f32],
     device: Arc<AudioDevice>,
@@ -134,14 +148,13 @@ pub fn audio_frames_to_speech_frames(
 
     let audio_data = normalize_v2(&audio_data);
 
-    const FRAME_SIZE: usize = 1600; // 100ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
     let mut total_frames = 0;
     let mut speech_frame_count = 0;
     let mut noise = 0.;
     let mut is_speech_active = false;
 
-    for chunk in audio_data.chunks(FRAME_SIZE) {
+    for chunk in audio_data.chunks(AUDIO_CONFIG.frame_size) {
         total_frames += 1;
 
         // Use the new speech boundary detection

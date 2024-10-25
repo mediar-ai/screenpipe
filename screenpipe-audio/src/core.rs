@@ -1,4 +1,5 @@
 use crate::audio_processing::{audio_frames_to_speech_frames, audio_to_mono, AudioInput};
+use crate::constants::AUDIO_CONFIG;
 use crate::vad_engine::VadEngine;
 use anyhow::{anyhow, Result};
 use chrono::Utc;
@@ -52,6 +53,12 @@ pub enum DeviceType {
 pub struct AudioDevice {
     pub name: String,
     pub device_type: DeviceType,
+}
+
+impl Default for AudioDevice {
+    fn default() -> Self {
+        AudioDevice::new("default".to_string(), DeviceType::Input)
+    }
 }
 
 impl AudioDevice {
@@ -171,13 +178,13 @@ pub async fn record_and_transcribe(
     println!("successfully subscribed to audio stream");
 
     // Add timeout to prevent infinite waiting
-    let timeout = Duration::from_secs(1000);
+    let timeout = Duration::from_secs(10); // TODO remove timeout useless
 
     loop {
         println!("waiting for audio segment");
         match tokio::time::timeout(timeout, receiver.recv()).await {
             Ok(Ok(segment)) => {
-                println!("received audio segment, length: {}", segment.frames.len());
+                // println!("received audio segment, length: {}", segment.frames.len());
                 let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
                 let sanitized_device_name =
                     audio_stream.device.to_string().replace(['/', '\\'], "_");
@@ -194,7 +201,7 @@ pub async fn record_and_transcribe(
                 }) {
                     println!("failed to send audio to audio model: {}", e);
                 }
-                println!("sent audio segment to audio model");
+                // println!("sent audio segment to audio model");
             }
             Ok(Err(e)) => {
                 println!("error receiving from broadcast channel: {}", e);
@@ -408,10 +415,9 @@ impl AudioStream {
                 let mut buffer = buffer_clone.lock().unwrap();
                 buffer.extend_from_slice(&mono);
 
-                const CHUNK_DURATION_MS: f32 = 3000.0;
                 let buffer_duration_ms =
                     (buffer.len() as f32 / config_clone2.sample_rate().0 as f32) * 1000.0;
-                if buffer_duration_ms < CHUNK_DURATION_MS {
+                if buffer_duration_ms < AUDIO_CONFIG.chunk_duration_ms {
                     return;
                 }
 
@@ -559,15 +565,14 @@ impl AudioStream {
                         sample_rate,
                         &mut *vad,
                     ) {
-                        println!("sending {} speech frames", speech_frames.len());
+                        // println!("sending {} speech frames", speech_frames.len());
                         let speech_segment = AudioSegment {
                             frames: Arc::new(chunk.to_vec()),
                             speech_frames: Arc::new(speech_frames),
                         };
 
-                        match tx.send(speech_segment) {
-                            Ok(n) => println!("successfully sent audio segment to {} receivers", n),
-                            Err(e) => println!("failed to send audio segment: {}", e),
+                        if let Err(e) = tx.send(speech_segment) {
+                            error!("failed to send audio segment: {}", e);
                         }
                     }
 
@@ -597,52 +602,48 @@ impl AudioStream {
 // Add this at the end of the file
 #[cfg(test)]
 pub mod tests {
-    use crate::{create_whisper_channel, vad_engine::SileroVad};
-
     use super::*;
-
+    use crate::{create_whisper_channel, vad_engine::SileroVad};
+    use rand::seq::SliceRandom;
+    use rand::thread_rng;
     use screenpipe_core::Language;
     use std::{
         collections::HashMap,
         path::PathBuf,
+        process::Command,
         sync::{Arc, Mutex},
     };
     use strsim::levenshtein;
-    use tracing::{info, Level};
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tempfile::tempdir;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_transcription_accuracy_direct() {
-        // init tracing logs thing
+        // Setup logging
         // fmt()
         //     .with_env_filter(
         //         EnvFilter::builder()
         //             .with_default_directive(Level::DEBUG.into())
         //             .parse_lossy("screenpipe_audio=debug"),
         //     )
-        //     .with_target(false) // Removes the target from logs
-        //     .with_thread_ids(true) // Adds thread IDs to logs
-        //     .with_file(true) // Adds file name to logs
-        //     .with_line_number(true) // Adds line numbers to logs
+        //     .with_target(false)
+        //     .with_thread_ids(true)
+        //     .with_file(true)
+        //     .with_line_number(true)
         //     .init();
+
         println!("starting transcription accuracy test");
 
         // Setup test cases
-        let test_cases = vec![
-            (
-                "test_data/accuracy1.wav",
-                r#"yo louis, here's the tldr of that mind-blowing meeting:
+        let mut test_cases: Vec<(String, &str)> = vec![
+            ("test_data/accuracy1.wav", r#"yo louis, here's the tldr of that mind-blowing meeting:
         - bob's cat walked across his keyboard 3 times. productivity increased by 200%.
         - sarah's virtual background glitched, revealing she was actually on a beach. no one noticed.
         - you successfully pretended to be engaged while scrolling twitter. achievement unlocked!
         - 7 people said "you're on mute" in perfect synchronization. new world record.
         - meeting could've been an email. shocking.
         key takeaway: we're all living in a simulation, and the devs are laughing.
-        peace out, llama3.2:3b-instruct-q4_K_M"#,
-            ),
-            (
-                "test_data/accuracy2.wav",
-                r#"bro - got some good stuff from screenpipe here's the lowdown on your day, you productivity ninja:
+        peace out, llama3.2:3b-instruct-q4_K_M"#),
+            ("test_data/accuracy2.wav", r#"bro - got some good stuff from screenpipe here's the lowdown on your day, you productivity ninja:
         - absolutely demolished that 2-hour coding sesh on the new feature. the keyboard is still smoking, bro!
         - crushed 3 client calls like a boss. they're probably writing love letters to you as we speak, make sure to close john tomorrow 8.00 am according to our notes, let the cash flow in!
         - spent 45 mins on slack. 90% memes, 10% actual work. perfectly balanced, as all things should be
@@ -650,24 +651,96 @@ pub mod tests {
         overall, you're killing it! 80% of your time on high-value tasks. the other 20%? probably spent admiring your own reflection, you handsome devil.
         PS: seriously, quit tiktok. your FBI agent is getting bored watching you scroll endlessly.
         what's the plan for tomorrow? more coding? more memes? world domination?
-        generated by your screenpipe ai assistant (who's definitely not planning to take over the world... yet)"#,
-            ),
-            (
-                "test_data/accuracy3.wav",
-                r#"again, screenpipe allows you to get meeting summaries, locally, without leaking data to OpenAI, with any apps, like WhatsApp, Meet, Zoom, etc. and it's open source at github.com/mediar-ai/screenpipe"#,
-            ),
-            (
-                "test_data/accuracy4.wav",
-                r#"Eventually but, I mean, I feel like but, I mean, first, I mean, you think your your vision smart will be interesting because, yeah, you install once. You pay us, you install once. That that yours. So, basically, all the time Microsoft explained, you know, MS Office, long time ago, you just buy the the the software that you can using there forever unless you wanna you wanna update upgrade is the better version. Right? So it's a little bit, you know"#,
-            ),
-            (
-                "test_data/accuracy5.wav",
-                r#"Thank you. Yeah. So I cannot they they took it, refresh because of my one set top top time. And, also, second thing is, your byte was stolen. By the time?"#,
-            ),
+        generated by your screenpipe ai assistant (who's definitely not planning to take over the world... yet)"#),
+            ("test_data/accuracy3.wav", r#"again, screenpipe allows you to get meeting summaries, locally, without leaking data to OpenAI, with any apps, like WhatsApp, Meet, Zoom, etc. and it's open source at github.com/mediar-ai/screenpipe"#),
+            ("test_data/accuracy4.wav", r#"Eventually but, I mean, I feel like but, I mean, first, I mean, you think your your vision smart will be interesting because, yeah, you install once. You pay us, you install once. That that yours. So, basically, all the time Microsoft explained, you know, MS Office, long time ago, you just buy the the the software that you can using there forever unless you wanna you wanna update upgrade is the better version. Right? So it's a little bit, you know"#),
+            ("test_data/accuracy5.wav", r#"Thank you. Yeah. So I cannot they they took it, refresh because of my one set top top time. And, also, second thing is, your byte was stolen. By the time?"#),
             // Add more test cases as needed
-        ];
+        ].into_iter()
+            .map(|(path, text)| {
+                let absolute_path = std::env::current_dir()
+                    .unwrap()
+                    .join(path)
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+                (absolute_path, text)
+            })
+            .collect();
 
-        println!("initialized {} test cases", test_cases.len());
+        // Shuffle test cases
+        let mut rng = thread_rng();
+        test_cases.shuffle(&mut rng);
+        println!("shuffled {} test cases", test_cases.len());
+
+        // Create temp dir for merged wav
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let merged_wav_path = temp_dir.path().join("merged.wav");
+
+        // Create file list for ffmpeg
+        let file_list_path = temp_dir.path().join("files.txt");
+        // Create a silent WAV file
+        let silence_path = temp_dir.path().join("silence.wav");
+        let silence_status = Command::new("ffmpeg")
+            .args([
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=44100:cl=stereo",
+                "-t",
+                "1", // 1 second of silence
+                silence_path.to_str().unwrap(),
+            ])
+            .status()
+            .expect("Failed to create silence file");
+
+        assert!(silence_status.success(), "Failed to create silence file");
+
+        // Create file list with silence between files
+        let file_list_content = test_cases
+            .iter()
+            .enumerate()
+            .map(|(i, (path, _))| {
+                if i == test_cases.len() - 1 {
+                    format!("file '{}'", path)
+                } else {
+                    format!("file '{}'\nfile '{}'", path, silence_path.to_str().unwrap())
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&file_list_path, file_list_content.clone())
+            .expect("Failed to write file list");
+
+        println!("ffmpeg file list content:\n{}", file_list_content);
+
+        // Merge WAV files using ffmpeg
+        let status = Command::new("ffmpeg")
+            .args([
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                file_list_path.to_str().unwrap(),
+                "-c",
+                "copy",
+                merged_wav_path.to_str().unwrap(),
+            ])
+            .status()
+            .expect("Failed to execute ffmpeg");
+
+        assert!(status.success(), "Failed to merge WAV files");
+
+        // Collect expected transcriptions in order
+        let expected_transcription = test_cases
+            .iter()
+            .map(|(_, text)| text.to_string())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        println!("expected transcription: \n\n{}", expected_transcription);
+
         let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo);
         println!("using engine: {}", engine);
 
@@ -679,154 +752,163 @@ pub mod tests {
                 .expect("Failed to create whisper channel");
         println!("whisper channel created successfully");
 
-        for (idx, (audio_file, expected_transcription)) in test_cases.iter().enumerate() {
-            println!(
-                "processing test case {}/{}: {}",
-                idx + 1,
-                test_cases.len(),
-                audio_file
-            );
+        let data_dir = Arc::new(PathBuf::from("/tmp/sp-test"));
+        println!("using data directory: {:?}", data_dir);
 
-            let data_dir = Arc::new(PathBuf::from("/tmp/sp-test"));
-            println!("using data directory: {:?}", data_dir);
+        println!("initializing vad engine");
+        let vad = Arc::new(Mutex::new(
+            Box::new(SileroVad::new().await.unwrap()) as Box<dyn VadEngine + Send>
+        ));
+        println!("vad engine initialized");
 
-            println!("initializing vad engine");
-            let vad = SileroVad::new().await.unwrap();
-            println!("vad engine initialized");
+        // Create audio stream from merged WAV
+        println!(
+            "creating audio stream from merged file: {:?}",
+            merged_wav_path
+        );
+        let audio_stream = Arc::new(
+            AudioStream::from_wav_file(merged_wav_path.to_str().unwrap(), vad.clone())
+                .await
+                .expect("Failed to create audio stream"),
+        );
+        println!("audio stream created successfully");
 
-            println!("creating audio stream from file: {}", audio_file);
-            let audio_stream = Arc::new(
-                AudioStream::from_wav_file(audio_file, Arc::new(Mutex::new(Box::new(vad))))
-                    .await
-                    .expect("Failed to create audio stream"),
-            );
-            println!("audio stream created successfully");
-
-            let whisper_sender_clone = whisper_sender.clone();
-            let handle = tokio::spawn(async move {
-                println!("abcd");
-                match record_and_transcribe(audio_stream.clone(), whisper_sender_clone, data_dir)
-                    .await
-                {
-                    Ok(_) => println!("record_and_transcribe completed successfully"),
-                    Err(e) => println!("record_and_transcribe error: {}", e),
-                }
-            });
-
-            tokio::time::sleep(Duration::from_secs(3)).await;
-
-            let mut full_transcription = String::new();
-            println!("collecting transcriptions from broadcast channel");
-
-            let mut device_transcripts: HashMap<String, (String, Option<i64>)> = HashMap::new();
-            let mut buffer_frames: HashMap<String, (Vec<String>, Vec<f32>)> = HashMap::new();
-
-            loop {
-                while let Ok(mut transcription) = whisper_receiver.recv() {
-                    println!(
-                        "device {} received transcription {:?}",
-                        transcription.input.device, transcription.transcription
-                    );
-
-                    // Get device-specific previous transcript
-                    let device_id = transcription.input.device.to_string();
-                    let (previous_transcript, _) = device_transcripts
-                        .entry(device_id.clone())
-                        .or_insert((String::new(), None));
-
-                    // Process with device-specific state
-                    let mut current_transcript: Option<String> =
-                        transcription.transcription.clone();
-                    if let Some((_, current)) =
-                        transcription.cleanup_overlap(previous_transcript.clone())
-                    {
-                        current_transcript = Some(current);
-                    }
-
-                    transcription.transcription = current_transcript.clone();
-                    *previous_transcript = current_transcript.unwrap_or_default();
-                    // buffer frames & transcript unless we have reached the chunk duration
-                    let frames = buffer_frames
-                        .entry(device_id.clone())
-                        .or_insert((Vec::new(), Vec::new()));
-
-                    // Buffer both transcription and frames
-                    if let Some(transcript) = transcription.transcription {
-                        frames.0.push(transcript);
-                    }
-                    frames.1.extend(
-                        transcription
-                            .input
-                            .data
-                            .iter()
-                            .flat_map(|segment| segment.frames.iter())
-                            .copied(), // Add .copied() to get owned f32 values
-                    );
-
-                    // Check if we've reached the chunk duration
-                    let total_frames = frames.1.len();
-                    let frames_per_chunk = (Duration::from_secs(3).as_secs_f32()
-                        * transcription.input.sample_rate as f32)
-                        as usize;
-
-                    if total_frames < frames_per_chunk {
-                        println!(
-                            "buffering frames until encoding & saving to db: {}/{}",
-                            total_frames, frames_per_chunk
-                        );
-                        continue; // Wait for more frames
-                    }
-
-                    // We have enough frames, process them but keep remainder
-                    let (mut buffered_transcripts, mut frames_to_process) = buffer_frames
-                        .get_mut(&device_id)
-                        .map(|f| (std::mem::take(&mut f.0), std::mem::take(&mut f.1)))
-                        .unwrap_or_default();
-
-                    // Split frames at chunk boundary
-                    let remainder_frames = frames_to_process.split_off(frames_per_chunk);
-
-                    // Keep the last transcript if there are remaining frames
-                    let remainder_transcript = if !remainder_frames.is_empty() {
-                        buffered_transcripts.pop()
-                    } else {
-                        None
-                    };
-
-                    // Put remainder back in buffer
-                    if !remainder_frames.is_empty() || remainder_transcript.is_some() {
-                        if let Some(buffer) = buffer_frames.get_mut(&device_id) {
-                            if let Some(transcript) = remainder_transcript {
-                                buffer.0.push(transcript);
-                            }
-                            buffer.1 = remainder_frames;
-                        }
-                    }
-
-                    // Join transcripts with spaces
-                    let combined_transcript = buffered_transcripts.join(" ");
-                    full_transcription = combined_transcript;
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                if full_transcription.split_whitespace().count() >= 10 {
-                    println!("full transcription: {}", full_transcription);
-                    break;
-                }
+        let whisper_sender_clone = whisper_sender.clone();
+        let handle = tokio::spawn(async move {
+            match record_and_transcribe(audio_stream.clone(), whisper_sender_clone, data_dir).await
+            {
+                Ok(_) => println!("record_and_transcribe completed successfully"),
+                Err(e) => println!("record_and_transcribe error: {}", e),
             }
-            let distance = levenshtein(expected_transcription, &full_transcription);
-            let accuracy = 1.0 - (distance as f64 / expected_transcription.len() as f64);
+        });
 
-            println!("=== Test Results for {} ===", audio_file);
-            println!("Expected length: {}", expected_transcription.len());
-            println!("Actual length: {}", full_transcription.len());
-            println!("Levenshtein distance: {}", distance);
-            println!("Accuracy: {:.2}%", accuracy * 100.0);
-            println!("Expected: {}", expected_transcription);
-            println!("Actual: {}", full_transcription);
+        let mut full_transcription = String::new();
+        println!("collecting transcriptions from broadcast channel");
 
-            println!("waiting for recording task to complete");
-            handle.await.expect("Recording task failed");
-            println!("test case completed");
+        let mut device_transcripts: HashMap<String, (String, Option<i64>)> = HashMap::new();
+        let mut buffer_frames: HashMap<String, (Vec<String>, Vec<f32>)> = HashMap::new();
+        let mut last_transcription_time = std::time::Instant::now();
+        const IDLE_TIMEOUT: Duration = Duration::from_secs(20); // ! change this if your computer is slow
+
+        loop {
+            while let Ok(mut transcription) = whisper_receiver.try_recv() {
+                last_transcription_time = std::time::Instant::now();
+                println!(
+                    "device {} received transcription {:?}",
+                    transcription.input.device, transcription.transcription
+                );
+
+                let device_id = transcription.input.device.to_string();
+                let (previous_transcript, _) = device_transcripts
+                    .entry(device_id.clone())
+                    .or_insert((String::new(), None));
+
+                let mut current_transcript: Option<String> = transcription.transcription.clone();
+                println!("current_transcript: {:?}", current_transcript);
+                if let Some((_, current)) =
+                    transcription.cleanup_overlap(previous_transcript.clone())
+                    // transcription
+                    //     .cleanup_overlap_llm(previous_transcript.clone())
+                    //     .await
+                    //     .unwrap()
+                {
+                    current_transcript = Some(current);
+                }
+                println!("current_transcript after cleanup: {:?}", current_transcript);
+
+                transcription.transcription = current_transcript.clone();
+                *previous_transcript = current_transcript.unwrap_or_default();
+
+                let frames = buffer_frames
+                    .entry(device_id.clone())
+                    .or_insert((Vec::new(), Vec::new()));
+
+                if let Some(transcript) = transcription.transcription {
+                    frames.0.push(transcript);
+                }
+                frames.1.extend(
+                    transcription
+                        .input
+                        .data
+                        .iter()
+                        .flat_map(|segment| segment.frames.iter())
+                        .copied(),
+                );
+
+                // ignore warning non used frames
+                // #![allow(unused)]
+                let total_frames = frames.1.len();
+                // #![allow(unused)]
+                let frames_per_chunk = (Duration::from_secs(3).as_secs_f32()
+                    * transcription.input.sample_rate as f32)
+                    as usize;
+
+                // keep commented code as it should reflect prod with encoding to disk & db
+                // if total_frames < frames_per_chunk {
+                //     println!(
+                //         "buffering frames until encoding & saving to db: {}/{}",
+                //         total_frames, frames_per_chunk
+                //     );
+                //     continue;
+                // }
+
+                let (mut buffered_transcripts, mut frames_to_process) = buffer_frames
+                    .get_mut(&device_id)
+                    .map(|f| (std::mem::take(&mut f.0), std::mem::take(&mut f.1)))
+                    .unwrap_or_default();
+
+                // let remainder_frames = frames_to_process.split_off(frames_per_chunk);
+                // let remainder_transcript = if !remainder_frames.is_empty() {
+                //     buffered_transcripts.pop()
+                // } else {
+                //     None
+                // };
+
+                // if !remainder_frames.is_empty() || remainder_transcript.is_some() {
+                //     if let Some(buffer) = buffer_frames.get_mut(&device_id) {
+                //         if let Some(transcript) = remainder_transcript {
+                //             buffer.0.push(transcript);
+                //         }
+                //         buffer.1 = remainder_frames;
+                //     }
+                // }
+
+                let combined_transcript = buffered_transcripts.join(" ");
+                full_transcription.push_str(&combined_transcript);
+                full_transcription.push(' ');
+            }
+
+            if last_transcription_time.elapsed() > IDLE_TIMEOUT {
+                // no data for x seconds, end
+                println!(
+                    "no new transcriptions for {} seconds, finishing",
+                    IDLE_TIMEOUT.as_secs()
+                );
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
+
+        // Wait a bit longer to ensure all transcriptions are processed
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        println!("waiting for recording task to complete");
+        handle.abort();
+
+        let distance = levenshtein(&expected_transcription, &full_transcription);
+        let accuracy = 1.0 - (distance as f64 / expected_transcription.len() as f64);
+
+        println!("=== Test Results ===");
+
+        println!("Expected: {}", expected_transcription);
+        println!("Actual: {}", full_transcription);
+
+        println!("Expected length: {}", expected_transcription.len());
+        println!("Actual length: {}", full_transcription.len());
+        println!("Levenshtein distance: {}", distance);
+        println!("Accuracy: {:.2}%", accuracy * 100.0);
+
+        assert!(accuracy > 0.3, "Accuracy below 30%, {}", accuracy);
     }
 }

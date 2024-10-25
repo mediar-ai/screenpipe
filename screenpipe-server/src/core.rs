@@ -18,6 +18,13 @@ use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinHandle;
+use once_cell::sync::Lazy;
+use std::env;
+
+// Add near other static/const declarations
+static TRANSCRIPTION_PROCESSING_URL: Lazy<String> = Lazy::new(|| {
+    env::var("TRANSCRIPTION_PROCESSING_MODEL_URL").unwrap_or_default()
+});
 
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
@@ -181,7 +188,10 @@ async fn record_video(
             let db_chunk_callback = Arc::clone(&db_chunk_callback);
             let device_name = Arc::clone(&device_name);
             rt.spawn(async move {
-                if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path, &device_name).await {
+                if let Err(e) = db_chunk_callback
+                    .insert_video_chunk(&file_path, &device_name)
+                    .await
+                {
                     error!("Failed to insert new video chunk: {}", e);
                 }
                 debug!("record_video: Inserted new video chunk: {}", file_path);
@@ -281,7 +291,11 @@ async fn record_audio(
             &audio_stream.device.name
         );
 
-        let handle = record_and_transcribe(audio_stream, whisper_sender_clone, data_dir_clone)?;
+        let handle = tokio::spawn(async move {
+            record_and_transcribe(audio_stream, whisper_sender_clone, data_dir_clone)
+                .await
+                .unwrap();
+        });
 
         info!("spawned task for device: {}", device_id);
         handles.insert(device_id, handle);
@@ -318,7 +332,11 @@ async fn record_audio(
             let mut current_transcript: Option<String> = transcription.transcription.clone();
             let mut processed_previous = String::new();
             if let Some((previous, current)) =
-                transcription.cleanup_overlap(previous_transcript.clone())
+                if TRANSCRIPTION_PROCESSING_URL.is_empty() {
+                    transcription.cleanup_overlap(previous_transcript.clone())
+                } else {
+                    transcription.cleanup_overlap_llm(previous_transcript.clone()).await?
+                }
             {
                 current_transcript = Some(current);
                 processed_previous = previous;
@@ -487,3 +505,4 @@ async fn process_audio_result(
     }
     Ok(chunk_id)
 }
+

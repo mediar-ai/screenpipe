@@ -26,9 +26,17 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Mutex;
 
+use crate::constants::{
+    DEEPGRAM_API_KEY, 
+    OVERLAP_SAMPLES, 
+    TRANSCRIPT_SPLITTER_PROMPT,
+    TRANSCRIPTION_PROCESSING_MODEL,
+    TRANSCRIPTION_PROCESSING_URL
+};
+
 // Replace the get_deepgram_api_key function with this:
 fn get_deepgram_api_key() -> String {
-    "7ed2a159a094337b01fd8178b914b7ae0e77822d".to_string()
+    DEEPGRAM_API_KEY.clone()
 }
 
 async fn transcribe_with_deepgram(
@@ -309,11 +317,8 @@ pub async fn stt(
     }
 
     // Update overlap buffer with the last few seconds of speech frames
-    const OVERLAP_SECONDS: usize = 1;
-    let overlap_samples = OVERLAP_SECONDS * 16000;
-    // info!("overlap samples length: {}, speech frames length: {}", overlap_samples, speech_frames.len());
-    if speech_frames.len() > overlap_samples {
-        *overlap_buffer = speech_frames.split_off(speech_frames.len() - overlap_samples);
+    if speech_frames.len() > OVERLAP_SAMPLES {
+        *overlap_buffer = speech_frames.split_off(speech_frames.len() - OVERLAP_SAMPLES);
         // info!("overlap buffer length: {}", overlap_buffer.len());
     } else {
         overlap_buffer.clear();
@@ -393,6 +398,75 @@ impl TranscriptionResult {
         }
 
         None
+    }
+
+    pub async fn cleanup_overlap_llm(
+        &mut self,
+        previous_transcript: String,
+    ) -> Result<Option<(String, String)>> {
+        if let Some(transcription) = &self.transcription {
+            let llm_result = async {
+
+                let client = Client::new();
+
+                let prompt = format!(
+                    "Split these overlapping transcript segments naturally:\nPrevious: '{}'\nCurrent: '{}'", 
+                    previous_transcript, transcription
+                );
+
+                let payload = serde_json::json!({
+                    "model": TRANSCRIPTION_PROCESSING_MODEL.clone(),
+                    "messages": [{
+                        "role": "system",
+                        "content": TRANSCRIPT_SPLITTER_PROMPT
+                    }, {
+                        "role": "user",
+                        "content": prompt
+                    }],
+                    "temperature": 0.2, // Reduced temperature for more consistent output
+                    "stream": false,
+                    "response_format": {
+                        "type": "json_object"
+                    }
+                });
+
+                let response = client.post(TRANSCRIPTION_PROCESSING_URL.clone()).json(&payload).send().await?;
+                let result: Value = response.json().await?;
+
+                if let Some(content) = result["choices"][0]["message"]["content"].as_str() {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(content) {
+                        let prev = parsed["previous"].as_str().unwrap_or("").to_string();
+                        let cur = parsed["current"].as_str().unwrap_or("").to_string();
+                        
+                        // Post-process the segments
+                        let prev = prev.trim().to_string();
+                        let cur = cur.trim().to_string();
+                        
+                        // Handle empty or invalid splits
+                        if prev.is_empty() && cur.is_empty() {
+                            return Ok(None);
+                        }
+                        
+                        return Ok(Some((prev, cur)));
+                    }
+                }
+                Err(anyhow::anyhow!(format!("Failed to parse LLM response: {:?}", result)))
+            }
+            .await;
+
+            // If LLM approach fails, fall back to original method
+            if let Err(e) = &llm_result {
+                debug!(
+                    "LLM cleanup failed, falling back to standard overlap: {}",
+                    e
+                );
+                return Ok(self.cleanup_overlap(previous_transcript));
+            }
+
+            llm_result
+        } else {
+            Ok(None)
+        }
     }
 }
 
