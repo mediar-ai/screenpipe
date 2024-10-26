@@ -6,7 +6,6 @@ mod pipes {
     use std::path::PathBuf;
     use std::pin::Pin;
     use tokio::process::Command;
-
     use reqwest::Client;
     use serde_json::Value;
 
@@ -64,10 +63,7 @@ mod pipes {
 
                 // Install dependencies
                 info!("Installing dependencies for Next.js pipe");
-                let install_output = Command::new("deno")
-                    .arg("run")
-                    .arg("-A")
-                    .arg("npm:npm@latest")
+                let install_output = Command::new("bun")
                     .arg("install")
                     .current_dir(&pipe_dir)
                     .output()
@@ -125,10 +121,10 @@ mod pipes {
                 //     .stdout(std::process::Stdio::piped())
                 //     .stderr(std::process::Stdio::piped())
                 //     .spawn()?;
-                let mut child = Command::new("deno")
-                    .arg("task")
-                    .arg("--unstable-detect-cjs")
-                    .arg("dev")
+
+                let mut child = Command::new("bun")
+                    .arg("run")
+                    .arg("start")
                     .arg("-p")
                     .arg(port.to_string())
                     .current_dir(&pipe_dir)
@@ -156,15 +152,8 @@ mod pipes {
         ));
 
         // Execute Deno
-        let mut child = Command::new("deno")
+        let mut child = Command::new("bun")
             .arg("run")
-            .arg("--config")
-            .arg(pipe_dir.join("deno.json"))
-            .arg("--allow-read")
-            .arg("--allow-write")
-            .arg("--allow-net")
-            .arg("--allow-env")
-            .arg("--reload=https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-js/main.ts")
             .arg(&main_module)
             .envs(env_vars)
             .stdout(std::process::Stdio::piped())
@@ -281,10 +270,7 @@ mod pipes {
                 info!("Detected Next.js project, setting up for production");
 
                 // Run npm install
-                let mut install_child = Command::new("deno")
-                    .arg("run")
-                    .arg("-A")
-                    .arg("npm:npm@latest")
+                let mut install_child = Command::new("bun")
                     .arg("install")
                     .current_dir(&dest_dir)
                     .stdout(std::process::Stdio::piped())
@@ -469,74 +455,74 @@ mod pipes {
             .map(|s| s.starts_with('.') || s == "Thumbs.db")
             .unwrap_or(false)
     }
-
     #[cfg(not(windows))]
-    const DENO_EXECUTABLE_NAME: &str = "deno";
-
+    const BUN_EXECUTABLE_NAME: &str = "bun";
+    
     #[cfg(windows)]
-    const DENO_EXECUTABLE_NAME: &str = "deno.exe";
+    const BUN_EXECUTABLE_NAME: &str = "bun.exe";
 
-    pub fn find_deno() -> Option<PathBuf> {
-        debug!("starting search for deno executable");
 
-        // check if `deno` is in the PATH environment variable
-        if let Ok(path) = which(DENO_EXECUTABLE_NAME) {
-            debug!("found deno in PATH: {:?}", path);
-            return Some(path);
+pub fn find_bun() -> Option<PathBuf> {
+    debug!("starting search for bun executable");
+
+    // check if `bun` is in the PATH environment variable
+    if let Ok(path) = which(BUN_EXECUTABLE_NAME) {
+        debug!("found bun in PATH: {:?}", path);
+        return Some(path);
+    }
+    debug!("bun not found in PATH");
+
+    // check in current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        debug!("current working directory: {:?}", cwd);
+        let bun_in_cwd = cwd.join(BUN_EXECUTABLE_NAME);
+        if bun_in_cwd.is_file() && bun_in_cwd.exists() {
+            debug!("found bun in current working directory: {:?}", bun_in_cwd);
+            return Some(bun_in_cwd);
         }
-        debug!("deno not found in PATH");
+        debug!("bun not found in current working directory");
+    }
 
-        // check in current working directory
-        if let Ok(cwd) = std::env::current_dir() {
-            debug!("current working directory: {:?}", cwd);
-            let deno_in_cwd = cwd.join(DENO_EXECUTABLE_NAME);
-            if deno_in_cwd.is_file() && deno_in_cwd.exists() {
-                debug!("found deno in current working directory: {:?}", deno_in_cwd);
-                return Some(deno_in_cwd);
+    // check in the same folder as the executable
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_folder) = exe_path.parent() {
+            debug!("executable folder: {:?}", exe_folder);
+            let bun_in_exe_folder = exe_folder.join(BUN_EXECUTABLE_NAME);
+            if bun_in_exe_folder.exists() {
+                debug!("found bun in executable folder: {:?}", bun_in_exe_folder);
+                return Some(bun_in_exe_folder);
             }
-            debug!("deno not found in current working directory");
-        }
-
-        // check in the same folder as the executable
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_folder) = exe_path.parent() {
-                debug!("executable folder: {:?}", exe_folder);
-                let deno_in_exe_folder = exe_folder.join(DENO_EXECUTABLE_NAME);
-                if deno_in_exe_folder.exists() {
-                    debug!("found deno in executable folder: {:?}", deno_in_exe_folder);
-                    return Some(deno_in_exe_folder);
-                }
-                debug!("deno not found in executable folder");
+            debug!("bun not found in executable folder");
 
                 // platform-specific checks
                 #[cfg(target_os = "macos")]
                 {
                     let resources_folder = exe_folder.join("../Resources");
                     debug!("resources folder: {:?}", resources_folder);
-                    let deno_in_resources = resources_folder.join(DENO_EXECUTABLE_NAME);
-                    if deno_in_resources.exists() {
-                        debug!("found deno in resources folder: {:?}", deno_in_resources);
-                        return Some(deno_in_resources);
+                    let bun_in_resources = resources_folder.join(BUN_EXECUTABLE_NAME);
+                    if bun_in_resources.exists() {
+                        debug!("found bun in resources folder: {:?}", bun_in_resources);
+                        return Some(bun_in_resources);
                     }
-                    debug!("deno not found in resources folder");
+                    debug!("bun not found in resources folder");
                 }
 
                 #[cfg(target_os = "linux")]
                 {
                     let lib_folder = exe_folder.join("lib");
                     debug!("lib folder: {:?}", lib_folder);
-                    let deno_in_lib = lib_folder.join(DENO_EXECUTABLE_NAME);
-                    if deno_in_lib.exists() {
-                        debug!("found deno in lib folder: {:?}", deno_in_lib);
-                        return Some(deno_in_lib);
+                    let bun_in_lib = lib_folder.join(BUN_EXECUTABLE_NAME);
+                    if bun_in_lib.exists() {
+                        debug!("found bun in lib folder: {:?}", bun_in_lib);
+                        return Some(bun_in_lib);
                     }
-                    debug!("deno not found in lib folder");
+                    debug!("bun not found in lib folder");
                 }
             }
         }
 
-        error!("deno not found");
-        None // return None if deno is not found
+        error!("bun not found");
+        None // return None if bun is not found
     }
 }
 

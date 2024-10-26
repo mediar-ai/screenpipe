@@ -82,116 +82,120 @@ const exports = {
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
 
-// Add this function to check if Deno is installed
-async function isDenoInstalled() { // assuming it's installed in PATH
+// Add this function to check if Bun is installed
+async function isBunInstalled() { // assuming it's installed in PATH
 	try {
-		await $`deno --version`.quiet();
+		await $`bun --version`.quiet();
 		return true;
 	} catch (error) {
 		return false;
 	}
 }
 
-// Add this function to install Deno
-async function installDeno() {
-	if (await isDenoInstalled()) {
-		console.log('deno is already installed.');
+// Add this function to install Bun
+async function installBun() {
+	if (await isBunInstalled()) {
+		console.log('bun is already installed.');
 		return;
 	}
 
-	console.log('installing deno...');
+	console.log('installing bun...');
 
 	if (platform === 'windows') {
-		console.log('attempting to install deno using chocolatey...');
+		console.log('attempting to install bun using chocolatey...');
 		try {
-			await $`choco upgrade deno -y`;
-			console.log('deno installed/upgraded successfully using chocolatey.');
+			await $`choco upgrade bun -y`;
+			console.log('bun installed/upgraded successfully using chocolatey.');
 		} catch (chocoError) {
-			console.error('failed to install/upgrade deno using chocolatey:', chocoError);
-			console.error('please install deno manually.');
+			console.error('failed to install/upgrade bun using chocolatey:', chocoError);
+			console.error('please install bun manually.');
 		}
 	} else {
 		// for macos and linux
-		await $`curl -fsSL https://deno.land/install.sh | sh`;
+		await $`curl -fsSL https://bun.land/install.sh | sh`;
 	}
 
-	console.log('deno installation attempt completed.');
+	console.log('bun installation attempt completed.');
 }
 
-// Add this function to copy the Deno binary
-async function copyDenoBinary() {
-	console.log('checking deno binary for tauri...');
+// Add this function to copy the Bun binary
+async function copyBunBinary() {
+	console.log('checking bun binary for tauri...');
 
-	let denoSrc, denoDest1, denoDest2;
+	let bunSrc, bunDest1, bunDest2;
 	if (platform === 'windows') {
 		// Check both potential installation locations
-		const chocoPathTools = 'C:\\ProgramData\\chocolatey\\lib\\deno\\tools\\deno.exe';
-		const chocoPathDirect = 'C:\\ProgramData\\chocolatey\\lib\\deno\\deno.exe';
+		const chocoPathTools = 'C:\\ProgramData\\chocolatey\\lib\\bun\\tools\\bun.exe';
+		const chocoPathDirect = 'C:\\ProgramData\\chocolatey\\lib\\bun\\bun.exe';
+        const chocoPathBin = 'C:\\ProgramData\\chocolatey\\bin\\bun.exe'
+
 
 		if (await fs.exists(chocoPathTools)) {
-			denoSrc = chocoPathTools;
+			bunSrc = chocoPathTools;
 		} else if (await fs.exists(chocoPathDirect)) {
-			denoSrc = chocoPathDirect;
-		} else {
-			console.error('deno binary not found in expected locations');
+			bunSrc = chocoPathDirect;
+		}else if(await fs.exists(chocoPathBin)) {
+            bunSrc = chocoPathBin;
+        }else {
+			console.error('bun binary not found in expected locations');
 			return;
 		}
-		denoDest1 = path.join(cwd, 'deno-x86_64-pc-windows-msvc.exe');
+		bunDest1 = path.join(cwd, 'bun-x86_64-pc-windows-msvc.exe');
 	} else if (platform === 'macos') {
-		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
-		denoDest1 = path.join(cwd, 'deno-aarch64-apple-darwin');
-		denoDest2 = path.join(cwd, 'deno-x86_64-apple-darwin');
+		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
+		bunDest1 = path.join(cwd, 'bun-aarch64-apple-darwin');
+		bunDest2 = path.join(cwd, 'bun-x86_64-apple-darwin');
 	} else if (platform === 'linux') {
-		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
-		denoDest1 = path.join(cwd, 'deno-x86_64-unknown-linux-gnu');
+		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
+		bunDest1 = path.join(cwd, 'bun-x86_64-unknown-linux-gnu');
 	} else {
-		console.error('unsupported platform for deno binary copy');
+		console.error('unsupported platform for bun binary copy');
 		return;
 	}
 
-	if (await fs.exists(denoDest1)) {
-		console.log('deno binary already exists for tauri.');
+	if (await fs.exists(bunDest1)) {
+		console.log('bun binary already exists for tauri.');
 		return;
 	}
 
 	try {
 		// Check if the source file exists
-		await fs.access(denoSrc);
+		await fs.access(bunSrc);
 
 		// If it exists, proceed with copying
-		await copyFile(denoSrc, denoDest1);
-		console.log(`deno binary copied successfully to ${denoDest1}`);
+		await copyFile(bunSrc, bunDest1);
+		console.log(`bun binary copied successfully to ${bunDest1}`);
 
 		if (platform === 'macos') {
-			await copyFile(denoSrc, denoDest2);
-			console.log(`deno binary also copied to ${denoDest2}`);
+			await copyFile(bunSrc, bunDest2);
+			console.log(`bun binary also copied to ${bunDest2}`);
 		}
 	} catch (error) {
 		if (error.code === 'ENOENT') {
-			console.error(`deno binary not found at expected location: ${denoSrc}`);
-			console.log('attempting to find deno in PATH...');
+			console.error(`bun binary not found at expected location: ${bunSrc}`);
+			console.log('attempting to find bun in PATH...');
 
 			try {
-				const { stdout } = await $`where deno`.quiet();
-				const denoPath = stdout.trim();
-				console.log(`found deno at: ${denoPath}`);
-				await fs.copyFile(denoPath, denoDest1);
-				await fs.chmod(denoDest1, 0o755);
-				console.log(`deno binary copied successfully from PATH to ${denoDest1}`);
+				const { stdout } = await $`where bun`.quiet();
+				const bunPath = stdout.trim();
+				console.log(`found bun at: ${bunPath}`);
+				await fs.copyFile(bunPath, bunDest1);
+				await fs.chmod(bunDest1, 0o755);
+				console.log(`bun binary copied successfully from PATH to ${bunDest1}`);
 
 				if (platform === 'macos') {
-					await fs.copyFile(denoPath, denoDest2);
-					await fs.chmod(denoDest2, 0o755);
-					console.log(`deno binary also copied to ${denoDest2}`);
+					await fs.copyFile(bunPath, bunDest2);
+					await fs.chmod(bunDest2, 0o755);
+					console.log(`bun binary also copied to ${bunDest2}`);
 				}
 			} catch (pathError) {
-				console.error('failed to find deno in PATH:', pathError);
-				console.log('please ensure deno is installed and accessible in your PATH');
+				console.error('failed to find bun in PATH:', pathError);
+				console.log('please ensure bun is installed and accessible in your PATH');
 			}
 		} else if (error.code === 'EPERM') {
-			console.error(`permission denied when copying deno binary. trying elevated copy...`);
-			await elevatedCopy(denoSrc, denoDest1);
-			console.log(`deno binary copied successfully to ${denoDest1} using elevated permissions`);
+			console.error(`permission denied when copying bun binary. trying elevated copy...`);
+			await elevatedCopy(bunSrc, bunDest1);
+			console.log(`bun binary copied successfully to ${bunDest1} using elevated permissions`);
 		} else {
 			console.error(`unexpected error: ${error.message}`);
 			process.exit(1);
@@ -603,8 +607,8 @@ async function installOllamaSidecar() {
 }
 
 // Near the end of the script, call these functions
-await installDeno();
-await copyDenoBinary();
+await installBun();
+await copyBunBinary();
 await installOllamaSidecar().catch(console.error);
 
 // --dev or --build
