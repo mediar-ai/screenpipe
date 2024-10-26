@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1729905974759,
+  "lastUpdate": 1729969298863,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -19889,6 +19889,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2607190479,
             "range": "± 437603391",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "3876375dbe59f41da0f960ddb90849b8a08239dd",
+          "message": "refactor: restart vad engine from a clean state + separate more tests + more tets of sub componentas",
+          "timestamp": "2024-10-26T11:53:34-07:00",
+          "tree_id": "690a85306fa9f13da8ddd812e62348d48637f9de",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/3876375dbe59f41da0f960ddb90849b8a08239dd"
+        },
+        "date": 1729969297216,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1902971708,
+            "range": "± 41316468",
             "unit": "ns/iter"
           }
         ]
