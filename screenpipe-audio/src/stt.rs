@@ -301,8 +301,13 @@ pub async fn stt(
         .entry(audio_input.device.name.clone())
         .or_insert_with(Vec::new);
 
-    // Combine overlap buffer with new speech frames
-    let mut speech_frames = overlap_buffer.clone();
+    // First add the overlap buffer if it exists
+    let mut speech_frames = Vec::new();
+    if !overlap_buffer.is_empty() {
+        speech_frames.extend(overlap_buffer.iter());
+    }
+
+    // Then add new frames
     speech_frames.extend(
         audio_input
             .data
@@ -310,20 +315,20 @@ pub async fn stt(
             .flat_map(|segment| segment.speech_frames.iter().copied()),
     );
 
-    // info!("speech frames length: {}", speech_frames.len());
-
-    if speech_frames.is_empty() {
-        return Ok(String::new());
-    }
-
-    // Update overlap buffer with the last few seconds of speech frames
+    // Only keep overlap if we have enough frames
     if speech_frames.len() > CONFIG.overlap_samples {
-        *overlap_buffer = speech_frames.split_off(speech_frames.len() - CONFIG.overlap_samples);
-        // info!("overlap buffer length: {}", overlap_buffer.len());
+        let new_overlap_start = speech_frames.len() - CONFIG.overlap_samples;
+        *overlap_buffer = speech_frames[new_overlap_start..].to_vec();
     } else {
         overlap_buffer.clear();
-        // info!("overlap buffer cleared");
     }
+
+    // Process only the non-overlapping portion for transcription
+    let transcription_frames = if speech_frames.len() > CONFIG.overlap_samples {
+        &speech_frames[..speech_frames.len() - CONFIG.overlap_samples]
+    } else {
+        &speech_frames
+    };
 
     let transcription: Result<String> =
         if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
@@ -338,7 +343,7 @@ pub async fn stt(
             );
             match transcribe_with_deepgram(
                 &api_key,
-                &speech_frames,
+                transcription_frames,
                 &audio_input.device.name,
                 audio_input.sample_rate,
                 languages.clone(),
@@ -354,7 +359,7 @@ pub async fn stt(
                     // Fallback to Whisper
                     process_with_whisper(
                         &mut *whisper_model,
-                        &speech_frames,
+                        transcription_frames,
                         &mel_filters,
                         languages.clone(),
                     )
@@ -362,7 +367,7 @@ pub async fn stt(
             }
         } else {
             // Existing Whisper implementation
-            process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
+            process_with_whisper(&mut *whisper_model, transcription_frames, &mel_filters, languages)
         };
 
     Ok(transcription?)

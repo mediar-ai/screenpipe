@@ -9,23 +9,13 @@ use std::sync::Once;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tracing::info;
-use vad_rs::{Vad, VadStatus};
+use vad_rs::Vad;
 
 #[derive(Clone, Copy, Debug)]
 pub enum VadSensitivity {
     Low,
     Medium,
     High,
-}
-
-impl VadSensitivity {
-    pub fn min_speech_ratio(&self) -> f32 {
-        match self {
-            VadSensitivity::Low => CONFIG.vad_sensitivity_low_speech_ratio,
-            VadSensitivity::Medium => CONFIG.vad_sensitivity_medium_speech_ratio,
-            VadSensitivity::High => CONFIG.vad_sensitivity_high_speech_ratio,
-        }
-    }
 }
 
 pub enum VadEngineEnum {
@@ -47,21 +37,142 @@ lazy_static! {
 static DOWNLOAD_ONCE: Once = Once::new();
 
 pub trait VadEngine: Send {
-    fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool>;
-    fn set_sensitivity(&mut self, sensitivity: VadSensitivity);
-    fn audio_type(&mut self, audio_chunk: &[f32]) -> anyhow::Result<VadStatus>;
-    fn get_min_speech_ratio(&self) -> f32;
-    fn detect_speech_boundaries(&mut self, audio_chunk: &[f32]) -> anyhow::Result<SpeechBoundary>;
+    fn process_frame(&mut self, frame: &[f32]) -> anyhow::Result<bool>;
+    fn reset(&mut self);
+    fn buffer(&mut self) -> &mut VadBuffer;
+}
+
+pub struct VadBuffer {
+    // main buffers
+    pre_speech_buffer: VecDeque<Vec<f32>>,
+    vad_buffer: VecDeque<Vec<f32>>,
+    speech_buffer: Vec<f32>,
+
+    // state tracking
+    is_speech_active: bool,
+    last_speech_time: Option<Instant>,
+    continuous_speech_start: Option<Instant>,
+}
+
+impl VadBuffer {
+    pub fn new(sample_rate: u32, frame_size: usize) -> Self {
+        let pre_speech_frames =
+            (CONFIG.pre_speech_buffer_duration_secs * sample_rate as f32) as usize / frame_size;
+        let vad_frames =
+            (CONFIG.vad_buffer_duration_secs * sample_rate as f32) as usize / frame_size;
+
+        Self {
+            pre_speech_buffer: VecDeque::with_capacity(pre_speech_frames),
+            vad_buffer: VecDeque::with_capacity(vad_frames),
+            speech_buffer: Vec::new(),
+            is_speech_active: false,
+            last_speech_time: None,
+            continuous_speech_start: None,
+        }
+    }
+
+    pub fn add_frame(&mut self, frame: Vec<f32>) {
+        // maintain pre-speech buffer
+        self.pre_speech_buffer.push_back(frame.clone());
+        if self.pre_speech_buffer.len() > self.pre_speech_buffer.capacity() {
+            self.pre_speech_buffer.pop_front();
+        }
+
+        // maintain vad buffer
+        self.vad_buffer.push_back(frame);
+        if self.vad_buffer.len() > self.vad_buffer.capacity() {
+            self.vad_buffer.pop_front();
+        }
+    }
+
+    pub fn process_speech(&mut self, is_current_frame_speech: bool) -> SpeechBoundary {
+        let now = Instant::now();
+
+        if is_current_frame_speech {
+            // println!("vad: detected speech frame");
+            self.last_speech_time = Some(now);
+
+            if !self.is_speech_active {
+                if self.continuous_speech_start.is_none() {
+                    // println!("vad: starting continuous speech detection");
+                    self.continuous_speech_start = Some(now);
+                }
+
+                // Check if we've reached the speech threshold (700ms)
+                if let Some(start) = self.continuous_speech_start {
+                    let speech_duration = now.duration_since(start);
+                    // println!("vad: speech duration: {:?}", speech_duration);
+
+                    if speech_duration >= Duration::from_millis(CONFIG.speech_threshold_duration_ms)
+                    {
+                        // println!("vad: speech threshold reached (700ms)");
+                        self.is_speech_active = true;
+                        // Add pre-speech buffer (2s)
+                        self.speech_buffer.extend(
+                            self.pre_speech_buffer
+                                .iter()
+                                .flat_map(|frame| frame.iter().copied()),
+                        );
+                        return SpeechBoundary::Start;
+                    }
+                }
+            }
+
+            if self.is_speech_active {
+                // Add current frame to speech buffer
+                if let Some(frame) = self.vad_buffer.back() {
+                    self.speech_buffer.extend(frame.iter());
+                }
+                return SpeechBoundary::Continuing;
+            }
+        } else {
+            if self.is_speech_active {
+                if let Some(last_speech) = self.last_speech_time {
+                    let silence_duration = now.duration_since(last_speech);
+                    // println!("vad: silence duration: {:?}", silence_duration);
+
+                    // Check if silence threshold reached (1500ms)
+                    if silence_duration
+                        >= Duration::from_millis(CONFIG.silence_threshold_duration_ms)
+                    {
+                        // println!("vad: silence threshold reached (1500ms)");
+                        self.is_speech_active = false;
+                        self.continuous_speech_start = None;
+                        return SpeechBoundary::End;
+                    }
+                }
+                return SpeechBoundary::Continuing;
+            }
+        }
+
+        SpeechBoundary::Silence
+    }
+
+    pub fn get_speech_buffer(&self) -> &[f32] {
+        // println!(
+        //     "vad: getting speech buffer, size: {}",
+        //     self.speech_buffer.len()
+        // );
+        &self.speech_buffer
+    }
+
+    pub fn clear_speech_buffer(&mut self) {
+        self.speech_buffer.clear();
+    }
+
+    // Add these getters/setters
+    pub fn is_speech_active(&self) -> bool {
+        self.is_speech_active
+    }
+
+    pub fn speech_buffer_size(&self) -> usize {
+        self.speech_buffer.len()
+    }
 }
 
 pub struct SileroVad {
     vad: Vad,
-    prob_history: VecDeque<f32>,
-    sensitivity: VadSensitivity,
-    speech_start_time: Option<Instant>,
-    last_speech_time: Option<Instant>,
-    speech_duration: Duration,
-    silence_duration: Duration,
+    buffer: VadBuffer,
 }
 
 impl SileroVad {
@@ -76,12 +187,7 @@ impl SileroVad {
         info!("silero vad initialized successfully");
         Ok(Self {
             vad,
-            prob_history: VecDeque::with_capacity(CONFIG.frame_history),
-            sensitivity: VadSensitivity::Medium,
-            speech_start_time: None,
-            last_speech_time: None,
-            speech_duration: Duration::from_millis(0),
-            silence_duration: Duration::from_millis(0),
+            buffer: VadBuffer::new(16000, 1600),
         })
     }
 
@@ -139,123 +245,21 @@ impl SileroVad {
             dirs::cache_dir().ok_or_else(|| anyhow::anyhow!("failed to get cache dir"))?;
         Ok(proj_dirs.join("screenpipe").join("vad"))
     }
-
-    fn update_status(&mut self, prob: f32) -> VadStatus {
-        self.prob_history.push_back(prob);
-        if self.prob_history.len() > CONFIG.frame_history {
-            self.prob_history.pop_front();
-        }
-
-        let speech_frames = self
-            .prob_history
-            .iter()
-            .filter(|&&p| p > CONFIG.speech_threshold)
-            .count();
-        let silence_frames = self
-            .prob_history
-            .iter()
-            .filter(|&&p| p < CONFIG.silence_threshold)
-            .count();
-
-        if speech_frames >= CONFIG.speech_frame_threshold {
-            VadStatus::Speech
-        } else if silence_frames > self.prob_history.len() / 2 {
-            VadStatus::Silence
-        } else {
-            VadStatus::Unknown
-        }
-    }
-
-    fn get_threshold(&self) -> f32 {
-        match self.sensitivity {
-            VadSensitivity::Low => CONFIG.vad_sensitivity_low_threshold,
-            VadSensitivity::Medium => CONFIG.vad_sensitivity_medium_threshold,
-            VadSensitivity::High => CONFIG.vad_sensitivity_high_threshold,
-        }
-    }
-
-    fn update_speech_state(&mut self, is_speech: bool) -> SpeechBoundary {
-        let now = Instant::now();
-
-        if is_speech {
-            if self.speech_start_time.is_none() {
-                self.speech_start_time = Some(now);
-            }
-            self.last_speech_time = Some(now);
-            self.speech_duration += Duration::from_millis(100);
-            self.silence_duration = Duration::from_millis(0);
-
-            if self.speech_duration > Duration::from_millis(CONFIG.speech_duration_threshold_ms) {
-                SpeechBoundary::Start
-            } else {
-                SpeechBoundary::Continuing
-            }
-        } else {
-            if let Some(last_speech) = self.last_speech_time {
-                self.silence_duration = now.duration_since(last_speech);
-                if self.silence_duration
-                    > Duration::from_millis(CONFIG.silence_duration_threshold_ms)
-                {
-                    self.speech_start_time = None;
-                    self.last_speech_time = None;
-                    self.speech_duration = Duration::from_millis(0);
-                    SpeechBoundary::End
-                } else {
-                    SpeechBoundary::Continuing
-                }
-            } else {
-                SpeechBoundary::Silence
-            }
-        }
-    }
 }
 
 impl VadEngine for SileroVad {
-    fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
-        let mut chunk_data: Vec<f32> = audio_chunk.to_vec();
-        chunk_data.resize(CONFIG.chunk_size, 0.0);
-        let result = self.vad.compute(&chunk_data).map_err(|e| {
-            debug!("SileroVad Error computing VAD: {}", e);
-            anyhow::anyhow!("Vad compute error: {}", e)
-        })?;
-
-        let status = self.update_status(result.prob);
-
-        Ok(status == VadStatus::Speech && result.prob > self.get_threshold())
+    fn process_frame(&mut self, frame: &[f32]) -> anyhow::Result<bool> {
+        let result = self.vad.compute(frame).unwrap();
+        // println!("vad: frame probability: {}", result.prob);
+        Ok(result.prob > 0.5) // More sensitive threshold
     }
 
-    fn audio_type(&mut self, audio_chunk: &[f32]) -> anyhow::Result<VadStatus> {
-        let mut chunk_data: Vec<f32> = audio_chunk.to_vec();
-        chunk_data.resize(CONFIG.chunk_size, 0.0);
-        let result = self.vad.compute(&chunk_data).map_err(|e| {
-            debug!("SileroVad Error computing VAD: {}", e);
-            anyhow::anyhow!("Vad compute error: {}", e)
-        })?;
-
-        let status = self.update_status(result.prob);
-
-        if status == VadStatus::Speech && result.prob > self.get_threshold() {
-            return Ok(VadStatus::Speech);
-        }
-
-        match status {
-            VadStatus::Unknown => Ok(VadStatus::Unknown),
-            // this is super misleading
-            _ => Ok(VadStatus::Silence),
-        }
+    fn reset(&mut self) {
+        self.buffer.clear_speech_buffer();
     }
 
-    fn set_sensitivity(&mut self, sensitivity: VadSensitivity) {
-        self.sensitivity = sensitivity;
-    }
-
-    fn get_min_speech_ratio(&self) -> f32 {
-        self.sensitivity.min_speech_ratio()
-    }
-
-    fn detect_speech_boundaries(&mut self, audio_chunk: &[f32]) -> anyhow::Result<SpeechBoundary> {
-        let is_speech = self.is_voice_segment(audio_chunk)?;
-        Ok(self.update_speech_state(is_speech))
+    fn buffer(&mut self) -> &mut VadBuffer {
+        &mut self.buffer
     }
 }
 

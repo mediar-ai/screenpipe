@@ -13,7 +13,6 @@ use realfft::RealFftPlanner;
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
-use tracing::debug;
 
 // ! TODO: should optimise speed of these stuff
 
@@ -136,7 +135,6 @@ impl Default for AudioInput {
 
 pub fn audio_frames_to_speech_frames(
     data: &[f32],
-    device: Arc<AudioDevice>,
     sample_rate: u32,
     vad_engine: &mut Box<dyn VadEngine + Send>,
 ) -> Result<Option<Vec<f32>>> {
@@ -148,63 +146,46 @@ pub fn audio_frames_to_speech_frames(
 
     let audio_data = normalize_v2(&audio_data);
 
-    let mut speech_frames = Vec::new();
-    let mut total_frames = 0;
-    let mut speech_frame_count = 0;
-    let mut noise = 0.;
-    let mut is_speech_active = false;
+    let mut speech_detected = false;
 
     for chunk in audio_data.chunks(CONFIG.frame_size) {
-        total_frames += 1;
+        // Add frame to VAD buffer regardless of speech status
+        vad_engine.buffer().add_frame(chunk.to_vec());
 
-        // Use the new speech boundary detection
-        match vad_engine.detect_speech_boundaries(chunk)? {
+        let is_speech = vad_engine.process_frame(chunk)?;
+
+        match vad_engine.buffer().process_speech(is_speech) {
             SpeechBoundary::Start => {
-                is_speech_active = true;
-                let processed_audio = spectral_subtraction(chunk, noise)?;
-                speech_frames.extend(processed_audio);
-                speech_frame_count += 1;
-            }
-            SpeechBoundary::Continuing if is_speech_active => {
-                let processed_audio = spectral_subtraction(chunk, noise)?;
-                speech_frames.extend(processed_audio);
-                speech_frame_count += 1;
+                // println!("vad: speech started: {}", device);
+                speech_detected = true;
             }
             SpeechBoundary::End => {
-                is_speech_active = false;
+                // println!("vad: speech ended: {}", device);
+                if speech_detected {
+                    let speech_data = vad_engine.buffer().get_speech_buffer().to_vec();
+                    vad_engine.buffer().clear_speech_buffer();
+                    return Ok(Some(speech_data));
+                }
             }
-            SpeechBoundary::Silence => {
-                noise = average_noise_spectrum(chunk);
+            SpeechBoundary::Continuing if speech_detected => {
+                // println!(
+                //     "vad: speech continuing, buffer size: {}",
+                //     vad_engine.buffer().get_speech_buffer().len()
+                // );
             }
             _ => {}
         }
     }
 
-    let speech_duration_ms = speech_frame_count * 100; // Each frame is 100ms
-    let speech_ratio = speech_frame_count as f32 / total_frames as f32;
-    let min_speech_ratio = vad_engine.get_min_speech_ratio();
+    // println!("finished processing all chunks");
 
-    debug!(
-        "device: {}, total audio frames processed: {}, frames that include speech: {}, speech duration: {}ms, speech ratio: {:.2}, min required ratio: {:.2}",
-        device,
-        total_frames,
-        speech_frame_count,
-        speech_duration_ms,
-        speech_ratio,
-        min_speech_ratio
-    );
-
-    // If no speech frames detected or speech ratio is too low, return no frames
-    if speech_frames.is_empty() || speech_ratio < min_speech_ratio {
-        debug!(
-            "device: {}, insufficient speech detected (ratio: {:.2}, min required: {:.2}), no speech frames",
-            device,
-            speech_ratio,
-            min_speech_ratio
-        );
-        Ok(None)
+    // If we have accumulated speech but haven't hit an end boundary
+    if speech_detected && vad_engine.buffer().get_speech_buffer().len() > 0 {
+        let speech_data = vad_engine.buffer().get_speech_buffer().to_vec();
+        vad_engine.buffer().clear_speech_buffer();
+        Ok(Some(speech_data))
     } else {
-        Ok(Some(speech_frames))
+        Ok(None)
     }
 }
 
