@@ -105,7 +105,7 @@ add this to your vscode settings in the root of the project `.vscode/settings.js
 cd screenpipe-app-tauri
 bun install
 bun scripts/pre_build.js # <- this is important to copy the CLI into the app
-bun tauri build
+bun tauri build --config '{"plugins": {"updater": {"active": false}}}'
 ```
 
 6b. to build the desktop app - M-Series (copy cli & binaries mannually):
@@ -156,7 +156,7 @@ wget --no-config -q --show-progress $OLLAMA_DOWNLOAD_URL -O $SRC_TAURI/ollama-aa
 chmod 755 $SRC_TAURI/ollama-aarch64-apple-darwin
 
 # Build the project using tauri
-bun tauri build
+bun tauri build --config '{"plugins": {"updater": {"active": false}}}'
 ```
 
 [need help? open an issue on github.](https://github.com/mediar-ai/screenpipe/issues/new)
@@ -225,7 +225,7 @@ cargo build --release --features cuda
 cd screenpipe-app-tauri
 bun install
 bun scripts\pre_build.js # (you might wget not retriving error, if so use '-O' flag) <- this is important to copy the CLI into the app
-bun tauri build
+bun tauri build --config '{"plugins": {"updater": {"active": false}}}'
 ```
 
 </MotionDiv>
@@ -265,7 +265,7 @@ bun tauri build
 cd screenpipe-app-tauri
 bun install
 bun scripts/pre_build.js # <- this is important to copy the CLI into the app
-bun tauri build 
+bun tauri build --config '{"plugins": {"updater": {"active": false}}}' 
 ```
 
 </MotionDiv>
