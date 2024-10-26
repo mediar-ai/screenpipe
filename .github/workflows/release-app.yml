@@ -51,18 +51,18 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
-            args: "--target aarch64-apple-darwin --features metal,beta"
+            args: "--target aarch64-apple-darwin --features metal,beta,mkl"
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin"
           - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin --features metal,beta"
+            args: "--target x86_64-apple-darwin --features metal,beta,mkl"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "" # TODO CUDA, mkl
+            args: "--features mkl" # TODO CUDA
             tauri-args: ""
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
