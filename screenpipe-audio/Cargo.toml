@@ -97,7 +97,7 @@ tokio-tungstenite = "0.24.0"
 futures-util = "0.3.31"
 rodio = "0.19.0"
 rand = "0.8.5"
-
+indicatif = "0.17.8"
 
 [features]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]

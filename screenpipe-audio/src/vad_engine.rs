@@ -1,3 +1,4 @@
+use crate::constants::CONFIG;
 use anyhow;
 use dirs;
 use lazy_static::lazy_static;
@@ -20,9 +21,9 @@ pub enum VadSensitivity {
 impl VadSensitivity {
     pub fn min_speech_ratio(&self) -> f32 {
         match self {
-            VadSensitivity::Low => 0.02,    // Increased from 0.01
-            VadSensitivity::Medium => 0.07, // Increased from 0.05
-            VadSensitivity::High => 0.3,    // Decreased from 0.4
+            VadSensitivity::Low => CONFIG.vad_sensitivity_low_speech_ratio,
+            VadSensitivity::Medium => CONFIG.vad_sensitivity_medium_speech_ratio,
+            VadSensitivity::High => CONFIG.vad_sensitivity_high_speech_ratio,
         }
     }
 }
@@ -38,11 +39,6 @@ pub enum SpeechBoundary {
     Continuing,
     Silence,
 }
-
-const FRAME_HISTORY: usize = 15; // Increased from 10
-const SPEECH_THRESHOLD: f32 = 0.55; // Increased from 0.5
-const SILENCE_THRESHOLD: f32 = 0.3; // Decreased from 0.35
-const SPEECH_FRAME_THRESHOLD: usize = 4; // Increased from 3
 
 lazy_static! {
     static ref MODEL_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -80,7 +76,7 @@ impl SileroVad {
         info!("silero vad initialized successfully");
         Ok(Self {
             vad,
-            prob_history: VecDeque::with_capacity(FRAME_HISTORY),
+            prob_history: VecDeque::with_capacity(CONFIG.frame_history),
             sensitivity: VadSensitivity::Medium,
             speech_start_time: None,
             last_speech_time: None,
@@ -146,22 +142,22 @@ impl SileroVad {
 
     fn update_status(&mut self, prob: f32) -> VadStatus {
         self.prob_history.push_back(prob);
-        if self.prob_history.len() > FRAME_HISTORY {
+        if self.prob_history.len() > CONFIG.frame_history {
             self.prob_history.pop_front();
         }
 
         let speech_frames = self
             .prob_history
             .iter()
-            .filter(|&&p| p > SPEECH_THRESHOLD)
+            .filter(|&&p| p > CONFIG.speech_threshold)
             .count();
         let silence_frames = self
             .prob_history
             .iter()
-            .filter(|&&p| p < SILENCE_THRESHOLD)
+            .filter(|&&p| p < CONFIG.silence_threshold)
             .count();
 
-        if speech_frames >= SPEECH_FRAME_THRESHOLD {
+        if speech_frames >= CONFIG.speech_frame_threshold {
             VadStatus::Speech
         } else if silence_frames > self.prob_history.len() / 2 {
             VadStatus::Silence
@@ -172,9 +168,9 @@ impl SileroVad {
 
     fn get_threshold(&self) -> f32 {
         match self.sensitivity {
-            VadSensitivity::Low => 0.25,    // Increased from 0.2
-            VadSensitivity::Medium => 0.55, // Increased from 0.5
-            VadSensitivity::High => 0.75,   // Increased from 0.7
+            VadSensitivity::Low => CONFIG.vad_sensitivity_low_threshold,
+            VadSensitivity::Medium => CONFIG.vad_sensitivity_medium_threshold,
+            VadSensitivity::High => CONFIG.vad_sensitivity_high_threshold,
         }
     }
 
@@ -189,7 +185,7 @@ impl SileroVad {
             self.speech_duration += Duration::from_millis(100);
             self.silence_duration = Duration::from_millis(0);
 
-            if self.speech_duration > Duration::from_millis(700) {
+            if self.speech_duration > Duration::from_millis(CONFIG.speech_duration_threshold_ms) {
                 SpeechBoundary::Start
             } else {
                 SpeechBoundary::Continuing
@@ -197,7 +193,9 @@ impl SileroVad {
         } else {
             if let Some(last_speech) = self.last_speech_time {
                 self.silence_duration = now.duration_since(last_speech);
-                if self.silence_duration > Duration::from_millis(1500) {
+                if self.silence_duration
+                    > Duration::from_millis(CONFIG.silence_duration_threshold_ms)
+                {
                     self.speech_start_time = None;
                     self.last_speech_time = None;
                     self.speech_duration = Duration::from_millis(0);
@@ -214,13 +212,8 @@ impl SileroVad {
 
 impl VadEngine for SileroVad {
     fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
-        const CHUNK_SIZE: usize = 1600; // 100 milliseconds
-
-        let threshold = self.get_threshold();
-
         let mut chunk_data: Vec<f32> = audio_chunk.to_vec();
-        chunk_data.resize(CHUNK_SIZE, 0.0);
-
+        chunk_data.resize(CONFIG.chunk_size, 0.0);
         let result = self.vad.compute(&chunk_data).map_err(|e| {
             debug!("SileroVad Error computing VAD: {}", e);
             anyhow::anyhow!("Vad compute error: {}", e)
@@ -228,17 +221,12 @@ impl VadEngine for SileroVad {
 
         let status = self.update_status(result.prob);
 
-        Ok(status == VadStatus::Speech && result.prob > threshold)
+        Ok(status == VadStatus::Speech && result.prob > self.get_threshold())
     }
 
     fn audio_type(&mut self, audio_chunk: &[f32]) -> anyhow::Result<VadStatus> {
-        const CHUNK_SIZE: usize = 1600; // 100 milliseconds
-
-        let threshold = self.get_threshold();
-
         let mut chunk_data: Vec<f32> = audio_chunk.to_vec();
-        chunk_data.resize(CHUNK_SIZE, 0.0);
-
+        chunk_data.resize(CONFIG.chunk_size, 0.0);
         let result = self.vad.compute(&chunk_data).map_err(|e| {
             debug!("SileroVad Error computing VAD: {}", e);
             anyhow::anyhow!("Vad compute error: {}", e)
@@ -246,7 +234,7 @@ impl VadEngine for SileroVad {
 
         let status = self.update_status(result.prob);
 
-        if status == VadStatus::Speech && result.prob > threshold {
+        if status == VadStatus::Speech && result.prob > self.get_threshold() {
             return Ok(VadStatus::Speech);
         }
 

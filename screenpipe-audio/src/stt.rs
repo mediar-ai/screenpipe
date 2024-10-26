@@ -28,7 +28,7 @@ use std::sync::Mutex;
 
 use crate::constants::{
     DEEPGRAM_API_KEY, 
-    OVERLAP_SAMPLES, 
+    CONFIG, 
     TRANSCRIPT_SPLITTER_PROMPT,
     TRANSCRIPTION_PROCESSING_MODEL,
     TRANSCRIPTION_PROCESSING_URL
@@ -317,8 +317,8 @@ pub async fn stt(
     }
 
     // Update overlap buffer with the last few seconds of speech frames
-    if speech_frames.len() > OVERLAP_SAMPLES {
-        *overlap_buffer = speech_frames.split_off(speech_frames.len() - OVERLAP_SAMPLES);
+    if speech_frames.len() > CONFIG.overlap_samples {
+        *overlap_buffer = speech_frames.split_off(speech_frames.len() - CONFIG.overlap_samples);
         // info!("overlap buffer length: {}", overlap_buffer.len());
     } else {
         overlap_buffer.clear();

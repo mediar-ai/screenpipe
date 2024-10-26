@@ -1,12 +1,16 @@
 use crate::audio_processing::{audio_frames_to_speech_frames, audio_to_mono, AudioInput};
-use crate::constants::AUDIO_CONFIG;
+use crate::constants::CONFIG;
 use crate::vad_engine::VadEngine;
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use log::{error, info, warn};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
@@ -181,7 +185,6 @@ pub async fn record_and_transcribe(
     let timeout = Duration::from_secs(10); // TODO remove timeout useless
 
     loop {
-        println!("waiting for audio segment");
         match tokio::time::timeout(timeout, receiver.recv()).await {
             Ok(Ok(segment)) => {
                 // println!("received audio segment, length: {}", segment.frames.len());
@@ -417,7 +420,7 @@ impl AudioStream {
 
                 let buffer_duration_ms =
                     (buffer.len() as f32 / config_clone2.sample_rate().0 as f32) * 1000.0;
-                if buffer_duration_ms < AUDIO_CONFIG.chunk_duration_ms {
+                if buffer_duration_ms < CONFIG.chunk_duration_ms {
                     return;
                 }
 
@@ -572,7 +575,7 @@ impl AudioStream {
                         };
 
                         if let Err(e) = tx.send(speech_segment) {
-                            error!("failed to send audio segment: {}", e);
+                            println!("failed to send audio segment: {}", e);
                         }
                     }
 
@@ -603,35 +606,146 @@ impl AudioStream {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{create_whisper_channel, vad_engine::SileroVad};
+    use crate::{
+        constants::{Config, TRANSCRIPTION_PROCESSING_URL},
+        create_whisper_channel,
+        vad_engine::SileroVad,
+    };
     use rand::seq::SliceRandom;
     use rand::thread_rng;
     use screenpipe_core::Language;
     use std::{
         collections::HashMap,
         path::PathBuf,
-        process::Command,
+        process::{Command, Stdio},
         sync::{Arc, Mutex},
     };
     use strsim::levenshtein;
     use tempfile::tempdir;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_transcription_accuracy_direct() {
-        // Setup logging
-        // fmt()
-        //     .with_env_filter(
-        //         EnvFilter::builder()
-        //             .with_default_directive(Level::DEBUG.into())
-        //             .parse_lossy("screenpipe_audio=debug"),
-        //     )
-        //     .with_target(false)
-        //     .with_thread_ids(true)
-        //     .with_file(true)
-        //     .with_line_number(true)
-        //     .init();
+    async fn download_test_samples() -> Result<Vec<(String, String)>> {
+        let test_data_dir = std::env::current_dir()?.join("test_data");
+        fs::create_dir_all(&test_data_dir)?;
 
-        println!("starting transcription accuracy test");
+        // LibriSpeech samples - larger set to choose from
+        let samples = vec![
+            // Dev-clean samples
+            ("https://www.openslr.org/resources/12/dev-clean/1272/128104/1272-128104-0000.wav", 
+             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"),
+            ("https://www.openslr.org/resources/12/dev-clean/1272/128104/1272-128104-0001.wav",
+             "nor is mister quilter's manner less interesting than his matter"),
+            ("https://www.openslr.org/resources/12/dev-clean/1272/128104/1272-128104-0002.wav",
+             "he tells us that at this very moment there are people silly enough to practice art for art's sake"),
+            // Dev-other samples (more challenging)
+            ("https://www.openslr.org/resources/12/dev-other/116/288045/116-288045-0000.wav",
+             "the time of the year at which this circuit is most practicable is from the beginning of february to the end of march"),
+            ("https://www.openslr.org/resources/12/dev-other/116/288045/116-288045-0001.wav",
+             "i shall take the liberty to make a few observations on the nature of the land in the above circuit"),
+            // Test-clean samples
+            ("https://www.openslr.org/resources/12/test-clean/1089/134686/1089-134686-0000.wav",
+             "she had a fine genius for poetry combined with real business talent"),
+            ("https://www.openslr.org/resources/12/test-clean/1089/134686/1089-134686-0001.wav",
+             "and she was always ready to give of these to the full measure of her ability"),
+            // Female speakers
+            ("https://www.openslr.org/resources/12/test-clean/2277/149896/2277-149896-0000.wav",
+             "there was a man in our town and he was wondrous wise"),
+            ("https://www.openslr.org/resources/12/test-clean/2277/149896/2277-149896-0001.wav",
+             "he jumped into a bramble bush and scratched out both his eyes"),
+            // Different accents
+            ("https://www.openslr.org/resources/12/test-other/2428/83699/2428-83699-0000.wav",
+             "once upon a time there were four little rabbits"),
+            ("https://www.openslr.org/resources/12/test-other/2428/83699/2428-83699-0001.wav",
+             "their names were flopsy mopsy cottontail and peter"),
+            // More challenging samples
+            ("https://www.openslr.org/resources/12/test-other/3752/6415/3752-6415-0000.wav",
+             "the scientific name of the black widow spider is latrodectus mactans"),
+            ("https://www.openslr.org/resources/12/test-other/3752/6415/3752-6415-0001.wav",
+             "in the winter they hibernate in dark sheltered places"),
+            // Add more samples as needed...
+        ];
+
+        let client = reqwest::Client::new();
+        let mut downloaded_samples = Vec::new();
+
+        // Randomly shuffle the samples
+        let mut rng = thread_rng();
+        let mut shuffled_samples = samples.clone();
+        shuffled_samples.shuffle(&mut rng);
+
+        // Take first 5 samples (or however many you want to test with)
+        for (i, (url, transcript)) in shuffled_samples.iter().take(5).enumerate() {
+            let wav_path = test_data_dir.join(format!("accuracy{}.wav", i + 1));
+
+            // Download only if file doesn't exist
+            if !wav_path.exists() {
+                println!("downloading sample {} from {}", i + 1, url);
+                let response = client.get(*url).send().await?;
+                let bytes = response.bytes().await?;
+                fs::write(&wav_path, bytes)?;
+            }
+
+            downloaded_samples.push((
+                wav_path.to_str().unwrap().to_string(),
+                transcript.to_string(),
+            ));
+        }
+
+        Ok(downloaded_samples)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+    async fn test_transcription_accuracy_direct() {
+        // 25% accuracy 15, 0.45, 0.3, 700, 1500, 2, 2000, 0.75, 0.3
+        // 25% accuracy 15, 0.45, 0.3, 700, 1500, 2, 4000, 0.75, 0.3
+        // 25% accuracy 40, 0.45, 0.3, 700, 1500, 2, 4000, 0.75, 0.3
+        // let test_config = Config {
+        //     // Customize your values here
+        //     frame_history: 40,
+        //     speech_threshold: 0.45,
+        //     silence_threshold: 0.3,
+        //     speech_duration_threshold_ms: 700, // 500, 1000 was bad (10% loss)
+        //     silence_duration_threshold_ms: 1500,
+        //     overlap_seconds: 2,
+        //     chunk_duration_ms: 4000.0,
+        //     vad_sensitivity_high_threshold: 0.75,
+        //     vad_sensitivity_high_speech_ratio: 0.3,
+        //     ..Config::new("test_config".to_string())
+        // }
+        let test_config = Config {
+            // Increase frame history to capture more context
+            frame_history: 60, // was 40
+
+            // Make speech detection more sensitive
+            speech_threshold: 0.35,  // was 0.45
+            silence_threshold: 0.25, // was 0.3
+
+            // Increase duration thresholds to capture longer speech segments
+            speech_duration_threshold_ms: 1000,  // was 700
+            silence_duration_threshold_ms: 2000, // was 1500
+
+            // Increase overlap to help with context
+            overlap_seconds: 3, // was 2
+
+            // Keep chunk duration the same as it seems to work well
+            chunk_duration_ms: 4000.0,
+
+            // Make VAD more sensitive
+            vad_sensitivity_high_threshold: 0.65,    // was 0.75
+            vad_sensitivity_high_speech_ratio: 0.25, // was 0.3
+
+            ..Config::new("test_config".to_string())
+        }
+        .set_as_active();
+
+        println!(
+            "starting transcription accuracy test with config: {}",
+            test_config.name
+        );
+
+        // Download test samples
+        // let downloaded_samples = download_test_samples()
+        //     .await
+        //     .expect("Failed to download test samples");
 
         // Setup test cases
         let mut test_cases: Vec<(String, &str)> = vec![
@@ -655,6 +769,47 @@ pub mod tests {
             ("test_data/accuracy3.wav", r#"again, screenpipe allows you to get meeting summaries, locally, without leaking data to OpenAI, with any apps, like WhatsApp, Meet, Zoom, etc. and it's open source at github.com/mediar-ai/screenpipe"#),
             ("test_data/accuracy4.wav", r#"Eventually but, I mean, I feel like but, I mean, first, I mean, you think your your vision smart will be interesting because, yeah, you install once. You pay us, you install once. That that yours. So, basically, all the time Microsoft explained, you know, MS Office, long time ago, you just buy the the the software that you can using there forever unless you wanna you wanna update upgrade is the better version. Right? So it's a little bit, you know"#),
             ("test_data/accuracy5.wav", r#"Thank you. Yeah. So I cannot they they took it, refresh because of my one set top top time. And, also, second thing is, your byte was stolen. By the time?"#),
+            ("test_data/accuracy6.wav", r#"To tell you basically what this is about is when I was watching Harvey Mackay at one of Harv Eker's things, he said he just finished the Boston marathon and you know, the guy is 76 and I went holy crap, you know, that is amazing. He looked so fit and he is so quick minded and so on I thought, all of a sudden it occurred to me I bet the way you eat, you know, is different. I bet you don't just eat a bunch of garbage and that started this thought. So, the basic three questions will be and I am recording it for you as well if I transcribe these for the book, but then I write about it and what has really been neat about it is that what started out as three same questions to everybody, everybody had kind of a different angle on it and I realized that they were creating the chapters for this book and of course Marci Shimoff read me right [???], I am not doing something where I did all the work and you are just transcribing it, but if you actually write in the book, I will do it. So I made her that promise and it was a hard promise, but it was a good one to make because it made me think more, you know.
+
+Got you.
+
+So, what I would do is I basically introduce you and then you can add anything that you think is important to that introduction and let me get my history up here because I have you on here. So, how is Robby doing?
+
+Good, hangin' in there.
+
+Yeah, did you guys have a nice holiday?
+
+Well, we actually kind of had a [???] holiday, her father who is very old got sick and ended up passing away.
+
+Oh I am sorry to hear that.
+
+But, you know, stuff happens, what are you going to do?
+
+So I am going to – is your best website, at the end I am going to ask you, you know, about your website and stuff, is rickfrishman.com the best one to go to or -
+
+Yeah probably just for most stuff that is probably the best way to go yeah.
+
+You had a really good bio on one of your websites.
+
+It is up there, there is one, you know, in most of them. I also have rickfrishmanblog.com, you know.
+
+Let me check that out, okay so the -
+
+There is a bio on that one, but it is also a bio on just rickfrishman.com.
+
+There we go about Rick, yeah.
+
+Sure.
+
+So you know, one of the things that I will bring up is, you know, you always talk about how you have the biggest Rolodex and I thought that was a really cool angle too because part of success is who you know and you know, I think that is important. I don't know what your angle is going to be on this, but you know, the questions will be do you think that that hypothesis is true that, you know, food affects your ability to succeed on some level and then if you -
+
+Food affects your ability to -
+
+You know, if it plays into your level of success. In other words, you know, I know there are successful people who eat crappy food, but so far kind of the consensus has been, you know, it has run the gamut of extremes, but so far people seem to say, you know, they can't keep up their energy if you speak a lot. You do a lot of speaking so you know, and you have a hectic schedule, so I imagine that if you are, you know, full of two pizzas, you probably don't have the energy on stage that you normally would.
+
+Right, it is true.
+
+So, that's kind of the angle, but..."#)
             // Add more test cases as needed
         ].into_iter()
             .map(|(path, text)| {
@@ -667,6 +822,13 @@ pub mod tests {
                 (absolute_path, text)
             })
             .collect();
+
+        // Add downloaded samples
+        // test_cases.extend(
+        //     downloaded_samples
+        //         .iter()
+        //         .map(|(path, transcript)| (path.clone(), transcript.as_str())),
+        // );
 
         // Shuffle test cases
         let mut rng = thread_rng();
@@ -691,6 +853,8 @@ pub mod tests {
                 "1", // 1 second of silence
                 silence_path.to_str().unwrap(),
             ])
+            .stderr(Stdio::null())
+            .stdout(Stdio::null())
             .status()
             .expect("Failed to create silence file");
 
@@ -727,6 +891,8 @@ pub mod tests {
                 "copy",
                 merged_wav_path.to_str().unwrap(),
             ])
+            .stderr(Stdio::null())
+            .stdout(Stdio::null())
             .status()
             .expect("Failed to execute ffmpeg");
 
@@ -788,7 +954,7 @@ pub mod tests {
         let mut device_transcripts: HashMap<String, (String, Option<i64>)> = HashMap::new();
         let mut buffer_frames: HashMap<String, (Vec<String>, Vec<f32>)> = HashMap::new();
         let mut last_transcription_time = std::time::Instant::now();
-        const IDLE_TIMEOUT: Duration = Duration::from_secs(20); // ! change this if your computer is slow
+        const IDLE_TIMEOUT: Duration = Duration::from_secs(60); // ! change this if your computer is slow
 
         loop {
             while let Ok(mut transcription) = whisper_receiver.try_recv() {
@@ -804,17 +970,18 @@ pub mod tests {
                     .or_insert((String::new(), None));
 
                 let mut current_transcript: Option<String> = transcription.transcription.clone();
-                println!("current_transcript: {:?}", current_transcript);
-                if let Some((_, current)) =
+                // println!("current_transcript: {:?}", current_transcript);
+                if let Some((_, current)) = if TRANSCRIPTION_PROCESSING_URL.is_empty() {
                     transcription.cleanup_overlap(previous_transcript.clone())
-                    // transcription
-                    //     .cleanup_overlap_llm(previous_transcript.clone())
-                    //     .await
-                    //     .unwrap()
-                {
+                } else {
+                    transcription
+                        .cleanup_overlap_llm(previous_transcript.clone())
+                        .await
+                        .unwrap()
+                } {
                     current_transcript = Some(current);
                 }
-                println!("current_transcript after cleanup: {:?}", current_transcript);
+                // println!("current_transcript after cleanup: {:?}", current_transcript);
 
                 transcription.transcription = current_transcript.clone();
                 *previous_transcript = current_transcript.unwrap_or_default();

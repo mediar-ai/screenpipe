@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::constants::AUDIO_CONFIG;
+use crate::constants::CONFIG;
 use crate::core::AudioSegment;
 use crate::vad_engine::{SpeechBoundary, VadEngine};
 use crate::AudioDevice;
@@ -23,8 +23,8 @@ pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
         .iter()
         .fold(0.0f32, |max, &sample| max.max(sample.abs()));
 
-    let target_rms = AUDIO_CONFIG.target_rms;
-    let target_peak = AUDIO_CONFIG.target_peak;
+    let target_rms = CONFIG.target_rms;
+    let target_peak = CONFIG.target_peak;
 
     let rms_scaling = target_rms / rms;
     let peak_scaling = target_peak / peak;
@@ -39,7 +39,7 @@ pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
 
 pub fn spectral_subtraction(audio: &[f32], d: f32) -> Result<Vec<f32>> {
     let mut real_planner = RealFftPlanner::<f32>::new();
-    let window_size = AUDIO_CONFIG.window_size; // 16k sample rate - 100ms
+    let window_size = CONFIG.window_size; // 16k sample rate - 100ms
     let r2c = real_planner.plan_fft_forward(window_size);
 
     let mut y = r2c.make_output_vec();
@@ -154,7 +154,7 @@ pub fn audio_frames_to_speech_frames(
     let mut noise = 0.;
     let mut is_speech_active = false;
 
-    for chunk in audio_data.chunks(AUDIO_CONFIG.frame_size) {
+    for chunk in audio_data.chunks(CONFIG.frame_size) {
         total_frames += 1;
 
         // Use the new speech boundary detection
