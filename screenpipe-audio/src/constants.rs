@@ -13,11 +13,14 @@ thread_local! {
 // Helper function to get the active config
 pub fn get_config() -> Arc<Config> {
     TESTING_CONFIG.with(|test_config| {
-        if let Some(config) = test_config.borrow().clone() {
+        let config = if let Some(config) = test_config.borrow().clone() {
+            println!("Using test config: {:?}", config);
             config
         } else {
+            println!("Using default config");
             Arc::new(CONFIG.clone())
-        }
+        };
+        config
     })
 }
 

@@ -145,47 +145,41 @@ pub fn audio_frames_to_speech_frames(
     };
 
     let audio_data = normalize_v2(&audio_data);
-
+    let mut all_speech_data = Vec::new();
     let mut speech_detected = false;
 
     for chunk in audio_data.chunks(CONFIG.frame_size) {
-        // Add frame to VAD buffer regardless of speech status
         vad_engine.buffer().add_frame(chunk.to_vec());
-
         let is_speech = vad_engine.process_frame(chunk)?;
 
         match vad_engine.buffer().process_speech(is_speech) {
             SpeechBoundary::Start => {
-                // println!("vad: speech started: {}", device);
                 speech_detected = true;
             }
             SpeechBoundary::End => {
-                // println!("vad: speech ended: {}", device);
                 if speech_detected {
                     let speech_data = vad_engine.buffer().get_speech_buffer().to_vec();
+                    all_speech_data.extend(speech_data);
                     vad_engine.buffer().clear_speech_buffer();
-                    return Ok(Some(speech_data));
+                    speech_detected = false;
                 }
             }
-            SpeechBoundary::Continuing if speech_detected => {
-                // println!(
-                //     "vad: speech continuing, buffer size: {}",
-                //     vad_engine.buffer().get_speech_buffer().len()
-                // );
-            }
+            SpeechBoundary::Continuing if speech_detected => {}
             _ => {}
         }
     }
 
-    // println!("finished processing all chunks");
-
-    // If we have accumulated speech but haven't hit an end boundary
-    if speech_detected && vad_engine.buffer().get_speech_buffer().len() > 0 {
+    // Handle any remaining speech data
+    if speech_detected && !vad_engine.buffer().get_speech_buffer().is_empty() {
         let speech_data = vad_engine.buffer().get_speech_buffer().to_vec();
+        all_speech_data.extend(speech_data);
         vad_engine.buffer().clear_speech_buffer();
-        Ok(Some(speech_data))
-    } else {
+    }
+
+    if all_speech_data.is_empty() {
         Ok(None)
+    } else {
+        Ok(Some(all_speech_data))
     }
 }
 

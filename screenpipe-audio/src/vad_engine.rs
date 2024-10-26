@@ -52,35 +52,42 @@ pub struct VadBuffer {
     is_speech_active: bool,
     last_speech_time: Option<Instant>,
     continuous_speech_start: Option<Instant>,
+    sample_rate: u32,
+    frame_size: usize,
 }
 
 impl VadBuffer {
     pub fn new(sample_rate: u32, frame_size: usize) -> Self {
-        let pre_speech_frames =
-            (CONFIG.pre_speech_buffer_duration_secs * sample_rate as f32) as usize / frame_size;
-        let vad_frames =
-            (CONFIG.vad_buffer_duration_secs * sample_rate as f32) as usize / frame_size;
-
+        // Remove the pre-calculated buffer sizes since we'll calculate them dynamically
         Self {
-            pre_speech_buffer: VecDeque::with_capacity(pre_speech_frames),
-            vad_buffer: VecDeque::with_capacity(vad_frames),
+            pre_speech_buffer: VecDeque::new(), // Remove fixed capacity
+            vad_buffer: VecDeque::new(),        // Remove fixed capacity
             speech_buffer: Vec::new(),
             is_speech_active: false,
             last_speech_time: None,
             continuous_speech_start: None,
+            sample_rate,
+            frame_size,
         }
     }
 
     pub fn add_frame(&mut self, frame: Vec<f32>) {
+        // Calculate buffer sizes dynamically using current CONFIG values
+        let pre_speech_frames = (CONFIG.pre_speech_buffer_duration_secs * self.sample_rate as f32)
+            as usize
+            / self.frame_size;
+        let vad_frames =
+            (CONFIG.vad_buffer_duration_secs * self.sample_rate as f32) as usize / self.frame_size;
+
         // maintain pre-speech buffer
         self.pre_speech_buffer.push_back(frame.clone());
-        if self.pre_speech_buffer.len() > self.pre_speech_buffer.capacity() {
+        while self.pre_speech_buffer.len() > pre_speech_frames {
             self.pre_speech_buffer.pop_front();
         }
 
         // maintain vad buffer
         self.vad_buffer.push_back(frame);
-        if self.vad_buffer.len() > self.vad_buffer.capacity() {
+        while self.vad_buffer.len() > vad_frames {
             self.vad_buffer.pop_front();
         }
     }
@@ -251,7 +258,7 @@ impl VadEngine for SileroVad {
     fn process_frame(&mut self, frame: &[f32]) -> anyhow::Result<bool> {
         let result = self.vad.compute(frame).unwrap();
         // println!("vad: frame probability: {}", result.prob);
-        Ok(result.prob > 0.5) // More sensitive threshold
+        Ok(result.prob > 0.3) // More sensitive threshold
     }
 
     fn reset(&mut self) {

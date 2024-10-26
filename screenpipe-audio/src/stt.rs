@@ -1,5 +1,6 @@
 use crate::{
     audio_processing::AudioInput,
+    constants::get_config,
     multilingual,
     whisper::{Decoder, WhisperModel},
     AudioTranscriptionEngine,
@@ -27,11 +28,8 @@ use std::io::Cursor;
 use std::sync::Mutex;
 
 use crate::constants::{
-    DEEPGRAM_API_KEY, 
-    CONFIG, 
+    CONFIG, DEEPGRAM_API_KEY, TRANSCRIPTION_PROCESSING_MODEL, TRANSCRIPTION_PROCESSING_URL,
     TRANSCRIPT_SPLITTER_PROMPT,
-    TRANSCRIPTION_PROCESSING_MODEL,
-    TRANSCRIPTION_PROCESSING_URL
 };
 
 // Replace the get_deepgram_api_key function with this:
@@ -151,7 +149,7 @@ pub fn stt_sync(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
-    overlap_buffers: Arc<Mutex<HashMap<String, Vec<f32>>>>,
+    overlap_buffers: Arc<Mutex<HashMap<String, OverlapBuffer>>>,
 ) -> Result<String> {
     let audio_input = audio_input.clone();
     let mut whisper_model = whisper_model.clone();
@@ -283,94 +281,75 @@ pub async fn stt(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
-    overlap_buffers: &mut HashMap<String, Vec<f32>>,
+    overlap_buffers: &mut OverlapBuffers,
 ) -> Result<String> {
-    let model = &whisper_model.model;
+    let config = get_config();
 
-    info!("Loading mel filters");
-    let mel_bytes = match model.config().num_mel_bins {
-        80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
-        128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
-        nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
-    };
-    let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
-    <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
-
-    // Get device-specific overlap buffer
+    // Get or create overlap buffer for this device
     let overlap_buffer = overlap_buffers
         .entry(audio_input.device.name.clone())
-        .or_insert_with(Vec::new);
+        .or_insert_with(|| OverlapBuffer::new(Vec::new()));
 
-    // First add the overlap buffer if it exists
-    let mut speech_frames = Vec::new();
-    if !overlap_buffer.is_empty() {
-        speech_frames.extend(overlap_buffer.iter());
-    }
+    // Combine overlap buffer with current frames
+    let mut combined_frames = overlap_buffer.raw_frames.clone();
+    let current_frames: Vec<f32> = audio_input
+        .data
+        .iter()
+        .flat_map(|segment| segment.speech_frames.iter().copied())
+        .collect();
 
-    // Then add new frames
-    speech_frames.extend(
-        audio_input
-            .data
-            .iter()
-            .flat_map(|segment| segment.speech_frames.iter().copied()),
-    );
+    combined_frames.extend(current_frames.iter());
 
-    // Only keep overlap if we have enough frames
-    if speech_frames.len() > CONFIG.overlap_samples {
-        let new_overlap_start = speech_frames.len() - CONFIG.overlap_samples;
-        *overlap_buffer = speech_frames[new_overlap_start..].to_vec();
+    // Update overlap buffer with last N samples
+    overlap_buffer.raw_frames = if combined_frames.len() > config.overlap_samples {
+        combined_frames[combined_frames.len() - config.overlap_samples..].to_vec()
     } else {
-        overlap_buffer.clear();
-    }
-
-    // Process only the non-overlapping portion for transcription
-    let transcription_frames = if speech_frames.len() > CONFIG.overlap_samples {
-        &speech_frames[..speech_frames.len() - CONFIG.overlap_samples]
-    } else {
-        &speech_frames
+        combined_frames.clone()
     };
 
-    let transcription: Result<String> =
-        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
-            // Deepgram implementation
-            let api_key = deepgram_api_key
-                .clone()
-                .unwrap_or_else(get_deepgram_api_key);
-            info!(
-                "device: {}, using deepgram api key: {}...",
-                audio_input.device,
-                &api_key[..8]
-            );
+    // Helper function to run whisper
+    let mut run_whisper = || -> Result<String> {
+        let model = &whisper_model.model;
+        let mel_bytes = match model.config().num_mel_bins {
+            80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
+            128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
+            nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
+        };
+        let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
+        <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(
+            mel_bytes,
+            &mut mel_filters,
+        );
+
+        process_with_whisper(
+            &mut *whisper_model,
+            &combined_frames,
+            &mel_filters,
+            languages.clone(),
+        )
+    };
+
+    match *audio_transcription_engine.as_ref() {
+        AudioTranscriptionEngine::Deepgram => {
+            // Try Deepgram first
             match transcribe_with_deepgram(
-                &api_key,
-                transcription_frames,
+                &deepgram_api_key.unwrap_or_else(get_deepgram_api_key),
+                &combined_frames,
                 &audio_input.device.name,
                 audio_input.sample_rate,
                 languages.clone(),
             )
             .await
             {
-                Ok(transcription) => Ok(transcription),
+                Ok(transcript) => Ok(transcript),
                 Err(e) => {
-                    error!(
-                        "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
-                        audio_input.device, e
-                    );
-                    // Fallback to Whisper
-                    process_with_whisper(
-                        &mut *whisper_model,
-                        transcription_frames,
-                        &mel_filters,
-                        languages.clone(),
-                    )
+                    debug!("deepgram failed, falling back to whisper: {}", e);
+                    run_whisper()
                 }
             }
-        } else {
-            // Existing Whisper implementation
-            process_with_whisper(&mut *whisper_model, transcription_frames, &mel_filters, languages)
-        };
-
-    Ok(transcription?)
+        }
+        _ => run_whisper(),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -379,100 +358,6 @@ pub struct TranscriptionResult {
     pub transcription: Option<String>,
     pub timestamp: u64,
     pub error: Option<String>,
-}
-
-impl TranscriptionResult {
-    // TODO --optimize
-    pub fn cleanup_overlap(&mut self, previous_transcript: String) -> Option<(String, String)> {
-        if let Some(transcription) = &self.transcription {
-            let transcription = transcription.to_string();
-            if let Some((prev_idx, cur_idx)) =
-                longest_common_word_substring(previous_transcript.as_str(), transcription.as_str())
-            {
-                // strip old transcript from prev_idx word pos
-                let new_prev = previous_transcript
-                    .split_whitespace()
-                    .collect::<Vec<&str>>()[..prev_idx]
-                    .join(" ");
-                // strip new transcript before cur_idx word pos
-                let new_cur =
-                    transcription.split_whitespace().collect::<Vec<&str>>()[cur_idx..].join(" ");
-
-                return Some((new_prev, new_cur));
-            }
-        }
-
-        None
-    }
-
-    pub async fn cleanup_overlap_llm(
-        &mut self,
-        previous_transcript: String,
-    ) -> Result<Option<(String, String)>> {
-        if let Some(transcription) = &self.transcription {
-            let llm_result = async {
-
-                let client = Client::new();
-
-                let prompt = format!(
-                    "Split these overlapping transcript segments naturally:\nPrevious: '{}'\nCurrent: '{}'", 
-                    previous_transcript, transcription
-                );
-
-                let payload = serde_json::json!({
-                    "model": TRANSCRIPTION_PROCESSING_MODEL.clone(),
-                    "messages": [{
-                        "role": "system",
-                        "content": TRANSCRIPT_SPLITTER_PROMPT
-                    }, {
-                        "role": "user",
-                        "content": prompt
-                    }],
-                    "temperature": 0.2, // Reduced temperature for more consistent output
-                    "stream": false,
-                    "response_format": {
-                        "type": "json_object"
-                    }
-                });
-
-                let response = client.post(TRANSCRIPTION_PROCESSING_URL.clone()).json(&payload).send().await?;
-                let result: Value = response.json().await?;
-
-                if let Some(content) = result["choices"][0]["message"]["content"].as_str() {
-                    if let Ok(parsed) = serde_json::from_str::<Value>(content) {
-                        let prev = parsed["previous"].as_str().unwrap_or("").to_string();
-                        let cur = parsed["current"].as_str().unwrap_or("").to_string();
-                        
-                        // Post-process the segments
-                        let prev = prev.trim().to_string();
-                        let cur = cur.trim().to_string();
-                        
-                        // Handle empty or invalid splits
-                        if prev.is_empty() && cur.is_empty() {
-                            return Ok(None);
-                        }
-                        
-                        return Ok(Some((prev, cur)));
-                    }
-                }
-                Err(anyhow::anyhow!(format!("Failed to parse LLM response: {:?}", result)))
-            }
-            .await;
-
-            // If LLM approach fails, fall back to original method
-            if let Err(e) = &llm_result {
-                debug!(
-                    "LLM cleanup failed, falling back to standard overlap: {}",
-                    e
-                );
-                return Ok(self.cleanup_overlap(previous_transcript));
-            }
-
-            llm_result
-        } else {
-            Ok(None)
-        }
-    }
 }
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -623,3 +508,16 @@ pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize
         _ => None,
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct OverlapBuffer {
+    pub raw_frames: Vec<f32>,
+}
+
+impl OverlapBuffer {
+    pub fn new(raw_frames: Vec<f32>) -> Self {
+        Self { raw_frames }
+    }
+}
+
+pub type OverlapBuffers = HashMap<String, OverlapBuffer>;

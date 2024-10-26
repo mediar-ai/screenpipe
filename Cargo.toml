@@ -26,7 +26,7 @@ edition = "2021"
 candle = { package = "candle-core", version = "0.7.2" }
 candle-nn = { package = "candle-nn", version = "0.7.2" }
 candle-transformers = { package = "candle-transformers", version = "0.7.2" }
-tokenizers = "0.20.0"
+tokenizers = { version = "0.20.0", features = ["http"] }
 hf-hub = "0.3.0"
 
 log = "0.4"
