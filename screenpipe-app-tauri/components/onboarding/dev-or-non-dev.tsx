@@ -43,17 +43,21 @@ const CardItem: React.FC<{
   return (
     <div className="relative group h-64">
       <div
-        className={`absolute inset-0 rounded-lg transition-transform duration-300 ease-out group-hover:scale-105`}
+        className={`absolute h-full !mt-[-5px] inset-0 rounded-lg transition-all duration-300 ease-out group-hover:before:opacity-100 group-hover:before:scale-100 
+        before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-black dark:before:border-white before:opacity-0 before:scale-95 before:transition-all 
+        before:duration-300 before:ease-out ${
+          isSelected ? "before:!border-none" : ""
+        }`}
       />
       <Card
-        className={`p-4 h-64 mt-[-5px] cursor-pointer bg-white dark:bg-gray-800 transition-transform duration-300 ease-out group-hover:scale-105 
-        ${isSelected ? "bg-accent" : ""}`}
+        className={`p-4 h-64 mt-[-5px] cursor-pointer bg-background hover:bg-accent transition-transform duration-300 ease-out group-hover:scale-105 
+        ${isSelected ? "bg-accent transition-transform relative border-2 border-black dark:border-white" : ""}`}
         onClick={onClick}
       >
         <CardContent className="flex flex-col w-60 justify-start">
           <Icon className="w-12 h-12 mx-auto" />
           <h2 className="font-semibold text-xl text-center mt-1">{title}</h2>
-          <span className="text-sm mt-0">{description}</span>
+          <span className="text-sm mt-2 dark:text-muted-foreground">{description}</span>
         </CardContent>
       </Card>
     </div>

@@ -1,7 +1,3 @@
-{
-  /*TODO: setup screenpipe status  <10-10-24, @tribhuwan-kumar>*/
-}
-
 import React, { useState } from "react";
 import { ArrowUpRight, Check, HelpCircle } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -158,7 +154,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           this may take a few minutes depending on your internet connection
         </h2>
       </DialogHeader>
-      <div className="mt-4 text-sm text-zinc-600 mx-auto">
+      <div className="mt-4 text-sm text-zinc-600 mx-auto dark:text-muted-foreground">
         <p className="mb-2 text-center">how screenpipe works:</p>
         <ul className="list-disc list-inside text-left">
           <li>core recording process runs in the background</li>

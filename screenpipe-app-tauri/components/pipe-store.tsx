@@ -665,7 +665,7 @@ const PipeDialog: React.FC = () => {
             {pipes.map((pipe: Pipe) => (
               <Card
                 key={pipe.id}
-                className="cursor-pointer hover:bg-gray-100 mb-2 p-2"
+                className="cursor-pointer hover:bg-gray-100 mb-2 p-2 dark:hover:text-muted"
                 onClick={() => setSelectedPipe(pipe)}
               >
                 <div className="flex justify-between items-start">

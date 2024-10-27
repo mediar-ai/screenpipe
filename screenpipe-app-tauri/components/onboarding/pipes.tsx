@@ -31,7 +31,7 @@ const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
       <div className="mt-32 w-full flex justify-around flex-col text-center">
         <div className="mx-3">
           <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
+            <span className="font-medium text-nowrap text-[14px] prose mr-1 dark:text-muted-foreground">
               screenpipe is built to be fully extensible,
             </span>
             allowing you to enhance its capabilities with custom pipes,

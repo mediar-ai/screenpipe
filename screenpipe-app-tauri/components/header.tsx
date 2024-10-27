@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Settings } from "@/components/settings";
 import { PrettyLink } from "@/components/pretty-link";
 import HealthStatus from "@/components/screenpipe-status";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Tooltip,
   TooltipContent,
@@ -124,7 +125,7 @@ export default function Header() {
                 <TooltipTrigger asChild>
                   <Button
                     variant="secondary"
-                    className="cursor-pointer"
+                    className="cursor-pointer dark:bg-transparent dark:border "
                     onClick={() => {
                       location.reload();
                     }}
@@ -158,6 +159,9 @@ export default function Header() {
               <Bell className="h-[1.2rem] w-[1.2rem]" />
               <span className="sr-only">notifications</span>
             </Button>
+
+            <ThemeToggle className="h-[1.2rem] w-[1.2rem]"/>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="cursor-pointer">

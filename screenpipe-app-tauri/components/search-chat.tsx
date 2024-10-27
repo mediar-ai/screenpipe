@@ -1209,7 +1209,7 @@ export function SearchChat() {
           >
             <form
               onSubmit={handleFloatingInputSubmit}
-              className="flex space-x-2 bg-white shadow-lg rounded-lg overflow-hidden p-4 items-center"
+              className="flex space-x-2 bg-background shadow-lg rounded-lg overflow-hidden p-4 items-center"
             >
               <div className="relative flex-grow">
                 <Input

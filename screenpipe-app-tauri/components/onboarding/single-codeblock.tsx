@@ -61,7 +61,7 @@ const CodeBlock: FC<Props> = memo(({ className, language, value }) => {
   };
 
   return (
-    <div className={` relative w-full font-sans codeblock backdrop-blur-sm bg-zinc-950 ${className}`}>
+    <div className={` relative w-full font-sans codeblock backdrop-blur-sm bg-zinc-950 dark:bg-black ${className}`}>
       <SyntaxHighlighter
         language={language}
         style={coldarkDark}

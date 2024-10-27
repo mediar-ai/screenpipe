@@ -48,7 +48,7 @@ const CardItem: React.FC<{
         }`}
       />
       <Card
-        className={`p-4 h-full !mt-[-5px] cursor-pointer bg-white dark:bg-gray-800 hover:bg-accent transition-all relative z-[1] duration-300 ease-out group-hover:scale-[0.98]
+        className={`p-4 h-full !mt-[-5px] cursor-pointer bg-background hover:bg-accent transition-all relative z-[1] duration-300 ease-out group-hover:scale-[0.98]
         ${
           isSelected
             ? "bg-accent transition-transform relative border-2 border-black dark:border-white"
@@ -59,8 +59,8 @@ const CardItem: React.FC<{
         <CardContent className="flex flex-col w-[250px] justify-center">
           <Icon className="w-16 h-16 mx-auto" />
           <h2 className="font-semibold text-xl text-center mt-1">{title}</h2>
-          <span className="prose prose-sm mt-1">{description}</span>
-          <span className="text-muted-foreground text-center prose-sm mt-4">
+          <span className="prose prose-sm mt-1 dark:text-muted-foreground">{description}</span>
+          <span className="text-muted-foreground text-center prose-sm mt-4 dark:text-muted-foreground">
             {note}
           </span>
         </CardContent>

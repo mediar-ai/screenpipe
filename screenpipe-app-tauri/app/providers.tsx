@@ -2,11 +2,16 @@
 "use client";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import "@radix-ui/themes/styles.css";
+import { Theme } from "@radix-ui/themes";
+import { ThemeProvider } from "next-themes";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const isDebug = process.env.TAURI_ENV_DEBUG === "true";
@@ -20,9 +25,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
   return (
-    <OnboardingProvider>
-      <PostHogProvider client={posthog}>{children}</PostHogProvider>
-    </OnboardingProvider>
+    <ThemeProvider attribute="class">
+      <Theme>
+        <OnboardingProvider>
+          <PostHogProvider client={posthog}>{children}</PostHogProvider>
+        </OnboardingProvider>
+      </Theme>
+    </ThemeProvider>
   );
 }

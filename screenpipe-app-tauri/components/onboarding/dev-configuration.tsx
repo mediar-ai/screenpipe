@@ -102,7 +102,7 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
       <div className="mt-8 w-full flex justify-around flex-col">
         <div className="mx-3">
           <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium prose text-[14px] mr-1">
+            <span className="font-medium prose text-[14px] mr-1 dark:text-muted-foreground">
               by using the cli,
             </span>
             you can manually configure and manage backend processes for advanced
@@ -118,7 +118,7 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
               {instructions.map((instructions, index) => (
                 <li key={index} className="list-disc mt-1">
                   <p className="text-muted-foreground text-sm ml-4">
-                    <span className="font-medium text-nowrap text-[14px] mr-1 prose">
+                    <span className="font-medium text-nowrap text-[14px] mr-1 prose dark:text-muted-foreground">
                       {instructions.label}
                     </span>
                     {instructions.description}

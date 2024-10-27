@@ -56,10 +56,10 @@ const SelectionItem: React.FC<{
   const { icon: Icon, label, description } = option;
   return (
     <div
-      className={`w-[90%] flex items-center border prose prose-sm rounded-lg m-[10px] px-4 py-[10px] hover:bg-accent cursor-pointer
+      className={`w-[90%] flex items-center border prose prose-sm rounded-lg m-[10px] px-4 py-[10px] hover:bg-accent cursor-pointer dark:text-inherit
         ${
           isSelected
-            ? "bg-primary text-primary-foreground transition duration-300 hover:bg-primary/90"
+            ? "bg-primary text-primary-foreground transition duration-300 hover:bg-primary/90 dark:text-muted"
             : ""
         }`}
       onClick={onClick}

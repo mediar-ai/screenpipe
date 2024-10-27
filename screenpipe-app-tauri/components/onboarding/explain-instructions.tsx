@@ -41,7 +41,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
         <div className="mx-4 mb-2">
           <h2 className="font-semibold text-md">search functionality:</h2>
           <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
+            <span className="font-medium text-nowrap text-[14px] prose mr-1 dark:text-muted-foreground">
               on screenpipe&apos;s main menu,
             </span>
             you&apos;ll find an advanced search interface to query your 24/7 screen & mic recordings. it
@@ -64,7 +64,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
         <div className="mx-4 mb-2">
           <h2 className="font-medium text-md">status menu:</h2>
           <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
+            <span className="font-medium text-nowrap text-[14px] prose mr-1 dark:text-muted-foreground">
               screenpipe status menu serves
             </span>
             as a health and process monitor and allows you to adjust advanced
@@ -78,7 +78,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
         <div className="mx-4 mb-2">
           <h2 className="font-medium text-md">settings menu:</h2>
           <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
+            <span className="font-medium text-nowrap text-[14px] prose mr-1 dark:text-muted-foreground">
               the settings menu,
             </span>
             is where you can configure various options like recording
@@ -94,7 +94,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
             meetings tracking (experimental):
           </h2>
           <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
+            <span className="font-medium text-nowrap text-[14px] prose mr-1 dark:text-muted-foreground">
               this features of screenpipe
             </span>
             tracks your meetings and generates
@@ -104,7 +104,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
         <div className="mx-4">
           <h2 className="font-medium text-md">pipe store (experimental):</h2>
           <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
+            <span className="font-medium text-nowrap text-[14px] prose mr-1 dark:text-muted-foreground">
               this features of screenpipe
             </span>
             extend your 24/7 data through plugins you can install in seconds,

@@ -106,14 +106,14 @@ export function SqlAutocompleteInput({
           )}
         </div>
         {open && (
-          <Command.List className="absolute z-20 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-auto shadow-lg text-sm">
-            <div className="flex items-center px-3 py-2 border-b border-gray-200">
+          <Command.List className="absolute z-20 w-full bg-background border border-gray-300 rounded-md mt-1 max-h-60 overflow-auto shadow-lg text-sm dark:border dark:border-input">
+            <div className="flex items-center px-3 py-2 border-b border-gray-200 dark:border-input">
               <Search className="mr-2 h-4 w-4 text-gray-400" />
               <Command.Input
                 placeholder="search..."
                 value={inputValue}
                 onValueChange={setInputValue}
-                className="border-none focus:ring-0 outline-none w-full"
+                className="border-none focus:ring-0 outline-none w-full bg-background"
               />
             </div>
             {isLoading ? (

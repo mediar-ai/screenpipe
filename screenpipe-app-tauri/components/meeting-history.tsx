@@ -739,14 +739,14 @@ export default function MeetingHistory() {
           </DialogTitle>
         </DialogHeader>
         <DialogDescription className="mb-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-600 dark:text-inherit">
             this page provides transcriptions and summaries of your daily
             meetings. it uses your ai settings to generate summaries. note:
             phrases like &quot;thank you&quot; or &quot;you know&quot; might be
             transcription errors. for better accuracy, consider using deepgram
             as the engine or adjust your prompt to ignore these.
           </p>
-          <p className="text-sm text-gray-600 mt-2">
+          <p className="text-sm text-gray-600 mt-2 dark:text-inherit">
             <strong>make sure to setup your ai settings</strong>
           </p>
         </DialogDescription>
@@ -767,7 +767,8 @@ export default function MeetingHistory() {
             <>
               {showError && error && (
                 <div
-                  className="bg-gray-100 border-l-4 border-black text-gray-700 p-4 mb-4 flex justify-between items-center"
+                  className="bg-gray-100 border-l-4 border-black text-gray-700 p-4 mb-4 flex justify-between items-center
+                            dark:bg-background dark:border-input dark:text-muted-foreground"
                   role="alert"
                 >
                   <div>
@@ -922,7 +923,7 @@ export default function MeetingHistory() {
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
-                          <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
+                          <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto dark:bg-accent">
                             {meeting.segments
                               .filter((s) =>
                                 meeting.selectedDevices.has(s.deviceName)
