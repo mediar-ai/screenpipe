@@ -192,7 +192,7 @@ pub async fn record_and_transcribe(
                 let file_path_clone = Arc::new(file_path);
 
                 if let Err(e) = whisper_sender.send(AudioInput {
-                    data: Arc::new(vec![segment]),
+                    data: Arc::new(segment), // Remove the vec![] wrapper
                     device: audio_stream.device.clone(),
                     sample_rate: audio_stream.device_config.sample_rate().0,
                     channels: audio_stream.device_config.channels(),
@@ -337,17 +337,11 @@ pub fn trigger_audio_permission() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug)]
-pub struct AudioSegment {
-    pub frames: Arc<Vec<f32>>,
-    pub speech_frames: Arc<Vec<f32>>,
-}
-
 #[derive(Clone)]
 pub struct AudioStream {
     pub device: Arc<AudioDevice>,
     pub device_config: cpal::SupportedStreamConfig,
-    transmitter: Arc<tokio::sync::broadcast::Sender<AudioSegment>>,
+    transmitter: Arc<tokio::sync::broadcast::Sender<Vec<f32>>>,
     stream_control: mpsc::Sender<StreamControl>,
     stream_thread: Option<Arc<tokio::sync::Mutex<Option<thread::JoinHandle<()>>>>>,
 }
@@ -357,11 +351,8 @@ enum StreamControl {
 }
 
 impl AudioStream {
-    pub async fn from_device(
-        device: Arc<AudioDevice>,
-        vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
-    ) -> Result<Self> {
-        let (tx, _) = broadcast::channel::<AudioSegment>(1000);
+    pub async fn from_device(device: Arc<AudioDevice>) -> Result<Self> {
+        let (tx, _) = broadcast::channel::<Vec<f32>>(1000);
         let tx_clone = tx.clone();
         let (cpal_audio_device, config) = get_device_and_config(&device).await?;
         let channels = config.channels();
@@ -371,11 +362,6 @@ impl AudioStream {
         let config_clone2 = config_clone.clone();
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
         let stream_control_tx_clone = stream_control_tx.clone();
-
-        let vad_engine_clone = vad_engine.clone();
-
-        let buffer = Arc::new(Mutex::new(Vec::new()));
-        let buffer_clone = buffer.clone();
 
         let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn(move || {
             info!(
@@ -409,31 +395,7 @@ impl AudioStream {
             let data_callback = move |data: &[f32], _: &_| {
                 let mono = audio_to_mono(data, channels);
 
-                // Add data to buffer
-                let mut buffer = buffer_clone.lock().unwrap();
-                buffer.extend_from_slice(&mono);
-
-                let buffer_duration_ms =
-                    (buffer.len() as f32 / config_clone2.sample_rate().0 as f32) * 1000.0;
-                if buffer_duration_ms < CONFIG.chunk_duration_ms {
-                    return;
-                }
-
-                // Process with VAD and audio processing
-                let mut vad = vad_engine_clone.lock().unwrap();
-                if let Ok(Some(speech_frames)) =
-                    audio_frames_to_speech_frames(&buffer, config_clone2.sample_rate().0, &mut *vad)
-                {
-                    // info!("sending speech frames length: {}", speech_frames.len());
-                    let speech_segment = AudioSegment {
-                        frames: Arc::new(std::mem::take(&mut *buffer)),
-                        speech_frames: Arc::new(speech_frames),
-                    };
-                    let _ = tx.send(speech_segment);
-                }
-
-                // Clear the buffer after processing attempt
-                buffer.clear();
+                let _ = tx.send(mono);
             };
 
             let stream = match config.sample_format() {
@@ -476,7 +438,7 @@ impl AudioStream {
         })
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<AudioSegment> {
+    pub fn subscribe(&self) -> broadcast::Receiver<Vec<f32>> {
         self.transmitter.subscribe()
     }
 
@@ -520,7 +482,7 @@ impl AudioStream {
         let sample_rate = decoder.sample_rate();
         let channels = decoder.channels();
 
-        let (tx, _rx) = broadcast::channel::<AudioSegment>(1000);
+        let (tx, _rx) = broadcast::channel::<Vec<f32>>(1000);
         let tx = Arc::new(tx);
         let tx_clone = tx.clone();
 
@@ -558,14 +520,9 @@ impl AudioStream {
                         audio_frames_to_speech_frames(chunk, sample_rate, &mut *vad)
                     {
                         // println!("sending {} speech frames", speech_frames.len());
-                        let speech_segment = AudioSegment {
-                            frames: Arc::new(chunk.to_vec()),
-                            speech_frames: Arc::new(speech_frames),
-                        };
-
-                        if let Err(e) = tx.send(speech_segment) {
-                            println!("failed to send audio segment: {}", e);
-                        }
+                    }
+                    if let Err(e) = tx.send(chunk.to_vec()) {
+                        println!("failed to send audio chunk: {}", e);
                     }
 
                     thread::sleep(Duration::from_millis(100));

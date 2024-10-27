@@ -34,10 +34,10 @@ pub mod test {
         let config = Config {
             overlap_seconds: 1,                   // Much larger than default
             chunk_duration_ms: 3000.0,            // Much smaller than default
-            pre_speech_buffer_duration_secs: 2.0, // Very small
-            vad_buffer_duration_secs: 1.0,        // Very small
+            pre_speech_buffer_duration_secs: 1.0, // Very small
+            vad_buffer_duration_secs: 4.0,        // Very small
             speech_threshold_duration_ms: 700,    // Very small
-            silence_threshold_duration_ms: 1500,  // Very small
+            silence_threshold_duration_ms: 1500,   // Very small
             ..Config::new("test_config".to_string())
         };
 
@@ -54,8 +54,10 @@ pub mod test {
         let file = BufReader::new(File::open(&test_path)?);
         let decoder = Decoder::new(file)?;
         let sample_rate = decoder.sample_rate();
-        let samples: Vec<f32> = decoder.map(|x: i16| x as f32 / i16::MAX as f32).collect();
+        let mut samples: Vec<f32> = decoder.map(|x: i16| x as f32 / i16::MAX as f32).collect();
 
+        // add 3 seconds of silence at the end
+        samples.extend(vec![0.0; (sample_rate as f32 * 3.0) as usize]);
         // Process audio in chunks like in production
         let chunk_size =
             ((sample_rate as f32 * get_config().chunk_duration_ms / 1000.0) as usize).max(1);
@@ -65,6 +67,12 @@ pub mod test {
             Box::new(SileroVad::new().await.unwrap()) as Box<dyn VadEngine + Send>
         ));
 
+        // Initialize whisper
+        let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo);
+        let mut whisper_model = WhisperModel::new(&engine)?;
+        let overlap_buffers = Arc::new(Mutex::new(HashMap::new()));
+
+        let mut full_transcription = String::new();
         // Process chunks
         for (i, chunk) in samples.chunks(chunk_size).enumerate() {
             println!("Processing chunk {}, size: {}", i, chunk.len());
@@ -85,43 +93,42 @@ pub mod test {
                     speech_frames: Arc::new(speech_frames),
                 };
                 segments.push(segment);
+
+                println!("segments: {:?}", segments.len());
+
+                let audio_input = AudioInput {
+                    data: Arc::new(segments.clone()),
+                    sample_rate: sample_rate as u32,
+                    channels: 1,
+                    device: Arc::new(AudioDevice::new(
+                        "test_device".to_string(),
+                        DeviceType::Input,
+                    )),
+                    output_path: Arc::new(std::path::PathBuf::from("/tmp")),
+                };
+
+                // Process the entire file at once
+                let transcription = stt(
+                    &audio_input,
+                    &mut whisper_model,
+                    engine.clone(),
+                    None,
+                    vec![Language::English],
+                    &mut overlap_buffers.lock().unwrap(),
+                )
+                .await?;
+
+                println!("transcription: {:?}", transcription);
+                full_transcription.push_str(&transcription);
             }
         }
-        println!("segments: {:?}", segments.len());
 
-        let audio_input = AudioInput {
-            data: Arc::new(segments),
-            sample_rate: sample_rate as u32,
-            channels: 1,
-            device: Arc::new(AudioDevice::new(
-                "test_device".to_string(),
-                DeviceType::Input,
-            )),
-            output_path: Arc::new(std::path::PathBuf::from("/tmp")),
-        };
-
-        // Initialize whisper
-        let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo);
-        let mut whisper_model = WhisperModel::new(&engine)?;
-        let overlap_buffers = Arc::new(Mutex::new(HashMap::new()));
-
-        // Process the entire file at once
-        let transcription = stt(
-            &audio_input,
-            &mut whisper_model,
-            engine.clone(),
-            None,
-            vec![Language::English],
-            &mut overlap_buffers.lock().unwrap(),
-        )
-        .await?;
-
-        println!("\nFinal transcription:\n{}", transcription);
+        println!("\nFinal transcription:\n{}", full_transcription);
         println!("\nExpected transcription:\n{}", EXPECTED_TRANSCRIPT);
 
         // Compare with expected transcription
         let similarity = strsim::jaro_winkler(
-            &transcription.to_lowercase(),
+            &full_transcription.to_lowercase(),
             &EXPECTED_TRANSCRIPT.to_lowercase(),
         );
         println!("\nTranscription similarity score: {}", similarity);

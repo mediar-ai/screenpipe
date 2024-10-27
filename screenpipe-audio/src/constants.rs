@@ -14,7 +14,6 @@ thread_local! {
 pub fn get_config() -> Arc<Config> {
     TESTING_CONFIG.with(|test_config| {
         let config = if let Some(config) = test_config.borrow().clone() {
-            println!("Using test config: {:?}", config);
             config
         } else {
             println!("Using default config");

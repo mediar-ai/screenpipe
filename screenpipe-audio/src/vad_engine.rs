@@ -96,59 +96,66 @@ impl VadBuffer {
         let now = Instant::now();
 
         if is_current_frame_speech {
-            // println!("vad: detected speech frame");
+            // println!("speech frame detected");
             self.last_speech_time = Some(now);
 
             if !self.is_speech_active {
                 if self.continuous_speech_start.is_none() {
-                    // println!("vad: starting continuous speech detection");
+                    println!("starting continuous speech detection");
                     self.continuous_speech_start = Some(now);
                 }
 
-                // Check if we've reached the speech threshold (700ms)
-                if let Some(start) = self.continuous_speech_start {
-                    let speech_duration = now.duration_since(start);
-                    // println!("vad: speech duration: {:?}", speech_duration);
+                let speech_duration = now.duration_since(self.continuous_speech_start.unwrap());
+                println!("speech duration: {:?}", speech_duration);
 
-                    if speech_duration >= Duration::from_millis(CONFIG.speech_threshold_duration_ms)
-                    {
-                        // println!("vad: speech threshold reached (700ms)");
-                        self.is_speech_active = true;
-                        // Add pre-speech buffer (2s)
-                        self.speech_buffer.extend(
-                            self.pre_speech_buffer
-                                .iter()
-                                .flat_map(|frame| frame.iter().copied()),
-                        );
-                        return SpeechBoundary::Start;
+                if speech_duration >= Duration::from_millis(CONFIG.speech_threshold_duration_ms) {
+                    println!("speech threshold reached");
+                    self.is_speech_active = true;
+                    // Add pre-speech buffer
+                    self.speech_buffer.extend(
+                        self.pre_speech_buffer
+                            .iter()
+                            .flat_map(|frame| frame.iter().copied()),
+                    );
+                    // Add current frame
+                    if let Some(frame) = self.vad_buffer.back() {
+                        self.speech_buffer.extend(frame.iter().copied());
                     }
+                    return SpeechBoundary::Start;
                 }
-            }
-
-            if self.is_speech_active {
-                // Add current frame to speech buffer
+            } else {
+                // Already in speech mode, add current frame
                 if let Some(frame) = self.vad_buffer.back() {
-                    self.speech_buffer.extend(frame.iter());
+                    self.speech_buffer.extend(frame.iter().copied());
                 }
                 return SpeechBoundary::Continuing;
             }
         } else {
+            // Not speech
             if self.is_speech_active {
                 if let Some(last_speech) = self.last_speech_time {
                     let silence_duration = now.duration_since(last_speech);
-                    // println!("vad: silence duration: {:?}", silence_duration);
+                    println!("silence duration: {:?}", silence_duration);
 
-                    // Check if silence threshold reached (1500ms)
-                    if silence_duration
-                        >= Duration::from_millis(CONFIG.silence_threshold_duration_ms)
-                    {
-                        // println!("vad: silence threshold reached (1500ms)");
+                    if silence_duration >= Duration::from_millis(CONFIG.silence_threshold_duration_ms) {
+                        println!("silence threshold reached");
                         self.is_speech_active = false;
                         self.continuous_speech_start = None;
                         return SpeechBoundary::End;
                     }
                 }
+                // Still in speech mode during short silence
+                if let Some(frame) = self.vad_buffer.back() {
+                    self.speech_buffer.extend(frame.iter().copied());
+                }
                 return SpeechBoundary::Continuing;
+            }
+        }
+
+        // Reset continuous speech detection if we've been silent too long
+        if let Some(last_speech) = self.last_speech_time {
+            if now.duration_since(last_speech) >= Duration::from_millis(CONFIG.silence_threshold_duration_ms) {
+                self.continuous_speech_start = None;
             }
         }
 
@@ -257,8 +264,8 @@ impl SileroVad {
 impl VadEngine for SileroVad {
     fn process_frame(&mut self, frame: &[f32]) -> anyhow::Result<bool> {
         let result = self.vad.compute(frame).unwrap();
-        // println!("vad: frame probability: {}", result.prob);
-        Ok(result.prob > 0.3) // More sensitive threshold
+        // println!("vad probability: {}", result.prob); // Add this debug line
+        Ok(result.prob > 0.5)
     }
 
     fn reset(&mut self) {

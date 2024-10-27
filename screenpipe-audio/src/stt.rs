@@ -292,11 +292,7 @@ pub async fn stt(
 
     // Combine overlap buffer with current frames
     let mut combined_frames = overlap_buffer.raw_frames.clone();
-    let current_frames: Vec<f32> = audio_input
-        .data
-        .iter()
-        .flat_map(|segment| segment.speech_frames.iter().copied())
-        .collect();
+    let current_frames: Vec<f32> = audio_input.data.clone().to_vec();
 
     combined_frames.extend(current_frames.iter());
 

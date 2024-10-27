@@ -419,4 +419,3 @@ fn apply_repetition_penalty(logits: &mut [f32], token_history: &[u32], penalty: 
     }
 }
 
-// ... (keep any other helper functions or structs that are specific to Whisper)

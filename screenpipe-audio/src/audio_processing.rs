@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::constants::CONFIG;
-use crate::core::AudioSegment;
 use crate::vad_engine::{SpeechBoundary, VadEngine};
 use crate::AudioDevice;
 use anyhow::Result;
@@ -113,7 +112,7 @@ pub fn audio_to_mono(audio: &[f32], channels: u16) -> Vec<f32> {
 
 #[derive(Debug, Clone)]
 pub struct AudioInput {
-    pub data: Arc<Vec<AudioSegment>>,
+    pub data: Arc<Vec<f32>>,
     pub sample_rate: u32,
     pub channels: u16,
     pub device: Arc<AudioDevice>,
@@ -169,8 +168,9 @@ pub fn audio_frames_to_speech_frames(
         }
     }
 
-    // Handle any remaining speech data
-    if speech_detected && !vad_engine.buffer().get_speech_buffer().is_empty() {
+    // After the main processing loop, check if we have any remaining speech data
+    if vad_engine.buffer().is_speech_active() {
+        println!("end of audio reached while speech was active, finalizing segment");
         let speech_data = vad_engine.buffer().get_speech_buffer().to_vec();
         all_speech_data.extend(speech_data);
         vad_engine.buffer().clear_speech_buffer();
