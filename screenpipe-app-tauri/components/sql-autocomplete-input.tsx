@@ -79,7 +79,7 @@ export function SqlAutocompleteInput({
     <div className={cn("relative", className)} ref={commandRef}>
       <Command className="relative w-full" shouldFilter={false}>
         <div className="relative">
-          <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 flex items-center">
+          <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 flex items-center">
             {icon}
             <span className="w-2" />
           </div>
@@ -133,7 +133,7 @@ export function SqlAutocompleteInput({
                     key={item.name}
                     value={item.name}
                     onSelect={handleSelect}
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200 last:border-b-0"
+                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200 last:border-b-0 dark:border-input dark:hover:bg-accent dark:text-muted-foreground"
                   >
                     {item.name} ({item.count})
                   </Command.Item>

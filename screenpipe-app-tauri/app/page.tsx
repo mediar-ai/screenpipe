@@ -26,6 +26,9 @@ import { Separator } from "@/components/ui/separator";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { registerShortcuts } from "@/lib/shortcuts";
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export default function Home() {
   const { settings } = useSettings();
@@ -46,7 +49,7 @@ export default function Home() {
   }, [settings.userId, posthog]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center">
+    <main className={ `flex min-h-screen flex-col items-center ${inter.className}`}>
       <NotificationHandler />
       {showOnboarding && <Onboarding />}
       {/* <UpdateNotification checkIntervalHours={3} /> */}

@@ -2,7 +2,7 @@
 "use client";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import "@radix-ui/themes/styles.css";
 import { Theme } from "@radix-ui/themes";
 import { ThemeProvider } from "next-themes";
