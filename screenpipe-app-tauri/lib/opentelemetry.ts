@@ -45,3 +45,42 @@ export function initOpenTelemetry(projectId: string, sessionId: string) {
     span.end();
   });
 }
+
+let tracerProvider: WebTracerProvider | null = null;
+
+export function getTracerProvider() {
+  if (!tracerProvider) {
+    tracerProvider = new WebTracerProvider();
+  }
+  return tracerProvider;
+}
+
+export function trackError(
+  error: unknown,
+  context: {
+    operation: string;
+    additionalAttributes?: Record<string, string>;
+  }
+) {
+  const isDebug = process.env.TAURI_ENV_DEBUG === "true";
+  if (isDebug || window.location.origin.includes("localhost")) return;
+
+  const provider = getTracerProvider();
+  const tracer = provider.getTracer("screenpipe-error-tracker");
+  const span = tracer.startSpan(context.operation);
+
+  span.setStatus({ code: 2 }); // OpenTelemetry error status code
+  span.setAttribute("error.type", context.operation);
+  span.setAttribute(
+    "error.message",
+    error instanceof Error ? error.message : String(error)
+  );
+
+  if (context.additionalAttributes) {
+    Object.entries(context.additionalAttributes).forEach(([key, value]) => {
+      span.setAttribute(key, value);
+    });
+  }
+
+  span.end();
+}
