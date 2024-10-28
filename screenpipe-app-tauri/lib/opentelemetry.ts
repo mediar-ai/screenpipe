@@ -7,7 +7,7 @@ export function initOpenTelemetry(projectId: string, sessionId: string) {
   const isDebug = process.env.TAURI_ENV_DEBUG === "true";
   if (isDebug || window.origin.includes("localhost")) return;
 
-  const provider = new WebTracerProvider({
+  tracerProvider = new WebTracerProvider({
     resource: new Resource({
       "highlight.project_id": projectId,
       "highlight.session_id": sessionId,
@@ -32,13 +32,13 @@ export function initOpenTelemetry(projectId: string, sessionId: string) {
     shutdown: () => Promise.resolve(),
   });
 
-  provider.addSpanProcessor(errorOnlySpanProcessor as any);
+  tracerProvider.addSpanProcessor(errorOnlySpanProcessor as any);
 
-  provider.register();
+  tracerProvider.register();
 
   // add global error handler
   window.addEventListener("error", (event) => {
-    const tracer = provider.getTracer("error-tracer");
+    const tracer = tracerProvider!.getTracer("error-tracer");
     const span = tracer.startSpan("unhandled-error");
     span.setStatus({ code: 2 }); // set status to error
     span.recordException(event.error);
