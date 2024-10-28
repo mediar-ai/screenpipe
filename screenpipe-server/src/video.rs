@@ -16,7 +16,7 @@ use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
 
-const MAX_FPS: f64 = 30.0; // Adjust based on your needs
+pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
 
 pub struct VideoCapture {

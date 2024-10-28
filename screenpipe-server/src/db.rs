@@ -238,6 +238,7 @@ impl DatabaseManager {
 
         Ok(id)
     }
+
     pub async fn update_audio_transcription(
         &self,
         audio_chunk_id: i64,
@@ -272,7 +273,10 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_frame(&self, device_name: &str) -> Result<i64, sqlx::Error> {
+    pub async fn insert_frame(&self, 
+        device_name: &str, 
+        timestamp: Option<DateTime<Utc>>,
+    ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
 
@@ -302,6 +306,8 @@ impl DatabaseManager {
         .fetch_one(&mut *tx)
         .await?;
         debug!("insert_frame Calculated offset_index: {}", offset_index);
+        
+        let timestamp = timestamp.unwrap_or_else(Utc::now);
 
         // Insert the new frame
         let id = sqlx::query(
@@ -309,7 +315,7 @@ impl DatabaseManager {
         )
         .bind(video_chunk_id)
         .bind(offset_index)
-        .bind(Utc::now())
+        .bind(timestamp)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -329,13 +335,11 @@ impl DatabaseManager {
         text_json: &str,
         app_name: &str,
         window_name: &str,
-        ocr_engine: impl Into<OcrEngine>,
+        ocr_engine: Arc<OcrEngine>,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
         const MAX_RETRIES: u32 = 3;
         const TIMEOUT_DURATION: TokioDuration = TokioDuration::from_secs(10);
-
-        let ocr_engine_str = ocr_engine.into().to_string();
 
         for attempt in 1..=MAX_RETRIES {
             match timeout(
@@ -346,7 +350,7 @@ impl DatabaseManager {
                     text_json,
                     app_name,
                     window_name,
-                    &ocr_engine_str,
+                    Arc::clone(&ocr_engine),
                     focused,
                 ),
             )
@@ -396,7 +400,7 @@ impl DatabaseManager {
         text_json: &str,
         app_name: &str,
         window_name: &str,
-        ocr_engine: &str,
+        ocr_engine: Arc<OcrEngine>,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
         let display_window_name = if window_name.chars().count() > 20 {
@@ -421,7 +425,7 @@ impl DatabaseManager {
             .bind(text)
             .bind(text_json)
             .bind(app_name)
-            .bind(ocr_engine)
+            .bind(format!("{:?}", *ocr_engine))
             .bind(window_name)
             .bind(focused)
             .execute(&mut *tx)

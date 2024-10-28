@@ -12,13 +12,15 @@ use screenpipe_core::LLM;
 #[cfg(feature = "llm")]
 use screenpipe_core::{ChatRequest, ChatResponse};
 use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::OcrEngine;
+use image::ImageFormat::{self};
 
 use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
     ContentType, DatabaseManager, SearchResult,
-    video::{start_ffmpeg_process, write_frame_to_ffmpeg, finish_ffmpeg_process}
+    video::{start_ffmpeg_process, write_frame_to_ffmpeg, finish_ffmpeg_process, MAX_FPS}
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
@@ -898,7 +900,6 @@ pub struct OCRResult {
 #[derive(Deserialize)]
 pub struct AudioTranscription {
     pub transcription: String,
-    pub timestamp: Option<DateTime<Utc>>,
     pub transcription_engine: String,
 }
 
@@ -916,37 +917,35 @@ async fn add_frame_to_db(
     let db = &state.db;
 
     let frame_id = db.insert_frame(
-        device_name.to_string(),
-        frame.file_path.clone(),
-        frame.timestamp.unwrap_or_else(Utc::now),
-        frame.app_name.clone(),
-        frame.window_name.clone(),
+        &device_name,
+        Some(frame.timestamp.unwrap_or_else(Utc::now)),
     ).await?;
 
-    if let Some(ocr_results) = frame.ocr_results {
+    if let Some(ocr_results) = &frame.ocr_results {
         for ocr in ocr_results {
             db.insert_ocr_text(
                 frame_id,
-                ocr.text,
-                ocr.text_json,
-                frame.app_name,
-                frame.window_name,
-                ocr.ocr_engine,
+                &ocr.text,
+                &ocr.text_json.as_deref().unwrap_or(""),
+                &frame.app_name.as_deref().unwrap_or(""),
+                &frame.window_name.as_deref().unwrap_or(""),
+                Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
                 false
             ).await?;
         }
     }
 
-    if let Some(tags) = frame.tags {
-        db.add_tags(frame_id, TagContentType::Vision, tags).await?;
+    if let Some(tags) = &frame.tags {
+        db.add_tags(frame_id, TagContentType::Vision, tags.clone()).await?;
     }
 
     Ok(())
 }
 
-fn encode_frame_from_file_path(file_path: &str) -> Result<Vec<u8>> {
+fn encode_frame_from_file_path(file_path: &str) -> Result<Vec<u8>, anyhow::Error> {
     let image = image::open(file_path)?;
     let mut buffer = Vec::new();
+    image.write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)?;
     Ok(buffer)
 }
 
@@ -954,7 +953,7 @@ async fn write_frames_to_video(
     frames: &Vec<FrameContent>,
     video_file_path: &str,
     fps: f64,
-) -> Result<()> {
+) -> Result<(), anyhow::Error> {
     let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps).await?;
     let mut ffmpeg_stdin = ffmpeg_child.stdin.take().expect("Failed to open stdin for FFmpeg");
 
@@ -977,12 +976,17 @@ async fn add_transcription_to_db(
 ) -> Result<(), anyhow::Error> {
     let db = &state.db;
 
+    let device = AudioDevice {
+        name: device_name.to_string(),
+        device_type: DeviceType::Input,
+    };
+
     db.insert_audio_transcription(
         -1, // No associated audio chunk
         &transcription.transcription,
         -1,
-        transcription.transcription_engine,
-        device_name,
+        &transcription.transcription_engine,
+        &device,
     ).await?;
 
     Ok(())
@@ -998,9 +1002,10 @@ pub(crate) async fn add_to_database(
     match &payload.content {
         AddContentData::Frames(frames) => {
             if !frames.is_empty() {
+                let output_dir = state.screenpipe_dir.join("videos");
                 let time = Utc::now();
                 let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
-                let video_file_path = PathBuf::from(output_path)
+                let video_file_path = PathBuf::from(output_dir)
                     .join(format!("{}_{}.mp4", device_name, formatted_time))
                     .to_str()
                     .expect("Failed to create valid path")
@@ -1014,7 +1019,7 @@ pub(crate) async fn add_to_database(
                     ));
                 }
 
-                if let Err(e) = write_frames_to_video(frames.clone(), &video_file_path, MAX_FPS).await {
+                if let Err(e) = write_frames_to_video(frames, &video_file_path, MAX_FPS).await {
                     error!("Failed to write frames to video file {}: {}", video_file_path, e);
                     return Err((
                         StatusCode::INTERNAL_SERVER_ERROR,

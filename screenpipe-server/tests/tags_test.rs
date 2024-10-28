@@ -360,7 +360,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
     let _video_chunk_id = db.insert_video_chunk("test_video_file.mp4", "test_device").await.unwrap();
 
     // Insert test frame
-    let frame_id = db.insert_frame("test_device").await.unwrap();
+    let frame_id = db.insert_frame("test_device", None).await.unwrap();
 
     // Insert test OCR data
     db.insert_ocr_text(
