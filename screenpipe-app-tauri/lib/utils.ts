@@ -110,16 +110,27 @@ export function parseKeyboardShortcut(shortcut: string, platformOverride?: Platf
   const isMac = platformOverride === 'macos';
 
   const modifierSymbols = modifiers.map(mod => {
-      switch (mod.toLowerCase()) {
-        case 'meta': return isMac ? "⌘" : "⊞";
-        case 'ctrl': return "⌃";
-        case 'alt': return isMac ? "⌥" : "Alt";
-        case 'shift': return "⇧";
-        default: return mod;
-      }
-    });
+    switch (mod.toLowerCase()) {
+      case 'super':
+      case 'meta':
+      case 'cmd':
+      case 'command':
+        return isMac ? "⌘" : "Ctrl";
+      case 'ctrl':
+      case 'control':
+        return isMac ? "⌃" : "Ctrl";
+      case 'alt':
+      case 'option':
+        return isMac ? "⌥" : "Alt";
+      case 'shift':
+        return isMac ? "⇧" : "Shift";
+      default:
+        return mod;
+    }
+  });
 
   return [...modifierSymbols, key].join(" + ");
 }
+
 
 

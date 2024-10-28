@@ -8,7 +8,9 @@ use llm_sidecar::EmbeddedLLMSettings;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use tauri::Emitter;
+use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_store::StoreExt;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -27,7 +29,7 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::StoreBuilder;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
-use tokio::sync::Mutex;
+use tokio::sync::Mutex as TokioMutex;
 use tracing::{debug, error, info};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
@@ -103,8 +105,118 @@ async fn main() {
                 .set_focus()
                 .expect("Can't focus window!");
         }))
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new()
+    .with_handler(move |app, shortcut, event| {
+        debug!("Shortcut triggered: {:?}, Event: {:?}", shortcut, event);
+        // check the contents of shortcuts.json
+        // let app_handle_store = app.clone(); 
+        // debug!("Shortcuts.json contents: {:?}", app_handle_store.(app_handle_store.path().app_config_dir().unwrap().join("shortcuts.json")).get("show_screenpipe_shortcut"));
+        // debug!("Shortcuts.json contents: {:?}", app_handle_store.store(app_handle_store.path().app_config_dir().unwrap().join("shortcuts.json")).get("toggle_recording_shortcut"));
+
+        fn normalize_shortcut(shortcut: &str) -> String {
+            let parts: Vec<&str> = shortcut.split('+').collect();
+            let mut modifiers: Vec<String> = parts[..parts.len() - 1]
+                .iter()
+                .map(|s| s.to_lowercase())
+                .collect();
+            modifiers.sort();
+            let key = parts.last().unwrap().replace("Key", "").to_lowercase();
+            debug!("normalized_shortcut: {:?}", format!("{}{}", modifiers.join("+"), key));
+            
+            format!("{}{}", modifiers.join("+"), key)
+        }
+
+        // check the event state
+        debug!("Event state: {:?}", event.state());
+        
+        // Load shortcuts from store
+        let path = app.path().app_config_dir().unwrap().join("shortcuts.json");
+        // app.store(path);
+        let store = app.store(path);
+        debug!("Shortcuts.json contents for show_screenpipe_shortcut: {:?}", store.get("show_screenpipe_shortcut"));
+        debug!("Shortcuts.json contents for toggle_recording_shortcut: {:?}", store.get("toggle_recording_shortcut"));
+        let show_screenpipe_shortcut = store.get("show_screenpipe_shortcut");
+        let toggle_recording_shortcut = store.get("toggle_recording_shortcut");
+        match event.state() {
+            ShortcutState::Pressed => {
+                debug!("I'm here");
+                debug!("Shortcut pressed");
+                debug!("Shortcut pressed: {:?}", shortcut);
+                debug!("Shortcut state: {:?}", event.state());
+                let app_handle = app.clone();
+                // log shortcut.to_string() and show_screenpipe_shortcut.unwrap().as_str().unwrap() and toggle_recording_shortcut.unwrap().as_str().unwrap()
+                debug!("shortcut.to_string(): {:?}", shortcut.to_string());
+                debug!("show_screenpipe_shortcut.unwrap().as_str().unwrap(): {:?}", show_screenpipe_shortcut.clone().unwrap().as_str().unwrap());
+                debug!("toggle_recording_shortcut.unwrap().as_str().unwrap(): {:?}", toggle_recording_shortcut.clone().unwrap().as_str().unwrap());
+                let normalized_shortcut = normalize_shortcut(&shortcut.to_string());
+                let normalized_show_shortcut = normalize_shortcut(&show_screenpipe_shortcut.clone().unwrap().as_str().unwrap());
+                let normalized_toggle_shortcut = normalize_shortcut(&toggle_recording_shortcut.clone().unwrap().as_str().unwrap());
+                debug!("normalized_shortcut: {:?}", normalized_shortcut);
+                debug!("normalized_show_shortcut: {:?}", normalized_show_shortcut);
+                debug!("normalized_toggle_shortcut: {:?}", normalized_toggle_shortcut);
+                if normalized_shortcut == normalized_show_shortcut {
+                    debug!("show_main_window");
+                    
+                    show_main_window(&app_handle, true);
+                } else if normalized_shortcut == normalized_toggle_shortcut {
+                    tokio::task::block_in_place(move || {
+                        Handle::current().block_on(async move {
+                            let state = app.state::<SidecarState>();
+                            let mut sidecar = state.0.lock().await;
+                            debug!("sidecar state: {:?}", sidecar.is_some());
+                            
+                            // Drop the lock before performing actions
+                            let is_running = sidecar.is_some();
+                            *sidecar = None;
+                            drop(sidecar);  // Important: Drop the lock before async operations
+                            
+                            if is_running {  // Changed condition: if sidecar is running, stop it
+                                // If screenpipe is running, stop it
+                                debug!("Stopping screenpipe via shortcut");
+                                if let Err(err) = kill_all_sreenpipes(state.clone(), app.clone()).await {
+                                    error!("Failed to stop recording: {}", err);
+                                    let _ = app.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Failed to stop recording")
+                                        .show();
+                                    let _ = app.emit("recording_failed", "Failed to stop recording");
+                                } else {
+                                    let _ = app.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Recording stopped")
+                                        .show();
+                                    let _ = app.emit("recording_stopped", "Recording stopped");
+                                }
+                            } else {
+                                // If screenpipe is not running, start it
+                                debug!("Starting screenpipe via shortcut");
+                                if let Err(err) = spawn_screenpipe(state.clone(), app.clone()).await {
+                                    error!("Failed to start recording: {}", err);
+                                    let _ = app.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Failed to start recording")
+                                        .show();
+                                    let _ = app.emit("recording_failed", "Failed to start recording");
+                                } else {
+                                    let _ = app.notification().builder()
+                                        .title("Screenpipe")
+                                        .body("Recording started")
+                                        .show();
+                                    let _ = app.emit("recording_started", "Recording started");
+                                }
+                            }
+                        });
+                    });
+                    }
+                
+            },
+            ShortcutState::Released => {
+                // Handle released state if needed
+                debug!("Shortcut released: {:?}", shortcut);
+            },
+        }
+            })
+            .build())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -116,8 +228,6 @@ async fn main() {
             reset_all_pipes,
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
-            commands::update_show_screenpipe_shortcut,
-            commands::update_recording_shortcut,
             commands::register_shortcuts,
             commands::unregister_all_shortcuts,  
         ])
@@ -319,7 +429,7 @@ async fn main() {
             store.save()?;
 
             // Ensure state is managed before calling update_show_screenpipe_shortcut
-            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
+            let sidecar_manager = Arc::new(TokioMutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
 
             let is_analytics_enabled = store
@@ -390,7 +500,7 @@ async fn main() {
                 store.save().unwrap();
             }
 
-            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
+            let sidecar_manager = Arc::new(TokioMutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();

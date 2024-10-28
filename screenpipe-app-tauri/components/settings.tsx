@@ -172,17 +172,16 @@ export function Settings({ className }: { className?: string }) {
 
       const currentPlatform = platform();
       const isMac = currentPlatform === 'macos';
-      setCurrentPlatform(currentPlatform);
 
       // Handle modifiers in correct order
       const modifiers: string[] = [];
       
-      // On Mac: Command (Meta) -> Option (Alt) -> Shift -> Control
+      // On Mac: Command (Super) -> Option (Alt) -> Shift -> Control
       if (isMac) {
-        if (e.metaKey) modifiers.push('Meta');  // Will be displayed as ⌘
-        if (e.altKey) modifiers.push('Alt');    // Will be displayed as ⌥
-        if (e.shiftKey) modifiers.push('Shift'); // Will be displayed as ⇧
-        if (e.ctrlKey) modifiers.push('Ctrl');   // Will be displayed as ⌃
+        if (e.metaKey) modifiers.push('Super');  // Changed from 'Meta' to 'Super'
+        if (e.altKey) modifiers.push('Alt');
+        if (e.shiftKey) modifiers.push('Shift');
+        if (e.ctrlKey) modifiers.push('Ctrl');
       } else {
         // On Windows/Linux: Control -> Alt -> Shift
         if (e.ctrlKey || e.metaKey) modifiers.push('Ctrl');
@@ -202,7 +201,6 @@ export function Settings({ className }: { className?: string }) {
         const newShortcut = [...modifiers, key].join('+');
         console.log('Setting new shortcut:', newShortcut);
         setTempShortcut(newShortcut);
-        console.log('tempShortcut:', tempShortcut);
       }
     }
   }, [listeningFor]);

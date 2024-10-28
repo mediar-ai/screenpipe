@@ -4,12 +4,50 @@
 // }
 
 use serde_json::Value;
-use tauri::{Emitter, Manager};
-use tauri_plugin_notification::NotificationExt;
+use tauri:: Manager;
 use tracing::info;
 use tracing::{debug, error};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 use std::str::FromStr;
+use tauri_plugin_store::StoreExt;
+
+
+// Command to register shortcuts (just saves to store, doesn't set up handlers)
+#[tauri::command(rename_all = "snake_case")]
+pub async fn register_shortcuts(
+    show_screenpipe_shortcut: String,
+    toggle_recording_shortcut: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    debug!("Saving shortcuts - Show: {}, Record: {}", 
+           show_screenpipe_shortcut, toggle_recording_shortcut);
+
+    // Save to store save DEFAULT_SHORTCUT if the shortcuts are empty
+    let path = app_handle.path().app_config_dir().unwrap().join("shortcuts.json");
+    let store = app_handle.store(path);    
+    store.set("show_screenpipe_shortcut".to_string(), show_screenpipe_shortcut.clone());
+    store.set("toggle_recording_shortcut".to_string(), toggle_recording_shortcut.clone());
+    store.save().map_err(|e| format!("Failed to save shortcuts: {}", e)).unwrap();
+    
+    let show_shortcut = parse_shortcut(&show_screenpipe_shortcut)?;
+    let toggle_shortcut = parse_shortcut(&toggle_recording_shortcut)?;
+
+    // register the shortcuts or default to the shortcuts in the store
+    app_handle.global_shortcut().register(show_shortcut).unwrap_or_else(|e| {
+        error!("Failed to register show shortcut: {}", e);
+    });
+    app_handle.global_shortcut().register(toggle_shortcut).unwrap_or_else(|e| {
+        error!("Failed to register toggle shortcut: {}", e);
+    });
+
+    debug!("Saved shortcuts successfully");
+
+    Ok(())
+}
+
+
+
+
 
 #[tauri::command]
 pub fn open_screen_capture_preferences() {
@@ -218,201 +256,7 @@ fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
     }
 }
 
-const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 
-
-#[tauri::command(rename_all = "snake_case")]
-pub fn update_show_screenpipe_shortcut(
-    app_handle: tauri::AppHandle<tauri::Wry>,
-    new_shortcut: String,
-) -> Result<(), String> {
-
-    app_handle
-        .global_shortcut()
-        .unregister_all()
-        .map_err(|e| e.to_string())?;
-
-    let show_window_shortcut = parse_shortcut(&new_shortcut)?;
-
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-
-    // Unregister all existing shortcuts
-    if let Err(e) = app_handle.global_shortcut().unregister_all() {
-        info!("failed to unregister shortcuts: {}", e);
-        // Continue execution to try setting the default shortcut
-    }
-
-    // Try to parse the new shortcut, fall back to default if it fails
-    let shortcut_str = match new_shortcut.parse::<Shortcut>() {
-        Ok(s) => new_shortcut,
-        Err(e) => {
-            info!(
-                "invalid shortcut '{}': {}, falling back to default",
-                new_shortcut, e
-            );
-            DEFAULT_SHORTCUT.to_string()
-        }
-    };
-
-    // Parse the shortcut string (will be either new_shortcut or default)
-    let show_window_shortcut = match shortcut_str.parse::<Shortcut>() {
-        Ok(s) => s,
-        Err(e) => {
-            return Err(format!("failed to parse shortcut: {}", e));
-        }
-    };
-
-    // Register the new shortcut
-    if let Err(e) = app_handle.global_shortcut().on_shortcut(
-        show_window_shortcut,
-        move |app_handle, _event, _shortcut| {
-            show_main_window(app_handle, true);
-        },
-    ) {
-        info!("failed to register shortcut: {}", e);
-
-        // Try to register the default shortcut as fallback
-        if let Ok(default_shortcut) = DEFAULT_SHORTCUT.parse::<Shortcut>() {
-            let _ = app_handle.global_shortcut().on_shortcut(
-                default_shortcut,
-                move |app_handle, _event, _shortcut| {
-                    show_main_window(app_handle, true);
-                },
-            );
-        }
-
-        return Err("failed to set shortcut, reverted to default".to_string());
-    }
-
-    Ok(())
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub fn update_recording_shortcut(
-    app_handle: tauri::AppHandle,
-    new_shortcut: String,
-) -> Result<(), String> {
-    // Unregister the old shortcut
-    if let Err(e) = app_handle.global_shortcut().unregister_all() {
-        error!("Failed to unregister old shortcut: {}", e);
-    }
-
-    let recording_shortcut = parse_shortcut(&new_shortcut)?;
-
-    app_handle
-        .global_shortcut()
-        .on_shortcut(recording_shortcut, move |app_handle, _event, _shortcut| {
-            let app_handle = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                let state = app_handle.state::<crate::SidecarState>();
-                let manager = state.0.lock().await;
-                
-                let (action, result) = match manager.as_ref().and_then(|m| m.child.as_ref()) {
-                    Some(_) => ("stop", crate::kill_all_sreenpipes(state.clone(), app_handle.clone()).await),
-                    None => ("start", crate::spawn_screenpipe(state.clone(), app_handle.clone()).await),
-                };
-
-                let (title, body, event) = match result {
-                    Ok(_) => ("Screenpipe", format!("Recording {action}ped"), format!("recording{action}ed")),
-                    Err(err) => {
-                        error!("Failed to {} recording: {}", action, err);
-                        ("Screenpipe", format!("Failed to {} recording", action), "recording_failed".to_string())
-                    }
-                };
-
-                let _ = app_handle.emit(&event, body.clone());
-                let _ = app_handle.notification().builder()
-                    .title(title)
-                    .body(body)
-                    .show();
-            });
-        })
-        .map_err(|e| e.to_string())?;
-
-    debug!("new recording shortcut registered successfully");
-    Ok(())
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn register_shortcuts(
-    show_screenpipe_shortcut: String,
-    toggle_recording_shortcut: String,
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    debug!("Registering shortcuts - Show: {}, Record: {}", 
-           show_screenpipe_shortcut, toggle_recording_shortcut);
-
-    // Unregister existing shortcuts first
-    match app_handle.global_shortcut().unregister_all() {
-        Ok(_) => debug!("Successfully unregistered existing shortcuts"),
-        Err(e) => {
-            error!("Failed to unregister shortcuts: {}", e);
-            // Continue anyway as the error might be that no shortcuts were registered
-        }
-    }
-
-    // Parse shortcuts
-    debug!("Parsing show screenpipe shortcut");
-    let show_window_shortcut = parse_shortcut(&show_screenpipe_shortcut)?;
-    debug!("Parsing recording shortcut");
-    let recording_shortcut = parse_shortcut(&toggle_recording_shortcut)?;
-
-    let app_handle_clone = app_handle.clone();
-    debug!("Registering show screenpipe shortcut");
-    if let Err(e) = app_handle.global_shortcut().on_shortcut(
-        show_window_shortcut,
-        move |app_handle, _event, _shortcut| {
-            show_main_window(&app_handle_clone, true);
-        },
-    ) {
-        let err = format!("Failed to register show shortcut: {}", e);
-        error!("{}", err);
-        // Try to unregister all shortcuts before returning error
-        let _ = app_handle.global_shortcut().unregister_all();
-        return Err(err);
-    }
-
-    let app_handle_clone = app_handle.clone();
-    debug!("Registering recording shortcut");
-    if let Err(e) = app_handle.global_shortcut().on_shortcut(
-        recording_shortcut,
-        move |app_handle, _event, _shortcut| {
-            let app_handle = app_handle_clone.clone();
-            tauri::async_runtime::spawn(async move {
-                let state = app_handle.state::<crate::SidecarState>();
-                let manager = state.0.lock().await;
-                
-                let (action, result) = match manager.as_ref().and_then(|m| m.child.as_ref()) {
-                    Some(_) => ("stop", crate::kill_all_sreenpipes(state.clone(), app_handle.clone()).await),
-                    None => ("start", crate::spawn_screenpipe(state.clone(), app_handle.clone()).await),
-                };
-
-                let (title, body, event) = match result {
-                    Ok(_) => ("Screenpipe", format!("Recording {action}ped"), format!("recording{action}ed")),
-                    Err(err) => {
-                        error!("Failed to {} recording: {}", action, err);
-                        ("Screenpipe", format!("Failed to {} recording", action), "recording_failed".to_string())
-                    }
-                };
-
-                let _ = app_handle.emit(&event, body.clone());
-                let _ = app_handle.notification().builder()
-                    .title(title)
-                    .body(body)
-                    .show();
-            });
-        },
-    ) {
-        let err = format!("Failed to register recording shortcut: {}", e);
-        error!("{}", err);
-        // Try to unregister all shortcuts before returning error
-        let _ = app_handle.global_shortcut().unregister_all();
-        return Err(err);
-    }
-
-    debug!("Successfully registered all shortcuts");
-    Ok(())
-}
 
 #[tauri::command]
 pub async fn unregister_all_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {

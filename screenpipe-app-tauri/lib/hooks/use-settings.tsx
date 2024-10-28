@@ -98,7 +98,7 @@ const defaultSettings: Settings = {
     port: 11438,
   },
   enableBeta: false,
-  showScreenpipeShortcut: "Meta+Alt+S",
+  showScreenpipeShortcut: "Super+Alt+S",  // Changed from Meta+Alt+S
   recordingShortcut: "Ctrl+Shift+R",
   isFirstTimeUser: true,
 };
@@ -275,7 +275,7 @@ export function useSettings() {
         }
 
         const savedShowScreenpipeShortcut =
-          (await store!.get<string>("showScreenpipeShortcut")) || "Meta+Alt+S";
+          (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
 
 
         const savedRecordingShortcut = (await store!.get<string>("recordingShortcut")) || "Ctrl+Shift+R";

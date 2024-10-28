@@ -17,18 +17,14 @@ export async function registerShortcuts(config: ShortcutConfig) {
     isRegistering = true;
     console.log("Attempting to register shortcuts with config:", config);
     
-    // Try to unregister, but don't fail if the command isn't available
     try {
       console.log("Unregistering existing shortcuts...");
       await invoke("unregister_all_shortcuts");
     } catch (error) {
-      // Ignore the error during initial startup
       if (typeof error === 'object' && error !== null && 'toString' in error) {
         if (!error.toString().includes("not found")) {
           console.warn("Failed to unregister shortcuts:", error);
         }
-      } else {
-        console.warn("Failed to unregister shortcuts:", error);
       }
     }
     
