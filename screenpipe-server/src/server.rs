@@ -879,6 +879,7 @@ pub enum AddContentData {
     Frames(Vec<FrameContent>),
     Transcription(AudioTranscription),
 }
+
 #[derive(Deserialize)]
 pub struct FrameContent {
     pub file_path: String,
