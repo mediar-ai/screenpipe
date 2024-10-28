@@ -8,9 +8,10 @@ import { Theme } from "@radix-ui/themes";
 import { ThemeProvider } from "next-themes";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
+import { useTheme } from "@/lib/hooks/use-theme";
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false);
+  const { mounted } = useTheme();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -25,14 +26,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   if (!mounted) return null;
 
   return (
-    <ThemeProvider attribute="class">
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <Theme>
         <OnboardingProvider>
           <PostHogProvider client={posthog}>{children}</PostHogProvider>

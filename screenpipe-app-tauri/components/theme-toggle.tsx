@@ -10,10 +10,7 @@ export function ThemeToggle({ className } : ThemeToggleProps) {
   const { currentTheme, toggleTheme } = useTheme();
 
   return (
-    <button 
-      title="toggle theme"
-      onClick={toggleTheme}
-    >
+    <button onClick={toggleTheme} >
       {currentTheme === "light" 
         ? <Sun className={className} /> 
         : <MoonStar className={className} />}

@@ -18,14 +18,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <Providers>
-        {/* https://posthog.com/docs/libraries/next-js for more info */}
-        <body className={inter.className}>
+      {/* https://posthog.com/docs/libraries/next-js for more info */}
+      <body className={inter.className}>
+        <Providers>
           {children}
 
-          <Toaster />
-        </body>
-      </Providers>
+        </Providers>
+        <Toaster />
+      </body>
     </html>
   );
 }

@@ -81,7 +81,7 @@ export function ExampleSearchCards({ onSelect }: ExampleSearchCardsProps) {
                   before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-black dark:before:border-white before:opacity-0 before:scale-95
                   group-hover:before:opacity-100 group-hover:before:scale-100 before:transition-all before:duration-300 before:ease-out" />
                 <Card
-                  className={`cursor-pointer relative bg-white dark:bg-background z-10 h-full transition-transform duration-300 ease-out ${
+                  className={`cursor-pointer relative bg-white dark:bg-background h-full transition-transform duration-300 ease-out ${
                     isHealthError ? "" : "group-hover:scale-[0.98]"
                   }`}
                   onClick={() => !isHealthError && onSelect(example)}

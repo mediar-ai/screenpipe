@@ -77,12 +77,12 @@ export function SqlAutocompleteInput({
 
   return (
     <div className={cn("relative", className)} ref={commandRef}>
-      <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 z-10 flex items-center">
-        {icon}
-        <span className="w-2" />
-      </div>
       <Command className="relative w-full" shouldFilter={false}>
         <div className="relative">
+          <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 flex items-center">
+            {icon}
+            <span className="w-2" />
+          </div>
           <Input
             ref={inputRef}
             id={id}
