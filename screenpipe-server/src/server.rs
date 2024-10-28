@@ -869,13 +869,18 @@ async fn execute_raw_sql(
 #[derive(Deserialize)]
 pub struct AddContentRequest {
     pub device_name: String, // Moved device_name to the top level
-    #[serde(flatten)]
     pub content: AddContentData, // The actual content (either Frame or Transcription)
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "type", content = "data")]
-pub enum AddContentData {
+pub struct AddContentData {
+    pub content_type: String,
+    pub data: ContentData,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum ContentData {
     Frames(Vec<FrameContent>),
     Transcription(AudioTranscription),
 }
@@ -997,56 +1002,72 @@ pub(crate) async fn add_to_database(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<AddContentRequest>,
 ) -> Result<JsonResponse<AddContentResponse>, (StatusCode, JsonResponse<Value>)> {
+
+    info!("Received add_to_database");
+
     let device_name = payload.device_name.clone();
     let mut success_messages = Vec::new();
 
-    match &payload.content {
-        AddContentData::Frames(frames) => {
-            if !frames.is_empty() {
-                let output_dir = state.screenpipe_dir.join("videos");
-                let time = Utc::now();
-                let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
-                let video_file_path = PathBuf::from(output_dir)
-                    .join(format!("{}_{}.mp4", device_name, formatted_time))
-                    .to_str()
-                    .expect("Failed to create valid path")
-                    .to_string();
+    match payload.content.content_type.as_str() {
+        "Frames" => {
+            if let ContentData::Frames(frames) = &payload.content.data {
+                debug!("Processing Frames content type with {} frames", frames.len());
 
-                if let Err(e) = state.db.insert_video_chunk(&video_file_path, &device_name).await {
-                    error!("Failed to insert video chunk for device {}: {}", device_name, e);
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        JsonResponse(json!({"error": format!("Failed to insert video chunk: {}", e)})),
-                    ));
-                }
+                if !frames.is_empty() {
+                    let output_dir = state.screenpipe_dir.join("data");
+                    let time = Utc::now();
+                    let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
+                    let video_file_path = PathBuf::from(output_dir)
+                        .join(format!("{}_{}.mp4", device_name, formatted_time))
+                        .to_str()
+                        .expect("Failed to create valid path")
+                        .to_string();
 
-                if let Err(e) = write_frames_to_video(frames, &video_file_path, MAX_FPS).await {
-                    error!("Failed to write frames to video file {}: {}", video_file_path, e);
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        JsonResponse(json!({"error": format!("Failed to write frames to video: {}", e)})),
-                    ));
-                }
-
-                for frame in frames {
-                    if let Err(e) = add_frame_to_db(&state, frame, &device_name).await {
-                        error!("Failed to add frame content for device {}: {}", device_name, e);
+                    if let Err(e) = state.db.insert_video_chunk(&video_file_path, &device_name).await {
+                        error!("Failed to insert video chunk for device {}: {}", device_name, e);
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({"error": format!("Failed to insert video chunk: {}", e)})),
+                        ));
                     }
-                }
 
-                success_messages.push("Frames added successfully".to_string());
+                    if let Err(e) = write_frames_to_video(frames, &video_file_path, MAX_FPS).await {
+                        error!("Failed to write frames to video file {}: {}", video_file_path, e);
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({"error": format!("Failed to write frames to video: {}", e)})),
+                        ));
+                    }
+
+                    for frame in frames {
+                        if let Err(e) = add_frame_to_db(&state, frame, &device_name).await {
+                            error!("Failed to add frame content for device {}: {}", device_name, e);
+                        }
+                    }
+
+                    success_messages.push("Frames added successfully".to_string());
+                }
             }
         }
-        AddContentData::Transcription(transcription) => {
-            if let Err(e) = add_transcription_to_db(&state, transcription, &device_name).await {
-                error!("Failed to add transcription for device {}: {}", device_name, e);
-                return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(json!({"error": format!("Failed to add transcription: {}", e)})),
-                ));
+        "Transcription" => {
+            if let ContentData::Transcription(transcription) = &payload.content.data {
+                if let Err(e) = add_transcription_to_db(&state, transcription, &device_name).await {
+                    error!("Failed to add transcription for device {}: {}", device_name, e);
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to add transcription: {}", e)})),
+                    ));
+                }
+        
+                success_messages.push("Transcription added successfully".to_string());
             }
-    
-            success_messages.push("Transcription added successfully".to_string());
+        }
+        _ => {
+            error!("Unknown content type: {}", payload.content.content_type);
+            return Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({"error": "Unsupported content type"})),
+            ));
         }
     }
 
@@ -1055,8 +1076,6 @@ pub(crate) async fn add_to_database(
         message: Some(success_messages.join(", ")),
     }))
 }
-
-
 
 #[cfg(feature = "experimental")]
 async fn input_control_handler(
