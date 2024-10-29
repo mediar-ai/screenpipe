@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730228677361,
+  "lastUpdate": 1730230926633,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -20579,6 +20579,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 3150306771,
             "range": "± 246771071",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2d7e3d7ffbffcbb8e378ca8ff42de92b175225a2",
+          "message": "Merge pull request #600 from Neptune650/fix_mkl\n\nUse recursive copy for MKL",
+          "timestamp": "2024-10-29T12:33:21-07:00",
+          "tree_id": "d1b267e2f0f596b1e92148a0fceff0d8df06e534",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/2d7e3d7ffbffcbb8e378ca8ff42de92b175225a2"
+        },
+        "date": 1730230925057,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2658911062,
+            "range": "± 195411097",
             "unit": "ns/iter"
           }
         ]
