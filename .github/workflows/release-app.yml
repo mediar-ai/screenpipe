@@ -150,7 +150,7 @@ jobs:
         run: |
           pip install mkl mkl-devel mkl-static
           mkdir -p /opt/intel/mkl
-          cp ~/.local/lib/* ~/.local/include/* /opt/intel/mkl/
+          cp -rfv ~/.local/lib/* ~/.local/include/* /opt/intel/mkl/
 
       - name: Install frontend dependencies
         shell: bash
