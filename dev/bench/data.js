@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730228462525,
+  "lastUpdate": 1730228577218,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -20519,6 +20519,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2846990709,
             "range": "± 155700573",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "95a7d2505719473e181d92a756c2dd3d110624ff",
+          "message": "Merge pull request #599 from Neptune650/mkl\n\nFix MKL support in Linux",
+          "timestamp": "2024-10-29T11:53:07-07:00",
+          "tree_id": "71c320d2894a3ceff2e590e9a79ecc2970ae0968",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/95a7d2505719473e181d92a756c2dd3d110624ff"
+        },
+        "date": 1730228575628,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1905448146,
+            "range": "± 30825876",
             "unit": "ns/iter"
           }
         ]
