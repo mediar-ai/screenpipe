@@ -18,7 +18,7 @@ export type AudioContent = {
   chunk_id: number;
   transcription: string;
   timestamp: string;
-  file_path: string;
+  file_path?: string;
   offset_index: number;
   tags: string[];
   device_name: string;
