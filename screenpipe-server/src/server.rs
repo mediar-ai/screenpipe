@@ -295,7 +295,7 @@ pub(crate) async fn search(
                 frame: None,
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
-                chunk_id: audio.audio_chunk_id.unwrap_or(-1),
+                chunk_id: audio.audio_chunk_id,
                 transcription: audio.transcription.clone(),
                 timestamp: audio.timestamp,
                 file_path: audio.file_path.clone(),

@@ -109,10 +109,10 @@ pub enum ContentType {
 
 #[derive(FromRow)]
 struct AudioResultRaw {
-    audio_chunk_id: Option<i64>,
+    audio_chunk_id: i64,
     transcription: String,
     timestamp: DateTime<Utc>,
-    file_path: Option<String>, // Make this an Option to handle NULLs
+    file_path: String, // Make this an Option to handle NULLs
     offset_index: i64,
     transcription_engine: String,
     tags: Option<String>,
@@ -122,7 +122,7 @@ struct AudioResultRaw {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioResult {
-    pub audio_chunk_id: Option<i64>,
+    pub audio_chunk_id: i64,
     pub transcription: String,
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
@@ -642,10 +642,10 @@ impl DatabaseManager {
         let audio_results = audio_results_raw
             .into_iter()
             .map(|raw| AudioResult {
-                audio_chunk_id: raw.audio_chunk_id,  // Now audio_chunk_id can be None
+                audio_chunk_id: raw.audio_chunk_id,
                 transcription: raw.transcription,
                 timestamp: raw.timestamp,
-                file_path: raw.file_path.unwrap_or_default(), // Handle cases where file_path may be NULL
+                file_path: raw.file_path,
                 offset_index: raw.offset_index,
                 transcription_engine: raw.transcription_engine,
                 tags: raw
