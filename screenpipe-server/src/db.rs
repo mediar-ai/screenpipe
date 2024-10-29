@@ -109,10 +109,10 @@ pub enum ContentType {
 
 #[derive(FromRow)]
 struct AudioResultRaw {
-    audio_chunk_id: i64,
+    audio_chunk_id: Option<i64>,
     transcription: String,
     timestamp: DateTime<Utc>,
-    file_path: String,
+    file_path: Option<String>, // Make this an Option to handle NULLs
     offset_index: i64,
     transcription_engine: String,
     tags: Option<String>,
@@ -122,7 +122,7 @@ struct AudioResultRaw {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioResult {
-    pub audio_chunk_id: i64,
+    pub audio_chunk_id: Option<i64>,
     pub transcription: String,
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
@@ -210,7 +210,7 @@ impl DatabaseManager {
 
     pub async fn insert_audio_transcription(
         &self,
-        audio_chunk_id: Option<i64>,
+        audio_chunk_id: i64,
         transcription: &str,
         offset_index: i64,
         transcription_engine: &str,
@@ -599,7 +599,7 @@ impl DatabaseManager {
             audio_transcriptions.is_input_device
         FROM 
             audio_transcriptions
-        JOIN 
+        LEFT JOIN 
             audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
         LEFT JOIN
             audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
@@ -613,7 +613,7 @@ impl DatabaseManager {
             AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
         "#,
         );
-
+    
         sql.push_str(
             r#"
         GROUP BY
@@ -626,7 +626,7 @@ impl DatabaseManager {
         LIMIT ?6 OFFSET ?7
         "#,
         );
-
+    
         let query = sqlx::query_as::<_, AudioResultRaw>(&sql)
             .bind(query)
             .bind(start_time)
@@ -635,17 +635,17 @@ impl DatabaseManager {
             .bind(max_length.map(|l| l as i64))
             .bind(limit)
             .bind(offset);
-
+    
         let audio_results_raw = query.fetch_all(&self.pool).await?;
-
+    
         // Parse the tags string into a Vec<String>
         let audio_results = audio_results_raw
             .into_iter()
             .map(|raw| AudioResult {
-                audio_chunk_id: raw.audio_chunk_id,
+                audio_chunk_id: raw.audio_chunk_id,  // Now audio_chunk_id can be None
                 transcription: raw.transcription,
                 timestamp: raw.timestamp,
-                file_path: raw.file_path,
+                file_path: raw.file_path.unwrap_or_default(), // Handle cases where file_path may be NULL
                 offset_index: raw.offset_index,
                 transcription_engine: raw.transcription_engine,
                 tags: raw
@@ -660,7 +660,7 @@ impl DatabaseManager {
                 },
             })
             .collect();
-
+    
         Ok(audio_results)
     }
 

@@ -380,7 +380,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
 
     // Insert test audio data
     db.insert_audio_transcription(
-        Some(audio_chunk_id),
+        audio_chunk_id,
         "Test audio transcription",
         0,
         "test_engine",

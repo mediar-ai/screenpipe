@@ -295,7 +295,7 @@ pub(crate) async fn search(
                 frame: None,
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
-                chunk_id: audio.audio_chunk_id,
+                chunk_id: audio.audio_chunk_id.unwrap_or(-1),
                 transcription: audio.transcription.clone(),
                 timestamp: audio.timestamp,
                 file_path: audio.file_path.clone(),
@@ -987,8 +987,10 @@ async fn add_transcription_to_db(
         device_type: DeviceType::Input,
     };
 
+    let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
+
     db.insert_audio_transcription(
-        None, // No associated audio chunk
+        dummy_audio_chunk_id, // No associated audio chunk
         &transcription.transcription,
         -1,
         &transcription.transcription_engine,
@@ -1007,7 +1009,7 @@ pub(crate) async fn add_to_database(
     let mut success_messages = Vec::new();
 
     match payload.content.content_type.as_str() {
-        "Frames" => {
+        "frames" => {
             if let ContentData::Frames(frames) = &payload.content.data {
                 if !frames.is_empty() {
                     let output_dir = state.screenpipe_dir.join("data");
@@ -1045,7 +1047,7 @@ pub(crate) async fn add_to_database(
                 }
             }
         }
-        "Transcription" => {
+        "transcription" => {
             if let ContentData::Transcription(transcription) = &payload.content.data {
                 if let Err(e) = add_transcription_to_db(&state, transcription, &device_name).await {
                     error!("Failed to add transcription for device {}: {}", device_name, e);

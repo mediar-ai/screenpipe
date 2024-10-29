@@ -136,7 +136,7 @@ mod tests {
         let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();
         let _ = db
             .insert_audio_transcription(
-                Some(audio_chunk_id),
+                audio_chunk_id,
                 "Test Audio",
                 0,
                 "",
@@ -196,7 +196,7 @@ mod tests {
         let audio_chunk_id = db.insert_audio_chunk("test_audio.wav").await.unwrap();
         let _ = db
             .insert_audio_transcription(
-                Some(audio_chunk_id),
+                audio_chunk_id,
                 "Test Audio",
                 0,
                 "",
@@ -255,7 +255,7 @@ mod tests {
 
         let _ = db
             .insert_audio_transcription(
-                Some(audio_chunk_id1),
+                audio_chunk_id1,
                 "Short",
                 0,
                 "",
@@ -266,7 +266,7 @@ mod tests {
 
         let _ = db
             .insert_audio_transcription(
-                Some(audio_chunk_id2),
+                audio_chunk_id2,
                 "This is a longer transcription with more words",
                 0,
                 "",
@@ -383,7 +383,7 @@ mod tests {
         let audio_chunk_id2 = db.insert_audio_chunk("test_audio2.wav").await.unwrap();
         let _ = db
             .insert_audio_transcription(
-                Some(audio_chunk_id1),
+                audio_chunk_id1,
                 "This is a test audio transcription",
                 0,
                 "",
@@ -393,7 +393,7 @@ mod tests {
             .unwrap();
         let _ = db
             .insert_audio_transcription(
-                Some(audio_chunk_id2),
+                audio_chunk_id2,
                 "Another audio transcription for testing",
                 0,
                 "",
@@ -536,7 +536,7 @@ mod tests {
 
         let audio_transcription_id1 = db
             .insert_audio_transcription(
-                Some(audio_chunk_id1),
+                audio_chunk_id1,
                 "old audio transcription",
                 0,
                 "",
