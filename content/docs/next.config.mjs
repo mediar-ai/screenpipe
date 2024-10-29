@@ -3,7 +3,7 @@ import withMDX from '@next/mdx';
 
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval' https://entelligence.ai https://d345f39z3arwqc.cloudfront.net;
+  script-src 'self' 'unsafe-inline' 'unsafe-eval';
   style-src 'self' 'unsafe-inline';
   img-src * blob: data:;
   media-src 'none';
