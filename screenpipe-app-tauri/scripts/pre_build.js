@@ -102,10 +102,10 @@ async function installBun() {
 	console.log('installing bun...');
 
 	if (platform === 'windows') {
-		console.log('attempting to install bun using powershell...');
+		console.log('attempting to install bun using npm...');
 		try {
-			await $`powershell -Command "irm bun.sh/install.ps1|iex"`;
-			console.log('bun installed successfully using powershell.');
+			await $`npm install -g bun`;
+			console.log('bun installed successfully using npm.');
 		} catch (error) {
 			console.error('failed to install bun:', error);
 			console.error('please install bun manually.');
@@ -124,7 +124,19 @@ async function copyBunBinary() {
 
 	let bunSrc, bunDest1, bunDest2;
 	if (platform === 'windows') {
-		bunSrc = path.join(os.homedir(), 'AppData', 'Local', 'bun', 'bun.exe');
+		// Update path to check npm's global installation directory
+		const npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
+		bunSrc = path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe');
+		// Alternative path if the above doesn't exist
+		const altBunSrc = path.join(npmGlobalPrefix, 'bun.exe');
+		
+		// Check both possible locations
+		try {
+			await fs.access(bunSrc);
+		} catch {
+			bunSrc = altBunSrc;
+		}
+		
 		bunDest1 = path.join(cwd, 'bun-x86_64-pc-windows-msvc.exe');
 	} else if (platform === 'macos') {
 		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
@@ -143,7 +155,7 @@ async function copyBunBinary() {
 	try {
 		await fs.access(bunSrc);
 		await copyFile(bunSrc, bunDest1);
-		console.log(`bun binary copied successfully to ${bunDest1}`);
+		console.log(`bun binary copied successfully from ${bunSrc} to ${bunDest1}`);
 
 		if (platform === 'macos') {
 			await copyFile(bunSrc, bunDest2);
@@ -151,6 +163,7 @@ async function copyBunBinary() {
 		}
 	} catch (error) {
 		console.error('failed to copy bun binary:', error);
+		console.error('source path:', bunSrc);
 		process.exit(1);
 	}
 }
