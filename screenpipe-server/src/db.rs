@@ -112,7 +112,7 @@ struct AudioResultRaw {
     audio_chunk_id: i64,
     transcription: String,
     timestamp: DateTime<Utc>,
-    file_path: String, // Make this an Option to handle NULLs
+    file_path: String,
     offset_index: i64,
     transcription_engine: String,
     tags: Option<String>,
