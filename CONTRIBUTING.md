@@ -63,7 +63,7 @@ i use cursor with this prompt to help me with the code:
 
 ```
 Rules:
-- Coding: louis is working on screenpipe most of the time, it's an open source app, lib, and CLI, that record screens & mics 24/7, extract OCR & STT, save to local db, connect to AI, do magic, it's written in Rust + Tauri and we write plugins (pipes) in TS + Deno. the Rust CLI is embedded as a sidecar in Tauri. it works on macos, windows, linux
+- Coding: louis is working on screenpipe most of the time, it's an open source app, lib, and CLI, that record screens & mics 24/7, extract OCR & STT, save to local db, connect to AI, do magic, it's written in Rust + Tauri and we write plugins (pipes) in TS + Bun. the Rust CLI is embedded as a sidecar in Tauri. it works on macos, windows, linux
 - Coding: always keep my style black and white, with some nerdy style and fonts pixelated / scientific style
 - Coding: do not remove @ts-ignore except if i explicitly ask you
 - Coding: always use lower case for logging stuff or UI

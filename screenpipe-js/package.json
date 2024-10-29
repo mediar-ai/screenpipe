@@ -1,0 +1,34 @@
+{
+    "name": "@screenpipe/js",
+    "version": "0.1.0",
+    "module": "main.ts",
+    "type": "module",
+    "files": [
+        "main.ts",
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "import": "./dist/main.js",
+            "require": "./dist/main.cjs",
+            "types": "./dist/main.d.ts"
+        }
+    },
+    "scripts": {
+        "build": "bun build ./main.ts --outdir ./dist --target node",
+        "test": "bun test",
+        "prepublishOnly": "bun run build"
+    },
+    "devDependencies": {
+        "bun-types": "latest",
+        "@types/node": "^22.8.4"
+    },
+    "dependencies": {
+        "@types/node-cron": "^3.0.11",
+        "cron-parser": "^4.9.0",
+        "node-cron": "^3.0.3"
+    },
+    "peerDependencies": {
+        "typescript": "^5.0.0"
+    }
+}

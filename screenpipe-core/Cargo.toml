@@ -49,6 +49,3 @@ cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 beta = ["dep:screenpipe-actions"]
 
-[build-dependencies]
-# Move this under the same feature flag
-deno_core = { version = "0.311.0", optional = true }

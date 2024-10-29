@@ -1,10 +1,9 @@
-import { ContentItem } from "screenpipe";
 import { TwitterApi, type TweetV2 } from "twitter-api-v2";
 import { z } from "zod";
 import { generateObject } from "ai";
 import { createOllama } from "ollama-ai-provider";
-import { pipe } from "screenpipe";
-import { createOpenAI } from "npm:@ai-sdk/openai";
+import { pipe, ContentItem } from "@screenpipe/js";
+import { createOpenAI } from "@ai-sdk/openai";
 
 const twitterSuggestionLog = z.object({
   suggestions: z.array(
@@ -113,21 +112,7 @@ async function fetchRelevantTweets(
   const minReplies = Math.max(1, 3 - attempt);
   const minRetweets = Math.max(1, 3 - attempt);
 
-  // Create search query with expanded criteria on later attempts
-  const baseTerms = [
-    "screen recording",
-    "screencasting",
-    "screen capture",
-    "screenpipe",
-    "recording software",
-  ];
-
-  // Add more general terms in later attempts
-  if (attempt > 1) {
-    baseTerms.push("productivity", "software", "tech");
-  }
-
-  const relevantKeywords = [...baseTerms, ...keywords]
+  const relevantKeywords = keywords
     .filter((k) => k.length > 0)
     .map((k) => `"${k}"`)
     .join(" OR ");
@@ -386,7 +371,7 @@ export PIPE_ID="pipe-twitter-autopilot"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-twitter-autopilot"
 
-deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys examples/typescript/pipe-twitter-autopilot/pipe.ts
+bun run examples/typescript/pipe-twitter-autopilot/pipe.ts
  */
 
 // ... existing code ...

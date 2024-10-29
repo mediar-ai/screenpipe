@@ -15,7 +15,7 @@ class Screenpipe < Formula
   end
   
   depends_on "ffmpeg"
-  depends_on "deno"
+  depends_on "bun"
 
   def install
     bin.install Dir["bin/*"]

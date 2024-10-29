@@ -45,11 +45,11 @@ import MotionDiv from '@/components/motion-div';
 
 | **example**                          | **description**                                  | **link**                          |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------- |
+| **pipe phi3.5 engineering team logs**| generate engineering team work logs              | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
 | **pipe post questions on reddit**    | post questions on reddit based on screen activity           | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit)                         |
 | **pipe email daily log**             | send daily activity logs via email               | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log)                         |
 | **pipe llama32 comment linear while you work** | comment on linear tasks while you work using llama32 | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-llama32-comment-linear-while-you-work)                         |
 | **pipe meeting summary by email**    | send meeting summaries via email                 | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-meeting-summary-by-email)                         |
-| **pipe phi3.5 engineering team logs**| generate engineering team work logs              | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
 
 </MotionDiv>
 
@@ -60,16 +60,19 @@ import MotionDiv from '@/components/motion-div';
 
 screenpipe's plugin system, referred to as **pipes**, allows you to create customized pipes that automate workflows. these pipes can process, annotate, analyze, summarize, or integrate your screen and audio data with other tools.
 
-users can begin by cloning an existing pipe, such as [pipe-post-questions-on-reddit](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
+users can begin by cloning an existing pipe, such as [pipe-phi3.5-engineering-team-logs](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
 
 ```bash 
 git clone https://github.com/mediar-ai/screenpipe.git
-cp -r screenpipe/examples/typescript/pipe-post-questions-on-reddit screenpipe/examples/typescript/my-pipe
+cp -r screenpipe/examples/typescript/pipe-phi3.5-engineering-team-logs screenpipe/examples/typescript/my-pipe
 ```
 
-we use Deno to run the pipe within the Rust codebase.
+we use Bun to run the pipe within the Rust codebase.
 
-check official [deno docs](https://deno.com/manual/basics) for more details on installing and running Deno.
+check official [bun docs](https://bun.sh/docs) for more details on installing and running Bun.
+
+
+> **note**: you can also use nextjs to build your pipe, we will render the page in the pipe store. check [pipe-simple-nextjs](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-simple-nextjs) for an example.
 
 ### configuring pipes
 
@@ -102,16 +105,16 @@ here's a snippet of a `pipe.json` for the pipe-post-questions-on-reddit:
 
 ### running pipes
 
-you can run your pipe manually with deno, for example:
+you can run your pipe manually with bun, for example:
 
 ```bash
 # these are mandatory env variables
 export SCREENPIPE_DIR="$HOME/.screenpipe"
-export PIPE_ID="pipe-find-leads-with-exa-ai"
+export PIPE_ID="pipe-phi3.5-engineering-team-logs"
 export PIPE_FILE="pipe.ts"
-export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-find-leads-with-exa-ai"
+export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-phi3.5-engineering-team-logs"
 
-deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys examples/typescript/pipe-find-leads-with-exa-ai/pipe.ts
+bun run examples/typescript/pipe-phi3.5-engineering-team-logs/pipe.ts
 ```
 
 make sure to configure your pipe.json first
@@ -162,13 +165,12 @@ we're working on integration with Stripe, to allow you to monetize your pipes, f
 
 ### outro 
 
-- we use deno to run the pipe within the Rust codebase.
+- we use bun to run the pipe within the Rust codebase.
 - you can use `pipe.json` to let others pass configuration options to your pipe through the UI or CLI.
 - pipes have access to a special API that allows you to interact with your computer or special features like sending notifications, sending emails, etc.
 - check this [file](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/pipes.rs) for more details on impl.
 - in general we recommend using local LLMs like ollama as the data can be large and sensitive and JSON outputs.
 - we recommend using [vercel ai sdk](https://github.com/vercel/ai) for faster dev.
-- deno caches dependencies and sometimes need to clear/reload cache
 
 ### known limitations
 

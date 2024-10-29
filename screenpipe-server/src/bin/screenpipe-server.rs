@@ -13,7 +13,7 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
@@ -114,7 +114,8 @@ async fn main() -> anyhow::Result<()> {
 
     let _log_guard = setup_logging(&local_data_dir, &cli)?;
 
-    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
+    let (pipe_manager, mut pipe_control_rx) = PipeManager::new(local_data_dir_clone.clone());
+    let pipe_manager = Arc::new(pipe_manager);
 
     if let Some(pipe_command) = cli.command {
         match pipe_command {
@@ -420,7 +421,8 @@ async fn main() -> anyhow::Result<()> {
 
     );
 
-    let mut pipe_futures = FuturesUnordered::new();
+    let pipe_futures = Arc::new(tokio::sync::Mutex::new(FuturesUnordered::new()));
+    let pipe_futures_clone = pipe_futures.clone();
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -650,7 +652,7 @@ async fn main() -> anyhow::Result<()> {
             continue;
         }
         match pipe_manager.start_pipe(&pipe.id).await {
-            Ok(future) => pipe_futures.push(future),
+            Ok(future) => pipe_futures.lock().await.push(future),
             Err(e) => eprintln!("failed to start pipe {}: {}", pipe.id, e),
         }
     }
@@ -660,7 +662,7 @@ async fn main() -> anyhow::Result<()> {
 
     let pipes_future = async {
         loop {
-            if let Some(result) = pipe_futures.next().await {
+            if let Some(result) = pipe_futures_clone.lock().await.next().await {
                 info!("pipe completed: {:?}", result);
             } else {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -712,6 +714,24 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    let pipe_control_future = async {
+        while let Some(control) = pipe_control_rx.recv().await {
+            match control {
+                PipeControl::Enable(pipe_id) => {
+                    debug!("enabling pipe: {}", pipe_id);
+                    match pipe_manager.start_pipe(&pipe_id).await {
+                        Ok(future) => pipe_futures_clone.lock().await.push(future),
+                        Err(e) => error!("failed to start pipe {}: {}", pipe_id, e),
+                    }
+                }
+                PipeControl::Disable(pipe_id) => {
+                    debug!("disabling pipe: {}", pipe_id);
+                }
+            }
+        }
+    };
+    pin_mut!(pipe_control_future);
+
     tokio::select! {
         _ = handle => info!("recording completed"),
         result = &mut server_future => {
@@ -722,6 +742,9 @@ async fn main() -> anyhow::Result<()> {
         }
         _ = &mut pipes_future => {
             info!("all pipes completed, but server is still running");
+        }
+        _ = &mut pipe_control_future => {
+            info!("pipe control channel closed");
         }
         _ = ctrl_c_future => {
             info!("received ctrl+c, initiating shutdown");

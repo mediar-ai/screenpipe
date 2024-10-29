@@ -16,7 +16,7 @@ this pipe automates the process of finding potential leads based on an evolving 
 #### requirements
 
 - screenpipe installed and configured
-- deno runtime
+- bun runtime
 - exa ai api key
 - openai api key
 - gmail account for sending notifications
@@ -39,7 +39,7 @@ export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-find-leads-with-exa-ai"
 2. run the pipe:
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys $PIPE_DIR/$PIPE_FILE
+bun run $PIPE_DIR/$PIPE_FILE
 ```
 
 #### how it works
