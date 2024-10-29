@@ -183,7 +183,7 @@ async function copyBunBinary() {
 		}
 
 		// Define the destination path
-		bunDest1 = path.join(cwd, 'src-tauri', 'binaries', 'bun-x86_64-pc-windows-msvc.exe');
+		bunDest1 = path.join(cwd, 'bun-x86_64-pc-windows-msvc.exe');
 		console.log('copying bun from:', bunSrc);
 		console.log('copying bun to:', bunDest1);
 	} else if (platform === 'macos') {
