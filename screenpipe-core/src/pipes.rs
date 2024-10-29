@@ -232,43 +232,97 @@ mod pipes {
 
         debug!("Destination directory: {:?}", dest_dir);
 
+        // Save existing pipe.json content before downloading
         let pipe_json_path = dest_dir.join("pipe.json");
-        let existing_pipe_json = if pipe_json_path.exists() {
+        let existing_config = if pipe_json_path.exists() {
             debug!("Existing pipe.json found");
-            Some(tokio::fs::read_to_string(&pipe_json_path).await?)
+            let content = tokio::fs::read_to_string(&pipe_json_path).await?;
+            Some(serde_json::from_str::<Value>(&content)?)
         } else {
             debug!("No existing pipe.json found");
             None
         };
 
-        tokio::fs::create_dir_all(&dest_dir).await?;
-        debug!("Created destination directory");
+        // Create temp directory for download
+        let temp_dir = dest_dir.with_extension("_temp");
+        tokio::fs::create_dir_all(&temp_dir).await?;
 
+        // Download to temp directory first
         if let Ok(parsed_url) = Url::parse(source) {
             debug!("Source is a URL: {}", parsed_url);
             if parsed_url.host_str() == Some("github.com") {
-                download_github_folder(&parsed_url, &dest_dir).await?;
+                download_github_folder(&parsed_url, &temp_dir).await?;
             } else {
                 anyhow::bail!("Unsupported URL format");
             }
         } else {
             debug!("Source is a local path");
             let source_path = Path::new(source);
-            if !source_path.exists() {
-                error!("Local source path does not exist: {:?}", source_path);
-                anyhow::bail!("Local source path does not exist");
+            if !source_path.exists() || !source_path.is_dir() {
+                anyhow::bail!("Invalid local source path");
             }
-            if !source_path.is_dir() {
-                error!("Local source is not a directory: {:?}", source_path);
-                anyhow::bail!("Local source is not a directory");
-            }
+            copy_dir_all(source_path, &temp_dir).await?;
+        }
 
-            debug!(
-                "Copying local folder from {:?} to {:?}",
-                source_path, dest_dir
-            );
-            copy_dir_all(source_path, &dest_dir).await?;
-            info!("Copied local folder: {:?} to {:?}", source_path, dest_dir);
+        // If download successful, move temp dir to final location
+        if dest_dir.exists() {
+            tokio::fs::remove_dir_all(&dest_dir).await?;
+        }
+        tokio::fs::rename(&temp_dir, &dest_dir).await?;
+
+        // Restore or merge pipe.json if needed
+        if let Some(ref existing_config) = existing_config {
+            let new_config_path = dest_dir.join("pipe.json");
+            if new_config_path.exists() {
+                let content = tokio::fs::read_to_string(&new_config_path).await?;
+                let new_json: Value = serde_json::from_str(&content)?;
+
+                // Create merged config
+                let mut merged_config = new_json.clone(); // Start with new schema
+
+                // If both configs have fields array, preserve user values
+                if let (Some(existing_obj), Some(new_obj)) =
+                    (existing_config.as_object(), merged_config.as_object_mut())
+                {
+                    // Copy over non-fields properties from existing config
+                    for (key, value) in existing_obj {
+                        if key != "fields" {
+                            new_obj.insert(key.clone(), value.clone());
+                        }
+                    }
+
+                    // For fields array, preserve user values while keeping new schema
+                    if let (Some(existing_fields), Some(new_fields)) = (
+                        existing_config["fields"].as_array(),
+                        new_obj.get_mut("fields").and_then(|f| f.as_array_mut()),
+                    ) {
+                        // For each field in the new schema
+                        for new_field in new_fields {
+                            if let Some(name) = new_field.get("name").and_then(Value::as_str) {
+                                // If this field existed in the old config, preserve its value
+                                if let Some(existing_field) = existing_fields
+                                    .iter()
+                                    .find(|f| f.get("name").and_then(Value::as_str) == Some(name))
+                                {
+                                    if let Some(user_value) = existing_field.get("value") {
+                                        if let Some(new_field_obj) = new_field.as_object_mut() {
+                                            new_field_obj
+                                                .insert("value".to_string(), user_value.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let config_str = serde_json::to_string_pretty(&merged_config)?;
+                tokio::fs::write(&new_config_path, config_str).await?;
+            } else {
+                // If no new config exists, keep the existing one
+                let config_str = serde_json::to_string_pretty(&existing_config)?;
+                tokio::fs::write(&new_config_path, config_str).await?;
+            }
         }
 
         // After downloading/copying the pipe, check if it's a Next.js project
@@ -309,8 +363,8 @@ mod pipes {
                 // stream_logs("next build", &mut build_child).await?;
 
                 // Update pipe.json to indicate it's a Next.js project
-                let mut pipe_config = if let Some(existing_json) = existing_pipe_json {
-                    serde_json::from_str(&existing_json)?
+                let mut pipe_config = if let Some(existing_json) = &existing_config {
+                    serde_json::from_str(&existing_json.as_str().unwrap())?
                 } else if pipe_json_path.exists() {
                     let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
                     serde_json::from_str(&pipe_json)?
