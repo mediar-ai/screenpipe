@@ -19,19 +19,21 @@ related issue: #
 - [ ] documentation update
 
 ## how to test
+
+add a few steps to test the pr in the most time efficient way.
+
 1. 
 2. 
 3. 
 
+if relevant add screenshots or screen captures to prove that this PR works to save us time.
+
 ## checklist
+- [ ] MOST IMPORTANT: this PR will require less than 30 min to review, merge, and release to production and not crash in the hand of thousands of users
 - [ ] i have read the [CONTRIBUTING.md](https://github.com/mediar-ai/screenpipe/blob/main/CONTRIBUTING.md) file 
-- [ ] i have added the custom cursor AI prompt to my settings as mentioned in CONTRIBUTING.md and used to write this PR
-- [ ] my code follows the project's style guidelines
-- [ ] i have performed a self-review of my code
 - [ ] i have updated the documentation if necessary
 - [ ] my changes generate no new warnings
 - [ ] i have added tests that prove my fix is effective or that my feature works
-- [ ] all tests pass locally with my changes
 
 ## additional notes
 any other relevant information about the pr.
