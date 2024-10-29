@@ -139,9 +139,10 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           brew install ffmpeg pkg-config
+          pip install mkl==2023.2.2 mkl-devel==2023.2.2 mkl-static==2023.2.2
 
       - name: Install MKL
-        if: matrix.platform == 'windows-latest' || matrix.target == 'x86_64-apple-darwin'
+        if: matrix.platform == 'windows-latest'
         run: |
           pip install mkl mkl-devel mkl-static
 
