@@ -1,11 +1,11 @@
-import * as fs from "fs";
-import nodemailer from "nodemailer";
-import { ContentItem, pipe } from "screenpipe";
+import * as fs from "node:fs";
+import nodemailer from "npm:nodemailer";
+import { ContentItem, pipe } from "https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-js/main.ts";
 import process from "node:process";
-import Exa from "exa-js";
-import { generateObject, generateText } from "ai";
-import { createOpenAI } from "openai-ai-provider";
-import { z } from "zod";
+import Exa from "npm:exa-js";
+import { generateObject, generateText } from "npm:ai";
+import { createOpenAI } from "npm:openai-ai-provider";
+import { z } from "npm:zod";
 import * as path from "node:path";
 
 const icpSchema = z.object({
@@ -311,6 +311,6 @@ export PIPE_ID="pipe-find-leads-with-exa-ai"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-find-leads-with-exa-ai"
 
-deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys examples/typescript/pipe-find-leads-with-exa-ai/pipe.ts
+bun run examples/typescript/pipe-find-leads-with-exa-ai/pipe.ts
 
 */

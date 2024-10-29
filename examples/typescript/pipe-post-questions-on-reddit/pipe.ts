@@ -1,6 +1,9 @@
-import * as fs from "fs";
+import * as fs from "node:fs";
 import nodemailer from "nodemailer";
-import { ContentItem, pipe } from "screenpipe";
+import {
+  ContentItem,
+  pipe,
+} from "@screenpipe/js";
 import process from "node:process";
 
 interface DailyLog {
@@ -223,7 +226,10 @@ async function dailyLogPipeline(): Promise<void> {
   const openaiApiKey = config.openaiApiKey;
   const windowName = config.windowName || "";
   const pageSize = config.pageSize;
-  const contentType = config.contentType || "ocr"; // Default to 'ocr' if not specified
+  const contentType = config.contentType || "ocr";
+
+  const emailEnabled = !!(emailAddress && emailPassword);
+  console.log("email enabled:", emailEnabled);
 
   console.log("creating logs dir");
   const logsDir = `${process.env.PIPE_DIR}/logs`;
@@ -234,26 +240,27 @@ async function dailyLogPipeline(): Promise<void> {
     console.warn("failed to create logs dir, probably already exists");
   }
 
-  let lastEmailSent = new Date(0); // Initialize to a past date
+  let lastEmailSent = new Date(0);
 
-  // send a welcome email to announce what will happen, when it will happen, and what it will do
-  const welcomeEmail = `
-    Welcome to the daily reddit questions pipeline!
+  // Only send welcome email if email is enabled
+  if (emailEnabled) {
+    const welcomeEmail = `
+      Welcome to the daily reddit questions pipeline!
 
-    This pipe will send you a daily list of reddit questions based on your screen data.
-    ${
-      summaryFrequency === "daily"
-        ? `It will run at ${emailTime} every day.`
-        : `It will run every ${summaryFrequency} hours.`
-    }
-    
-  `;
-  await sendEmail(
-    emailAddress,
-    emailPassword,
-    "daily reddit questions",
-    welcomeEmail
-  );
+      This pipe will send you a daily list of reddit questions based on your screen data.
+      ${
+        summaryFrequency === "daily"
+          ? `It will run at ${emailTime} every day.`
+          : `It will run every ${summaryFrequency} hours.`
+      }
+    `;
+    await sendEmail(
+      emailAddress!,
+      emailPassword!,
+      "daily reddit questions",
+      welcomeEmail
+    );
+  }
 
   while (true) {
     try {
@@ -318,12 +325,18 @@ async function dailyLogPipeline(): Promise<void> {
             openaiApiKey
           );
           console.log("reddit questions:", redditQuestions);
-          await sendEmail(
-            emailAddress,
-            emailPassword,
-            "reddit questions",
-            redditQuestions
-          );
+
+          // Send email only if enabled
+          if (emailEnabled) {
+            await sendEmail(
+              emailAddress!,
+              emailPassword!,
+              "reddit questions",
+              redditQuestions
+            );
+          }
+
+          // Always send to inbox and desktop notification
           await pipe.inbox.send({
             title: "reddit questions",
             body: redditQuestions,
