@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730239517067,
+  "lastUpdate": 1730245235663,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -20819,6 +20819,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1886778375,
             "range": "± 22232108",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "53c93e5aa9dad16ba5078b6a264688472df79cac",
+          "message": "Merge pull request #603 from Neptune650/patch-1\n\nFree up space in Ubuntu actions",
+          "timestamp": "2024-10-29T16:30:08-07:00",
+          "tree_id": "6eefcf390a8c801bdee16beb5f6f446f19892078",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/53c93e5aa9dad16ba5078b6a264688472df79cac"
+        },
+        "date": 1730245234228,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1908691521,
+            "range": "± 31025860",
             "unit": "ns/iter"
           }
         ]
