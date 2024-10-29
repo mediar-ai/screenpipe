@@ -125,6 +125,10 @@ async function copyBunBinary() {
 
 	let bunSrc, bunDest1, bunDest2;
 	if (platform === 'windows') {
+		// Get and log npm global prefix
+		const npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
+		console.log('npm global prefix:', npmGlobalPrefix);
+
 		// Try to find bun location using system commands
 		let bunPathFromSystem;
 		try {
@@ -149,6 +153,7 @@ async function copyBunBinary() {
 			// npm global paths
 			path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe'),
 			path.join(npmGlobalPrefix, 'bun.exe'),
+			path.join(npmGlobalPrefix, 'bin', 'bun.exe'),
 			// AppData paths
 			path.join(os.homedir(), 'AppData', 'Local', 'bun', 'bun.exe'),
 			// Direct paths
@@ -156,7 +161,7 @@ async function copyBunBinary() {
 			'C:\\Program Files (x86)\\bun\\bun.exe',
 			// System path
 			'bun.exe'
-		].filter(Boolean); // Remove undefined entries
+		].filter(Boolean);
 
 		console.log('searching bun in these locations:');
 		possibleBunPaths.forEach(p => console.log('- ' + p));
