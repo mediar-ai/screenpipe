@@ -181,6 +181,11 @@ async function copyBunBinary() {
 		if (!bunSrc) {
 			throw new Error('Could not find bun.exe in any expected location. Please check if bun is installed correctly');
 		}
+
+		// Define the destination path
+		bunDest1 = path.join(cwd, 'src-tauri', 'binaries', 'bun-x86_64-pc-windows-msvc.exe');
+		console.log('copying bun from:', bunSrc);
+		console.log('copying bun to:', bunDest1);
 	} else if (platform === 'macos') {
 		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
 		bunDest1 = path.join(cwd, 'bun-aarch64-apple-darwin');
