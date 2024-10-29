@@ -57,7 +57,7 @@ mod tests {
         let db = setup_test_db().await;
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
         db.insert_audio_transcription(
-            audio_chunk_id,
+            Some(audio_chunk_id),
             "Hello from audio",
             0,
             "",
@@ -95,7 +95,7 @@ mod tests {
         let db = setup_test_db().await;
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
         db.insert_audio_transcription(
-            audio_chunk_id,
+            Some(audio_chunk_id),
             "Hello from audio",
             0,
             "",
@@ -157,7 +157,7 @@ mod tests {
         // Insert Audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
         db.insert_audio_transcription(
-            audio_chunk_id,
+            Some(audio_chunk_id),
             "Hello from audio",
             0,
             "",
@@ -220,7 +220,7 @@ mod tests {
         // Insert first audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
         db.insert_audio_transcription(
-            audio_chunk_id,
+            Some(audio_chunk_id),
             "Hello from audio 1",
             0,
             "",
@@ -252,7 +252,7 @@ mod tests {
         .unwrap();
 
         db.insert_audio_transcription(
-            audio_chunk_id,
+            Some(audio_chunk_id),
             "Hello from audio 2",
             1,
             "",
@@ -372,7 +372,7 @@ mod tests {
         // Insert first audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
         db.insert_audio_transcription(
-            audio_chunk_id,
+            Some(audio_chunk_id),
             "Hello from audio 1",
             0,
             "",
@@ -402,7 +402,7 @@ mod tests {
         .unwrap();
 
         db.insert_audio_transcription(
-            audio_chunk_id,
+            Some(audio_chunk_id),
             "Hello from audio 2",
             1,
             "",
