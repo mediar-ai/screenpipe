@@ -243,6 +243,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
+          # ubuntu mkl
+          PKG_CONFIG_PATH: ${{ matrix.platform == 'ubuntu-22.04' && '~/.local/lib/pkgconfig:$PKG_CONFIG_PATH' || '' }}
+          MKLROOT: ${{ matrix.platform == 'ubuntu-22.04' && '/opt/intel/mkl' || '' }}
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.platform == 'windows-latest' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.platform == 'windows-latest' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
