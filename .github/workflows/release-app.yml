@@ -133,7 +133,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf intel-mkl-full
+          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
@@ -141,9 +141,16 @@ jobs:
           brew install ffmpeg pkg-config
 
       - name: Install MKL
-        if: matrix.platform == 'windows-latest' || matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'windows-latest'
         run: |
           pip install mkl mkl-devel mkl-static
+
+      - name: Install MKL in Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          pip install mkl mkl-devel mkl-static
+          mkdir -p /opt/intel/mkl
+          cp ~/.local/lib/* ~/.local/include/* /opt/intel/mkl/
 
       - name: Install frontend dependencies
         shell: bash
@@ -180,6 +187,10 @@ jobs:
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
+          fi
+          if [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            export PKG_CONFIG_PATH="~/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
+            export MKLROOT="/opt/intel/mkl"
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
 
