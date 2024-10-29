@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730170599203,
+  "lastUpdate": 1730217089892,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -20249,6 +20249,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1888847020,
             "range": "± 10860939",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "neptune650@proton.me",
+            "name": "Neptune",
+            "username": "Neptune650"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "12e2460f4e21416996e0efdeb119e38194c07f1f",
+          "message": "feat: mkl acceleration (#588)",
+          "timestamp": "2024-10-29T08:43:46-07:00",
+          "tree_id": "35f9d5260c6ce1b943a82c809af04fe75572bae7",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/12e2460f4e21416996e0efdeb119e38194c07f1f"
+        },
+        "date": 1730217088572,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2197751104,
+            "range": "± 92258688",
             "unit": "ns/iter"
           }
         ]
