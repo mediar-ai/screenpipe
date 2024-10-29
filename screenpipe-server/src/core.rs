@@ -435,7 +435,7 @@ async fn process_audio_result(
 
             if let Err(e) = db
                 .insert_audio_transcription(
-                    audio_chunk_id,
+                    Some(audio_chunk_id),
                     &transcription,
                     0,
                     &transcription_engine,

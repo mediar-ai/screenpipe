@@ -988,7 +988,7 @@ async fn add_transcription_to_db(
     };
 
     db.insert_audio_transcription(
-        -1, // No associated audio chunk
+        None, // No associated audio chunk
         &transcription.transcription,
         -1,
         &transcription.transcription_engine,
@@ -1003,16 +1003,12 @@ pub(crate) async fn add_to_database(
     Json(payload): Json<AddContentRequest>,
 ) -> Result<JsonResponse<AddContentResponse>, (StatusCode, JsonResponse<Value>)> {
 
-    info!("Received add_to_database");
-
     let device_name = payload.device_name.clone();
     let mut success_messages = Vec::new();
 
     match payload.content.content_type.as_str() {
         "Frames" => {
             if let ContentData::Frames(frames) = &payload.content.data {
-                debug!("Processing Frames content type with {} frames", frames.len());
-
                 if !frames.is_empty() {
                     let output_dir = state.screenpipe_dir.join("data");
                     let time = Utc::now();

@@ -210,7 +210,7 @@ impl DatabaseManager {
 
     pub async fn insert_audio_transcription(
         &self,
-        audio_chunk_id: i64,
+        audio_chunk_id: Option<i64>,
         transcription: &str,
         offset_index: i64,
         transcription_engine: &str,
