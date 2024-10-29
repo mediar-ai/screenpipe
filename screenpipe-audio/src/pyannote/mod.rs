@@ -1,4 +1,4 @@
-mod embedding;
-mod identify;
-mod segment;
-mod session;
+pub mod embedding;
+pub mod identify;
+pub mod segment;
+pub mod session;

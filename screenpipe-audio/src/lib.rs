@@ -3,7 +3,7 @@ mod core;
 pub mod encode;
 mod multilingual;
 pub mod pcm_decode;
-mod pyannote;
+pub mod pyannote;
 pub mod stt;
 mod tokenizer;
 pub mod vad_engine;

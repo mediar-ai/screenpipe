@@ -5,20 +5,21 @@ wget https://github.com/thewh1teagle/pyannote-rs/releases/download/v0.1.0/6_spea
 cargo run --example infinite 6_speakers.wav
 */
 
-use cpal::FromSample;
-use pyannote_rs::{EmbeddingExtractor, EmbeddingManager};
-use screenpipe_audio::{encode_single_audio, resample};
+use anyhow::{anyhow, Result};
+use screenpipe_audio::pyannote::segment::{get_segments, Segment};
+use screenpipe_audio::pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
+use screenpipe_audio::resample;
 use std::{
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
 };
 
 fn process_segment(
-    segment: pyannote_rs::Segment,
+    segment: Segment,
     embedding_extractor: &mut EmbeddingExtractor,
     embedding_manager: &mut EmbeddingManager,
     search_threshold: f32,
-) -> Result<(), eyre::Report> {
+) -> Result<()> {
     let embedding_result: Vec<f32> = embedding_extractor
         .compute(&segment.samples)
         .unwrap()
@@ -39,14 +40,14 @@ fn process_segment(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), eyre::Report> {
+async fn main() -> Result<()> {
     let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     let device = screenpipe_audio::parse_audio_device("MacBook Pro Microphone (input)")
-        .map_err(|_| eyre::eyre!("Failed to get default input device"))?;
+        .map_err(|_| anyhow!("Failed to get default input device"))?;
     let (_, config) = screenpipe_audio::get_device_and_config(&device)
         .await
-        .map_err(|_| eyre::eyre!("Failed to get device and config"))?;
+        .map_err(|_| anyhow!("Failed to get device and config"))?;
     let search_threshold = 0.5;
 
     let embedding_model_path = project_dir
@@ -68,12 +69,12 @@ async fn main() -> Result<(), eyre::Report> {
     let is_running = Arc::new(AtomicBool::new(true));
     let stream = screenpipe_audio::AudioStream::from_device(Arc::new(device), is_running.clone())
         .await
-        .map_err(|_| eyre::eyre!("Failed to create audio stream"))?;
+        .map_err(|_| anyhow!("Failed to create audio stream"))?;
 
     let mut embedding_extractor = EmbeddingExtractor::new(
         embedding_model_path
             .to_str()
-            .ok_or_else(|| eyre::eyre!("Invalid embedding model path"))?,
+            .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
     )?;
     let mut embedding_manager = EmbeddingManager::new(usize::MAX);
 
@@ -93,21 +94,10 @@ async fn main() -> Result<(), eyre::Report> {
         samples.extend(sample_chunk);
 
         if samples.len() >= (sample_rate as usize) * 10 {
-            samples = resample(&samples, sample_rate, 16000).map_err(|e| eyre::eyre!(e))?;
+            samples = resample(&samples, sample_rate, 16000).map_err(|e| anyhow!(e))?;
             println!("Processing {} samples at {} Hz", samples.len(), 16000);
-            // write samples to file
-            encode_single_audio(
-                bytemuck::cast_slice(&samples),
-                16000,
-                1,
-                &project_dir.join("samples.wav"),
-            )
-            .map_err(|e| eyre::eyre!(e))?;
-            let segments = pyannote_rs::get_segments(
-                samples.as_slice(),
-                sample_rate,
-                &segmentation_model_path,
-            )?;
+
+            let segments = get_segments(samples.as_slice(), sample_rate, &segmentation_model_path)?;
             let segments: Vec<_> = segments.collect();
             let segments_len = segments.len();
             println!("Found {} segments", segments_len);
