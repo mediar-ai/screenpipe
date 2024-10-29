@@ -2,9 +2,10 @@ use crate::{
     audio_processing::normalize_v2,
     encode_single_audio, multilingual,
     pyannote::{
+        self,
         embedding::EmbeddingExtractor,
         identify::EmbeddingManager,
-        segment::{get_segments, Segment},
+        segment::{get_segments, get_speaker, Segment},
     },
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
     whisper::{Decoder, WhisperModel},
@@ -186,39 +187,54 @@ fn process_with_whisper(
 
     let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-    // let embedding_model_path = project_dir
-    //     .join("models")
-    //     .join("pyannote")
-    //     .join("wespeaker_en_voxceleb_CAM++.onnx");
+    let embedding_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("wespeaker_en_voxceleb_CAM++.onnx");
 
     let segmentation_model_path = project_dir
         .join("models")
         .join("pyannote")
         .join("segmentation-3.0.onnx");
 
-    // let mut embedding_extractor = EmbeddingExtractor::new(
-    //     embedding_model_path
-    //         .to_str()
-    //         .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
-    // )?;
-    // let mut embedding_manager = EmbeddingManager::new(usize::MAX);
+    let mut embedding_extractor = EmbeddingExtractor::new(
+        embedding_model_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
+    )?;
+    let mut embedding_manager = EmbeddingManager::new(usize::MAX);
 
-    let segments = get_segments(speech_frames, 16000, &segmentation_model_path)?;
+    let segments = get_segments(
+        speech_frames,
+        16000,
+        &segmentation_model_path,
+        &mut embedding_extractor,
+        &mut embedding_manager,
+    )?
+    .collect::<Result<Vec<_>, _>>()?;
+    //
+    // // merge segments that have the same speaker
+    // let mut merged_segments = Vec::new();
+    //
+    // for segment in segments {
+    //     if merged_segments.is_empty() {
+    //         merged_segments.push(segment);
+    //     } else if merged_segments.last().unwrap().speaker == segment.speaker {
+    //         merged_segments.last_mut().unwrap().end = segment.end;
+    //         merged_segments
+    //             .last_mut()
+    //             .unwrap()
+    //             .samples
+    //             .extend(segment.samples);
+    //     } else {
+    //         merged_segments.push(segment);
+    //     }
+    // }
+
     let mut iter = 1;
     for segment in segments {
         info!("processing segment {}", iter);
-        let segment = segment.unwrap_or(Segment {
-            start: 0.0,
-            end: 0.0,
-            samples: vec![],
-        });
-
         let segment_samples = segment.samples;
-
-        if segment_samples.is_empty() {
-            continue;
-        }
-
         debug!("converting pcm to mel spectrogram");
         let mel = audio::pcm_to_mel(model.config(), &segment_samples, mel_filters);
         let mel_len = mel.len();

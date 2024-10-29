@@ -97,7 +97,13 @@ async fn main() -> Result<()> {
             samples = resample(&samples, sample_rate, 16000).map_err(|e| anyhow!(e))?;
             println!("Processing {} samples at {} Hz", samples.len(), 16000);
 
-            let segments = get_segments(samples.as_slice(), 16000, &segmentation_model_path)?;
+            let segments = get_segments(
+                samples.as_slice(),
+                16000,
+                &segmentation_model_path,
+                &mut embedding_extractor,
+                &mut embedding_manager,
+            )?;
             let segments: Vec<_> = segments.collect();
             let segments_len = segments.len();
             println!("Found {} segments", segments_len);

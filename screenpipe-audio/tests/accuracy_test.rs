@@ -8,6 +8,7 @@ use std::sync::Arc;
 use strsim::levenshtein;
 use tokio::sync::Mutex;
 use tracing::debug;
+use screenpipe_core::Language;
 
 #[tokio::test]
 async fn test_transcription_accuracy() {
@@ -94,7 +95,7 @@ async fn test_transcription_accuracy() {
                 None,
                 &output_path,
                 true,
-                vec![],
+                vec![Language::English],
             )
             .await
             .unwrap();

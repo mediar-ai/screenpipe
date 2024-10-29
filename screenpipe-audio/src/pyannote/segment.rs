@@ -3,12 +3,15 @@ use anyhow::{format_err, Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
 use std::{cmp::Ordering, path::Path};
 
+use super::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
+
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Segment {
     pub start: f64,
     pub end: f64,
     pub samples: Vec<f32>,
+    pub speaker: String,
 }
 
 fn find_max_index(row: ArrayBase<ViewRepr<&f32>, IxDyn>) -> Result<usize> {
@@ -23,12 +26,13 @@ fn find_max_index(row: ArrayBase<ViewRepr<&f32>, IxDyn>) -> Result<usize> {
         .context("sub_row should not be empty")?;
     Ok(max_index)
 }
-
-pub fn get_segments<P: AsRef<Path>>(
-    samples: &[f32],
+pub fn get_segments<'a, P: AsRef<Path>>(
+    samples: &'a [f32],
     sample_rate: u32,
     model_path: P,
-) -> Result<impl Iterator<Item = Result<Segment>> + '_> {
+    embedding_extractor: &'a mut EmbeddingExtractor,
+    embedding_manager: &'a mut EmbeddingManager,
+) -> Result<impl Iterator<Item = Result<Segment>> + 'a> {
     // Create session using the provided model path
     let session = session::create_session(model_path.as_ref())?;
 
@@ -114,10 +118,14 @@ pub fn get_segments<P: AsRef<Path>>(
 
                         is_speeching = false;
 
+                        let speaker =
+                            get_speaker(embedding_extractor, embedding_manager, segment_samples);
+
                         segments.push(Ok(Segment {
                             start,
                             end,
                             samples: segment_samples.to_vec(),
+                            speaker,
                         }));
                     }
                     offset += frame_size;
@@ -126,4 +134,19 @@ pub fn get_segments<P: AsRef<Path>>(
         }
         segments.pop()
     }))
+}
+
+pub fn get_speaker(
+    embedding_extractor: &mut EmbeddingExtractor,
+    embedding_manager: &mut EmbeddingManager,
+    samples: &[f32],
+) -> String {
+    let search_threshold = 0.5;
+    let embedding_result: Vec<f32> = embedding_extractor.compute(samples).unwrap().collect();
+
+    embedding_manager
+        .search_speaker(embedding_result.clone(), search_threshold)
+        .ok_or_else(|| embedding_manager.search_speaker(embedding_result, 0.0)) // Ensure always to return speaker
+        .map(|r| r.to_string())
+        .unwrap_or("?".into())
 }
