@@ -1,0 +1,134 @@
+/*
+wget https://github.com/thewh1teagle/pyannote-rs/releases/download/v0.1.0/segmentation-3.0.onnx
+wget https://github.com/thewh1teagle/pyannote-rs/releases/download/v0.1.0/wespeaker_en_voxceleb_CAM++.onnx
+wget https://github.com/thewh1teagle/pyannote-rs/releases/download/v0.1.0/6_speakers.wav
+cargo run --example infinite 6_speakers.wav
+*/
+
+use cpal::FromSample;
+use pyannote_rs::{EmbeddingExtractor, EmbeddingManager};
+use screenpipe_audio::{encode_single_audio, resample};
+use std::{
+    path::PathBuf,
+    sync::{atomic::AtomicBool, Arc},
+};
+
+fn process_segment(
+    segment: pyannote_rs::Segment,
+    embedding_extractor: &mut EmbeddingExtractor,
+    embedding_manager: &mut EmbeddingManager,
+    search_threshold: f32,
+) -> Result<(), eyre::Report> {
+    let embedding_result: Vec<f32> = embedding_extractor
+        .compute(&segment.samples)
+        .unwrap()
+        .collect();
+
+    let speaker = embedding_manager
+        .search_speaker(embedding_result.clone(), search_threshold)
+        .ok_or_else(|| embedding_manager.search_speaker(embedding_result, 0.0)) // Ensure always to return speaker
+        .map(|r| r.to_string())
+        .unwrap_or("?".into());
+
+    println!(
+        "start = {:.2}, end = {:.2}, speaker = {}",
+        segment.start, segment.end, speaker
+    );
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), eyre::Report> {
+    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let device = screenpipe_audio::parse_audio_device("MacBook Pro Microphone (input)")
+        .map_err(|_| eyre::eyre!("Failed to get default input device"))?;
+    let (_, config) = screenpipe_audio::get_device_and_config(&device)
+        .await
+        .map_err(|_| eyre::eyre!("Failed to get device and config"))?;
+    let search_threshold = 0.5;
+
+    let embedding_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("wespeaker_en_voxceleb_CAM++.onnx");
+
+    let segmentation_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("segmentation-3.0.onnx");
+
+    println!("Using embedding model: {}", embedding_model_path.display());
+    println!(
+        "Using segmentation model: {}",
+        segmentation_model_path.display()
+    );
+
+    let is_running = Arc::new(AtomicBool::new(true));
+    let stream = screenpipe_audio::AudioStream::from_device(Arc::new(device), is_running.clone())
+        .await
+        .map_err(|_| eyre::eyre!("Failed to create audio stream"))?;
+
+    let mut embedding_extractor = EmbeddingExtractor::new(
+        embedding_model_path
+            .to_str()
+            .ok_or_else(|| eyre::eyre!("Invalid embedding model path"))?,
+    )?;
+    let mut embedding_manager = EmbeddingManager::new(usize::MAX);
+
+    let mut rx = stream.subscribe().await;
+
+    // TODO: process audio stream every ten seconds
+    let mut samples = Vec::new();
+    let sample_rate = config.sample_rate().0;
+    println!("Sample rate: {}", sample_rate);
+
+    while is_running
+        .clone()
+        .load(std::sync::atomic::Ordering::Relaxed)
+    {
+        let sample_chunk = rx.recv().await.unwrap();
+
+        samples.extend(sample_chunk);
+
+        if samples.len() >= (sample_rate as usize) * 10 {
+            samples = resample(&samples, sample_rate, 16000).map_err(|e| eyre::eyre!(e))?;
+            println!("Processing {} samples at {} Hz", samples.len(), 16000);
+            // write samples to file
+            encode_single_audio(
+                bytemuck::cast_slice(&samples),
+                16000,
+                1,
+                &project_dir.join("samples.wav"),
+            )
+            .map_err(|e| eyre::eyre!(e))?;
+            let segments = pyannote_rs::get_segments(
+                samples.as_slice(),
+                sample_rate,
+                &segmentation_model_path,
+            )?;
+            let segments: Vec<_> = segments.collect();
+            let segments_len = segments.len();
+            println!("Found {} segments", segments_len);
+
+            for segment in segments {
+                if let Ok(segment) = segment {
+                    if let Err(error) = process_segment(
+                        segment,
+                        &mut embedding_extractor,
+                        &mut embedding_manager,
+                        search_threshold,
+                    ) {
+                        eprintln!("Error processing segment: {:?}", error);
+                    }
+                } else if let Err(error) = segment {
+                    eprintln!("Failed to process segment: {:?}", error);
+                }
+            }
+            samples.clear();
+        }
+    }
+
+    Ok(())
+}

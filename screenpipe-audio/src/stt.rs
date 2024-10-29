@@ -421,7 +421,7 @@ pub async fn stt(
     Ok((transcription?, file_path_clone))
 }
 
-fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
+pub fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
     debug!("Resampling audio");
     let params = SincInterpolationParameters {
         sinc_len: 256,
