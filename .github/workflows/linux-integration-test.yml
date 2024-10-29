@@ -48,7 +48,10 @@ jobs:
     
     - name: Check for crashes and expected behavior
       run: .github/scripts/check_logs.sh
-    
+
+    - name: Check final storage usage
+      run: du -ha ~/.screenpipe/data
+
     - name: Upload logs
       uses: actions/upload-artifact@v3
       if: always()
