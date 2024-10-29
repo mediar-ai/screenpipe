@@ -43,7 +43,6 @@ jobs:
           api-key: ${{ secrets.CN_API_KEY }}
 
   publish-tauri:
-    needs: draft
     permissions:
       contents: write
     strategy:
@@ -59,10 +58,10 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "" # TODO CUDA, mkl
+            args: "--features mkl" # TODO CUDA
             tauri-args: ""
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
@@ -134,12 +133,17 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf intel-mkl-full
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
         run: |
           brew install ffmpeg pkg-config
+
+      - name: Install MKL
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'ubuntu-22.04'
+        run: |
+          pip install mkl mkl-devel mkl-static
 
       - name: Install frontend dependencies
         shell: bash

@@ -115,6 +115,7 @@ harness = false
 default = []
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 pipes = ["screenpipe-core/pipes", "tempfile", "url"]
 llm = ["screenpipe-core/llm"]
 beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
