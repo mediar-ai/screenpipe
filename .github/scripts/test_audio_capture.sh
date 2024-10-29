@@ -8,7 +8,7 @@ PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native paplay --verbose .github/scrip
 for i in {1..3}
 do
    sleep 10
-   ps -p $(echo screenpipe.pid) -o %cpu,%mem,cmd
+   ps -p $(cat screenpipe.pid) -o %cpu,%mem,cmd
 done
 cat screenpipe_output.log
 if grep -qi "human world" screenpipe_output.log; then

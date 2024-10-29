@@ -6,7 +6,7 @@ DISPLAY_PID=$!
 for i in {1..3}
 do
    sleep 10
-   ps -p $(echo screenpipe.pid) -o %cpu,%mem,cmd
+   ps -p $(cat screenpipe.pid) -o %cpu,%mem,cmd
 done
 kill $DISPLAY_PID
 if grep -qi "Hello, Screenpipe OCR" screenpipe_output.log; then
