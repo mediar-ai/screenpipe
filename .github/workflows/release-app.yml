@@ -141,9 +141,19 @@ jobs:
           brew install ffmpeg pkg-config
 
       - name: Install MKL
-        if: matrix.platform == 'windows-latest' || matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'windows-latest'
         run: |
           pip install mkl mkl-devel mkl-static
+
+      - name: Install MKL in Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          pip install mkl mkl-devel mkl-static
+          mkdir -p /opt/intel/mkl
+          cp /usr/lib/python3.10/site-packages/mkl/* \
+             /usr/lib/python3.10/site-packages/mkl-devel/* \
+             /usr/lib/python3.10/site-packages/mkl-static/* \
+             /opt/intel/mkl/
 
       - name: Install frontend dependencies
         shell: bash
