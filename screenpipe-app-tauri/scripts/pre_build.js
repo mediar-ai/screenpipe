@@ -126,17 +126,34 @@ async function copyBunBinary() {
 	if (platform === 'windows') {
 		// Update path to check npm's global installation directory
 		const npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
-		bunSrc = path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe');
-		// Alternative path if the above doesn't exist
-		const altBunSrc = path.join(npmGlobalPrefix, 'bun.exe');
-		
-		// Check both possible locations
-		try {
-			await fs.access(bunSrc);
-		} catch {
-			bunSrc = altBunSrc;
+		const possibleBunPaths = [
+			// npm global paths
+			path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe'),
+			path.join(npmGlobalPrefix, 'bun.exe'),
+			// AppData paths
+			path.join(os.homedir(), 'AppData', 'Local', 'bun', 'bun.exe'),
+			// Direct paths
+			'C:\\Program Files\\bun\\bun.exe',
+			'C:\\Program Files (x86)\\bun\\bun.exe',
+			// System path
+			'bun.exe'
+		];
+
+		bunSrc = null;
+		for (const possiblePath of possibleBunPaths) {
+			try {
+				await fs.access(possiblePath);
+				bunSrc = possiblePath;
+				break;
+			} catch {
+				continue;
+			}
 		}
-		
+
+		if (!bunSrc) {
+			throw new Error('Could not find bun.exe in any expected location');
+		}
+
 		bunDest1 = path.join(cwd, 'bun-x86_64-pc-windows-msvc.exe');
 	} else if (platform === 'macos') {
 		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
