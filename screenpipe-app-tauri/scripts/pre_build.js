@@ -44,6 +44,7 @@ const config = {
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
 			'libxdo-dev',
+			'intel-openmp'
 		],
 	},
 	macos: {
@@ -124,9 +125,27 @@ async function copyBunBinary() {
 
 	let bunSrc, bunDest1, bunDest2;
 	if (platform === 'windows') {
-		// Update path to check npm's global installation directory
-		const npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
+		// Try to find bun location using system commands
+		let bunPathFromSystem;
+		try {
+			bunPathFromSystem = (await $`where.exe bun`.text()).trim().split('\n')[0];
+		} catch {
+			try {
+				bunPathFromSystem = (await $`which bun`.text()).trim();
+			} catch {
+				console.log('could not find bun using where.exe or which');
+			}
+		}
+
+		if (bunPathFromSystem) {
+			console.log('found bun using system command at:', bunPathFromSystem);
+		}
+
 		const possibleBunPaths = [
+			// Add system-found path if it exists
+			bunPathFromSystem,
+			// Bun's default installer location
+			path.join(os.homedir(), '.bun', 'bin', 'bun.exe'),
 			// npm global paths
 			path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe'),
 			path.join(npmGlobalPrefix, 'bun.exe'),
@@ -137,12 +156,16 @@ async function copyBunBinary() {
 			'C:\\Program Files (x86)\\bun\\bun.exe',
 			// System path
 			'bun.exe'
-		];
+		].filter(Boolean); // Remove undefined entries
+
+		console.log('searching bun in these locations:');
+		possibleBunPaths.forEach(p => console.log('- ' + p));
 
 		bunSrc = null;
 		for (const possiblePath of possibleBunPaths) {
 			try {
 				await fs.access(possiblePath);
+				console.log('found bun at:', possiblePath);
 				bunSrc = possiblePath;
 				break;
 			} catch {
@@ -151,10 +174,8 @@ async function copyBunBinary() {
 		}
 
 		if (!bunSrc) {
-			throw new Error('Could not find bun.exe in any expected location');
+			throw new Error('Could not find bun.exe in any expected location. Please check if bun is installed correctly');
 		}
-
-		bunDest1 = path.join(cwd, 'bun-x86_64-pc-windows-msvc.exe');
 	} else if (platform === 'macos') {
 		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
 		bunDest1 = path.join(cwd, 'bun-aarch64-apple-darwin');
