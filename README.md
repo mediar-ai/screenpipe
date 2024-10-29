@@ -69,20 +69,17 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 
 ---
 
-# 24/7 local AI screen & audio capture
+# open source 24/7 screen & voice recording for the age of superintelligence
 
-library to build personalized AI powered by what you've seen, said, or heard. works with Ollama. alternative to Rewind.ai. open. secure. you own your data. rust.  
 we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
 
 ![diagram](./content/diagram2.png)
 
 # why?
 
-super intelligence + activity data from your life and your team = magic
- 
-AI is progressing so fast that it will be able to ingest months of recordings of your life and business by next year, and we're building the foundations to make it happen.
+in 2025, context won't be an issue anymore.
 
-start recording your screen today ... or be left behind 
+will you have the data ready?
 
 ## get started
 
