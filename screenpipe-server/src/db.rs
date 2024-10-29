@@ -599,7 +599,7 @@ impl DatabaseManager {
             audio_transcriptions.is_input_device
         FROM 
             audio_transcriptions
-        LEFT JOIN 
+        JOIN 
             audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
         LEFT JOIN
             audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
