@@ -1,11 +1,16 @@
 use crate::{
     audio_processing::normalize_v2,
     encode_single_audio, multilingual,
+    pyannote::{
+        embedding::EmbeddingExtractor,
+        identify::EmbeddingManager,
+        segment::{get_segments, Segment},
+    },
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
     whisper::{Decoder, WhisperModel},
     AudioDevice, AudioTranscriptionEngine,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use candle::Tensor;
 use candle_transformers::models::whisper::{self as m, audio};
 use chrono::Utc;
@@ -28,8 +33,6 @@ use reqwest::Client;
 use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
-
-
 
 async fn transcribe_with_deepgram(
     api_key: &str,
@@ -179,66 +182,109 @@ fn process_with_whisper(
     let model = &mut whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
     let device = &whisper_model.device;
+    let mut final_transcript = String::new();
 
-    debug!("converting pcm to mel spectrogram");
-    let mel = audio::pcm_to_mel(&model.config(), speech_frames, mel_filters);
-    let mel_len = mel.len();
+    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-    debug!("creating tensor from mel spectrogram");
-    let mel = Tensor::from_vec(
-        mel,
-        (
-            1,
-            model.config().num_mel_bins,
-            mel_len / model.config().num_mel_bins,
-        ),
-        device,
-    )?;
+    // let embedding_model_path = project_dir
+    //     .join("models")
+    //     .join("pyannote")
+    //     .join("wespeaker_en_voxceleb_CAM++.onnx");
 
-    debug!("detecting language");
-    let language_token = Some(multilingual::detect_language(
-        model,
-        tokenizer,
-        &mel,
-        languages.clone(),
-    )?);
+    let segmentation_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("segmentation-3.0.onnx");
 
-    debug!("initializing decoder");
-    let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
+    // let mut embedding_extractor = EmbeddingExtractor::new(
+    //     embedding_model_path
+    //         .to_str()
+    //         .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
+    // )?;
+    // let mut embedding_manager = EmbeddingManager::new(usize::MAX);
 
-    debug!("starting decoding process");
-    let segments = dc.run(&mel)?;
-    debug!("decoding complete");
+    let segments = get_segments(speech_frames, 16000, &segmentation_model_path)?;
+    let mut iter = 1;
+    for segment in segments {
+        info!("processing segment {}", iter);
+        let segment = segment.unwrap_or(Segment {
+            start: 0.0,
+            end: 0.0,
+            samples: vec![],
+        });
 
-    let mut ranges: HashSet<String> = HashSet::new();
-    let token_regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>")?;
-    let mut transcript = String::new();
+        let segment_samples = segment.samples;
 
-    let mut min_time: f32 = f32::MAX;
-    let mut max_time: f32 = f32::MIN;
-    let segments_len = segments.len();
-
-    for (i, segment) in segments.iter().enumerate() {
-        let mut text = segment.dr.text.clone();
-
-        // Extract start and end times
-        let (start, end) = extract_time_tokens(&text, &token_regex);
-        let (s_time, e_time) = parse_time_tokens(&start, &end, &mut min_time, &mut max_time);
-
-        let range = format!("{}{}", start, end);
-        if ranges.insert(range) {
-            if segments_len > 1 && i == segments_len - 1 && s_time == min_time && e_time == max_time
-            {
-                continue;
-            }
-
-            text = token_regex.replace_all(&text, "").to_string();
-            text.push('\n');
-            transcript.push_str(&text);
+        if segment_samples.is_empty() {
+            continue;
         }
+
+        debug!("converting pcm to mel spectrogram");
+        let mel = audio::pcm_to_mel(model.config(), &segment_samples, mel_filters);
+        let mel_len = mel.len();
+
+        debug!("creating tensor from mel spectrogram");
+        let mel = Tensor::from_vec(
+            mel,
+            (
+                1,
+                model.config().num_mel_bins,
+                mel_len / model.config().num_mel_bins,
+            ),
+            device,
+        )?;
+
+        debug!("detecting language");
+        let language_token = Some(multilingual::detect_language(
+            model,
+            tokenizer,
+            &mel,
+            languages.clone(),
+        )?);
+
+        debug!("initializing decoder");
+        let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
+
+        debug!("starting decoding process");
+        let segments = dc.run(&mel)?;
+        debug!("decoding complete");
+
+        let mut ranges: HashSet<String> = HashSet::new();
+        let token_regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>")?;
+        let mut transcript = String::new();
+
+        let mut min_time: f32 = f32::MAX;
+        let mut max_time: f32 = f32::MIN;
+        let segments_len = segments.len();
+
+        for (i, segment) in segments.iter().enumerate() {
+            let mut text = segment.dr.text.clone();
+
+            // Extract start and end times
+            let (start, end) = extract_time_tokens(&text, &token_regex);
+            let (s_time, e_time) = parse_time_tokens(&start, &end, &mut min_time, &mut max_time);
+
+            let range = format!("{}{}", start, end);
+            if ranges.insert(range) {
+                if segments_len > 1
+                    && i == segments_len - 1
+                    && s_time == min_time
+                    && e_time == max_time
+                {
+                    continue;
+                }
+
+                text = token_regex.replace_all(&text, "").to_string();
+                text.push('\n');
+                transcript.push_str(&text);
+            }
+        }
+
+        final_transcript.push_str(&transcript);
+        iter += 1;
     }
 
-    Ok(transcript)
+    Ok(final_transcript)
 }
 
 fn extract_time_tokens(text: &str, token_regex: &Regex) -> (String, String) {
@@ -256,11 +302,11 @@ fn extract_time_tokens(text: &str, token_regex: &Regex) -> (String, String) {
 fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut f32) -> (f32, f32) {
     let num_regex = Regex::new(r"([<>|])").unwrap();
     let s_time = num_regex
-        .replace_all(&start, "")
+        .replace_all(start, "")
         .parse::<f32>()
         .unwrap_or(*min_time);
     let e_time = num_regex
-        .replace_all(&end, "")
+        .replace_all(end, "")
         .parse::<f32>()
         .unwrap_or(*max_time);
 
@@ -366,39 +412,45 @@ pub async fn stt(
         return Ok(("".to_string(), "".to_string()));
     }
 
-    let transcription: Result<String> = if audio_transcription_engine
-        == AudioTranscriptionEngine::Deepgram.into()
-    {
-        // Deepgram implementation
-        let api_key = deepgram_api_key.unwrap();
-        info!(
-            "device: {}, using deepgram api key: {}...",
-            audio_input.device,
-            &api_key[..8]
-        );
-        match transcribe_with_deepgram(
-            &api_key,
-            &speech_frames,
-            &audio_input.device.name,
-            audio_input.sample_rate,
-            languages.clone(),
-        )
-        .await
-        {
-            Ok(transcription) => Ok(transcription),
-            Err(e) => {
-                error!(
-                    "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
-                    audio_input.device, e
-                );
-                // Fallback to Whisper
-                process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
+    let transcription: Result<String> =
+        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
+            // Deepgram implementation
+            let api_key = deepgram_api_key
+                .clone()
+                .unwrap_or_else(get_deepgram_api_key);
+            info!(
+                "device: {}, using deepgram api key: {}...",
+                audio_input.device,
+                &api_key[..8]
+            );
+            match transcribe_with_deepgram(
+                &api_key,
+                &speech_frames,
+                &audio_input.device.name,
+                audio_input.sample_rate,
+                languages.clone(),
+            )
+            .await
+            {
+                Ok(transcription) => Ok(transcription),
+                Err(e) => {
+                    error!(
+                        "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
+                        audio_input.device, e
+                    );
+                    // Fallback to Whisper
+                    process_with_whisper(
+                        &mut *whisper_model,
+                        &speech_frames,
+                        &mel_filters,
+                        languages.clone(),
+                    )
+                }
             }
-        }
-    } else {
-        // Existing Whisper implementation
-        process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
-    };
+        } else {
+            // Existing Whisper implementation
+            process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
+        };
 
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
     let sanitized_device_name = audio_input.device.to_string().replace(['/', '\\'], "_");

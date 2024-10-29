@@ -35,7 +35,7 @@ pub fn get_segments<P: AsRef<Path>>(
     // Define frame parameters
     let frame_size = 270;
     let frame_start = 721;
-    let window_size = (sample_rate * 10) as usize; // 10 seconds
+    let window_size = (sample_rate * 5) as usize; // 10 seconds
     let mut is_speeching = false;
     let mut offset = frame_start;
     let mut start_offset = 0.0;
@@ -49,8 +49,10 @@ pub fn get_segments<P: AsRef<Path>>(
 
     let mut start_iter = (0..padded_samples.len()).step_by(window_size);
 
+    let mut segments = Vec::new();
+
     Ok(std::iter::from_fn(move || {
-        if let Some(start) = start_iter.next() {
+        while let Some(start) = start_iter.next() {
             let end = (start + window_size).min(padded_samples.len());
             let window = &padded_samples[start..end];
 
@@ -105,7 +107,6 @@ pub fn get_segments<P: AsRef<Path>>(
                         let start_f64 = start * (sample_rate as f64);
                         let end_f64 = end * (sample_rate as f64);
 
-                        // Ensure indices are within bounds
                         let start_idx = start_f64.min((samples.len() - 1) as f64) as usize;
                         let end_idx = end_f64.min(samples.len() as f64) as usize;
 
@@ -113,7 +114,7 @@ pub fn get_segments<P: AsRef<Path>>(
 
                         is_speeching = false;
 
-                        return Some(Ok(Segment {
+                        segments.push(Ok(Segment {
                             start,
                             end,
                             samples: segment_samples.to_vec(),
@@ -123,6 +124,6 @@ pub fn get_segments<P: AsRef<Path>>(
                 }
             }
         }
-        None
+        segments.pop()
     }))
 }
