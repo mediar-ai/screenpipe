@@ -26,12 +26,24 @@ import { Separator } from "@/components/ui/separator";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { registerShortcuts } from "@/lib/shortcuts";
+import SearchHistorySidebar from "@/components/search-history-sidebar";
+import { useSearchHistory } from "@/lib/hooks/use-search-history";
 
 export default function Home() {
   const { settings } = useSettings();
   const posthog = usePostHog();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
+
+  const {
+    searches,
+    currentSearchId,
+    setCurrentSearchId,
+    addSearch,
+    deleteSearch,
+    isCollapsed,
+    toggleCollapse
+  } = useSearchHistory();
 
   useEffect(() => {
     registerShortcuts({
@@ -45,62 +57,82 @@ export default function Home() {
     }
   }, [settings.userId, posthog]);
 
+  const handleNewSearch = () => {
+    setCurrentSearchId(null);
+    // Add any other reset logic you need
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center">
-      <NotificationHandler />
-      {showOnboarding && <Onboarding />}
-      {/* <UpdateNotification checkIntervalHours={3} /> */}
-      {/* <ScreenpipeInstanceChecker /> */}
-      <Header />
-      <div className="my-4" />
-      {settings.isLoading ? (
-        <div className="flex flex-col items-center justify-center h-full space-y-4">
-          <Skeleton className="w-[200px] h-[24px] rounded-full" />
-          <Skeleton className="w-[300px] h-[20px] rounded-full" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
-            {[...Array(5)].map((_, index) => (
-              <Card key={index}>
-                <CardContent className="p-4">
-                  <Skeleton className="w-full h-[40px]" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      ) : settings.aiUrl ? (
-        <>
-          <h1 className="text-2xl font-bold text-center mb-12">
-            where pixels become magic
-          </h1>
-          <SearchChat />
-        </>
-      ) : (
-        <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
-          <Card className="w-[600px]">
-            <CardHeader>
-              <CardTitle>Welcome to Screenpipe playground</CardTitle>
-              <CardDescription>
-                Make sure to set your AI provider settings to ask questions
-                about your data.
-                <br />
-                <br />
-                <div className="aspect-w-16 aspect-h-9">
-                  <iframe
-                    src="https://www.youtube.com/embed/u2GfjvEY6tk"
-                    title="Onboarding Video"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full h-[300px] rounded-lg shadow-lg"
-                  ></iframe>
-                </div>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Settings />
-            </CardContent>
-          </Card>
-        </div>
+    <main className="flex min-h-screen">
+      {settings.aiUrl && (
+        <SearchHistorySidebar
+          searches={searches}
+          currentSearchId={currentSearchId}
+          onSelectSearch={setCurrentSearchId}
+          onDeleteSearch={deleteSearch}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={toggleCollapse}
+          onNewSearch={handleNewSearch}
+        />
       )}
+      <div className="flex flex-col items-center flex-1">
+        <NotificationHandler />
+        {showOnboarding && <Onboarding />}
+        <Header />
+        <div className="my-4" />
+        {settings.isLoading ? (
+          <div className="flex flex-col items-center justify-center h-full space-y-4">
+            <Skeleton className="w-[200px] h-[24px] rounded-full" />
+            <Skeleton className="w-[300px] h-[20px] rounded-full" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+              {[...Array(5)].map((_, index) => (
+                <Card key={index}>
+                  <CardContent className="p-4">
+                    <Skeleton className="w-full h-[40px]" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        ) : settings.aiUrl ? (
+          <>
+            <h1 className="text-2xl font-bold text-center mb-12">
+              where pixels become magic
+            </h1>
+            <SearchChat 
+              currentSearchId={currentSearchId}
+              onAddSearch={addSearch}
+              searches={searches}
+            />
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
+            <Card className="w-[600px]">
+              <CardHeader>
+                <CardTitle>Welcome to Screenpipe playground</CardTitle>
+                <CardDescription>
+                  Make sure to set your AI provider settings to ask questions
+                  about your data.
+                  <br />
+                  <br />
+                  <div className="aspect-w-16 aspect-h-9">
+                    <iframe
+                      src="https://www.youtube.com/embed/u2GfjvEY6tk"
+                      title="Onboarding Video"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-[300px] rounded-lg shadow-lg"
+                    ></iframe>
+                  </div>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Settings />
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
