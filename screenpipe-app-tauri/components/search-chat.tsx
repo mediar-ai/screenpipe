@@ -81,17 +81,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { SearchHistory } from "@/lib/types/history";
 
-
-    
-interface SearchChatProps {
-  currentSearchId: string | null;
-  onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
-  searches: SearchHistory[];
-}
-
-export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
-  
-  interface Agent {
+interface Agent {
   id: string;
   name: string;
   description: string;
@@ -159,6 +149,15 @@ const AGENTS: Agent[] = [
         })),
   },
 ];
+
+export function SearchChat() {
+interface SearchChatProps {
+  currentSearchId: string | null;
+  onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
+  searches: SearchHistory[];
+}
+
+export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
   // Search state
   const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
