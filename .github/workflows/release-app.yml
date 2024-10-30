@@ -151,6 +151,7 @@ jobs:
           pip install mkl mkl-devel mkl-static
           mkdir -p /opt/intel/mkl
           cp -rfv ~/.local/lib/* ~/.local/include/* /opt/intel/mkl/
+          sudo cp -rfv ~/.local/lib/* /usr/lib/x86_64-linux-gnu/
 
       - name: Install frontend dependencies
         shell: bash
@@ -219,12 +220,20 @@ jobs:
 
       - name: Free Disk Space (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo swapoff -a
-          sudo rm -f /swapfile
-          sudo apt clean
-          docker rmi $(docker image ls -aq)
-          df -h
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+        
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
@@ -243,6 +252,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
+          # ubuntu mkl
+          PKG_CONFIG_PATH: ${{ matrix.platform == 'ubuntu-22.04' && '~/.local/lib/pkgconfig:$PKG_CONFIG_PATH' || '' }}
+          MKLROOT: ${{ matrix.platform == 'ubuntu-22.04' && '/opt/intel/mkl' || '' }}
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.platform == 'windows-latest' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.platform == 'windows-latest' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}

@@ -44,6 +44,7 @@ const config = {
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
 			'libxdo-dev',
+			'intel-openmp'
 		],
 	},
 	macos: {
@@ -102,10 +103,10 @@ async function installBun() {
 	console.log('installing bun...');
 
 	if (platform === 'windows') {
-		console.log('attempting to install bun using powershell...');
+		console.log('attempting to install bun using npm...');
 		try {
-			await $`powershell -Command "irm bun.sh/install.ps1|iex"`;
-			console.log('bun installed successfully using powershell.');
+			await $`npm install -g bun`;
+			console.log('bun installed successfully using npm.');
 		} catch (error) {
 			console.error('failed to install bun:', error);
 			console.error('please install bun manually.');
@@ -124,8 +125,67 @@ async function copyBunBinary() {
 
 	let bunSrc, bunDest1, bunDest2;
 	if (platform === 'windows') {
-		bunSrc = path.join(os.homedir(), 'AppData', 'Local', 'bun', 'bun.exe');
+		// Get and log npm global prefix
+		const npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
+		console.log('npm global prefix:', npmGlobalPrefix);
+
+		// Try to find bun location using system commands
+		let bunPathFromSystem;
+		try {
+			bunPathFromSystem = (await $`where.exe bun`.text()).trim().split('\n')[0];
+		} catch {
+			try {
+				bunPathFromSystem = (await $`which bun`.text()).trim();
+			} catch {
+				console.log('could not find bun using where.exe or which');
+			}
+		}
+
+		if (bunPathFromSystem) {
+			console.log('found bun using system command at:', bunPathFromSystem);
+		}
+
+		const possibleBunPaths = [
+			// Add system-found path if it exists
+			bunPathFromSystem,
+			// Bun's default installer location
+			path.join(os.homedir(), '.bun', 'bin', 'bun.exe'),
+			// npm global paths
+			path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe'),
+			path.join(npmGlobalPrefix, 'bun.exe'),
+			path.join(npmGlobalPrefix, 'bin', 'bun.exe'),
+			// AppData paths
+			path.join(os.homedir(), 'AppData', 'Local', 'bun', 'bun.exe'),
+			// Direct paths
+			'C:\\Program Files\\bun\\bun.exe',
+			'C:\\Program Files (x86)\\bun\\bun.exe',
+			// System path
+			'bun.exe'
+		].filter(Boolean);
+
+		console.log('searching bun in these locations:');
+		possibleBunPaths.forEach(p => console.log('- ' + p));
+
+		bunSrc = null;
+		for (const possiblePath of possibleBunPaths) {
+			try {
+				await fs.access(possiblePath);
+				console.log('found bun at:', possiblePath);
+				bunSrc = possiblePath;
+				break;
+			} catch {
+				continue;
+			}
+		}
+
+		if (!bunSrc) {
+			throw new Error('Could not find bun.exe in any expected location. Please check if bun is installed correctly');
+		}
+
+		// Define the destination path
 		bunDest1 = path.join(cwd, 'bun-x86_64-pc-windows-msvc.exe');
+		console.log('copying bun from:', bunSrc);
+		console.log('copying bun to:', bunDest1);
 	} else if (platform === 'macos') {
 		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
 		bunDest1 = path.join(cwd, 'bun-aarch64-apple-darwin');
@@ -143,7 +203,7 @@ async function copyBunBinary() {
 	try {
 		await fs.access(bunSrc);
 		await copyFile(bunSrc, bunDest1);
-		console.log(`bun binary copied successfully to ${bunDest1}`);
+		console.log(`bun binary copied successfully from ${bunSrc} to ${bunDest1}`);
 
 		if (platform === 'macos') {
 			await copyFile(bunSrc, bunDest2);
@@ -151,6 +211,7 @@ async function copyBunBinary() {
 		}
 	} catch (error) {
 		console.error('failed to copy bun binary:', error);
+		console.error('source path:', bunSrc);
 		process.exit(1);
 	}
 }
