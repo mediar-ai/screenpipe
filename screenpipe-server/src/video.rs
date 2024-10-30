@@ -16,7 +16,7 @@ use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
 
-const MAX_FPS: f64 = 30.0; // Adjust based on your needs
+pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
 
 pub struct VideoCapture {
@@ -144,7 +144,7 @@ impl VideoCapture {
     }
 }
 
-async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
+pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
         warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
@@ -201,7 +201,7 @@ async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyh
     Ok(child)
 }
 
-async fn write_frame_to_ffmpeg(stdin: &mut ChildStdin, buffer: &[u8]) -> Result<(), anyhow::Error> {
+pub async fn write_frame_to_ffmpeg(stdin: &mut ChildStdin, buffer: &[u8]) -> Result<(), anyhow::Error> {
     stdin.write_all(buffer).await?;
     Ok(())
 }
@@ -383,7 +383,7 @@ async fn flush_ffmpeg_input(stdin: &mut ChildStdin, frame_count: usize, fps: f64
     }
 }
 
-async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
+pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
     drop(stdin); // Ensure stdin is closed
     match child.wait_with_output().await {
         Ok(output) => {
