@@ -164,6 +164,13 @@ async fn main() -> anyhow::Result<()> {
                 SileroVad::new().await.unwrap();
 
                 // Check if FFmpeg is working properly
+                if let Some(ffmpeg_path) = find_ffmpeg_path() {
+                    println!("ffmpeg found at: {:?}", ffmpeg_path);
+                } else {
+                    eprintln!("failed to find or install ffmpeg.");
+                    return Err(anyhow::anyhow!("ffmpeg installation failed"));
+                }
+
                 match check_ffmpeg().await {
                     Ok(_) => info!("FFmpeg is working properly"),
                     Err(e) => {
@@ -174,12 +181,6 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 info!("screenpipe setup complete");
-                if let Some(ffmpeg_path) = find_ffmpeg_path() {
-                    println!("ffmpeg found at: {:?}", ffmpeg_path);
-                } else {
-                    eprintln!("failed to find or install ffmpeg.");
-                    return Err(anyhow::anyhow!("ffmpeg installation failed"));
-                }
                 return Ok(());
             }
         }
