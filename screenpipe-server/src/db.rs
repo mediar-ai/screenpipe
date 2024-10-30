@@ -158,7 +158,7 @@ impl DatabaseManager {
         }
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(10)
+            .max_connections(50)
             .min_connections(3) // Minimum number of idle connections
             .acquire_timeout(Duration::from_secs(10))
             .connect(&connection_string)
@@ -261,7 +261,11 @@ impl DatabaseManager {
         Ok(affected as i64)
     }
 
-    pub async fn insert_video_chunk(&self, file_path: &str, device_name: &str) -> Result<i64, sqlx::Error> {
+    pub async fn insert_video_chunk(
+        &self,
+        file_path: &str,
+        device_name: &str,
+    ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         let id = sqlx::query("INSERT INTO video_chunks (file_path, device_name) VALUES (?1, ?2)")
             .bind(file_path)
@@ -273,19 +277,21 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_frame(&self, 
-        device_name: &str, 
+    pub async fn insert_frame(
+        &self,
+        device_name: &str,
         timestamp: Option<DateTime<Utc>>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
 
         // Get the most recent video_chunk_id
-        let video_chunk_id: Option<i64> =
-            sqlx::query_scalar("SELECT id FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1")
-                .bind(device_name)
-                .fetch_optional(&mut *tx)
-                .await?;
+        let video_chunk_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1",
+        )
+        .bind(device_name)
+        .fetch_optional(&mut *tx)
+        .await?;
         debug!("Fetched most recent video_chunk_id: {:?}", video_chunk_id);
 
         // If no video chunk is found, return 0
@@ -306,7 +312,7 @@ impl DatabaseManager {
         .fetch_one(&mut *tx)
         .await?;
         debug!("insert_frame Calculated offset_index: {}", offset_index);
-        
+
         let timestamp = timestamp.unwrap_or_else(Utc::now);
 
         // Insert the new frame
@@ -613,7 +619,7 @@ impl DatabaseManager {
             AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
         "#,
         );
-    
+
         sql.push_str(
             r#"
         GROUP BY
@@ -626,7 +632,7 @@ impl DatabaseManager {
         LIMIT ?6 OFFSET ?7
         "#,
         );
-    
+
         let query = sqlx::query_as::<_, AudioResultRaw>(&sql)
             .bind(query)
             .bind(start_time)
@@ -635,9 +641,9 @@ impl DatabaseManager {
             .bind(max_length.map(|l| l as i64))
             .bind(limit)
             .bind(offset);
-    
+
         let audio_results_raw = query.fetch_all(&self.pool).await?;
-    
+
         // Parse the tags string into a Vec<String>
         let audio_results = audio_results_raw
             .into_iter()
@@ -660,7 +666,7 @@ impl DatabaseManager {
                 },
             })
             .collect();
-    
+
         Ok(audio_results)
     }
 
@@ -1215,6 +1221,49 @@ impl DatabaseManager {
             result.into_iter().map(serde_json::Value::Object).collect(),
         ))
     }
+
+    pub async fn get_video_chunks_in_range(
+        &self,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+    ) -> Result<Vec<VideoChunk>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT 
+                vc.file_path,
+                f.timestamp as start_time,
+                COALESCE(
+                    LEAD(f.timestamp) OVER (ORDER BY f.timestamp),
+                    datetime('now')
+                ) as end_time,
+                ot.app_name,
+                ot.window_name
+            FROM frames f
+            JOIN video_chunks vc ON f.video_chunk_id = vc.id
+            LEFT JOIN ocr_text ot ON f.id = ot.frame_id
+            WHERE f.timestamp <= ? AND f.timestamp >= ?
+            GROUP BY f.id
+            ORDER BY f.timestamp ASC
+            "#,
+        )
+        .bind(end_time)
+        .bind(start_time)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let chunks = rows
+            .iter()
+            .map(|row| VideoChunk {
+                file_path: row.get("file_path"),
+                start_time: row.get("start_time"),
+                end_time: row.get("end_time"),
+                app_name: row.get("app_name"),
+                window_name: row.get("window_name"),
+            })
+            .collect();
+
+        Ok(chunks)
+    }
 }
 
 impl Clone for DatabaseManager {
@@ -1308,5 +1357,20 @@ impl FriendWearableDatabase for DatabaseManager {
         )
         .await
         .map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)
+    }
+}
+
+#[derive(Debug)]
+pub struct VideoChunk {
+    pub file_path: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub app_name: Option<String>,
+    pub window_name: Option<String>,
+}
+
+impl VideoChunk {
+    pub fn contains_time(&self, time: DateTime<Utc>) -> bool {
+        time >= self.start_time && time <= self.end_time
     }
 }

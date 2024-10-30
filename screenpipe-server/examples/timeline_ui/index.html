@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>screenpipe frame stream</title>
+    <style>
+        body {
+            background: #000;
+            color: #fff;
+            font-family: monospace;
+            margin: 0;
+            padding: 20px;
+        }
+        #frame {
+            max-width: 100%;
+            border: 1px solid #333;
+        }
+        #info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        #error {
+            color: #ff4444;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <img id="frame" />
+    <div id="info"></div>
+    <div id="error"></div>
+
+    <script>
+        const endTime = new Date();
+        const startTime = new Date(endTime - 1000 * 60 * 5); // last 5 minutes
+
+        // Properly encode the dates for the URL
+        const url = new URL('http://localhost:3030/stream/frames');
+        url.searchParams.append('start_time', startTime.toISOString());
+        url.searchParams.append('end_time', endTime.toISOString());
+        url.searchParams.append('fps', '1');
+        
+        console.log('connecting to:', url.toString());
+        
+        const eventSource = new EventSource(url.toString(), {
+            withCredentials: false
+        });
+        
+        eventSource.onopen = () => {
+            console.log('connection opened');
+            document.getElementById('error').textContent = 'connected successfully';
+        };
+        
+        eventSource.addEventListener('frame', (event) => {
+            const data = JSON.parse(event.data);
+            document.getElementById('frame').src = `data:image/jpeg;base64,${data.frame}`;
+            document.getElementById('info').textContent = `timestamp: ${data.timestamp} | app: ${data.app_name || 'n/a'} | window: ${data.window_name || 'n/a'}`;
+        });
+
+        eventSource.onerror = (error) => {
+            const errorDetails = {
+                type: error.type,
+                target: {
+                    readyState: eventSource.readyState,
+                    url: url.toString()
+                },
+                timestamp: new Date().toISOString()
+            };
+            
+            console.error('sse error:', errorDetails);
+            document.getElementById('error').textContent = 
+                `error connecting to stream:\n${JSON.stringify(errorDetails, null, 2)}`;
+            eventSource.close();
+        };
+    </script>
+</body>
+</html>
