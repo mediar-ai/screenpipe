@@ -59,7 +59,6 @@ export default function Home() {
 
   const handleNewSearch = () => {
     setCurrentSearchId(null);
-    location.reload();
     // Add any other reset logic you need
   };
 
