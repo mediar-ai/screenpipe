@@ -101,7 +101,7 @@ import type { Settings as SettingsType } from "@/lib/hooks/use-settings";
 import { ShortcutDisplay } from "./shortcut-display";
 
 export function Settings({ className }: { className?: string }) {
-  const { settings, updateSettings, resetSetting } = useSettings();
+  const { settings, updateSettings, resetSetting, loadSettingsFromStore, setSettings } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<
@@ -128,11 +128,17 @@ export function Settings({ className }: { className?: string }) {
   const [listeningFor, setListeningFor] = useState<ShortcutAction | null>(null);
   const [tempShortcut, setTempShortcut] = useState<string>("");
 
-  const [shortcuts, setShortcuts] = useState<Record<ShortcutAction, string>>({
+  const [shortcuts, setShortcuts] = useState<Record<ShortcutAction, string>>(() => ({
     startRecording: settings.recordingShortcut,
     showScreenpipe: settings.showScreenpipeShortcut,
-    // Add other shortcuts as needed
-  });
+  }));
+
+  useEffect(() => {
+    setShortcuts({
+      startRecording: settings.recordingShortcut,
+      showScreenpipe: settings.showScreenpipeShortcut,
+    });
+  }, [settings.recordingShortcut, settings.showScreenpipeShortcut]);
 
   useEffect(() => {
     setCurrentShortcut(settings.showScreenpipeShortcut);
@@ -232,68 +238,28 @@ export function Settings({ className }: { className?: string }) {
     if (!tempShortcut) return;
 
     try {
-      console.log(`Attempting to set ${action} shortcut to:`, tempShortcut);
+      console.log(`Setting ${action} shortcut to:`, tempShortcut);
       
-      // Update local state first
-      setShortcuts(prev => {
-        console.log("Updating local shortcuts state:", { ...prev, [action]: tempShortcut });
-        return { ...prev, [action]: tempShortcut };
-      });
-      
-      // Update settings based on the action
-      const settingsUpdate: Partial<SettingsType> = {};
-      switch(action) {
-        case 'startRecording':
-          settingsUpdate.recordingShortcut = tempShortcut;
-          break;
-        case 'showScreenpipe':
-          settingsUpdate.showScreenpipeShortcut = tempShortcut;
-          break;
-      }
-      
-      console.log("Updating settings with:", settingsUpdate);
-      await updateSettings(settingsUpdate);
-
-      // Register new shortcuts
-      const shortcutConfig = {
-        show_screenpipe_shortcut: action === 'showScreenpipe' ? tempShortcut : shortcuts.showScreenpipe,
-        toggle_recording_shortcut: action === 'startRecording' ? tempShortcut : shortcuts.startRecording,
+      // Update the settings based on the action
+      const settingsUpdate: Partial<typeof Settings> = {
+        [action === 'startRecording' ? 'recordingShortcut' : 'showScreenpipeShortcut']: tempShortcut
       };
-      console.log("Registering shortcuts with config:", shortcutConfig);
       
-      await registerShortcuts(shortcutConfig).catch((error) => {
-        console.error('Failed to register shortcuts. Full error:', error);
-        setShortcuts(prev => ({ ...prev, [action]: shortcuts[action] }));
-        throw error;
-      });
-
-      console.log("Successfully updated shortcut");
+      await updateSettings(settingsUpdate);
+      
+      // Local state will be updated via the effect above
+      
       toast({
         title: "shortcut updated",
-        description: `new ${ACTION_DISPLAY[action]} shortcut set to: ${parseKeyboardShortcut(tempShortcut, isPlatform(currentPlatform) ? currentPlatform : undefined)}`,
+        description: `new ${ACTION_DISPLAY[action]} shortcut set to: ${parseKeyboardShortcut(tempShortcut)}`,
       });
     } catch (error) {
-      console.error('Failed to update shortcut. Full error:', error);
-      if (error instanceof Error) {
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
-      }
-      
-      // Show more specific error message
-      let errorMessage = "Failed to update shortcut";
-      if (error instanceof Error && error.message.includes("not found")) {
-        errorMessage = "Shortcut registration is not available. Please restart the app.";
-      } else {
-        errorMessage = "The shortcut combination might be invalid or already in use";
-      }
-      
+      console.error('Failed to update shortcut:', error);
       toast({
         title: "failed to update shortcut",
-        description: errorMessage,
+        description: "The shortcut could not be updated. Please try again.",
         variant: "destructive",
       });
-      
-      setShortcuts(prev => ({ ...prev, [action]: shortcuts[action] }));
     }
 
     setListeningFor(null);
@@ -663,6 +629,13 @@ export function Settings({ className }: { className?: string }) {
   // Use the useInterval hook to periodically check the status
   useInterval(checkEmbeddedAIStatus, 10000); // Check every 10 seconds
 
+
+  useEffect(() => {
+    const refreshSettings = async () => {
+      await loadSettingsFromStore(setSettings);
+    };
+    refreshSettings();
+  }, []); // Keep empty dependency array
 
   return (
     <Dialog

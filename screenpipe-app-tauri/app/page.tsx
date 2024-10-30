@@ -53,9 +53,15 @@ export default function Home() {
         toggle_recording_shortcut: settings.recordingShortcut,
       };
       
-      debouncedRegisterShortcuts(config);
+      console.log("Page: Registering shortcuts with config:", config);
+      
+      // Only register if we have valid shortcuts
+      if (config.show_screenpipe_shortcut && config.toggle_recording_shortcut) {
+        debouncedRegisterShortcuts(config);
+      } else {
+        console.warn("Invalid shortcut configuration:", config);
+      }
 
-      // Cleanup function
       return () => {
         debouncedRegisterShortcuts.cancel();
       };

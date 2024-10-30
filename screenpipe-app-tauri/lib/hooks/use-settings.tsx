@@ -98,21 +98,208 @@ const defaultSettings: Settings = {
     port: 11438,
   },
   enableBeta: false,
-  showScreenpipeShortcut: "Super+Alt+S",  // Changed from Meta+Alt+S
-  recordingShortcut: "Ctrl+Shift+R",
+  showScreenpipeShortcut: "Super+Alt+F",  // Update default
+  recordingShortcut: "Super+Alt+E",      // Update default
   isFirstTimeUser: true,
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
 
+// First, add a debug function to help track state changes
+const logSettingsDebug = (prefix: string, settings: Partial<Settings>) => {
+  console.log(`[${prefix}] Settings state:`, {
+    showScreenpipeShortcut: settings.showScreenpipeShortcut,
+    recordingShortcut: settings.recordingShortcut,
+    // Add other relevant fields you want to track
+  });
+};
+
+export async function loadSettingsFromStore(setSettings: React.Dispatch<React.SetStateAction<Settings>>) {
+  if (!store) {
+    await initStore();
+  }
+
+  try {
+    console.log("loading settings", store);
+    const currentPlatform = platform();
+    const ocrModel = currentPlatform === "macos" 
+      ? "apple-native" 
+      : currentPlatform === "windows" 
+      ? "windows-native" 
+      : "tesseract";
+
+    // Load all settings with proper defaults
+    const savedKey = await store!.get<string>("openaiApiKey") || "";
+    const savedDeepgramKey = await store!.get<string>("deepgramApiKey") || "7ed2a159a094337b01fd8178b914b7ae0e77822d";
+    const savedAiModel = await store!.get<string>("aiModel") || "gpt-4o";
+    const savedInstalledPipes = await store!.get<Pipe[]>("installedPipes") || [];
+    const savedUserId = await store!.get<string>("userId") || "";
+    const savedCustomPrompt = await store!.get<string>("customPrompt") || "";
+    
+    let savedDevMode = await store!.get<boolean>("devMode");
+    if (savedDevMode === null) savedDevMode = false;
+
+    const savedShowScreenpipeShortcut = await store!.get<string>("showScreenpipeShortcut");
+    const savedRecordingShortcut = await store!.get<string>("recordingShortcut");
+    const savedAudioTranscriptionEngine = await store!.get<string>("audioTranscriptionEngine") || "deepgram";
+    const savedOcrEngine = await store!.get<string>("ocrEngine") || ocrModel;
+    const savedMonitorIds = await store!.get<string[]>("monitorIds") || ["default"];
+    const savedAudioDevices = await store!.get<string[]>("audioDevices") || ["default"];
+    const savedIncludedWindows = await store!.get<string[]>("includedWindows") || [];
+    
+    let savedUsePiiRemoval = await store!.get<boolean>("usePiiRemoval");
+    if (savedUsePiiRemoval === null) savedUsePiiRemoval = false;
+    
+    const savedRestartInterval = await store!.get<number>("restartInterval") || 0;
+    const savedPort = await store!.get<number>("port") || 3030;
+    const savedDataDir = await store!.get<string>("dataDir") || "";
+    
+    let savedDisableAudio = await store!.get<boolean>("disableAudio");
+    if (savedDisableAudio === null) savedDisableAudio = false;
+
+    const savedAiUrl = await store!.get<string>("aiUrl") || "https://api.openai.com/v1";
+    const savedAiMaxContextChars = await store!.get<number>("aiMaxContextChars") || 30000;
+    const savedFps = await store!.get<number>("fps") || (currentPlatform === "macos" ? 0.2 : 1);
+    
+    let savedVadSensitivity = await store!.get<VadSensitivity>("vadSensitivity");
+    if (savedVadSensitivity === null) savedVadSensitivity = "high";
+    
+    let savedAnalyticsEnabled = await store!.get<boolean>("analyticsEnabled");
+    if (savedAnalyticsEnabled === null) savedAnalyticsEnabled = true;
+    
+    const savedAudioChunkDuration = await store!.get<number>("audioChunkDuration") || 30;
+    
+    let savedUseChineseMirror = await store!.get<boolean>("useChineseMirror");
+    if (savedUseChineseMirror === null) savedUseChineseMirror = false;
+    
+    const savedEmbeddedLLM = await store!.get<EmbeddedLLMConfig>("embeddedLLM") || {
+      enabled: false,
+      model: "llama3.2:1b-instruct-q4_K_M",
+      port: 11438,
+    };
+
+    const savedLanguages = await store!.get<Language[]>("languages") || [];
+    
+    let savedEnableBeta = await store!.get<boolean>("enableBeta");
+    if (savedEnableBeta === null) savedEnableBeta = false;
+
+    let savedIsFirstTimeUser = await store!.get<boolean>("isFirstTimeUser");
+    if (savedIsFirstTimeUser === null) savedIsFirstTimeUser = true;
+
+    let savedAiProviderType = await store!.get<AIProviderType>("aiProviderType");
+    if (savedAiProviderType === null) savedAiProviderType = "openai";
+
+    // Define ignored windows based on platform
+    const ignoredWindowsInAllOS = [
+      "bit", "VPN", "Trash", "Private", "Incognito", "Wallpaper",
+      "Settings", "Keepass", "Recorder", "Vaults", "OBS Studio",
+    ];
+
+    const defaultIgnoredWindows = currentPlatform === "macos"
+      ? [
+          ...ignoredWindowsInAllOS,
+          ".env", "Item-0", "App Icon Window", "Battery",
+          "Shortcuts", "WiFi", "BentoBox", "Clock", "Dock", "DeepL",
+        ]
+      : currentPlatform === "windows"
+      ? [
+          ...ignoredWindowsInAllOS,
+          "Nvidia", "Control Panel", "System Properties",
+        ]
+      : currentPlatform === "linux"
+      ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
+      : [];
+
+    const savedIgnoredWindows = await store!.get<string[]>("ignoredWindows");
+    const finalIgnoredWindows = savedIgnoredWindows?.length ? savedIgnoredWindows : defaultIgnoredWindows;
+
+    // Create merged settings with all values
+    const mergedSettings: Settings = {
+      openaiApiKey: savedKey,
+      deepgramApiKey: savedDeepgramKey,
+      isLoading: false,
+      aiModel: savedAiModel,
+      installedPipes: savedInstalledPipes,
+      userId: savedUserId,
+      customPrompt: savedCustomPrompt,
+      devMode: savedDevMode,
+      audioTranscriptionEngine: savedAudioTranscriptionEngine,
+      ocrEngine: savedOcrEngine,
+      monitorIds: savedMonitorIds,
+      audioDevices: savedAudioDevices,
+      usePiiRemoval: savedUsePiiRemoval,
+      restartInterval: savedRestartInterval,
+      port: savedPort,
+      dataDir: savedDataDir,
+      disableAudio: savedDisableAudio,
+      ignoredWindows: finalIgnoredWindows,
+      includedWindows: savedIncludedWindows,
+      aiProviderType: savedAiProviderType,
+      aiUrl: savedAiUrl,
+      aiMaxContextChars: savedAiMaxContextChars,
+      fps: savedFps,
+      vadSensitivity: savedVadSensitivity,
+      analyticsEnabled: savedAnalyticsEnabled,
+      audioChunkDuration: savedAudioChunkDuration,
+      useChineseMirror: savedUseChineseMirror,
+      embeddedLLM: savedEmbeddedLLM,
+      languages: savedLanguages,
+      enableBeta: savedEnableBeta,
+      showScreenpipeShortcut: savedShowScreenpipeShortcut || defaultSettings.showScreenpipeShortcut,
+      recordingShortcut: savedRecordingShortcut || defaultSettings.recordingShortcut,
+      isFirstTimeUser: savedIsFirstTimeUser,
+    };
+
+    // Update UI state
+    setSettings(mergedSettings);
+    
+    logSettingsDebug("After SetSettings", mergedSettings);
+
+  } catch (error) {
+    console.error("Failed to load settings:", error);
+    setSettings(prev => ({ ...prev, isLoading: false }));
+  }
+}
+
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
 
+  // Add debug effect to track settings changes
   useEffect(() => {
-    posthog.identify(settings.userId);
-  }, [settings.userId]);
+    logSettingsDebug("Settings Changed", settings);
+  }, [settings.showScreenpipeShortcut, settings.recordingShortcut]);
 
-  // console.log("settings", settings);
+  useEffect(() => {
+    loadSettingsFromStore(setSettings);
+  }, []);
+
+  const updateSettings = async (newSettings: Partial<Settings>) => {
+    if (!store) {
+      await initStore();
+    }
+
+    try {
+      // Create updated settings object
+      const updatedSettings = { ...settings, ...newSettings };
+      
+      // Update store for each changed setting
+      for (const [key, value] of Object.entries(newSettings)) {
+        await store!.set(key, value);
+      }
+      
+      // Explicit save
+      await store!.save();
+      
+      // Update state after successful store update
+      setSettings(updatedSettings);
+      
+      console.log("Settings updated successfully:", updatedSettings);
+    } catch (error) {
+      console.error("Failed to update settings:", error);
+      throw error; // Let the component handle the error
+    }
+  };
+
   const resetSetting = async (key: keyof Settings) => {
     if (!store) {
       await initStore();
@@ -130,238 +317,7 @@ export function useSettings() {
     }
   };
 
-  useEffect(() => {
-    const loadSettings = async () => {
-      if (!store) {
-        await initStore();
-      }
-
-      const ocrModel =
-        platform() === "macos"
-          ? "apple-native"
-          : platform() === "windows"
-          ? "windows-native"
-          : "tesseract";
-      try {
-        console.log("loading settings", store);
-        // no need to call load() as it's done automatically
-        const savedKey = (await store!.get<string>("openaiApiKey")) || "";
-        const savedDeepgramKey =
-          (await store!.get<string>("deepgramApiKey")) ||
-          "7ed2a159a094337b01fd8178b914b7ae0e77822d";
-        const savedAiModel = (await store!.get<string>("aiModel")) || "gpt-4o";
-        const savedInstalledPipes =
-          (await store!.get<Pipe[]>("installedPipes")) || [];
-        const savedUserId = (await store!.get<string>("userId")) || "";
-        const savedCustomPrompt =
-          (await store!.get<string>("customPrompt")) || "";
-        let savedDevMode = await store!.get<boolean>("devMode");
-        if (savedDevMode === null) {
-          savedDevMode = false;
-        }
-        console.log("savedDevMode", savedDevMode);
-
-        const savedAudioTranscriptionEngine =
-          (await store!.get<string>("audioTranscriptionEngine")) || "deepgram";
-        const savedOcrEngine =
-          (await store!.get<string>("ocrEngine")) || ocrModel;
-        const savedMonitorIds = (await store!.get<string[]>("monitorIds")) || [
-          "default",
-        ];
-        const savedAudioDevices = (await store!.get<string[]>(
-          "audioDevices"
-        )) || ["default"];
-        let savedUsePiiRemoval = await store!.get<boolean>("usePiiRemoval");
-        if (savedUsePiiRemoval === null) {
-          savedUsePiiRemoval = false;
-        }
-        const savedRestartInterval =
-          (await store!.get<number>("restartInterval")) || 0;
-        const savedPort = (await store!.get<number>("port")) || 3030;
-        const savedDataDir = (await store!.get<string>("dataDir")) || "";
-        let savedDisableAudio = await store!.get<boolean>("disableAudio");
-        if (savedDisableAudio === null) {
-          savedDisableAudio = false;
-        }
-
-        const savedIncludedWindows =
-          (await store!.get<string[]>("includedWindows")) || [];
-        const savedAiUrl =
-          (await store!.get<string>("aiUrl")) || "https://api.openai.com/v1";
-        const savedAiMaxContextChars =
-          (await store!.get<number>("aiMaxContextChars")) || 30000;
-        const savedFps =
-          (await store!.get<number>("fps")) ||
-          (platform() === "macos" ? 0.2 : 1);
-        const savedVadSensitivity =
-          (await store!.get<VadSensitivity>("vadSensitivity")) || "high";
-        let savedAnalyticsEnabled = await store!.get<boolean>(
-          "analyticsEnabled"
-        );
-        if (savedAnalyticsEnabled === null) {
-          savedAnalyticsEnabled = true;
-        }
-        console.log("savedAnalyticsEnabled", savedAnalyticsEnabled);
-        const savedAudioChunkDuration =
-          (await store!.get<number>("audioChunkDuration")) || 30;
-        let savedUseChineseMirror = await store!.get<boolean>(
-          "useChineseMirror"
-        );
-        if (savedUseChineseMirror === null) {
-          savedUseChineseMirror = false;
-        }
-        const savedEmbeddedLLM = (await store!.get<EmbeddedLLMConfig>(
-          "embeddedLLM"
-        )) || {
-          enabled: false,
-          model: "llama3.2:1b-instruct-q4_K_M",
-          port: 11438,
-        };
-
-        const savedLanguages =
-          (await store!.get<Language[]>("languages")) || [];
-
-        const currentPlatform = platform();
-        const ignoredWindowsInAllOS = [
-          "bit",
-          "VPN",
-          "Trash",
-          "Private",
-          "Incognito",
-          "Wallpaper",
-          "Settings",
-          "Keepass",
-          "Recorder",
-          "Vaults",
-          "OBS Studio",
-        ];
-        const defaultIgnoredWindows =
-          currentPlatform === "macos"
-            ? [
-                ...ignoredWindowsInAllOS,
-                ".env",
-                "Item-0",
-                "App Icon Window",
-                "Battery",
-                "Shortcuts",
-                "WiFi",
-                "BentoBox",
-                "Clock",
-                "Dock",
-                "DeepL",
-              ]
-            : currentPlatform === "windows"
-            ? [
-                ...ignoredWindowsInAllOS,
-                "Nvidia",
-                "Control Panel",
-                "System Properties",
-              ]
-            : currentPlatform === "linux"
-            ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
-            : [];
-
-        const savedIgnoredWindows = await store!.get<string[]>(
-          "ignoredWindows"
-        );
-        const finalIgnoredWindows =
-          savedIgnoredWindows && savedIgnoredWindows.length > 0
-            ? savedIgnoredWindows
-            : defaultIgnoredWindows;
-
-        let savedEnableBeta = await store!.get<boolean>("enableBeta");
-        if (savedEnableBeta === null) {
-          savedEnableBeta = false;
-        }
-
-        const savedShowScreenpipeShortcut =
-          (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
-
-
-        const savedRecordingShortcut = (await store!.get<string>("recordingShortcut")) || "Ctrl+Shift+R";
-
-        let savedIsFirstTimeUser = await store!.get<boolean>("isFirstTimeUser");
-        if (savedIsFirstTimeUser === null) {
-          savedIsFirstTimeUser = true;
-        }
-        const savedAiProviderType =
-          (await store!.get<AIProviderType>("aiProviderType")) || "openai";
-
-
-        setSettings({
-          openaiApiKey: savedKey,
-          deepgramApiKey: savedDeepgramKey,
-          isLoading: false,
-          aiModel: savedAiModel,
-          installedPipes: savedInstalledPipes,
-          userId: savedUserId,
-          customPrompt: savedCustomPrompt,
-          devMode: savedDevMode,
-          audioTranscriptionEngine: savedAudioTranscriptionEngine,
-          ocrEngine: savedOcrEngine,
-          monitorIds: savedMonitorIds,
-          audioDevices: savedAudioDevices,
-          usePiiRemoval: savedUsePiiRemoval,
-          restartInterval: savedRestartInterval,
-          port: savedPort,
-          dataDir: savedDataDir,
-          disableAudio: savedDisableAudio,
-          ignoredWindows: finalIgnoredWindows,
-          includedWindows: savedIncludedWindows,
-          aiProviderType: savedAiProviderType,
-          aiUrl: savedAiUrl,
-          aiMaxContextChars: savedAiMaxContextChars,
-          fps: savedFps,
-          vadSensitivity: savedVadSensitivity,
-          analyticsEnabled: savedAnalyticsEnabled,
-          audioChunkDuration: savedAudioChunkDuration,
-          useChineseMirror: savedUseChineseMirror,
-          embeddedLLM: savedEmbeddedLLM,
-          languages: savedLanguages,
-          enableBeta: savedEnableBeta,
-          showScreenpipeShortcut: savedShowScreenpipeShortcut,
-
-          recordingShortcut: savedRecordingShortcut,
-
-          isFirstTimeUser: savedIsFirstTimeUser,
-
-        });
-      } catch (error) {
-        console.error("failed to load settings:", error);
-        setSettings((prevSettings) => ({ ...prevSettings, isLoading: false }));
-      }
-    };
-    loadSettings();
-  }, []);
-
-  const updateSettings = async (newSettings: Partial<Settings>) => {
-    if (!store) {
-      await initStore();
-    }
-
-    try {
-      console.log("Updating settings:", newSettings); // Add this line
-      const updatedSettings = { ...settings, ...newSettings };
-      setSettings(updatedSettings);
-
-      // update the store for the fields that were changed
-      for (const key in newSettings) {
-        if (Object.prototype.hasOwnProperty.call(newSettings, key)) {
-          console.log(
-            `Setting ${key}:`,
-            updatedSettings[key as keyof Settings]
-          ); // Add this line
-          await store!.set(key, updatedSettings[key as keyof Settings]);
-        }
-      }
-      await store!.save();
-    } catch (error) {
-      console.error("failed to update settings:", error);
-      setSettings(settings);
-    }
-  };
-
-  return { settings, updateSettings, resetSetting };
+  return { settings, updateSettings, resetSetting, loadSettingsFromStore, setSettings };
 }
 
 async function initStore() {

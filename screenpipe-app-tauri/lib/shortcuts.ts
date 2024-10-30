@@ -15,28 +15,39 @@ export async function registerShortcuts(config: ShortcutConfig) {
 
   try {
     isRegistering = true;
-    console.log("Attempting to register shortcuts with config:", config);
+    console.log("Attempting to register shortcuts:", {
+      show: config.show_screenpipe_shortcut,
+      record: config.toggle_recording_shortcut
+    });
     
+    // First unregister existing shortcuts
     try {
-      console.log("Unregistering existing shortcuts...");
       await invoke("unregister_all_shortcuts");
+      console.log("Successfully unregistered existing shortcuts");
     } catch (error) {
-      if (typeof error === 'object' && error !== null && 'toString' in error) {
-        if (!error.toString().includes("not found")) {
-          console.warn("Failed to unregister shortcuts:", error);
-        }
+      if (error instanceof Error && !error.message.includes("not found")) {
+        console.warn("Failed to unregister shortcuts:", error);
       }
     }
     
-    console.log("Registering new shortcuts...");
+    // Validate shortcuts
+    if (!config.show_screenpipe_shortcut || !config.toggle_recording_shortcut) {
+      console.error("Invalid shortcut configuration:", config);
+      throw new Error("Invalid shortcut configuration");
+    }
+
+    // Register new shortcuts
     await invoke("register_shortcuts", {
       show_screenpipe_shortcut: config.show_screenpipe_shortcut,
       toggle_recording_shortcut: config.toggle_recording_shortcut,
     });
-    
-    console.log("Successfully registered shortcuts");
+
+    console.log("Successfully registered new shortcuts:", {
+      show: config.show_screenpipe_shortcut,
+      record: config.toggle_recording_shortcut
+    });
   } catch (error) {
-    console.error("Failed to register shortcuts. Full error:", error);
+    console.error("Failed to register shortcuts. Error:", error);
     throw error;
   } finally {
     isRegistering = false;

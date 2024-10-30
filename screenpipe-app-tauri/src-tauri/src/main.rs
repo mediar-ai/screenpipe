@@ -130,7 +130,7 @@ async fn main() {
         debug!("Event state: {:?}", event.state());
         
         // Load shortcuts from store
-        let path = app.path().app_config_dir().unwrap().join("shortcuts.json");
+        let path = app.path().local_data_dir().unwrap().join("screenpipe").join("store.bin");
         // app.store(path);
         let store = app.store(path);
         debug!("Shortcuts.json contents for show_screenpipe_shortcut: {:?}", store.get("show_screenpipe_shortcut"));
