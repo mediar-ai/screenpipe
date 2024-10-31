@@ -714,7 +714,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Start the UI monitoring task
-    #[cfg(all(target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     let _ui_handle: JoinHandle<()> = {
         if cli.enable_ui_monitoring {
             let shutdown_tx_clone = shutdown_tx.clone();
