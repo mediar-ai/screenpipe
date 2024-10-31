@@ -176,7 +176,7 @@ pub fn stt_sync(
 
 fn process_with_whisper(
     whisper_model: &mut WhisperModel,
-    speech_frames: &[f32],
+    segments: Vec<Segment>,
     mel_filters: &[f32],
     languages: Vec<Language>,
 ) -> Result<String> {
@@ -184,52 +184,6 @@ fn process_with_whisper(
     let tokenizer = &whisper_model.tokenizer;
     let device = &whisper_model.device;
     let mut final_transcript = String::new();
-
-    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-
-    let embedding_model_path = project_dir
-        .join("models")
-        .join("pyannote")
-        .join("wespeaker_en_voxceleb_CAM++.onnx");
-
-    let segmentation_model_path = project_dir
-        .join("models")
-        .join("pyannote")
-        .join("segmentation-3.0.onnx");
-
-    let mut embedding_extractor = EmbeddingExtractor::new(
-        embedding_model_path
-            .to_str()
-            .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
-    )?;
-    let mut embedding_manager = EmbeddingManager::new(usize::MAX);
-
-    let segments = get_segments(
-        speech_frames,
-        16000,
-        &segmentation_model_path,
-        &mut embedding_extractor,
-        &mut embedding_manager,
-    )?
-    .collect::<Result<Vec<_>, _>>()?;
-    //
-    // // merge segments that have the same speaker
-    // let mut merged_segments = Vec::new();
-    //
-    // for segment in segments {
-    //     if merged_segments.is_empty() {
-    //         merged_segments.push(segment);
-    //     } else if merged_segments.last().unwrap().speaker == segment.speaker {
-    //         merged_segments.last_mut().unwrap().end = segment.end;
-    //         merged_segments
-    //             .last_mut()
-    //             .unwrap()
-    //             .samples
-    //             .extend(segment.samples);
-    //     } else {
-    //         merged_segments.push(segment);
-    //     }
-    // }
 
     let mut iter = 1;
     for segment in segments {
@@ -376,6 +330,33 @@ pub async fn stt(
 
     let audio_data = normalize_v2(&audio_data);
 
+    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let embedding_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("wespeaker_en_voxceleb_CAM++.onnx");
+
+    let segmentation_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("segmentation-3.0.onnx");
+
+    let mut embedding_extractor = EmbeddingExtractor::new(
+        embedding_model_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
+    )?;
+    let mut embedding_manager = EmbeddingManager::new(usize::MAX);
+
+    let mut segments = get_segments(
+        &audio_data,
+        16000,
+        &segmentation_model_path,
+        &mut embedding_extractor,
+        &mut embedding_manager,
+    )?;
+
     let frame_size = 1600; // 100ms frame size for 16kHz audio
     let mut speech_frames = Vec::new();
     let mut total_frames = 0;
@@ -383,24 +364,28 @@ pub async fn stt(
 
     let mut noise = 0.;
 
-    for chunk in audio_data.chunks(frame_size) {
-        total_frames += 1;
-        match vad_engine.audio_type(chunk) {
-            Ok(status) => match status {
-                VadStatus::Speech => {
-                    let processed_audio = spectral_subtraction(chunk, noise)?;
-                    speech_frames.extend(processed_audio);
-                    speech_frame_count += 1;
+    for segment in segments.iter_mut() {
+        let mut audio_frames = Vec::new();
+        for chunk in segment.samples.chunks(frame_size) {
+            total_frames += 1;
+            match vad_engine.audio_type(chunk) {
+                Ok(status) => match status {
+                    VadStatus::Speech => {
+                        let processed_audio = spectral_subtraction(chunk, noise)?;
+                        audio_frames.extend(processed_audio);
+                        speech_frame_count += 1;
+                    }
+                    _ => {
+                        noise = average_noise_spectrum(chunk);
+                    }
+                },
+                Err(e) => {
+                    debug!("VAD failed for chunk: {:?}", e);
                 }
-                VadStatus::Unknown => {
-                    noise = average_noise_spectrum(chunk);
-                }
-                _ => {}
-            },
-            Err(e) => {
-                debug!("VAD failed for chunk: {:?}", e);
             }
         }
+        segment.samples = audio_frames.clone();
+        speech_frames.extend(audio_frames);
     }
 
     let speech_duration_ms = speech_frame_count * 100; // Each frame is 100ms
@@ -457,7 +442,7 @@ pub async fn stt(
                     // Fallback to Whisper
                     process_with_whisper(
                         &mut *whisper_model,
-                        &speech_frames,
+                        segments,
                         &mel_filters,
                         languages.clone(),
                     )
@@ -465,7 +450,7 @@ pub async fn stt(
             }
         } else {
             // Existing Whisper implementation
-            process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
+            process_with_whisper(&mut *whisper_model, segments, &mel_filters, languages)
         };
 
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();

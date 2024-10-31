@@ -104,23 +104,16 @@ async fn main() -> Result<()> {
                 &mut embedding_extractor,
                 &mut embedding_manager,
             )?;
-            let segments: Vec<_> = segments.collect();
             let segments_len = segments.len();
             println!("Found {} segments", segments_len);
 
             for segment in segments {
-                if let Ok(segment) = segment {
-                    if let Err(error) = process_segment(
-                        segment,
-                        &mut embedding_extractor,
-                        &mut embedding_manager,
-                        search_threshold,
-                    ) {
-                        eprintln!("Error processing segment: {:?}", error);
-                    }
-                } else if let Err(error) = segment {
-                    eprintln!("Failed to process segment: {:?}", error);
-                }
+                process_segment(
+                    segment,
+                    &mut embedding_extractor,
+                    &mut embedding_manager,
+                    search_threshold,
+                )?;
             }
             samples.clear();
         }
