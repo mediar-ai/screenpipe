@@ -260,14 +260,14 @@ export function RecordingSettings({
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       toast({
-        title: "Settings updated successfully",
-        description: "Screenpipe has been restarted with new settings.",
+        title: "settings updated successfully",
+        description: "screenpipe has been restarted with new settings.",
       });
     } catch (error) {
-      console.error("Failed to update settings:", error);
+      console.error("failed to update settings:", error);
       toast({
-        title: "Error updating settings",
-        description: "Please try again or check the logs for more information.",
+        title: "error updating settings",
+        description: "please try again or check the logs for more information.",
         variant: "destructive",
       });
     } finally {
@@ -544,6 +544,17 @@ export function RecordingSettings({
         setLocalSettings({ ...localSettings, enableBeta: false });
       }
     }
+  };
+
+  const handleFrameCacheToggle = (checked: boolean) => {
+    setLocalSettings({
+      ...localSettings,
+      enableFrameCache: checked,
+    });
+  };
+
+  const handleShowTimeline = async () => {
+    await invoke("show_timeline");
   };
 
   return (
@@ -1334,6 +1345,48 @@ export function RecordingSettings({
                 </Label>
               </div>
             )}
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="frame-cache-toggle"
+                    checked={localSettings.enableFrameCache}
+                    onCheckedChange={handleFrameCacheToggle}
+                  />
+                  <Label
+                    htmlFor="frame-cache-toggle"
+                    className="flex items-center space-x-2"
+                  >
+                    <span>enable timeline UI</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>
+                            experimental feature that provides a timeline UI
+                            (like rewind.ai).
+                            <br />
+                            may increase CPU usage and memory consumption.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                </div>
+                {localSettings.enableFrameCache && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleShowTimeline}
+                    className="ml-2"
+                  >
+                    show timeline
+                  </Button>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

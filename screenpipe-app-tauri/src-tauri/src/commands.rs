@@ -126,6 +126,33 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
     }
 }
 
+#[tauri::command]
+pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("timeline") {
+        #[cfg(target_os = "macos")]
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+        let _ = window.set_visible_on_all_workspaces(true);
+        let _ = window.set_always_on_top(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "timeline",
+            tauri::WebviewUrl::App("timeline.html".into()),
+        )
+        .title("timeline")
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible_on_all_workspaces(true) // Added this
+        .center()
+        .build()
+        .unwrap();
+    }
+}
+
 const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 
 #[tauri::command(rename_all = "snake_case")]
@@ -143,7 +170,7 @@ pub fn update_show_screenpipe_shortcut(
 
     // Try to parse the new shortcut, fall back to default if it fails
     let shortcut_str = match new_shortcut.parse::<Shortcut>() {
-        Ok(s) => new_shortcut,
+        Ok(_s) => new_shortcut,
         Err(e) => {
             info!(
                 "invalid shortcut '{}': {}, falling back to default",
@@ -182,6 +209,7 @@ pub fn update_show_screenpipe_shortcut(
 
         return Err("failed to set shortcut, reverted to default".to_string());
     }
+
 
     Ok(())
 }
