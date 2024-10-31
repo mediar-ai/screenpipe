@@ -3,6 +3,19 @@ import ApplicationServices
 import Foundation
 import SQLite3
 
+// Force stdout to flush immediately
+setbuf(__stdoutp, nil)
+print("swift script starting...")
+
+// Add early error handling
+func checkAccessibilityPermissions() -> Bool {
+    let checkOptPrompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue()
+    let options = [checkOptPrompt: true] as CFDictionary
+    let trusted = AXIsProcessTrustedWithOptions(options)
+    print("accessibility permissions check: \(trusted)")
+    return trusted
+}
+
 // Define WindowState struct first
 struct WindowState {
     var elements: [String: ElementAttributes]
@@ -115,8 +128,8 @@ var isTraversing = false
 var shouldCancelTraversal = false
 let traversalQueue = DispatchQueue(label: "com.screenpipe.traversal")
 
-// Add global database connection
-var db: OpaquePointer?
+// Add ScreenPipeDB instance
+var screenPipeDb: ScreenPipeDB?
 
 // Replace the tuple with a struct
 struct WindowIdentifier: Hashable {
@@ -160,8 +173,8 @@ func loadOrCreateState() -> UIMonitoringState {
         return state
     }
     
-    // Create default state
-    let defaultState = UIMonitoringState()
+    // Create default state with TablePlus ignored
+    let defaultState = UIMonitoringState(ignoredApps: ["tableplus"])
     
     // Save default state
     if let encoded = try? JSONEncoder().encode(defaultState) {
@@ -175,15 +188,28 @@ func loadOrCreateState() -> UIMonitoringState {
 startMonitoring()
 
 func startMonitoring() {
+    print("entering startMonitoring()")
+    
+    // Check permissions first
+    if !checkAccessibilityPermissions() {
+        print("error: accessibility permissions not granted")
+        exit(1)
+    }
+    
     // Set up signal handling
     signal(SIGINT) { _ in
+        print("received SIGINT, cleaning up...")
         cleanup()
         exit(0)
     }
 
     setupDatabase()
     print("loaded ui_monitoring logs state")
+    
+    print("setting up application observer...")
     setupApplicationChangeObserver()
+    
+    print("monitoring current application...")
     monitorCurrentFrontmostApplication()
 
     Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
@@ -197,9 +223,12 @@ func startMonitoring() {
 }
 
 func setupDatabase() {
-    let dbPath = (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent("ui_elements.db")
-
-    if sqlite3_open(dbPath, &db) == SQLITE_OK {
+    print("setting up database connection...")
+    do {
+        screenPipeDb = try ScreenPipeDB()
+        print("database connected successfully")
+        
+        // Create table if not exists
         let createTableSQL = """
             CREATE TABLE IF NOT EXISTS ui_monitoring (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -211,12 +240,16 @@ func setupDatabase() {
             CREATE INDEX IF NOT EXISTS idx_timestamp ON ui_monitoring(timestamp);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_app_window ON ui_monitoring(app, window);
         """
-
-        if sqlite3_exec(db, createTableSQL, nil, nil, nil) != SQLITE_OK {
-            print("error creating table: \(String(cString: sqlite3_errmsg(db!)))")
+        
+        if sqlite3_exec(screenPipeDb?.db, createTableSQL, nil, nil, nil) != SQLITE_OK {
+            let error = String(cString: sqlite3_errmsg(screenPipeDb?.db))
+            print("error creating table: \(error)")
+        } else {
+            print("database tables created successfully")
         }
-    } else {
-        print("error opening database")
+    } catch {
+        print("error setting up database: \(error)")
+        exit(1)
     }
 }
 
@@ -252,7 +285,7 @@ func monitorCurrentFrontmostApplication() {
         .trimmingCharacters(in: .whitespacesAndNewlines)
 
     // First check if app should be ignored
-    var state = loadOrCreateState()
+    let state = loadOrCreateState()
     if state.ignoredApps.contains(appName) {
         print("skipping ignored app: \(appName)")
         return
@@ -299,7 +332,6 @@ func monitorCurrentFrontmostApplication() {
     setupAccessibilityNotifications(pid: pid, axApp: axApp, appName: appName, windowName: windowName)
 
     print("monitoring changes for \(appName), window: \(windowName)...")
-    print("press ctrl+c to stop")
 }
 
 func setupApplicationChangeObserver() {
@@ -628,56 +660,62 @@ func handleFocusedWindowChange(element: AXUIElement) {
 
 
 func axObserverCallback(observer: AXObserver, element: AXUIElement, notification: CFString, refcon: UnsafeMutableRawPointer?) {
-    synchronizationQueue.async {
-        // Check for window-related notifications
-        let notificationStr = notification as String
-        if notificationStr == kAXFocusedWindowChangedNotification as String ||
-           notificationStr == kAXMainWindowChangedNotification as String ||
-           notificationStr == kAXTitleChangedNotification as String {
-            
-            // For title changes, we need to check if it's a window
-            if notificationStr == kAXTitleChangedNotification as String {
-                if let role = getAttributeValue(element, forAttribute: "AXRole") as? String,
-                   role == "AXWindow" {
+    // Add autoreleasepool and safety checks
+    autoreleasepool {
+        guard !isCleaningUp else { return }
+        guard CFGetTypeID(element) == AXUIElementGetTypeID() else { return }
+        
+        synchronizationQueue.async {
+            // Check for window-related notifications
+            let notificationStr = notification as String
+            if notificationStr == kAXFocusedWindowChangedNotification as String ||
+               notificationStr == kAXMainWindowChangedNotification as String ||
+               notificationStr == kAXTitleChangedNotification as String {
+                
+                // For title changes, we need to check if it's a window
+                if notificationStr == kAXTitleChangedNotification as String {
+                    if let role = getAttributeValue(element, forAttribute: "AXRole") as? String,
+                       role == "AXWindow" {
+                        handleFocusedWindowChange(element: element)
+                        return
+                    }
+                } else {
                     handleFocusedWindowChange(element: element)
                     return
                 }
-            } else {
-                handleFocusedWindowChange(element: element)
-                return
             }
-        }
 
-        if isCleaningUp || isTraversing { return }
-        if currentContext == nil { return }  // Simplified check since we don't need the value yet
+            if isCleaningUp || isTraversing { return }
+            if currentContext == nil { return }  // Simplified check since we don't need the value yet
 
-        // Get parent and grandparent
-        let parent = getAttributeValue(element, forAttribute: "AXParent") as! AXUIElement?
-        var grandparent: AXUIElement? = nil
-        if let parent = parent {
-            grandparent = getAttributeValue(parent, forAttribute: "AXParent") as! AXUIElement?
+            // Get parent and grandparent
+            let parent = getAttributeValue(element, forAttribute: "AXParent") as! AXUIElement?
+            var grandparent: AXUIElement? = nil
+            if let parent = parent {
+                grandparent = getAttributeValue(parent, forAttribute: "AXParent") as! AXUIElement?
+            }
+            
+            // Start from highest available ancestor
+            let startElement = grandparent ?? parent ?? element
+            
+            // Get the depth of the startElement
+            let (_, depth) = getElementPath(startElement)
+            
+            // Add to pending notifications
+            pendingNotifications.append((startElement: startElement, depth: depth))
+            
+            // Reset debounce timer
+            debounceTimer?.cancel()
+            debounceTimer = nil
+            
+            // Start a new debounce timer
+            debounceTimer = DispatchSource.makeTimerSource(queue: synchronizationQueue)
+            debounceTimer?.schedule(deadline: .now() + .milliseconds(200))
+            debounceTimer?.setEventHandler {
+                processPendingNotifications()
+            }
+            debounceTimer?.resume()
         }
-        
-        // Start from highest available ancestor
-        let startElement = grandparent ?? parent ?? element
-        
-        // Get the depth of the startElement
-        let (_, depth) = getElementPath(startElement)
-        
-        // Add to pending notifications
-        pendingNotifications.append((startElement: startElement, depth: depth))
-        
-        // Reset debounce timer
-        debounceTimer?.cancel()
-        debounceTimer = nil
-        
-        // Start a new debounce timer
-        debounceTimer = DispatchSource.makeTimerSource(queue: synchronizationQueue)
-        debounceTimer?.schedule(deadline: .now() + .milliseconds(200))
-        debounceTimer?.setEventHandler {
-            processPendingNotifications()
-        }
-        debounceTimer?.resume()
     }
 }
 
@@ -716,20 +754,27 @@ func processPendingNotifications() {
 
 
 func setupAccessibilityNotifications(pid: pid_t, axApp: AXUIElement, appName: String, windowName: String) {
-    // Store context globally with synchronization
+    // Add safety check for invalid pid
+    if pid <= 0 {
+        print("invalid pid: \(pid)")
+        return
+    }
+
     synchronizationQueue.sync {
         currentContext = MonitoringContext(appName: appName, windowName: windowName)
     }
 
-    // Create observer with proper cleanup
+    // Add error handling for observer creation
     var observer: AXObserver?
-    guard AXObserverCreate(pid, axObserverCallback, &observer) == .success,
-          let axObserver = observer else {
-        print("failed to create accessibility observer")
+    let createResult = AXObserverCreate(pid, axObserverCallback, &observer)
+    if createResult != .success || observer == nil {
+        print("failed to create accessibility observer: \(createResult)")
         return
     }
 
-    // Clean up previous observer if exists
+    let axObserver = observer!
+
+    // Clean up previous observer if exists - no need for source nil check
     if let oldObserver = currentObserver {
         CFRunLoopRemoveSource(
             CFRunLoopGetCurrent(),
@@ -740,6 +785,7 @@ func setupAccessibilityNotifications(pid: pid_t, axApp: AXUIElement, appName: St
 
     currentObserver = axObserver
 
+    // Add source directly - no need for nil check
     CFRunLoopAddSource(
         CFRunLoopGetCurrent(),
         AXObserverGetRunLoopSource(axObserver),
@@ -967,6 +1013,11 @@ func buildTextOutput(from windowState: WindowState) -> String {
 }
 
 func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp: String) {
+    guard let db = screenPipeDb?.db else {
+        print("database not initialized")
+        return
+    }
+    
     let startTime = DispatchTime.now()
     let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     let MAX_CHARS = 300_000
@@ -1093,7 +1144,7 @@ func saveElementValues() {
     let timestamp = ISO8601DateFormatter().string(from: Date())
     var totalChars = 0
     
-    sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
+    sqlite3_exec(screenPipeDb?.db, "BEGIN TRANSACTION", nil, nil, nil)
     
     for windowId in changedWindows {
         guard let windowState = globalElementValues[windowId.app]?[windowId.window] else { continue }
@@ -1109,7 +1160,7 @@ func saveElementValues() {
         saveToDatabase(windowId: windowId, newTextOutput: textOutput, timestamp: timestamp)
     }
     
-    sqlite3_exec(db, "COMMIT", nil, nil, nil)
+    sqlite3_exec(screenPipeDb?.db, "COMMIT", nil, nil, nil)
     
     // Clear the changed windows set
     changedWindows.removeAll()
@@ -1133,11 +1184,8 @@ func cleanup() {
         currentObserver = nil
     }
 
-    // Close database
-    if db != nil {
-        sqlite3_close(db)
-        db = nil
-    }
+    // Clear database reference
+    screenPipeDb = nil
 
     // Clear global state
     globalElementValues.removeAll()
@@ -1285,5 +1333,41 @@ struct AXUIElementWrapper: Hashable {
 
     static func == (lhs: AXUIElementWrapper, rhs: AXUIElementWrapper) -> Bool {
         return CFEqual(lhs.element, rhs.element)
+    }
+}
+
+// Get the universal screenpipe database path
+func getScreenPipeDbPath() -> String {
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser
+    return homeDir.appendingPathComponent(".screenpipe/db.sqlite").path
+}
+
+// Database connection helper
+class ScreenPipeDB {
+    let db: OpaquePointer
+    
+    init() throws {
+        var dbPointer: OpaquePointer?
+        let dbPath = getScreenPipeDbPath()
+        
+        // Create directory if it doesn't exist
+        let dbDir = (dbPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dbDir, withIntermediateDirectories: true)
+        
+        if sqlite3_open(dbPath, &dbPointer) != SQLITE_OK {
+            throw NSError(domain: "db error", code: 1, 
+                         userInfo: [NSLocalizedDescriptionKey: "failed to open database"])
+        }
+        
+        guard let db = dbPointer else {
+            throw NSError(domain: "db error", code: 2,
+                         userInfo: [NSLocalizedDescriptionKey: "database pointer is nil"])
+        }
+        
+        self.db = db
+    }
+    
+    deinit {
+        sqlite3_close(db)
     }
 }
