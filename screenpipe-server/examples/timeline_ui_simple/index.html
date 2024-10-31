@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>screenpipe frame stream</title>
+    <style>
+        body {
+            background: #000;
+            color: #fff;
+            font-family: monospace;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        #controls {
+            position: sticky;
+            top: 0;
+            background: #000;
+            padding: 20px 0;
+            margin-bottom: 20px;
+            z-index: 100;
+        }
+        
+        #frames {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .frame-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid #333;
+        }
+        
+        .frame-container img {
+            max-width: 100%;
+        }
+        
+        .frame-timestamp {
+            color: #666;
+        }
+        
+        input, button {
+            background: #111;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 8px;
+            font-family: monospace;
+        }
+        
+        button:hover {
+            background: #222;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <input type="datetime-local" id="startTime" step="1">
+        <input type="datetime-local" id="endTime" step="1">
+        <button onclick="startStream()">start stream</button>
+        <button onclick="stopStream()">stop</button>
+        <button onclick="clearFrames()">clear</button>
+    </div>
+
+    <div id="frames"></div>
+
+    <script>
+        let eventSource = null;
+        
+        function setDefaultTimes() {
+            const end = new Date();
+            const start = new Date(end - 5 * 60 * 1000);
+            
+            document.getElementById('startTime').value = start.toISOString().slice(0, -1);
+            document.getElementById('endTime').value = end.toISOString().slice(0, -1);
+        }
+        
+        function clearFrames() {
+            document.getElementById('frames').innerHTML = '';
+        }
+        
+        function appendFrame(frame, timestamp) {
+            console.log('Frame data length:', frame.length);
+            console.log('First 100 chars:', frame.substring(0, 100));
+            
+            const container = document.createElement('div');
+            container.className = 'frame-container';
+            
+            const img = document.createElement('img');
+            img.onerror = (e) => console.error('Failed to load image:', e);
+            img.onload = () => console.log('Image loaded successfully');
+            
+            const cleanBase64 = frame.trim().replace(/\s/g, '');
+            img.src = `data:image/jpeg;base64,${cleanBase64}`;
+            
+            img.style.display = 'block';
+            img.style.minHeight = '100px';
+            
+            const ts = document.createElement('div');
+            ts.className = 'frame-timestamp';
+            ts.innerText = new Date(timestamp).toLocaleString();
+            
+            container.appendChild(img);
+            container.appendChild(ts);
+            
+            const frames = document.getElementById('frames');
+            frames.appendChild(container);
+            frames.scrollTop = frames.scrollHeight;
+        }
+        
+        function startStream() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            
+            const url = `http://localhost:3030/stream/frames?start_time=${startTime}Z&end_time=${endTime}Z`;
+            console.log('starting stream:', url);
+            eventSource = new EventSource(url);
+            
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data === 'keep-alive-text') {
+                        return;
+                    }
+                    
+                    if (data.frame && data.timestamp) {
+                        console.log('appending frame from:', data.timestamp);
+                        appendFrame(data.frame, data.timestamp);
+                    }
+                } catch (e) {
+                    console.error('Failed to parse frame data:', e);
+                }
+            };
+            
+            eventSource.onerror = (error) => {
+                console.error('sse error:', error);
+                eventSource.close();
+            };
+        }
+        
+        function stopStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        }
+        
+        setDefaultTimes();
+    </script>
+</body>
+</html>
