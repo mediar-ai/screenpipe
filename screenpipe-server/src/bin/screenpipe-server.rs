@@ -13,7 +13,7 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
@@ -114,6 +114,12 @@ async fn main() -> anyhow::Result<()> {
 
     let _log_guard = setup_logging(&local_data_dir, &cli)?;
 
+    let h = Highlight::init(HighlightConfig {
+        project_id:String::from("7e30w91e"),
+        ..Default::default()
+    })
+    .expect("Failed to initialize Highlight.io");
+
     let (pipe_manager, mut pipe_control_rx) = PipeManager::new(local_data_dir_clone.clone());
     let pipe_manager = Arc::new(pipe_manager);
 
@@ -133,6 +139,7 @@ async fn main() -> anyhow::Result<()> {
                     if let Err(e) = trigger_keyboard_permission() {
                         error!("Failed to trigger keyboard permission: {:?}", e);
                         error!("Please grant keyboard permission manually in System Preferences.");
+                        h.capture_error("Please grant keyboard permission manually in System Preferences.");
                     } else {
                         info!("Keyboard permission requested. Please grant permission if prompted.");
                     }
@@ -144,6 +151,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Err(e) = trigger_audio_permission() {
                     error!("Failed to trigger audio permission: {:?}", e);
                     error!("Please grant microphone permission manually in System Preferences.");
+                    h.capture_error("Please grant microphone permission manually in System Preferences.");
                 } else {
                     info!("Audio permission requested. Please grant permission if prompted.");
                 }
@@ -152,6 +160,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Err(e) = trigger_screen_capture_permission() {
                     error!("Failed to trigger screen capture permission: {:?}", e);
                     error!("Please grant screen recording permission manually in System Preferences.");
+                    h.capture_error("Please grant microphone permission manually in System Preferences.");
                 } else {
                     info!("Screen capture permission requested. Please grant permission if prompted.");
                 }
@@ -169,6 +178,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(e) => {
                         error!("FFmpeg check failed: {}", e);
                         error!("Please ensure FFmpeg is installed correctly and is in your PATH");
+                        h.capture_error("Please ensure FFmpeg is installed correctly and is in your PATH");
                         return Err(e.into());
                     }
                 }
@@ -752,6 +762,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    h.shutdown();
     info!("shutdown complete");
 
     Ok(())
