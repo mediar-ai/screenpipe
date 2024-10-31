@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Duration, Timelike, Utc};
+use chrono::{DateTime, Duration, Utc};
 use dirs::cache_dir;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,8 +11,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 use glob::glob;
-use lazy_static::lazy_static;
-use regex::Regex;
 use screenpipe_core::find_ffmpeg_path;
 use std::collections::HashMap;
 use std::time::SystemTime;
@@ -27,9 +25,9 @@ pub struct FrameCacheConfig {
 impl Default for FrameCacheConfig {
     fn default() -> Self {
         Self {
-            prefetch_size: Duration::minutes(30),
+            prefetch_size: Duration::minutes(5),
             cleanup_interval: Duration::minutes(5),
-            fps: 10.0,
+            fps: 1.0,
         }
     }
 }
@@ -46,6 +44,7 @@ pub struct FrameCache {
 #[derive(Debug)]
 enum CacheCommand {
     Cleanup,
+    ScanForNewFrames,
 }
 
 #[derive(Debug)]
@@ -149,41 +148,62 @@ impl FrameCache {
             config,
         };
 
+        // Start background scanner task
+        let scanner_cache = cache.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::seconds(10).to_std().unwrap());
+            loop {
+                interval.tick().await;
+                let now = Utc::now();
+                let scan_start = now - Duration::minutes(5); // Scan last 5 minutes
+                debug!("scanning for new frames from {} to {}", scan_start, now);
+
+                if let Err(e) = scanner_cache.preload_frames(&scan_start, &now).await {
+                    error!("failed to scan for new frames: {}", e);
+                }
+            }
+        });
+
         // Clone the parts needed for the cleanup task
-        let cleanup_cache = FrameCache {
-            screenpipe_dir: cache.screenpipe_dir.clone(),
-            cache_dir: cache.cache_dir.clone(),
-            cache_tx: cache.cache_tx.clone(),
-            last_accessed_range: cache.last_accessed_range.clone(),
-            config: cache.config,
-        };
+        let cleanup_cache = cache.clone();
 
-        // tokio::spawn(async move {
-        //     let mut interval =
-        //         tokio::time::interval(cleanup_cache.config.cleanup_interval.to_std().unwrap());
-        //     loop {
-        //         tokio::select! {
-        //             _ = interval.tick() => {
-        //                 info!("performing cleanup");
-        //                 if let Err(e) = Self::cleanup_old_frames(&cleanup_cache).await {
-        //                     error!("failed to cleanup frames: {}", e);
-        //                 }
-        //             }
-        //             Some(cmd) = cache_rx.recv() => {
-        //                 match cmd {
-        //                     CacheCommand::Cleanup => {
-        //                         info!("performing cleanup");
-        //                         if let Err(e) = Self::cleanup_old_frames(&cleanup_cache).await {
-        //                             error!("failed to cleanup frames: {}", e);
-        //                         }
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // });
+        // Modify existing cleanup task to also handle ScanForNewFrames
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(cleanup_cache.config.cleanup_interval.to_std().unwrap());
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        debug!("performing scheduled cleanup");
+                        // if let Err(e) = Self::cleanup_old_frames(&cleanup_cache).await {
+                        //     error!("failed to cleanup frames: {}", e);
+                        // }
+                    }
+                    Some(cmd) = cache_rx.recv() => {
+                        match cmd {
+                            CacheCommand::Cleanup => {
+                                debug!("performing requested cleanup");
+                                // if let Err(e) = Self::cleanup_old_frames(&cleanup_cache).await {
+                                //     error!("failed to cleanup frames: {}", e);
+                                // }
+                            }
+                            CacheCommand::ScanForNewFrames => {
+                                let now = Utc::now();
+                                // should be a percentage of the prefetch size
+                                let scan_start = now - Duration::minutes(
+                                    cleanup_cache.config.prefetch_size.num_minutes() / 10
+                                );
+                                if let Err(e) = cleanup_cache.preload_frames(&scan_start, &now).await {
+                                    error!("failed to scan for new frames: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
-        Ok(cleanup_cache)
+        Ok(cache)
     }
 
     async fn cleanup_old_frames(cache: &FrameCache) -> Result<()> {
@@ -235,19 +255,27 @@ impl FrameCache {
         let frame_path = self
             .cache_dir
             .join(format!("frame_{}.jpg", target_time.timestamp()));
+
         if frame_path.exists() {
+            debug!("frame found in cache: {:?}", frame_path);
             return Some(frame_path);
         }
 
-        // If not in cache, do the prefetch and WAIT for it
+        // If not in cache, trigger prefetch
         let prefetch_end = target_time + self.config.prefetch_size;
-        if let Err(e) = self.update_access_pattern(target_time, prefetch_end).await {
+        debug!(
+            "frame not in cache, prefetching range {} to {}",
+            target_time, prefetch_end
+        );
+
+        if let Err(e) = self.preload_frames(&target_time, &prefetch_end).await {
             error!("prefetch failed: {}", e);
             return None;
         }
 
-        // After prefetch completes, check cache again
+        // After prefetch, check cache again
         if frame_path.exists() {
+            debug!("frame found after prefetch: {:?}", frame_path);
             Some(frame_path)
         } else {
             debug!("frame not found even after prefetch: {}", target_time);
@@ -484,8 +512,8 @@ impl FrameCache {
 
                     debug!("file age: {}s, chunk_time: {}", age.as_secs(), chunk_time);
 
-                    if age.as_secs() < 60 {
-                        debug!("skipping recent file: {}", file_path);
+                    if age.as_secs() < 10 {
+                        debug!("skipping very recent file: {}", file_path);
                         continue;
                     }
 

@@ -26,7 +26,15 @@ async fn setup_test_env() -> Result<FrameCache> {
 
 #[tokio::test]
 async fn test_frame_retrieval() -> Result<()> {
-    let cache = setup_test_env().await?;
+    // Use custom config with shorter timeouts for testing
+    let config = FrameCacheConfig {
+        prefetch_size: Duration::seconds(10),
+        cleanup_interval: Duration::minutes(1),
+        fps: 1.0,
+    };
+    
+    let frame_cache = setup_test_env().await?;
+    let cache = FrameCache::with_config(frame_cache.screenpipe_dir, config).await?;
     let target_time = Utc::now() - Duration::minutes(30);
 
     println!("triggering initial frame load for {}", target_time);

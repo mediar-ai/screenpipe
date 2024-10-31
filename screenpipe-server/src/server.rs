@@ -19,7 +19,7 @@ use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
-    video_cache::FrameCache,
+    video_cache::{FrameCache, FrameCacheConfig},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
     ContentType, DatabaseManager, SearchResult,
 };
@@ -750,7 +750,18 @@ impl Server {
             pipe_manager: self.pipe_manager,
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
-            frame_cache: Arc::new(FrameCache::new(self.screenpipe_dir.clone()).await.unwrap()),
+            frame_cache: Arc::new(
+                FrameCache::with_config(
+                    self.screenpipe_dir.clone().join("data"),
+                    FrameCacheConfig {
+                        prefetch_size: chrono::Duration::seconds(60),
+                        cleanup_interval: chrono::Duration::minutes(360),
+                        fps: 1.0,
+                    },
+                )
+                .await
+                .unwrap(),
+            ),
         });
 
         let app = create_router()
@@ -1233,7 +1244,7 @@ async fn stream_frames_handler(
                 info!("no frame found at time: {}", current_time);
             }
 
-            current_time = current_time - chrono::Duration::milliseconds((1000.0 / request.fps.unwrap_or(10.0)) as i64);
+            current_time = current_time - chrono::Duration::milliseconds((1000.0 / request.fps.unwrap_or(1.0)) as i64);
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     };

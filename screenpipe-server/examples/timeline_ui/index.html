@@ -10,9 +10,26 @@
             margin: 0;
             padding: 20px;
         }
+        #timeline {
+            position: relative;
+            width: 100%;
+            height: 60px;
+            background: #111;
+            margin: 10px 0;
+            border: 1px solid #333;
+            cursor: pointer;
+        }
+        #cursor {
+            position: absolute;
+            width: 2px;
+            height: 100%;
+            background: #fff;
+            top: 0;
+        }
         #frame {
             max-width: 100%;
             border: 1px solid #333;
+            min-height: 200px; /* prevent layout shift */
         }
         #info {
             margin-top: 10px;
@@ -25,55 +42,149 @@
             white-space: pre-wrap;
             font-family: monospace;
         }
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            display: none;
+        }
+        .loading.active {
+            display: block;
+        }
+        /* retro loading animation */
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
     </style>
 </head>
 <body>
+    <div id="timeline"><div id="cursor"></div></div>
     <img id="frame" />
     <div id="info"></div>
     <div id="error"></div>
+    <div class="loading">loading frames...</div>
 
     <script>
-        const endTime = new Date();
-        const startTime = new Date(endTime - 1000 * 60 * 5); // last 5 minutes
+        let currentTime = new Date();
+        const timelineWidth = document.getElementById('timeline').offsetWidth;
+        const loading = document.querySelector('.loading');
+        let isLoading = false;
 
-        // Properly encode the dates for the URL
-        const url = new URL('http://localhost:3030/stream/frames');
-        url.searchParams.append('start_time', startTime.toISOString());
-        url.searchParams.append('end_time', endTime.toISOString());
-        url.searchParams.append('fps', '1');
-        
-        console.log('connecting to:', url.toString());
-        
-        const eventSource = new EventSource(url.toString(), {
-            withCredentials: false
-        });
-        
-        eventSource.onopen = () => {
-            console.log('connection opened');
-            document.getElementById('error').textContent = 'connected successfully';
-        };
-        
-        eventSource.addEventListener('frame', (event) => {
-            const data = JSON.parse(event.data);
-            document.getElementById('frame').src = `data:image/jpeg;base64,${data.frame}`;
-            document.getElementById('info').textContent = `timestamp: ${data.timestamp} | app: ${data.app_name || 'n/a'} | window: ${data.window_name || 'n/a'}`;
-        });
+        function setLoading(state) {
+            isLoading = state;
+            loading.classList.toggle('active', state);
+        }
 
-        eventSource.onerror = (error) => {
-            const errorDetails = {
-                type: error.type,
-                target: {
-                    readyState: eventSource.readyState,
-                    url: url.toString()
-                },
-                timestamp: new Date().toISOString()
+        function updateTimeline() {
+            const cursor = document.getElementById('cursor');
+            const position = ((currentTime - startTime) / (endTime - startTime)) * 100;
+            cursor.style.left = `${position}%`;
+        }
+
+        function connectToStream(startTime, endTime) {
+            if (window.eventSource) {
+                window.eventSource.close();
+            }
+
+            setLoading(true);
+
+            const url = new URL('http://localhost:3030/stream/frames');
+            url.searchParams.append('start_time', startTime.toISOString());
+            url.searchParams.append('end_time', endTime.toISOString());
+            url.searchParams.append('fps', '1');
+            
+            console.log('connecting to:', url.toString());
+            
+            window.eventSource = new EventSource(url.toString(), {
+                withCredentials: false
+            });
+            
+            window.eventSource.onopen = () => {
+                console.log('connection opened');
+                document.getElementById('error').textContent = 'connected successfully';
             };
             
-            console.error('sse error:', errorDetails);
-            document.getElementById('error').textContent = 
-                `error connecting to stream:\n${JSON.stringify(errorDetails, null, 2)}`;
-            eventSource.close();
-        };
+            window.eventSource.addEventListener('frame', (event) => {
+                setLoading(false);
+                const data = JSON.parse(event.data);
+                document.getElementById('frame').src = `data:image/jpeg;base64,${data.frame}`;
+                document.getElementById('info').textContent = 
+                    `timestamp: ${data.timestamp} | app: ${data.app_name || 'n/a'} | window: ${data.window_name || 'n/a'}`;
+                currentTime = new Date(data.timestamp);
+                updateTimeline();
+            });
+
+            window.eventSource.onerror = (error) => {
+                setLoading(false);
+                const errorDetails = {
+                    type: error.type,
+                    target: {
+                        readyState: window.eventSource.readyState,
+                        url: url.toString()
+                    },
+                    timestamp: new Date().toISOString()
+                };
+                
+                console.error('sse error:', errorDetails);
+                document.getElementById('error').textContent = 
+                    `error connecting to stream:\n${JSON.stringify(errorDetails, null, 2)}`;
+                window.eventSource.close();
+            };
+        }
+
+        // Initialize timeline interaction
+        const timeline = document.getElementById('timeline');
+        timeline.addEventListener('click', (e) => {
+            const rect = timeline.getBoundingClientRect();
+            const position = (e.clientX - rect.left) / rect.width;
+            const timeRange = endTime - startTime;
+            currentTime = new Date(startTime.getTime() + (timeRange * position));
+            
+            // Recalculate window around new current time
+            const windowSize = 5 * 60 * 1000; // 5 minutes
+            const newStartTime = new Date(currentTime.getTime() - (windowSize / 2));
+            const newEndTime = new Date(currentTime.getTime() + (windowSize / 2));
+            
+            connectToStream(newStartTime, newEndTime);
+        });
+
+        // Handle keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            const step = 1000; // 1 second step
+            if (e.key === 'ArrowLeft') {
+                currentTime = new Date(currentTime.getTime() - step);
+                connectToStream(
+                    new Date(currentTime.getTime() - 150000),
+                    new Date(currentTime.getTime() + 150000)
+                );
+            } else if (e.key === 'ArrowRight') {
+                currentTime = new Date(currentTime.getTime() + step);
+                connectToStream(
+                    new Date(currentTime.getTime() - 150000),
+                    new Date(currentTime.getTime() + 150000)
+                );
+            }
+        });
+
+        // Initial connection
+        const endTime = new Date();
+        const startTime = new Date(endTime - 1000 * 60 * 5); // last 5 minutes
+        connectToStream(startTime, endTime);
     </script>
 </body>
 </html>
