@@ -120,7 +120,7 @@ mod tests {
 
         // Insert some recent data
         let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
-        let frame_id = db.insert_frame("test_device").await.unwrap();
+        let frame_id = db.insert_frame("test_device", None).await.unwrap();
         let _ = db
             .insert_ocr_text(
                 frame_id,
@@ -180,7 +180,7 @@ mod tests {
         // Insert some stale data (more than 60 seconds old)
         let stale_time = Utc::now() - Duration::seconds(61);
         let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
-        let frame_id = db.insert_frame("test_device").await.unwrap();
+        let frame_id = db.insert_frame("test_device", None).await.unwrap();
         let _ = db
             .insert_ocr_text(
                 frame_id,
@@ -352,8 +352,8 @@ mod tests {
 
         // Insert some test data
         let _ = db.insert_video_chunk("test_video1.mp4", "test_device").await.unwrap();
-        let frame_id1 = db.insert_frame("test_device").await.unwrap();
-        let frame_id2 = db.insert_frame("test_device").await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
         let _ = db
             .insert_ocr_text(
                 frame_id1,
@@ -504,7 +504,7 @@ mod tests {
 
         // insert test data with different timestamps
         let _ = db.insert_video_chunk("test_video1.mp4", "test_device").await.unwrap();
-        let frame_id1 = db.insert_frame("test_device").await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
 
         let now = DateTime::parse_from_rfc3339("2024-09-21T10:49:23.240367Z")

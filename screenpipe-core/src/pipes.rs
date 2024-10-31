@@ -43,6 +43,21 @@ mod pipes {
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
         let pipe_json_path = pipe_dir.join("pipe.json");
 
+        // Check if pipe is still enabled
+        if pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+            let pipe_config: Value = serde_json::from_str(&pipe_json)?;
+
+            if !pipe_config
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                debug!("pipe {} is disabled, stopping", pipe);
+                return Ok(None);
+            }
+        }
+
         // Prepare environment variables
         let mut env_vars = std::env::vars().collect::<Vec<(String, String)>>();
         env_vars.push((
@@ -62,12 +77,9 @@ mod pipes {
             if pipe_config["is_nextjs"] == json!(true) {
                 info!("Running Next.js pipe: {}", pipe);
 
-                // Install dependencies
+                // Install dependencies using bun
                 info!("Installing dependencies for Next.js pipe");
-                let install_output = Command::new("deno")
-                    .arg("run")
-                    .arg("-A")
-                    .arg("npm:npm@latest")
+                let install_output = Command::new("bun")
                     .arg("install")
                     .current_dir(&pipe_dir)
                     .output()
@@ -81,25 +93,6 @@ mod pipes {
                     anyhow::bail!("Failed to install dependencies for Next.js pipe");
                 }
 
-                // Build the Next.js project // ! broken https://github.com/denoland/deno/issues/25359
-                // info!("Building Next.js project");
-                // let build_output = Command::new("deno")
-                //     .arg("run")
-                //     .arg("-A")
-                //     .arg("npm:next@latest")
-                //     .arg("build")
-                //     .current_dir(&pipe_dir)
-                //     .output()
-                //     .await?;
-
-                // if !build_output.status.success() {
-                //     error!(
-                //         "Failed to build Next.js project: {}",
-                //         String::from_utf8_lossy(&build_output.stderr)
-                //     );
-                //     anyhow::bail!("Failed to build Next.js project");
-                // }
-
                 let port = pick_unused_port().expect("No ports free");
 
                 // Update pipe.json with the port
@@ -109,27 +102,13 @@ mod pipes {
                 let mut file = File::create(&pipe_json_path).await?;
                 file.write_all(updated_pipe_json.as_bytes()).await?;
 
-                // Add the port to the environment variables
                 env_vars.push(("PORT".to_string(), port.to_string()));
 
-                // Run the Next.js project
-                // let mut child = Command::new("deno")
-                //     .arg("run")
-                //     .arg("-A")
-                //     .arg("npm:next@latest")
-                //     .arg("start")
-                //     .arg("-p")
-                //     .arg(port.to_string())
-                //     .current_dir(&pipe_dir)
-                //     .envs(env_vars)
-                //     .stdout(std::process::Stdio::piped())
-                //     .stderr(std::process::Stdio::piped())
-                //     .spawn()?;
-                let mut child = Command::new("deno")
-                    .arg("task")
-                    .arg("--unstable-detect-cjs")
+                // Run the Next.js project with bun
+                let mut child = Command::new("bun")
+                    .arg("run")
                     .arg("dev")
-                    .arg("-p")
+                    .arg("--port")
                     .arg(port.to_string())
                     .current_dir(&pipe_dir)
                     .envs(env_vars)
@@ -155,16 +134,8 @@ mod pipes {
             main_module.to_str().unwrap().to_string(),
         ));
 
-        // Execute Deno
-        let mut child = Command::new("deno")
+        let mut child = Command::new("bun")
             .arg("run")
-            .arg("--config")
-            .arg(pipe_dir.join("deno.json"))
-            .arg("--allow-read")
-            .arg("--allow-write")
-            .arg("--allow-net")
-            .arg("--allow-env")
-            .arg("--reload=https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-js/main.ts")
             .arg(&main_module)
             .envs(env_vars)
             .stdout(std::process::Stdio::piped())
@@ -232,43 +203,97 @@ mod pipes {
 
         debug!("Destination directory: {:?}", dest_dir);
 
+        // Save existing pipe.json content before downloading
         let pipe_json_path = dest_dir.join("pipe.json");
-        let existing_pipe_json = if pipe_json_path.exists() {
+        let existing_config = if pipe_json_path.exists() {
             debug!("Existing pipe.json found");
-            Some(tokio::fs::read_to_string(&pipe_json_path).await?)
+            let content = tokio::fs::read_to_string(&pipe_json_path).await?;
+            Some(serde_json::from_str::<Value>(&content)?)
         } else {
             debug!("No existing pipe.json found");
             None
         };
 
-        tokio::fs::create_dir_all(&dest_dir).await?;
-        debug!("Created destination directory");
+        // Create temp directory for download
+        let temp_dir = dest_dir.with_extension("_temp");
+        tokio::fs::create_dir_all(&temp_dir).await?;
 
+        // Download to temp directory first
         if let Ok(parsed_url) = Url::parse(source) {
             debug!("Source is a URL: {}", parsed_url);
             if parsed_url.host_str() == Some("github.com") {
-                download_github_folder(&parsed_url, &dest_dir).await?;
+                download_github_folder(&parsed_url, &temp_dir).await?;
             } else {
                 anyhow::bail!("Unsupported URL format");
             }
         } else {
             debug!("Source is a local path");
             let source_path = Path::new(source);
-            if !source_path.exists() {
-                error!("Local source path does not exist: {:?}", source_path);
-                anyhow::bail!("Local source path does not exist");
+            if !source_path.exists() || !source_path.is_dir() {
+                anyhow::bail!("Invalid local source path");
             }
-            if !source_path.is_dir() {
-                error!("Local source is not a directory: {:?}", source_path);
-                anyhow::bail!("Local source is not a directory");
-            }
+            copy_dir_all(source_path, &temp_dir).await?;
+        }
 
-            debug!(
-                "Copying local folder from {:?} to {:?}",
-                source_path, dest_dir
-            );
-            copy_dir_all(source_path, &dest_dir).await?;
-            info!("Copied local folder: {:?} to {:?}", source_path, dest_dir);
+        // If download successful, move temp dir to final location
+        if dest_dir.exists() {
+            tokio::fs::remove_dir_all(&dest_dir).await?;
+        }
+        tokio::fs::rename(&temp_dir, &dest_dir).await?;
+
+        // Restore or merge pipe.json if needed
+        if let Some(ref existing_config) = existing_config {
+            let new_config_path = dest_dir.join("pipe.json");
+            if new_config_path.exists() {
+                let content = tokio::fs::read_to_string(&new_config_path).await?;
+                let new_json: Value = serde_json::from_str(&content)?;
+
+                // Create merged config
+                let mut merged_config = new_json.clone(); // Start with new schema
+
+                // If both configs have fields array, preserve user values
+                if let (Some(existing_obj), Some(new_obj)) =
+                    (existing_config.as_object(), merged_config.as_object_mut())
+                {
+                    // Copy over non-fields properties from existing config
+                    for (key, value) in existing_obj {
+                        if key != "fields" {
+                            new_obj.insert(key.clone(), value.clone());
+                        }
+                    }
+
+                    // For fields array, preserve user values while keeping new schema
+                    if let (Some(existing_fields), Some(new_fields)) = (
+                        existing_config["fields"].as_array(),
+                        new_obj.get_mut("fields").and_then(|f| f.as_array_mut()),
+                    ) {
+                        // For each field in the new schema
+                        for new_field in new_fields {
+                            if let Some(name) = new_field.get("name").and_then(Value::as_str) {
+                                // If this field existed in the old config, preserve its value
+                                if let Some(existing_field) = existing_fields
+                                    .iter()
+                                    .find(|f| f.get("name").and_then(Value::as_str) == Some(name))
+                                {
+                                    if let Some(user_value) = existing_field.get("value") {
+                                        if let Some(new_field_obj) = new_field.as_object_mut() {
+                                            new_field_obj
+                                                .insert("value".to_string(), user_value.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let config_str = serde_json::to_string_pretty(&merged_config)?;
+                tokio::fs::write(&new_config_path, config_str).await?;
+            } else {
+                // If no new config exists, keep the existing one
+                let config_str = serde_json::to_string_pretty(&existing_config)?;
+                tokio::fs::write(&new_config_path, config_str).await?;
+            }
         }
 
         // After downloading/copying the pipe, check if it's a Next.js project
@@ -281,11 +306,8 @@ mod pipes {
                 info!("Detected Next.js project, setting up for production");
 
                 // Run npm install
-                let mut install_child = Command::new("deno")
-                    .arg("run")
-                    .arg("-A")
-                    .arg("npm:npm@latest")
-                    .arg("install")
+                let mut install_child = Command::new("bun")
+                    .arg("i")
                     .current_dir(&dest_dir)
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
@@ -294,23 +316,9 @@ mod pipes {
                 // Stream logs for npm install
                 stream_logs("npm install", &mut install_child).await?;
 
-                // Run next build // ! broken https://github.com/denoland/deno/issues/25359
-                // let mut build_child = Command::new("deno")
-                //     .arg("run")
-                //     .arg("-A")
-                //     .arg("npm:next@latest")
-                //     .arg("build")
-                //     .current_dir(&dest_dir)
-                //     .stdout(std::process::Stdio::piped())
-                //     .stderr(std::process::Stdio::piped())
-                //     .spawn()?;
-
-                // // Stream logs for next build
-                // stream_logs("next build", &mut build_child).await?;
-
                 // Update pipe.json to indicate it's a Next.js project
-                let mut pipe_config = if let Some(existing_json) = existing_pipe_json {
-                    serde_json::from_str(&existing_json)?
+                let mut pipe_config = if let Some(existing_json) = &existing_config {
+                    serde_json::from_str(&existing_json.as_str().unwrap())?
                 } else if pipe_json_path.exists() {
                     let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
                     serde_json::from_str(&pipe_json)?
@@ -471,72 +479,68 @@ mod pipes {
     }
 
     #[cfg(not(windows))]
-    const DENO_EXECUTABLE_NAME: &str = "deno";
+    const BUN_EXECUTABLE_NAME: &str = "bun";
 
     #[cfg(windows)]
-    const DENO_EXECUTABLE_NAME: &str = "deno.exe";
+    const BUN_EXECUTABLE_NAME: &str = "bun.exe";
 
-    pub fn find_deno() -> Option<PathBuf> {
-        debug!("starting search for deno executable");
+    pub fn find_bun() -> Option<PathBuf> {
+        debug!("starting search for bun executable");
 
-        // check if `deno` is in the PATH environment variable
-        if let Ok(path) = which(DENO_EXECUTABLE_NAME) {
-            debug!("found deno in PATH: {:?}", path);
+        if let Ok(path) = which(BUN_EXECUTABLE_NAME) {
+            debug!("found bun in PATH: {:?}", path);
             return Some(path);
         }
-        debug!("deno not found in PATH");
+        debug!("bun not found in PATH");
 
-        // check in current working directory
         if let Ok(cwd) = std::env::current_dir() {
             debug!("current working directory: {:?}", cwd);
-            let deno_in_cwd = cwd.join(DENO_EXECUTABLE_NAME);
-            if deno_in_cwd.is_file() && deno_in_cwd.exists() {
-                debug!("found deno in current working directory: {:?}", deno_in_cwd);
-                return Some(deno_in_cwd);
+            let bun_in_cwd = cwd.join(BUN_EXECUTABLE_NAME);
+            if bun_in_cwd.is_file() && bun_in_cwd.exists() {
+                debug!("found bun in current working directory: {:?}", bun_in_cwd);
+                return Some(bun_in_cwd);
             }
-            debug!("deno not found in current working directory");
+            debug!("bun not found in current working directory");
         }
 
-        // check in the same folder as the executable
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_folder) = exe_path.parent() {
                 debug!("executable folder: {:?}", exe_folder);
-                let deno_in_exe_folder = exe_folder.join(DENO_EXECUTABLE_NAME);
-                if deno_in_exe_folder.exists() {
-                    debug!("found deno in executable folder: {:?}", deno_in_exe_folder);
-                    return Some(deno_in_exe_folder);
+                let bun_in_exe_folder = exe_folder.join(BUN_EXECUTABLE_NAME);
+                if bun_in_exe_folder.exists() {
+                    debug!("found bun in executable folder: {:?}", bun_in_exe_folder);
+                    return Some(bun_in_exe_folder);
                 }
-                debug!("deno not found in executable folder");
+                debug!("bun not found in executable folder");
 
-                // platform-specific checks
                 #[cfg(target_os = "macos")]
                 {
                     let resources_folder = exe_folder.join("../Resources");
                     debug!("resources folder: {:?}", resources_folder);
-                    let deno_in_resources = resources_folder.join(DENO_EXECUTABLE_NAME);
-                    if deno_in_resources.exists() {
-                        debug!("found deno in resources folder: {:?}", deno_in_resources);
-                        return Some(deno_in_resources);
+                    let bun_in_resources = resources_folder.join(BUN_EXECUTABLE_NAME);
+                    if bun_in_resources.exists() {
+                        debug!("found bun in resources folder: {:?}", bun_in_resources);
+                        return Some(bun_in_resources);
                     }
-                    debug!("deno not found in resources folder");
+                    debug!("bun not found in resources folder");
                 }
 
                 #[cfg(target_os = "linux")]
                 {
                     let lib_folder = exe_folder.join("lib");
                     debug!("lib folder: {:?}", lib_folder);
-                    let deno_in_lib = lib_folder.join(DENO_EXECUTABLE_NAME);
-                    if deno_in_lib.exists() {
-                        debug!("found deno in lib folder: {:?}", deno_in_lib);
-                        return Some(deno_in_lib);
+                    let bun_in_lib = lib_folder.join(BUN_EXECUTABLE_NAME);
+                    if bun_in_lib.exists() {
+                        debug!("found bun in lib folder: {:?}", bun_in_lib);
+                        return Some(bun_in_lib);
                     }
-                    debug!("deno not found in lib folder");
+                    debug!("bun not found in lib folder");
                 }
             }
         }
 
-        error!("deno not found");
-        None // return None if deno is not found
+        error!("bun not found");
+        None // return None if bun is not found
     }
 }
 

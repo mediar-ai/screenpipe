@@ -2,7 +2,7 @@
     "bundle": {
         "externalBin": [
             "screenpipe",
-            "deno",
+            "bun",
             "ollama"
         ],
         "resources": {

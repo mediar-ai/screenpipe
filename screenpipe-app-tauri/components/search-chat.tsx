@@ -683,9 +683,15 @@ export function SearchChat() {
                     {item.type === "Audio" && (
                       <>
                         <p className="mt-2">{item.content.transcription}</p>
-                        <div className="flex justify-center mt-4">
-                          <VideoComponent filePath={item.content.file_path} />
-                        </div>
+                        {item.content.file_path && item.content.file_path.trim() !== "" ? (
+                          <div className="flex justify-center mt-4">
+                            <VideoComponent filePath={item.content.file_path} />
+                          </div>
+                        ) : (
+                          <p className="text-gray-500 italic mt-2">
+                            No file path available for this audio.
+                          </p>
+                        )}
                       </>
                     )}
                     {item.type === "FTS" && (

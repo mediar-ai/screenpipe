@@ -2,7 +2,7 @@ import { z } from "zod";
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
-import { pipe, ContentItem } from "screenpipe";
+import { pipe, ContentItem } from "@screenpipe/js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import process from "node:process";

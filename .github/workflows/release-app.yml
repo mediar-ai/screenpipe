@@ -43,7 +43,6 @@ jobs:
           api-key: ${{ secrets.CN_API_KEY }}
 
   publish-tauri:
-    needs: draft
     permissions:
       contents: write
     strategy:
@@ -59,10 +58,10 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "" # TODO CUDA, mkl
+            args: "--features mkl" # TODO CUDA
             tauri-args: ""
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
@@ -141,6 +140,19 @@ jobs:
         run: |
           brew install ffmpeg pkg-config
 
+      - name: Install MKL
+        if: matrix.platform == 'windows-latest'
+        run: |
+          pip install mkl mkl-devel mkl-static
+
+      - name: Install MKL in Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          pip install mkl mkl-devel mkl-static
+          mkdir -p /opt/intel/mkl
+          cp -rfv ~/.local/lib/* ~/.local/include/* /opt/intel/mkl/
+          sudo cp -rfv ~/.local/lib/* /usr/lib/x86_64-linux-gnu/
+
       - name: Install frontend dependencies
         shell: bash
         working-directory: ./screenpipe-app-tauri
@@ -176,7 +188,10 @@ jobs:
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
-            export V8_FLAGS="--max-old-space-size=8192" # https://github.com/denoland/deno_core/issues/916
+          fi
+          if [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            export PKG_CONFIG_PATH="~/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
+            export MKLROOT="/opt/intel/mkl"
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
 
@@ -205,12 +220,20 @@ jobs:
 
       - name: Free Disk Space (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo swapoff -a
-          sudo rm -f /swapfile
-          sudo apt clean
-          docker rmi $(docker image ls -aq)
-          df -h
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+        
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
@@ -229,6 +252,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
+          # ubuntu mkl
+          PKG_CONFIG_PATH: ${{ matrix.platform == 'ubuntu-22.04' && '~/.local/lib/pkgconfig:$PKG_CONFIG_PATH' || '' }}
+          MKLROOT: ${{ matrix.platform == 'ubuntu-22.04' && '/opt/intel/mkl' || '' }}
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.platform == 'windows-latest' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.platform == 'windows-latest' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
