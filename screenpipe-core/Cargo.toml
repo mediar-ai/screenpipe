@@ -39,6 +39,8 @@ clap = { version = "4.5.20", features = ["derive"] }
 # random
 rand = "0.8.5"
 
+once_cell = "1.19.0"
+
 [features]
 default = ["pipes", "security"]
 llm = ["candle", "candle-nn", "candle-transformers", "tokenizers", "hf-hub"]

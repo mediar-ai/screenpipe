@@ -41,7 +41,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::{fs, net::TcpListener};
+use tokio::net::TcpListener;
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -754,6 +754,7 @@ impl Server {
                 FrameCache::with_config(
                     self.screenpipe_dir.clone().join("data"),
                     FrameCacheConfig {
+                        cache_dir: None,
                         prefetch_size: chrono::Duration::seconds(60),
                         cleanup_interval: chrono::Duration::minutes(360),
                         fps: 1.0,
@@ -1162,7 +1163,6 @@ struct InputControlResponse {
 pub struct StreamFramesRequest {
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
-    fps: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -1215,41 +1215,87 @@ async fn stream_frames_handler(
         "stream_frames_handler start_time={:?} end_time={:?}",
         request.start_time, request.end_time
     );
-    let stream = async_stream::stream! {
-        let mut current_time = request.end_time;
 
-        while current_time >= request.start_time {
-            info!("checking frame at time: {}", current_time);
-            if let Some(frame_path) = state.frame_cache.get_frame(current_time).await {
-                info!("found frame at {}: {}", current_time, frame_path.to_string_lossy());
-                if let Ok(frame_data) = fs::read(&frame_path).await {
-                    let response = StreamFramesResponse {
-                        #[allow(deprecated)]
+    let (progress_tx, mut progress_rx) = tokio::sync::mpsc::channel(100);
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
+    let cache = state.frame_cache.clone();
+
+    // Spawn prefetch task
+    tokio::spawn(async move {
+        if let Err(e) = cache
+            .preload_frames_with_progress(
+                &request.start_time,
+                &request.end_time,
+                progress_tx,
+                frame_tx,
+            )
+            .await
+        {
+            error!("prefetch failed: {}", e);
+        }
+    });
+
+    let stream = async_stream::stream! {
+        loop {
+            tokio::select! {
+                Some(progress) = progress_rx.recv() => {
+                    let json = serde_json::to_string(&StreamResponse::Progress(progress)).unwrap();
+                    yield Ok(Event::default().event("progress").data(json));
+                }
+                Some((timestamp, frame_data)) = frame_rx.recv() => {
+                    let response = StreamResponse::Frame(StreamFramesResponse {
                         frame: base64::encode(&frame_data),
-                        timestamp: current_time,
-                        file_path: frame_path.to_string_lossy().to_string(),
+                        timestamp,
+                        file_path: "".to_string(), // Could pass this through if needed
                         app_name: None,
                         window_name: None,
-                    };
+                    });
 
                     if let Ok(json) = serde_json::to_string(&response) {
-                        yield Ok(Event::default()
-                            .event("frame")
-                            .data(json));
+                        yield Ok(Event::default().event("frame").data(json));
                     }
-                } else {
-                    error!("failed to read frame file: {}", frame_path.to_string_lossy());
                 }
-            } else {
-                info!("no frame found at time: {}", current_time);
+                else => break,
             }
-
-            current_time = current_time - chrono::Duration::milliseconds((1000.0 / request.fps.unwrap_or(1.0)) as i64);
-            tokio::time::sleep(Duration::from_millis(5)).await;
         }
     };
 
     Sse::new(stream)
+}
+
+// Add new response types
+#[derive(Serialize)]
+#[serde(tag = "type", content = "data")]
+pub enum StreamResponse {
+    Progress(ProgressInfo),
+    Frame(StreamFramesResponse),
+}
+
+#[derive(Serialize)]
+pub struct ProgressInfo {
+    message: String,
+    percent: f32,
+    total_chunks: usize,
+    processed_chunks: usize,
+    current_timestamp: DateTime<Utc>,
+}
+
+impl ProgressInfo {
+    pub fn new(
+        message: String,
+        percent: f32,
+        total_chunks: usize,
+        processed_chunks: usize,
+        current_timestamp: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            message,
+            percent,
+            total_chunks,
+            processed_chunks,
+            current_timestamp,
+        }
+    }
 }
 
 /*

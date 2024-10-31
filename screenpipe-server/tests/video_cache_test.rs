@@ -1,14 +1,14 @@
 use anyhow::Result;
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use dirs::home_dir;
-use std::{path::PathBuf, time::SystemTime};
-use tempfile::env::temp_dir;
-use tokio::{fs, process::Command};
-use tracing::debug;
+use std::time::SystemTime;
+use tempfile::TempDir;
+use tokio::fs;
+use tracing::{debug, info};
 
 use screenpipe_server::video_cache::{FrameCache, FrameCacheConfig};
 
-async fn setup_test_env() -> Result<FrameCache> {
+async fn setup_test_env() -> Result<(FrameCache, TempDir)> {
     // enabled tracing logging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
@@ -19,34 +19,35 @@ async fn setup_test_env() -> Result<FrameCache> {
         .join(".screenpipe")
         .join("data");
 
+    // Create temporary directory for cache
+    let temp_dir = TempDir::new()?;
+
     println!("using real screenpipe data dir: {:?}", screenpipe_dir);
-    let cache = FrameCache::new(screenpipe_dir).await?;
-    Ok(cache)
+    println!("using temp cache dir: {:?}", temp_dir.path());
+
+    let config = FrameCacheConfig {
+        cache_dir: Some(temp_dir.path().to_path_buf()),
+        ..FrameCacheConfig::default()
+    };
+
+    let cache = FrameCache::with_config(screenpipe_dir, config).await?;
+    Ok((cache, temp_dir))
 }
 
 #[tokio::test]
 async fn test_frame_retrieval() -> Result<()> {
     // Use custom config with shorter timeouts for testing
+    let temp_dir = TempDir::new()?;
     let config = FrameCacheConfig {
-        prefetch_size: Duration::seconds(10),
+        prefetch_size: Duration::seconds(300),
         cleanup_interval: Duration::minutes(1),
         fps: 1.0,
+        cache_dir: Some(temp_dir.path().to_path_buf()),
     };
-    
-    let frame_cache = setup_test_env().await?;
+
+    let (frame_cache, _temp_dir) = setup_test_env().await?;
     let cache = FrameCache::with_config(frame_cache.screenpipe_dir, config).await?;
-    let target_time = Utc::now() - Duration::minutes(30);
-
-    println!("triggering initial frame load for {}", target_time);
-
-    // First trigger the prefetch
-    cache.get_frame(target_time).await;
-
-    // Wait for prefetch to complete (30 seconds should be enough)
-    println!("waiting for prefetch to complete...");
-    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-
-    println!("attempting to retrieve frame for {}", target_time);
+    let target_time = Utc::now() - Duration::seconds(300);
 
     // Now try to get the frame with timeout
     let frame = tokio::time::timeout(
@@ -57,7 +58,7 @@ async fn test_frame_retrieval() -> Result<()> {
     .unwrap()
     .unwrap();
 
-    println!(
+    info!(
         "successfully retrieved frame for timestamp {}: {:?}",
         target_time, frame
     );
@@ -66,13 +67,13 @@ async fn test_frame_retrieval() -> Result<()> {
 
 #[tokio::test]
 async fn test_skip_recent_videos() -> Result<()> {
-    let cache = setup_test_env().await?;
+    let (cache, _temp_dir) = setup_test_env().await?;
 
     // Try to get frame from very recent recording
     let target_time = Utc::now() - Duration::seconds(30);
     let frame = cache.get_frame(target_time).await;
 
-    println!("attempted to get frame from recent video: {:?}", frame);
+    info!("attempted to get frame from recent video: {:?}", frame);
     assert!(
         frame.is_none(),
         "should not get frames from very recent videos"
@@ -82,14 +83,15 @@ async fn test_skip_recent_videos() -> Result<()> {
 
 #[tokio::test]
 async fn test_prefetch_mechanism() -> Result<()> {
-    // Use custom config with smaller prefetch size for testing
+    let temp_dir = TempDir::new()?;
     let config = FrameCacheConfig {
-        prefetch_size: Duration::seconds(10), // Smaller window for testing
+        prefetch_size: Duration::seconds(10),
         cleanup_interval: Duration::minutes(1),
         fps: 1.0,
+        cache_dir: Some(temp_dir.path().to_path_buf()),
     };
 
-    let frame_cache = setup_test_env().await?;
+    let (frame_cache, _temp_dir) = setup_test_env().await?;
     let cache = FrameCache::with_config(frame_cache.screenpipe_dir, config).await?;
 
     // Request frame from 1 hour ago to trigger prefetch
@@ -100,15 +102,15 @@ async fn test_prefetch_mechanism() -> Result<()> {
     let nearby_time = target_time + Duration::seconds(10);
     let nearby_frame = cache.get_frame(nearby_time).await;
 
-    println!("prefetch test - initial frame: {:?}", frame);
-    println!("prefetch test - nearby frame: {:?}", nearby_frame);
+    info!("prefetch test - initial frame: {:?}", frame);
+    info!("prefetch test - nearby frame: {:?}", nearby_frame);
     assert!(nearby_frame.is_some(), "nearby frame should be prefetched");
     Ok(())
 }
 
 #[tokio::test]
 async fn test_high_speed_streaming() -> Result<()> {
-    let cache = setup_test_env().await?;
+    let (cache, _temp_dir) = setup_test_env().await?;
 
     let start_time = Utc::now() - Duration::minutes(5);
     let mut frames = Vec::new();
@@ -121,11 +123,11 @@ async fn test_high_speed_streaming() -> Result<()> {
         }
 
         if i % 10 == 0 {
-            println!("retrieved {} frames", frames.len());
+            info!("retrieved {} frames", frames.len());
         }
     }
 
-    println!("total frames retrieved: {}", frames.len());
+    info!("total frames retrieved: {}", frames.len());
     Ok(())
 }
 
@@ -180,9 +182,14 @@ async fn test_frame_extraction() -> Result<()> {
         start_time, end_time
     );
 
-    let frames =
-        FrameCache::extract_frames_batch(test_file.to_str().unwrap(), start_time, end_time, 10.0)
-            .await?;
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<(DateTime<Utc>, Vec<u8>)>(100);
+    FrameCache::extract_frames_batch(test_file.to_str().unwrap(), start_time, end_time, 10.0, tx)
+        .await?;
+
+    let mut frames = Vec::new();
+    while let Some((timestamp, frame)) = rx.recv().await {
+        frames.push((timestamp, frame));
+    }
 
     debug!("extracted {} frames", frames.len());
     assert!(!frames.is_empty(), "Should extract at least one frame");

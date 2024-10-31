@@ -28,8 +28,8 @@ export default function Timeline() {
     }
 
     const endTime = new Date();
-    const startTime = new Date(endTime.getTime() - 30 * 60 * 1000);
-    const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&fps=3&reverse=true`;
+    const startTime = new Date(endTime.getTime() - 5 * 60 * 1000);
+    const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&fps=1&reverse=true`;
 
     console.log("Starting stream:", url);
 

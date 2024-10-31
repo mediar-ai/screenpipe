@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>screenpipe frame stream</title>
+    <style>
+        body {
+            background: #000;
+            color: #fff;
+            font-family: monospace;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        #controls {
+            margin-bottom: 20px;
+        }
+        
+        #frame {
+            max-width: 100%;
+            border: 1px solid #333;
+        }
+        
+        #status {
+            margin-top: 10px;
+            color: #666;
+        }
+        
+        input, button {
+            background: #111;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 8px;
+            font-family: monospace;
+        }
+        
+        button:hover {
+            background: #222;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <input type="datetime-local" id="startTime" step="1">
+        <input type="datetime-local" id="endTime" step="1">
+        <button onclick="startStream()">start stream</button>
+        <button onclick="stopStream()">stop</button>
+    </div>
+
+    <img id="frame" src="">
+    <div id="status"></div>
+
+    <script>
+        let eventSource = null;
+        
+        // Set default time range to last 5 minutes
+        function setDefaultTimes() {
+            const end = new Date();
+            const start = new Date(end - 5 * 60 * 1000); // 5 minutes ago
+            
+            document.getElementById('startTime').value = start.toISOString().slice(0, -1);
+            document.getElementById('endTime').value = end.toISOString().slice(0, -1);
+        }
+        
+        function startStream() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            
+            const url = `http://localhost:3030/stream/frames?start_time=${startTime}Z&end_time=${endTime}Z`;
+            eventSource = new EventSource(url);
+            
+            eventSource.addEventListener('frame', (event) => {
+                const data = JSON.parse(event.data);
+                document.getElementById('frame').src = `data:image/png;base64,${data.data.frame}`;
+                document.getElementById('status').innerText = `timestamp: ${data.data.timestamp}`;
+            });
+            
+            eventSource.addEventListener('progress', (event) => {
+                const data = JSON.parse(event.data);
+                document.getElementById('status').innerText = 
+                    `${data.data.message} (${Math.round(data.data.percent)}%)`;
+            });
+            
+            eventSource.onerror = (error) => {
+                console.error('sse error:', error);
+                document.getElementById('status').innerText = 'error: connection lost';
+                eventSource.close();
+            };
+        }
+        
+        function stopStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                document.getElementById('status').innerText = 'stopped';
+            }
+        }
+        
+        // Initialize with default time range
+        setDefaultTimes();
+    </script>
+</body>
+</html>
