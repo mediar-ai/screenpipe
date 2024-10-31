@@ -12,9 +12,6 @@ use futures::{
 };
 use image::ImageFormat::{self};
 
-use screenpipe_vision::monitor::list_monitors;
-use screenpipe_vision::OcrEngine;
-
 use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
@@ -24,12 +21,15 @@ use crate::{
     ContentType, DatabaseManager, SearchResult,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
+use base64::prelude::*;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
     DeviceType,
 };
+use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -753,8 +753,8 @@ impl Server {
             frame_cache: Arc::new(
                 FrameCache::with_config(
                     self.screenpipe_dir.clone().join("data"),
+                    None,
                     FrameCacheConfig {
-                        cache_dir: None,
                         prefetch_size: chrono::Duration::seconds(60),
                         cleanup_interval: chrono::Duration::minutes(360),
                         fps: 1.0,
@@ -1212,63 +1212,44 @@ async fn stream_frames_handler(
     State(state): State<Arc<AppState>>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     info!(
-        "stream_frames_handler start_time={:?} end_time={:?}",
+        "streaming frames from {} to {}",
         request.start_time, request.end_time
     );
 
-    let (progress_tx, mut progress_rx) = tokio::sync::mpsc::channel(100);
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
     let cache = state.frame_cache.clone();
 
-    // Spawn prefetch task
+    // Spawn frame extraction task
     tokio::spawn(async move {
         if let Err(e) = cache
-            .preload_frames_with_progress(
-                &request.start_time,
-                &request.end_time,
-                progress_tx,
-                frame_tx,
-            )
+            .extract_frames_range(&request.start_time, &request.end_time, frame_tx)
             .await
         {
-            error!("prefetch failed: {}", e);
+            error!("frame extraction failed: {}", e);
         }
     });
 
     let stream = async_stream::stream! {
-        loop {
-            tokio::select! {
-                Some(progress) = progress_rx.recv() => {
-                    let json = serde_json::to_string(&StreamResponse::Progress(progress)).unwrap();
-                    yield Ok(Event::default().event("progress").data(json));
-                }
-                Some((timestamp, frame_data)) = frame_rx.recv() => {
-                    let response = StreamResponse::Frame(StreamFramesResponse {
-                        frame: base64::encode(&frame_data),
-                        timestamp,
-                        file_path: "".to_string(), // Could pass this through if needed
-                        app_name: None,
-                        window_name: None,
-                    });
+        while let Some((timestamp, frame_data)) = frame_rx.recv().await {
+            let response = StreamFramesResponse {
+                frame: BASE64_STANDARD.encode(&frame_data),
+                timestamp,
+                file_path: "".to_string(),
+                app_name: None,
+                window_name: None,
+            };
 
-                    if let Ok(json) = serde_json::to_string(&response) {
-                        yield Ok(Event::default().event("frame").data(json));
-                    }
-                }
-                else => break,
+            if let Ok(json) = serde_json::to_string(&response) {
+                yield Ok(Event::default().data(json));
             }
         }
     };
 
-    Sse::new(stream)
-}
-
-// Add new response types
-#[derive(Serialize)]
-#[serde(tag = "type", content = "data")]
-pub enum StreamResponse {
-    Progress(ProgressInfo),
-    Frame(StreamFramesResponse),
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    )
 }
 
 #[derive(Serialize)]

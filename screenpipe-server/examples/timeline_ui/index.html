@@ -204,40 +204,37 @@
     <img id="frame" />
     <div id="info"></div>
     <div id="error"></div>
-    <div class="loading">
-        <div>preparing frames</div>
-        <div class="progress-bar">
-            <div class="progress-bar-fill" style="width: 0%"></div>
-        </div>
-        <div class="progress-text">initializing...</div>
-    </div>
 
     <script>
         let currentTime = new Date();
+        let frames = []; // Store all frames
         const timelineWidth = document.getElementById('timeline').offsetWidth;
-        const loading = document.querySelector('.loading');
-        const progressBar = document.querySelector('.progress-bar-fill');
-        const progressText = document.querySelector('.progress-text');
-        let isLoading = false;
 
-        function setLoading(state, message = '') {
-            isLoading = state;
-            loading.classList.toggle('active', state);
-            if (!state) {
-                progressBar.style.width = '0%';
-                progressText.textContent = '';
-            }
-        }
-
-        function updateProgress(progress) {
-            progressBar.style.width = `${progress.percent}%`;
-            progressText.textContent = progress.message;
-        }
-
-        function updateTimeline() {
+        function updateTimelineCursor() {
             const cursor = document.getElementById('cursor');
-            const position = ((currentTime - startTime) / (endTime - startTime)) * 100;
-            cursor.style.left = `${position}%`;
+            const timeRange = endTime - startTime;
+            const position = (currentTime - startTime) / timeRange;
+            cursor.style.left = `${position * 100}%`;
+
+            // Update highlight position
+            const highlight = document.querySelector('.timeline-highlight');
+            highlight.style.left = `${position * 100}%`;
+        }
+
+        function displayFrameAtTime(timestamp) {
+            // Find the closest frame to the requested timestamp
+            const frame = frames.reduce((prev, curr) => {
+                return Math.abs(new Date(curr.timestamp) - timestamp) < Math.abs(new Date(prev.timestamp) - timestamp) ? curr : prev;
+            });
+
+            const frameElement = document.getElementById('frame');
+            frameElement.style.display = 'block';
+            frameElement.src = `data:image/jpeg;base64,${frame.frame.trim().replace(/\s/g, '')}`;
+            
+            document.getElementById('info').textContent = 
+                `timestamp: ${frame.timestamp} | app: ${frame.app_name || 'n/a'} | window: ${frame.window_name || 'n/a'}`;
+            currentTime = new Date(frame.timestamp);
+            updateTimelineCursor();
         }
 
         function connectToStream(startTime, endTime) {
@@ -245,94 +242,34 @@
                 window.eventSource.close();
             }
 
-            setLoading(true, 'connecting to stream...');
-
             const url = new URL('http://localhost:3030/stream/frames');
-            url.searchParams.append('start_time', startTime.toISOString());
-            url.searchParams.append('end_time', endTime.toISOString());
-            url.searchParams.append('fps', '1');
+            url.searchParams.append('start_time', `${startTime.toISOString().slice(0, -1)}Z`);
+            url.searchParams.append('end_time', `${endTime.toISOString().slice(0, -1)}Z`);
             
-            console.log('connecting to:', url.toString());
+            window.eventSource = new EventSource(url.toString());
             
-            window.eventSource = new EventSource(url.toString(), {
-                withCredentials: false
-            });
-            
+
             window.eventSource.onopen = () => {
                 console.log('SSE connection opened');
                 document.getElementById('error').textContent = '';
             };
             
-            window.eventSource.addEventListener('progress', (event) => {
-                console.log('raw progress event:', event);
-                try {
-                    let progressData = JSON.parse(event.data);
-                    console.log('parsed progress:', progressData);
-                    
-                    // Extract progress data from the enum wrapper if needed
-                    if (progressData.type === 'Progress') {
-                        progressData = progressData.data;
-                    }
-                    
-                    updateProgress(progressData);
-                    
-                    // Add visual feedback even if percentage is 0
-                    if (progressData.percent === 0) {
-                        progressText.textContent = 'scanning files...';
-                        progressBar.style.width = '5%'; // Show some movement
-                    }
-                } catch (e) {
-                    console.error('Failed to parse progress:', e);
-                    console.error('Raw data:', event.data);
-                }
-            });
-
             window.eventSource.onmessage = (event) => {
-                console.log('generic message event:', event);
-            };
-
-            window.eventSource.addEventListener('frame', (event) => {
-                console.log('frame event received:', event.data);
                 try {
-                    const parsed = JSON.parse(event.data);
-                    console.log('parsed frame data:', parsed);
-                    
-                    // Extract the actual frame data from the wrapper
-                    const data = parsed.type === 'Frame' ? parsed.data : parsed;
-                    
-                    if (!data.frame) {
-                        console.error('no frame data in response');
-                        return;
-                    }
+                    const data = JSON.parse(event.data);
+                    console.log('frame event:', data.frame.length);
 
-                    setLoading(false);
-                    const frameElement = document.getElementById('frame');
-                    frameElement.style.display = 'block';
-                    frameElement.src = `data:image/jpeg;base64,${data.frame}`;
-                    document.getElementById('info').textContent = 
-                        `timestamp: ${data.timestamp} | app: ${data.app_name || 'n/a'} | window: ${data.window_name || 'n/a'}`;
-                    currentTime = new Date(data.timestamp);
-                    updateTimeline();
+                    if (data === 'keep-alive-text' || !data.frame) return;
+
+                    frames.push(data);
+                    displayFrameAtTime(new Date(data.timestamp));
                 } catch (e) {
                     console.error('Failed to parse frame data:', e);
-                    console.error('Raw event data:', event.data);
                 }
-            });
+            };
 
             window.eventSource.onerror = (error) => {
-                setLoading(false);
-                const errorDetails = {
-                    type: error.type,
-                    target: {
-                        readyState: window.eventSource.readyState,
-                        url: url.toString()
-                    },
-                    timestamp: new Date().toISOString()
-                };
-                
-                console.error('sse error:', errorDetails);
-                document.getElementById('error').textContent = 
-                    `error connecting to stream:\n${JSON.stringify(errorDetails, null, 2)}`;
+                console.log('stream ended or errored (expected behavior)');
                 window.eventSource.close();
             };
         }
@@ -357,46 +294,32 @@
             }
         }
 
-        // Initialize timeline interaction
+        // Modified timeline interaction
         const timeline = document.getElementById('timeline');
         timeline.addEventListener('click', (e) => {
             const rect = timeline.getBoundingClientRect();
             const position = (e.clientX - rect.left) / rect.width;
             const timeRange = endTime - startTime;
             currentTime = new Date(startTime.getTime() + (timeRange * position));
-            
-            // Recalculate window around new current time
-            const windowSize = 3 * 60 * 1000; // 3 minutes instead of 5
-            const newStartTime = new Date(currentTime.getTime() - (windowSize / 2));
-            const newEndTime = new Date(currentTime.getTime() + (windowSize / 2));
-            
-            connectToStream(newStartTime, newEndTime);
-            updateTimelineMarkers();
+            displayFrameAtTime(currentTime);
+            updateTimelineCursor();
         });
 
-        // Handle keyboard navigation
+        // Modified keyboard navigation
         document.addEventListener('keydown', (e) => {
             const step = 1000; // 1 second step
             if (e.key === 'ArrowLeft') {
                 currentTime = new Date(currentTime.getTime() - step);
-                connectToStream(
-                    new Date(currentTime.getTime() - 150000),
-                    new Date(currentTime.getTime() + 150000)
-                );
-                updateTimelineMarkers();
+                displayFrameAtTime(currentTime);
             } else if (e.key === 'ArrowRight') {
                 currentTime = new Date(currentTime.getTime() + step);
-                connectToStream(
-                    new Date(currentTime.getTime() - 150000),
-                    new Date(currentTime.getTime() + 150000)
-                );
-                updateTimelineMarkers();
+                displayFrameAtTime(currentTime);
             }
         });
 
         // Initial connection
         const endTime = new Date();
-        const startTime = new Date(endTime - 1000 * 60 * 3); // last 3 minutes instead of 5
+        const startTime = new Date(endTime - 1000 * 60 * 3); // last 3 minutes
         connectToStream(startTime, endTime);
         updateTimelineMarkers();
     </script>
