@@ -258,15 +258,6 @@ func monitorCurrentFrontmostApplication() {
         return
     }
 
-    // Check if app exists in global state
-    if globalElementValues[appName] == nil {
-        // Only add to ignored list if app isn't being monitored yet
-        state.ignoredApps.append(appName)
-        if let encoded = try? JSONEncoder().encode(state) {
-            try? encoded.write(to: URL(fileURLWithPath: getStateFilePath()))
-        }
-    }
-
     let pid = app.processIdentifier
     let axApp = AXUIElementCreateApplication(pid)
 
@@ -495,13 +486,6 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
         print("\(String(format: "%.2f", timeInterval))ms - ui traversal")
 
         measureGlobalElementValuesSize()
-
-        // Remove app from ignored list since traversal succeeded
-        var state = loadOrCreateState()
-        state.ignoredApps.removeAll(where: { $0 == appName })
-        if let encoded = try? JSONEncoder().encode(state) {
-            try? encoded.write(to: URL(fileURLWithPath: getStateFilePath()))
-        }
     }
 }
 
