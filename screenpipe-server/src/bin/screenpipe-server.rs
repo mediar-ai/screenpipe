@@ -414,11 +414,6 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
-        #[cfg(feature = "llm")]
-        cli.enable_llm,
-        #[cfg(feature = "llm")]
-        llm,
-
     );
 
     let pipe_futures = Arc::new(tokio::sync::Mutex::new(FuturesUnordered::new()));
@@ -657,7 +652,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let server_future = server.start(devices_status, api_plugin);
+    let server_future = server.start(devices_status, api_plugin, cli.enable_frame_cache);
     pin_mut!(server_future);
 
     let pipes_future = async {

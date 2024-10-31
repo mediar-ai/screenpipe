@@ -235,6 +235,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_beta: bool,
 
+    /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
+    #[arg(long, default_value_t = false)]
+    pub enable_frame_cache: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 

@@ -54,6 +54,7 @@ export interface Settings {
   enableBeta: boolean;
   showScreenpipeShortcut: string;
   isFirstTimeUser: boolean;
+  enableFrameCache: boolean; // Add this line
 }
 
 const defaultSettings: Settings = {
@@ -99,6 +100,7 @@ const defaultSettings: Settings = {
   enableBeta: false,
   showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
+  enableFrameCache: false, // Add this line
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -282,6 +284,9 @@ export function useSettings() {
         const savedAiProviderType =
           (await store!.get<AIProviderType>("aiProviderType")) || "openai";
 
+        const savedEnableFrameCache =
+          (await store!.get<boolean>("enableFrameCache")) || false;
+
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -315,6 +320,7 @@ export function useSettings() {
           enableBeta: savedEnableBeta,
           showScreenpipeShortcut: savedShowScreenpipeShortcut,
           isFirstTimeUser: savedIsFirstTimeUser,
+          enableFrameCache: savedEnableFrameCache,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

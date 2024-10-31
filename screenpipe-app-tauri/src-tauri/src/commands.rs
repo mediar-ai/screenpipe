@@ -127,7 +127,7 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
 }
 
 #[tauri::command]
-pub fn show_quick_capture(app_handle: &tauri::AppHandle<tauri::Wry>) {
+pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
     if let Some(window) = app_handle.get_webview_window("timeline") {
         #[cfg(target_os = "macos")]
         let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -138,11 +138,11 @@ pub fn show_quick_capture(app_handle: &tauri::AppHandle<tauri::Wry>) {
         let _ = window.set_focus();
     } else {
         let _window = tauri::WebviewWindowBuilder::new(
-            app_handle,
+            &app_handle,
             "timeline",
             tauri::WebviewUrl::App("timeline.html".into()),
         )
-        .title("Timeline")
+        .title("timeline")
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
@@ -210,16 +210,6 @@ pub fn update_show_screenpipe_shortcut(
         return Err("failed to set shortcut, reverted to default".to_string());
     }
 
-    // Register the new shortcut for quick capture window
-    let quick_capture_shortcut = "Super+Alt+Q".parse::<Shortcut>().unwrap();
-    if let Err(e) = app_handle.global_shortcut().on_shortcut(
-        quick_capture_shortcut,
-        move |app_handle, _event, _shortcut| {
-            show_quick_capture(app_handle);
-        },
-    ) {
-        info!("failed to register quick capture shortcut: {}", e);
-    }
 
     Ok(())
 }

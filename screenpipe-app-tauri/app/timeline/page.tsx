@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, WheelEvent } from "react";
+import { useEffect, useState, useRef } from "react";
 
 interface StreamFramesResponse {
   frame: string;
@@ -95,6 +95,13 @@ export default function Timeline() {
   useEffect(() => {
     setupEventSource();
 
+    // Update the type annotation to use the DOM's WheelEvent
+    const preventScroll = (e: globalThis.WheelEvent) => {
+      e.preventDefault();
+    };
+
+    document.addEventListener("wheel", preventScroll, { passive: false });
+
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -102,10 +109,11 @@ export default function Timeline() {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
+      document.removeEventListener("wheel", preventScroll);
     };
   }, []);
 
-  const handleScroll = (e: WheelEvent) => {
+  const handleScroll = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -125,7 +133,10 @@ export default function Timeline() {
     <div
       className="fixed inset-0 flex flex-col bg-black text-white overflow-hidden font-['Press_Start_2P'] relative"
       onWheel={handleScroll}
-      style={{ height: "100vh" }}
+      style={{
+        height: "100vh",
+        overscrollBehavior: "none", // Prevent bounce/overscroll effects
+      }}
     >
       {/* Scanline effect overlay */}
       <div

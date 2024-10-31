@@ -59,7 +59,7 @@ pub struct AppState {
     pub pipe_manager: Arc<PipeManager>,
     pub vision_disabled: bool,
     pub audio_disabled: bool,
-    pub frame_cache: Arc<FrameCache>,
+    pub frame_cache: Option<Arc<FrameCache>>,
 }
 
 // Update the SearchQuery struct
@@ -736,6 +736,7 @@ impl Server {
         self,
         device_status: HashMap<AudioDevice, DeviceControl>,
         api_plugin: F,
+        enable_frame_cache: bool,
     ) -> Result<(), std::io::Error>
     where
         F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
@@ -750,19 +751,23 @@ impl Server {
             pipe_manager: self.pipe_manager,
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
-            frame_cache: Arc::new(
-                FrameCache::with_config(
-                    self.screenpipe_dir.clone().join("data"),
-                    None,
-                    FrameCacheConfig {
-                        prefetch_size: chrono::Duration::seconds(60),
-                        cleanup_interval: chrono::Duration::minutes(360),
-                        fps: 1.0,
-                    },
-                )
-                .await
-                .unwrap(),
-            ),
+            frame_cache: if enable_frame_cache {
+                Some(Arc::new(
+                    FrameCache::with_config(
+                        self.screenpipe_dir.clone().join("data"),
+                        None,
+                        FrameCacheConfig {
+                            prefetch_size: chrono::Duration::seconds(60),
+                            cleanup_interval: chrono::Duration::minutes(360),
+                            fps: 1.0,
+                        },
+                    )
+                    .await
+                    .unwrap(),
+                ))
+            } else {
+                None
+            },
         });
 
         let app = create_router()
@@ -1217,15 +1222,17 @@ async fn stream_frames_handler(
     );
 
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
-    let cache = state.frame_cache.clone();
+    let cache = state.frame_cache.as_ref().unwrap().clone();
 
     // Spawn frame extraction task
-    tokio::spawn(async move {
-        if let Err(e) = cache
-            .extract_frames_range(&request.start_time, &request.end_time, frame_tx)
-            .await
-        {
-            error!("frame extraction failed: {}", e);
+    tokio::spawn({
+        async move {
+            if let Err(e) = cache
+                .extract_frames_range(&request.start_time, &request.end_time, frame_tx)
+                .await
+            {
+                error!("frame extraction failed: {}", e);
+            }
         }
     });
 

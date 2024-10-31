@@ -71,10 +71,10 @@
         "height": 600,
         "minWidth": 1400,
         "minHeight": 600,
-        "visible": true,
+        "visible": false,
         "decorations": true,
         "transparent": true,
-        "alwaysOnTop": false,
+        "alwaysOnTop": true,
         "label": "timeline"
       }
     ],
