@@ -236,7 +236,7 @@ pub struct Cli {
     pub enable_beta: bool,
 
     /// Enable UI monitoring (macOS only)
-    #[arg(long)]
+    #[arg(long, default_value_t = false)]
     pub enable_ui_monitoring: bool,
 
     #[command(subcommand)]
