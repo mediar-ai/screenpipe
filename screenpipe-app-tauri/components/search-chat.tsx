@@ -79,6 +79,7 @@ import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { SearchHistory } from "@/lib/types/history";
 
 interface SearchChatProps {
   currentSearchId: string | null;
