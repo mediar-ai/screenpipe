@@ -10,7 +10,7 @@ class Screenpipe < Formula
       sha256 "2cb4d60689ee22bf7c639e75cbcb57d3b8f21732fc383ff57592b4044b5e4396" # arm64
     else
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
-      sha256 "a6fa5c46025f35eeb0290f050f95d37614d2cd5c54f1b8ed2c381705744938be" # x86_64
+      sha256 "969dad8fdbf79af2fa6ea14b604ac656041d8fa0281777b70bac6893d13bd34b" # x86_64
     end
   end
   
