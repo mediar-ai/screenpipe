@@ -715,26 +715,21 @@ async fn main() -> anyhow::Result<()> {
 
     // Start the UI monitoring task
     #[cfg(target_os = "macos")]
-    let _ui_handle: JoinHandle<()> = {
-        if cli.enable_ui_monitoring {
-            let shutdown_tx_clone = shutdown_tx.clone();
-            tokio::spawn(async move {
-                let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                
-                tokio::select! {
-                    _ = run_ui() => {
-                        error!("ui monitoring stopped unexpectedly");
-                    }
-                    _ = shutdown_rx.recv() => {
-                        info!("received shutdown signal, stopping ui monitoring");
-                    }
+    if cli.enable_ui_monitoring {
+        let shutdown_tx_clone = shutdown_tx.clone();
+        tokio::spawn(async move {
+            let mut shutdown_rx = shutdown_tx_clone.subscribe();
+            
+            tokio::select! {
+                _ = run_ui() => {
+                    error!("ui monitoring stopped unexpectedly");
                 }
-            })
-        } else {
-            // Create a dummy task that just completes immediately
-            tokio::spawn(async {})
-        }
-    };
+                _ = shutdown_rx.recv() => {
+                    info!("received shutdown signal, stopping ui monitoring");
+                }
+            }
+        });
+    }
 
     let pipe_control_future = async {
         while let Some(control) = pipe_control_rx.recv().await {
