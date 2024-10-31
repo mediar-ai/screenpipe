@@ -6,13 +6,18 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
    </a>
 </p>
 
-<pre align="center">
-   ___  ___ _ __ ___  ___ _ __  _ __ (_)_ __   ___ 
-  / __|/ __| '__/ _ \/ _ \ '_ \| '_ \| | '_ \ / _ \
-  \__ \ (__| | |  __/  __/ | | | |_) | | |_) |  __/
-  |___/\___|_|  \___|\___|_| |_| .__/|_| .__/ \___|
-                               |_|     |_|         
-</pre>
+
+
+<!-- ScreenPipe Title and Subtitle -->
+<p align="center" style="font-family: 'Press Start 2P', monospace;">
+   <h1 align="center">[ screenpipe ]</h1>
+   <p align="center">24/7 screen & voice recording for the age of superintelligence</p>
+</p>
+
+<!-- Slogan -->
+<p align="center" style="font-family: monospace;">
+   <code>[ recording reality, one pixel at a time ]</code>
+</p>
 
 <p align="center">
     <a href="https://screenpi.pe" target="_blank">
