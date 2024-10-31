@@ -17,6 +17,7 @@ import {
 } from "../ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Label } from "../ui/label";
+import { trackError } from "@/lib/opentelemetry";
 
 interface OnboardingStatusProps {
   className?: string;
@@ -136,6 +137,12 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       console.error("error checking status:", error);
       setStatus("error");
       setIsLoading(false);
+      trackError(error, {
+        operation: "screenpipe-setup-failure",
+        additionalAttributes: {
+          useChineseMirror: String(useChineseMirror),
+        },
+      });
     }
   };
 

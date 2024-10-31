@@ -1,9 +1,9 @@
-import { ContentItem, pipe } from "screenpipe";
+import { ContentItem, pipe } from "@screenpipe/js";
 
 import { z } from "zod";
 import { generateObject } from "ai";
 import { createOllama } from "ollama-ai-provider";
-import { LinearClient } from "npm:@linear/sdk";
+import { LinearClient } from "@linear/sdk";
 
 const linearSearchQuery = z.object({
   query: z.string(),

@@ -238,6 +238,7 @@ impl DatabaseManager {
 
         Ok(id)
     }
+
     pub async fn update_audio_transcription(
         &self,
         audio_chunk_id: i64,
@@ -272,7 +273,10 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_frame(&self, device_name: &str) -> Result<i64, sqlx::Error> {
+    pub async fn insert_frame(&self, 
+        device_name: &str, 
+        timestamp: Option<DateTime<Utc>>,
+    ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
 
@@ -302,6 +306,8 @@ impl DatabaseManager {
         .fetch_one(&mut *tx)
         .await?;
         debug!("insert_frame Calculated offset_index: {}", offset_index);
+        
+        let timestamp = timestamp.unwrap_or_else(Utc::now);
 
         // Insert the new frame
         let id = sqlx::query(
@@ -309,7 +315,7 @@ impl DatabaseManager {
         )
         .bind(video_chunk_id)
         .bind(offset_index)
-        .bind(Utc::now())
+        .bind(timestamp)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -607,7 +613,7 @@ impl DatabaseManager {
             AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
         "#,
         );
-
+    
         sql.push_str(
             r#"
         GROUP BY
@@ -620,7 +626,7 @@ impl DatabaseManager {
         LIMIT ?6 OFFSET ?7
         "#,
         );
-
+    
         let query = sqlx::query_as::<_, AudioResultRaw>(&sql)
             .bind(query)
             .bind(start_time)
@@ -629,9 +635,9 @@ impl DatabaseManager {
             .bind(max_length.map(|l| l as i64))
             .bind(limit)
             .bind(offset);
-
+    
         let audio_results_raw = query.fetch_all(&self.pool).await?;
-
+    
         // Parse the tags string into a Vec<String>
         let audio_results = audio_results_raw
             .into_iter()
@@ -654,7 +660,7 @@ impl DatabaseManager {
                 },
             })
             .collect();
-
+    
         Ok(audio_results)
     }
 

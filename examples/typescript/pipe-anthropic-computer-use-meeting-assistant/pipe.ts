@@ -1,5 +1,5 @@
-import { pipe, ContentItem } from "screenpipe";
-import Anthropic from "npm:@anthropic-ai/sdk";
+import { pipe, ContentItem } from "@screenpipe/js";
+import Anthropic from "@anthropic-ai/sdk";
 
 let anthropic: Anthropic;
 let meetingNotes = "";
@@ -214,7 +214,7 @@ export PIPE_ID="pipe-anthropic-computer-use-meeting-assistant"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-anthropic-computer-use-meeting-assistant"
 
-deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys examples/typescript/pipe-anthropic-computer-use-meeting-assistant/pipe.ts
+bun run examples/typescript/pipe-anthropic-computer-use-meeting-assistant/pipe.ts
  */
 
 

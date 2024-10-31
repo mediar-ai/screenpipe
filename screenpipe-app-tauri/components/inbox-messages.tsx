@@ -26,6 +26,7 @@ import { MemoizedReactMarkdown } from "./markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { format } from "date-fns";
+import posthog from "posthog-js";
 
 export interface Message {
   id: string;
@@ -106,6 +107,9 @@ export function InboxMessages({
   };
 
   useEffect(() => {
+    // Trigger PostHog event when the inbox is opened
+    posthog.capture("inbox opened");
+
     function handleClickOutside(event: MouseEvent) {
       if (
         inboxRef.current &&
@@ -180,12 +184,18 @@ export function InboxMessages({
                               <p className="mb-2 last:mb-0">{children}</p>
                             ),
                             a: ({ node, href, children, ...props }) => {
-                              const isExternal = href?.startsWith('http') || href?.startsWith('https');
+                              const isExternal =
+                                href?.startsWith("http") ||
+                                href?.startsWith("https");
                               return (
                                 <a
                                   href={href}
                                   target={isExternal ? "_blank" : undefined}
-                                  rel={isExternal ? "noopener noreferrer" : undefined}
+                                  rel={
+                                    isExternal
+                                      ? "noopener noreferrer"
+                                      : undefined
+                                  }
                                   className="break-all text-blue-500 hover:underline"
                                   {...props}
                                 >
