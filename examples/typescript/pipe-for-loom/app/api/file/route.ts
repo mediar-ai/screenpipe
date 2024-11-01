@@ -1,15 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest, NextResponse } from 'next/server';
 
 let isAudio = false;
 
-export async function GET(req: NextApiRequest, res: NextApiResponse) {
-  console.log("query received:", req.query);
-
-  const videoPath = req.query?.path as string;
+export async function GET(req: NextRequest) {
+  const videoPath = req.nextUrl.searchParams.get('path');
   if (!videoPath || typeof videoPath !== 'string') {
-    return res.status(400).json({ error: 'file path is required' });
+    return NextResponse.json({ error: 'file path is required' }, { status: 400 });
   }
 
   try {
@@ -22,21 +20,22 @@ export async function GET(req: NextApiRequest, res: NextApiResponse) {
     const fileStream = fs.createReadStream(fullPath);
     const contentType = getContentType(fullPath);
 
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Accept-Ranges', 'bytes');
+    const headers = new Headers();
+    headers.set('Content-Type', contentType);
+    headers.set('Accept-Ranges', 'bytes');
 
-    fileStream.pipe(res);
-  } catch (error: any) {
+    return new NextResponse(fileStream, { headers });
+  } catch (error :any) {
     console.error('Error fetching file:', error);
     if (error.code === 'ENOENT') {
       console.error('Error: File not found');
-      return res.status(404).json({ error: 'File not found' });
+      return NextResponse.json({ error: 'File not found' }, { status: 404 });
     } else if (error.code === 'EACCES') {
       console.error('Error: Permission denied');
-      return res.status(403).json({ error: 'Permission denied' });
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     } else {
       console.error('Unexpected error:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+      return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
   }
 }
@@ -56,3 +55,5 @@ function getContentType(filePath: string): string {
       return isAudio ? "audio/mpeg" : "video/mp4";;
   }
 }
+
+

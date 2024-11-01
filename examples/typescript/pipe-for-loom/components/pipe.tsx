@@ -1,10 +1,10 @@
 import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
 import React, { useEffect, useState} from 'react';
 import { DateTimePicker } from './date-time-picker';
 import { useToast } from "@/lib/use-toast";
-import { Clock, Folder } from "lucide-react";
+import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const Pipe: React.FC = () => {
   const { toast } = useToast();
@@ -14,6 +14,9 @@ const Pipe: React.FC = () => {
   const [mergedAudioPath, setMergedAudioPath] = useState<string>('');
   const [videoBlobUrl, setVideoBlobUrl] = useState<string>('');
   const [audioBlobUrl, setAudioBlobUrl] = useState<string>('');
+  const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
+  const [isMerging, setIsMerging] = useState<boolean>(false);
+  const [activeContentType, setActiveContentType] = useState<'video' | 'audio' | null>(null);
 
   useEffect(() => {
     const createBlobUrl = async (path: string, type: 'video' | 'audio') => {
@@ -25,12 +28,12 @@ const Pipe: React.FC = () => {
 
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        console.log("BLOB", blob)
-        console.log("URL", url)
         if (type === 'video') {
           setVideoBlobUrl(url);
+          setAudioBlobUrl('');
         } else {
           setAudioBlobUrl(url);
+          setVideoBlobUrl('');
         }
       } catch (error) {
         console.error('error creating blob URL:', error);
@@ -54,6 +57,12 @@ const Pipe: React.FC = () => {
       }
     };
   }, [mergedVideoPath, mergedAudioPath]);
+
+  useEffect(() =>{
+    if (videoBlobUrl || audioBlobUrl) {
+      setIsDialogOpen(true);
+    }
+  }, [videoBlobUrl, audioBlobUrl])
 
   const handleQuickTimeFilter = (minutes: number) => {
     const now = new Date();
@@ -164,18 +173,26 @@ const Pipe: React.FC = () => {
 
   const handleVideoMerging = async () => {
     try {
+      setIsMerging(true);
+      setActiveContentType('video');
+      toast({
+        title: "merging",
+        description: "video merging in process...",
+        duration: 3000,
+      });
       const startTimeStr = startTime.toISOString();
       const endTimeStr = endTime.toISOString();
 
       const videoPaths = await fetchVideoContent(startTimeStr, endTimeStr) as string[];
       console.log("videoPaths", videoPaths)
-      if (videoPaths.length < 1) {
+      if (videoPaths.length < 2) {
         toast({
           title: "insufficient content",
           variant: "destructive",
           description: "insufficient video contents in that time period, please try again later!",
           duration: 3000,
         });
+        setIsMerging(false);
         return;
       }
       await mergeContent(videoPaths, 'video');
@@ -187,23 +204,32 @@ const Pipe: React.FC = () => {
         description: "error in video merging, please try again later!!",
         duration: 3000,
       });
+      setIsMerging(false);
     }
   };
 
   const handleAudioMerging = async () => {
     try {
+      setIsMerging(true);
+      setActiveContentType('audio');
+      toast({
+        title: "merging",
+        description: "audio merging in process...",
+        duration: 3000,
+      });
       const startTimeStr = startTime.toISOString();
       const endTimeStr = endTime.toISOString();
 
       const audioPaths = await fetchAudioContent(startTimeStr, endTimeStr) as string[];
       console.log("audioPaths", audioPaths)
-      if (audioPaths.length < 1) {
+      if (audioPaths.length < 2) {
         toast({
           title: "insufficient content",
           variant: "destructive",
           description: "insufficient audio contents, please try again later",
           duration: 3000,
         });
+        setIsMerging(false);
         return;
       }
       await mergeContent(audioPaths, 'audio');
@@ -215,6 +241,7 @@ const Pipe: React.FC = () => {
         description: "error in audio merging, please try again!",
         duration: 3000,
       });
+      setIsMerging(false);
     }
   };
 
@@ -271,50 +298,52 @@ const Pipe: React.FC = () => {
 
       <div className="flex mt-12 flex-row min-w-[550px] justify-between items-center">
         <Button 
-          className="!w-32"
+          className="!w-32 disabled:!cursor-not-allowed"
           variant={"default"}
           onClick={handleVideoMerging}
+          disabled={isMerging}
         >
           get video loom
         </Button>
-        <Button
-          variant={"default"}
-          // onClick={handleOpenLoomDir}
-          className=""
-        >
-          <Folder className="h-4 w-4 mr-2" />
-          view saved looms
-        </Button>
         <Button 
-          className="!w-32"
+          className="!w-32 disabled:!cursor-not-allowed"
           variant={"default"}
           onClick={handleAudioMerging}
+          disabled={isMerging}
         >
           get audio loom
         </Button>
       </div>
-      <p>{mergedVideoPath}</p>
-      <p>{mergedAudioPath}</p>
-      <p>{videoBlobUrl}</p>
-      <p>{audioBlobUrl}</p>
 
-      {videoBlobUrl && (
-        <div className="flex flex-col">
-          <h3 className="text-bold text-foreground">loom of your spent time:</h3>
-          <video controls className="w-full rounded-md">
-            <source src={videoBlobUrl} type="video/mp4" />
-            Your browser does not support the video tag.
-          </video>
-        </div>
-      )}
-      {audioBlobUrl && (
-        <div className="flex flex-col mt-4">
-          <h3 className="text-bold text-foreground">loom of your spent time (audio):</h3>
-          <audio controls>
-            <source src={audioBlobUrl} type="audio/mpeg"/>
-          </audio>
-        </div>
-      )}
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        setIsDialogOpen(open);
+        if(!open){
+          setIsMerging(false);
+        }
+      }}>
+        <DialogContent className='flex flex-col justify-center items-center max-w-[80rem] h-[650px] '>
+          <DialogHeader className="flex flex-col justify-center items-center">
+            <DialogTitle className="text-center text-2xl">
+              loom for your spent time
+            </DialogTitle>
+          </DialogHeader>
+          {activeContentType === 'video' && videoBlobUrl && (
+            <video controls className="w-[70%] rounded-md">
+              <source src={videoBlobUrl} type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          )}
+          {activeContentType === 'audio' && audioBlobUrl && (
+            <div className="bg-gray-100 p-4 rounded-md">
+              <audio controls className="w-full">
+                <source src={audioBlobUrl} type="video/mp4" />
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+          )}
+        </DialogContent>
+        <DialogFooter />
+      </Dialog>
     </div>
   );
 };
