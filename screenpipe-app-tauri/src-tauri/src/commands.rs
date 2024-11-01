@@ -161,29 +161,48 @@ pub async fn reset_all_pipes() -> Result<(), String> {
     Ok(())
 }
 
+
 #[tauri::command]
 pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool) {
     if let Some(window) = app_handle.get_webview_window("main") {
+        info!("Showing main window");
+        
+        // Set window properties
+        let _ = window.set_visible_on_all_workspaces(overlay);
+        let _ = window.set_always_on_top(overlay);
+        let _ = window.set_decorations(overlay);
+        
+        // Set window level to float above others when in overlay mode
         #[cfg(target_os = "macos")]
         if overlay {
             let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
         }
-
-        let _ = window.set_visible_on_all_workspaces(overlay);
-        let _ = window.set_always_on_top(overlay);
+        
         let _ = window.show();
-
+        
         if !overlay {
             let _ = window.set_focus();
+            #[cfg(target_os = "macos")]
+            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
         }
     } else {
-        let _ = tauri::WebviewWindowBuilder::new(
+        // Create new window with appropriate settings
+        let window = tauri::WebviewWindowBuilder::new(
             app_handle,
             "main",
             tauri::WebviewUrl::App("index.html".into()),
         )
         .title("Screenpipe")
-        .build();
+        .visible_on_all_workspaces(overlay)
+        .always_on_top(overlay)
+        .decorations(!overlay)
+        .build()
+        .expect("failed to create window");
+
+        #[cfg(target_os = "macos")]
+        if overlay {
+            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        }
     }
 }
 
