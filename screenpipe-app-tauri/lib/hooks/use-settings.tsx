@@ -55,6 +55,7 @@ export interface Settings {
   showScreenpipeShortcut: string;
   recordingShortcut: string;
   isFirstTimeUser: boolean;
+  enableFrameCache: boolean; // Add this line
 }
 
 const defaultSettings: Settings = {
@@ -101,6 +102,7 @@ const defaultSettings: Settings = {
   showScreenpipeShortcut: "Super+Alt+F",  // Update default
   recordingShortcut: "Super+Alt+E",      // Update default
   isFirstTimeUser: true,
+  enableFrameCache: false, // Add this line
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -212,6 +214,8 @@ export async function loadSettingsFromStore(setSettings: React.Dispatch<React.Se
 
     const savedIgnoredWindows = await store!.get<string[]>("ignoredWindows");
     const finalIgnoredWindows = savedIgnoredWindows?.length ? savedIgnoredWindows : defaultIgnoredWindows;
+    const savedEnableFrameCache =
+          (await store!.get<boolean>("enableFrameCache")) || false;
 
     // Create merged settings with all values
     const mergedSettings: Settings = {
@@ -248,6 +252,7 @@ export async function loadSettingsFromStore(setSettings: React.Dispatch<React.Se
       showScreenpipeShortcut: savedShowScreenpipeShortcut || defaultSettings.showScreenpipeShortcut,
       recordingShortcut: savedRecordingShortcut || defaultSettings.recordingShortcut,
       isFirstTimeUser: savedIsFirstTimeUser,
+      enableFrameCache: savedEnableFrameCache,
     };
 
     // Update UI state
@@ -271,6 +276,7 @@ export function useSettings() {
 
   useEffect(() => {
     loadSettingsFromStore(setSettings);
+     
   }, []);
 
   const updateSettings = async (newSettings: Partial<Settings>) => {

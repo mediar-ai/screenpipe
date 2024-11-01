@@ -7,7 +7,7 @@ export function initOpenTelemetry(projectId: string, sessionId: string) {
   const isDebug = process.env.TAURI_ENV_DEBUG === "true";
   if (isDebug || window.origin.includes("localhost")) return;
 
-  const provider = new WebTracerProvider({
+  tracerProvider = new WebTracerProvider({
     resource: new Resource({
       "highlight.project_id": projectId,
       "highlight.session_id": sessionId,
@@ -32,16 +32,55 @@ export function initOpenTelemetry(projectId: string, sessionId: string) {
     shutdown: () => Promise.resolve(),
   });
 
-  provider.addSpanProcessor(errorOnlySpanProcessor as any);
+  tracerProvider.addSpanProcessor(errorOnlySpanProcessor as any);
 
-  provider.register();
+  tracerProvider.register();
 
   // add global error handler
   window.addEventListener("error", (event) => {
-    const tracer = provider.getTracer("error-tracer");
+    const tracer = tracerProvider!.getTracer("error-tracer");
     const span = tracer.startSpan("unhandled-error");
     span.setStatus({ code: 2 }); // set status to error
     span.recordException(event.error);
     span.end();
   });
+}
+
+let tracerProvider: WebTracerProvider | null = null;
+
+export function getTracerProvider() {
+  if (!tracerProvider) {
+    tracerProvider = new WebTracerProvider();
+  }
+  return tracerProvider;
+}
+
+export function trackError(
+  error: unknown,
+  context: {
+    operation: string;
+    additionalAttributes?: Record<string, string>;
+  }
+) {
+  const isDebug = process.env.TAURI_ENV_DEBUG === "true";
+  if (isDebug || window.location.origin.includes("localhost")) return;
+
+  const provider = getTracerProvider();
+  const tracer = provider.getTracer("screenpipe-error-tracker");
+  const span = tracer.startSpan(context.operation);
+
+  span.setStatus({ code: 2 }); // OpenTelemetry error status code
+  span.setAttribute("error.type", context.operation);
+  span.setAttribute(
+    "error.message",
+    error instanceof Error ? error.message : String(error)
+  );
+
+  if (context.additionalAttributes) {
+    Object.entries(context.additionalAttributes).forEach(([key, value]) => {
+      span.setAttribute(key, value);
+    });
+  }
+
+  span.end();
 }

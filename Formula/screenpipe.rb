@@ -1,21 +1,21 @@
 class Screenpipe < Formula
   desc "Library to build personalized AI powered by what you've seen, said, or heard."
   homepage "https://github.com/mediar-ai/screenpipe"
-  url "https://github.com/mediar-ai/screenpipe/releases/download/v0.1.96/screenpipe-0.1.96-aarch64-apple-darwin.tar.gz"
-  version "0.1.96"
+  url "https://github.com/mediar-ai/screenpipe/releases/download/v0.1.98/screenpipe-0.1.98-aarch64-apple-darwin.tar.gz"
+  version "0.1.98"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
-      sha256 "8fff1b31922a383e2e097dce46eb09e69d7358b4e6b0bd64c029b2dc1ee4f516" # arm64
+      sha256 "2cb4d60689ee22bf7c639e75cbcb57d3b8f21732fc383ff57592b4044b5e4396" # arm64
     else
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
-      sha256 "276cff5d1787881fc6cd08200a9548c342b2968b3d3a788ef5e0bc2234e0f450" # x86_64
+      sha256 "969dad8fdbf79af2fa6ea14b604ac656041d8fa0281777b70bac6893d13bd34b" # x86_64
     end
   end
   
   depends_on "ffmpeg"
-  depends_on "deno"
+  depends_on "bun"
 
   def install
     bin.install Dir["bin/*"]

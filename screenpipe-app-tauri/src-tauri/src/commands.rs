@@ -207,6 +207,36 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
 }
 
 
+#[tauri::command]
+pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("timeline") {
+        #[cfg(target_os = "macos")]
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+        let _ = window.set_visible_on_all_workspaces(true);
+        let _ = window.set_always_on_top(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "timeline",
+            tauri::WebviewUrl::App("timeline.html".into()),
+        )
+        .title("timeline")
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible_on_all_workspaces(true) // Added this
+        .center()
+        .build()
+        .unwrap();
+    }
+}
+
+const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
+
+
 fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
     debug!("Starting to parse shortcut: {}", shortcut);
 
@@ -216,6 +246,7 @@ fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
     if parts.is_empty() {
         return Err("Empty shortcut".to_string());
     }
+
 
     let (modifiers, key) = parts.split_at(parts.len() - 1);
     debug!("Modifiers: {:?}, Key: {:?}", modifiers, key);
@@ -249,6 +280,16 @@ fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
                 error!("{}", err);
                 return Err(err);
             }
+
+    // Try to parse the new shortcut, fall back to default if it fails
+    let shortcut_str = match new_shortcut.parse::<Shortcut>() {
+        Ok(_s) => new_shortcut,
+        Err(e) => {
+            info!(
+                "invalid shortcut '{}': {}, falling back to default",
+                new_shortcut, e
+            );
+            DEFAULT_SHORTCUT.to_string()
         }
     }
 
@@ -302,4 +343,7 @@ pub async fn unregister_all_shortcuts(app_handle: tauri::AppHandle) -> Result<()
         .global_shortcut()
         .unregister_all()
         .map_err(|e| format!("Failed to unregister shortcuts: {}", e))
+
+    Ok(())
+
 }

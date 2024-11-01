@@ -171,6 +171,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let enable_frame_cache = store
+        .get("enableFrameCache")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -268,7 +273,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-beta");
     }
 
-
+    if enable_frame_cache {
+        args.push("--enable-frame-cache");
+    }
 
     if cfg!(windows) {
         let exe_dir = env::current_exe()

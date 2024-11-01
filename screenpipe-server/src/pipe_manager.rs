@@ -6,6 +6,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tracing::{debug, info, warn};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -17,13 +18,27 @@ pub struct PipeInfo {
     pub port: Option<u16>,
 }
 
+#[derive(Debug)]
+pub enum PipeControl {
+    Enable(String),
+    Disable(String),
+}
+
 pub struct PipeManager {
     screenpipe_dir: PathBuf,
+    control_tx: Sender<PipeControl>,
 }
 
 impl PipeManager {
-    pub fn new(screenpipe_dir: PathBuf) -> Self {
-        PipeManager { screenpipe_dir }
+    pub fn new(screenpipe_dir: PathBuf) -> (Self, Receiver<PipeControl>) {
+        let (control_tx, control_rx) = mpsc::channel(32);
+        (
+            PipeManager {
+                screenpipe_dir,
+                control_tx,
+            },
+            control_rx,
+        )
     }
 
     pub async fn start_pipe(
@@ -73,6 +88,9 @@ impl PipeManager {
             })
         };
 
+        // Check enabled before moving new_config
+        let enabled = new_config.get("enabled").and_then(Value::as_bool);
+
         if let Value::Object(existing_config) = &mut config {
             if let Value::Object(updates) = new_config {
                 for (key, value) in updates {
@@ -83,6 +101,16 @@ impl PipeManager {
             }
         } else {
             return Err(anyhow::anyhow!("existing configuration is not an object"));
+        }
+
+        // Use the previously extracted enabled value
+        if let Some(enabled) = enabled {
+            let control = if enabled {
+                PipeControl::Enable(id.to_string())
+            } else {
+                PipeControl::Disable(id.to_string())
+            };
+            let _ = self.control_tx.send(control).await;
         }
 
         let updated_config_str = serde_json::to_string_pretty(&config)?;
