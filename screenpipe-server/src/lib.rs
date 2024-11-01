@@ -2,6 +2,7 @@ mod auto_destruct;
 pub mod chunking;
 pub mod cli;
 pub mod core;
+pub mod highlight;
 mod db;
 pub mod filtering;
 mod pipe_manager;
@@ -29,3 +30,6 @@ pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
 pub use server::Server;
 pub use video::VideoCapture;
+pub use pipe_manager::PipeControl;
+pub use highlight::Highlight;
+

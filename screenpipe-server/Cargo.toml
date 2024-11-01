@@ -42,6 +42,15 @@ anyhow = "1.0.86"
 hf-hub = "0.3.2"
 rand = "0.8.5"
 
+thiserror="1"
+
+#opentelemetry
+opentelemetry = "0.21"
+opentelemetry-appender-tracing = "0.2"
+opentelemetry-otlp = {version="0.14", features=["http-proto","reqwest-rustls","tokio","reqwest-client"]}
+opentelemetry_sdk = {version="0.21",default-features = false,features=["rt-tokio"]}
+opentelemetry-semantic-conventions = "0.13"
+
 # Server
 axum = "0.7.5"
 async-stream = "0.3"
