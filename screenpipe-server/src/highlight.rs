@@ -200,11 +200,10 @@ impl Highlight {
         self.0.config.project_id.clone()
     }
 
-    /// Shuts down the Highlight logger and tracer.
-    /// This allows for the logs and traces to flush while the runtime is still around.
-    /// If this method is not called, logs and traces that happened right before your app exits will not be transmitted to Highlight.
-    pub fn shutdown(self) {
-        global::shutdown_logger_provider();
+    /// Shuts down the Highlight tracer.
+    /// This allows for the traces to flush while the runtime is still around.
+    /// If this method is not called, traces that happened right before your app exits will not be transmitted to Highlight.
+    pub fn shutdown(&self) {
         global::shutdown_tracer_provider();
     }
 }

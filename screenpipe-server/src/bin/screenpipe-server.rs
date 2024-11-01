@@ -645,6 +645,7 @@ async fn main() -> anyhow::Result<()> {
                 .bright_yellow()
         );
     } else {
+        h.shutdown();
         println!(
             "{}",
             "telemetry is disabled. no data will be sent to external services."
