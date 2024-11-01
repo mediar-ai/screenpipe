@@ -116,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
     let _log_guard = setup_logging(&local_data_dir, &cli)?;
 
     let h = Highlight::init(HighlightConfig {
-        project_id:String::from("7e30w91e"),
+        project_id:String::from("82688"),
         ..Default::default()
     })
     .expect("Failed to initialize Highlight.io");
