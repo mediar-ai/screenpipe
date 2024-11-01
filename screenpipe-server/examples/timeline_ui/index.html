@@ -383,6 +383,34 @@
             to { transform: translateX(-50%) scale(1.1); }
         }
 
+        .loading-indicator {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 0, 0.1);
+            border: 2px solid #0f0;
+            padding: 8px 16px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px;
+            color: #0f0;
+            text-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 0 16px rgba(0, 255, 0, 0.2);
+        }
+
+        .loading-indicator.active {
+            display: block;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
@@ -406,6 +434,8 @@
     <div id="info"></div>
     <div id="error"></div>
 
+    <div class="loading-indicator">loading frames...</div>
+
     <script>
         let currentTime = new Date();
         let endTime = new Date();
@@ -417,8 +447,13 @@
         let scrollTimeout = null;
 
         // Add these new variables
-        const PREFETCH_THRESHOLD = 0.8; // When to fetch more frames (80% of range)
-        const FETCH_OVERLAP = 1000 * 60 * 5; // 2 minutes overlap when fetching new frames
+        const PREFETCH_THRESHOLD = 0.8; // When to fetch more frames (80% of visible range)
+        const FETCH_OVERLAP = 1000 * 60 * 2; // 2 minutes overlap when fetching new frames
+
+        // Add debounce utility at the top
+        let prefetchTimeout = null;
+        let lastPrefetchDirection = null;
+        let isPrefetching = false;
 
         function debugFrames() {
             console.log('Current frames:', {
@@ -457,47 +492,88 @@
             }
         }
 
+        // Update prefetchFrames to prevent duplicate requests
         async function prefetchFrames(direction) {
-            let newStartTime, newEndTime;
-            
-            // Adjust the time window based on current view
-            const currentTimeWindow = endTime - startTime;
-            
-            if (direction === 'future') {
-                newStartTime = new Date(endTime - FETCH_OVERLAP);
-                newEndTime = new Date(endTime.getTime() + currentTimeWindow);
-            } else {
-                newEndTime = new Date(startTime + FETCH_OVERLAP);
-                newStartTime = new Date(startTime.getTime() - currentTimeWindow);
+            if (isPrefetching || direction === lastPrefetchDirection) {
+                return;
             }
-            
-            console.log(`Prefetching ${direction} frames from ${newStartTime} to ${newEndTime}`);
-            
-            // Fetch new frames but keep existing ones
-            const url = new URL('http://localhost:3030/stream/frames');
-            url.searchParams.append('start_time', `${newStartTime.toISOString().slice(0, -1)}Z`);
-            url.searchParams.append('end_time', `${newEndTime.toISOString().slice(0, -1)}Z`);
-            
-            try {
-                const response = await fetch(url.toString());
-                const newFrames = await response.json();
+
+            if (prefetchTimeout) {
+                clearTimeout(prefetchTimeout);
+            }
+
+            prefetchTimeout = setTimeout(async () => {
+                isPrefetching = true;
+                lastPrefetchDirection = direction;
                 
-                // Merge new frames with existing ones, avoiding duplicates
-                const existingTimestamps = new Set(frames.map(f => f.timestamp));
-                const uniqueNewFrames = newFrames.filter(f => !existingTimestamps.has(f.timestamp));
-                
-                if (direction === 'future') {
-                    frames.push(...uniqueNewFrames);
-                    endTime = newEndTime;
-                } else {
-                    frames.unshift(...uniqueNewFrames);
-                    startTime = newStartTime;
+                // Show loading indicator
+                const loadingIndicator = document.querySelector('.loading-indicator');
+                loadingIndicator.classList.add('active');
+
+                try {
+                    const timeWindow = endTime - startTime;
+                    let newStartTime, newEndTime;
+                    
+                    if (direction === 'future') {
+                        newStartTime = new Date(endTime - FETCH_OVERLAP);
+                        newEndTime = new Date(endTime.getTime() + timeWindow);
+                    } else {
+                        newEndTime = new Date(startTime + FETCH_OVERLAP);
+                        newStartTime = new Date(startTime.getTime() - timeWindow);
+                    }
+                    
+                    console.log(`Prefetching ${direction} frames:`, {
+                        newStartTime,
+                        newEndTime,
+                        currentFrames: frames.length
+                    });
+                    
+                    // Use /frames endpoint instead of /stream/frames for batch fetch
+                    const url = new URL('http://localhost:3030/stream/frames');
+                    url.searchParams.append('start_time', newStartTime.toISOString());
+                    url.searchParams.append('end_time', newEndTime.toISOString());
+                    
+                    const response = await fetch(url.toString());
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const newFrames = await response.json();
+                    
+                    if (!Array.isArray(newFrames)) {
+                        throw new Error('Expected array of frames');
+                    }
+                    
+                    const existingTimestamps = new Set(frames.map(f => f.timestamp));
+                    const uniqueNewFrames = newFrames.filter(f => !existingTimestamps.has(f.timestamp));
+                    
+                    if (direction === 'future') {
+                        frames.push(...uniqueNewFrames);
+                        endTime = newEndTime;
+                    } else {
+                        frames.unshift(...uniqueNewFrames);
+                        startTime = newStartTime;
+                    }
+                    
+                    frames.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                    updateTimelineMarkers();
+                    
+                    console.log('Prefetch complete:', {
+                        direction,
+                        newFramesAdded: uniqueNewFrames.length,
+                        totalFrames: frames.length
+                    });
+                } catch (e) {
+                    console.error('Failed to prefetch frames:', e);
+                } finally {
+                    // Hide loading indicator
+                    loadingIndicator.classList.remove('active');
+                    
+                    setTimeout(() => {
+                        isPrefetching = false;
+                        lastPrefetchDirection = null;
+                    }, 1000);
                 }
-                
-                updateTimelineMarkers();
-            } catch (e) {
-                console.error('Failed to prefetch frames:', e);
-            }
+            }, 500);
         }
 
         function displayFrameAtTime(timestamp) {
@@ -654,8 +730,7 @@
             e.preventDefault();
             
             const timeRange = endTime - startTime;
-            // Make scroll less sensitive - adjust this value to control speed
-            const scrollSensitivity = timeRange / 200; // Changed from 20 to 200 for slower movement
+            const scrollSensitivity = timeRange / 200;
             
             const timeDelta = e.deltaY > 0 ? scrollSensitivity : -scrollSensitivity;
             const newTime = new Date(currentTime.getTime() + timeDelta);
@@ -663,12 +738,15 @@
             if (newTime >= startTime && newTime <= endTime) {
                 currentTime = newTime;
                 
-                console.log('Scroll update:', {
-                    timeDelta,
-                    newTime: currentTime.toISOString()
-                });
+                // Check if we're near boundaries and need to prefetch
+                const position = (currentTime - startTime) / (endTime - startTime);
                 
-                debugFrames();
+                if (position > PREFETCH_THRESHOLD) {
+                    prefetchFrames('future');
+                } else if (position < (1 - PREFETCH_THRESHOLD)) {
+                    prefetchFrames('past');
+                }
+                
                 displayFrameAtTime(currentTime);
                 updateTimelinePosition();
             }

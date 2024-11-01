@@ -1163,20 +1163,31 @@ struct InputControlResponse {
     success: bool,
 }
 
+#[derive(Deserialize, PartialEq)]
+enum Order {
+    Ascending,
+    Descending,
+}
+
 // Add this new struct
 #[derive(Deserialize)]
 pub struct StreamFramesRequest {
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
+    // #[serde(rename = "order")]
+    // #[serde(default = "descending")]
+    // order: Order,
 }
 
 #[derive(Serialize)]
 pub struct StreamFramesResponse {
-    frame: String, // base64 encoded frame
     timestamp: DateTime<Utc>,
+    frame: String,
     file_path: String,
-    app_name: Option<String>,
-    window_name: Option<String>,
+    app_name: String,
+    window_name: String,
+    transcription: String,
+    ocr_text: String,
 }
 
 pub fn create_router() -> Router<Arc<AppState>> {
@@ -1238,7 +1249,7 @@ async fn stream_frames_handler(
         let frame_tx = frame_tx.clone();
         async move {
             tokio::select! {
-                result = cache.get_frames(center_timestamp, duration_minutes, frame_tx) => {
+                result = cache.get_frames(center_timestamp, duration_minutes, frame_tx, true) => {
                     if let Err(e) = result {
                         error!("frame extraction failed: {}", e);
                     }
@@ -1257,11 +1268,13 @@ async fn stream_frames_handler(
 
         while let Some(frame_info) = frame_rx.recv().await {
             let response = StreamFramesResponse {
-                frame: BASE64_STANDARD.encode(&frame_info.data),
                 timestamp: frame_info.timestamp,
+                frame: BASE64_STANDARD.encode(&frame_info.data),
                 file_path: String::new(),
-                app_name: Some(frame_info.app_name),
-                window_name: Some(frame_info.window_name),
+                app_name: frame_info.metadata.app_name,
+                window_name: frame_info.metadata.window_name,
+                transcription: frame_info.metadata.transcription,
+                ocr_text: frame_info.metadata.ocr_text,
             };
 
             if let Ok(json) = serde_json::to_string(&response) {
