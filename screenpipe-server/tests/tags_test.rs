@@ -357,7 +357,10 @@ async fn test_search_by_multiple_tags() {
 
 async fn insert_test_data(db: &Arc<DatabaseManager>) {
     // Insert test video chunk
-    let _video_chunk_id = db.insert_video_chunk("test_video_file.mp4", "test_device").await.unwrap();
+    let _video_chunk_id = db
+        .insert_video_chunk("test_video_file.mp4", "test_device")
+        .await
+        .unwrap();
 
     // Insert test frame
     let frame_id = db.insert_frame("test_device", None).await.unwrap();
@@ -385,18 +388,6 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         0,
         "test_engine",
         &AudioDevice::new("test".to_string(), DeviceType::Output),
-    )
-    .await
-    .unwrap();
-
-    // Insert test FTS data
-    db.insert_chunked_text(
-        frame_id,
-        "Test FTS text",
-        Utc::now(),
-        "tesseract",
-        "local_simple",
-        ContentSource::Screen,
     )
     .await
     .unwrap();

@@ -822,78 +822,6 @@ impl DatabaseManager {
         Ok((latest_frame.map(|f| f.0), latest_audio.map(|a| a.0)))
     }
 
-    // Modify the insert_chunked_text method to handle both OCR and audio transcriptions
-    pub async fn insert_chunked_text(
-        &self,
-        id: i64,
-        text: &str,
-        timestamp: DateTime<Utc>,
-        engine: &str,
-        chunking_engine: &str,
-        source: ContentSource,
-    ) -> Result<(), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
-
-        // Insert or get the text_id
-        let text_id: i64 = sqlx::query_scalar(
-            "INSERT INTO chunked_text_index (text) VALUES (?1) ON CONFLICT(text) DO UPDATE SET text=text RETURNING text_id",
-        )
-        .bind(text)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        // Insert the entry into chunked_text_entries
-        let query = match source {
-            ContentSource::Audio => "INSERT INTO chunked_text_entries (text_id, audio_chunk_id, timestamp, engine, chunking_engine, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            ContentSource::Screen => "INSERT INTO chunked_text_entries (text_id, frame_id, timestamp, engine, chunking_engine, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        };
-
-        sqlx::query(query)
-            .bind(text_id)
-            .bind(id)
-            .bind(timestamp)
-            .bind(engine)
-            .bind(chunking_engine)
-            .bind(source.to_string())
-            .execute(&mut *tx)
-            .await?;
-
-        tx.commit().await?;
-        Ok(())
-    }
-
-    pub async fn search_chunked_text(
-        &self,
-        query: &str,
-        start_time: Option<DateTime<Utc>>,
-        end_time: Option<DateTime<Utc>>,
-    ) -> Result<Vec<(i64, DateTime<Utc>)>, sqlx::Error> {
-        let sql = r#"
-            SELECT 
-                chunked_text_entries.frame_id,
-                chunked_text_entries.timestamp
-            FROM 
-                chunked_text_index
-            JOIN 
-                chunked_text_entries ON chunked_text_index.text_id = chunked_text_entries.text_id
-            WHERE 
-                chunked_text_index.text LIKE '%' || ?1 || '%' COLLATE NOCASE
-                AND (?2 IS NULL OR chunked_text_entries.timestamp >= ?2)
-                AND (?3 IS NULL OR chunked_text_entries.timestamp <= ?3)
-            ORDER BY 
-                chunked_text_entries.timestamp DESC
-        "#;
-
-        let results = sqlx::query_as::<_, (i64, DateTime<Utc>)>(sql)
-            .bind(query)
-            .bind(start_time)
-            .bind(end_time)
-            .fetch_all(&self.pool)
-            .await?;
-
-        Ok(results)
-    }
-
     pub async fn get_chunked_data_since_last_request(
         &self,
         memory_source: &str,
@@ -1222,47 +1150,24 @@ impl DatabaseManager {
         ))
     }
 
-    pub async fn get_video_chunks_in_range(
+    pub async fn get_frame_metadata(
         &self,
-        start_time: DateTime<Utc>,
-        end_time: DateTime<Utc>,
-    ) -> Result<Vec<VideoChunk>, sqlx::Error> {
-        let rows = sqlx::query(
+        file_path: &str,
+    ) -> Result<Vec<(String, String)>, SqlxError> {
+        debug!("getting frame metadata for file: {}", file_path);
+        sqlx::query_as::<_, (String, String)>(
             r#"
-            SELECT 
-                vc.file_path,
-                f.timestamp as start_time,
-                COALESCE(
-                    LEAD(f.timestamp) OVER (ORDER BY f.timestamp),
-                    datetime('now')
-                ) as end_time,
-                ot.app_name,
-                ot.window_name
-            FROM frames f
-            JOIN video_chunks vc ON f.video_chunk_id = vc.id
-            LEFT JOIN ocr_text ot ON f.id = ot.frame_id
-            WHERE f.timestamp <= ? AND f.timestamp >= ?
-            GROUP BY f.id
-            ORDER BY f.timestamp ASC
+            SELECT ocr_text.app_name, ocr_text.window_name
+            FROM video_chunks
+            JOIN frames ON frames.video_chunk_id = video_chunks.id
+            JOIN ocr_text ON frames.id = ocr_text.frame_id
+            WHERE video_chunks.file_path = ?1
+            ORDER BY frames.offset_index ASC
             "#,
         )
-        .bind(end_time)
-        .bind(start_time)
+        .bind(file_path)
         .fetch_all(&self.pool)
-        .await?;
-
-        let chunks = rows
-            .iter()
-            .map(|row| VideoChunk {
-                file_path: row.get("file_path"),
-                start_time: row.get("start_time"),
-                end_time: row.get("end_time"),
-                app_name: row.get("app_name"),
-                window_name: row.get("window_name"),
-            })
-            .collect();
-
-        Ok(chunks)
+        .await
     }
 }
 
@@ -1357,20 +1262,5 @@ impl FriendWearableDatabase for DatabaseManager {
         )
         .await
         .map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)
-    }
-}
-
-#[derive(Debug)]
-pub struct VideoChunk {
-    pub file_path: String,
-    pub start_time: DateTime<Utc>,
-    pub end_time: DateTime<Utc>,
-    pub app_name: Option<String>,
-    pub window_name: Option<String>,
-}
-
-impl VideoChunk {
-    pub fn contains_time(&self, time: DateTime<Utc>) -> bool {
-        time >= self.start_time && time <= self.end_time
     }
 }
