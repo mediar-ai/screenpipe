@@ -1224,26 +1224,44 @@ async fn stream_frames_handler(
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
     let cache = state.frame_cache.as_ref().unwrap().clone();
 
-    // Spawn frame extraction task
+    // Calculate duration in minutes between start and end time
+    let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1) as i64;
+
+    // Calculate center timestamp
+    let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
+
+    // Use a cancellation token to handle client disconnection
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+
+    // Spawn frame extraction task using get_frames
     tokio::spawn({
+        let frame_tx = frame_tx.clone();
         async move {
-            if let Err(e) = cache
-                .extract_frames_range(&request.start_time, &request.end_time, frame_tx)
-                .await
-            {
-                error!("frame extraction failed: {}", e);
+            tokio::select! {
+                result = cache.get_frames(center_timestamp, duration_minutes, frame_tx) => {
+                    if let Err(e) = result {
+                        error!("frame extraction failed: {}", e);
+                    }
+                }
+                _ = cancel_rx => {
+                    debug!("client disconnected, stopping frame stream");
+                }
             }
         }
     });
 
     let stream = async_stream::stream! {
-        while let Some((timestamp, frame_data, file_path, app_name, window_name)) = frame_rx.recv().await {
+        let _cancel_guard = scopeguard::guard(cancel_tx, |tx| {
+            let _ = tx.send(());  // Signal cancellation when stream is dropped
+        });
+
+        while let Some(frame_info) = frame_rx.recv().await {
             let response = StreamFramesResponse {
-                frame: BASE64_STANDARD.encode(&frame_data),
-                timestamp,
-                file_path,
-                app_name: Some(app_name),
-                window_name: Some(window_name),
+                frame: BASE64_STANDARD.encode(&frame_info.data),
+                timestamp: frame_info.timestamp,
+                file_path: String::new(),
+                app_name: Some(frame_info.app_name),
+                window_name: Some(frame_info.window_name),
             };
 
             if let Ok(json) = serde_json::to_string(&response) {

@@ -420,6 +420,14 @@
         const PREFETCH_THRESHOLD = 0.8; // When to fetch more frames (80% of range)
         const FETCH_OVERLAP = 1000 * 60 * 5; // 2 minutes overlap when fetching new frames
 
+        function debugFrames() {
+            console.log('Current frames:', {
+                count: frames.length,
+                timeRange: `${new Date(frames[0]?.timestamp)} to ${new Date(frames[frames.length-1]?.timestamp)}`,
+                currentTime: currentTime
+            });
+        }
+
         function updateTimelinePosition() {
             const timeRange = endTime - startTime;
             const position = (currentTime - startTime) / timeRange;
@@ -452,13 +460,18 @@
         async function prefetchFrames(direction) {
             let newStartTime, newEndTime;
             
+            // Adjust the time window based on current view
+            const currentTimeWindow = endTime - startTime;
+            
             if (direction === 'future') {
                 newStartTime = new Date(endTime - FETCH_OVERLAP);
-                newEndTime = new Date(endTime.getTime() + (endTime - startTime));
+                newEndTime = new Date(endTime.getTime() + currentTimeWindow);
             } else {
                 newEndTime = new Date(startTime + FETCH_OVERLAP);
-                newStartTime = new Date(startTime.getTime() - (endTime - startTime));
+                newStartTime = new Date(startTime.getTime() - currentTimeWindow);
             }
+            
+            console.log(`Prefetching ${direction} frames from ${newStartTime} to ${newEndTime}`);
             
             // Fetch new frames but keep existing ones
             const url = new URL('http://localhost:3030/stream/frames');
@@ -489,43 +502,43 @@
 
         function displayFrameAtTime(timestamp) {
             if (!frames.length) {
-                console.log('No frames available yet');
+                console.log('No frames available');
                 return;
             }
 
-            try {
-                // Find the closest frame
-                const frame = frames.reduce((prev, curr) => {
-                    const prevDiff = Math.abs(new Date(prev.timestamp) - timestamp);
-                    const currDiff = Math.abs(new Date(curr.timestamp) - timestamp);
-                    return currDiff < prevDiff ? curr : prev;
-                });
-
-                console.log('Displaying frame:', {
-                    timestamp: frame.timestamp,
-                    app_name: frame.app_name,
-                    window_name: frame.window_name
-                });
-
-                if (!frame.frame) {
-                    throw new Error('Frame data is missing');
+            const targetTime = new Date(timestamp).getTime();
+            
+            // Find closest frame using binary search for better performance
+            let closest = frames[0];
+            let closestDiff = Math.abs(new Date(closest.timestamp).getTime() - targetTime);
+            
+            for (const frame of frames) {
+                const diff = Math.abs(new Date(frame.timestamp).getTime() - targetTime);
+                if (diff < closestDiff) {
+                    closest = frame;
+                    closestDiff = diff;
                 }
-
-                const frameElement = document.getElementById('frame');
-                frameElement.style.display = 'block';
-                frameElement.src = `data:image/jpeg;base64,${frame.frame}`;
-                
-                // Updated IDs to match the HTML
-                document.getElementById('timestamp-display').textContent = `time: ${new Date(frame.timestamp).toLocaleTimeString()}`;
-                document.getElementById('app-name-display').textContent = `app: ${frame.app_name || 'n/a'}`;
-                document.getElementById('window-name-display').textContent = `window: ${frame.window_name || 'n/a'}`;
-                
-                currentTime = new Date(frame.timestamp);
-                updateTimelinePosition();
-            } catch (e) {
-                console.error('Error displaying frame:', e);
-                document.getElementById('error').textContent = `Error displaying frame: ${e.message}`;
             }
+            
+            console.log('Frame selection:', {
+                targetTime: new Date(targetTime).toISOString(),
+                selectedTime: closest.timestamp,
+                timeDiff: closestDiff,
+                framesAvailable: frames.length
+            });
+
+            // Update display
+            const frameElement = document.getElementById('frame');
+            frameElement.style.display = 'block';
+            frameElement.src = `data:image/jpeg;base64,${closest.frame}`;
+            
+            // Restore app and window name display
+            document.getElementById('timestamp-display').textContent = 
+                `time: ${new Date(closest.timestamp).toLocaleTimeString()}`;
+            document.getElementById('app-name-display').textContent = 
+                `app: ${closest.app_name || 'unknown'}`;
+            document.getElementById('window-name-display').textContent = 
+                `window: ${closest.window_name || 'unknown'}`;
         }
 
         function connectToStream(startTime, endTime) {
@@ -551,35 +564,24 @@
                     // Skip keep-alive messages
                     if (data === 'keep-alive-text') return;
                     
-                    // Add debug logging
-                    console.log('Received frame data:', {
+                    // Ensure timestamp is properly formatted
+                    data.timestamp = new Date(data.timestamp).toISOString();
+                    
+                    // Add frame to array and sort by timestamp
+                    frames.push(data);
+                    frames.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                    
+                    console.log('Frame received:', {
                         timestamp: data.timestamp,
-                        app_name: data.app_name,
-                        window_name: data.window_name,
-                        hasFrame: !!data.frame
+                        framesCount: frames.length
                     });
                     
-                    // Validate frame data
-                    if (!data || !data.frame || !data.timestamp) {
-                        console.warn('Invalid frame data received:', data);
-                        return;
-                    }
-
-                    // Clean the frame data before storing
-                    data.frame = data.frame.trim();
-                    
-                    console.log('Received frame for timestamp:', data.timestamp);
-                    frames.push(data);
-                    
-                    if (window.pendingTimestamp) {
-                        displayFrameAtTime(window.pendingTimestamp);
-                        window.pendingTimestamp = null;
-                    } else if (frames.length === 1) { // If this is our first frame
+                    // Update display if needed
+                    if (frames.length === 1 || Math.abs(new Date(data.timestamp) - currentTime) < 1000) {
                         displayFrameAtTime(currentTime);
                     }
                 } catch (e) {
-                    console.error('Failed to parse frame data:', e, '\nRaw data:', event.data);
-                    document.getElementById('error').textContent = `Error parsing frame: ${e.message}`;
+                    console.error('Failed to parse frame data:', e);
                 }
             };
 
@@ -647,53 +649,29 @@
             updateTimelineMarkers();
         }
 
-        // Replace the wheel event listener with this fixed version:
+        // Update the wheel event listener
         document.addEventListener('wheel', (e) => {
-            e.preventDefault();  // Prevent default scroll
+            e.preventDefault();
             
-            // Get timeline element for calculations
-            const timeline = document.getElementById('timeline');
-            const timelineRect = timeline.getBoundingClientRect();
             const timeRange = endTime - startTime;
+            // Make scroll less sensitive - adjust this value to control speed
+            const scrollSensitivity = timeRange / 200; // Changed from 20 to 200 for slower movement
             
-            // Calculate scroll sensitivity - adjust this value to change scroll speed
-            const scrollSensitivity = timeRange / 1000; // 1000px = full time range
+            const timeDelta = e.deltaY > 0 ? scrollSensitivity : -scrollSensitivity;
+            const newTime = new Date(currentTime.getTime() + timeDelta);
             
-            // Update current time based on scroll
-            if (e.deltaY > 0) {
-                currentTime = new Date(currentTime.getTime() + scrollSensitivity);
-            } else {
-                currentTime = new Date(currentTime.getTime() - scrollSensitivity);
+            if (newTime >= startTime && newTime <= endTime) {
+                currentTime = newTime;
+                
+                console.log('Scroll update:', {
+                    timeDelta,
+                    newTime: currentTime.toISOString()
+                });
+                
+                debugFrames();
+                displayFrameAtTime(currentTime);
+                updateTimelinePosition();
             }
-            
-            // Keep currentTime within bounds
-            currentTime = new Date(Math.max(
-                startTime.getTime(),
-                Math.min(endTime.getTime(), currentTime.getTime())
-            ));
-            
-            // Check if we need to load more frames
-            const position = (currentTime - startTime) / timeRange;
-            if (position > PREFETCH_THRESHOLD) {
-                prefetchFrames('future');
-            } else if (position < (1 - PREFETCH_THRESHOLD)) {
-                prefetchFrames('past');
-            }
-            
-            // Update frame display and timeline position
-            displayFrameAtTime(currentTime);
-            
-            // Update time travel indicator
-            const indicator = document.querySelector('.time-travel-indicator');
-            indicator.classList.add('active');
-            indicator.textContent = e.deltaY > 0 ? '▼ traveling to future ▼' : '▲ traveling to past ▲';
-
-            if (scrollTimeout) {
-                clearTimeout(scrollTimeout);
-            }
-            scrollTimeout = setTimeout(() => {
-                indicator.classList.remove('active');
-            }, 300);
         }, { passive: false });
 
         // Optional: Add touch support for mobile
