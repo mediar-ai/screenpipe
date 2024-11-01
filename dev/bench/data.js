@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730481972565,
+  "lastUpdate": 1730482495918,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -21479,6 +21479,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1930444354,
             "range": "± 51539434",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "397341575@qq.com",
+            "name": "ToSeven",
+            "username": "ToSeven"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad9b78c480a985938d255612c0db061218c35554",
+          "message": "feat: integrate Highlight into screenpipe (#611)\n\n* integrate Highlight into screenpipe\r\n\r\n* add disable-telemetry support\r\n\r\n---------\r\n\r\nCo-authored-by: heng <byone.heng@gmail.com>\r\nCo-authored-by: Louis Beaumont <louis.beaumont@gmail.com>",
+          "timestamp": "2024-11-01T10:24:01-07:00",
+          "tree_id": "1cac0c7ad4d5b2bf0c9a8e94669882e9850b1f21",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/ad9b78c480a985938d255612c0db061218c35554"
+        },
+        "date": 1730482493967,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2119877354,
+            "range": "± 123459636",
             "unit": "ns/iter"
           }
         ]
