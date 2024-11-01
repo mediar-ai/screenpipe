@@ -47,6 +47,7 @@ impl UpdatesManager {
             }
 
             #[cfg(not(target_os = "windows"))] {
+                self.update_menu_item.set_enabled(false)?;
                 self.update_menu_item
                     .set_text("downloading latest version of screenpipe")?;
             }
@@ -88,32 +89,29 @@ impl UpdatesManager {
                 });
 
                 if rx.await? {
+
                     #[cfg(target_os = "windows")] {
                         self.update_menu_item.set_enabled(false)?;
                         self.update_menu_item
                             .set_text("downloading latest version of screenpipe")?;
                         update.download_and_install(|_, _| {}, || {}).await?;
                         *self.update_installed.lock().await = true;
+
                         self.update_menu_item.set_enabled(true)?;
                         self.update_menu_item.set_text("update now")?;
                     }
+                    // Proceed with the update
 
-                    // For all platforms
-                    self.update_menu_item.set_enabled(false)?;
-                    self.update_menu_item
-                        .set_text("downloading latest version of screenpipe")?;
+                    // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
+                    // bad UX: i use CLI and it kills my CLI because i updated app
 
                     if let Err(err) =
                         kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone())
-                        .await
+                            .await
                     {
                         error!("Failed to kill sidecar: {}", err);
                     }
-                    update.download_and_install(|_, _| {}, || {}).await?;
-                    *self.update_installed.lock().await = true;
-
                     self.update_screenpipe();
-                    return Result::Ok(true);
                 }
             }
 
