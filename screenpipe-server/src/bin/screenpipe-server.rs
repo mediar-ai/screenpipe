@@ -25,7 +25,6 @@ use tracing_subscriber::{fmt, EnvFilter};
 use tracing::{info, debug, error};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_appender::non_blocking::WorkerGuard;
-use tokio::task::JoinHandle;
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
