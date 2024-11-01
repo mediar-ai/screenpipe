@@ -43,4 +43,6 @@ ffmpeg*
 *src-tauri/tesseract* 
 *src-tauri/bun* 
 *src-tauri/ollama* 
+*src-tauri/deno-*-apple-darwin
+*src-tauri/deno-*-*
 
