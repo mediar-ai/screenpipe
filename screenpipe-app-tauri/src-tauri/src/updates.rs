@@ -40,8 +40,12 @@ impl UpdatesManager {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         if let Some(update) = self.app.updater()?.check().await? {
             *self.update_available.lock().await = true;
-
             #[cfg(target_os = "windows")] {
+                self.update_menu_item.set_enabled(true)?;
+                self.update_menu_item.set_text("update now")?;
+            }
+
+            #[cfg(not(target_os = "windows"))] {
                 self.update_menu_item.set_enabled(true)?;
                 self.update_menu_item.set_text("update now")?;
             }
@@ -61,13 +65,6 @@ impl UpdatesManager {
                     tray.set_icon(Some(image))?;
                     tray.set_icon_as_template(true)?;
                 }
-            }
-
-            #[cfg(not(target_os = "windows"))] {
-                update.download_and_install(|_, _| {}, || {}).await?;
-                *self.update_installed.lock().await = true;
-                self.update_menu_item.set_enabled(true)?;
-                self.update_menu_item.set_text("update now")?;
             }
 
             if show_dialog {
@@ -99,6 +96,12 @@ impl UpdatesManager {
                         self.update_menu_item.set_text("update now")?;
                     }
                     // Proceed with the update
+                    self.update_menu_item.set_enabled(false)?;
+                    self.update_menu_item
+                        .set_text("downloading latest version of screenpipe")?;
+
+                    update.download_and_install(|_, _| {}, || {}).await?;
+                    *self.update_installed.lock().await = true;
 
                     // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
                     // bad UX: i use CLI and it kills my CLI because i updated app
@@ -110,6 +113,10 @@ impl UpdatesManager {
                         error!("Failed to kill sidecar: {}", err);
                     }
                     self.update_screenpipe();
+                    return Result::Ok(true);
+                } else {
+                    self.update_menu_item.set_enabled(true)?;
+                    self.update_menu_item.set_text("update now")?;
                 }
             }
 
