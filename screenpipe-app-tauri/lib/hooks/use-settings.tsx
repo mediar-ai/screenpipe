@@ -55,6 +55,7 @@ export interface Settings {
   showScreenpipeShortcut: string;
   isFirstTimeUser: boolean;
   enableFrameCache: boolean; // Add this line
+  enableUiMonitoring: boolean; // Add this line
 }
 
 const defaultSettings: Settings = {
@@ -101,6 +102,7 @@ const defaultSettings: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
   enableFrameCache: false, // Add this line
+  enableUiMonitoring: false, // Add this line
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -321,6 +323,7 @@ export function useSettings() {
           showScreenpipeShortcut: savedShowScreenpipeShortcut,
           isFirstTimeUser: savedIsFirstTimeUser,
           enableFrameCache: savedEnableFrameCache,
+          enableUiMonitoring: false,
         });
       } catch (error) {
         console.error("failed to load settings:", error);
