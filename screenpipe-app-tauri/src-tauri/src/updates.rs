@@ -40,9 +40,8 @@ impl UpdatesManager {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         if let Some(update) = self.app.updater()?.check().await? {
             *self.update_available.lock().await = true;
-
-            self.update_menu_item
-                .set_text("downloading latest version of screenpipe")?;
+            self.update_menu_item.set_enabled(true)?;
+            self.update_menu_item.set_text("update now")?;
 
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
                 let path = self.app.path().resolve(
@@ -55,12 +54,6 @@ impl UpdatesManager {
                     tray.set_icon_as_template(true)?;
                 }
             }
-
-            update.download_and_install(|_, _| {}, || {}).await?;
-
-            *self.update_installed.lock().await = true;
-            self.update_menu_item.set_enabled(true)?;
-            self.update_menu_item.set_text("update now")?;
 
             if show_dialog {
                 let (tx, rx) = oneshot::channel();
@@ -81,6 +74,12 @@ impl UpdatesManager {
 
                 if rx.await? {
                     // Proceed with the update
+                    self.update_menu_item.set_enabled(false)?;
+                    self.update_menu_item
+                        .set_text("downloading latest version of screenpipe")?;
+
+                    update.download_and_install(|_, _| {}, || {}).await?;
+                    *self.update_installed.lock().await = true;
 
                     // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
                     // bad UX: i use CLI and it kills my CLI because i updated app
@@ -92,6 +91,10 @@ impl UpdatesManager {
                         error!("Failed to kill sidecar: {}", err);
                     }
                     self.update_screenpipe();
+                    return Result::Ok(true);
+                } else {
+                    self.update_menu_item.set_enabled(true)?;
+                    self.update_menu_item.set_text("update now")?;
                 }
             }
 
