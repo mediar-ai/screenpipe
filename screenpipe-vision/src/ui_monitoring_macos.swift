@@ -354,170 +354,187 @@ func setupApplicationChangeObserver() {
     }
 }
 
+func safeAccessibilityCall<T>(_ operation: () -> T?) -> T? {
+    return autoreleasepool {
+        return withoutActuallyEscaping(operation) { operation in
+            return operation()
+        }
+    }
+}
+
+func getAttributeValue(_ element: AXUIElement, forAttribute attribute: String) -> AnyObject? {
+    return safeAccessibilityCall {
+        var value: AnyObject?
+        let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+        return result == .success ? value : nil
+    }
+}
+
 func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowName: String) {
-    // Don't start new traversal if one is already in progress
-    if isTraversing { return }
+    autoreleasepool {
+        if isTraversing { return }
 
-    isTraversing = true
-    shouldCancelTraversal = false
+        isTraversing = true
+        shouldCancelTraversal = false
 
-    let startTime = DispatchTime.now()
-    var visitedElements = Set<AXUIElementWrapper>()
-    let unwantedValues = ["0", "", "\u{200E}", "3", "\u{200F}"]  // LRM and RLM marks
-    let unwantedLabels = [
-        "window", "application", "group", "button", "image", "text",
-        "pop up button", "region", "notifications", "table", "column",
-        "html content"
-    ]
-    let attributesToCheck = ["AXDescription", "AXValue", "AXLabel", "AXRoleDescription", "AXHelp"]
+        let startTime = DispatchTime.now()
+        var visitedElements = Set<AXUIElementWrapper>()
+        let unwantedValues = ["0", "", "\u{200E}", "3", "\u{200F}"]  // LRM and RLM marks
+        let unwantedLabels = [
+            "window", "application", "group", "button", "image", "text",
+            "pop up button", "region", "notifications", "table", "column",
+            "html content"
+        ]
+        let attributesToCheck = ["AXDescription", "AXValue", "AXLabel", "AXRoleDescription", "AXHelp"]
 
-    // Add character count tracking
-    var totalCharacterCount = 0
+        // Add character count tracking
+        var totalCharacterCount = 0
 
-    func traverse(_ element: AXUIElement, depth: Int) -> ElementAttributes? {
-        // Add check for AXMenuBar at the start
-        if let role = getAttributeValue(element, forAttribute: "AXRole") as? String,
-           role == "AXMenuBar" {
-            return nil
-        }
-
-        // Add depth limit check
-        if depth > 100 {
-            print("max depth reached: depth=\(depth), app=\(appName), window=\(windowName)")
-            return nil
-        }
-
-        // Check for cancellation or character limit
-        if shouldCancelTraversal || totalCharacterCount >= 100_000 {
-            if totalCharacterCount >= 1_000_000 {
-                print("hit 1mln char limit for app: \(appName), window: \(windowName)")
+        func traverse(_ element: AXUIElement, depth: Int) -> ElementAttributes? {
+            // Add check for AXMenuBar at the start
+            if let role = getAttributeValue(element, forAttribute: "AXRole") as? String,
+               role == "AXMenuBar" {
+                return nil
             }
-            return nil
-        }
 
-        let elementWrapper = AXUIElementWrapper(element: element)
+            // Add depth limit check
+            if depth > 100 {
+                print("max depth reached: depth=\(depth), app=\(appName), window=\(windowName)")
+                return nil
+            }
 
-        guard !visitedElements.contains(elementWrapper) else { return nil }
-        visitedElements.insert(elementWrapper)
+            // Check for cancellation or character limit
+            if shouldCancelTraversal || totalCharacterCount >= 100_000 {
+                if totalCharacterCount >= 1_000_000 {
+                    print("hit 1mln char limit for app: \(appName), window: \(windowName)")
+                }
+                return nil
+            }
 
-        var attributeNames: CFArray?
-        let result = AXUIElementCopyAttributeNames(element, &attributeNames)
+            let elementWrapper = AXUIElementWrapper(element: element)
 
-        guard result == .success, let attributes = attributeNames as? [String] else { return nil }
+            guard !visitedElements.contains(elementWrapper) else { return nil }
+            visitedElements.insert(elementWrapper)
 
-        var position: CGPoint = .zero
-        var size: CGSize = .zero
+            var attributeNames: CFArray?
+            let result = AXUIElementCopyAttributeNames(element, &attributeNames)
 
-        // Get position
-        if let positionValue = getAttributeValue(element, forAttribute: kAXPositionAttribute) as! AXValue?,
-           AXValueGetType(positionValue) == .cgPoint {
-            AXValueGetValue(positionValue, .cgPoint, &position)
-        }
+            guard result == .success, let attributes = attributeNames as? [String] else { return nil }
 
-        // Get size
-        if let sizeValue = getAttributeValue(element, forAttribute: kAXSizeAttribute) as! AXValue?,
-           AXValueGetType(sizeValue) == .cgSize {
-            AXValueGetValue(sizeValue, .cgSize, &size)
-        }
+            var position: CGPoint = .zero
+            var size: CGSize = .zero
 
-        // Get element description
-        let elementDesc = (getAttributeValue(element, forAttribute: "AXRole") as? String) ?? "Unknown"
+            // Get position
+            if let positionValue = getAttributeValue(element, forAttribute: kAXPositionAttribute) as! AXValue?,
+               AXValueGetType(positionValue) == .cgPoint {
+                AXValueGetValue(positionValue, .cgPoint, &position)
+            }
 
-        // Get path
-        let (path, depth) = getElementPath(element)
+            // Get size
+            if let sizeValue = getAttributeValue(element, forAttribute: kAXSizeAttribute) as! AXValue?,
+               AXValueGetType(sizeValue) == .cgSize {
+                AXValueGetValue(sizeValue, .cgSize, &size)
+            }
 
-        var elementAttributes = ElementAttributes(
-            element: elementDesc,
-            path: path,
-            attributes: [:],
-            depth: depth,
-            x: position.x,
-            y: position.y,
-            width: size.width,
-            height: size.height,
-            children: [],
-            timestamp: Date()
-        )
+            // Get element description
+            let elementDesc = (getAttributeValue(element, forAttribute: "AXRole") as? String) ?? "Unknown"
 
-        var hasRelevantValue = false
+            // Get path
+            let (path, depth) = getElementPath(element)
 
-        for attr in attributes {
-            // Check relevant attributes
-            if attributesToCheck.contains(attr) {
-                if let value = getAttributeValue(element, forAttribute: attr) {
-                    let valueStr = describeValue(value)
-                    if !valueStr.isEmpty &&
-                       !unwantedValues.contains(valueStr) &&
-                       valueStr.count > 1 &&
-                       !unwantedLabels.contains(valueStr.lowercased()) {
-                        // Store attribute and its value
-                        elementAttributes.attributes[attr] = valueStr
-                        hasRelevantValue = true
+            var elementAttributes = ElementAttributes(
+                element: elementDesc,
+                path: path,
+                attributes: [:],
+                depth: depth,
+                x: position.x,
+                y: position.y,
+                width: size.width,
+                height: size.height,
+                children: [],
+                timestamp: Date()
+            )
+
+            var hasRelevantValue = false
+
+            for attr in attributes {
+                // Check relevant attributes
+                if attributesToCheck.contains(attr) {
+                    if let value = getAttributeValue(element, forAttribute: attr) {
+                        let valueStr = describeValue(value)
+                        if !valueStr.isEmpty &&
+                           !unwantedValues.contains(valueStr) &&
+                           valueStr.count > 1 &&
+                           !unwantedLabels.contains(valueStr.lowercased()) {
+                            // Store attribute and its value
+                            elementAttributes.attributes[attr] = valueStr
+                            hasRelevantValue = true
+                        }
                     }
                 }
             }
-        }
 
-        // Traverse child elements
-        var childrenElements: [ElementAttributes] = []
-        for attr in attributes {
-            if let childrenValue = getAttributeValue(element, forAttribute: attr) {
-                // Check if it's an array of AXUIElements first
-                if let elementArray = childrenValue as? [AXUIElement] {
-                    if elementArray.count > 1000 {
-                        print("element at path \(path) has \(elementArray.count) children")
-                    }
-                    for childElement in elementArray {
+            // Traverse child elements
+            var childrenElements: [ElementAttributes] = []
+            for attr in attributes {
+                if let childrenValue = getAttributeValue(element, forAttribute: attr) {
+                    // Check if it's an array of AXUIElements first
+                    if let elementArray = childrenValue as? [AXUIElement] {
+                        if elementArray.count > 1000 {
+                            print("element at path \(path) has \(elementArray.count) children")
+                        }
+                        for childElement in elementArray {
+                            if let childAttributes = traverse(childElement, depth: depth + 1) {
+                                childrenElements.append(childAttributes)
+                            }
+                        }
+                    } else if let childElement = childrenValue as! AXUIElement? {
                         if let childAttributes = traverse(childElement, depth: depth + 1) {
                             childrenElements.append(childAttributes)
                         }
                     }
-                } else if let childElement = childrenValue as! AXUIElement? {
-                    if let childAttributes = traverse(childElement, depth: depth + 1) {
-                        childrenElements.append(childAttributes)
-                    }
+                }
+            }
+            elementAttributes.children = childrenElements
+
+            if hasRelevantValue || !childrenElements.isEmpty {
+                // Store the element with its attributes using identifier as key
+                globalElementValues[appName]?[windowName]?.elements[elementAttributes.identifier] = elementAttributes
+                return elementAttributes
+            } else {
+                return nil
+            }
+
+            // Update character count when storing values
+            if hasRelevantValue {
+                for value in elementAttributes.attributes.values {
+                    totalCharacterCount += value.count
                 }
             }
         }
-        elementAttributes.children = childrenElements
 
-        if hasRelevantValue || !childrenElements.isEmpty {
-            // Store the element with its attributes using identifier as key
-            globalElementValues[appName]?[windowName]?.elements[elementAttributes.identifier] = elementAttributes
-            return elementAttributes
-        } else {
-            return nil
+        // Run traversal in dedicated queue
+        traversalQueue.async {
+            _ = traverse(element, depth: 0)
+
+            // Reset state after traversal
+            isTraversing = false
+            shouldCancelTraversal = false
+
+            // Mark window as changed to ensure first scan gets saved
+            hasChanges = true
+            changedWindows.insert(WindowIdentifier(app: appName, window: windowName))
+
+            // Update timestamp after traversal
+            globalElementValues[appName]?[windowName]?.timestamp = Date()
+
+            let endTime = DispatchTime.now()
+            let nanoTime = endTime.uptimeNanoseconds - startTime.uptimeNanoseconds
+            let timeInterval = Double(nanoTime) / 1_000_000
+            print("\(String(format: "%.2f", timeInterval))ms - ui traversal")
+
+            measureGlobalElementValuesSize()
         }
-
-        // Update character count when storing values
-        if hasRelevantValue {
-            for value in elementAttributes.attributes.values {
-                totalCharacterCount += value.count
-            }
-        }
-    }
-
-    // Run traversal in dedicated queue
-    traversalQueue.async {
-        _ = traverse(element, depth: 0)
-
-        // Reset state after traversal
-        isTraversing = false
-        shouldCancelTraversal = false
-
-        // Mark window as changed to ensure first scan gets saved
-        hasChanges = true
-        changedWindows.insert(WindowIdentifier(app: appName, window: windowName))
-
-        // Update timestamp after traversal
-        globalElementValues[appName]?[windowName]?.timestamp = Date()
-
-        let endTime = DispatchTime.now()
-        let nanoTime = endTime.uptimeNanoseconds - startTime.uptimeNanoseconds
-        let timeInterval = Double(nanoTime) / 1_000_000
-        print("\(String(format: "%.2f", timeInterval))ms - ui traversal")
-
-        measureGlobalElementValuesSize()
     }
 }
 
@@ -660,7 +677,6 @@ func handleFocusedWindowChange(element: AXUIElement) {
 
 
 func axObserverCallback(observer: AXObserver, element: AXUIElement, notification: CFString, refcon: UnsafeMutableRawPointer?) {
-    // Add autoreleasepool and safety checks
     autoreleasepool {
         guard !isCleaningUp else { return }
         guard CFGetTypeID(element) == AXUIElementGetTypeID() else { return }
@@ -831,12 +847,6 @@ func registerNotificationsRecursively(element: AXUIElement, observer: AXObserver
             registerNotificationsRecursively(element: child, observer: observer, depth: depth + 1)
         }
     }
-}
-
-func getAttributeValue(_ element: AXUIElement, forAttribute attr: String) -> AnyObject? {
-    var value: AnyObject?
-    let result = AXUIElementCopyAttributeValue(element, attr as CFString, &value)
-    return result == .success ? value : nil
 }
 
 func describeValue(_ value: AnyObject?) -> String {
