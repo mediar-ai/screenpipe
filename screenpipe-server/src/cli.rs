@@ -235,6 +235,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_beta: bool,
 
+    /// Enable UI monitoring (macOS only)
+    #[arg(long, default_value_t = false)]
+    pub enable_ui_monitoring: bool,
+    
     /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
     #[arg(long, default_value_t = false)]
     pub enable_frame_cache: bool,
