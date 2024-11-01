@@ -230,7 +230,6 @@ async fn main() {
             llm_sidecar::stop_ollama_sidecar,
             commands::register_shortcuts,
             commands::unregister_all_shortcuts,  
-            commands::update_show_screenpipe_shortcut,
             commands::show_timeline,
         ])
         .setup(|app| {

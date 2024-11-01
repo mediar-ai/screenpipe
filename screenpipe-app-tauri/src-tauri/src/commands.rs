@@ -280,16 +280,6 @@ fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
                 error!("{}", err);
                 return Err(err);
             }
-
-    // Try to parse the new shortcut, fall back to default if it fails
-    let shortcut_str = match new_shortcut.parse::<Shortcut>() {
-        Ok(_s) => new_shortcut,
-        Err(e) => {
-            info!(
-                "invalid shortcut '{}': {}, falling back to default",
-                new_shortcut, e
-            );
-            DEFAULT_SHORTCUT.to_string()
         }
     }
 
@@ -342,7 +332,7 @@ pub async fn unregister_all_shortcuts(app_handle: tauri::AppHandle) -> Result<()
     app_handle
         .global_shortcut()
         .unregister_all()
-        .map_err(|e| format!("Failed to unregister shortcuts: {}", e))
+        .map_err(|e| format!("Failed to unregister shortcuts: {}", e));
 
     Ok(())
 
