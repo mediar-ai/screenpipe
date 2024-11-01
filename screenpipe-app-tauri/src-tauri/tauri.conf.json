@@ -67,9 +67,9 @@
       {
         "title": "timeline",
         "url": "/timeline",
-        "width": 1400,
+        "width": 1200,
         "height": 600,
-        "minWidth": 1400,
+        "minWidth": 1000,
         "minHeight": 600,
         "visible": false,
         "decorations": true,

@@ -482,8 +482,16 @@ impl FrameCache {
         start: &DateTime<Utc>,
         end: &DateTime<Utc>,
         frame_tx: FrameChannel,
+        descending: bool,
     ) -> Result<()> {
-        let chunks = self.find_video_chunks(*start, *end).await?;
+        let mut chunks = self.find_video_chunks(*start, *end).await?;
+
+        // Sort chunks based on the descending flag
+        if descending {
+            chunks.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        } else {
+            chunks.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+        }
 
         for chunk in chunks {
             if !self.is_video_file_complete(&chunk.file_path).await {
@@ -598,6 +606,7 @@ impl FrameCache {
         timestamp: DateTime<Utc>,
         duration_minutes: i64,
         frame_tx: Sender<FrameInfo>,
+        descending: bool,
     ) -> Result<()> {
         let start = timestamp - Duration::minutes(duration_minutes / 2);
         let end = timestamp + Duration::minutes(duration_minutes / 2);
@@ -607,7 +616,7 @@ impl FrameCache {
         let cache_clone = self.clone();
         let extract_handle = tokio::spawn(async move {
             cache_clone
-                .extract_frames_range(&start, &end, extract_tx)
+                .extract_frames_range(&start, &end, extract_tx, descending)
                 .await
         });
 

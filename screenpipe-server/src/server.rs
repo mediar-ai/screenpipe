@@ -1163,11 +1163,20 @@ struct InputControlResponse {
     success: bool,
 }
 
+#[derive(Deserialize, PartialEq)]
+enum Order {
+    Ascending,
+    Descending,
+}
+
 // Add this new struct
 #[derive(Deserialize)]
 pub struct StreamFramesRequest {
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
+    // #[serde(rename = "order")]
+    // #[serde(default = "descending")]
+    // order: Order,
 }
 
 #[derive(Serialize)]
@@ -1238,7 +1247,7 @@ async fn stream_frames_handler(
         let frame_tx = frame_tx.clone();
         async move {
             tokio::select! {
-                result = cache.get_frames(center_timestamp, duration_minutes, frame_tx) => {
+                result = cache.get_frames(center_timestamp, duration_minutes, frame_tx, true) => {
                     if let Err(e) = result {
                         error!("frame extraction failed: {}", e);
                     }

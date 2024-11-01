@@ -19,7 +19,6 @@ export default function Timeline() {
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout>();
-  const maxRetries = 3;
   const retryCount = useRef(0);
 
   const setupEventSource = () => {
@@ -27,9 +26,13 @@ export default function Timeline() {
       eventSourceRef.current.close();
     }
 
+    // now minus 2 minutes
     const endTime = new Date();
-    const startTime = new Date(endTime.getTime() - 5 * 60 * 1000);
-    const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&fps=1&reverse=true`;
+    endTime.setMinutes(endTime.getMinutes() - 2);
+    // at 00.01 am today
+    const startTime = new Date();
+    startTime.setHours(0, 1, 0, 0);
+    const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
 
     console.log("starting stream:", url);
 
@@ -59,7 +62,7 @@ export default function Timeline() {
     eventSource.onerror = (error) => {
       // Ignore end of stream errors (expected behavior)
       if (eventSource.readyState === EventSource.CLOSED) {
-        console.log("stream ended (expected behavior)");
+        console.log("stream ended (expected behavior)", error);
         setIsLoading(false);
         return;
       }
@@ -68,21 +71,6 @@ export default function Timeline() {
       setError("connection lost. retrying...");
 
       eventSource.close();
-
-      if (retryCount.current < maxRetries) {
-        retryTimeoutRef.current = setTimeout(() => {
-          retryCount.current += 1;
-          console.log(
-            `retrying connection (${retryCount.current}/${maxRetries})...`
-          );
-          setupEventSource();
-        }, 2000 * Math.pow(2, retryCount.current)); // Exponential backoff
-      } else {
-        setError(
-          "failed to connect after multiple attempts. please refresh the page."
-        );
-        setIsLoading(false);
-      }
     };
 
     eventSource.onopen = () => {
@@ -117,9 +105,17 @@ export default function Timeline() {
     e.preventDefault();
     e.stopPropagation();
 
-    const delta = Math.sign(e.deltaY);
+    // Add a sensitivity factor to slow down scrolling (higher = slower)
+    const scrollSensitivity = 1;
+    // Negate the delta to invert the scrolling direction
+    const delta = -Math.sign(e.deltaY) / scrollSensitivity;
+
+    // Use Math.floor or Math.ceil depending on scroll direction to ensure we don't get stuck
     const newIndex = Math.min(
-      Math.max(0, currentIndex + delta),
+      Math.max(
+        0,
+        currentIndex + (delta > 0 ? Math.ceil(delta) : Math.floor(delta))
+      ),
       frames.length - 1
     );
 
@@ -129,13 +125,26 @@ export default function Timeline() {
     }
   };
 
+  const getCurrentTimePercentage = () => {
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const totalDayMilliseconds = endOfDay.getTime() - startOfDay.getTime();
+    const currentMilliseconds = now.getTime() - startOfDay.getTime();
+
+    return (currentMilliseconds / totalDayMilliseconds) * 100;
+  };
+
   return (
     <div
       className="fixed inset-0 flex flex-col bg-black text-white overflow-hidden font-['Press_Start_2P'] relative"
       onWheel={handleScroll}
       style={{
         height: "100vh",
-        overscrollBehavior: "none", // Prevent bounce/overscroll effects
+        overscrollBehavior: "none",
       }}
     >
       {/* Scanline effect overlay */}
@@ -144,7 +153,6 @@ export default function Timeline() {
         style={{
           background:
             "repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)",
-          imageRendering: "pixelated",
         }}
       />
 
@@ -164,32 +172,29 @@ export default function Timeline() {
           </div>
         )}
         {currentFrame && (
-          <img
-            src={`data:image/png;base64,${currentFrame.frame}`}
-            className="absolute inset-0 w-4/5 h-auto max-h-[80vh] object-contain mx-auto mt-8 border-4 border-[#333] shadow-[0_0_16px_rgba(255,255,255,0.1)]"
-            style={{ imageRendering: "pixelated" }}
-            alt="Current frame"
-          />
-        )}
-      </div>
-
-      {/* Info text */}
-      <div className="text-center text-[#888] text-xs tracking-wider my-5">
-        {currentFrame && (
-          <span>
-            timestamp: {new Date(currentFrame.timestamp).toLocaleString()} |
-            app: {currentFrame?.app_name || "n/a"} | window:{" "}
-            {currentFrame?.window_name || "n/a"}
-          </span>
+          <>
+            {/* App info centered above frame */}
+            <div className="w-4/5 mx-auto mt-4 mb-2 text-center">
+              <div className="inline-block bg-black/50 p-2 rounded shadow-lg backdrop-blur-sm border border-[#333] text-[#888] text-xs tracking-wider">
+                <div className="flex items-center gap-4">
+                  <div>{new Date(currentFrame?.timestamp).toLocaleTimeString()}</div>
+                  <div>app: {currentFrame?.app_name || "n/a"}</div>
+                  <div>window: {currentFrame?.window_name || "n/a"}</div>
+                </div>
+              </div>
+            </div>
+            <img
+              src={`data:image/png;base64,${currentFrame.frame}`}
+              className="absolute inset-0 w-4/5 h-auto max-h-[80vh] object-contain mx-auto mt-12"
+              alt="Current frame"
+            />
+          </>
         )}
       </div>
 
       {/* Timeline bar */}
       <div className="w-4/5 mx-auto mb-8 relative">
-        <div
-          className="h-[60px] bg-[#111] border-4 border-[#444] shadow-[0_0_16px_rgba(0,0,0,0.8),inset_0_0_8px_rgba(255,255,255,0.1)] cursor-crosshair relative"
-          style={{ imageRendering: "pixelated" }}
-        >
+        <div className="h-[60px] bg-[#111] border-4 border-[#444] shadow-[0_0_16px_rgba(0,0,0,0.8),inset_0_0_8px_rgba(255,255,255,0.1)] cursor-crosshair relative">
           {/* Grid lines */}
           <div
             className="absolute inset-0"
@@ -204,31 +209,28 @@ export default function Timeline() {
           <div
             className="absolute top-0 h-full w-1 bg-[#0f0] shadow-[0_0_12px_#0f0] opacity-80"
             style={{
-              left: `${(currentIndex / Math.max(frames.length - 1, 1)) * 100}%`,
+              left: `${getCurrentTimePercentage()}%`,
             }}
           />
         </div>
 
         {/* Timeline timestamps */}
         <div className="relative mt-1 px-2 text-[10px] text-[#0f0] shadow-[0_0_8px_#0f0]">
-          {frames.length > 0 &&
-            Array(5)
-              .fill(0)
-              .map((_, i) => {
-                const position = i / 4;
-                const frameIndex = Math.floor(position * (frames.length - 1));
-                return (
-                  <div
-                    key={i}
-                    className="absolute transform -translate-x-1/2"
-                    style={{ left: `${position * 100}%` }}
-                  >
-                    {new Date(
-                      frames[frameIndex]?.timestamp
-                    ).toLocaleTimeString()}
-                  </div>
-                );
-              })}
+          {Array(7)
+            .fill(0)
+            .map((_, i) => {
+              const hour = (i * 4) % 24; // Start at 0 and increment by 4 hours
+
+              return (
+                <div
+                  key={i}
+                  className="absolute transform -translate-x-1/2"
+                  style={{ left: `${(i * 100) / 6}%` }}
+                >
+                  {`${hour.toString().padStart(2, "0")}:00`}
+                </div>
+              );
+            })}
         </div>
       </div>
     </div>
