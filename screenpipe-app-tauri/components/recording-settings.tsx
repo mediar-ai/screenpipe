@@ -1388,6 +1388,43 @@ export function RecordingSettings({
                 )}
               </div>
             </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="ui-monitoring-toggle"
+                checked={localSettings.enableUiMonitoring}
+                onCheckedChange={(checked) => 
+                  setLocalSettings({
+                    ...localSettings,
+                    enableUiMonitoring: checked,
+                  })
+                }
+              />
+              <Label
+                htmlFor="ui-monitoring-toggle"
+                className="flex items-center space-x-2"
+              >
+                <span>enable UI monitoring</span>
+                <Badge variant="outline" className="ml-2">macOS only</Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        enables monitoring of UI elements and their interactions.
+                        <br />
+                        this allows for better context in search results
+                        <br />
+                        and more accurate activity tracking.
+                        <br />
+                        (macOS only)
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+            </div>
           </CardContent>
         </Card>
       </div>
