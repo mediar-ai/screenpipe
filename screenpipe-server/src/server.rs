@@ -755,7 +755,7 @@ impl Server {
                 Some(Arc::new(
                     FrameCache::with_config(
                         self.screenpipe_dir.clone().join("data"),
-                        None,
+                        self.db.clone(),
                         FrameCacheConfig {
                             prefetch_size: chrono::Duration::seconds(60),
                             cleanup_interval: chrono::Duration::minutes(360),
@@ -1237,13 +1237,13 @@ async fn stream_frames_handler(
     });
 
     let stream = async_stream::stream! {
-        while let Some((timestamp, frame_data)) = frame_rx.recv().await {
+        while let Some((timestamp, frame_data, file_path, app_name, window_name)) = frame_rx.recv().await {
             let response = StreamFramesResponse {
                 frame: BASE64_STANDARD.encode(&frame_data),
                 timestamp,
-                file_path: "".to_string(),
-                app_name: None,
-                window_name: None,
+                file_path,
+                app_name: Some(app_name),
+                window_name: Some(window_name),
             };
 
             if let Ok(json) = serde_json::to_string(&response) {
@@ -1257,33 +1257,6 @@ async fn stream_frames_handler(
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
     )
-}
-
-#[derive(Serialize)]
-pub struct ProgressInfo {
-    message: String,
-    percent: f32,
-    total_chunks: usize,
-    processed_chunks: usize,
-    current_timestamp: DateTime<Utc>,
-}
-
-impl ProgressInfo {
-    pub fn new(
-        message: String,
-        percent: f32,
-        total_chunks: usize,
-        processed_chunks: usize,
-        current_timestamp: DateTime<Utc>,
-    ) -> Self {
-        Self {
-            message,
-            percent,
-            total_chunks,
-            processed_chunks,
-            current_timestamp,
-        }
-    }
 }
 
 /*

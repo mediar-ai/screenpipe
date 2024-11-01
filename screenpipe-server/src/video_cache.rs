@@ -1,15 +1,11 @@
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
-use dirs::cache_dir;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::fs;
-use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::sync::mpsc::{channel, Sender};
 use tracing::{debug, error, info};
 
-use crate::server::ProgressInfo;
 use glob::glob;
 use screenpipe_core::find_ffmpeg_path;
 use std::time::SystemTime;
@@ -17,22 +13,26 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 
 // Add these new imports at the top
+use crate::DatabaseManager;
 use lru::LruCache;
 use std::num::NonZeroUsize;
+use tokio::io::AsyncReadExt;
 use tokio::sync::oneshot;
+type FrameChannel = Sender<(DateTime<Utc>, Vec<u8>, String, String, String)>;
 
 // Add these new types after the existing imports
 #[derive(Debug, Clone)]
 struct CachedFrame {
     timestamp: DateTime<Utc>,
     data: Arc<Vec<u8>>,
-    last_accessed: DateTime<Utc>,
+    file_path: String,
+    app_name: String,
+    window_name: String,
 }
 
 enum CacheMsg {
     GetFrame(i64, oneshot::Sender<Option<CachedFrame>>), // timestamp as key
     InsertFrame(i64, CachedFrame),
-    Clear,
 }
 
 struct FrameCacheManager {
@@ -54,9 +54,6 @@ impl FrameCacheManager {
             }
             CacheMsg::InsertFrame(timestamp, frame) => {
                 self.frames.put(timestamp, frame);
-            }
-            CacheMsg::Clear => {
-                self.frames.clear();
             }
         }
     }
@@ -82,9 +79,9 @@ impl Default for FrameCacheConfig {
 #[derive(Clone)]
 pub struct FrameCache {
     pub screenpipe_dir: PathBuf,
-    cache_dir: PathBuf,
     config: FrameCacheConfig,
     cache_manager_tx: Sender<CacheMsg>,
+    db: Arc<DatabaseManager>,
 }
 
 #[derive(Debug)]
@@ -92,6 +89,15 @@ struct VideoChunk {
     file_path: String,
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
+}
+
+// Add a new struct for frame metadata
+#[derive(Debug, Clone)]
+pub struct FrameInfo {
+    pub timestamp: DateTime<Utc>,
+    pub data: Vec<u8>,
+    pub app_name: String,
+    pub window_name: String,
 }
 
 /*
@@ -170,22 +176,16 @@ rules:
 */
 
 impl FrameCache {
-    pub async fn new(screenpipe_dir: PathBuf, cache_dir: Option<PathBuf>) -> Result<Self> {
-        Self::with_config(screenpipe_dir, cache_dir, FrameCacheConfig::default()).await
+    pub async fn new(screenpipe_dir: PathBuf, db: Arc<DatabaseManager>) -> Result<Self> {
+        Self::with_config(screenpipe_dir, db, FrameCacheConfig::default()).await
     }
 
     pub async fn with_config(
         screenpipe_dir: PathBuf,
-        cache_dir_: Option<PathBuf>,
+        db: Arc<DatabaseManager>,
         config: FrameCacheConfig,
     ) -> Result<Self> {
         info!("initializing frame cache");
-        let cache_dir = match cache_dir_ {
-            Some(dir) => dir,
-            None => cache_dir().unwrap().join("screenpipe"),
-        };
-        fs::create_dir_all(&cache_dir).await?;
-
         // Add chunk cache manager channel
         let (cache_manager_tx, mut cache_manager_rx) = channel::<CacheMsg>(100);
 
@@ -199,9 +199,9 @@ impl FrameCache {
 
         let cache = Self {
             screenpipe_dir,
-            cache_dir: cache_dir.clone(),
             config,
             cache_manager_tx,
+            db: db.clone(),
         };
 
         // Start background scanner task
@@ -225,7 +225,7 @@ impl FrameCache {
         Ok(cache)
     }
 
-    pub async fn get_frame(&self, target_time: DateTime<Utc>) -> Option<Vec<u8>> {
+    pub async fn get_frame(&self, target_time: DateTime<Utc>) -> Option<FrameInfo> {
         let timestamp = target_time.timestamp();
 
         // Try cache first
@@ -237,7 +237,12 @@ impl FrameCache {
         {
             if let Ok(Some(frame)) = rx.await {
                 debug!("cache hit for frame at {}", target_time);
-                return Some(frame.data.as_ref().clone());
+                return Some(FrameInfo {
+                    timestamp: frame.timestamp,
+                    data: frame.data.as_ref().clone(),
+                    app_name: frame.app_name,
+                    window_name: frame.window_name,
+                });
             }
         }
 
@@ -245,7 +250,7 @@ impl FrameCache {
         debug!("cache miss for frame at {}", target_time);
         let prefetch_end = target_time + self.config.prefetch_size;
 
-        let (_, mut rx) = tokio::sync::mpsc::channel::<(DateTime<Utc>, Vec<u8>)>(100);
+        let (_, mut rx): (FrameChannel, _) = tokio::sync::mpsc::channel(100);
 
         // Spawn prefetch task
         let cache = self.clone();
@@ -256,12 +261,15 @@ impl FrameCache {
         });
 
         // Wait for the specific frame we need
-        while let Some((frame_time, frame_data)) = rx.recv().await {
+        while let Some((frame_time, frame_data, file_path, app_name, window_name)) = rx.recv().await
+        {
             // Cache the frame
             let frame = CachedFrame {
                 timestamp: frame_time,
                 data: Arc::new(frame_data.clone()),
-                last_accessed: Utc::now(),
+                file_path: file_path.clone(),
+                app_name: app_name.clone(),
+                window_name: window_name.clone(),
             };
 
             let _ = self
@@ -271,7 +279,12 @@ impl FrameCache {
 
             // Return if this is the frame we wanted
             if (frame_time - target_time).num_milliseconds().abs() < 1000 {
-                return Some(frame_data);
+                return Some(FrameInfo {
+                    timestamp: frame_time,
+                    data: frame_data,
+                    app_name,
+                    window_name,
+                });
             }
         }
 
@@ -279,11 +292,12 @@ impl FrameCache {
     }
 
     pub async fn extract_frames_batch(
+        &self,
         file_path: &str,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         fps: f32,
-        frame_tx: Sender<(DateTime<Utc>, Vec<u8>)>,
+        frame_tx: FrameChannel,
     ) -> Result<()> {
         let ffmpeg = find_ffmpeg_path().ok_or_else(|| anyhow::anyhow!("ffmpeg not found"))?;
 
@@ -336,40 +350,52 @@ impl FrameCache {
         let mut frame_time = start_time;
         let frame_interval = Duration::milliseconds((1000.0 / fps) as i64);
 
-        loop {
-            // Read JPEG header marker
-            let mut buf = [0u8; 2];
-            if reader.read_exact(&mut buf).await.is_err() {
-                break;
-            }
-            if buf != [0xFF, 0xD8] {
-                continue;
+        // Get metadata from database for the file chunk
+        let metadata = self
+            .db
+            .get_frame_metadata(&file_path)
+            .await
+            .unwrap_or_default();
+
+        info!("found {} metadata entries in {}", metadata.len(), file_path);
+        // Read JPEG magic bytes
+        let mut magic = [0u8; 2];
+        while reader.read_exact(&mut magic).await.is_ok() {
+            if magic != [0xFF, 0xD8] {
+                continue; // Not a JPEG start marker, keep searching
             }
 
-            // Read until JPEG end marker
+            // Read until we find JPEG end marker
             let mut frame_data = vec![0xFF, 0xD8];
-            let mut last_byte = 0;
-            loop {
-                match reader.read_u8().await {
-                    Ok(byte) => {
-                        frame_data.push(byte);
-                        if last_byte == 0xFF && byte == 0xD9 {
-                            break;
-                        }
-                        last_byte = byte;
-                    }
-                    Err(_) => break,
-                }
-            }
+            let mut buf = [0u8; 1];
+            let mut last_byte = 0u8;
 
-            // Send frame if it's complete
-            if frame_data.ends_with(&[0xFF, 0xD9]) {
-                if let Err(e) = frame_tx.send((frame_time, frame_data)).await {
-                    println!("failed to send frame: {}", e);
+            while reader.read_exact(&mut buf).await.is_ok() {
+                frame_data.push(buf[0]);
+                if last_byte == 0xFF && buf[0] == 0xD9 {
+                    if let Err(e) = frame_tx
+                        .send((
+                            frame_time,
+                            frame_data,
+                            file_path.to_string(),
+                            metadata
+                                .get(frame_count)
+                                .map_or("".to_string(), |(app, _)| app.clone()),
+                            metadata
+                                .get(frame_count)
+                                .map_or("".to_string(), |(_, win)| win.clone()),
+                        ))
+                        .await
+                    {
+                        error!("failed to send frame: {}", e);
+                        break;
+                    }
+
+                    frame_count += 1;
+                    frame_time = start_time + frame_interval * (frame_count as i32);
                     break;
                 }
-                frame_count += 1;
-                frame_time = start_time + frame_interval * frame_count;
+                last_byte = buf[0];
             }
         }
 
@@ -432,7 +458,7 @@ impl FrameCache {
         &self,
         start: &DateTime<Utc>,
         end: &DateTime<Utc>,
-        frame_tx: tokio::sync::mpsc::Sender<(DateTime<Utc>, Vec<u8>)>,
+        frame_tx: FrameChannel,
     ) -> Result<()> {
         let chunks = self
             .find_video_chunks(&self.screenpipe_dir, *start, *end)
@@ -443,14 +469,15 @@ impl FrameCache {
                 continue;
             }
 
-            if let Err(e) = Self::extract_frames_batch(
-                &chunk.file_path,
-                chunk.start_time,
-                chunk.end_time,
-                self.config.fps,
-                frame_tx.clone(),
-            )
-            .await
+            if let Err(e) = self
+                .extract_frames_batch(
+                    &chunk.file_path,
+                    chunk.start_time,
+                    chunk.end_time,
+                    self.config.fps,
+                    frame_tx.clone(),
+                )
+                .await
             {
                 error!("failed to extract frames from {}: {}", chunk.file_path, e);
             }
@@ -513,7 +540,7 @@ impl FrameCache {
         debug!("preloading frames from {} to {}", start, end);
 
         // Create channels for internal use
-        let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<(DateTime<Utc>, Vec<u8>)>(100);
+        let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
 
         // Process chunks and stream frames
         let chunks = self
@@ -533,117 +560,50 @@ impl FrameCache {
                 continue;
             }
 
-            if let Err(e) = Self::extract_frames_batch(
-                &chunk.file_path,
-                chunk.start_time,
-                chunk.end_time,
-                self.config.fps,
-                frame_tx.clone(),
-            )
-            .await
+            if let Err(e) = self
+                .extract_frames_batch(
+                    &chunk.file_path,
+                    chunk.start_time,
+                    chunk.end_time,
+                    self.config.fps,
+                    frame_tx.clone(),
+                )
+                .await
             {
                 error!("failed to extract frames from {}: {}", chunk.file_path, e);
             }
         }
 
         // Handle received frames if needed (e.g., caching)
-        while let Some((timestamp, frame_data)) = frame_rx.recv().await {
-            self.insert_frame(timestamp, frame_data).await;
+        while let Some((timestamp, frame_data, file_path, app_name, window_name)) =
+            frame_rx.recv().await
+        {
+            self.insert_frame(timestamp, frame_data, file_path, app_name, window_name)
+                .await;
         }
 
         Ok(())
     }
 
-    async fn insert_frame(&self, timestamp: DateTime<Utc>, frame_data: Vec<u8>) {
+    async fn insert_frame(
+        &self,
+        timestamp: DateTime<Utc>,
+        frame_data: Vec<u8>,
+        file_path: String,
+        app_name: String,
+        window_name: String,
+    ) {
         let frame = CachedFrame {
             timestamp,
             data: Arc::new(frame_data),
-            last_accessed: Utc::now(),
+            file_path,
+            app_name,
+            window_name,
         };
 
         let _ = self
             .cache_manager_tx
             .send(CacheMsg::InsertFrame(timestamp.timestamp(), frame))
             .await;
-    }
-
-    pub async fn preload_frames_with_progress(
-        &self,
-        start: &DateTime<Utc>,
-        end: &DateTime<Utc>,
-        progress_tx: tokio::sync::mpsc::Sender<ProgressInfo>,
-        frame_tx: tokio::sync::mpsc::Sender<(DateTime<Utc>, Vec<u8>)>,
-    ) -> Result<()> {
-        debug!("preloading frames from {} to {}", start, end);
-
-        let chunks = self
-            .find_video_chunks(&self.screenpipe_dir, *start, *end)
-            .await?;
-        let total_chunks = chunks.len();
-
-        debug!("found {} chunks to process", total_chunks);
-
-        if chunks.is_empty() {
-            let _ = progress_tx
-                .send(ProgressInfo::new(
-                    "no video chunks found".to_string(),
-                    100.0,
-                    0,
-                    0,
-                    *start,
-                ))
-                .await;
-            return Ok(());
-        }
-
-        for (i, chunk) in chunks.into_iter().enumerate() {
-            debug!(
-                "processing chunk {}/{}: {}",
-                i + 1,
-                total_chunks,
-                chunk.file_path
-            );
-
-            // Send progress update
-            let _ = progress_tx
-                .send(ProgressInfo::new(
-                    format!("processing chunk {}/{}", i + 1, total_chunks),
-                    (i as f32 / total_chunks as f32) * 100.0,
-                    total_chunks,
-                    i,
-                    chunk.start_time,
-                ))
-                .await;
-
-            if !self.is_video_file_complete(&chunk.file_path).await {
-                continue;
-            }
-
-            // Pass the frame_tx channel to extract_frames_batch
-            if let Err(e) = Self::extract_frames_batch(
-                &chunk.file_path,
-                chunk.start_time,
-                chunk.end_time,
-                self.config.fps,
-                frame_tx.clone(),
-            )
-            .await
-            {
-                error!("failed to extract frames from {}: {}", chunk.file_path, e);
-            }
-        }
-
-        // Send completion progress
-        let _ = progress_tx
-            .send(ProgressInfo::new(
-                "completed frame extraction".to_string(),
-                100.0,
-                total_chunks,
-                total_chunks,
-                *end,
-            ))
-            .await;
-
-        Ok(())
     }
 }

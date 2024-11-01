@@ -227,6 +227,7 @@ export function RecordingSettings({
         useChineseMirror: localSettings.useChineseMirror,
         languages: localSettings.languages,
         enableBeta: localSettings.enableBeta,
+        enableFrameCache: localSettings.enableFrameCache,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
