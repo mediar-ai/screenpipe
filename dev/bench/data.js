@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730484037770,
+  "lastUpdate": 1730498123300,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -21599,6 +21599,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1906697458,
             "range": "± 30660056",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "9217d722a161bf449e561080919658ef1cc9e2a7",
+          "message": "refactor: make the video cache faster",
+          "timestamp": "2024-11-01T14:45:17-07:00",
+          "tree_id": "89bbf726eb4168c00f41a778e5397b955739ee26",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/9217d722a161bf449e561080919658ef1cc9e2a7"
+        },
+        "date": 1730498121372,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1898850208,
+            "range": "± 101172990",
             "unit": "ns/iter"
           }
         ]
