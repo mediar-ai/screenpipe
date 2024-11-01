@@ -41,3 +41,6 @@ onnxruntime-win-x64-gpu*/
 
 # ignore environment variables
 .env
+
+# WIP versions
+screenpipe-vision/src/ui_monitoring_past_versions/
