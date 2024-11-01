@@ -179,7 +179,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let enable_ui_monitoring = store
         .get("enableUiMonitoring")
         .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .unwrap_or(true);
 
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
