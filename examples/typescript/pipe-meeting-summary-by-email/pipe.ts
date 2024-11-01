@@ -3,7 +3,7 @@ import {
   loadPipeConfig,
   ContentItem,
   extractJsonFromLlmResponse,
-} from "screenpipe";
+} from "@screenpipe/js";
 import nodemailer from "nodemailer";
 
 async function summarizeAudio(

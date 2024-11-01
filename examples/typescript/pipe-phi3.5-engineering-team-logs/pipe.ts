@@ -1,9 +1,8 @@
-import { ContentItem } from "screenpipe";
-import { Client } from "npm:@notionhq/client";
+import { Client } from "@notionhq/client";
 import { z } from "zod";
 import { generateObject } from "ai";
 import { createOllama } from "ollama-ai-provider";
-import { pipe } from "screenpipe";
+import { pipe, ContentItem } from "@screenpipe/js";
 
 const engineeringLog = z.object({
   title: z.string(),

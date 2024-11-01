@@ -31,9 +31,7 @@ jobs:
           toolchain: stable
           override: true
 
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      - uses: oven-sh/setup-bun@v1
 
       - name: Install dependencies
         run: .github/scripts/install_dependencies.sh
@@ -46,13 +44,13 @@ jobs:
       - name: Run cargo tests
         run: cargo test
 
-      - name: Run deno tests
+      - name: Run bun tests
         env:
           SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
           PIPE_ID: test
           PIPE_FILE: pipe.ts
           PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
-        run: deno test --allow-env --allow-write --allow-read
+        run: bun ./scripts/run_tests.js
         working-directory: ./screenpipe-js
 
   test-windows:
@@ -71,9 +69,7 @@ jobs:
           profile: minimal
           toolchain: stable
 
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      - uses: oven-sh/setup-bun@v1
 
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
@@ -92,13 +88,13 @@ jobs:
       - name: Run specific Windows OCR cargo test
         run: cargo test test_process_ocr_task_windows
 
-      - name: Run deno tests
+      - name: Run bun tests
         env:
           SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
           PIPE_ID: test
           PIPE_FILE: pipe.ts
           PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
-        run: deno test --allow-env --allow-write --allow-read
+        run: bun ./scripts/run_tests.js
         working-directory: ./screenpipe-js
 
   test-macos:
@@ -117,9 +113,7 @@ jobs:
           profile: minimal
           toolchain: stable
 
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      - uses: oven-sh/setup-bun@v1
 
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
@@ -143,11 +137,11 @@ jobs:
           DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr
 
-      - name: Run deno tests
+      - name: Run bun tests
         env:
           SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
           PIPE_ID: test
           PIPE_FILE: pipe.ts
           PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
-        run: deno test --allow-env --allow-write --allow-read
+        run: bun ./scripts/run_tests.js
         working-directory: ./screenpipe-js

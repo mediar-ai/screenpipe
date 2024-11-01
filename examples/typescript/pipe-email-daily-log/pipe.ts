@@ -1,11 +1,10 @@
-import * as fs from "fs";
+import * as fs from "node:fs";
 import nodemailer from "nodemailer";
-import { queryScreenpipe, loadPipeConfig, ContentItem } from "screenpipe";
+import { queryScreenpipe, loadPipeConfig, ContentItem, pipe } from "@screenpipe/js";
 import process from "node:process";
 import { z } from "zod";
 import { generateObject, generateText } from "ai";
 import { createOllama } from "ollama-ai-provider";
-import { pipe } from "screenpipe";
 
 interface DailyLog {
   activity: string;

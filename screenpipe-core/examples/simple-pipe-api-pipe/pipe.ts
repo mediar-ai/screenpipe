@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { streamText } from "ai";
 import { ollama } from "ollama-ai-provider";
-import { queryScreenpipe } from "https://raw.githubusercontent.com/mediar-ai/screenpipe/deno-thru-cli/screenpipe-js/main.ts";
+import { queryScreenpipe } from "@screenpipe/js";
 
 const simpleOllamaChat = async () => {
   console.log(

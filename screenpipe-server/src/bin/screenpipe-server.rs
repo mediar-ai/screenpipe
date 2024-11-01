@@ -13,9 +13,10 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
 use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
@@ -114,7 +115,14 @@ async fn main() -> anyhow::Result<()> {
 
     let _log_guard = setup_logging(&local_data_dir, &cli)?;
 
-    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
+    let h = Highlight::init(HighlightConfig {
+        project_id:String::from("82688"),
+        ..Default::default()
+    })
+    .expect("Failed to initialize Highlight.io");
+
+    let (pipe_manager, mut pipe_control_rx) = PipeManager::new(local_data_dir_clone.clone());
+    let pipe_manager = Arc::new(pipe_manager);
 
     if let Some(pipe_command) = cli.command {
         match pipe_command {
@@ -132,6 +140,7 @@ async fn main() -> anyhow::Result<()> {
                     if let Err(e) = trigger_keyboard_permission() {
                         error!("Failed to trigger keyboard permission: {:?}", e);
                         error!("Please grant keyboard permission manually in System Preferences.");
+                        h.capture_error("Please grant keyboard permission manually in System Preferences.");
                     } else {
                         info!("Keyboard permission requested. Please grant permission if prompted.");
                     }
@@ -143,6 +152,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Err(e) = trigger_audio_permission() {
                     error!("Failed to trigger audio permission: {:?}", e);
                     error!("Please grant microphone permission manually in System Preferences.");
+                    h.capture_error("Please grant microphone permission manually in System Preferences.");
                 } else {
                     info!("Audio permission requested. Please grant permission if prompted.");
                 }
@@ -151,6 +161,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Err(e) = trigger_screen_capture_permission() {
                     error!("Failed to trigger screen capture permission: {:?}", e);
                     error!("Please grant screen recording permission manually in System Preferences.");
+                    h.capture_error("Please grant microphone permission manually in System Preferences.");
                 } else {
                     info!("Screen capture permission requested. Please grant permission if prompted.");
                 }
@@ -168,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(e) => {
                         error!("FFmpeg check failed: {}", e);
                         error!("Please ensure FFmpeg is installed correctly and is in your PATH");
+                        h.capture_error("Please ensure FFmpeg is installed correctly and is in your PATH");
                         return Err(e.into());
                     }
                 }
@@ -413,14 +425,10 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
-        #[cfg(feature = "llm")]
-        cli.enable_llm,
-        #[cfg(feature = "llm")]
-        llm,
-
     );
 
-    let mut pipe_futures = FuturesUnordered::new();
+    let pipe_futures = Arc::new(tokio::sync::Mutex::new(FuturesUnordered::new()));
+    let pipe_futures_clone = pipe_futures.clone();
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -605,6 +613,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
+
     println!("└─────────────────────┴────────────────────────────────────┘");
 
     // Add warning for cloud arguments and telemetry
@@ -633,6 +643,7 @@ async fn main() -> anyhow::Result<()> {
                 .bright_yellow()
         );
     } else {
+        h.shutdown();
         println!(
             "{}",
             "telemetry is disabled. no data will be sent to external services."
@@ -650,17 +661,17 @@ async fn main() -> anyhow::Result<()> {
             continue;
         }
         match pipe_manager.start_pipe(&pipe.id).await {
-            Ok(future) => pipe_futures.push(future),
+            Ok(future) => pipe_futures.lock().await.push(future),
             Err(e) => eprintln!("failed to start pipe {}: {}", pipe.id, e),
         }
     }
 
-    let server_future = server.start(devices_status, api_plugin);
+    let server_future = server.start(devices_status, api_plugin, cli.enable_frame_cache);
     pin_mut!(server_future);
 
     let pipes_future = async {
         loop {
-            if let Some(result) = pipe_futures.next().await {
+            if let Some(result) = pipe_futures_clone.lock().await.next().await {
                 info!("pipe completed: {:?}", result);
             } else {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -712,6 +723,42 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Start the UI monitoring task
+    #[cfg(target_os = "macos")]
+    if cli.enable_ui_monitoring {
+        let shutdown_tx_clone = shutdown_tx.clone();
+        tokio::spawn(async move {
+            let mut shutdown_rx = shutdown_tx_clone.subscribe();
+            
+            tokio::select! {
+                _ = run_ui() => {
+                    error!("ui monitoring stopped unexpectedly");
+                }
+                _ = shutdown_rx.recv() => {
+                    info!("received shutdown signal, stopping ui monitoring");
+                }
+            }
+        });
+    }
+
+    let pipe_control_future = async {
+        while let Some(control) = pipe_control_rx.recv().await {
+            match control {
+                PipeControl::Enable(pipe_id) => {
+                    debug!("enabling pipe: {}", pipe_id);
+                    match pipe_manager.start_pipe(&pipe_id).await {
+                        Ok(future) => pipe_futures_clone.lock().await.push(future),
+                        Err(e) => error!("failed to start pipe {}: {}", pipe_id, e),
+                    }
+                }
+                PipeControl::Disable(pipe_id) => {
+                    debug!("disabling pipe: {}", pipe_id);
+                }
+            }
+        }
+    };
+    pin_mut!(pipe_control_future);
+
     tokio::select! {
         _ = handle => info!("recording completed"),
         result = &mut server_future => {
@@ -723,12 +770,16 @@ async fn main() -> anyhow::Result<()> {
         _ = &mut pipes_future => {
             info!("all pipes completed, but server is still running");
         }
+        _ = &mut pipe_control_future => {
+            info!("pipe control channel closed");
+        }
         _ = ctrl_c_future => {
             info!("received ctrl+c, initiating shutdown");
             let _ = shutdown_tx.send(());
         }
     }
 
+    h.shutdown();
     info!("shutdown complete");
 
     Ok(())
