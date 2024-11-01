@@ -360,6 +360,9 @@ impl FrameCache {
         info!("found {} metadata entries in {}", metadata.len(), file_path);
         // Read JPEG magic bytes
         let mut magic = [0u8; 2];
+        let mut error_count = 0;
+        const MAX_ERRORS: u32 = 3; // Maximum number of errors before giving up
+
         while reader.read_exact(&mut magic).await.is_ok() {
             if magic != [0xFF, 0xD8] {
                 continue; // Not a JPEG start marker, keep searching
@@ -387,8 +390,13 @@ impl FrameCache {
                         ))
                         .await
                     {
+                        error_count += 1;
                         error!("failed to send frame: {}", e);
-                        break;
+
+                        if error_count >= MAX_ERRORS {
+                            debug!("channel appears closed, stopping extraction");
+                            return Ok(()); // Early return to completely stop processing
+                        }
                     }
 
                     frame_count += 1;

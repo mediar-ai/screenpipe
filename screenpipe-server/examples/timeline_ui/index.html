@@ -15,17 +15,19 @@
             box-sizing: border-box;
         }
         #timeline {
-            position: relative;
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 20px;
             width: 80%;
             height: 60px;
             background: #111;
             border: 4px solid #444;
             image-rendering: pixelated;
             box-shadow: 0 0 16px rgba(0,0,0,0.8), inset 0 0 8px rgba(255,255,255,0.1);
-            cursor: crosshair;
-            margin: 0 auto 32px auto;
             max-width: calc(80vw - 48px);
             box-sizing: border-box;
+            z-index: 1000;
         }
         #cursor {
             position: absolute;
@@ -35,6 +37,8 @@
             box-shadow: 0 0 12px #0f0;
             top: 0;
             opacity: 0.8;
+            left: 50%;
+            transform: translateX(-50%);
         }
         #frame {
             display: none;
@@ -139,6 +143,7 @@
             max-width: calc(80vw - 48px);
             box-sizing: border-box;
             padding: 0 8px;
+            transition: transform 0.3s ease;
         }
         .timestamp {
             position: absolute;
@@ -191,6 +196,7 @@
                     transparent 1px
                 );
             background-size: 10% 100%;
+            transition: transform 0.3s ease;
         }
 
         /* Add new styles for app and window info */
@@ -199,10 +205,21 @@
             font-size: 8px;
             color: #0f0;
             text-shadow: 0 0 8px rgba(0,255,0,0.3);
-            margin: 8px 0;
+            margin: 16px 0;
+            text-align: center;
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            z-index: 1001;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-bottom: 2px solid #0f0;
         }
         .metadata span {
             margin: 0 8px;
+            display: inline-block;
         }
 
         #timeline::after {
@@ -228,6 +245,144 @@
             height: 100%;
             overflow: hidden;  /* Prevent default scrolling */
         }
+
+        /* Add these styles */
+        .timeline-top-bar {
+            position: absolute;
+            bottom: -24px;
+            left: 0;
+            width: 100%;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            font-size: 10px;
+            color: #0f0;
+            overflow: hidden;
+        }
+
+        .timeline-numbers {
+            position: absolute;
+            display: flex;
+            transition: transform 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .time-mark {
+            padding: 0 10px;
+            opacity: 0.8;
+        }
+
+        .now-indicator {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0f0;
+            color: #000;
+            padding: 2px 6px;
+            font-size: 8px;
+            border-radius: 2px;
+            z-index: 1;
+            box-shadow: 0 0 8px rgba(0,255,0,0.4);
+        }
+
+        /* Add styles for app indicators */
+        .app-indicators {
+            position: absolute;
+            bottom: -48px; /* Below the timeline numbers */
+            left: 0;
+            width: 100%;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .app-marker {
+            position: absolute;
+            transform: translateX(-50%);
+            font-size: 8px;
+            color: #0f0;
+            opacity: 0.8;
+            white-space: nowrap;
+            text-shadow: 0 0 8px rgba(0,255,0,0.4);
+        }
+
+        /* Update timeline container to account for bottom elements */
+        #timeline {
+            margin-bottom: 64px; /* Increased to make room for bottom elements */
+        }
+
+        /* Rename and update the bar styles */
+        .timeline-bottom-bar {
+            position: absolute;
+            bottom: -24px;
+            left: 0;
+            width: 100%;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            font-size: 10px;
+            color: #0f0;
+            overflow: visible;
+        }
+
+        .timeline-numbers {
+            position: absolute;
+            display: flex;
+            transition: transform 0.3s ease;
+            white-space: nowrap;
+            width: 100%;
+        }
+
+        .time-mark {
+            position: absolute;
+            padding: 0 10px;
+            opacity: 0.8;
+            transform: translateX(-50%);
+            text-shadow: 0 0 8px rgba(0,255,0,0.4);
+        }
+
+        .app-indicators {
+            position: absolute;
+            bottom: -48px;
+            left: 0;
+            width: 100%;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            overflow: visible;
+        }
+
+        /* Make sure the timeline container has enough margin */
+        #timeline {
+            margin-bottom: 84px !important; /* Increased to make room for both bars */
+        }
+
+        /* Add these new styles for the time travel indicator */
+        .time-travel-indicator {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: #0f0;
+            text-shadow: 0 0 8px #0f0;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+            z-index: 1002;
+        }
+
+        .time-travel-indicator.active {
+            opacity: 1;
+            animation: pulse 0.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: translateX(-50%) scale(1); }
+            to { transform: translateX(-50%) scale(1.1); }
+        }
+
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
@@ -235,6 +390,11 @@
     <div id="timeline">
         <div class="timeline-highlight"></div>
         <div id="cursor"></div>
+        <div class="app-indicators"></div>
+    </div>
+    <div class="timeline-bottom-bar">
+        <div class="timeline-numbers"></div>
+        <div class="now-indicator">now</div>
     </div>
     <div class="timeline-timestamps" id="timestamps"></div>
     <img id="frame" />
@@ -256,19 +416,75 @@
         // Add debounce utility
         let scrollTimeout = null;
 
-        function updateTimelineCursor() {
-            const cursor = document.getElementById('cursor');
+        // Add these new variables
+        const PREFETCH_THRESHOLD = 0.8; // When to fetch more frames (80% of range)
+        const FETCH_OVERLAP = 1000 * 60 * 5; // 2 minutes overlap when fetching new frames
+
+        function updateTimelinePosition() {
             const timeRange = endTime - startTime;
             const position = (currentTime - startTime) / timeRange;
             
-            const boundedPosition = Math.max(0, Math.min(1, position));
-            cursor.style.left = `${boundedPosition * 100}%`;
-
-            // Update highlight position
-            const highlight = document.querySelector('.timeline-highlight');
-            highlight.style.left = `${boundedPosition * 100}%`;
+            // Calculate the translation percentage
+            const translateX = (0.5 - position) * 100;
             
-            console.log('cursor position:', boundedPosition); // Debug log
+            // Update all timeline-related elements
+            const elements = [
+                '.timeline-timestamps',
+                '.timeline-numbers',
+                '.app-indicators',
+                '#timeline::before'  // Grid lines
+            ];
+            
+            elements.forEach(selector => {
+                const el = document.querySelector(selector);
+                if (el) {
+                    el.style.transform = `translateX(${translateX}%)`;
+                }
+            });
+            
+            // Update grid position
+            const timeline = document.getElementById('timeline');
+            if (timeline) {
+                timeline.style.setProperty('--grid-translate', `${translateX}%`);
+            }
+        }
+
+        async function prefetchFrames(direction) {
+            let newStartTime, newEndTime;
+            
+            if (direction === 'future') {
+                newStartTime = new Date(endTime - FETCH_OVERLAP);
+                newEndTime = new Date(endTime.getTime() + (endTime - startTime));
+            } else {
+                newEndTime = new Date(startTime + FETCH_OVERLAP);
+                newStartTime = new Date(startTime.getTime() - (endTime - startTime));
+            }
+            
+            // Fetch new frames but keep existing ones
+            const url = new URL('http://localhost:3030/stream/frames');
+            url.searchParams.append('start_time', `${newStartTime.toISOString().slice(0, -1)}Z`);
+            url.searchParams.append('end_time', `${newEndTime.toISOString().slice(0, -1)}Z`);
+            
+            try {
+                const response = await fetch(url.toString());
+                const newFrames = await response.json();
+                
+                // Merge new frames with existing ones, avoiding duplicates
+                const existingTimestamps = new Set(frames.map(f => f.timestamp));
+                const uniqueNewFrames = newFrames.filter(f => !existingTimestamps.has(f.timestamp));
+                
+                if (direction === 'future') {
+                    frames.push(...uniqueNewFrames);
+                    endTime = newEndTime;
+                } else {
+                    frames.unshift(...uniqueNewFrames);
+                    startTime = newStartTime;
+                }
+                
+                updateTimelineMarkers();
+            } catch (e) {
+                console.error('Failed to prefetch frames:', e);
+            }
         }
 
         function displayFrameAtTime(timestamp) {
@@ -305,7 +521,7 @@
                 document.getElementById('window-name-display').textContent = `window: ${frame.window_name || 'n/a'}`;
                 
                 currentTime = new Date(frame.timestamp);
-                updateTimelineCursor();
+                updateTimelinePosition();
             } catch (e) {
                 console.error('Error displaying frame:', e);
                 document.getElementById('error').textContent = `Error displaying frame: ${e.message}`;
@@ -374,23 +590,45 @@
         }
 
         function updateTimelineMarkers() {
-            const timestampsContainer = document.getElementById('timestamps');
-            timestampsContainer.innerHTML = '';
+            const timestampsContainer = document.querySelector('.timeline-numbers');
+            const appIndicators = document.querySelector('.app-indicators');
             
-            // Create 5 evenly spaced timestamps
+            // Clear existing markers
+            timestampsContainer.innerHTML = '';
+            appIndicators.innerHTML = '';
+            
+            // Create evenly spaced timestamps
             const timeRange = endTime - startTime;
-            const numMarkers = 5;
+            const numMarkers = 10;
             
             for (let i = 0; i < numMarkers; i++) {
-                // Adjust percentage to account for the actual timeline width
                 const percent = (i / (numMarkers - 1)) * 100;
                 const time = new Date(startTime.getTime() + (timeRange * (i / (numMarkers - 1))));
+                
                 const marker = document.createElement('div');
-                marker.className = 'timestamp';
+                marker.className = 'time-mark';
                 marker.style.left = `${percent}%`;
                 marker.textContent = time.toLocaleTimeString();
                 timestampsContainer.appendChild(marker);
+                
+                console.log(`Added time marker at ${percent}%: ${time.toLocaleTimeString()}`); // Debug log
             }
+
+            // Add app/window markers
+            frames.forEach(frame => {
+                const timestamp = new Date(frame.timestamp);
+                const percent = ((timestamp - startTime) / timeRange) * 100;
+                
+                if (percent >= 0 && percent <= 100) {
+                    const marker = document.createElement('div');
+                    marker.className = 'app-marker';
+                    marker.style.left = `${percent}%`;
+                    marker.textContent = `${frame.app_name || 'unknown'} - ${frame.window_name || 'unknown'}`;
+                    appIndicators.appendChild(marker);
+                    
+                    console.log(`Added app marker at ${percent}%: ${frame.app_name}`); // Debug log
+                }
+            });
         }
 
         function navigateTimeRange(direction) {
@@ -409,50 +647,23 @@
             updateTimelineMarkers();
         }
 
-        // Modified timeline interaction
-        const timeline = document.getElementById('timeline');
-        timeline.addEventListener('click', (e) => {
-            const rect = timeline.getBoundingClientRect();
-            const position = (e.clientX - rect.left) / rect.width;
-            const timeRange = endTime - startTime;
-            currentTime = new Date(startTime.getTime() + (timeRange * position));
-            displayFrameAtTime(currentTime);
-            updateTimelineCursor();
-        });
-
-        // Modified keyboard navigation
-        document.addEventListener('keydown', (e) => {
-            const step = 1000; // 1 second step
-            if (e.key === 'ArrowLeft') {
-                currentTime = new Date(currentTime.getTime() - step);
-                displayFrameAtTime(currentTime);
-            } else if (e.key === 'ArrowRight') {
-                currentTime = new Date(currentTime.getTime() + step);
-                displayFrameAtTime(currentTime);
-            } else if (e.key === 'PageUp') {
-                navigateTimeRange('past');
-            } else if (e.key === 'PageDown') {
-                navigateTimeRange('future');
-            }
-        });
-
-        // Replace the wheel event listener with this improved version:
+        // Replace the wheel event listener with this fixed version:
         document.addEventListener('wheel', (e) => {
             e.preventDefault();  // Prevent default scroll
             
-            // Clear any pending scroll timeout
-            if (scrollTimeout) {
-                clearTimeout(scrollTimeout);
-            }
+            // Get timeline element for calculations
+            const timeline = document.getElementById('timeline');
+            const timelineRect = timeline.getBoundingClientRect();
+            const timeRange = endTime - startTime;
             
-            // Calculate time step (make it smaller for finer control)
-            const timeStep = 1000; // 1 second per scroll tick
+            // Calculate scroll sensitivity - adjust this value to change scroll speed
+            const scrollSensitivity = timeRange / 1000; // 1000px = full time range
             
-            // Update current time based on scroll direction
+            // Update current time based on scroll
             if (e.deltaY > 0) {
-                currentTime = new Date(currentTime.getTime() + timeStep);
+                currentTime = new Date(currentTime.getTime() + scrollSensitivity);
             } else {
-                currentTime = new Date(currentTime.getTime() - timeStep);
+                currentTime = new Date(currentTime.getTime() - scrollSensitivity);
             }
             
             // Keep currentTime within bounds
@@ -461,17 +672,28 @@
                 Math.min(endTime.getTime(), currentTime.getTime())
             ));
             
-            // Add debug logging
-            console.log('scroll: updating time to:', currentTime.toISOString());
+            // Check if we need to load more frames
+            const position = (currentTime - startTime) / timeRange;
+            if (position > PREFETCH_THRESHOLD) {
+                prefetchFrames('future');
+            } else if (position < (1 - PREFETCH_THRESHOLD)) {
+                prefetchFrames('past');
+            }
             
-            // Debounce the frame display update
+            // Update frame display and timeline position
+            displayFrameAtTime(currentTime);
+            
+            // Update time travel indicator
+            const indicator = document.querySelector('.time-travel-indicator');
+            indicator.classList.add('active');
+            indicator.textContent = e.deltaY > 0 ? '▼ traveling to future ▼' : '▲ traveling to past ▲';
+
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
             scrollTimeout = setTimeout(() => {
-                displayFrameAtTime(currentTime);
-                updateTimelineCursor(); // Make sure cursor updates even if frame isn't ready
-            }, 16); // ~60fps throttle
-            
-            // Update cursor position immediately for smooth visual feedback
-            updateTimelineCursor();
+                indicator.classList.remove('active');
+            }, 300);
         }, { passive: false });
 
         // Optional: Add touch support for mobile
@@ -490,5 +712,6 @@
         connectToStream(startTime, endTime);
         updateTimelineMarkers();
     </script>
+    <div class="time-travel-indicator">▼ traveling through time ▼</div>
 </body>
 </html>
