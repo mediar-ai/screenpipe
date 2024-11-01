@@ -5,6 +5,9 @@ use tokio::select;
 use tokio::process::Command as TokioCommand;
 use anyhow::Result;
 use log::{info, warn, error, debug};
+use once_cell::sync::Lazy;
+use which::which;
+use std::path::PathBuf;
 
 // UPDATE THIS STRING EVERY TIME YOU MAKE CHANGES IN THE UI_MONITORING_MACOS.SWIFT FILE
 const UI_MONITORING_SCRIPT: &str = r#"
@@ -1394,7 +1397,48 @@ class ScreenPipeDB {
 
 "#;
 
+static SWIFT_PATH: Lazy<Option<PathBuf>> = Lazy::new(find_swift_path_internal);
+
+fn find_swift_path_internal() -> Option<PathBuf> {
+    debug!("Starting search for swift executable");
+
+    // Check if `swift` is in the PATH environment variable
+    if let Ok(path) = which("swift") {
+        debug!("Found swift in PATH: {:?}", path);
+        return Some(path);
+    }
+    debug!("swift not found in PATH");
+
+    // Common Swift installation paths on macOS
+    let common_paths = [
+        "/usr/bin/swift",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift",
+        "/Library/Developer/CommandLineTools/usr/bin/swift",
+    ];
+
+    for path in common_paths {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            debug!("Found swift at common path: {:?}", path);
+            return Some(path);
+        }
+    }
+
+    error!("swift not found");
+    None
+}
+
+pub fn find_swift_path() -> Option<PathBuf> {
+    SWIFT_PATH.as_ref().map(|p| p.clone())
+}
+
 pub async fn run_ui() -> Result<()> {
+    // Check for Swift availability first
+    if find_swift_path().is_none() {
+        return Err(anyhow::anyhow!(
+            "swift not found. Please install Xcode Command Line Tools or Xcode"
+        ));
+    }
     // Create a temporary file for the Swift script
     let temp_dir = std::env::temp_dir();
     let script_path = temp_dir.join("ui_monitoring_macos.swift");
@@ -1423,7 +1467,12 @@ pub async fn run_ui() -> Result<()> {
 
 // Separate function to handle the monitoring process
 async fn run_ui_monitoring(script_path: &std::path::Path) -> Result<()> {
-    let mut child = TokioCommand::new("swift")
+    // Get Swift path
+    let swift_path = find_swift_path().ok_or_else(|| {
+        anyhow::anyhow!("swift not found. Please install Xcode Command Line Tools or Xcode")
+    })?;
+
+    let mut child = TokioCommand::new(swift_path)
         .arg(script_path.to_str().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
