@@ -174,7 +174,7 @@ export default function Timeline() {
         {currentFrame && (
           <>
             {/* App info centered above frame */}
-            <div className="w-4/5 mx-auto mt-4 mb-2 text-center">
+            <div className="w-4/5 mx-auto mt-4 mb-4 text-center">
               <div className="inline-block bg-black/50 p-2 rounded shadow-lg backdrop-blur-sm border border-[#333] text-[#888] text-xs tracking-wider">
                 <div className="flex items-center gap-4">
                   <div>{new Date(currentFrame?.timestamp).toLocaleTimeString()}</div>
@@ -185,7 +185,7 @@ export default function Timeline() {
             </div>
             <img
               src={`data:image/png;base64,${currentFrame.frame}`}
-              className="absolute inset-0 w-4/5 h-auto max-h-[80vh] object-contain mx-auto mt-12"
+              className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto mt-12"
               alt="Current frame"
             />
           </>
@@ -193,7 +193,7 @@ export default function Timeline() {
       </div>
 
       {/* Timeline bar */}
-      <div className="w-4/5 mx-auto mb-8 relative">
+      <div className="w-4/5 mx-auto my-8 relative">
         <div className="h-[60px] bg-[#111] border-4 border-[#444] shadow-[0_0_16px_rgba(0,0,0,0.8),inset_0_0_8px_rgba(255,255,255,0.1)] cursor-crosshair relative">
           {/* Grid lines */}
           <div
@@ -231,6 +231,15 @@ export default function Timeline() {
                 </div>
               );
             })}
+        </div>
+      </div>
+
+      {/* Scroll indicator */}
+      <div className="fixed left-12 top-1/2 -translate-y-1/2 font-['Press_Start_2P'] text-xs text-[#0f0] animate-pulse">
+        <div className="flex flex-col items-center gap-1">
+          <span>▲</span>
+          <span className="tracking-wider">scroll</span>
+          <span>▼</span>
         </div>
       </div>
     </div>
