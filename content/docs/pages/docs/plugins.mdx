@@ -62,7 +62,7 @@ screenpipe's plugin system, referred to as **pipes**, allows you to create custo
 
 users can begin by cloning an existing pipe, such as [pipe-phi3.5-engineering-team-logs](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
 
-```bash 
+```bash copy
 git clone https://github.com/mediar-ai/screenpipe.git
 cp -r screenpipe/examples/typescript/pipe-phi3.5-engineering-team-logs screenpipe/examples/typescript/my-pipe
 ```
@@ -82,7 +82,7 @@ we parse your `pipe.json` file to render in the UI the input fields for your pip
 
 here's a snippet of a `pipe.json` for the pipe-post-questions-on-reddit:
 
-```json 
+```json copy
 {
   "fields": [
     {
@@ -107,7 +107,7 @@ here's a snippet of a `pipe.json` for the pipe-post-questions-on-reddit:
 
 you can run your pipe manually with bun, for example:
 
-```bash
+```bash copy
 # these are mandatory env variables
 export SCREENPIPE_DIR="$HOME/.screenpipe"
 export PIPE_ID="pipe-phi3.5-engineering-team-logs"
@@ -122,17 +122,17 @@ make sure to configure your pipe.json first
 once the pipe is ready, follow these steps to make it work with `screenpipe`:
 
 - **download the pipe** (from local or github url):
-  ```bash
+  ```bash copy
   screenpipe pipe download path/to/pipe-name
   ```
 
 - **enable the pipe** (enabling will activate the pipe, similar to installing it in screenpipe):
-  ```bash
+  ```bash copy
   screenpipe pipe enable pipe-name
   ```
 
 - **run the pipe** (restart screenpipe):
-  ```bash
+  ```bash copy
   screenpipe
   ```
 
