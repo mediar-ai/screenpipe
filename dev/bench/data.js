@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730568980051,
+  "lastUpdate": 1730573791308,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -21809,6 +21809,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1919297854,
             "range": "± 27186151",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "d48cb3150d0640e196813806036916f11f149ee6",
+          "message": "fix inverted transcription and ocr in api stream",
+          "timestamp": "2024-11-02T11:45:22-07:00",
+          "tree_id": "b4774a90b9e99d17f0a2b2f5d6ad6d8cf2a9d078",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/d48cb3150d0640e196813806036916f11f149ee6"
+        },
+        "date": 1730573789720,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1917921958,
+            "range": "± 12980651",
             "unit": "ns/iter"
           }
         ]
