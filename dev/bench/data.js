@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730568974818,
+  "lastUpdate": 1730568980051,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -21779,6 +21779,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1888959771,
             "range": "± 56252637",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1607995a605a7f87b54c07abd5d3fac59b8e9925",
+          "message": "Merge pull request #622 from krushnarout/fix-light-mode\n\nfix: correct logo text and GitHub icon colors in light mode",
+          "timestamp": "2024-11-02T10:26:16-07:00",
+          "tree_id": "cc7c3da60fbea7a8e568613cd853b0af276a1e29",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/1607995a605a7f87b54c07abd5d3fac59b8e9925"
+        },
+        "date": 1730568977700,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1919297854,
+            "range": "± 27186151",
             "unit": "ns/iter"
           }
         ]
