@@ -1439,6 +1439,7 @@ pub async fn run_ui() -> Result<()> {
             "swift not found. Please install Xcode Command Line Tools or Xcode"
         ));
     }
+
     // Create a temporary file for the Swift script
     let temp_dir = std::env::temp_dir();
     let script_path = temp_dir.join("ui_monitoring_macos.swift");
@@ -1449,11 +1450,9 @@ pub async fn run_ui() -> Result<()> {
         info!("starting ui monitoring...");
         debug!("running swift script from: {}", script_path.display());
         
-        // Add error handling wrapper
         match run_ui_monitoring(&script_path).await {
             Ok(_) => {
-                info!("ui monitoring exited normally");
-                return Ok(());
+                return Err(anyhow::anyhow!("ui monitoring exited unexpectedly"));
             },
             Err(e) => {
                 error!("ui monitoring crashed: {}", e);
