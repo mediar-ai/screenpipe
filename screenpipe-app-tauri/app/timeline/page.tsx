@@ -17,6 +17,7 @@ export default function Timeline() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadedTimeRange, setLoadedTimeRange] = useState<{start: Date, end: Date} | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout>();
   const retryCount = useRef(0);
@@ -33,6 +34,12 @@ export default function Timeline() {
     const startTime = new Date();
     startTime.setHours(0, 1, 0, 0);
     const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
+
+    // Set the initial loaded time range
+    setLoadedTimeRange({
+      start: startTime,
+      end: endTime
+    });
 
     console.log("starting stream:", url);
 
@@ -77,6 +84,24 @@ export default function Timeline() {
       console.log("eventsource connection opened");
       setError(null);
       retryCount.current = 0;
+    };
+  };
+
+  const getLoadedTimeRangeStyles = () => {
+    if (!loadedTimeRange) return { left: '0%', right: '100%' };
+    
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    const totalMs = endOfDay.getTime() - startOfDay.getTime();
+    const startPercent = ((loadedTimeRange.start.getTime() - startOfDay.getTime()) / totalMs) * 100;
+    const endPercent = ((loadedTimeRange.end.getTime() - startOfDay.getTime()) / totalMs) * 100;
+    
+    return {
+      left: `${startPercent}%`,
+      right: `${100 - endPercent}%`
     };
   };
 
@@ -195,6 +220,15 @@ export default function Timeline() {
       {/* Timeline bar */}
       <div className="w-4/5 mx-auto my-8 relative">
         <div className="h-[60px] bg-[#111] border-4 border-[#444] shadow-[0_0_16px_rgba(0,0,0,0.8),inset_0_0_8px_rgba(255,255,255,0.1)] cursor-crosshair relative">
+          {/* Unloaded regions overlay - making it more visible with a different color and opacity */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              ...getLoadedTimeRangeStyles(),
+              background: 'linear-gradient(to right, rgba(255,255,255,0.8), rgba(255,255,255,0.2))'
+            }}
+          />
+
           {/* Grid lines */}
           <div
             className="absolute inset-0"
@@ -207,7 +241,7 @@ export default function Timeline() {
 
           {/* Current position indicator */}
           <div
-            className="absolute top-0 h-full w-1 bg-[#0f0] shadow-[0_0_12px_#0f0] opacity-80"
+            className="absolute top-0 h-full w-1 bg-[#0f0] shadow-[0_0_12px_#0f0] opacity-80 z-10"
             style={{
               left: `${getCurrentTimePercentage()}%`,
             }}

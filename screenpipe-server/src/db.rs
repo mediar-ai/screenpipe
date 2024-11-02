@@ -1153,21 +1153,36 @@ impl DatabaseManager {
     pub async fn get_frame_metadata(
         &self,
         file_path: &str,
-    ) -> Result<Vec<(String, String)>, SqlxError> {
+    ) -> Result<Vec<(DateTime<Utc>, String, String, String, String)>, SqlxError> {
         debug!("getting frame metadata for file: {}", file_path);
-        sqlx::query_as::<_, (String, String)>(
+        sqlx::query_as::<_, (DateTime<Utc>, String, String, String, String)>(
             r#"
-            SELECT ocr_text.app_name, ocr_text.window_name
+            SELECT 
+                frames.timestamp,
+                ocr_text.app_name,
+                ocr_text.window_name,
+                ocr_text.text as ocr_text,
+                audio_transcriptions.transcription
             FROM video_chunks
             JOIN frames ON frames.video_chunk_id = video_chunks.id
             JOIN ocr_text ON frames.id = ocr_text.frame_id
+            LEFT JOIN audio_transcriptions ON frames.timestamp = audio_transcriptions.timestamp
             WHERE video_chunks.file_path = ?1
-            ORDER BY frames.offset_index ASC
+            ORDER BY frames.timestamp ASC
             "#,
         )
         .bind(file_path)
         .fetch_all(&self.pool)
         .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(
+                    |(timestamp, app_name, window_name, ocr_text, transcription)| {
+                        (timestamp, app_name, window_name, ocr_text, transcription)
+                    },
+                )
+                .collect()
+        })
     }
 }
 
