@@ -53,10 +53,17 @@ export default function Timeline() {
   const inputRef = useRef<HTMLInputElement>(null);
   const aiPanelRef = useRef<HTMLDivElement>(null);
   const [isHoveringAiPanel, setIsHoveringAiPanel] = useState(false);
-  const [position, setPosition] = useState({ x: window.innerWidth - 400, y: window.innerHeight / 4 });
+  const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDraggingPanel, setIsDraggingPanel] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [osType, setOsType] = useState<string>("");
+
+  useEffect(() => {
+    setPosition({
+      x: window.innerWidth - 400,
+      y: window.innerHeight / 4,
+    });
+  }, []);
 
   const setupEventSource = () => {
     if (eventSourceRef.current) {
@@ -170,7 +177,7 @@ export default function Timeline() {
           handleAskAI();
         }
       }
-      
+
       // Cmd+Enter or Ctrl+Enter to send message
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
@@ -231,17 +238,29 @@ export default function Timeline() {
     setIsDragging(true);
     setDragStart(percentage);
 
-    // Convert percentage to time
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const totalMs = 24 * 60 * 60 * 1000;
-    const timeAtClick = new Date(
-      startOfDay.getTime() + (totalMs * percentage) / 100
+    // Calculate hours and minutes from percentage for local display
+    const totalMinutesInDay = 24 * 60;
+    const minutesFromMidnight = (percentage / 100) * totalMinutesInDay;
+    const hours = Math.floor(minutesFromMidnight / 60);
+    const minutes = Math.floor(minutesFromMidnight % 60);
+
+    // Create date in UTC
+    const now = new Date();
+    const utcDate = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        hours,
+        minutes,
+        0,
+        0
+      )
     );
 
     setSelectionRange({
-      start: timeAtClick,
-      end: timeAtClick,
+      start: utcDate,
+      end: utcDate,
     });
   };
 
@@ -251,21 +270,43 @@ export default function Timeline() {
     const rect = e.currentTarget.getBoundingClientRect();
     const percentage = ((e.clientX - rect.left) / rect.width) * 100;
 
-    // Convert percentages to times
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const totalMs = 24 * 60 * 60 * 1000;
+    // Calculate times for both points
+    const totalMinutesInDay = 24 * 60;
+    const startMinutes =
+      (Math.min(dragStart, percentage) / 100) * totalMinutesInDay;
+    const endMinutes =
+      (Math.max(dragStart, percentage) / 100) * totalMinutesInDay;
 
-    const startTime = new Date(
-      startOfDay.getTime() + (totalMs * Math.min(dragStart, percentage)) / 100
+    const now = new Date();
+
+    // Create UTC dates
+    const utcStartDate = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        Math.floor(startMinutes / 60),
+        Math.floor(startMinutes % 60),
+        0,
+        0
+      )
     );
-    const endTime = new Date(
-      startOfDay.getTime() + (totalMs * Math.max(dragStart, percentage)) / 100
+
+    const utcEndDate = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        Math.floor(endMinutes / 60),
+        Math.floor(endMinutes % 60),
+        0,
+        0
+      )
     );
 
     setSelectionRange({
-      start: startTime,
-      end: endTime,
+      start: utcStartDate,
+      end: utcEndDate,
     });
   };
 
@@ -274,23 +315,41 @@ export default function Timeline() {
   };
 
   const handleAskAI = () => {
-    setIsAiPanelExpanded(true);
-    // Focus the input after a brief delay to allow animation to complete
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
+    if (isAiPanelExpanded) {
+      // If panel is already open, clear messages and close
+      setChatMessages([]);
+      setIsAiPanelExpanded(false);
+      setAiInput("");
+    } else {
+      // Opening fresh panel - always expand directly to chat
+      setChatMessages([]);
+      setIsAiPanelExpanded(true);
+      // Focus the input after a brief delay to allow animation to complete
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
   };
 
   const handleAiSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aiInput.trim() || !selectionRange) return;
 
+    console.log("Selection range (UTC):", {
+      start: selectionRange.start.toISOString(),
+      end: selectionRange.end.toISOString(),
+    });
+
     const relevantFrames = frames.filter((frame) => {
       const frameTime = new Date(frame.timestamp);
+      console.log("frameTime", frameTime);
       return (
         frameTime >= selectionRange.start && frameTime <= selectionRange.end
       );
     });
+
+    console.log("Total frames:", frames.length);
+    console.log("Relevant frames:", relevantFrames.length);
 
     const userMessage = {
       id: generateId(),
@@ -308,22 +367,19 @@ export default function Timeline() {
         dangerouslyAllowBrowser: true,
       });
 
-      const customPrompt = settings.customPrompt || "";
-
       const messages = [
         {
           role: "system" as const,
-          content: `You are a helpful assistant analyzing screenpipe recordings.
+          content: `You are a helpful assistant analyzing screen & mic 24/7 recordings including OCR, transcription, and more.
             Rules:
             - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
             - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
             - User timezone offset: ${new Date().getTimezoneOffset()}
-            - Very important: follow custom prompt: "${customPrompt}"
-            - Perform timezone conversion to UTC before using datetime in tool calls
-            - Reformat timestamps to human-readable format in responses
+            - All timestamps in the context data are in UTC
+            - Convert timestamps to local time for human-readable responses
             - Never output UTC time unless explicitly asked
             - Focus on app usage patterns and context switches
-            ${customPrompt}`,
+            `,
         },
         ...chatMessages,
         {
@@ -385,8 +441,8 @@ export default function Timeline() {
       }
     };
 
-    document.addEventListener('wheel', preventScroll, { passive: false });
-    return () => document.removeEventListener('wheel', preventScroll);
+    document.addEventListener("wheel", preventScroll, { passive: false });
+    return () => document.removeEventListener("wheel", preventScroll);
   }, []);
 
   const handlePanelMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -427,13 +483,13 @@ export default function Timeline() {
     };
 
     if (isDraggingPanel) {
-      document.addEventListener('mousemove', handleGlobalMouseMove);
-      document.addEventListener('mouseup', handleGlobalMouseUp);
+      document.addEventListener("mousemove", handleGlobalMouseMove);
+      document.addEventListener("mouseup", handleGlobalMouseUp);
     }
 
     return () => {
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener("mousemove", handleGlobalMouseMove);
+      document.removeEventListener("mouseup", handleGlobalMouseUp);
     };
   }, [isDraggingPanel, dragOffset]);
 
@@ -563,40 +619,45 @@ export default function Timeline() {
 
         {/* Floating window when selection exists */}
         {selectionRange && (
-          <div 
+          <div
             ref={aiPanelRef}
             onMouseEnter={() => setIsHoveringAiPanel(true)}
             onMouseLeave={() => setIsHoveringAiPanel(false)}
             style={{
-              position: 'fixed',
+              position: "fixed",
               left: position.x,
               top: position.y,
-              cursor: isDraggingPanel ? 'grabbing' : 'grab'
+              cursor: isDraggingPanel ? "grabbing" : "grab",
             }}
             className={`w-96 bg-black/90 border-2 border-[#0f0] shadow-[0_0_20px_rgba(0,255,0,0.3)] rounded transition-colors duration-300 ease-in-out z-[100] ${
-              isAiPanelExpanded ? 'h-[70vh]' : 'h-auto'
+              isAiPanelExpanded ? "h-[70vh]" : "h-auto"
             }`}
           >
-            <div 
+            <div
               className="p-2 border-b border-[#0f0]/20 select-none flex justify-between items-center group"
               onMouseDown={handlePanelMouseDown}
               onMouseMove={handlePanelMouseMove}
               onMouseUp={handlePanelMouseUp}
               onMouseLeave={handlePanelMouseUp}
             >
-              <div 
-                className="flex items-center gap-2 flex-1 cursor-grab active:cursor-grabbing"
-              >
+              <div className="flex items-center gap-2 flex-1 cursor-grab active:cursor-grabbing">
                 <GripHorizontal className="w-4 h-4 text-[#0f0]/50 group-hover:text-[#0f0]" />
                 <div className="text-[#0f0] text-xs">
-                  {selectionRange?.start.toLocaleTimeString()} - {selectionRange?.end.toLocaleTimeString()}
+                  {/* Convert UTC to local for display */}
+                  {new Date(
+                    selectionRange.start.getTime()
+                  ).toLocaleTimeString()}{" "}
+                  -{" "}
+                  {new Date(selectionRange.end.getTime()).toLocaleTimeString()}
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setSelectionRange(null);
                   setIsAiPanelExpanded(false);
-                }} 
+                  setChatMessages([]); // Clear messages
+                  setAiInput(""); // Clear input
+                }}
                 className="text-[#0f0] hover:text-[#0f0]/70 ml-2"
               >
                 <X className="h-4 w-4" />
@@ -605,9 +666,14 @@ export default function Timeline() {
 
             <div className="p-4">
               {!isAiPanelExpanded && (
-                <button 
+                <button
                   className="px-3 py-1 bg-[#0f0]/20 hover:bg-[#0f0]/30 border border-[#0f0] text-[#0f0] text-xs rounded flex items-center gap-2"
-                  onClick={handleAskAI}
+                  onClick={() => {
+                    setIsAiPanelExpanded(true);
+                    setTimeout(() => {
+                      inputRef.current?.focus();
+                    }, 100);
+                  }}
                 >
                   <span>ask ai</span>
                   <span className="text-[#0f0]/50 text-[10px]">
@@ -620,7 +686,7 @@ export default function Timeline() {
             {isAiPanelExpanded && (
               <div className="flex flex-col h-[calc(100%-100px)]">
                 {/* Chat messages - Fixed height and scrollable */}
-                <div 
+                <div
                   className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 hover:cursor-auto text-[#eee] font-mono text-sm leading-relaxed"
                   style={{
                     WebkitUserSelect: "text",
@@ -629,7 +695,7 @@ export default function Timeline() {
                     msUserSelect: "text",
                     overscrollBehavior: "contain",
                     textShadow: "0 0 1px rgba(255, 255, 255, 0.5)",
-                    letterSpacing: "0.02em"
+                    letterSpacing: "0.02em",
                   }}
                 >
                   {chatMessages.map((msg, index) => (
@@ -643,7 +709,7 @@ export default function Timeline() {
                 </div>
 
                 {/* Input form */}
-                <form 
+                <form
                   onSubmit={handleAiSubmit}
                   className="p-4 border-t border-[#0f0]/20"
                   style={{
@@ -663,7 +729,7 @@ export default function Timeline() {
                       className="flex-1 bg-black/50 border-[#0f0] text-[#0f0] placeholder-[#0f0]/50"
                       disabled={isAiLoading}
                     />
-                    <Button 
+                    <Button
                       type="submit"
                       disabled={isAiLoading}
                       className="bg-[#0f0]/20 hover:bg-[#0f0]/30 border border-[#0f0] text-[#0f0] group relative"
@@ -692,14 +758,18 @@ export default function Timeline() {
             .fill(0)
             .map((_, i) => {
               const hour = (i * 4) % 24; // Start at 0 and increment by 4 hours
-
+              const date = new Date();
+              date.setHours(hour, 0, 0, 0);
               return (
                 <div
                   key={i}
                   className="absolute transform -translate-x-1/2"
                   style={{ left: `${(i * 100) / 6}%` }}
                 >
-                  {`${hour.toString().padStart(2, "0")}:00`}
+                  {date.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </div>
               );
             })}
