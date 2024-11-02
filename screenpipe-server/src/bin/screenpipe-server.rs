@@ -603,8 +603,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
-
     println!("└─────────────────────┴────────────────────────────────────┘");
 
     // Add warning for cloud arguments and telemetry
@@ -661,7 +661,7 @@ async fn main() -> anyhow::Result<()> {
     let pipes_future = async {
         loop {
             if let Some(result) = pipe_futures_clone.lock().await.next().await {
-                info!("pipe completed: {:?}", result);
+                // info!("pipe completed: {:?}", result);
             } else {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
@@ -719,12 +719,22 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move {
             let mut shutdown_rx = shutdown_tx_clone.subscribe();
             
-            tokio::select! {
-                _ = run_ui() => {
-                    error!("ui monitoring stopped unexpectedly");
-                }
-                _ = shutdown_rx.recv() => {
-                    info!("received shutdown signal, stopping ui monitoring");
+            loop {
+                tokio::select! {
+                    result = run_ui() => {
+                        match result {
+                            Ok(_) => break,
+                            Err(e) => {
+                                error!("ui monitoring error: {}", e);
+                                tokio::time::sleep(Duration::from_secs(5)).await;
+                                continue;
+                            }
+                        }
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("received shutdown signal, stopping ui monitoring");
+                        break;
+                    }
                 }
             }
         });
