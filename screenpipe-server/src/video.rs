@@ -5,6 +5,7 @@ use log::{debug, error};
 use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
+use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -201,7 +202,10 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
     Ok(child)
 }
 
-pub async fn write_frame_to_ffmpeg(stdin: &mut ChildStdin, buffer: &[u8]) -> Result<(), anyhow::Error> {
+pub async fn write_frame_to_ffmpeg(
+    stdin: &mut ChildStdin,
+    buffer: &[u8],
+) -> Result<(), anyhow::Error> {
     stdin.write_all(buffer).await?;
     Ok(())
 }
@@ -395,5 +399,3 @@ pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
         Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
     }
 }
-
-use std::env;

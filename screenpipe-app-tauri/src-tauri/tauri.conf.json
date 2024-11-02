@@ -63,6 +63,19 @@
         "minWidth": 1200,
         "minHeight": 850,
         "resizable": true
+      },
+      {
+        "title": "timeline",
+        "url": "/timeline",
+        "width": 1200,
+        "height": 600,
+        "minWidth": 1000,
+        "minHeight": 600,
+        "visible": false,
+        "decorations": true,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "label": "timeline"
       }
     ],
     "security": {

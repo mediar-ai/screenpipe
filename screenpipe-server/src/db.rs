@@ -158,7 +158,7 @@ impl DatabaseManager {
         }
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(10)
+            .max_connections(50)
             .min_connections(3) // Minimum number of idle connections
             .acquire_timeout(Duration::from_secs(10))
             .connect(&connection_string)
@@ -261,7 +261,11 @@ impl DatabaseManager {
         Ok(affected as i64)
     }
 
-    pub async fn insert_video_chunk(&self, file_path: &str, device_name: &str) -> Result<i64, sqlx::Error> {
+    pub async fn insert_video_chunk(
+        &self,
+        file_path: &str,
+        device_name: &str,
+    ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         let id = sqlx::query("INSERT INTO video_chunks (file_path, device_name) VALUES (?1, ?2)")
             .bind(file_path)
@@ -273,19 +277,21 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn insert_frame(&self, 
-        device_name: &str, 
+    pub async fn insert_frame(
+        &self,
+        device_name: &str,
         timestamp: Option<DateTime<Utc>>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
 
         // Get the most recent video_chunk_id
-        let video_chunk_id: Option<i64> =
-            sqlx::query_scalar("SELECT id FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1")
-                .bind(device_name)
-                .fetch_optional(&mut *tx)
-                .await?;
+        let video_chunk_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1",
+        )
+        .bind(device_name)
+        .fetch_optional(&mut *tx)
+        .await?;
         debug!("Fetched most recent video_chunk_id: {:?}", video_chunk_id);
 
         // If no video chunk is found, return 0
@@ -306,7 +312,7 @@ impl DatabaseManager {
         .fetch_one(&mut *tx)
         .await?;
         debug!("insert_frame Calculated offset_index: {}", offset_index);
-        
+
         let timestamp = timestamp.unwrap_or_else(Utc::now);
 
         // Insert the new frame
@@ -613,7 +619,7 @@ impl DatabaseManager {
             AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
         "#,
         );
-    
+
         sql.push_str(
             r#"
         GROUP BY
@@ -626,7 +632,7 @@ impl DatabaseManager {
         LIMIT ?6 OFFSET ?7
         "#,
         );
-    
+
         let query = sqlx::query_as::<_, AudioResultRaw>(&sql)
             .bind(query)
             .bind(start_time)
@@ -635,9 +641,9 @@ impl DatabaseManager {
             .bind(max_length.map(|l| l as i64))
             .bind(limit)
             .bind(offset);
-    
+
         let audio_results_raw = query.fetch_all(&self.pool).await?;
-    
+
         // Parse the tags string into a Vec<String>
         let audio_results = audio_results_raw
             .into_iter()
@@ -660,7 +666,7 @@ impl DatabaseManager {
                 },
             })
             .collect();
-    
+
         Ok(audio_results)
     }
 
@@ -814,78 +820,6 @@ impl DatabaseManager {
                 .await?;
 
         Ok((latest_frame.map(|f| f.0), latest_audio.map(|a| a.0)))
-    }
-
-    // Modify the insert_chunked_text method to handle both OCR and audio transcriptions
-    pub async fn insert_chunked_text(
-        &self,
-        id: i64,
-        text: &str,
-        timestamp: DateTime<Utc>,
-        engine: &str,
-        chunking_engine: &str,
-        source: ContentSource,
-    ) -> Result<(), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
-
-        // Insert or get the text_id
-        let text_id: i64 = sqlx::query_scalar(
-            "INSERT INTO chunked_text_index (text) VALUES (?1) ON CONFLICT(text) DO UPDATE SET text=text RETURNING text_id",
-        )
-        .bind(text)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        // Insert the entry into chunked_text_entries
-        let query = match source {
-            ContentSource::Audio => "INSERT INTO chunked_text_entries (text_id, audio_chunk_id, timestamp, engine, chunking_engine, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            ContentSource::Screen => "INSERT INTO chunked_text_entries (text_id, frame_id, timestamp, engine, chunking_engine, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        };
-
-        sqlx::query(query)
-            .bind(text_id)
-            .bind(id)
-            .bind(timestamp)
-            .bind(engine)
-            .bind(chunking_engine)
-            .bind(source.to_string())
-            .execute(&mut *tx)
-            .await?;
-
-        tx.commit().await?;
-        Ok(())
-    }
-
-    pub async fn search_chunked_text(
-        &self,
-        query: &str,
-        start_time: Option<DateTime<Utc>>,
-        end_time: Option<DateTime<Utc>>,
-    ) -> Result<Vec<(i64, DateTime<Utc>)>, sqlx::Error> {
-        let sql = r#"
-            SELECT 
-                chunked_text_entries.frame_id,
-                chunked_text_entries.timestamp
-            FROM 
-                chunked_text_index
-            JOIN 
-                chunked_text_entries ON chunked_text_index.text_id = chunked_text_entries.text_id
-            WHERE 
-                chunked_text_index.text LIKE '%' || ?1 || '%' COLLATE NOCASE
-                AND (?2 IS NULL OR chunked_text_entries.timestamp >= ?2)
-                AND (?3 IS NULL OR chunked_text_entries.timestamp <= ?3)
-            ORDER BY 
-                chunked_text_entries.timestamp DESC
-        "#;
-
-        let results = sqlx::query_as::<_, (i64, DateTime<Utc>)>(sql)
-            .bind(query)
-            .bind(start_time)
-            .bind(end_time)
-            .fetch_all(&self.pool)
-            .await?;
-
-        Ok(results)
     }
 
     pub async fn get_chunked_data_since_last_request(
@@ -1214,6 +1148,41 @@ impl DatabaseManager {
         Ok(serde_json::Value::Array(
             result.into_iter().map(serde_json::Value::Object).collect(),
         ))
+    }
+
+    pub async fn get_frame_metadata(
+        &self,
+        file_path: &str,
+    ) -> Result<Vec<(DateTime<Utc>, String, String, String, String)>, SqlxError> {
+        debug!("getting frame metadata for file: {}", file_path);
+        sqlx::query_as::<_, (DateTime<Utc>, String, String, String, String)>(
+            r#"
+            SELECT 
+                frames.timestamp,
+                ocr_text.app_name,
+                ocr_text.window_name,
+                ocr_text.text as ocr_text,
+                audio_transcriptions.transcription
+            FROM video_chunks
+            JOIN frames ON frames.video_chunk_id = video_chunks.id
+            JOIN ocr_text ON frames.id = ocr_text.frame_id
+            LEFT JOIN audio_transcriptions ON frames.timestamp = audio_transcriptions.timestamp
+            WHERE video_chunks.file_path = ?1
+            ORDER BY frames.timestamp ASC
+            "#,
+        )
+        .bind(file_path)
+        .fetch_all(&self.pool)
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(
+                    |(timestamp, app_name, window_name, ocr_text, transcription)| {
+                        (timestamp, app_name, window_name, ocr_text, transcription)
+                    },
+                )
+                .collect()
+        })
     }
 }
 

@@ -61,7 +61,7 @@ jobs:
             args: "--features mkl" # TODO CUDA
             tauri-args: ""
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
+            args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
@@ -140,10 +140,10 @@ jobs:
         run: |
           brew install ffmpeg pkg-config
 
-      - name: Install MKL
-        if: matrix.platform == 'windows-latest'
-        run: |
-          pip install mkl mkl-devel mkl-static
+      # - name: Install MKL
+      #   if: matrix.platform == 'windows-latest'
+      #   run: |
+      #     pip install mkl mkl-devel mkl-static
 
       - name: Install MKL in Linux
         if: matrix.platform == 'ubuntu-22.04'
