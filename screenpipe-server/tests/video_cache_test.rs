@@ -36,7 +36,7 @@ async fn setup_test_env() -> Result<(FrameCache, TempDir, Arc<DatabaseManager>)>
             home_dir()
                 .unwrap()
                 .join(".screenpipe")
-                .join("sqlite.db")
+                .join("db.sqlite")
                 .to_str()
                 .unwrap(),
         )
@@ -58,7 +58,7 @@ async fn test_high_speed_streaming() -> Result<()> {
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 
     // First, request the frames
-    cache.get_frames(start_time, 1, tx).await?;
+    cache.get_frames(start_time, 1, tx, true).await?;
 
     // Then use try_recv in a loop with timeout to collect frames
     let timeout = tokio::time::sleep(std::time::Duration::from_secs(5));
@@ -97,7 +97,7 @@ async fn test_frame_jpeg_integrity() -> Result<()> {
     debug!("hi");
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-    cache.get_frames(target_time, 1, tx).await?;
+    cache.get_frames(target_time, 1, tx, true).await?;
     debug!("bye");
 
     let frame = rx.recv().await;
@@ -173,7 +173,9 @@ async fn measure_frame_retrieval(
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 
     let timer = std::time::Instant::now();
-    cache.get_frames(start_time, duration_minutes, tx).await?;
+    cache
+        .get_frames(start_time, duration_minutes, tx, true)
+        .await?;
 
     // Collect frames with timeout
     let timeout = tokio::time::sleep(std::time::Duration::from_secs(30));
@@ -317,5 +319,63 @@ async fn test_extended_time_range_retrieval() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_frame_metadata_integrity() -> Result<()> {
+    let (cache, _temp_dir, _db) = setup_test_env().await?;
+
+    // Get frames from last 5 minutes with a 1-minute duration window
+    let target_time = Utc::now() - Duration::minutes(5);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+
+    // Request frames with a 1-minute duration
+    cache.get_frames(target_time, 2, tx, false).await?;
+
+    let mut found_metadata = false;
+    let timeout = tokio::time::sleep(std::time::Duration::from_secs(50));
+    tokio::pin!(timeout);
+
+    println!("\nChecking frames for metadata:");
+    println!("----------------------------");
+
+    loop {
+        tokio::select! {
+            frame = rx.recv() => {
+                match frame {
+                    Some(frame) => {
+                        println!("Frame at: {}", frame.timestamp);
+                        println!("- App: {}", frame.metadata.app_name);
+                        println!("- Window: {}", frame.metadata.window_name);
+                        println!("- Transcription: {}", frame.metadata.transcription);
+                        println!("- OCR: {}", frame.metadata.ocr_text);
+                        println!("----------------------------");
+
+                        // Check that at least one field has content
+                        if !frame.metadata.app_name.is_empty()
+                            || !frame.metadata.window_name.is_empty()
+                            || !frame.metadata.transcription.is_empty()
+                            || !frame.metadata.ocr_text.is_empty() {
+                            found_metadata = true;
+                            break;
+                        }
+                    },
+                    None => {
+                        println!("No more frames");
+                        break;
+                    }
+                }
+            }
+            _ = &mut timeout => {
+                println!("Timeout reached after 5s");
+                break;
+            }
+        }
+    }
+    assert!(
+        found_metadata,
+        "should find at least one frame with non-empty metadata"
+    );
     Ok(())
 }

@@ -1270,7 +1270,7 @@ async fn stream_frames_handler(
             let response = StreamFramesResponse {
                 timestamp: frame_info.timestamp,
                 frame: BASE64_STANDARD.encode(&frame_info.data),
-                file_path: String::new(),
+                file_path: frame_info.metadata.file_path,
                 app_name: frame_info.metadata.app_name,
                 window_name: frame_info.metadata.window_name,
                 transcription: frame_info.metadata.transcription,

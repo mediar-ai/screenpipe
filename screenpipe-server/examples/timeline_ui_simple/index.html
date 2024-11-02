@@ -54,6 +54,49 @@
             background: #222;
             cursor: pointer;
         }
+        
+        .frame-metadata {
+            display: none;
+            color: #666;
+            white-space: pre-wrap;
+            font-size: 12px;
+            max-width: 100%;
+            overflow-wrap: break-word;
+        }
+        
+        .frame-container:hover .frame-metadata {
+            display: block;
+        }
+        
+        .metadata-icons {
+            display: flex;
+            gap: 8px;
+            color: #666;
+        }
+        
+        .icon {
+            position: relative;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background: #111;
+            padding: 8px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            max-width: 300px;
+            z-index: 1000;
+        }
+        
+        .icon:hover .tooltip {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -72,7 +115,10 @@
         
         function setDefaultTimes() {
             const end = new Date();
-            const start = new Date(end - 5 * 60 * 1000);
+            end.setMinutes(end.getMinutes() - 2);
+            
+            const start = new Date();
+            start.setHours(0, 1, 0, 0);
             
             document.getElementById('startTime').value = start.toISOString().slice(0, -1);
             document.getElementById('endTime').value = end.toISOString().slice(0, -1);
@@ -82,10 +128,7 @@
             document.getElementById('frames').innerHTML = '';
         }
         
-        function appendFrame(frame, timestamp) {
-            console.log('Frame data length:', frame.length);
-            console.log('First 100 chars:', frame.substring(0, 100));
-            
+        function appendFrame(frame, timestamp, data) {
             const container = document.createElement('div');
             container.className = 'frame-container';
             
@@ -102,9 +145,38 @@
             const ts = document.createElement('div');
             ts.className = 'frame-timestamp';
             ts.innerText = new Date(timestamp).toLocaleString();
+
+            const metadata = document.createElement('div');
+            metadata.className = 'metadata-icons';
+            
+            metadata.innerHTML = `
+                <span>window: ${(data && data.window_name) || 'N/A'}</span>
+                <span>app: ${(data && data.app_name) || 'N/A'}</span>
+            `;
+
+            if (data && data.ocr_text) {
+                const ocrIcon = document.createElement('div');
+                ocrIcon.className = 'icon';
+                ocrIcon.innerHTML = `
+                    📝
+                    <div class="tooltip">OCR: ${data.ocr_text}</div>
+                `;
+                metadata.appendChild(ocrIcon);
+            }
+
+            if (data && data.transcription) {
+                const transcriptionIcon = document.createElement('div');
+                transcriptionIcon.className = 'icon';
+                transcriptionIcon.innerHTML = `
+                    🎤
+                    <div class="tooltip">Transcription: ${data.transcription}</div>
+                `;
+                metadata.appendChild(transcriptionIcon);
+            }
             
             container.appendChild(img);
             container.appendChild(ts);
+            container.appendChild(metadata);
             
             const frames = document.getElementById('frames');
             frames.appendChild(container);
@@ -116,10 +188,10 @@
                 eventSource.close();
             }
             
-            const startTime = document.getElementById('startTime').value;
-            const endTime = document.getElementById('endTime').value;
+            const startTime = new Date(document.getElementById('startTime').value).toISOString();
+            const endTime = new Date(document.getElementById('endTime').value).toISOString();
             
-            const url = `http://localhost:3030/stream/frames?start_time=${startTime}Z&end_time=${endTime}Z`;
+            const url = `http://localhost:3030/stream/frames?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`;
             console.log('starting stream:', url);
             eventSource = new EventSource(url);
             
@@ -132,8 +204,8 @@
                     }
                     
                     if (data.frame && data.timestamp) {
-                        console.log('appending frame from:', data.timestamp);
-                        appendFrame(data.frame, data.timestamp);
+                        console.log('appending frame from:', data.timestamp, data);
+                        appendFrame(data.frame, data.timestamp, data);
                     }
                 } catch (e) {
                     console.error('Failed to parse frame data:', e);
@@ -141,8 +213,8 @@
             };
             
             eventSource.onerror = (error) => {
-                console.error('sse error:', error);
-                eventSource.close();
+                // console.error('sse error:', error);
+                // eventSource.close();
             };
         }
         

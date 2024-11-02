@@ -284,15 +284,27 @@ export default function Timeline() {
 
     // Calculate times for both points in local time
     const totalMinutesInDay = 24 * 60;
-    const startMinutes = (Math.min(dragStart, percentage) / 100) * totalMinutesInDay;
-    const endMinutes = (Math.max(dragStart, percentage) / 100) * totalMinutesInDay;
+    const startMinutes =
+      (Math.min(dragStart, percentage) / 100) * totalMinutesInDay;
+    const endMinutes =
+      (Math.max(dragStart, percentage) / 100) * totalMinutesInDay;
 
     // Create local dates
     const startLocal = new Date();
-    startLocal.setHours(Math.floor(startMinutes / 60), Math.floor(startMinutes % 60), 0, 0);
-    
+    startLocal.setHours(
+      Math.floor(startMinutes / 60),
+      Math.floor(startMinutes % 60),
+      0,
+      0
+    );
+
     const endLocal = new Date();
-    endLocal.setHours(Math.floor(endMinutes / 60), Math.floor(endMinutes % 60), 0, 0);
+    endLocal.setHours(
+      Math.floor(endMinutes / 60),
+      Math.floor(endMinutes % 60),
+      0,
+      0
+    );
 
     // Convert to UTC for storage
     const utcStartDate = new Date(
@@ -357,7 +369,7 @@ export default function Timeline() {
 
     const relevantFrames = frames.filter((frame) => {
       const frameTime = new Date(frame.timestamp);
-      console.log("frameTime", frameTime);
+      // console.log("frameTime", frameTime);
       return (
         frameTime >= selectionRange.start && frameTime <= selectionRange.end
       );
@@ -412,6 +424,11 @@ export default function Timeline() {
           ${aiInput}`,
         },
       ];
+
+      console.log(
+        "messages",
+        messages.findLast((m) => m.role === "user")?.content
+      );
 
       abortControllerRef.current = new AbortController();
       setIsStreaming(true);
@@ -640,12 +657,13 @@ export default function Timeline() {
               className="absolute top-0 h-full bg-[#0f0] opacity-20"
               style={{
                 left: `${
-                  ((new Date(selectionRange.start).getHours() * 3600 +
+                  (new Date(selectionRange.start).getHours() * 3600 +
                     new Date(selectionRange.start).getMinutes() * 60) /
-                    864)
+                  864
                 }%`,
                 width: `${
-                  ((selectionRange.end.getTime() - selectionRange.start.getTime()) /
+                  ((selectionRange.end.getTime() -
+                    selectionRange.start.getTime()) /
                     (24 * 3600 * 1000)) *
                   100
                 }%`,

@@ -32,7 +32,7 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::RwLock;
@@ -50,6 +50,7 @@ type FrameChannel = Sender<(DateTime<Utc>, Vec<u8>, FrameMetadata)>;
 
 #[derive(Debug, Clone)]
 pub struct FrameMetadata {
+    pub file_path: String,
     pub app_name: String,
     pub window_name: String,
     pub transcription: String,
@@ -294,6 +295,10 @@ impl FrameCache {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
+        // Set 30s timeout for frame extraction
+        let extraction_timeout = tokio::time::sleep(tokio::time::Duration::from_secs(30));
+        tokio::pin!(extraction_timeout);
+
         let stdout = child
             .stdout
             .take()
@@ -304,12 +309,8 @@ impl FrameCache {
             .take()
             .ok_or_else(|| anyhow::anyhow!("failed to get stderr"))?;
 
-        tokio::spawn(async move {
-            let mut reader = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!("ffmpeg: {}", line);
-            }
-        });
+        // Handle stderr in background
+        let stderr_handle = tokio::spawn(Self::log_ffmpeg_output(stderr));
 
         let mut reader = BufReader::new(stdout);
         let frame_extraction = async {
@@ -348,12 +349,13 @@ impl FrameCache {
                             window_name: metadata
                                 .get(frame_count)
                                 .map_or("".to_string(), |(_, _, win, _, _)| win.clone()),
-                            transcription: metadata
-                                .get(frame_count)
-                                .map_or("".to_string(), |(_, _, _, trans, _)| trans.clone()),
                             ocr_text: metadata
                                 .get(frame_count)
-                                .map_or("".to_string(), |(_, _, _, _, ocr)| ocr.clone()),
+                                .map_or("".to_string(), |(_, _, _, ocr, _)| ocr.clone()),
+                            transcription: metadata
+                                .get(frame_count)
+                                .map_or("".to_string(), |(_, _, _, _, trans)| trans.clone()),
+                            file_path: file_path.to_string(),
                         };
 
                         if let Err(e) = frame_tx
@@ -365,7 +367,7 @@ impl FrameCache {
 
                             if error_count >= MAX_ERRORS {
                                 debug!("channel appears closed, stopping extraction");
-                                return Ok(());
+                                return Ok::<(), anyhow::Error>(());
                             }
                         }
 
@@ -380,19 +382,33 @@ impl FrameCache {
             Ok(())
         };
 
-        match tokio::time::timeout(std::time::Duration::from_secs(30), frame_extraction).await {
-            Ok(result) => result,
-            Err(_) => {
-                let _ = child.kill().await;
-                Err(anyhow::anyhow!("frame extraction timed out"))
+        tokio::select! {
+            _ = &mut extraction_timeout => {
+                // Kill the ffmpeg process
+                if let Err(e) = child.kill().await {
+                    error!("failed to kill ffmpeg process: {}", e);
+                }
+                stderr_handle.abort();
+                return Err(anyhow::anyhow!("frame extraction timed out"));
             }
-        }?;
+            result = frame_extraction => {
+                stderr_handle.abort();
+                drop(result);
+            }
+        }
 
         let status = child.wait().await?;
         if !status.success() {
             return Err(anyhow::anyhow!("ffmpeg failed with status: {}", status));
         }
 
+        Ok(())
+    }
+    async fn log_ffmpeg_output(stderr: impl AsyncRead + Unpin) -> Result<()> {
+        let mut lines = BufReader::new(stderr).lines();
+        while let Some(line) = lines.next_line().await? {
+            debug!("ffmpeg: {}", line);
+        }
         Ok(())
     }
 
