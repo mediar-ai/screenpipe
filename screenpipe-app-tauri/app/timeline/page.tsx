@@ -6,7 +6,14 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { ChatMessage } from "@/components/chat-message-v2";
 import { useToast } from "@/components/ui/use-toast";
 import { ChatCompletionMessageParam } from "openai/resources/index.mjs";
-import { Loader2, Send, Square, X, GripHorizontal } from "lucide-react";
+import {
+  Loader2,
+  Send,
+  Square,
+  X,
+  GripHorizontal,
+  RotateCcw,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { platform } from "@tauri-apps/plugin-os";
@@ -17,6 +24,8 @@ interface StreamFramesResponse {
   file_path: string;
   app_name?: string;
   window_name?: string;
+  ocr_text?: string;
+  transcription?: string;
 }
 
 interface TimeRange {
@@ -238,21 +247,24 @@ export default function Timeline() {
     setIsDragging(true);
     setDragStart(percentage);
 
-    // Calculate hours and minutes from percentage for local display
+    // Calculate time in local timezone
     const totalMinutesInDay = 24 * 60;
     const minutesFromMidnight = (percentage / 100) * totalMinutesInDay;
     const hours = Math.floor(minutesFromMidnight / 60);
     const minutes = Math.floor(minutesFromMidnight % 60);
 
-    // Create date in UTC
-    const now = new Date();
+    // Create date in local time
+    const localDate = new Date();
+    localDate.setHours(hours, minutes, 0, 0);
+
+    // Convert to UTC for storage
     const utcDate = new Date(
       Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        hours,
-        minutes,
+        localDate.getUTCFullYear(),
+        localDate.getUTCMonth(),
+        localDate.getUTCDate(),
+        localDate.getUTCHours(),
+        localDate.getUTCMinutes(),
         0,
         0
       )
@@ -270,23 +282,26 @@ export default function Timeline() {
     const rect = e.currentTarget.getBoundingClientRect();
     const percentage = ((e.clientX - rect.left) / rect.width) * 100;
 
-    // Calculate times for both points
+    // Calculate times for both points in local time
     const totalMinutesInDay = 24 * 60;
-    const startMinutes =
-      (Math.min(dragStart, percentage) / 100) * totalMinutesInDay;
-    const endMinutes =
-      (Math.max(dragStart, percentage) / 100) * totalMinutesInDay;
+    const startMinutes = (Math.min(dragStart, percentage) / 100) * totalMinutesInDay;
+    const endMinutes = (Math.max(dragStart, percentage) / 100) * totalMinutesInDay;
 
-    const now = new Date();
+    // Create local dates
+    const startLocal = new Date();
+    startLocal.setHours(Math.floor(startMinutes / 60), Math.floor(startMinutes % 60), 0, 0);
+    
+    const endLocal = new Date();
+    endLocal.setHours(Math.floor(endMinutes / 60), Math.floor(endMinutes % 60), 0, 0);
 
-    // Create UTC dates
+    // Convert to UTC for storage
     const utcStartDate = new Date(
       Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        Math.floor(startMinutes / 60),
-        Math.floor(startMinutes % 60),
+        startLocal.getUTCFullYear(),
+        startLocal.getUTCMonth(),
+        startLocal.getUTCDate(),
+        startLocal.getUTCHours(),
+        startLocal.getUTCMinutes(),
         0,
         0
       )
@@ -294,11 +309,11 @@ export default function Timeline() {
 
     const utcEndDate = new Date(
       Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        Math.floor(endMinutes / 60),
-        Math.floor(endMinutes % 60),
+        endLocal.getUTCFullYear(),
+        endLocal.getUTCMonth(),
+        endLocal.getUTCDate(),
+        endLocal.getUTCHours(),
+        endLocal.getUTCMinutes(),
         0,
         0
       )
@@ -349,7 +364,7 @@ export default function Timeline() {
     });
 
     console.log("Total frames:", frames.length);
-    console.log("Relevant frames:", relevantFrames.length);
+    console.log("Relevant frames:", relevantFrames);
 
     const userMessage = {
       id: generateId(),
@@ -384,7 +399,15 @@ export default function Timeline() {
         ...chatMessages,
         {
           role: "user" as const,
-          content: `Context data: ${JSON.stringify(relevantFrames)}
+          content: `Context data: ${JSON.stringify(
+            relevantFrames.map((frame) => ({
+              timestamp: frame.timestamp,
+              app_name: frame.app_name,
+              window_name: frame.window_name,
+              ocr_text: frame.ocr_text,
+              transcription: frame.transcription,
+            }))
+          )}
           
           ${aiInput}`,
         },
@@ -493,6 +516,14 @@ export default function Timeline() {
     };
   }, [isDraggingPanel, dragOffset]);
 
+  const handleRefresh = () => {
+    setFrames([]);
+    setCurrentFrame(null);
+    setCurrentIndex(0);
+    setIsLoading(true);
+    setupEventSource();
+  };
+
   return (
     <div
       className="fixed inset-0 flex flex-col bg-black text-white overflow-hidden font-['Press_Start_2P'] relative"
@@ -512,6 +543,13 @@ export default function Timeline() {
         msUserSelect: "none",
       }}
     >
+      <button
+        onClick={handleRefresh}
+        className="absolute top-4 right-4 p-2 text-[#0f0] hover:text-[#0f0]/70 bg-black/50 rounded border border-[#0f0]/20 hover:border-[#0f0]/50 transition-colors z-50"
+      >
+        <RotateCcw className="h-4 w-4" />
+      </button>
+
       {/* Scanline effect overlay */}
       <div
         className="fixed inset-0 pointer-events-none z-50"
@@ -602,13 +640,12 @@ export default function Timeline() {
               className="absolute top-0 h-full bg-[#0f0] opacity-20"
               style={{
                 left: `${
-                  (selectionRange.start.getHours() * 3600 +
-                    selectionRange.start.getMinutes() * 60) /
-                  864
+                  ((new Date(selectionRange.start).getHours() * 3600 +
+                    new Date(selectionRange.start).getMinutes() * 60) /
+                    864)
                 }%`,
                 width: `${
-                  ((selectionRange.end.getTime() -
-                    selectionRange.start.getTime()) /
+                  ((selectionRange.end.getTime() - selectionRange.start.getTime()) /
                     (24 * 3600 * 1000)) *
                   100
                 }%`,
