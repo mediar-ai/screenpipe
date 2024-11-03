@@ -415,6 +415,7 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
+        cli.enable_ui_monitoring
     );
 
     let pipe_futures = Arc::new(tokio::sync::Mutex::new(FuturesUnordered::new()));
