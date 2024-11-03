@@ -51,6 +51,12 @@ impl UpdatesManager {
             }
 
             #[cfg(not(target_os = "windows"))] {
+                self.update_menu_item.set_enabled(true)?;
+                self.update_menu_item.set_text("update now")?;
+            }
+
+            #[cfg(not(target_os = "windows"))] {
+                self.update_menu_item.set_enabled(false)?;
                 self.update_menu_item
                     .set_text("downloading latest version of screenpipe")?;
             }
