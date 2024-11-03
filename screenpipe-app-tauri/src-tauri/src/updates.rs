@@ -41,8 +41,15 @@ impl UpdatesManager {
         if let Some(update) = self.app.updater()?.check().await? {
             *self.update_available.lock().await = true;
 
-            self.update_menu_item
-                .set_text("downloading latest version of screenpipe")?;
+            #[cfg(target_os = "windows")] {
+                self.update_menu_item.set_enabled(true)?;
+                self.update_menu_item.set_text("update now")?;
+            }
+
+            #[cfg(not(target_os = "windows"))] {
+                self.update_menu_item
+                    .set_text("downloading latest version of screenpipe")?;
+            }
 
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
                 let path = self.app.path().resolve(
@@ -56,11 +63,12 @@ impl UpdatesManager {
                 }
             }
 
-            update.download_and_install(|_, _| {}, || {}).await?;
-
-            *self.update_installed.lock().await = true;
-            self.update_menu_item.set_enabled(true)?;
-            self.update_menu_item.set_text("update now")?;
+            #[cfg(not(target_os = "windows"))] {
+                update.download_and_install(|_, _| {}, || {}).await?;
+                *self.update_installed.lock().await = true;
+                self.update_menu_item.set_enabled(true)?;
+                self.update_menu_item.set_text("update now")?;
+            }
 
             if show_dialog {
                 let (tx, rx) = oneshot::channel();
@@ -80,6 +88,16 @@ impl UpdatesManager {
                 });
 
                 if rx.await? {
+
+                    #[cfg(target_os = "windows")] {
+                        self.update_menu_item.set_enabled(false)?;
+                        self.update_menu_item
+                            .set_text("downloading latest version of screenpipe")?;
+                        update.download_and_install(|_, _| {}, || {}).await?;
+                        *self.update_installed.lock().await = true;
+                        self.update_menu_item.set_enabled(true)?;
+                        self.update_menu_item.set_text("update now")?;
+                    }
                     // Proceed with the update
 
                     // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
