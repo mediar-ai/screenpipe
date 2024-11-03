@@ -817,7 +817,7 @@ impl DatabaseManager {
     }
     pub async fn get_latest_timestamps(
         &self,
-    ) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>), sqlx::Error> {
+    ) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>, Option<DateTime<Utc>>), sqlx::Error> {
         let latest_frame: Option<(DateTime<Utc>,)> =
             sqlx::query_as("SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1")
                 .fetch_optional(&self.pool)
@@ -828,7 +828,29 @@ impl DatabaseManager {
                 .fetch_optional(&self.pool)
                 .await?;
 
-        Ok((latest_frame.map(|f| f.0), latest_audio.map(|a| a.0)))
+        // Check if ui_monitoring table exists first
+        let latest_ui: Option<(DateTime<Utc>,)> = match sqlx::query_scalar::<_, i32>(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ui_monitoring'"
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        {
+            Some(_) => {
+                sqlx::query_as("SELECT timestamp FROM ui_monitoring ORDER BY timestamp DESC LIMIT 1")
+                    .fetch_optional(&self.pool)
+                    .await?
+            }
+            None => {
+                debug!("ui_monitoring table does not exist");
+                None
+            }
+        };
+
+        Ok((
+            latest_frame.map(|f| f.0),
+            latest_audio.map(|a| a.0),
+            latest_ui.map(|u| u.0),
+        ))
     }
 
     pub async fn get_chunked_data_since_last_request(
