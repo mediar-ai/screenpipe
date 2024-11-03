@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730574388510,
+  "lastUpdate": 1730676209749,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -21869,6 +21869,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1915673458,
             "range": "± 18034159",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "3c2010ef10ad840f97601a26ca0cc0513508ae01",
+          "message": "refactor: make timeline a timeseries data structure for efficiency",
+          "timestamp": "2024-11-03T15:13:16-08:00",
+          "tree_id": "83b1b1cc0813c509997022f5c3652f90a6f513fb",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/3c2010ef10ad840f97601a26ca0cc0513508ae01"
+        },
+        "date": 1730676207955,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1915753416,
+            "range": "± 33276217",
             "unit": "ns/iter"
           }
         ]
