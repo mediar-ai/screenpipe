@@ -102,7 +102,7 @@ const defaultSettings: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
   enableFrameCache: false, // Add this line
-  enableUiMonitoring: true, // Add this line
+  enableUiMonitoring: platform() === "macos", // Change this line to be macOS-specific
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
