@@ -144,6 +144,15 @@ pub struct DatabaseManager {
     pub pool: SqlitePool,
 }
 
+// Add this before the DatabaseManager impl block
+#[derive(Serialize, sqlx::FromRow)]
+pub struct UiMonitoringResult {
+    pub app: String,
+    pub window: String,
+    pub text_output: String,
+    pub timestamp: DateTime<Utc>,
+}
+
 impl DatabaseManager {
     pub async fn new(database_path: &str) -> Result<Self, sqlx::Error> {
         debug!(
@@ -1168,6 +1177,68 @@ impl DatabaseManager {
         .bind(file_path)
         .fetch_all(&self.pool)
         .await
+    }
+
+    pub async fn search_ui_monitoring(
+        &self,
+        query: &str,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<UiMonitoringResult>, sqlx::Error> {
+        let mut conditions = vec!["1=1"];
+        let mut params: Vec<String> = vec![];
+
+        if !query.is_empty() {
+            conditions.push("text_output LIKE ?");
+            params.push(format!("%{}%", query));
+        }
+
+        if let Some(app) = app_name {
+            conditions.push("app LIKE ?");
+            params.push(format!("%{}%", app));
+        }
+
+        if let Some(window) = window_name {
+            conditions.push("window LIKE ?");
+            params.push(format!("%{}%", window));
+        }
+
+        if let Some(start) = start_time {
+            conditions.push("timestamp >= ?");
+            params.push(start.to_rfc3339());
+        }
+
+        if let Some(end) = end_time {
+            conditions.push("timestamp <= ?");
+            params.push(end.to_rfc3339());
+        }
+
+        let sql = format!(
+            r#"
+            SELECT app, window, text_output, timestamp
+            FROM ui_monitoring
+            WHERE {}
+            ORDER BY timestamp DESC
+            LIMIT ? OFFSET ?
+            "#,
+            conditions.join(" AND ")
+        );
+
+        let mut query = sqlx::query_as::<_, UiMonitoringResult>(&sql);
+        
+        // Bind all the params
+        for param in params {
+            query = query.bind(param);
+        }
+
+        // Bind limit and offset
+        query = query.bind(limit).bind(offset);
+
+        query.fetch_all(&self.pool).await
     }
 }
 
