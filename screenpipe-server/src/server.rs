@@ -60,6 +60,7 @@ pub struct AppState {
     pub pipe_manager: Arc<PipeManager>,
     pub vision_disabled: bool,
     pub audio_disabled: bool,
+    pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
 }
 
@@ -210,8 +211,10 @@ pub struct HealthCheckResponse {
     pub status: String,
     pub last_frame_timestamp: Option<DateTime<Utc>>,
     pub last_audio_timestamp: Option<DateTime<Utc>>,
+    pub last_ui_timestamp: Option<DateTime<Utc>>,
     pub frame_status: String,
     pub audio_status: String,
+    pub ui_status: String,
     pub message: String,
     pub verbose_instructions: Option<String>,
 }
@@ -480,11 +483,11 @@ pub(crate) async fn remove_tags(
 }
 
 pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<HealthCheckResponse> {
-    let (last_frame, last_audio) = match state.db.get_latest_timestamps().await {
-        Ok((frame, audio)) => (frame, audio),
+    let (last_frame, last_audio, last_ui) = match state.db.get_latest_timestamps().await {
+        Ok((frame, audio, ui)) => (frame, audio, ui),
         Err(e) => {
             error!("failed to get latest timestamps: {}", e);
-            (None, None)
+            (None, None, None)
         }
     };
 
@@ -526,9 +529,19 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         }
     };
 
-    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
-        || frame_status == "disabled")
+    let ui_status = if !state.ui_monitoring_enabled {
+        "disabled"
+    } else {
+        match last_ui {
+            Some(timestamp) if now.signed_duration_since(timestamp) < chrono::Duration::from_std(threshold).unwrap() => "ok",
+            Some(_) => "stale",
+            None => "no data"
+        }
+    };
+
+    let (overall_status, message, verbose_instructions) = if (frame_status == "ok" || frame_status == "disabled") 
         && (audio_status == "ok" || audio_status == "disabled")
+        && (ui_status == "ok" || ui_status == "disabled")
     {
         (
             "healthy",
@@ -543,11 +556,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         if audio_status != "ok" && audio_status != "disabled" {
             unhealthy_systems.push("audio");
         }
+        if ui_status != "ok" && ui_status != "disabled" {
+            unhealthy_systems.push("ui monitoring");
+        }
 
         (
             "unhealthy",
-            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}", 
-                    unhealthy_systems.join(", "), frame_status, audio_status),
+            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}", 
+                    unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
             Some("if you're experiencing issues, please try the following steps:\n\
                   1. restart the application.\n\
                   2. if using a desktop app, reset your screenpipe os audio/screen recording permissions.\n\
@@ -560,8 +576,10 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         status: overall_status.to_string(),
         last_frame_timestamp: last_frame,
         last_audio_timestamp: last_audio,
+        last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status: audio_status.to_string(),
+        ui_status: ui_status.to_string(),
         message,
         verbose_instructions,
     })
@@ -707,6 +725,7 @@ pub struct Server {
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
     audio_disabled: bool,
+    ui_monitoring_enabled: bool,
 }
 
 impl Server {
@@ -720,6 +739,7 @@ impl Server {
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
         audio_disabled: bool,
+        ui_monitoring_enabled: bool,
     ) -> Self {
         Server {
             db,
@@ -730,6 +750,7 @@ impl Server {
             pipe_manager,
             vision_disabled,
             audio_disabled,
+            ui_monitoring_enabled,
         }
     }
 
@@ -752,6 +773,7 @@ impl Server {
             pipe_manager: self.pipe_manager,
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
+            ui_monitoring_enabled: self.ui_monitoring_enabled,
             frame_cache: if enable_frame_cache {
                 Some(Arc::new(
                     FrameCache::with_config(
