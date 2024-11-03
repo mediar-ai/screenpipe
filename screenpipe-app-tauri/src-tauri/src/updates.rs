@@ -95,6 +95,7 @@ impl UpdatesManager {
                             .set_text("downloading latest version of screenpipe")?;
                         update.download_and_install(|_, _| {}, || {}).await?;
                         *self.update_installed.lock().await = true;
+
                         self.update_menu_item.set_enabled(true)?;
                         self.update_menu_item.set_text("update now")?;
                     }
