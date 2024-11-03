@@ -22,7 +22,9 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
+use std::collections::BTreeMap;
 use tokio::time::{timeout, Duration as TokioDuration};
+
 #[derive(Debug)]
 pub struct DatabaseError(String);
 
@@ -1150,40 +1152,144 @@ impl DatabaseManager {
         ))
     }
 
-    pub async fn get_frame_metadata(
+    // ! TODO: atm not sure what will happen if we have multiple transcriptions, OCR, etc for same timestamp (multi monitor, multi audio device...)
+    // ! just merging
+    // ! the offset is not quite right but we try to index around frames which is the central human experience and most important sense
+    // ! there should be a way to properly sync audio and video indexes
+    pub async fn find_video_chunks(
         &self,
-        file_path: &str,
-    ) -> Result<Vec<(DateTime<Utc>, String, String, String, String)>, SqlxError> {
-        debug!("getting frame metadata for file: {}", file_path);
-        sqlx::query_as::<_, (DateTime<Utc>, String, String, String, String)>(
-            r#"
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<TimeSeriesChunk, SqlxError> {
+        // First get all frames in time range with their OCR data
+        let frames_query = r#"
             SELECT 
-                frames.timestamp,
-                ocr_text.app_name,
-                ocr_text.window_name,
-                ocr_text.text as ocr_text,
-                audio_transcriptions.transcription
-            FROM video_chunks
-            JOIN frames ON frames.video_chunk_id = video_chunks.id
-            JOIN ocr_text ON frames.id = ocr_text.frame_id
-            LEFT JOIN audio_transcriptions ON frames.timestamp = audio_transcriptions.timestamp
-            WHERE video_chunks.file_path = ?1
-            ORDER BY frames.timestamp ASC
-            "#,
-        )
-        .bind(file_path)
-        .fetch_all(&self.pool)
-        .await
-        .map(|rows| {
-            rows.into_iter()
-                .map(
-                    |(timestamp, app_name, window_name, ocr_text, transcription)| {
-                        (timestamp, app_name, window_name, ocr_text, transcription)
-                    },
-                )
-                .collect()
+                f.timestamp,
+                f.offset_index,
+                ot.text,
+                ot.app_name,
+                ot.window_name,
+                vc.device_name as screen_device,
+                vc.file_path as video_path
+            FROM frames f
+            JOIN video_chunks vc ON f.video_chunk_id = vc.id
+            LEFT JOIN ocr_text ot ON f.id = ot.frame_id
+            WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
+            ORDER BY f.timestamp, f.offset_index
+        "#;
+
+        // Then get audio data that overlaps with these frames
+        let audio_query = r#"
+            SELECT 
+                at.timestamp,
+                at.transcription,
+                at.device as audio_device,
+                at.is_input_device,
+                ac.file_path as audio_path
+            FROM audio_transcriptions at
+            JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+            WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
+            ORDER BY at.timestamp
+        "#;
+
+        // Execute both queries
+        let (frame_rows, audio_rows) = tokio::try_join!(
+            sqlx::query(frames_query)
+                .bind(start)
+                .bind(end)
+                .fetch_all(&self.pool),
+            sqlx::query(audio_query)
+                .bind(start)
+                .bind(end)
+                .fetch_all(&self.pool)
+        )?;
+
+        // Process into structured data
+        let mut frames_map: BTreeMap<(DateTime<Utc>, i64), FrameData> = BTreeMap::new();
+
+        // Process frame/OCR data
+        for row in frame_rows {
+            let timestamp: DateTime<Utc> = row.get("timestamp");
+            let offset_index: i64 = row.get("offset_index");
+            let key = (timestamp, offset_index);
+
+            let frame_data = frames_map.entry(key).or_insert_with(|| FrameData {
+                timestamp,
+                offset_index,
+                ocr_entries: Vec::new(),
+                audio_entries: Vec::new(),
+            });
+
+            if let Ok(text) = row.try_get::<String, _>("text") {
+                frame_data.ocr_entries.push(OCREntry {
+                    text,
+                    app_name: row.get("app_name"),
+                    window_name: row.get("window_name"),
+                    device_name: row.get("screen_device"),
+                    video_file_path: row.get("video_path"),
+                });
+            }
+        }
+
+        // Process audio data
+        for row in audio_rows {
+            let timestamp: DateTime<Utc> = row.get("timestamp");
+
+            // Find the closest frame
+            if let Some((&key, _)) = frames_map.range(..(timestamp, i64::MAX)).next_back() {
+                if let Some(frame_data) = frames_map.get_mut(&key) {
+                    frame_data.audio_entries.push(AudioEntry {
+                        transcription: row.get("transcription"),
+                        device_name: row.get("audio_device"),
+                        is_input: row.get("is_input_device"),
+                        audio_file_path: row.get("audio_path"),
+                        // duration_secs: row.get("duration_secs"),
+                        duration_secs: 0.0, // TODO
+                    });
+                }
+            }
+        }
+
+        Ok(TimeSeriesChunk {
+            frames: frames_map.into_values().collect(),
+            start_time: start,
+            end_time: end,
         })
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct FrameData {
+    pub timestamp: DateTime<Utc>,
+    pub offset_index: i64,
+    pub ocr_entries: Vec<OCREntry>,
+    pub audio_entries: Vec<AudioEntry>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OCREntry {
+    pub text: String,
+    pub app_name: String,
+    pub window_name: String,
+    pub device_name: String,
+    pub video_file_path: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AudioEntry {
+    pub transcription: String,
+    pub device_name: String,
+    pub is_input: bool,
+    pub audio_file_path: String,
+    // Optional: duration of this transcription
+    pub duration_secs: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TimeSeriesChunk {
+    pub frames: Vec<FrameData>,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
 }
 
 impl Clone for DatabaseManager {
