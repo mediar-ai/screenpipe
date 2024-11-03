@@ -189,7 +189,7 @@ impl DatabaseManager {
             return Err(e);
         }
 
-        info!("Migrations executed successfully.");
+        debug!("migrations executed successfully.");
         Ok(db_manager)
     }
 
@@ -1175,7 +1175,7 @@ impl DatabaseManager {
             JOIN video_chunks vc ON f.video_chunk_id = vc.id
             LEFT JOIN ocr_text ot ON f.id = ot.frame_id
             WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
-            ORDER BY f.timestamp, f.offset_index
+            ORDER BY f.timestamp DESC, f.offset_index DESC
         "#;
 
         // Then get audio data that overlaps with these frames
@@ -1189,7 +1189,7 @@ impl DatabaseManager {
             FROM audio_transcriptions at
             JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
             WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
-            ORDER BY at.timestamp
+            ORDER BY at.timestamp DESC
         "#;
 
         // Execute both queries
@@ -1251,7 +1251,7 @@ impl DatabaseManager {
         }
 
         Ok(TimeSeriesChunk {
-            frames: frames_map.into_values().collect(),
+            frames: frames_map.into_values().rev().collect(),
             start_time: start,
             end_time: end,
         })

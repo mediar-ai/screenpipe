@@ -1,29 +1,3 @@
-/*
-
-### Video Cache Rules
-
-✅ **DO**
-- index ALL files in memory (just paths + metadata, ~10MB RAM)
-- cache last 5min full-res, 1h low-res (640px)
-- use ffmpeg for frame extraction (JPEG, q=3/8)
-- use filesystem metadata for timestamps
-- handle timeouts (30s max)
-- refresh index every 30s
-
-❌ **DON'T**
-- parse filenames for dates
-- cache full video files in RAM
-- keep file handles open
-- use more than 1GB RAM total
-- block on frame extraction / slowness
-- process files modified in last 60s
-
-We should be able to allow users to:
-- stream frames at high speed from current timestamp, 10 min around
-- go back in time fast, like 2 months ago
-
-
-*/
 use anyhow::Result;
 use bincode;
 use chrono::{DateTime, Duration, Utc};
@@ -33,20 +7,18 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::fs;
-use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
-use tokio::sync::mpsc::{channel, Sender};
-use tokio::sync::RwLock;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
 
 use crate::db::{FrameData, OCREntry};
 use crate::DatabaseManager;
 
-type FrameChannel = Sender<TimeSeriesFrame>;
+type FrameChannel = mpsc::Sender<TimeSeriesFrame>;
 
 #[derive(Debug, Clone)]
 pub struct TimeSeriesFrame {
@@ -80,10 +52,20 @@ pub struct FrameMetadata {
     pub ocr_text: String,
 }
 
-pub struct FrameInfo {
-    pub timestamp: DateTime<Utc>,
-    pub data: Vec<u8>,
-    pub metadata: FrameMetadata,
+#[derive(Debug)]
+enum CacheMessage {
+    Store {
+        cache_key: String,
+        frame_data: Vec<u8>,
+        device_data: OCREntry,
+        audio_entries: Vec<AudioEntry>,
+        response: oneshot::Sender<Result<()>>,
+    },
+    Get {
+        cache_key: String,
+        response:
+            oneshot::Sender<Result<Option<(Vec<u8>, FrameMetadata, (DateTime<Utc>, String))>>>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,7 +89,7 @@ enum CompressionType {
 }
 
 #[derive(Debug)]
-pub struct CacheEntry {
+struct CacheEntry {
     frame: CachedFrame,
     path: PathBuf,
     last_accessed: SystemTime,
@@ -132,7 +114,7 @@ impl Default for CacheConfig {
     }
 }
 
-pub struct FrameDiskCache {
+struct FrameDiskCache {
     config: CacheConfig,
     entries: BTreeMap<(DateTime<Utc>, String), CacheEntry>,
     total_size: u64,
@@ -144,10 +126,8 @@ impl FrameDiskCache {
         let cache_dir = &config.cache_dir;
         let index_path = cache_dir.join("cache_index.bin");
 
-        // Ensure cache directory exists
         fs::create_dir_all(cache_dir).await?;
 
-        // Initialize empty cache
         let mut cache = Self {
             config,
             entries: BTreeMap::new(),
@@ -155,16 +135,13 @@ impl FrameDiskCache {
             index_path,
         };
 
-        // Try to load existing index, but don't fail if it doesn't exist
         if cache.index_path.exists() {
             if let Err(e) = cache.load_index().await {
                 debug!("could not load existing cache index: {}", e);
-                // Clear any partial data
                 cache.entries.clear();
                 cache.total_size = 0;
             }
         } else {
-            // Create empty index file
             cache.save_index().await?;
         }
 
@@ -191,16 +168,10 @@ impl FrameDiskCache {
                     }
                     debug!("loaded {} cached frames", self.entries.len());
                 }
-                Err(e) => {
-                    error!("failed to deserialize cache index: {}", e);
-                }
+                Err(e) => error!("failed to deserialize cache index: {}", e),
             },
-            Ok(_) => {
-                debug!("cache index is empty, starting fresh");
-            }
-            Err(e) => {
-                error!("failed to read cache index: {}", e);
-            }
+            Ok(_) => debug!("cache index is empty, starting fresh"),
+            Err(e) => error!("failed to read cache index: {}", e),
         }
         Ok(())
     }
@@ -208,28 +179,18 @@ impl FrameDiskCache {
     async fn save_index(&self) -> Result<()> {
         let frames: Vec<_> = self.entries.values().map(|entry| &entry.frame).collect();
         let temp_path = self.index_path.with_extension("tmp");
-
-        // Initialize with empty Vec if no frames
         let encoded = if frames.is_empty() {
             bincode::serialize(&Vec::<CachedFrame>::new())?
         } else {
             bincode::serialize(&frames)?
         };
 
-        // Write to temporary file
-        fs::write(&temp_path, encoded)
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to write temp index: {}", e))?;
-
-        // Atomically rename
-        fs::rename(&temp_path, &self.index_path)
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to rename temp index: {}", e))?;
-
+        fs::write(&temp_path, encoded).await?;
+        fs::rename(&temp_path, &self.index_path).await?;
         Ok(())
     }
 
-    pub async fn store_frame(
+    async fn store_frame(
         &mut self,
         cache_key: &str,
         frame_data: &[u8],
@@ -241,7 +202,6 @@ impl FrameDiskCache {
             .split_once("||")
             .ok_or_else(|| anyhow::anyhow!("invalid cache key format"))?;
 
-        // Clean up the timestamp string
         let clean_timestamp = timestamp_str
             .trim_end_matches(" UTC")
             .replace(' ', "T")
@@ -260,31 +220,28 @@ impl FrameDiskCache {
 
         let frame_path = self.get_frame_path(&timestamp.into(), device_id);
 
-        // Ensure parent directory exists
         if let Some(parent) = frame_path.parent() {
             fs::create_dir_all(parent).await?;
         }
 
-        // Calculate checksum
         let mut hasher = Sha256::new();
         hasher.update(frame_data);
         let checksum = format!("{:x}", hasher.finalize());
 
-        // Create cached frame entry
         let cached_frame = CachedFrame {
             timestamp: timestamp.into(),
             device_id: device_id.to_string(),
             checksum,
             metadata: FrameMetadata {
                 file_path: device_data.video_file_path.clone(),
-                app_name: device_data.app_name,
-                window_name: device_data.window_name,
+                app_name: device_data.app_name.clone(),
+                window_name: device_data.window_name.clone(),
                 transcription: audio_entries
                     .iter()
                     .map(|a| a.transcription.clone())
                     .collect::<Vec<_>>()
                     .join(" "),
-                ocr_text: device_data.text,
+                ocr_text: device_data.text.clone(),
             },
             frame_size: frame_data.len() as u64,
             compression: CompressionType::Jpeg {
@@ -295,12 +252,8 @@ impl FrameDiskCache {
             audio_entries: audio_entries.to_vec(),
         };
 
-        // Write frame data
-        fs::write(&frame_path, frame_data)
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to write frame data: {}", e))?;
+        fs::write(&frame_path, frame_data).await?;
 
-        // Update in-memory entries
         self.entries.insert(
             (timestamp.into(), device_id.to_string()),
             CacheEntry {
@@ -316,7 +269,7 @@ impl FrameDiskCache {
         Ok(())
     }
 
-    pub async fn get_frame_data(
+    async fn get_frame_data(
         &self,
         cache_key: &str,
     ) -> Result<Option<(Vec<u8>, FrameMetadata, (DateTime<Utc>, String))>> {
@@ -338,7 +291,6 @@ impl FrameDiskCache {
 
         let frame_data = fs::read(&frame_path).await?;
 
-        // Find the entry in our in-memory cache
         if let Some(entry) = self.entries.get(&(timestamp.into(), device_id.to_string())) {
             let mut hasher = Sha256::new();
             hasher.update(&frame_data);
@@ -368,10 +320,36 @@ impl FrameDiskCache {
     }
 }
 
+async fn run_cache_manager(mut cache: FrameDiskCache, mut rx: mpsc::Receiver<CacheMessage>) {
+    while let Some(msg) = rx.recv().await {
+        match msg {
+            CacheMessage::Store {
+                cache_key,
+                frame_data,
+                device_data,
+                audio_entries,
+                response,
+            } => {
+                let result = cache
+                    .store_frame(&cache_key, &frame_data, device_data, &audio_entries)
+                    .await;
+                let _ = response.send(result);
+            }
+            CacheMessage::Get {
+                cache_key,
+                response,
+            } => {
+                let result = cache.get_frame_data(&cache_key).await;
+                let _ = response.send(result);
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct FrameCache {
     pub screenpipe_dir: PathBuf,
-    pub disk_cache: Arc<RwLock<FrameDiskCache>>,
+    cache_tx: mpsc::Sender<CacheMessage>,
     db: Arc<DatabaseManager>,
 }
 
@@ -384,15 +362,16 @@ impl FrameCache {
 
         fs::create_dir_all(&cache_config.cache_dir).await?;
 
-        let disk_cache = Arc::new(RwLock::new(FrameDiskCache::new(cache_config).await?));
+        let (cache_tx, cache_rx) = mpsc::channel(100);
+        let disk_cache = FrameDiskCache::new(cache_config).await?;
 
-        let cache = Self {
-            screenpipe_dir: screenpipe_dir.clone(),
-            disk_cache,
+        tokio::spawn(run_cache_manager(disk_cache, cache_rx));
+
+        Ok(Self {
+            screenpipe_dir,
+            cache_tx,
             db,
-        };
-
-        Ok(cache)
+        })
     }
 
     async fn extract_frames_batch(
@@ -408,9 +387,11 @@ impl FrameCache {
             start_time, end_time
         );
 
-        // First, get all the video chunks and organize by timestamp
-        let chunks = self.db.find_video_chunks(start_time, end_time).await?;
-
+        let mut chunks = self.db.find_video_chunks(start_time, end_time).await?;
+        
+        // Sort frames in descending order by timestamp
+        chunks.frames.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        
         debug!("found {} chunks", chunks.frames.len());
 
         let frame_times = chunks
@@ -426,25 +407,24 @@ impl FrameCache {
             frame_times.len()
         );
 
-        // Process each timestamp
         for chunk in &chunks.frames {
             let mut timeseries_frame = TimeSeriesFrame {
                 timestamp: chunk.timestamp,
                 frame_data: Vec::new(),
             };
 
-            // Check cache first for each device - acquire lock only when needed
             for device_data in &chunk.ocr_entries {
-                let cache_key = format!("{}:{}", chunk.timestamp, device_data.device_name);
+                let cache_key = format!("{}||{}", chunk.timestamp, device_data.device_name);
 
-                // Acquire read lock only for cache lookup
-                if let Some((frame_data, metadata, _)) = self
-                    .disk_cache
-                    .read()
-                    .await
-                    .get_frame_data(&cache_key)
-                    .await?
-                {
+                let (response_tx, response_rx) = oneshot::channel();
+                self.cache_tx
+                    .send(CacheMessage::Get {
+                        cache_key: cache_key.clone(),
+                        response: response_tx,
+                    })
+                    .await?;
+
+                if let Ok(Some((frame_data, metadata, _))) = response_rx.await? {
                     timeseries_frame.frame_data.push(DeviceFrame {
                         device_id: device_data.device_name.clone(),
                         image_data: frame_data,
@@ -462,7 +442,6 @@ impl FrameCache {
                             .collect(),
                     });
                 } else {
-                    // Cache miss - queue for extraction
                     extraction_queue
                         .entry(device_data.video_file_path.clone())
                         .or_insert_with(Vec::new)
@@ -470,23 +449,20 @@ impl FrameCache {
                 }
             }
 
-            // If we have any frames for this timestamp, send them
             if !timeseries_frame.frame_data.is_empty() {
                 frame_tx.send(timeseries_frame).await?;
             }
         }
 
-        // Process extraction queue
         let ffmpeg = find_ffmpeg_path().ok_or_else(|| anyhow::anyhow!("ffmpeg not found"))?;
 
-        // Process each task
         for (file_path, tasks) in extraction_queue {
             extract_frame(
                 ffmpeg.clone(),
                 file_path,
                 tasks,
                 frame_tx.clone(),
-                self.disk_cache.clone(),
+                self.cache_tx.clone(),
             )
             .await?;
         }
@@ -505,49 +481,62 @@ impl FrameCache {
         let start = timestamp - Duration::minutes(duration_minutes / 2);
         let end = timestamp + Duration::minutes(duration_minutes / 2);
 
-        let (extract_tx, mut extract_rx) = channel(100);
-        let done = Arc::new(AtomicBool::new(false));
-        let done_clone = done.clone();
+        let (extract_tx, mut extract_rx) = mpsc::channel(100);
 
-        let cache_clone = self.clone();
-        let mut extract_handle = tokio::spawn(async move {
-            debug!("starting frame extraction");
-            let result = cache_clone
-                .extract_frames_batch(start, end, extract_tx.clone())
-                .await;
-            // Explicitly drop the sender after extraction is done to finish the channel
-            drop(extract_tx);
-            done_clone.store(true, std::sync::atomic::Ordering::Release);
-            debug!("frame extraction completed");
-            result
-        });
+        let mut extraction_handle = {
+            let cache_clone = self.clone();
+            tokio::spawn(async move {
+                let result = cache_clone
+                    .extract_frames_batch(start, end, extract_tx)
+                    .await;
+                debug!("extraction task finished with result: {:?}", result.is_ok());
+                result
+            })
+        };
 
-        // Create a select future that completes when either:
-        // 1. We receive a frame from extract_rx
-        // 2. The extract_handle completes
-        loop {
-            if done.load(std::sync::atomic::Ordering::Acquire) {
-                break;
-            }
-
-            tokio::select! {
-                frame = extract_rx.recv() => {
-                    match frame {
-                        Some(timeseries_frame) => {
-                            debug!("sending frame at {} to client", timeseries_frame.timestamp);
-                            frame_tx.send(timeseries_frame).await?;
+        // 30 s x duration of the requested time range
+        let timeout_duration = tokio::time::Duration::from_secs(10 * duration_minutes as u64);
+        let result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                tokio::select! {
+                    maybe_frame = extract_rx.recv() => {
+                        match maybe_frame {
+                            Some(frame) => {
+                                if let Err(e) = frame_tx.send(frame).await {
+                                    debug!("client channel closed, stopping: {}", e);
+                                    break;
+                                }
+                            }
+                            None => {
+                                debug!("extraction channel closed, stopping");
+                                break;
+                            }
                         }
-                        None => break, // Channel closed, extraction complete
+                    }
+                    result = &mut extraction_handle => {
+                        match result {
+                            Ok(Ok(())) => debug!("extraction task completed successfully"),
+                            Ok(Err(e)) => debug!("extraction task failed: {}", e),
+                            Err(e) => debug!("extraction task panicked: {}", e),
+                        }
+                        break;
                     }
                 }
-                result = &mut extract_handle => {
-                    result??; // Propagate any errors
-                    break;
-                }
+            }
+        })
+        .await;
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                debug!(
+                    "frame extraction timed out after {} seconds",
+                    timeout_duration.as_secs()
+                );
+                // Err(anyhow::anyhow!("frame extraction timed out"))
+                Ok(())
             }
         }
-
-        Ok(())
     }
 }
 
@@ -556,14 +545,13 @@ async fn extract_frame(
     video_file_path: String,
     tasks: Vec<(FrameData, OCREntry)>,
     frame_tx: FrameChannel,
-    disk_cache: Arc<RwLock<FrameDiskCache>>,
+    cache_tx: mpsc::Sender<CacheMessage>,
 ) -> Result<()> {
     if !is_video_file_complete(&ffmpeg, &video_file_path).await? {
         debug!("skipping incomplete video file: {}", video_file_path);
         return Ok(());
     }
 
-    // Extract ALL frames as separate JPEGs
     let temp_dir = tempfile::tempdir()?;
     let output_pattern = temp_dir.path().join("frame%d.jpg");
 
@@ -588,7 +576,6 @@ async fn extract_frame(
         return Ok(());
     }
 
-    // Read all frames
     let mut entries = tokio::fs::read_dir(temp_dir.path()).await?;
     while let Some(entry) = entries.next_entry().await? {
         let frame_data = tokio::fs::read(entry.path()).await?;
@@ -599,39 +586,35 @@ async fn extract_frame(
             video_file_path
         );
 
-        // Group frames by timestamp
         let mut frames_by_timestamp: HashMap<DateTime<Utc>, Vec<DeviceFrame>> = HashMap::new();
 
-        // Process all tasks for this video file
         for (chunk, device_data) in &tasks {
             let cache_key = format!("{}||{}", chunk.timestamp, device_data.device_name);
 
-            // Cache the frame
-            {
-                let mut cache = disk_cache.write().await;
-                cache
-                    .store_frame(
-                        &cache_key,
-                        &frame_data,
-                        device_data.clone(),
-                        &chunk
-                            .audio_entries
-                            .iter()
-                            .map(|a| AudioEntry {
-                                transcription: a.transcription.clone(),
-                                device_name: a.device_name.clone(),
-                                is_input: a.is_input,
-                                audio_file_path: a.audio_file_path.clone(),
-                                duration_secs: a.duration_secs,
-                            })
-                            .collect::<Vec<_>>(),
-                    )
-                    .await?;
-                drop(cache);
-            }
+            let (response_tx, response_rx) = oneshot::channel();
+            cache_tx
+                .send(CacheMessage::Store {
+                    cache_key: cache_key.clone(),
+                    frame_data: frame_data.clone(),
+                    device_data: device_data.clone(),
+                    audio_entries: chunk
+                        .audio_entries
+                        .iter()
+                        .map(|a| AudioEntry {
+                            transcription: a.transcription.clone(),
+                            device_name: a.device_name.clone(),
+                            is_input: a.is_input,
+                            audio_file_path: a.audio_file_path.clone(),
+                            duration_secs: a.duration_secs,
+                        })
+                        .collect(),
+                    response: response_tx,
+                })
+                .await?;
+
+            response_rx.await??;
             debug!("cached frame for {}", device_data.device_name);
 
-            // Group frames by timestamp
             frames_by_timestamp
                 .entry(chunk.timestamp)
                 .or_default()
@@ -664,7 +647,6 @@ async fn extract_frame(
                 });
         }
 
-        // Send all frames for each timestamp
         for (timestamp, device_frames) in frames_by_timestamp {
             frame_tx
                 .send(TimeSeriesFrame {

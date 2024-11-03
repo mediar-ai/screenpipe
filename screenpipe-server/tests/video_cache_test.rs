@@ -365,222 +365,76 @@ async fn test_basic_frame_retrieval() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_frame_storage() -> Result<()> {
+async fn test_frame_ordering() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
-    // Create test frame data
-    let test_timestamp = Utc::now();
-    let test_device_id = "test_device";
-    let cache_key = format!("{}||{}", test_timestamp.to_rfc3339(), test_device_id);
+    // Get frames from last 10 minutes to ensure we have enough samples
+    let target_time = Utc::now() - Duration::minutes(5);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 
-    // Create sample JPEG data (minimal valid JPEG)
-    let frame_data = vec![
-        0xFF, 0xD8, // SOI marker
-        0xFF, 0xE0, 0x00, 0x10, // APP0 segment
-        0x4A, 0x46, 0x49, 0x46, // "JFIF"
-        0x00, 0x01, 0x01, 0x00, // version, units
-        0x00, 0x01, 0x00, 0x01, // density
-        0x00, 0x00, // thumbnail
-        0xFF, 0xD9, // EOI marker
-    ];
+    println!("\nframe ordering test:");
+    println!("------------------");
+    println!("target time: {}", target_time);
 
-    // Create test OCR entry
-    let ocr_entry = OCREntry {
-        device_name: test_device_id.to_string(),
-        video_file_path: "test_video.mp4".to_string(),
-        app_name: "test_app".to_string(),
-        window_name: "test_window".to_string(),
-        text: "test ocr text".to_string(),
-    };
+    // Request frames with a 10-minute window
+    cache.get_frames(target_time, 10, tx, true).await?;
 
-    // Create test audio entries
-    let audio_entries = vec![AudioEntry {
-        transcription: "test transcription".to_string(),
-        device_name: test_device_id.to_string(),
-        is_input: true,
-        audio_file_path: "test_audio.wav".to_string(),
-        duration_secs: 1.0,
-    }];
+    let mut frames = Vec::new();
+    let timeout = tokio::time::sleep(std::time::Duration::from_secs(30));
+    tokio::pin!(timeout);
 
-    // Get write access to disk cache
-    let mut disk_cache = cache.disk_cache.write().await;
-
-    debug!("storing frame");
-    // Store the frame
-    disk_cache
-        .store_frame(&cache_key, &frame_data, ocr_entry, &audio_entries)
-        .await?;
-
-    debug!("saved frame");
-
-    // Drop write lock
-    drop(disk_cache);
-
-    // Get read access to verify storage
-    let disk_cache = cache.disk_cache.read().await;
-
-    // Verify frame was stored correctly
-    if let Some((stored_data, metadata, (stored_timestamp, stored_device))) =
-        disk_cache.get_frame_data(&cache_key).await?
-    {
-        // Verify frame data
-        assert_eq!(stored_data, frame_data, "Frame data mismatch");
-
-        // Verify metadata
-        assert_eq!(metadata.app_name, "test_app", "App name mismatch");
-        assert_eq!(metadata.window_name, "test_window", "Window name mismatch");
-        assert_eq!(metadata.ocr_text, "test ocr text", "OCR text mismatch");
-
-        // Verify timestamp and device
-        assert_eq!(stored_timestamp, test_timestamp, "Timestamp mismatch");
-        assert_eq!(stored_device, test_device_id, "Device ID mismatch");
-
-        println!("✅ frame storage test passed:");
-        println!("- stored {} bytes of frame data", stored_data.len());
-        println!("- metadata verified");
-        println!("- timestamp and device ID verified");
-    } else {
-        panic!("Failed to retrieve stored frame");
-    }
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_frame_storage_edge_cases() -> Result<()> {
-    let (cache, _db) = setup_test_env().await?;
-
-    // Test cases with potentially problematic timestamps and device IDs
-    let test_cases = vec![
-        // Regular case (control)
-        (Utc::now(), "monitor_1", "normal case"),
-        // Timestamp edge cases
-        (Utc::now(), "monitor||1", "device id with pipes"),
-        (Utc::now(), "monitor 1", "device id with spaces"),
-        (Utc::now(), "monitor/1", "device id with slash"),
-        (Utc::now(), "monitor\\1", "device id with backslash"),
-        // Special characters
-        (Utc::now(), "monitor#1", "device id with hash"),
-        (Utc::now(), "monitor:1", "device id with colon"),
-        (Utc::now(), "monitor?1", "device id with question mark"),
-    ];
-
-    // Sample frame data (minimal valid JPEG)
-    let frame_data = vec![
-        0xFF, 0xD8, // SOI marker
-        0xFF, 0xE0, 0x00, 0x10, // APP0 segment
-        0x4A, 0x46, 0x49, 0x46, // "JFIF"
-        0x00, 0x01, 0x01, 0x00, // version, units
-        0x00, 0x01, 0x00, 0x01, // density
-        0x00, 0x00, // thumbnail
-        0xFF, 0xD9, // EOI marker
-    ];
-
-    println!("\nTesting frame storage edge cases:");
-    println!("--------------------------------");
-
-    for (timestamp, device_id, test_desc) in test_cases {
-        println!("\nTesting: {}", test_desc);
-        println!("Timestamp: {}", timestamp);
-        println!("Device ID: {}", device_id);
-
-        let cache_key = format!("{}||{}", timestamp.to_rfc3339(), device_id);
-        println!("Cache key: {}", cache_key);
-
-        // Create test OCR entry
-        let ocr_entry = OCREntry {
-            device_name: device_id.to_string(),
-            video_file_path: "test_video.mp4".to_string(),
-            app_name: "test_app".to_string(),
-            window_name: "test_window".to_string(),
-            text: "test ocr text".to_string(),
-        };
-
-        // Create test audio entries
-        let audio_entries = vec![AudioEntry {
-            transcription: "test transcription".to_string(),
-            device_name: device_id.to_string(),
-            is_input: true,
-            audio_file_path: "test_audio.wav".to_string(),
-            duration_secs: 1.0,
-        }];
-
-        // Get write access to disk cache
-        let mut disk_cache = cache.disk_cache.write().await;
-
-        // Try to store the frame and capture the result
-        match disk_cache
-            .store_frame(&cache_key, &frame_data, ocr_entry, &audio_entries)
-            .await
-        {
-            Ok(_) => {
-                println!("✅ Successfully stored frame");
-                // Try retrieve only if storage succeeded
-                match disk_cache.get_frame_data(&cache_key).await {
-                    Ok(Some(_)) => println!("✅ Successfully retrieved frame"),
-                    Ok(None) => println!("❌ Frame not found after storage"),
-                    Err(e) => println!("❌ Error retrieving frame: {}", e),
+    // Collect all frames
+    loop {
+        tokio::select! {
+            frame = rx.recv() => {
+                match frame {
+                    Some(f) => {
+                        frames.push(f);
+                    }
+                    None => break,
                 }
             }
-            Err(e) => println!("❌ Failed to store frame: {}", e),
+            _ = &mut timeout => {
+                println!("timeout waiting for frames!");
+                break;
+            }
         }
     }
 
-    Ok(())
-}
+    println!("received {} frames", frames.len());
 
-#[tokio::test]
-async fn test_frame_storage_with_rfc3339_variations() -> Result<()> {
-    let (cache, _db) = setup_test_env().await?;
+    // Verify ordering
+    let mut is_ordered = true;
+    let mut prev_timestamp = None;
 
-    // Test cases with different RFC3339 timestamp formats
-    let test_cases = vec![
-        // Standard format
-        "2024-11-03T01:05:11.690182Z",
-        // With space instead of T
-        "2024-11-03 01:05:11.690182Z",
-        // Without microseconds
-        "2024-11-03T01:05:11Z",
-        // With offset
-        "2024-11-03T01:05:11+00:00",
-    ];
+    for (i, frame) in frames.iter().enumerate() {
+        if let Some(prev) = prev_timestamp {
+            if frame.timestamp > prev {
+                is_ordered = false;
+                println!(
+                    "❌ ordering violation at index {}: {} > {} (should be descending)",
+                    i, frame.timestamp, prev
+                );
+            }
+        }
+        prev_timestamp = Some(frame.timestamp);
+    }
 
-    let frame_data = vec![0xFF, 0xD8, 0xFF, 0xD9]; // Minimal JPEG
-    let device_id = "monitor_1";
+    assert!(
+        is_ordered,
+        "frames should be in descending order (newest first)"
+    );
 
-    println!("\nTesting RFC3339 timestamp variations:");
-    println!("-----------------------------------");
+    // Print first few and last few timestamps to visualize the ordering
+    println!("\nfirst 3 frames (should be newest):");
+    for frame in frames.iter().take(3) {
+        println!("  {}", frame.timestamp);
+    }
 
-    for timestamp_str in test_cases {
-        println!("\nTesting timestamp: {}", timestamp_str);
-
-        let cache_key = format!("{}||{}", timestamp_str, device_id);
-        println!("Cache key: {}", cache_key);
-
-        let ocr_entry = OCREntry {
-            device_name: device_id.to_string(),
-            video_file_path: "test_video.mp4".to_string(),
-            app_name: "test_app".to_string(),
-            window_name: "test_window".to_string(),
-            text: "test ocr text".to_string(),
-        };
-
-        let audio_entries = vec![AudioEntry {
-            transcription: "test transcription".to_string(),
-            device_name: device_id.to_string(),
-            is_input: true,
-            audio_file_path: "test_audio.wav".to_string(),
-            duration_secs: 1.0,
-        }];
-
-        let mut disk_cache = cache.disk_cache.write().await;
-
-        match disk_cache
-            .store_frame(&cache_key, &frame_data, ocr_entry, &audio_entries)
-            .await
-        {
-            Ok(_) => println!("✅ Successfully stored frame"),
-            Err(e) => println!("❌ Failed to store frame: {}", e),
+    if frames.len() > 3 {
+        println!("\nlast 3 frames (should be oldest):");
+        for frame in frames.iter().rev().take(3) {
+            println!("  {}", frame.timestamp);
         }
     }
 
