@@ -19,42 +19,34 @@ pub async fn register_shortcuts(
     toggle_recording_shortcut: String,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    debug!("Saving shortcuts - Show: {}, Record: {}", 
+    debug!("Registering shortcuts - Show: {}, Record: {}", 
            show_screenpipe_shortcut, toggle_recording_shortcut);
+
+    // Validate shortcuts are different
+    if show_screenpipe_shortcut == toggle_recording_shortcut {
+        return Err("Show and toggle shortcuts cannot be the same".to_string());
+    }
+
+    // Parse shortcuts first to validate them
+    let show_shortcut = parse_shortcut(&show_screenpipe_shortcut)?;
+    let toggle_shortcut = parse_shortcut(&toggle_recording_shortcut)?;
+
+    // Unregister all existing shortcuts first
+    app_handle.global_shortcut().unregister_all()
+        .map_err(|e| format!("Failed to unregister existing shortcuts: {}", e))?;
 
     // Use the same store path as main.rs
     let data_dir = app_handle.path().local_data_dir().unwrap().join("screenpipe");
     let path = data_dir.join("store.bin");
-    debug!("Store path: {:?}", path);
-    
-    // Log store contents before saving
-    let store = app_handle.store(path.clone());
-    debug!("Current store contents:");
-    if let Some(show) = store.get("show_screenpipe_shortcut") {
-        debug!("show_screenpipe_shortcut: {:?}", show);
-    }
-    if let Some(toggle) = store.get("toggle_recording_shortcut") {
-        debug!("toggle_recording_shortcut: {:?}", toggle);
-    }
+    let store = app_handle.store(path);
     
     // Save to store
     store.set("show_screenpipe_shortcut".to_string(), show_screenpipe_shortcut.clone());
     store.set("toggle_recording_shortcut".to_string(), toggle_recording_shortcut.clone());
-    store.save().map_err(|e| format!("Failed to save shortcuts: {}", e)).unwrap();
-    
-    // Log store contents after saving
-    debug!("Store contents after saving:");
-    if let Some(show) = store.get("show_screenpipe_shortcut") {
-        debug!("show_screenpipe_shortcut: {:?}", show);
-    }
-    if let Some(toggle) = store.get("toggle_recording_shortcut") {
-        debug!("toggle_recording_shortcut: {:?}", toggle);
-    }
+    store.save()
+        .map_err(|e| format!("Failed to save shortcuts: {}", e)).unwrap();
 
-    // Register the shortcuts
-    let show_shortcut = parse_shortcut(&show_screenpipe_shortcut)?;
-    let toggle_shortcut = parse_shortcut(&toggle_recording_shortcut)?;
-
+    // Register the new shortcuts
     app_handle.global_shortcut().register(show_shortcut)
         .map_err(|e| format!("Failed to register show shortcut: {}", e))?;
     app_handle.global_shortcut().register(toggle_shortcut)
