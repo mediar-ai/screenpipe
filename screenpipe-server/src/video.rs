@@ -39,7 +39,6 @@ impl VideoCapture {
         include_list: &[String],
         languages: Vec<Language>,
     ) -> Self {
-        info!("Starting new video capture");
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
         } else {
@@ -71,7 +70,6 @@ impl VideoCapture {
             .await;
         });
 
-        info!("Started capture thread");
 
         // In the _queue_thread
         let _queue_thread = tokio::spawn(async move {

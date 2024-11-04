@@ -100,7 +100,6 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .with(fmt::layer().with_writer(non_blocking))
         .init();
 
-    info!("logging initialized");
     Ok(guard)
 }
 
@@ -264,7 +263,6 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("no audio devices available. audio recording will be disabled.");
         } else {
             for device in &audio_devices {
-                info!("  {}", device);
 
                 let device_control = DeviceControl {
                     is_running: true,
@@ -292,10 +290,7 @@ async fn main() -> anyhow::Result<()> {
                 e
             })?,
     );
-    info!(
-        "database initialized, will store files in {}",
-        local_data_dir.to_string_lossy()
-    );
+
     let db_server = db.clone();
 
     // Channel for controlling the recorder ! TODO RENAME SHIT
@@ -496,6 +491,9 @@ async fn main() -> anyhow::Result<()> {
         "│ friend wearable uid │ {:<34} │",
         cli.friend_wearable_uid.as_deref().unwrap_or("not set")
     );
+    println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
+    println!("│ frame cache         │ {:<34} │", cli.enable_frame_cache);
+
     const VALUE_WIDTH: usize = 34;
 
     // Function to truncate and pad strings
@@ -612,8 +610,6 @@ async fn main() -> anyhow::Result<()> {
             );
         }
     }
-
-    println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
 
     println!("└─────────────────────┴────────────────────────────────────┘");
 
