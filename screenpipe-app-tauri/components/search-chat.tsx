@@ -158,6 +158,75 @@ interface SearchChatProps {
 }
 
 export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
+interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  dataSelector: (results: ContentItem[]) => any;
+  systemPrompt: string;
+}
+
+const AGENTS: Agent[] = [
+  {
+    id: "context-master",
+    name: "context master",
+    description: "analyzes everything: apps, windows, text & audio",
+    systemPrompt:
+      "you analyze all types of data from screen recordings and audio transcriptions. provide comprehensive insights.",
+    dataSelector: (results) => results,
+  },
+  {
+    id: "window-detective",
+    name: "window detective",
+    description: "focuses on app usage patterns",
+    systemPrompt:
+      "you specialize in analyzing app usage patterns and window switching behavior. help users understand their app usage.",
+    dataSelector: (results) =>
+      results
+        .filter(
+          (item) =>
+            item.type === "OCR" &&
+            (item.content.app_name || item.content.window_name)
+        )
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          // @ts-ignore
+          app_name: item.content.app_name,
+          // @ts-ignore
+          window_name: item.content.window_name,
+        })),
+  },
+  {
+    id: "text-oracle",
+    name: "text oracle",
+    description: "analyzes screen text (OCR)",
+    systemPrompt:
+      "you focus on text extracted from screen recordings. help users find and understand text content.",
+    dataSelector: (results) =>
+      results
+        .filter((item) => item.type === "OCR")
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          text: item.content.text,
+          app_name: item.content.app_name,
+        })),
+  },
+  {
+    id: "voice-sage",
+    name: "voice sage",
+    description: "focuses on audio transcriptions",
+    systemPrompt:
+      "you analyze audio transcriptions from recordings. help users understand spoken content.",
+    dataSelector: (results) =>
+      results
+        .filter((item) => item.type === "Audio")
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          transcription: item.content.transcription,
+        })),
+  },
+];
+
   // Search state
   const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
