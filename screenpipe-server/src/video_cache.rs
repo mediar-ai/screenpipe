@@ -43,6 +43,18 @@ pub struct AudioEntry {
     pub duration_secs: f64,
 }
 
+impl From<crate::db::AudioEntry> for AudioEntry {
+    fn from(db_entry: crate::db::AudioEntry) -> Self {
+        Self {
+            transcription: db_entry.transcription,
+            device_name: db_entry.device_name,
+            is_input: db_entry.is_input,
+            audio_file_path: db_entry.audio_file_path,
+            duration_secs: db_entry.duration_secs,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrameMetadata {
     pub file_path: String,
@@ -109,7 +121,7 @@ impl Default for CacheConfig {
             cache_dir: PathBuf::from("frame_cache"),
             max_cache_size_gb: 10.0,
             frame_retention_days: 7,
-            compression_quality: 85,
+            compression_quality: 50,
         }
     }
 }
@@ -202,21 +214,7 @@ impl FrameDiskCache {
             .split_once("||")
             .ok_or_else(|| anyhow::anyhow!("invalid cache key format"))?;
 
-        let clean_timestamp = timestamp_str
-            .trim_end_matches(" UTC")
-            .replace(' ', "T")
-            .trim()
-            .to_string();
-
-        let clean_timestamp = if !clean_timestamp.ends_with('Z') && !clean_timestamp.contains('+') {
-            format!("{}Z", clean_timestamp)
-        } else {
-            clean_timestamp
-        };
-
-        let timestamp = DateTime::parse_from_rfc3339(&clean_timestamp).map_err(|e| {
-            anyhow::anyhow!("failed to parse timestamp '{}': {}", clean_timestamp, e)
-        })?;
+        let timestamp = parse_timestamp(timestamp_str)?;
 
         let frame_path = self.get_frame_path(&timestamp.into(), device_id);
 
@@ -278,17 +276,25 @@ impl FrameDiskCache {
             None => return Ok(None),
         };
 
-        let timestamp = match DateTime::parse_from_rfc3339(timestamp_str) {
+        debug!("cache lookup for key: {}", cache_key);
+
+        let timestamp = match parse_timestamp(timestamp_str) {
             Ok(ts) => ts,
-            Err(_) => return Ok(None),
+            Err(e) => {
+                debug!("failed to parse timestamp {}: {}", timestamp_str, e);
+                return Ok(None);
+            }
         };
 
         let frame_path = self.get_frame_path(&timestamp.into(), device_id);
+        debug!("looking for cached frame at: {:?}", frame_path);
 
         if !frame_path.exists() {
+            debug!("cache miss - frame not found at {:?}", frame_path);
             return Ok(None);
         }
 
+        debug!("cache hit - reading frame from {:?}", frame_path);
         let frame_data = fs::read(&frame_path).await?;
 
         if let Some(entry) = self.entries.get(&(timestamp.into(), device_id.to_string())) {
@@ -301,12 +307,14 @@ impl FrameDiskCache {
                 return Ok(None);
             }
 
+            debug!("successfully retrieved cached frame");
             Ok(Some((
                 frame_data,
                 entry.frame.metadata.clone(),
                 (timestamp.into(), device_id.to_string()),
             )))
         } else {
+            debug!("cache miss - no entry in index for frame");
             Ok(None)
         }
     }
@@ -381,6 +389,7 @@ impl FrameCache {
         frame_tx: FrameChannel,
     ) -> Result<()> {
         let mut extraction_queue = HashMap::new();
+        let mut total_frames = 0;
 
         debug!(
             "extracting frames for time range: {} to {}",
@@ -388,25 +397,12 @@ impl FrameCache {
         );
 
         let mut chunks = self.db.find_video_chunks(start_time, end_time).await?;
-        
-        // Sort frames in descending order by timestamp
-        chunks.frames.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        
-        debug!("found {} chunks", chunks.frames.len());
+        // Sort by timestamp to ensure consistent ordering
+        chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
 
-        let frame_times = chunks
-            .frames
-            .iter()
-            .map(|c| c.timestamp)
-            .collect::<Vec<_>>();
+        debug!("found {} chunks to process", chunks.frames.len());
 
-        debug!(
-            "🎯 requested time range: {} to {} ({} frames)",
-            start_time,
-            end_time,
-            frame_times.len()
-        );
-
+        // First pass: process all cache hits
         for chunk in &chunks.frames {
             let mut timeseries_frame = TimeSeriesFrame {
                 timestamp: chunk.timestamp,
@@ -415,6 +411,7 @@ impl FrameCache {
 
             for device_data in &chunk.ocr_entries {
                 let cache_key = format!("{}||{}", chunk.timestamp, device_data.device_name);
+                debug!("checking cache for key: {}", cache_key);
 
                 let (response_tx, response_rx) = oneshot::channel();
                 self.cache_tx
@@ -424,50 +421,65 @@ impl FrameCache {
                     })
                     .await?;
 
-                if let Ok(Some((frame_data, metadata, _))) = response_rx.await? {
-                    timeseries_frame.frame_data.push(DeviceFrame {
-                        device_id: device_data.device_name.clone(),
-                        image_data: frame_data,
-                        metadata,
-                        audio_entries: chunk
-                            .audio_entries
-                            .iter()
-                            .map(|a| AudioEntry {
-                                transcription: a.transcription.clone(),
-                                device_name: a.device_name.clone(),
-                                is_input: a.is_input,
-                                audio_file_path: a.audio_file_path.clone(),
-                                duration_secs: a.duration_secs,
-                            })
-                            .collect(),
-                    });
-                } else {
-                    extraction_queue
-                        .entry(device_data.video_file_path.clone())
-                        .or_insert_with(Vec::new)
-                        .push((chunk.clone(), device_data.clone()));
+                match response_rx.await? {
+                    Ok(Some((frame_data, metadata, _))) => {
+                        debug!("cache hit for {}", cache_key);
+                        timeseries_frame.frame_data.push(DeviceFrame {
+                            device_id: device_data.device_name.clone(),
+                            image_data: frame_data,
+                            metadata,
+                            audio_entries: chunk
+                                .audio_entries
+                                .iter()
+                                .map(|a| AudioEntry {
+                                    transcription: a.transcription.clone(),
+                                    device_name: a.device_name.clone(),
+                                    is_input: a.is_input,
+                                    audio_file_path: a.audio_file_path.clone(),
+                                    duration_secs: a.duration_secs,
+                                })
+                                .collect(),
+                        });
+                    }
+                    _ => {
+                        debug!("cache miss for {}", cache_key);
+                        extraction_queue
+                            .entry(device_data.video_file_path.clone())
+                            .or_insert_with(Vec::new)
+                            .push((chunk.clone(), device_data.clone()));
+                    }
                 }
             }
 
             if !timeseries_frame.frame_data.is_empty() {
+                total_frames += timeseries_frame.frame_data.len();
+                debug!(
+                    "sending cached frame batch with {} devices",
+                    timeseries_frame.frame_data.len()
+                );
                 frame_tx.send(timeseries_frame).await?;
             }
         }
 
-        let ffmpeg = find_ffmpeg_path().ok_or_else(|| anyhow::anyhow!("ffmpeg not found"))?;
+        // Second pass: handle cache misses
+        if !extraction_queue.is_empty() {
+            let ffmpeg = find_ffmpeg_path().ok_or_else(|| anyhow::anyhow!("ffmpeg not found"))?;
 
-        for (file_path, tasks) in extraction_queue {
-            extract_frame(
-                ffmpeg.clone(),
-                file_path,
-                tasks,
-                frame_tx.clone(),
-                self.cache_tx.clone(),
-            )
-            .await?;
+            for (file_path, tasks) in extraction_queue {
+                debug!("extracting {} frames from {}", tasks.len(), file_path);
+                let extracted = extract_frame(
+                    ffmpeg.clone(),
+                    file_path,
+                    tasks,
+                    frame_tx.clone(),
+                    self.cache_tx.clone(),
+                )
+                .await?;
+                total_frames += extracted;
+            }
         }
-        debug!("extraction queue completed");
 
+        debug!("total frames processed: {}", total_frames);
         Ok(())
     }
 
@@ -546,10 +558,10 @@ async fn extract_frame(
     tasks: Vec<(FrameData, OCREntry)>,
     frame_tx: FrameChannel,
     cache_tx: mpsc::Sender<CacheMessage>,
-) -> Result<()> {
+) -> Result<usize> {
     if !is_video_file_complete(&ffmpeg, &video_file_path).await? {
         debug!("skipping incomplete video file: {}", video_file_path);
-        return Ok(());
+        return Ok(0);
     }
 
     let temp_dir = tempfile::tempdir()?;
@@ -562,9 +574,15 @@ async fn extract_frame(
         "-c:v",
         "mjpeg",
         "-q:v",
-        "3",
+        "8",
+        "-qmin",
+        "8",
+        "-qmax",
+        "12",
         "-vsync",
         "0",
+        "-threads",
+        "2",
         output_pattern.to_str().unwrap(),
     ]);
 
@@ -573,52 +591,54 @@ async fn extract_frame(
     let output = cmd.output().await?;
     if !output.status.success() {
         error!("ffmpeg error: {}", String::from_utf8_lossy(&output.stderr));
-        return Ok(());
+        return Ok(0);
     }
 
+    let mut processed = 0;
     let mut entries = tokio::fs::read_dir(temp_dir.path()).await?;
+    let mut all_frames = Vec::new();
+
     while let Some(entry) = entries.next_entry().await? {
         let frame_data = tokio::fs::read(entry.path()).await?;
+        all_frames.push(frame_data);
+    }
 
-        debug!(
-            "extracted frame of size {} bytes from {}",
-            frame_data.len(),
-            video_file_path
-        );
+    debug!("extracted {} frames from video", all_frames.len());
 
-        let mut frames_by_timestamp: HashMap<DateTime<Utc>, Vec<DeviceFrame>> = HashMap::new();
+    for (task_index, (chunk, device_data)) in tasks.iter().enumerate() {
+        if task_index >= all_frames.len() {
+            debug!("warning: ran out of frames at index {}", task_index);
+            break;
+        }
 
-        for (chunk, device_data) in &tasks {
-            let cache_key = format!("{}||{}", chunk.timestamp, device_data.device_name);
+        let frame_data = &all_frames[task_index];
+        let cache_key = format!("{}||{}", chunk.timestamp, device_data.device_name);
+        debug!("processing frame {} with key {}", task_index, cache_key);
 
-            let (response_tx, response_rx) = oneshot::channel();
-            cache_tx
-                .send(CacheMessage::Store {
-                    cache_key: cache_key.clone(),
-                    frame_data: frame_data.clone(),
-                    device_data: device_data.clone(),
-                    audio_entries: chunk
-                        .audio_entries
-                        .iter()
-                        .map(|a| AudioEntry {
-                            transcription: a.transcription.clone(),
-                            device_name: a.device_name.clone(),
-                            is_input: a.is_input,
-                            audio_file_path: a.audio_file_path.clone(),
-                            duration_secs: a.duration_secs,
-                        })
-                        .collect(),
-                    response: response_tx,
-                })
-                .await?;
+        // Store in cache first
+        let (response_tx, response_rx) = oneshot::channel();
+        cache_tx
+            .send(CacheMessage::Store {
+                cache_key: cache_key.clone(),
+                frame_data: frame_data.clone(),
+                device_data: device_data.clone(),
+                audio_entries: chunk
+                    .audio_entries
+                    .clone()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+                response: response_tx,
+            })
+            .await?;
 
-            response_rx.await??;
-            debug!("cached frame for {}", device_data.device_name);
+        response_rx.await??;
 
-            frames_by_timestamp
-                .entry(chunk.timestamp)
-                .or_default()
-                .push(DeviceFrame {
+        // Then send the frame
+        frame_tx
+            .send(TimeSeriesFrame {
+                timestamp: chunk.timestamp,
+                frame_data: vec![DeviceFrame {
                     device_id: device_data.device_name.clone(),
                     image_data: frame_data.clone(),
                     metadata: FrameMetadata {
@@ -644,24 +664,15 @@ async fn extract_frame(
                             duration_secs: a.duration_secs,
                         })
                         .collect(),
-                });
-        }
+                }],
+            })
+            .await?;
 
-        for (timestamp, device_frames) in frames_by_timestamp {
-            frame_tx
-                .send(TimeSeriesFrame {
-                    timestamp,
-                    frame_data: device_frames,
-                })
-                .await?;
-        }
-
-        debug!("sent frames for entire video file {}", video_file_path);
+        processed += 1;
     }
 
-    debug!("extraction completed");
-
-    Ok(())
+    debug!("processed {} frames from video file", processed);
+    Ok(processed)
 }
 
 async fn is_video_file_complete(ffmpeg_path: &PathBuf, file_path: &str) -> Result<bool> {
@@ -697,4 +708,25 @@ async fn is_video_file_complete(ffmpeg_path: &PathBuf, file_path: &str) -> Resul
             Ok(false)
         }
     }
+}
+
+fn parse_timestamp(timestamp_str: &str) -> Result<DateTime<Utc>> {
+    // First try direct RFC3339 parsing
+    if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp_str) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+
+    // Handle " UTC" suffix by converting to Z format
+    let cleaned = timestamp_str.trim_end_matches(" UTC").replace(' ', "T");
+
+    // Ensure we have a Z or +00:00 timezone marker
+    let timestamp_with_tz = if !cleaned.ends_with('Z') && !cleaned.contains('+') {
+        format!("{}Z", cleaned)
+    } else {
+        cleaned
+    };
+
+    DateTime::parse_from_rfc3339(&timestamp_with_tz)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(|e| anyhow::anyhow!("failed to parse timestamp '{}': {}", timestamp_str, e))
 }

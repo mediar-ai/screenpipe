@@ -1,7 +1,7 @@
 use crate::filtering::filter_texts;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_integrations::friend_wearable::FriendWearableDatabase;
 use screenpipe_vision::OcrEngine;
