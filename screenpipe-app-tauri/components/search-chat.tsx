@@ -1316,13 +1316,17 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
 
       {results.length > 0 && <Separator className="my-8" />}
 
-      {/* Display chat messages */}
-      <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto ">
-        {chatMessages.map((msg, index) => (
-          <ChatMessage key={index} message={msg} />
-        ))}
-        {isAiLoading && spinner}
-      </div>
+      {/* Display chat messages - Update this section */}
+      {(chatMessages.length > 0 || isAiLoading) && (
+        <>
+          <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
+            {chatMessages.map((msg, index) => (
+              <ChatMessage key={index} message={msg} />
+            ))}
+            {isAiLoading && spinner}
+          </div>
+        </>
+      )}
 
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
