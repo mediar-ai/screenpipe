@@ -60,7 +60,7 @@ jobs:
           - platform: "ubuntu-22.04" # Ubuntu x86_64
             args: "--features mkl" # TODO CUDA
             tauri-args: ""
-          - platform: "windows-latest" # Windows x86_64
+          - platform: [self-hosted, windows, x64] # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
@@ -141,7 +141,7 @@ jobs:
           brew install ffmpeg pkg-config
 
       # - name: Install MKL
-      #   if: matrix.platform == 'windows-latest'
+      #   if: matrix.args == '--target x86_64-pc-windows-msvc'
       #   run: |
       #     pip install mkl mkl-devel mkl-static
 
@@ -161,7 +161,7 @@ jobs:
           bun install
 
       # - name: Setup tmate session # HACK
-      #   if: matrix.platform == 'windows-latest'
+      #   if: matrix.args == '--target x86_64-pc-windows-msvc'
       #   uses: mxschmitt/action-tmate@v3
 
       - name: Install wget on Linux
@@ -203,17 +203,17 @@ jobs:
         working-directory: ./screenpipe-app-tauri
 
       - name: Install vcpkg
-        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
-        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
@@ -256,11 +256,11 @@ jobs:
           PKG_CONFIG_PATH: ${{ matrix.platform == 'ubuntu-22.04' && '~/.local/lib/pkgconfig:$PKG_CONFIG_PATH' || '' }}
           MKLROOT: ${{ matrix.platform == 'ubuntu-22.04' && '/opt/intel/mkl' || '' }}
           # Optimize for build speed on Windows
-          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.platform == 'windows-latest' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.platform == 'windows-latest' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.platform == 'windows-latest' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
           # Enable incremental compilation for Windows
-          CARGO_INCREMENTAL: ${{ matrix.platform == 'windows-latest' && '1' || '0' }}
+          CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '1' || '0' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
