@@ -89,7 +89,7 @@ interface SearchChatProps {
   searches: SearchHistory[];
 }
 
-export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps)) {
+export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
   
   interface Agent {
   id: string;
