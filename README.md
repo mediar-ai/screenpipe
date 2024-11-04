@@ -11,7 +11,7 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">rewind.ai x cursor.ai = AI powered by your 24/7 local screen & voice.</p>
+   <p align="center">rewind.ai x cursor.ai = AI powered by your 24/7 screen & voice local recording.</p>
 </p>
 
 <!-- Slogan -->
