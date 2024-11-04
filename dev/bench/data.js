@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730758528155,
+  "lastUpdate": 1730762508009,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -22289,6 +22289,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1906797000,
             "range": "± 15668176",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6f5c25a76524409a0ab21f3e7a12dbf4295a403e",
+          "message": "Merge pull request #627 from Neptune650/self_hosted\n\nUse self-hosted runner for Windows",
+          "timestamp": "2024-11-04T15:11:07-08:00",
+          "tree_id": "d25888fe7b3d6acdc50ff2327505389643642ef0",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/6f5c25a76524409a0ab21f3e7a12dbf4295a403e"
+        },
+        "date": 1730762506265,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2031222125,
+            "range": "± 71452255",
             "unit": "ns/iter"
           }
         ]
