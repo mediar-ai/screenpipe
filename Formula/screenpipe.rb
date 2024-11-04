@@ -15,7 +15,7 @@ class Screenpipe < Formula
   end
   
   depends_on "ffmpeg"
-  depends_on "bun"
+  # depends_on "bun" # not available on brew?
 
   def install
     bin.install Dir["bin/*"]
