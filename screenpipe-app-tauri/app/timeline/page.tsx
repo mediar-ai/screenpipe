@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { platform } from "@tauri-apps/plugin-os";
+import posthog from "posthog-js";
 
 interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -449,6 +450,10 @@ export default function Timeline() {
   };
 
   const handleAskAI = () => {
+    posthog.capture("timeline_toggle_ai_panel", {
+      action: isAiPanelExpanded ? "close" : "open" 
+    });
+
     if (isAiPanelExpanded) {
       setChatMessages([]);
       setIsAiPanelExpanded(false);
@@ -463,6 +468,15 @@ export default function Timeline() {
   };
 
   const handleAiSubmit = async (e: React.FormEvent) => {
+    posthog.capture("timeline_ai_chat", {
+      ai_url: settings.aiUrl,
+      model: settings.aiModel,
+      agent: selectedAgent.name,
+      selection_range_minutes: selectionRange ? 
+        Math.round((selectionRange.end.getTime() - selectionRange.start.getTime()) / 60000) : 0,
+      // Don't include actual messages/content
+    });
+
     e.preventDefault();
     if (!aiInput.trim() || !selectionRange) return;
 
@@ -623,11 +637,21 @@ export default function Timeline() {
   }, [isDraggingPanel, dragOffset]);
 
   const handleRefresh = () => {
+    posthog.capture("timeline_refresh");
+
     setFrames([]);
     setCurrentFrame(null);
     setCurrentIndex(0);
     setIsLoading(true);
     setupEventSource();
+  };
+
+  const handleAgentChange = (agentId: string) => {
+    const newAgent = AGENTS.find(a => a.id === agentId) || AGENTS[0];
+    posthog.capture("timeline_change_agent", {
+      agent: newAgent.name
+    });
+    setSelectedAgent(newAgent);
   };
 
   return (
@@ -853,7 +877,7 @@ export default function Timeline() {
                   <div className="flex flex-col gap-2">
                     <select
                       value={selectedAgent.id}
-                      onChange={(e) => setSelectedAgent(AGENTS.find(a => a.id === e.target.value) || AGENTS[0])}
+                      onChange={(e) => handleAgentChange(e.target.value)}
                       className="w-full bg-black/50 border border-[#0f0] text-[#0f0] rounded px-2 py-1 text-xs"
                     >
                       {AGENTS.map((agent) => (
