@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730742365637,
+  "lastUpdate": 1730742678985,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -21959,6 +21959,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 2045590084,
             "range": "± 183429351",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2bbe645810ab83e54faa4b1b9b4e3b2dd9c5b63",
+          "message": "Merge pull request #621 from tribhuwan-kumar/updater\n\nfix: show updater dialog before updating in windows",
+          "timestamp": "2024-11-04T09:38:26-08:00",
+          "tree_id": "b746eb6d13166fe6b00b28e4e548b75697ad8e2a",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/a2bbe645810ab83e54faa4b1b9b4e3b2dd9c5b63"
+        },
+        "date": 1730742677154,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 2840962916,
+            "range": "± 135676051",
             "unit": "ns/iter"
           }
         ]
