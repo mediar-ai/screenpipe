@@ -81,6 +81,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { SearchHistory } from "@/lib/types/history";
 
+
 interface Agent {
   id: string;
   name: string;
@@ -150,7 +151,6 @@ const AGENTS: Agent[] = [
   },
 ];
 
-export function SearchChat() {
 interface SearchChatProps {
   currentSearchId: string | null;
   onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
