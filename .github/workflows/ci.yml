@@ -54,7 +54,7 @@ jobs:
         working-directory: ./screenpipe-js
 
   test-windows:
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows, x64]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/cache@v3
