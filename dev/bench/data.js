@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1730756722814,
+  "lastUpdate": 1730758528155,
   "repoUrl": "https://github.com/mediar-ai/screenpipe",
   "entries": {
     "OCR Benchmarks": [
@@ -22259,6 +22259,36 @@ window.BENCHMARK_DATA = {
             "name": "Apple Vision OCR/Performance/",
             "value": 1959050645,
             "range": "± 62082865",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "committer": {
+            "email": "louis.beaumont@gmail.com",
+            "name": "Louis Beaumont",
+            "username": "louis030195"
+          },
+          "distinct": true,
+          "id": "097da660e7a8b4090434076bde5743d9beccbdab",
+          "message": "feat: add version in menu\nfix: size of ai chat in timeline\nfix: easier to drag in timeline\nrefactor: timeline not too intrusive",
+          "timestamp": "2024-11-04T14:05:22-08:00",
+          "tree_id": "e70f5289ed2dc28e06c76412a70aa95abcff266a",
+          "url": "https://github.com/mediar-ai/screenpipe/commit/097da660e7a8b4090434076bde5743d9beccbdab"
+        },
+        "date": 1730758526281,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Apple Vision OCR/Performance/",
+            "value": 1906797000,
+            "range": "± 15668176",
             "unit": "ns/iter"
           }
         ]
