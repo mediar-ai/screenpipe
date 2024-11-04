@@ -2,7 +2,7 @@ mod auto_destruct;
 pub mod chunking;
 pub mod cli;
 pub mod core;
-mod db;
+pub mod db;
 pub mod filtering;
 pub mod highlight;
 mod pipe_manager;
