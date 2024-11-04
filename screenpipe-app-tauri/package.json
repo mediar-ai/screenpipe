@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.39",
+    "@dnd-kit/core": "^6.1.0",
     "@mlc-ai/web-llm": "^0.2.51",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-zone": "^1.22.0",
@@ -71,6 +72,7 @@
     "react-day-picker": "8.10.1",
     "react-dom": "^18",
     "react-markdown": "^9.0.1",
+    "react-resizable-panels": "^2.1.6",
     "react-syntax-highlighter": "^15.5.0",
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",

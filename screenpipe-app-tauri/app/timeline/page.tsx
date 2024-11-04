@@ -533,6 +533,9 @@ export default function Timeline() {
             - Convert timestamps to local time for human-readable responses
             - Never output UTC time unless explicitly asked
             - Focus on ${selectedAgent.description}
+            - Follow the user's instructions carefully & to the letter: ${
+              settings.customPrompt
+            }
             `,
         },
         ...chatMessages,
@@ -613,13 +616,11 @@ export default function Timeline() {
   }, []);
 
   const handlePanelMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      setIsDraggingPanel(true);
-      setDragOffset({
-        x: e.clientX - position.x,
-        y: e.clientY - position.y,
-      });
-    }
+    setIsDraggingPanel(true);
+    setDragOffset({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
   };
 
   const handlePanelMouseMove = (e: React.MouseEvent) => {
@@ -838,62 +839,62 @@ export default function Timeline() {
               left: position.x,
               top: position.y,
               width: chatWindowSize.width,
-              height: isAiPanelExpanded ? chatWindowSize.height : 80,
-              cursor: isDraggingPanel ? "grabbing" : "grab",
+              height: isAiPanelExpanded ? chatWindowSize.height : 120,
+              cursor: isDraggingPanel ? "grabbing" : "default",
             }}
             className={`bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]`}
           >
             <div
-              className="p-2 border-b border-muted-foreground select-none flex justify-between items-center group"
+              className="select-none cursor-grab active:cursor-grabbing"
               onMouseDown={handlePanelMouseDown}
               onMouseMove={handlePanelMouseMove}
               onMouseUp={handlePanelMouseUp}
               onMouseLeave={handlePanelMouseUp}
             >
-              <div className="flex items-center gap-2 flex-1 cursor-grab active:cursor-grabbing">
-                <GripHorizontal className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-                <div className="text-muted-foreground text-xs">
-                  {new Date(
-                    selectionRange.start.getTime()
-                  ).toLocaleTimeString()}{" "}
-                  -{" "}
-                  {new Date(selectionRange.end.getTime()).toLocaleTimeString()}
+              <div className="p-4 border-b border-muted-foreground flex justify-between items-center group">
+                <div className="flex items-center gap-2 flex-1">
+                  <GripHorizontal className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+                  <div className="text-muted-foreground text-xs">
+                    {new Date(selectionRange.start.getTime()).toLocaleTimeString()} -{" "}
+                    {new Date(selectionRange.end.getTime()).toLocaleTimeString()}
+                  </div>
                 </div>
-              </div>
-              <button
-                onClick={() => {
-                  setSelectionRange(null);
-                  setIsAiPanelExpanded(false);
-                  setChatMessages([]);
-                  setAiInput("");
-                }}
-                className="text-muted-foreground hover:text-foreground transition-colors ml-2"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="p-4">
-              {!isAiPanelExpanded && (
                 <button
-                  className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
                   onClick={() => {
-                    setIsAiPanelExpanded(true);
-                    setTimeout(() => {
-                      inputRef.current?.focus();
-                    }, 100);
+                    setSelectionRange(null);
+                    setIsAiPanelExpanded(false);
+                    setChatMessages([]);
+                    setAiInput("");
                   }}
+                  className="text-muted-foreground hover:text-foreground transition-colors ml-2"
                 >
-                  <span>ask ai</span>
-                  <span className="text-muted-foreground text-[10px]">
-                    {osType === "macos" ? "⌘K" : "Ctrl+K"}
-                  </span>
+                  <X className="h-4 w-4" />
                 </button>
+              </div>
+
+              {!isAiPanelExpanded && (
+                <div className="p-4">
+                  <button
+                    className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsAiPanelExpanded(true);
+                      setTimeout(() => {
+                        inputRef.current?.focus();
+                      }, 100);
+                    }}
+                  >
+                    <span>ask ai</span>
+                    <span className="text-muted-foreground text-[10px]">
+                      {osType === "macos" ? "⌘K" : "Ctrl+K"}
+                    </span>
+                  </button>
+                </div>
               )}
             </div>
 
             {isAiPanelExpanded && (
-              <div className="flex flex-col h-[calc(100%-100px)]">
+              <div className="flex flex-col h-[calc(100%-52px)]">
                 <div
                   className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 hover:cursor-auto text-foreground font-mono text-sm leading-relaxed"
                   style={{
@@ -916,7 +917,7 @@ export default function Timeline() {
 
                 <form
                   onSubmit={handleAiSubmit}
-                  className="p-4 border-t border-muted-foreground"
+                  className="p-3 border-t border-muted-foreground"
                 >
                   <div className="flex flex-col gap-2">
                     <select
