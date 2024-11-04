@@ -158,7 +158,8 @@ interface SearchChatProps {
 }
 
 export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
-interface Agent {
+  
+  interface Agent {
   id: string;
   name: string;
   description: string;
