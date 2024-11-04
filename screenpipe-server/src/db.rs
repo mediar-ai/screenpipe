@@ -67,6 +67,7 @@ pub enum SearchResult {
     OCR(OCRResult),
     Audio(AudioResult),
     FTS(FTSSearchResult),
+    UI(UiContent),
 }
 
 // Intermediate struct for fetching data
@@ -103,8 +104,9 @@ pub struct OCRResult {
 pub enum ContentType {
     #[default]
     All,
-    OCR, // TODO replace by vision and make this deprecated
+    OCR,
     Audio,
+    UI,
 }
 
 #[derive(FromRow)]
@@ -145,12 +147,17 @@ pub struct DatabaseManager {
 }
 
 // Add this before the DatabaseManager impl block
-#[derive(Serialize, sqlx::FromRow)]
-pub struct UiMonitoringResult {
-    pub app: String,
-    pub window: String,
-    pub text_output: String,
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct UiContent {
+    #[sqlx(rename = "text_output")]
+    pub text: String,
     pub timestamp: DateTime<Utc>,
+    #[sqlx(rename = "app")]
+    pub app_name: String,
+    #[sqlx(rename = "window")]
+    pub window_name: String,
+    pub id: i64,
+    pub initial_traversal_at: Option<DateTime<Utc>>,
 }
 
 impl DatabaseManager {
@@ -488,11 +495,16 @@ impl DatabaseManager {
             && window_name.is_none()
         {
             let audio_results = self
-                .search_audio(
-                    query, limit, offset, start_time, end_time, min_length, max_length,
-                )
+                .search_audio(query, limit, offset, start_time, end_time, min_length, max_length)
                 .await?;
             results.extend(audio_results.into_iter().map(SearchResult::Audio));
+        }
+
+        if content_type == ContentType::All || content_type == ContentType::UI {
+            let ui_results = self
+                .search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit, offset)
+                .await?;
+            results.extend(ui_results.into_iter().map(SearchResult::UI));
         }
 
         Ok(results)
@@ -711,7 +723,7 @@ impl DatabaseManager {
     ) -> Result<usize, sqlx::Error> {
         let mut total_count = 0;
 
-        // If app_name or window_name is specified, only count OCR results
+        // If app_name or window_name is specified, only count OCR and UI results
         if app_name.is_some() || window_name.is_some() {
             let ocr_count = self
                 .count_ocr_results(
@@ -725,13 +737,15 @@ impl DatabaseManager {
                 )
                 .await?;
             total_count += ocr_count;
+
+            let ui_count = self
+                .count_ui_results(query, app_name, window_name, start_time, end_time)
+                .await?;
+            total_count += ui_count;
         } else {
-            // If no app_name or window_name is specified, proceed with normal counting
             if content_type == ContentType::All || content_type == ContentType::OCR {
                 let ocr_count = self
-                    .count_ocr_results(
-                        query, start_time, end_time, None, None, min_length, max_length,
-                    )
+                    .count_ocr_results(query, start_time, end_time, None, None, min_length, max_length)
                     .await?;
                 total_count += ocr_count;
             }
@@ -741,6 +755,13 @@ impl DatabaseManager {
                     .count_audio_results(query, start_time, end_time, min_length, max_length)
                     .await?;
                 total_count += audio_count;
+            }
+
+            if content_type == ContentType::All || content_type == ContentType::UI {
+                let ui_count = self
+                    .count_ui_results(query, None, None, start_time, end_time)
+                    .await?;
+                total_count += ui_count;
             }
         }
 
@@ -785,6 +806,7 @@ impl DatabaseManager {
         let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count as usize)
     }
+
     async fn count_audio_results(
         &self,
         query: &str,
@@ -815,6 +837,63 @@ impl DatabaseManager {
         let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count as usize)
     }
+
+    async fn count_ui_results(
+        &self,
+        query: &str,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<usize, sqlx::Error> {
+        let mut conditions = vec!["1=1"];
+        let mut params: Vec<String> = vec![];
+
+        if !query.is_empty() {
+            conditions.push("text_output LIKE ?");
+            params.push(format!("%{}%", query));
+        }
+
+        if let Some(app) = app_name {
+            conditions.push("app LIKE ?");
+            params.push(format!("%{}%", app));
+        }
+
+        if let Some(window) = window_name {
+            conditions.push("window LIKE ?");
+            params.push(format!("%{}%", window));
+        }
+
+        if let Some(start) = start_time {
+            conditions.push("timestamp >= ?");
+            params.push(start.to_rfc3339());
+        }
+
+        if let Some(end) = end_time {
+            conditions.push("timestamp <= ?");
+            params.push(end.to_rfc3339());
+        }
+
+        let sql = format!(
+            r#"
+            SELECT COUNT(*)
+            FROM ui_monitoring
+            WHERE {}
+            "#,
+            conditions.join(" AND ")
+        );
+
+        let mut query = sqlx::query_as::<_, (i64,)>(&sql);
+        
+        // Bind all the params
+        for param in params {
+            query = query.bind(param);
+        }
+
+        let (count,) = query.fetch_one(&self.pool).await?;
+        Ok(count as usize)
+    }
+
     pub async fn get_latest_timestamps(
         &self,
     ) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>, Option<DateTime<Utc>>), sqlx::Error> {
@@ -1210,7 +1289,7 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<UiMonitoringResult>, sqlx::Error> {
+    ) -> Result<Vec<UiContent>, sqlx::Error> {
         let mut conditions = vec!["1=1"];
         let mut params: Vec<String> = vec![];
 
@@ -1241,7 +1320,13 @@ impl DatabaseManager {
 
         let sql = format!(
             r#"
-            SELECT app, window, text_output, timestamp
+            SELECT 
+                id,
+                text_output as "text",
+                timestamp,
+                app as app_name,
+                window as window_name,
+                initial_traversal_at
             FROM ui_monitoring
             WHERE {}
             ORDER BY timestamp DESC
@@ -1250,7 +1335,7 @@ impl DatabaseManager {
             conditions.join(" AND ")
         );
 
-        let mut query = sqlx::query_as::<_, UiMonitoringResult>(&sql);
+        let mut query = sqlx::query_as::<_, UiContent>(&sql);
         
         // Bind all the params
         for param in params {
