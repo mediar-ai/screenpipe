@@ -60,7 +60,7 @@ export interface Settings {
 
 const defaultSettings: Settings = {
   openaiApiKey: "",
-  deepgramApiKey: "7ed2a159a094337b01fd8178b914b7ae0e77822d", // for now we hardcode our key (dw about using it, we have bunch of credits)
+  deepgramApiKey: "", // for now we hardcode our key (dw about using it, we have bunch of credits)
   isLoading: true,
   aiModel: "gpt-4o",
   installedPipes: [],
@@ -149,8 +149,7 @@ export function useSettings() {
         // no need to call load() as it's done automatically
         const savedKey = (await store!.get<string>("openaiApiKey")) || "";
         const savedDeepgramKey =
-          (await store!.get<string>("deepgramApiKey")) ||
-          "7ed2a159a094337b01fd8178b914b7ae0e77822d";
+          (await store!.get<string>("deepgramApiKey")) || "";
         const savedAiModel = (await store!.get<string>("aiModel")) || "gpt-4o";
         const savedInstalledPipes =
           (await store!.get<Pipe[]>("installedPipes")) || [];
