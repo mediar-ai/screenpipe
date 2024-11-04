@@ -910,7 +910,7 @@ export default function MeetingHistory() {
                                       s.deviceType?.toLowerCase() === "input"
                                         ? "you"
                                         : "others"
-                                    }]`;
+                                    }] ${s.transcription}`
                                   })
                                   .join("\n"),
                                 "transcription"
