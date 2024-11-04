@@ -82,6 +82,7 @@ import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { SearchHistory } from "@/lib/types/history";
 
 
+
 interface SearchChatProps {
   currentSearchId: string | null;
   onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
@@ -89,6 +90,7 @@ interface SearchChatProps {
 }
 
 export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
+
 
 interface Agent {
   id: string;
