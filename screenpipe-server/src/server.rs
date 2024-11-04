@@ -45,7 +45,6 @@ use tokio::net::TcpListener;
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
-use crate::db::UiMonitoringResult;
 // At the top of the file, add:
 #[cfg(feature = "experimental")]
 use enigo::{Enigo, Key, Settings};
@@ -126,6 +125,7 @@ pub enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
     FTS(FTSContent),
+    UI(UiContent),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -164,6 +164,16 @@ pub struct FTSContent {
     pub file_path: String,
     pub original_frame_text: Option<String>,
     pub tags: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UiContent {
+    pub text: String,
+    pub timestamp: DateTime<Utc>,
+    pub app_name: String,
+    pub window_name: String,
+    pub id: i64,
+    pub initial_traversal_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize)]
@@ -317,6 +327,14 @@ pub(crate) async fn search(
                 file_path: fts.video_file_path.clone(),
                 original_frame_text: fts.original_frame_text.clone(),
                 tags: fts.tags.clone(),
+            }),
+            SearchResult::UI(ui) => ContentItem::UI(UiContent {
+                text: ui.text.clone(),
+                timestamp: ui.timestamp,
+                app_name: ui.app_name.clone(),
+                window_name: ui.window_name.clone(),
+                id: ui.id,
+                initial_traversal_at: ui.initial_traversal_at,
             }),
         })
         .collect();
@@ -1202,46 +1220,6 @@ pub struct StreamFramesResponse {
     window_name: Option<String>,
 }
 
-#[derive(Deserialize)]
-pub struct SearchUiMonitoringRequest {
-    q: Option<String>,
-    app_name: Option<String>,
-    window_name: Option<String>,
-    start_time: Option<DateTime<Utc>>,
-    end_time: Option<DateTime<Utc>>,
-    #[serde(default = "default_limit")]
-    limit: u32,
-    #[serde(default)]
-    offset: u32,
-}
-
-async fn search_ui_monitoring(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<SearchUiMonitoringRequest>,
-) -> Result<JsonResponse<Vec<UiMonitoringResult>>, (StatusCode, JsonResponse<Value>)> {
-    let results = state
-        .db
-        .search_ui_monitoring(
-            params.q.as_deref().unwrap_or(""),
-            params.app_name.as_deref(),
-            params.window_name.as_deref(),
-            params.start_time,
-            params.end_time,
-            params.limit,
-            params.offset,
-        )
-        .await
-        .map_err(|e| {
-            error!("failed to search ui monitoring: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": "Database error"})),
-            )
-        })?;
-
-    Ok(JsonResponse(results))
-}
-
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1271,7 +1249,6 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))
-        .route("/ui/search", get(search_ui_monitoring))
         .layer(cors)
 }
 
