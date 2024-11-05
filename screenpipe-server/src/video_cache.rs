@@ -104,13 +104,17 @@ enum CompressionType {
 struct CacheEntry {
     frame: CachedFrame,
     path: PathBuf,
+    #[allow(dead_code)]
     last_accessed: SystemTime,
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct CacheConfig {
     cache_dir: PathBuf,
+    #[allow(dead_code)]
     max_cache_size_gb: f64,
+    #[allow(dead_code)]
     frame_retention_days: u64,
     compression_quality: u8,
 }
