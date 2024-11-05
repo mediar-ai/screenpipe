@@ -14,8 +14,8 @@ jobs:
     env:
       RUSTFLAGS: "-C link-arg=-Wl,--allow-multiple-definition"
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -25,13 +25,14 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - uses: actions-rs/toolchain@v1
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           override: true
+          cache: true
 
-      - uses: oven-sh/setup-bun@v1
+      - uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: .github/scripts/install_dependencies.sh
@@ -56,23 +57,23 @@ jobs:
   test-windows:
     runs-on: [self-hosted, windows, x64]
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~\AppData\Local\cargo\
             target\
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - uses: actions-rs/toolchain@v1
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
-
-      - uses: oven-sh/setup-bun@v1
+          override: true
+          cache: true
 
       - name: setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
 
       - name: Run pre_build.js on
         shell: bash
@@ -100,23 +101,23 @@ jobs:
   test-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~\AppData\Local\cargo\
             target\
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - uses: actions-rs/toolchain@v1
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
-
-      - uses: oven-sh/setup-bun@v1
+          override: true
+          cache: true
 
       - name: setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
 
       - name: Run pre_build.js on
         shell: bash
