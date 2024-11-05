@@ -30,6 +30,7 @@ jobs:
           override: true
           cache: true
           target: ${{ matrix.target }}
+          rustflags: ""
 
       - name: Cache Homebrew packages
         uses: actions/cache@v4

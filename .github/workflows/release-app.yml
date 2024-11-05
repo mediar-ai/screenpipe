@@ -90,6 +90,7 @@ jobs:
           override: true
           target: ${{ matrix.target }}
           cache: true
+          rustflags: ""
 
       - uses: actions/cache@v4
         with:

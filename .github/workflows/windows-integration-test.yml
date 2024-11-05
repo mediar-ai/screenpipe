@@ -18,6 +18,7 @@ jobs:
         toolchain: stable
         override: true
         cache: true
+        rustflags: ""
 
     - name: Install dependencies
       shell: pwsh
