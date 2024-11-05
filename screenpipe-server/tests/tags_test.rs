@@ -14,8 +14,8 @@ use std::{collections::HashMap, path::PathBuf};
 use tower::ServiceExt;
 
 use screenpipe_server::{
-    create_router, AppState, ContentItem, ContentSource, DatabaseManager, PaginatedResponse,
-    PipeManager,
+    create_router, video_cache::FrameCache, AppState, ContentItem, DatabaseManager,
+    PaginatedResponse, PipeManager,
 };
 
 // Add this function to initialize the logger
@@ -34,7 +34,10 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         devices_status: HashMap::new(),
         app_start_time: Utc::now(),
         screenpipe_dir: PathBuf::from(""),
-        pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
+        pipe_manager: Arc::new(PipeManager::new(PathBuf::from("")).0),
+        frame_cache: Some(Arc::new(
+            FrameCache::new(PathBuf::from(""), db).await.unwrap(),
+        )),
     });
 
     let app = create_router().with_state(app_state.clone());

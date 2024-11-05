@@ -132,8 +132,9 @@ pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
         #[cfg(target_os = "macos")]
         let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-        let _ = window.set_visible_on_all_workspaces(true);
-        let _ = window.set_always_on_top(true);
+        // let _ = window.set_visible_on_all_workspaces(true);
+        // let _ = window.set_always_on_top(true);
+        let _ = window.set_decorations(true);
         let _ = window.show();
         let _ = window.set_focus();
     } else {
@@ -143,10 +144,10 @@ pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
             tauri::WebviewUrl::App("timeline.html".into()),
         )
         .title("timeline")
-        .decorations(false)
+        .decorations(true)
         .transparent(true)
-        .always_on_top(true)
-        .visible_on_all_workspaces(true) // Added this
+        // .always_on_top(true)
+        // .visible_on_all_workspaces(true) // Added this
         .center()
         .build()
         .unwrap();
@@ -209,7 +210,6 @@ pub fn update_show_screenpipe_shortcut(
 
         return Err("failed to set shortcut, reverted to default".to_string());
     }
-
 
     Ok(())
 }

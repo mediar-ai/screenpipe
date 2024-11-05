@@ -229,6 +229,7 @@ export function RecordingSettings({
         languages: localSettings.languages,
         enableBeta: localSettings.enableBeta,
         enableFrameCache: localSettings.enableFrameCache,
+        enableUiMonitoring: localSettings.enableUiMonitoring,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);

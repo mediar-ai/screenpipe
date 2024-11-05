@@ -1521,7 +1521,6 @@ pub async fn run_ui() -> Result<()> {
             "swift not found. Please install Xcode Command Line Tools or Xcode"
         ));
     }
-
     // Create a temporary file for the Swift script
     let temp_dir = std::env::temp_dir();
     let script_path = temp_dir.join("ui_monitoring_macos.swift");

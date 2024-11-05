@@ -92,6 +92,14 @@ export function CliCommandDialog({ localSettings }: CliCommandDialogProps) {
       localSettings.languages.forEach((id) => args.push(`--language ${id}`));
     }
 
+    if (localSettings.enableFrameCache) {
+      args.push("--enable-frame-cache");
+    }
+
+    if (localSettings.enableUiMonitoring) {
+      args.push("--enable-ui-monitoring");
+    }
+
     return `${cliPath} ${args.join(" ")}`;
   };
 

@@ -16,7 +16,7 @@ use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
-    video_cache::{FrameCache, FrameCacheConfig},
+    video_cache::{FrameCache, TimeSeriesFrame},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
     ContentType, DatabaseManager, SearchResult,
 };
@@ -794,17 +794,9 @@ impl Server {
             ui_monitoring_enabled: self.ui_monitoring_enabled,
             frame_cache: if enable_frame_cache {
                 Some(Arc::new(
-                    FrameCache::with_config(
-                        self.screenpipe_dir.clone().join("data"),
-                        self.db.clone(),
-                        FrameCacheConfig {
-                            prefetch_size: chrono::Duration::seconds(60),
-                            cleanup_interval: chrono::Duration::minutes(360),
-                            fps: 1.0,
-                        },
-                    )
-                    .await
-                    .unwrap(),
+                    FrameCache::new(self.screenpipe_dir.clone().join("data"), self.db.clone())
+                        .await
+                        .unwrap(),
                 ))
             } else {
                 None
@@ -1204,20 +1196,90 @@ struct InputControlResponse {
     success: bool,
 }
 
+#[derive(Deserialize, PartialEq)]
+enum Order {
+    Ascending,
+    Descending,
+}
+
 // Add this new struct
 #[derive(Deserialize)]
 pub struct StreamFramesRequest {
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
+    // #[serde(rename = "order")]
+    // #[serde(default = "descending")]
+    // order: Order,
 }
 
-#[derive(Serialize)]
-pub struct StreamFramesResponse {
-    frame: String, // base64 encoded frame
-    timestamp: DateTime<Utc>,
-    file_path: String,
-    app_name: Option<String>,
-    window_name: Option<String>,
+#[derive(Debug, Serialize)]
+pub struct StreamTimeSeriesResponse {
+    pub timestamp: DateTime<Utc>,
+    pub devices: Vec<DeviceFrameResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeviceFrameResponse {
+    pub device_id: String,
+    pub frame: String, // base64 encoded image
+    pub metadata: DeviceMetadata,
+    pub audio: Vec<AudioData>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeviceMetadata {
+    pub file_path: String,
+    pub app_name: String,
+    pub window_name: String,
+    pub ocr_text: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AudioData {
+    pub device_name: String,
+    pub is_input: bool,
+    pub transcription: String,
+    pub audio_file_path: String,
+    pub duration_secs: f64,
+    pub start_offset: f64, // offset from frame timestamp
+}
+
+impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
+    fn from(frame: TimeSeriesFrame) -> Self {
+        StreamTimeSeriesResponse {
+            timestamp: frame.timestamp,
+            devices: frame
+                .frame_data
+                .into_iter()
+                .map(|device_frame| {
+                    DeviceFrameResponse {
+                        device_id: device_frame.device_id,
+                        frame: BASE64_STANDARD.encode(&device_frame.image_data),
+                        metadata: DeviceMetadata {
+                            file_path: device_frame.metadata.file_path,
+                            app_name: device_frame.metadata.app_name,
+                            window_name: device_frame.metadata.window_name,
+                            ocr_text: device_frame.metadata.ocr_text,
+                        },
+                        audio: device_frame
+                            .audio_entries
+                            .into_iter()
+                            .map(|audio| {
+                                AudioData {
+                                    device_name: audio.device_name,
+                                    is_input: audio.is_input,
+                                    transcription: audio.transcription,
+                                    audio_file_path: audio.audio_file_path,
+                                    duration_secs: audio.duration_secs,
+                                    start_offset: 0.0, // calculate based on audio timestamp vs frame timestamp
+                                }
+                            })
+                            .collect(),
+                    }
+                })
+                .collect(),
+        }
+    }
 }
 
 pub fn create_router() -> Router<Arc<AppState>> {
@@ -1265,29 +1327,39 @@ async fn stream_frames_handler(
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
     let cache = state.frame_cache.as_ref().unwrap().clone();
 
-    // Spawn frame extraction task
+    // Calculate duration in minutes between start and end time
+    let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1) as i64;
+
+    // Calculate center timestamp
+    let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
+
+    // Use a cancellation token to handle client disconnection
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+
+    // Spawn frame extraction task using get_frames
     tokio::spawn({
+        let frame_tx = frame_tx.clone();
         async move {
-            if let Err(e) = cache
-                .extract_frames_range(&request.start_time, &request.end_time, frame_tx)
-                .await
-            {
-                error!("frame extraction failed: {}", e);
+            tokio::select! {
+                result = cache.get_frames(center_timestamp, duration_minutes, frame_tx, true) => {
+                    if let Err(e) = result {
+                        error!("frame extraction failed: {}", e);
+                    }
+                }
+                _ = cancel_rx => {
+                    debug!("client disconnected, stopping frame stream");
+                }
             }
         }
     });
 
     let stream = async_stream::stream! {
-        while let Some((timestamp, frame_data, file_path, app_name, window_name)) = frame_rx.recv().await {
-            let response = StreamFramesResponse {
-                frame: BASE64_STANDARD.encode(&frame_data),
-                timestamp,
-                file_path,
-                app_name: Some(app_name),
-                window_name: Some(window_name),
-            };
+        let _cancel_guard = scopeguard::guard(cancel_tx, |tx| {
+            let _ = tx.send(());  // Signal cancellation when stream is dropped
+        });
 
-            if let Ok(json) = serde_json::to_string(&response) {
+        while let Some(timeseries_frame) = frame_rx.recv().await {
+            if let Ok(json) = serde_json::to_string(&StreamTimeSeriesResponse::from(timeseries_frame)) {
                 yield Ok(Event::default().data(json));
             }
         }
