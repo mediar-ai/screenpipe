@@ -20,9 +20,13 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
   const hasMP4File = (content: string) =>
     content.trim().toLowerCase().includes(".mp4");
 
+  if (!message?.content?.trim()) {
+    return null;
+  }
+
   return (
     <div
-      className={cn("group relative mb-4 flex items-start  w-full")}
+      className={cn("group relative mb-4 flex items-start w-full")}
       {...props}
     >
       <div

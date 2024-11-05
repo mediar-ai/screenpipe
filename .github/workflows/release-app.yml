@@ -54,7 +54,7 @@ jobs:
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin"
           - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin --features metal,beta"
+            args: "--target x86_64-apple-darwin --features metal,beta,mkl"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
@@ -267,6 +267,7 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
           # Enable incremental compilation for Windows
           CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '1' || '0' }}
+
           RUSTFLAGS: "-A warnings"
         with:
           args: ${{ matrix.tauri-args }}

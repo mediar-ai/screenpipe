@@ -79,6 +79,18 @@ import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { SearchHistory } from "@/lib/types/history";
+
+
+
+interface SearchChatProps {
+  currentSearchId: string | null;
+  onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
+  searches: SearchHistory[];
+}
+
+export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
+
 
 interface Agent {
   id: string;
@@ -149,7 +161,6 @@ const AGENTS: Agent[] = [
   },
 ];
 
-export function SearchChat() {
   // Search state
   const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
@@ -430,7 +441,10 @@ export function SearchChat() {
       role: "user" as const,
       content: floatingInput,
     };
-    setChatMessages((prevMessages) => [...prevMessages, userMessage]);
+    setChatMessages((prevMessages) => [
+      ...prevMessages,
+      { id: generateId(), role: "assistant", content: "" },
+    ]);
     setFloatingInput("");
     setIsAiLoading(true);
 
@@ -496,8 +510,8 @@ export function SearchChat() {
       let fullResponse = "";
       // @ts-ignore
       setChatMessages((prevMessages) => [
-        ...prevMessages,
-        { role: "assistant", content: "" },
+        ...prevMessages.slice(0, -1),
+        { id: generateId(), role: "assistant", content: fullResponse },
       ]);
 
       setIsUserScrolling(false);
@@ -510,7 +524,7 @@ export function SearchChat() {
         // @ts-ignore
         setChatMessages((prevMessages) => [
           ...prevMessages.slice(0, -1),
-          { role: "assistant", content: fullResponse },
+          { id: generateId(), role: "assistant", content: fullResponse },
         ]);
         scrollToBottom();
       }
@@ -565,20 +579,21 @@ export function SearchChat() {
     });
 
     try {
-      const response = await queryScreenpipe({
+      const searchParams = {
         q: query || undefined,
         content_type: overrides.contentType || contentType,
         limit: overrides.limit || limit,
         offset: newOffset,
-        start_time:
-          overrides.startDate?.toISOString() || startDate.toISOString(),
+        start_time: overrides.startDate?.toISOString() || startDate.toISOString(),
         end_time: endDate.toISOString(),
         app_name: overrides.appName || appName || undefined,
         window_name: overrides.windowName || windowName || undefined,
         include_frames: includeFrames,
         min_length: overrides.minLength || minLength,
         max_length: maxLength,
-      });
+      };
+
+      const response = await queryScreenpipe(searchParams);
 
       if (!response || !Array.isArray(response.data)) {
         throw new Error("invalid response data");
@@ -586,6 +601,9 @@ export function SearchChat() {
 
       setResults(response.data);
       setTotalResults(response.pagination.total);
+
+      // Save search to history
+      await onAddSearch(searchParams, response.data);
     } catch (error) {
       console.error("search error:", error);
       toast({
@@ -809,6 +827,41 @@ export function SearchChat() {
         </motion.div>
       ));
   };
+
+  // Add effect to restore search when currentSearchId changes
+  useEffect(() => {
+    if (currentSearchId) {
+      const selectedSearch = searches.find(s => s.id === currentSearchId);
+      if (selectedSearch) {
+        // Restore search parameters
+        setQuery(selectedSearch.searchParams.q || '');
+        setContentType(selectedSearch.searchParams.content_type);
+        setLimit(selectedSearch.searchParams.limit);
+        setStartDate(new Date(selectedSearch.searchParams.start_time));
+        setEndDate(new Date(selectedSearch.searchParams.end_time));
+        setAppName(selectedSearch.searchParams.app_name || '');
+        setWindowName(selectedSearch.searchParams.window_name || '');
+        setIncludeFrames(selectedSearch.searchParams.include_frames);
+        setMinLength(selectedSearch.searchParams.min_length);
+        setMaxLength(selectedSearch.searchParams.max_length);
+        
+        // Restore results
+        setResults(selectedSearch.results);
+        setTotalResults(selectedSearch.results.length);
+        setHasSearched(true);
+        setShowExamples(false);
+        
+        // Restore messages if any
+        if (selectedSearch.messages) {
+          setChatMessages(selectedSearch.messages.map(msg => ({
+            id: msg.id,
+            role: msg.type === 'ai' ? 'assistant' : 'user',
+            content: msg.content
+          })));
+        }
+      }
+    }
+  }, [currentSearchId, searches]);
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
@@ -1364,13 +1417,17 @@ export function SearchChat() {
 
       {results.length > 0 && <Separator className="my-8" />}
 
-      {/* Display chat messages */}
-      <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto ">
-        {chatMessages.map((msg, index) => (
-          <ChatMessage key={index} message={msg} />
-        ))}
-        {isAiLoading && spinner}
-      </div>
+      {/* Display chat messages - Update this section */}
+      {(chatMessages.length > 0 || isAiLoading) && (
+        <>
+          <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
+            {chatMessages.map((msg, index) => (
+              <ChatMessage key={index} message={msg} />
+            ))}
+            {isAiLoading && spinner}
+          </div>
+        </>
+      )}
 
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
