@@ -286,33 +286,45 @@ impl FrameDiskCache {
             }
         };
 
-        let frame_path = self.get_frame_path(&timestamp.into(), device_id);
-        debug!("looking for cached frame at: {:?}", frame_path);
-
-        if !frame_path.exists() {
-            debug!("cache miss - frame not found at {:?}", frame_path);
-            return Ok(None);
-        }
-
-        debug!("cache hit - reading frame from {:?}", frame_path);
-        let frame_data = fs::read(&frame_path).await?;
-
+        // First check if we have the entry before reading the file
         if let Some(entry) = self.entries.get(&(timestamp.into(), device_id.to_string())) {
-            let mut hasher = Sha256::new();
-            hasher.update(&frame_data);
-            let checksum = format!("{:x}", hasher.finalize());
+            let frame_path = &entry.path;
 
-            if checksum != entry.frame.checksum {
-                debug!("checksum mismatch for frame at {}:{}", timestamp, device_id);
-                return Ok(None);
+            // Only verify checksum periodically (e.g., every 100th access) or if file size changed
+            let metadata = match fs::metadata(&frame_path).await {
+                Ok(m) => m,
+                Err(_) => return Ok(None),
+            };
+
+            let should_verify =
+                metadata.len() != entry.frame.frame_size || fastrand::u32(0..100) == 0; // Random periodic verification
+
+            if should_verify {
+                debug!("verifying checksum for cached frame");
+                let frame_data = fs::read(&frame_path).await?;
+                let mut hasher = Sha256::new();
+                hasher.update(&frame_data);
+                let checksum = format!("{:x}", hasher.finalize());
+
+                if checksum != entry.frame.checksum {
+                    debug!("checksum mismatch for frame at {}:{}", timestamp, device_id);
+                    return Ok(None);
+                }
+
+                Ok(Some((
+                    frame_data,
+                    entry.frame.metadata.clone(),
+                    (timestamp.into(), device_id.to_string()),
+                )))
+            } else {
+                // Fast path - skip checksum verification
+                let frame_data = fs::read(&frame_path).await?;
+                Ok(Some((
+                    frame_data,
+                    entry.frame.metadata.clone(),
+                    (timestamp.into(), device_id.to_string()),
+                )))
             }
-
-            debug!("successfully retrieved cached frame");
-            Ok(Some((
-                frame_data,
-                entry.frame.metadata.clone(),
-                (timestamp.into(), device_id.to_string()),
-            )))
         } else {
             debug!("cache miss - no entry in index for frame");
             Ok(None)
@@ -488,25 +500,28 @@ impl FrameCache {
         timestamp: DateTime<Utc>,
         duration_minutes: i64,
         frame_tx: Sender<TimeSeriesFrame>,
-        _descending: bool,
+        descending: bool,
     ) -> Result<()> {
         let start = timestamp - Duration::minutes(duration_minutes / 2);
         let end = timestamp + Duration::minutes(duration_minutes / 2);
 
         let (extract_tx, mut extract_rx) = mpsc::channel(100);
 
+        let mut streamer =
+            OrderedFrameStreamer::new(frame_tx, Duration::seconds(60 * 1), descending);
+
+        // Spawn extraction task
         let mut extraction_handle = {
             let cache_clone = self.clone();
             tokio::spawn(async move {
                 let result = cache_clone
                     .extract_frames_batch(start, end, extract_tx)
                     .await;
-                debug!("extraction task finished with result: {:?}", result.is_ok());
+                debug!("extraction task completed: {:?}", result.is_ok());
                 result
             })
         };
 
-        // 30 s x duration of the requested time range
         let timeout_duration = tokio::time::Duration::from_secs(10 * duration_minutes as u64);
         let result = tokio::time::timeout(timeout_duration, async {
             loop {
@@ -514,26 +529,30 @@ impl FrameCache {
                     maybe_frame = extract_rx.recv() => {
                         match maybe_frame {
                             Some(frame) => {
-                                if let Err(e) = frame_tx.send(frame).await {
-                                    debug!("client channel closed, stopping: {}", e);
+                                if let Err(e) = streamer.push(frame).await {
+                                    debug!("failed to push frame: {}", e);
                                     break;
                                 }
                             }
                             None => {
-                                debug!("extraction channel closed, stopping");
+                                debug!("extraction channel closed");
                                 break;
                             }
                         }
                     }
                     result = &mut extraction_handle => {
                         match result {
-                            Ok(Ok(())) => debug!("extraction task completed successfully"),
-                            Ok(Err(e)) => debug!("extraction task failed: {}", e),
+                            Ok(Ok(())) => debug!("extraction completed successfully"),
+                            Ok(Err(e)) => debug!("extraction failed: {}", e),
                             Err(e) => debug!("extraction task panicked: {}", e),
                         }
                         break;
                     }
                 }
+            }
+
+            if let Err(e) = streamer.finish().await {
+                debug!("error during final flush: {}", e);
             }
         })
         .await;
@@ -545,7 +564,6 @@ impl FrameCache {
                     "frame extraction timed out after {} seconds",
                     timeout_duration.as_secs()
                 );
-                // Err(anyhow::anyhow!("frame extraction timed out"))
                 Ok(())
             }
         }
@@ -729,4 +747,112 @@ fn parse_timestamp(timestamp_str: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(&timestamp_with_tz)
         .map(|dt| dt.with_timezone(&Utc))
         .map_err(|e| anyhow::anyhow!("failed to parse timestamp '{}': {}", timestamp_str, e))
+}
+
+struct OrderedFrameStreamer {
+    buffer: BTreeMap<DateTime<Utc>, Vec<TimeSeriesFrame>>,
+    window_size: Duration,
+    last_sent: Option<DateTime<Utc>>,
+    tx: mpsc::Sender<TimeSeriesFrame>,
+    descending: bool,
+}
+
+impl OrderedFrameStreamer {
+    fn new(tx: mpsc::Sender<TimeSeriesFrame>, window_size: Duration, descending: bool) -> Self {
+        Self {
+            buffer: BTreeMap::new(),
+            window_size,
+            last_sent: None,
+            tx,
+            descending,
+        }
+    }
+
+    async fn push(&mut self, frame: TimeSeriesFrame) -> Result<()> {
+        let ts = frame.timestamp;
+        self.buffer.entry(ts).or_default().push(frame);
+
+        // Sort frames within each timestamp by device_id for consistency
+        if let Some(frames) = self.buffer.get_mut(&ts) {
+            frames.sort_by(|a, b| {
+                a.frame_data
+                    .first()
+                    .map(|f| &f.device_id)
+                    .cmp(&b.frame_data.first().map(|f| &f.device_id))
+            });
+        }
+
+        self.flush_window().await
+    }
+
+    async fn flush_window(&mut self) -> Result<()> {
+        if self.last_sent.is_none() && !self.buffer.is_empty() {
+            self.last_sent = if self.descending {
+                self.buffer.keys().next_back().copied()
+            } else {
+                self.buffer.keys().next().copied()
+            };
+        }
+
+        let Some(last_sent) = self.last_sent else {
+            return Ok(());
+        };
+
+        // Determine the window range based on direction
+        let window_range = if self.descending {
+            (last_sent - self.window_size)..=last_sent
+        } else {
+            last_sent..=(last_sent + self.window_size)
+        };
+
+        // Collect frames that are ready to be sent
+        let mut ready_frames = Vec::new();
+        for (_, frames) in self.buffer.range(window_range) {
+            ready_frames.extend(frames.iter().cloned());
+        }
+
+        // Sort all collected frames
+        ready_frames.sort_by_key(|frame| {
+            if self.descending {
+                std::cmp::Reverse(frame.timestamp)
+            } else {
+                std::cmp::Reverse(std::cmp::Reverse(frame.timestamp)).0
+            }
+        });
+
+        // Send frames and update buffer
+        for frame in ready_frames {
+            let ts = frame.timestamp;
+            self.tx.send(frame).await?;
+            self.buffer.remove(&ts);
+            self.last_sent = Some(ts);
+        }
+
+        Ok(())
+    }
+
+    async fn finish(self) -> Result<()> {
+        let mut all_frames = Vec::new();
+
+        // Collect all remaining frames
+        for frames in self.buffer.values() {
+            all_frames.extend(frames.iter().cloned());
+        }
+
+        // Sort them according to the desired order
+        all_frames.sort_by_key(|frame| {
+            if self.descending {
+                std::cmp::Reverse(frame.timestamp)
+            } else {
+                std::cmp::Reverse(std::cmp::Reverse(frame.timestamp)).0
+            }
+        });
+
+        // Send all remaining frames
+        for frame in all_frames {
+            self.tx.send(frame).await?;
+        }
+
+        Ok(())
+    }
 }

@@ -191,21 +191,10 @@ export default function Timeline() {
             const exists = prev.some((f) => f.timestamp === data.timestamp);
             if (exists) return prev;
 
-            // Get current timestamp if there's a current frame
-            const currentTimestamp = prev[currentIndex]?.timestamp;
-
             // Add new frame and sort
             const newFrames = [...prev, data].sort((a, b) => {
               return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             });
-
-            // If we have a current frame, adjust the currentIndex
-            if (currentTimestamp) {
-              const newIndex = newFrames.findIndex(f => f.timestamp === currentTimestamp);
-              if (newIndex !== -1) {
-                setCurrentIndex(newIndex);
-              }
-            }
 
             return newFrames;
           });
@@ -727,6 +716,7 @@ export default function Timeline() {
       style={{
         height: "100vh",
         overscrollBehavior: "none",
+        overflow: "hidden", 
         WebkitUserSelect: "none",
         userSelect: "none",
         MozUserSelect: "none",
