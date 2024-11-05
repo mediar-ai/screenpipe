@@ -117,6 +117,7 @@ struct CacheConfig {
     #[allow(dead_code)]
     frame_retention_days: u64,
     compression_quality: u8,
+    fps: f64,
 }
 
 impl Default for CacheConfig {
@@ -126,6 +127,7 @@ impl Default for CacheConfig {
             max_cache_size_gb: 10.0,
             frame_retention_days: 7,
             compression_quality: 50,
+            fps: 0.1,
         }
     }
 }
@@ -586,13 +588,50 @@ async fn extract_frame(
         return Ok(0);
     }
 
+    // Get source FPS from video metadata
+    let source_fps = match get_video_fps(&ffmpeg, &video_file_path).await {
+        Ok(fps) => fps,
+        Err(e) => {
+            error!("failed to get video fps, using default 1fps: {}", e);
+            1.0
+        }
+    };
+
     let temp_dir = tempfile::tempdir()?;
     let output_pattern = temp_dir.path().join("frame%d.jpg");
+
+    // Calculate frame interval based on target FPS
+    let frame_interval = (source_fps / 0.1).round() as i64; // Using 0.1 as target FPS
+    
+    debug!("extracting frames with interval {} (source: {}fps, target: {}fps)", 
+           frame_interval, source_fps, 0.1);
+
+    // Calculate which frames to extract
+    let frame_positions: Vec<String> = tasks
+        .iter()
+        .filter_map(|(frame, _)| {
+            // Only select frames that align with our target FPS
+            if frame.offset_index as i64 % frame_interval == 0 {
+                Some(format!("select=eq(n\\,{})", frame.offset_index))
+            } else {
+                None
+            }
+        })
+        .collect();
+    
+    if frame_positions.is_empty() {
+        debug!("no frames to extract after applying fps filter");
+        return Ok(0);
+    }
+
+    let select_filter = frame_positions.join("+");
 
     let mut cmd = Command::new(&ffmpeg);
     cmd.args([
         "-i",
         &video_file_path,
+        "-vf",
+        &select_filter,
         "-c:v",
         "mjpeg",
         "-q:v",
@@ -859,4 +898,31 @@ impl OrderedFrameStreamer {
 
         Ok(())
     }
+}
+
+async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
+    let output = Command::new(ffmpeg_path)
+        .args([
+            "-i",
+            video_path,
+        ])
+        .output()
+        .await?;
+
+    // ffmpeg outputs metadata to stderr by design
+    let metadata = String::from_utf8_lossy(&output.stderr);
+    
+    // Look for fps info in patterns like: "23.98 fps" or "30 fps" or "29.97 fps"
+    let fps = metadata
+        .lines()
+        .find(|line| line.contains("fps") && !line.contains("Stream"))
+        .and_then(|line| {
+            line.split_whitespace()
+                .find(|&word| word.parse::<f64>().is_ok())
+                .and_then(|n| n.parse::<f64>().ok())
+        })
+        .unwrap_or(1.0);
+
+    debug!("detected fps from video metadata: {}", fps);
+    Ok(fps)
 }
