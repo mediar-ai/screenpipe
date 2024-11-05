@@ -9,9 +9,9 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -21,10 +21,12 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - uses: actions-rs/toolchain@v1
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
+          override: true
+          cache: true
 
       - name: Install dependencies
         run: |
@@ -79,13 +81,13 @@ jobs:
           EOF
 
       - name: Upload memory usage data
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: memory-usage-data
           path: memory_usage.csv
 
       - name: Upload memory usage graph
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: memory-usage-graph
           path: memory_usage_graph.png
@@ -102,7 +104,7 @@ jobs:
           sqlite3 ~/.screenpipe/db.sqlite "SELECT COUNT(*) FROM audio_transcriptions;"
 
       - name: Upload screenpipe data
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: screenpipe-data
           path: |

@@ -10,7 +10,7 @@ jobs:
     name: Run Apple OCR benchmark
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
@@ -24,7 +24,7 @@ jobs:
           cargo bench --bench ocr_benchmark -- --output-format bencher | tee -a ocr_output.txt
 
       - name: Upload OCR benchmark artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ocr-benchmark-data
           path: ocr_output.txt
@@ -33,7 +33,7 @@ jobs:
     name: Run Tesseract OCR benchmark
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
@@ -46,7 +46,7 @@ jobs:
           cargo bench --bench ocr_benchmark -- --output-format bencher | tee -a ocr_output.txt
 
       - name: Upload OCR benchmark artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ocr-benchmark-data
           path: ocr_output.txt
@@ -55,7 +55,7 @@ jobs:
     name: Run Windows OCR benchmark
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run Windows OCR benchmarks
@@ -65,7 +65,7 @@ jobs:
           # | Tee-Object -Append -FilePath ocr_output.txt
 
       - name: Upload OCR benchmark artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ocr-benchmark-data
           path: ocr_output.txt
@@ -74,7 +74,7 @@ jobs:
     name: Run STT benchmark
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
@@ -87,7 +87,7 @@ jobs:
           cargo bench --bench stt_benchmark -- --output-format bencher | tee -a stt_output.txt
 
       - name: Upload STT benchmark artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: stt-benchmark-data
           path: stt_output.txt
@@ -102,7 +102,7 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download benchmark data
         uses: actions/download-artifact@v3

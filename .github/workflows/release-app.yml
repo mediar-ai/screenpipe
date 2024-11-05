@@ -165,6 +165,22 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: sudo apt-get install -y wget
 
+      - name: Install vcpkg
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "2a3138723698306f4261632c92dc782f586167e3"
+
+      - name: Set up MSVC
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install LLVM and Clang
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
+
       - name: Run pre_build.js
         shell: bash
         env:
@@ -198,22 +214,6 @@ jobs:
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
-
-      - name: Install vcpkg
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
-
-      - name: Set up MSVC
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Install LLVM and Clang
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "10.0"
 
       - name: Free Disk Space (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
