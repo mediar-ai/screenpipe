@@ -16,7 +16,6 @@ use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
 use screenpipe_vision::monitor::list_monitors;
-use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
@@ -720,21 +719,24 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Start the UI monitoring task
-    #[cfg(target_os = "macos")]
-    if cli.enable_ui_monitoring {
-        let shutdown_tx_clone = shutdown_tx.clone();
-        tokio::spawn(async move {
-            let mut shutdown_rx = shutdown_tx_clone.subscribe();
-            
-            tokio::select! {
-                _ = run_ui() => {
-                    error!("ui monitoring stopped unexpectedly");
+    if cfg!(target_os = "macos") {
+        use screenpipe_vision::run_ui;
+
+        if cli.enable_ui_monitoring {
+            let shutdown_tx_clone = shutdown_tx.clone();
+            tokio::spawn(async move {
+                let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                
+                tokio::select! {
+                    _ = run_ui() => {
+                        error!("ui monitoring stopped unexpectedly");
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("received shutdown signal, stopping ui monitoring");
+                    }
                 }
-                _ = shutdown_rx.recv() => {
-                    info!("received shutdown signal, stopping ui monitoring");
-                }
-            }
-        });
+            });
+        }
     }
 
     let pipe_control_future = async {

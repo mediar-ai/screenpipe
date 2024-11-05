@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: create draft release
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0.2
         with:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
@@ -80,21 +80,30 @@ jobs:
             sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
           fi
 
-      - name: setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Rust
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        run: |
+          wget https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe
+          .\rustup-init.exe -y
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
           target: ${{ matrix.target }}
+          cache: true
+          rustflags: ""
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index/
@@ -108,7 +117,7 @@ jobs:
 
       - name: Cache Homebrew packages
         if: matrix.platform == 'macos-latest'
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/Homebrew
@@ -168,6 +177,22 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: sudo apt-get install -y wget
 
+      - name: Install vcpkg
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "2a3138723698306f4261632c92dc782f586167e3"
+
+      - name: Set up MSVC
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install LLVM and Clang
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
+
       - name: Run pre_build.js
         shell: bash
         env:
@@ -178,11 +203,8 @@ jobs:
 
       - name: Build CLI
         shell: bash
-        # TODO: too slow
-        # env:
-        #   CARGO_PROFILE_RELEASE_LTO: "true"
-        #   CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
-        #   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+        env:
+          RUSTFLAGS: "-A warnings"
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -201,22 +223,6 @@ jobs:
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
-
-      - name: Install vcpkg
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
-
-      - name: Set up MSVC
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Install LLVM and Clang
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "10.0"
 
       - name: Free Disk Space (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
@@ -261,13 +267,15 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
           # Enable incremental compilation for Windows
           CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '1' || '0' }}
+
+          RUSTFLAGS: "-A warnings"
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0.2
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}

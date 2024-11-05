@@ -24,15 +24,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
+          cache: true
           target: ${{ matrix.target }}
+          rustflags: ""
 
       - name: Cache Homebrew packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/Homebrew
@@ -46,7 +47,7 @@ jobs:
         run: |
           brew install ffmpeg pkg-config
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -123,7 +124,7 @@ jobs:
           gh pr create --base main --head update-formula-${{ matrix.target }}-${{ github.sha }} --title "Update Homebrew formula for ${{ matrix.target }}" --body "Automated PR to update Homebrew formula for ${{ matrix.target }}"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: screenpipe-macos-${{ matrix.target }}
           path: screenpipe-*.tar.gz
@@ -132,7 +133,7 @@ jobs:
   #   runs-on: ubuntu-latest
   #   steps:
   #     - name: Checkout code
-  #       uses: actions/checkout@v2
+  #       uses: actions/checkout@v4
 
   #     - name: Install dependencies
   #       run: |
@@ -172,7 +173,7 @@ jobs:
   #         tar -czvf screenpipe-linux.tar.gz screenpipe-linux
 
   #     - name: Upload Artifact
-  #       uses: actions/upload-artifact@v3
+  #       uses: actions/upload-artifact@v4
   #       with:
   #         name: screenpipe-linux
   #         path: screenpipe-linux.tar.gz
@@ -181,7 +182,7 @@ jobs:
   #   runs-on: windows-latest
   #   steps:
   #     - name: Checkout code
-  #       uses: actions/checkout@v2
+  #       uses: actions/checkout@v4
 
   #     - name: Set up Rust
   #       uses: actions-rs/toolchain@v1
@@ -216,7 +217,7 @@ jobs:
   #         Compress-Archive -Path "screenpipe-win64" -DestinationPath "screenpipe-$VERSION-x86_64-pc-windows-msvc.zip"
 
   #     - name: Upload Artifact
-  #       uses: actions/upload-artifact@v2
+  #       uses: actions/upload-artifact@v4
   #       with:
   #         name: screenpipe-windows
   #         path: screenpipe-*.zip
@@ -226,7 +227,7 @@ jobs:
     needs: [build-macos] # ubuntu,  build-windows windows not supported atm, build from source bro
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       # get the current tag or take latest (in the case of a workflow dispatch)
       - name: Set version
@@ -243,7 +244,7 @@ jobs:
           echo "Set version to: $VERSION"
 
       - name: Download macOS Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 

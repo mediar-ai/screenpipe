@@ -191,17 +191,15 @@ export default function Timeline() {
             const exists = prev.some((f) => f.timestamp === data.timestamp);
             if (exists) return prev;
 
-            // ! HACK: Add new frame and sort in descending order
+            // Add new frame and sort
             const newFrames = [...prev, data].sort((a, b) => {
-              return (
-                new Date(b.timestamp).getTime() -
-                new Date(a.timestamp).getTime()
-              );
+              return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             });
 
             return newFrames;
           });
 
+          // Only set initial frame if we don't have one
           setCurrentFrame((prev) => prev || data.devices[0]);
           setIsLoading(false);
         }
@@ -718,6 +716,7 @@ export default function Timeline() {
       style={{
         height: "100vh",
         overscrollBehavior: "none",
+        overflow: "hidden", 
         WebkitUserSelect: "none",
         userSelect: "none",
         MozUserSelect: "none",
@@ -765,6 +764,9 @@ export default function Timeline() {
                   <div>app: {currentFrame.metadata.app_name || "n/a"}</div>
                   <div>
                     window: {currentFrame.metadata.window_name || "n/a"}
+                  </div>
+                  <div className="border-l pl-4 font-mono">
+                    {new Date(currentFrame.metadata.timestamp || frames[currentIndex].timestamp).toLocaleString()}
                   </div>
                 </div>
               </div>
