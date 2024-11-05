@@ -168,11 +168,11 @@ pub struct FTSContent {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UiContent {
+    pub id: i64,
     pub text: String,
     pub timestamp: DateTime<Utc>,
     pub app_name: String,
     pub window_name: String,
-    pub id: i64,
     pub initial_traversal_at: Option<DateTime<Utc>>,
 }
 
@@ -257,13 +257,13 @@ pub(crate) async fn search(
     let content_type = if query.app_name.is_some() || query.window_name.is_some() {
         ContentType::OCR
     } else {
-        query.content_type
+        query.content_type.clone()
     };
 
     let (results, total) = try_join(
         state.db.search(
             query_str,
-            content_type,
+            content_type.clone(),
             query.pagination.limit,
             query.pagination.offset,
             query.start_time,
@@ -329,11 +329,11 @@ pub(crate) async fn search(
                 tags: fts.tags.clone(),
             }),
             SearchResult::UI(ui) => ContentItem::UI(UiContent {
+                id: ui.id,
                 text: ui.text.clone(),
                 timestamp: ui.timestamp,
                 app_name: ui.app_name.clone(),
                 window_name: ui.window_name.clone(),
-                id: ui.id,
                 initial_traversal_at: ui.initial_traversal_at,
             }),
         })
