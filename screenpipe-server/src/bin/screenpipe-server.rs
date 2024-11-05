@@ -662,7 +662,7 @@ async fn main() -> anyhow::Result<()> {
     let pipes_future = async {
         loop {
             if let Some(result) = pipe_futures_clone.lock().await.next().await {
-                // info!("pipe completed: {:?}", result);
+                info!("pipe completed: {:?}", result);
             } else {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
