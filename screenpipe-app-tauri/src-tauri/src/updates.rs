@@ -12,6 +12,7 @@ use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio::time::interval;
+use crate::llm_sidecar::stop_ollama_sidecar;
 
 pub struct UpdatesManager {
     interval: Duration,
@@ -94,6 +95,16 @@ impl UpdatesManager {
                         self.update_menu_item.set_enabled(false)?;
                         self.update_menu_item
                             .set_text("downloading latest version of screenpipe")?;
+
+                        if let Err(err) =
+                            kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone()).await {
+                            error!("Failed to kill sidecar: {}", err);
+                        }
+                        // llm sidecar only need to kill in windows
+                        if let Err(err) = stop_ollama_sidecar(self.app.clone()).await {
+                            error!("Failed to stop ollama: {}", err);
+                        }
+
                         update.download_and_install(|_, _| {}, || {}).await?;
                         *self.update_installed.lock().await = true;
 
@@ -105,11 +116,11 @@ impl UpdatesManager {
                     // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
                     // bad UX: i use CLI and it kills my CLI because i updated app
 
-                    if let Err(err) =
-                        kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone())
-                            .await
-                    {
-                        error!("Failed to kill sidecar: {}", err);
+                    #[cfg(not(target_os = "windows"))] {
+                        if let Err(err) = 
+                            kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone()).await {
+                            error!("Failed to kill sidecar: {}", err);
+                        }
                     }
                     self.update_screenpipe();
                 }
