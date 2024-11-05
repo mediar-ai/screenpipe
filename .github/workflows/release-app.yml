@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: create draft release
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0.2
         with:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
@@ -81,20 +81,17 @@ jobs:
           fi
 
       - name: setup Bun
-        uses: oven-sh/setup-bun@v1
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: oven-sh/setup-bun@v2
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
           target: ${{ matrix.target }}
+          cache: true
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index/
@@ -108,7 +105,7 @@ jobs:
 
       - name: Cache Homebrew packages
         if: matrix.platform == 'macos-latest'
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/Homebrew
@@ -267,7 +264,7 @@ jobs:
           tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0.2
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
