@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use dirs::home_dir;
 use std::sync::Arc;
 use tracing::{debug, error};
