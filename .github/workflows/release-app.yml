@@ -80,8 +80,19 @@ jobs:
             sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
           fi
 
-      - name: setup Bun
+      - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Rust
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        run: |
+          wget https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe
+          .\rustup-init.exe -y
 
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
