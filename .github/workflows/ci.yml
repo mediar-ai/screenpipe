@@ -75,7 +75,20 @@ jobs:
       - name: setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Run pre_build.js on
+      - name: Install vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "2a3138723698306f4261632c92dc782f586167e3"
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
+
+      - name: Run pre_build.js
         shell: bash
         run: bun ./scripts/pre_build.js
         working-directory: ./screenpipe-app-tauri
@@ -119,7 +132,7 @@ jobs:
       - name: setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Run pre_build.js on
+      - name: Run pre_build.js
         shell: bash
         env:
           SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
