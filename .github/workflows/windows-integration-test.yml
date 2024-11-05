@@ -12,6 +12,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Install Rust
+      run: |
+        wget https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe
+        .\rustup-init.exe -y
+
     - name: Set up Rust
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
