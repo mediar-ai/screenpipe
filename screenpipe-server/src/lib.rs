@@ -31,4 +31,3 @@ pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
 pub use server::Server;
 pub use video::VideoCapture;
-pub use pipe_manager::PipeControl;
