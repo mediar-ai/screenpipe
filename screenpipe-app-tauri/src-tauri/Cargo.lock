@@ -3781,9 +3781,11 @@ version = "0.9.1"
 dependencies = [
  "anyhow",
  "axum",
+ "core-foundation 0.9.4",
  "dirs 5.0.1",
  "fix-path-env",
  "http 0.2.12",
+ "libc",
  "log",
  "reqwest",
  "serde",
