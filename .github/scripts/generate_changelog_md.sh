@@ -61,10 +61,12 @@ mkdir -p content/changelogs
 
 # Create a new file with the current release as the name
 echo ${CONTENT//\"/} > content/changelogs/$CURRENT_RELEASE.md
+SHORT_COMMIT_LAST_RELEASE=$(echo $COMMIT_LAST_RELEASE | cut -c 1-5)
+SHORT_COMMIT_CURRENT_RELEASE=$(echo $COMMIT_CURRENT_RELEASE | cut -c 1-5)
 
 # Add the full changelog on the end of the file
 echo """
-#### **Full Changelog:** [$COMMIT_LAST_RELEASE...$COMMIT_CURRENT_RELEASE](https://github.com/mediar-ai/screenpipe/compare/$COMMIT_LAST_RELEASE...$COMMIT_CURRENT_RELEASE)
+#### **Full Changelog:** [$SHORT_COMMIT_LAST_RELEASE...$SHORT_COMMIT_CURRENT_RELEASE](https://github.com/mediar-ai/screenpipe/compare/$COMMIT_LAST_RELEASE...$COMMIT_CURRENT_RELEASE)
 """ >> content/changelogs/$CURRENT_RELEASE.md
 
 # Copy the new changelog to the main changelog file
