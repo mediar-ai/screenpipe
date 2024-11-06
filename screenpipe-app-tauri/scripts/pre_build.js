@@ -20,8 +20,8 @@ console.log('cwd', cwd)
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	windows: {
-		ffmpegName: 'ffmpeg-release-full',
-		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z',
+		ffmpegName: 'ffmpeg-7.0.2-full_build-shared',
+		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.0.2-full_build-shared.7z',
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
 	linux: {
@@ -313,7 +313,6 @@ if (platform == 'windows') {
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
-		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
 	}
 
 	// Setup ONNX Runtime
@@ -444,7 +443,7 @@ if (platform == 'macos') {
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.7z`
-		await $`7z x ${config.macos.ffmpegName}.7z`
+		await $`7z e ${config.macos.ffmpegName}.7z -o ./${config.macos.ffmpegName}`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.7z`
 	} else {
