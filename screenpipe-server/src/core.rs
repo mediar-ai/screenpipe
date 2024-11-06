@@ -5,11 +5,13 @@ use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
 use screenpipe_audio::vad_engine::VadSensitivity;
+use screenpipe_audio::AudioStream;
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
     AudioInput, AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
 };
 use screenpipe_core::pii_removal::remove_pii;
+use screenpipe_core::Language;
 use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
@@ -43,7 +45,59 @@ pub async fn start_continuous_recording(
     include_windows: &[String],
     deepgram_api_key: Option<String>,
     vad_sensitivity: CliVadSensitivity,
+    languages: Vec<Language>,
 ) -> Result<()> {
+    // Initialize friend wearable loop
+    if let Some(uid) = &friend_wearable_uid {
+        tokio::spawn(initialize_friend_wearable_loop(
+            uid.clone(),
+            Arc::clone(&db),
+        ));
+    }
+
+    debug!("Starting video recording for monitor {:?}", monitor_ids);
+    let video_tasks = if !vision_disabled {
+        monitor_ids
+            .iter()
+            .map(|&monitor_id| {
+                let db_manager_video = Arc::clone(&db);
+                let output_path_video = Arc::clone(&output_path);
+                let is_running_video = Arc::clone(&vision_control);
+                let ocr_engine = Arc::clone(&ocr_engine);
+                let friend_wearable_uid_video = friend_wearable_uid.clone();
+                let ignored_windows_video = ignored_windows.to_vec();
+                let include_windows_video = include_windows.to_vec();
+
+                let languages = languages.clone();
+
+                debug!("Starting video recording for monitor {}", monitor_id);
+                vision_handle.spawn(async move {
+                    record_video(
+                        db_manager_video,
+                        output_path_video,
+                        fps,
+                        is_running_video,
+                        save_text_files,
+                        ocr_engine,
+                        friend_wearable_uid_video,
+                        monitor_id,
+                        use_pii_removal,
+                        &ignored_windows_video,
+                        &include_windows_video,
+                        video_chunk_duration,
+                        languages.clone(),
+                    )
+                    .await
+                })
+            })
+            .collect::<Vec<_>>()
+    } else {
+        vec![vision_handle.spawn(async move {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            Ok(())
+        })]
+    };
+
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
         let (input_sender, _): (
@@ -66,58 +120,12 @@ pub async fn start_continuous_recording(
             deepgram_api_key,
             &PathBuf::from(output_path.as_ref()),
             VadSensitivity::from(vad_sensitivity),
+            languages.clone(),
         )
         .await?
     };
     let whisper_sender_clone = whisper_sender.clone();
     let db_manager_audio = Arc::clone(&db);
-    // Initialize friend wearable loop
-    if let Some(uid) = &friend_wearable_uid {
-        tokio::spawn(initialize_friend_wearable_loop(
-            uid.clone(),
-            Arc::clone(&db),
-        ));
-    }
-
-    debug!("Starting video recording for monitor {:?}", monitor_ids);
-    let video_tasks = if !vision_disabled {
-        monitor_ids
-            .iter()
-            .map(|&monitor_id| {
-                let db_manager_video = Arc::clone(&db);
-                let output_path_video = Arc::clone(&output_path);
-                let is_running_video = Arc::clone(&vision_control);
-                let ocr_engine = Arc::clone(&ocr_engine);
-                let friend_wearable_uid_video = friend_wearable_uid.clone();
-                let ignored_windows_video = ignored_windows.to_vec();
-                let include_windows_video = include_windows.to_vec();
-
-                debug!("Starting video recording for monitor {}", monitor_id);
-                vision_handle.spawn(async move {
-                    record_video(
-                        db_manager_video,
-                        output_path_video,
-                        fps,
-                        is_running_video,
-                        save_text_files,
-                        ocr_engine,
-                        friend_wearable_uid_video,
-                        monitor_id,
-                        use_pii_removal,
-                        &ignored_windows_video,
-                        &include_windows_video,
-                        video_chunk_duration,
-                    )
-                    .await
-                })
-            })
-            .collect::<Vec<_>>()
-    } else {
-        vec![vision_handle.spawn(async move {
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            Ok(())
-        })]
-    };
 
     let audio_task = if !audio_disabled {
         audio_handle.spawn(async move {
@@ -177,19 +185,27 @@ async fn record_video(
     ignored_windows: &[String],
     include_windows: &[String],
     video_chunk_duration: Duration,
+    languages: Vec<Language>,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
     let rt = Handle::current();
-    let new_chunk_callback = move |file_path: &str| {
+    let device_name = Arc::new(format!("monitor_{}", monitor_id));
+
+    let new_chunk_callback = {
         let db_chunk_callback = Arc::clone(&db_chunk_callback);
-        let file_path = file_path.to_string();
-        rt.spawn(async move {
-            if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path).await {
-                error!("Failed to insert new video chunk: {}", e);
-            }
-            debug!("record_video: Inserted new video chunk: {}", file_path);
-        });
+        let device_name = Arc::clone(&device_name);
+        move |file_path: &str| {
+            let file_path = file_path.to_string();
+            let db_chunk_callback = Arc::clone(&db_chunk_callback);
+            let device_name = Arc::clone(&device_name);
+            rt.spawn(async move {
+                if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path, &device_name).await {
+                    error!("Failed to insert new video chunk: {}", e);
+                }
+                debug!("record_video: Inserted new video chunk: {}", file_path);
+            });
+        }
     };
 
     let video_capture = VideoCapture::new(
@@ -202,12 +218,13 @@ async fn record_video(
         monitor_id,
         ignored_windows,
         include_windows,
+        languages,
     );
 
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
-                match db.insert_frame().await {
+                match db.insert_frame(&device_name, None).await {
                     Ok(frame_id) => {
                         let text_json =
                             serde_json::to_string(&window_result.text_json).unwrap_or_default();
@@ -259,7 +276,6 @@ async fn record_audio(
     friend_wearable_uid: Option<String>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<()> {
-    const OVERLAP_DURATION: Duration = Duration::from_secs(2);
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
@@ -284,77 +300,45 @@ async fn record_audio(
 
             let handle = tokio::spawn(async move {
                 let audio_device_clone = Arc::clone(&audio_device);
-                let error = Arc::new(AtomicBool::new(false));
+                // let error = Arc::new(AtomicBool::new(false));
                 debug!(
                     "Starting audio capture thread for device: {}",
                     &audio_device
                 );
 
-                let error_clone = Arc::clone(&error);
-                let mut iteration = 0;
-                loop {
-                    let device_control_clone = Arc::clone(&device_control);
-                    let whisper_sender_clone = whisper_sender_clone.clone();
-                    let error_clone = Arc::clone(&error_clone);
-                    if error_clone.load(Ordering::Relaxed) {
-                        break;
+                let audio_stream = match AudioStream::from_device(
+                    audio_device_clone.clone(),
+                    Arc::new(AtomicBool::new(device_control.clone().is_running)),
+                )
+                .await
+                {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        error!("Failed to create audio stream: {}", e);
+                        return;
                     }
-                    let audio_device = Arc::clone(&audio_device_clone);
-                    iteration += 1;
-                    tokio::spawn(async move {
-                        debug!(
-                            "Starting iteration {} for device {}",
-                            iteration, audio_device
-                        );
+                };
 
-                        // let error_clone = Arc::clone(&error_clone);
-                        // let whisper_sender_clone_2 = whisper_sender_clone.clone();
-                        let audio_device_clone = audio_device.clone();
-                        // let audio_device_clone_2 = audio_device.clone();
+                let audio_stream = Arc::new(audio_stream);
+                let device_control_clone = Arc::clone(&device_control);
+                let whisper_sender_clone = whisper_sender_clone.clone();
+                let audio_device = Arc::clone(&audio_device_clone);
+                let record_handle = tokio::spawn(async move {
+                    let _ = record_and_transcribe(
+                        audio_stream,
+                        chunk_duration,
+                        whisper_sender_clone.clone(),
+                        Arc::new(AtomicBool::new(device_control_clone.is_running)),
+                    )
+                    .await;
+                });
 
-                        debug!(
-                            "Starting record_and_transcribe for device {} (iteration {})",
-                            audio_device_clone, iteration
-                        );
-                        let result = record_and_transcribe(
-                            audio_device,
-                            // audio_device_clone,
-                            chunk_duration,
-                            whisper_sender_clone.clone(),
-                            // whisper_sender_clone_2.clone(),
-                            Arc::new(AtomicBool::new(device_control_clone.is_running)),
-                        )
-                        .await;
-                        info!(
-                            "Finished record_and_transcribe for device {} (iteration {})",
-                            audio_device_clone, iteration
-                        );
+                // let live_transcription_handle = tokio::spawn(async move {
+                //     let _ = live_transcription(audio_stream, whisper_sender_clone.clone()).await;
+                // });
 
-                        match result {
-                            Ok(file_path) => {
-                                info!(
-                                    "Recording complete for device {} (iteration {}): {:?}",
-                                    audio_device_clone, iteration, file_path
-                                );
-                            }
-                            Err(e) => {
-                                error!(
-                                "Error in record_and_transcribe for device {} (iteration {}): {}, stopping thread",
-                                audio_device_clone, iteration, e
-                            );
-                                error_clone.store(true, Ordering::Relaxed);
-                            }
-                        }
-                        info!(
-                            "Finished iteration {} for device {}",
-                            iteration, &audio_device_clone
-                        );
-                    });
-
-                    tokio::time::sleep(chunk_duration - OVERLAP_DURATION).await;
-                }
-
-                info!("Exiting audio capture thread for device: {}", &audio_device);
+                record_handle.await.unwrap();
+                info!("exiting audio capture thread for device: {}", &audio_device);
             });
 
             handles.insert(device_id, handle);
@@ -386,6 +370,7 @@ async fn record_audio(
             }
 
             transcription.transcription = current_transcript.clone();
+            previous_transcript = current_transcript.unwrap();
             // Process the audio result
             match process_audio_result(
                 &db,
@@ -398,10 +383,7 @@ async fn record_audio(
             .await
             {
                 Err(e) => error!("Error processing audio result: {}", e),
-                Ok(id) => {
-                    previous_transcript = current_transcript.unwrap();
-                    previous_transcript_id = id
-                }
+                Ok(id) => previous_transcript_id = id,
             }
         }
 
@@ -427,6 +409,7 @@ async fn process_audio_result(
 
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
+    let mut chunk_id: Option<i64> = None;
 
     info!(
         "device {} inserting audio chunk: {:?}",
@@ -437,12 +420,7 @@ async fn process_audio_result(
             .update_audio_transcription(id, previous_transcript.as_str())
             .await
         {
-            Ok(audio_chunk_id) => {
-                debug!(
-                    "Inserted audio transcription for chunk {} from device {} using {}",
-                    audio_chunk_id, result.input.device, transcription_engine
-                );
-            }
+            Ok(_) => {}
             Err(e) => error!(
                 "Failed to update transcription for {}: audio_chunk_id {}",
                 result.input.device, e
@@ -475,6 +453,7 @@ async fn process_audio_result(
                     "Inserted audio transcription for chunk {} from device {} using {}",
                     audio_chunk_id, result.input.device, transcription_engine
                 );
+                chunk_id = Some(audio_chunk_id);
             }
         }
         Err(e) => error!(
@@ -482,5 +461,5 @@ async fn process_audio_result(
             result.input.device, e
         ),
     }
-    Ok(None)
+    Ok(chunk_id)
 }

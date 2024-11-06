@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
-import process from "node:process";
+import * as path from "node:path";
+import cronParser from "cron-parser";
+import cron, { type ScheduledTask } from "node-cron";
 
 // Type definitions
 export interface PipeConfig {
@@ -250,10 +252,144 @@ export interface InboxMessageAction {
   action: string;
 }
 
+class Task {
+  private _name: string;
+  private _interval: string | number;
+  private _time: string | null = null;
+  private _handler: (() => Promise<void>) | null = null;
+  private _cronTask: ScheduledTask | null = null;
+
+  constructor(name: string) {
+    this._name = name;
+    this._interval = 0;
+  }
+
+  every(interval: string | number): Task {
+    this._interval = interval;
+    return this;
+  }
+
+  at(time: string): Task {
+    this._time = time;
+    return this;
+  }
+
+  do(handler: () => Promise<void>): Task {
+    this._handler = handler;
+    return this;
+  }
+
+  schedule(): void {
+    if (!this._handler) {
+      throw new Error(`No handler defined for task: ${this._name}`);
+    }
+
+    const cronExpression = this.toCronExpression();
+
+    this._cronTask = cron.schedule(cronExpression, this._handler, {
+      name: this._name,
+    });
+  }
+
+  stop(): void {
+    return this._cronTask!.stop();
+  }
+
+  private toCronExpression(): string {
+    if (typeof this._interval === "number") {
+      const minutes = Math.floor(this._interval / 60000);
+      return `*/${minutes} * * * *`;
+    }
+
+    const [value, unit] = this._interval.split(" ");
+    switch (unit) {
+      case "second":
+      case "seconds":
+        return `*/${value} * * * * *`;
+      case "minute":
+      case "minutes":
+        return `*/${value} * * * *`;
+      case "hour":
+      case "hours":
+        return `0 */${value} * * *`;
+      case "day":
+      case "days":
+        return `0 0 */${value} * *`;
+      default:
+        throw new Error(`Unsupported interval unit: ${unit}`);
+    }
+  }
+}
+
+class Scheduler {
+  private tasks: Task[] = [];
+
+  task(name: string): Task {
+    const task = new Task(name);
+    this.tasks.push(task);
+    return task;
+  }
+
+  start() {
+    this.tasks.forEach((task) => task.schedule());
+  }
+
+  stop(): void {
+    cron.getTasks().forEach((task) => task.stop());
+    this.tasks = [];
+  }
+}
+
+export type InputAction =
+  | { type: "WriteText"; data: string }
+  | { type: "KeyPress"; data: string }
+  | { type: "MouseMove"; data: { x: number; y: number } }
+  | { type: "MouseClick"; data: "left" | "right" | "middle" };
+
+interface InputControlResponse {
+  success: boolean;
+}
+
+/**
+ * The pipe object is used to interact with the screenpipe higher level functions.
+ *
+ */
 export const pipe = {
+  /**
+   * Send a desktop notification to the user.
+   *
+   * @example
+   * ```typescript
+   * pipe.sendDesktopNotification({ title: "Task Completed", body: "Your task has been completed." });
+   * ```
+   */
   sendDesktopNotification,
+  /**
+   * Load the pipe configuration that can be set through the screenpipe app or the pipe.json file.
+   *
+   * @example
+   * ```typescript
+   * pipe.loadPipeConfig();
+   * ```
+   */
   loadPipeConfig,
+  /**
+   * Query the screenpipe API.
+   *
+   * @example
+   * ```typescript
+   * pipe.queryScreenpipe({ q: "squirrel", contentType: "ocr", limit: 10 });
+   * ```
+   */
   queryScreenpipe,
+  /**
+   * Send a notification to the user's AI inbox.
+   *
+   * @example
+   * ```typescript
+   * pipe.inbox.send({ title: "Task Completed", body: "Your task has been completed." });
+   * ```
+   */
   inbox: {
     send: async (message: InboxMessage): Promise<boolean> => {
       const notificationApiUrl =
@@ -271,4 +407,86 @@ export const pipe = {
       }
     },
   },
+  /**
+   * Scheduler for running tasks at specific times or intervals.
+   *
+   * @example
+   * ```typescript
+   * pipe.scheduler.task("dailyReport")
+   *   .every("1 day")
+   *   .at("00:00")
+   *   .do(async () => {
+   *     console.log("running daily report");
+   *   });
+   *
+   * pipe.scheduler.task("everyFiveMinutes")
+   *   .every("5 minutes")
+   *   .do(async () => {
+   *     console.log("running task every 5 minutes");
+   *   });
+   *
+   * pipe.scheduler.start();
+   * ```
+   */
+  scheduler: new Scheduler(),
+  /**
+   * Experimental input control methods.
+   * Use with caution as these directly manipulate input devices.
+   */
+  input: {
+    /**
+     * Simulate typing text.
+     * @example
+     * pipe.input.type("Hello, Screenpipe!");
+     */
+    type: (text: string): Promise<boolean> => {
+      return sendInputControl({ type: "WriteText", data: text });
+    },
+
+    /**
+     * Simulate a key press.
+     * @example
+     * pipe.input.press("enter");
+     */
+    press: (key: string): Promise<boolean> => {
+      return sendInputControl({ type: "KeyPress", data: key });
+    },
+
+    /**
+     * Move the mouse to absolute coordinates.
+     * @example
+     * pipe.input.moveMouse(100, 200);
+     */
+    moveMouse: (x: number, y: number): Promise<boolean> => {
+      return sendInputControl({ type: "MouseMove", data: { x, y } });
+    },
+
+    /**
+     * Simulate a mouse click.
+     * @example
+     * pipe.input.click("left");
+     */
+    click: (button: "left" | "right" | "middle"): Promise<boolean> => {
+      return sendInputControl({ type: "MouseClick", data: button });
+    },
+  },
 };
+
+async function sendInputControl(action: InputAction): Promise<boolean> {
+  const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+  try {
+    const response = await fetch(`${apiUrl}/experimental/input_control`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data: InputControlResponse = await response.json();
+    return data.success;
+  } catch (error) {
+    console.error("failed to control input:", error);
+    return false;
+  }
+}

@@ -4,6 +4,59 @@ import { localDataDir, join } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
+import { Language } from "@/lib/language";
+
+export type VadSensitivity = "low" | "medium" | "high";
+
+export type AIProviderType =
+  | "native-ollama"
+  | "openai"
+  | "custom"
+  | "embedded"
+  | "screenpipe-cloud";
+
+export type EmbeddedLLMConfig = {
+  enabled: boolean;
+  model: string;
+  port: number;
+};
+
+export interface Settings {
+  openaiApiKey: string;
+  deepgramApiKey: string;
+  isLoading: boolean;
+  aiModel: string;
+  installedPipes: Pipe[];
+  userId: string;
+  customPrompt: string;
+  devMode: boolean;
+  audioTranscriptionEngine: string;
+  ocrEngine: string;
+  monitorIds: string[];
+  audioDevices: string[];
+  usePiiRemoval: boolean;
+  restartInterval: number;
+  port: number;
+  dataDir: string;
+  disableAudio: boolean;
+  ignoredWindows: string[];
+  includedWindows: string[];
+  aiProviderType: AIProviderType;
+  aiUrl: string;
+  aiMaxContextChars: number;
+  fps: number;
+  vadSensitivity: VadSensitivity;
+  analyticsEnabled: boolean;
+  audioChunkDuration: number; // new field
+  useChineseMirror: boolean; // Add this line
+  embeddedLLM: EmbeddedLLMConfig;
+  languages: Language[];
+  enableBeta: boolean;
+  showScreenpipeShortcut: string;
+  isFirstTimeUser: boolean;
+  enableFrameCache: boolean; // Add this line
+  enableUiMonitoring: boolean; // Add this line
+}
 
 const defaultSettings: Settings = {
   openaiApiKey: "",
@@ -31,6 +84,7 @@ const defaultSettings: Settings = {
   disableAudio: false,
   ignoredWindows: [],
   includedWindows: [],
+  aiProviderType: "openai",
   aiUrl: "https://api.openai.com/v1",
   aiMaxContextChars: 30000,
   fps: 0.5,
@@ -38,37 +92,18 @@ const defaultSettings: Settings = {
   analyticsEnabled: true,
   audioChunkDuration: 30, // default to 10 seconds
   useChineseMirror: false, // Add this line
+  languages: [],
+  embeddedLLM: {
+    enabled: false,
+    model: "llama3.2:1b-instruct-q4_K_M",
+    port: 11438,
+  },
+  enableBeta: false,
+  showScreenpipeShortcut: "Super+Alt+S",
+  isFirstTimeUser: true,
+  enableFrameCache: false, // Add this line
+  enableUiMonitoring: false, // Add this line
 };
-
-export type VadSensitivity = "low" | "medium" | "high";
-export interface Settings {
-  openaiApiKey: string;
-  deepgramApiKey: string;
-  isLoading: boolean;
-  aiModel: string;
-  installedPipes: Pipe[];
-  userId: string;
-  customPrompt: string;
-  devMode: boolean;
-  audioTranscriptionEngine: string;
-  ocrEngine: string;
-  monitorIds: string[];
-  audioDevices: string[];
-  usePiiRemoval: boolean;
-  restartInterval: number;
-  port: number;
-  dataDir: string;
-  disableAudio: boolean;
-  ignoredWindows: string[];
-  includedWindows: string[];
-  aiUrl: string;
-  aiMaxContextChars: number;
-  fps: number;
-  vadSensitivity: VadSensitivity;
-  analyticsEnabled: boolean;
-  audioChunkDuration: number; // new field
-  useChineseMirror: boolean; // Add this line
-}
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
 
@@ -122,12 +157,14 @@ export function useSettings() {
         const savedUserId = (await store!.get<string>("userId")) || "";
         const savedCustomPrompt =
           (await store!.get<string>("customPrompt")) || "";
-        const savedDevMode = (await store!.get<boolean>("devMode")) || false;
+        let savedDevMode = await store!.get<boolean>("devMode");
+        if (savedDevMode === null) {
+          savedDevMode = false;
+        }
         console.log("savedDevMode", savedDevMode);
 
         const savedAudioTranscriptionEngine =
-          (await store!.get<string>("audioTranscriptionEngine")) ||
-          "deepgram";
+          (await store!.get<string>("audioTranscriptionEngine")) || "deepgram";
         const savedOcrEngine =
           (await store!.get<string>("ocrEngine")) || ocrModel;
         const savedMonitorIds = (await store!.get<string[]>("monitorIds")) || [
@@ -136,16 +173,19 @@ export function useSettings() {
         const savedAudioDevices = (await store!.get<string[]>(
           "audioDevices"
         )) || ["default"];
-        const savedUsePiiRemoval =
-          (await store!.get<boolean>("usePiiRemoval")) || false;
+        let savedUsePiiRemoval = await store!.get<boolean>("usePiiRemoval");
+        if (savedUsePiiRemoval === null) {
+          savedUsePiiRemoval = false;
+        }
         const savedRestartInterval =
           (await store!.get<number>("restartInterval")) || 0;
         const savedPort = (await store!.get<number>("port")) || 3030;
         const savedDataDir = (await store!.get<string>("dataDir")) || "";
-        const savedDisableAudio =
-          (await store!.get<boolean>("disableAudio")) || false;
-        const savedIgnoredWindows =
-          (await store!.get<string[]>("ignoredWindows")) || [];
+        let savedDisableAudio = await store!.get<boolean>("disableAudio");
+        if (savedDisableAudio === null) {
+          savedDisableAudio = false;
+        }
+
         const savedIncludedWindows =
           (await store!.get<string[]>("includedWindows")) || [];
         const savedAiUrl =
@@ -157,12 +197,98 @@ export function useSettings() {
           (platform() === "macos" ? 0.2 : 1);
         const savedVadSensitivity =
           (await store!.get<VadSensitivity>("vadSensitivity")) || "high";
-        const savedAnalyticsEnabled =
-          (await store!.get<boolean>("analyticsEnabled")) || true;
+        let savedAnalyticsEnabled = await store!.get<boolean>(
+          "analyticsEnabled"
+        );
+        if (savedAnalyticsEnabled === null) {
+          savedAnalyticsEnabled = true;
+        }
+        console.log("savedAnalyticsEnabled", savedAnalyticsEnabled);
         const savedAudioChunkDuration =
           (await store!.get<number>("audioChunkDuration")) || 30;
-        const savedUseChineseMirror =
-          (await store!.get<boolean>("useChineseMirror")) || false;
+        let savedUseChineseMirror = await store!.get<boolean>(
+          "useChineseMirror"
+        );
+        if (savedUseChineseMirror === null) {
+          savedUseChineseMirror = false;
+        }
+        const savedEmbeddedLLM = (await store!.get<EmbeddedLLMConfig>(
+          "embeddedLLM"
+        )) || {
+          enabled: false,
+          model: "llama3.2:1b-instruct-q4_K_M",
+          port: 11438,
+        };
+
+        const savedLanguages =
+          (await store!.get<Language[]>("languages")) || [];
+
+        const currentPlatform = platform();
+        const ignoredWindowsInAllOS = [
+          "bit",
+          "VPN",
+          "Trash",
+          "Private",
+          "Incognito",
+          "Wallpaper",
+          "Settings",
+          "Keepass",
+          "Recorder",
+          "Vaults",
+          "OBS Studio",
+        ];
+        const defaultIgnoredWindows =
+          currentPlatform === "macos"
+            ? [
+                ...ignoredWindowsInAllOS,
+                ".env",
+                "Item-0",
+                "App Icon Window",
+                "Battery",
+                "Shortcuts",
+                "WiFi",
+                "BentoBox",
+                "Clock",
+                "Dock",
+                "DeepL",
+              ]
+            : currentPlatform === "windows"
+            ? [
+                ...ignoredWindowsInAllOS,
+                "Nvidia",
+                "Control Panel",
+                "System Properties",
+              ]
+            : currentPlatform === "linux"
+            ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
+            : [];
+
+        const savedIgnoredWindows = await store!.get<string[]>(
+          "ignoredWindows"
+        );
+        const finalIgnoredWindows =
+          savedIgnoredWindows && savedIgnoredWindows.length > 0
+            ? savedIgnoredWindows
+            : defaultIgnoredWindows;
+
+        let savedEnableBeta = await store!.get<boolean>("enableBeta");
+        if (savedEnableBeta === null) {
+          savedEnableBeta = false;
+        }
+
+        const savedShowScreenpipeShortcut =
+          (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
+
+        let savedIsFirstTimeUser = await store!.get<boolean>("isFirstTimeUser");
+        if (savedIsFirstTimeUser === null) {
+          savedIsFirstTimeUser = true;
+        }
+        const savedAiProviderType =
+          (await store!.get<AIProviderType>("aiProviderType")) || "openai";
+
+        const savedEnableFrameCache =
+          (await store!.get<boolean>("enableFrameCache")) || false;
+
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -181,8 +307,9 @@ export function useSettings() {
           port: savedPort,
           dataDir: savedDataDir,
           disableAudio: savedDisableAudio,
-          ignoredWindows: savedIgnoredWindows,
+          ignoredWindows: finalIgnoredWindows,
           includedWindows: savedIncludedWindows,
+          aiProviderType: savedAiProviderType,
           aiUrl: savedAiUrl,
           aiMaxContextChars: savedAiMaxContextChars,
           fps: savedFps,
@@ -190,6 +317,13 @@ export function useSettings() {
           analyticsEnabled: savedAnalyticsEnabled,
           audioChunkDuration: savedAudioChunkDuration,
           useChineseMirror: savedUseChineseMirror,
+          embeddedLLM: savedEmbeddedLLM,
+          languages: savedLanguages,
+          enableBeta: savedEnableBeta,
+          showScreenpipeShortcut: savedShowScreenpipeShortcut,
+          isFirstTimeUser: savedIsFirstTimeUser,
+          enableFrameCache: savedEnableFrameCache,
+          enableUiMonitoring: false,
         });
       } catch (error) {
         console.error("failed to load settings:", error);
@@ -205,12 +339,17 @@ export function useSettings() {
     }
 
     try {
+      console.log("Updating settings:", newSettings); // Add this line
       const updatedSettings = { ...settings, ...newSettings };
       setSettings(updatedSettings);
 
       // update the store for the fields that were changed
       for (const key in newSettings) {
         if (Object.prototype.hasOwnProperty.call(newSettings, key)) {
+          console.log(
+            `Setting ${key}:`,
+            updatedSettings[key as keyof Settings]
+          ); // Add this line
           await store!.set(key, updatedSettings[key as keyof Settings]);
         }
       }

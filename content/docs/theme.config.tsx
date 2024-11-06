@@ -14,7 +14,7 @@ const themeConfig = {
   project: {
     link: "https://github.com/mediar-ai/screenpipe", // Project link
   },
-  docsRepositoryBase: "https://github.com/mediar-ai/screenpipe/", // Documentation repo link
+  docsRepositoryBase: "https://github.com/mediar-ai/screenpipe/tree/main/content/docs", // Documentation repo link
   footer: {
     text: "screenpipe docs",
   },

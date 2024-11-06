@@ -4,6 +4,7 @@
 // }
 
 use serde_json::Value;
+use tauri::Manager;
 use tracing::info;
 
 #[tauri::command]
@@ -78,7 +79,6 @@ pub async fn save_pipe_config(pipe_name: String, config: Value) -> Result<(), St
     Ok(())
 }
 
-
 #[tauri::command]
 pub async fn reset_all_pipes() -> Result<(), String> {
     info!("Resetting all pipes");
@@ -100,3 +100,116 @@ pub async fn reset_all_pipes() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        #[cfg(target_os = "macos")]
+        if overlay {
+            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        }
+
+        let _ = window.set_visible_on_all_workspaces(overlay);
+        let _ = window.set_always_on_top(overlay);
+        let _ = window.show();
+
+        if !overlay {
+            let _ = window.set_focus();
+        }
+    } else {
+        let _ = tauri::WebviewWindowBuilder::new(
+            app_handle,
+            "main",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .title("Screenpipe")
+        .build();
+    }
+}
+
+#[tauri::command]
+pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("timeline") {
+        #[cfg(target_os = "macos")]
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+        let _ = window.set_visible_on_all_workspaces(true);
+        let _ = window.set_always_on_top(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "timeline",
+            tauri::WebviewUrl::App("timeline.html".into()),
+        )
+        .title("timeline")
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible_on_all_workspaces(true) // Added this
+        .center()
+        .build()
+        .unwrap();
+    }
+}
+
+const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn update_show_screenpipe_shortcut(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    new_shortcut: String,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    // Unregister all existing shortcuts
+    if let Err(e) = app_handle.global_shortcut().unregister_all() {
+        info!("failed to unregister shortcuts: {}", e);
+        // Continue execution to try setting the default shortcut
+    }
+
+    // Try to parse the new shortcut, fall back to default if it fails
+    let shortcut_str = match new_shortcut.parse::<Shortcut>() {
+        Ok(_s) => new_shortcut,
+        Err(e) => {
+            info!(
+                "invalid shortcut '{}': {}, falling back to default",
+                new_shortcut, e
+            );
+            DEFAULT_SHORTCUT.to_string()
+        }
+    };
+
+    // Parse the shortcut string (will be either new_shortcut or default)
+    let show_window_shortcut = match shortcut_str.parse::<Shortcut>() {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!("failed to parse shortcut: {}", e));
+        }
+    };
+
+    // Register the new shortcut
+    if let Err(e) = app_handle.global_shortcut().on_shortcut(
+        show_window_shortcut,
+        move |app_handle, _event, _shortcut| {
+            show_main_window(app_handle, true);
+        },
+    ) {
+        info!("failed to register shortcut: {}", e);
+
+        // Try to register the default shortcut as fallback
+        if let Ok(default_shortcut) = DEFAULT_SHORTCUT.parse::<Shortcut>() {
+            let _ = app_handle.global_shortcut().on_shortcut(
+                default_shortcut,
+                move |app_handle, _event, _shortcut| {
+                    show_main_window(app_handle, true);
+                },
+            );
+        }
+
+        return Err("failed to set shortcut, reverted to default".to_string());
+    }
+
+
+    Ok(())
+}

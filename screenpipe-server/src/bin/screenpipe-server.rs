@@ -1,7 +1,6 @@
 use std::{
-    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env
+    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env, io::Write
 };
-use std::io::Write;
 
 use clap::Parser;
 #[allow(unused_imports)]
@@ -10,13 +9,14 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device, vad_engine::SileroVad, whisper::WhisperModel, AudioDevice, DeviceControl
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
 use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
@@ -106,14 +106,23 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+
     debug!("starting screenpipe server");
     let cli = Cli::parse();
+
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
     let _log_guard = setup_logging(&local_data_dir, &cli)?;
 
-    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
+    let h = Highlight::init(HighlightConfig {
+        project_id:String::from("82688"),
+        ..Default::default()
+    })
+    .expect("Failed to initialize Highlight.io");
+
+    let (pipe_manager, mut pipe_control_rx) = PipeManager::new(local_data_dir_clone.clone());
+    let pipe_manager = Arc::new(pipe_manager);
 
     if let Some(pipe_command) = cli.command {
         match pipe_command {
@@ -121,7 +130,42 @@ async fn main() -> anyhow::Result<()> {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
             }
-            Command::Setup => {
+            #[allow(unused_variables)]
+            Command::Setup { enable_beta } => {
+                #[cfg(feature = "beta")]
+                if enable_beta {
+                    use screenpipe_actions::type_and_animate::trigger_keyboard_permission;
+
+                    // Trigger keyboard permission request
+                    if let Err(e) = trigger_keyboard_permission() {
+                        error!("Failed to trigger keyboard permission: {:?}", e);
+                        error!("Please grant keyboard permission manually in System Preferences.");
+                        h.capture_error("Please grant keyboard permission manually in System Preferences.");
+                    } else {
+                        info!("Keyboard permission requested. Please grant permission if prompted.");
+                    }
+                }
+                use screenpipe_audio::{trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel};
+                use screenpipe_vision::core::trigger_screen_capture_permission;
+
+                // Trigger audio permission request
+                if let Err(e) = trigger_audio_permission() {
+                    error!("Failed to trigger audio permission: {:?}", e);
+                    error!("Please grant microphone permission manually in System Preferences.");
+                    h.capture_error("Please grant microphone permission manually in System Preferences.");
+                } else {
+                    info!("Audio permission requested. Please grant permission if prompted.");
+                }
+
+                // Trigger screen capture permission request
+                if let Err(e) = trigger_screen_capture_permission() {
+                    error!("Failed to trigger screen capture permission: {:?}", e);
+                    error!("Please grant screen recording permission manually in System Preferences.");
+                    h.capture_error("Please grant microphone permission manually in System Preferences.");
+                } else {
+                    info!("Screen capture permission requested. Please grant permission if prompted.");
+                }
+
                 // this command just download models and stuff (useful to have specific step to display in UI)
 
                 // ! should prob skip if deepgram?
@@ -129,7 +173,18 @@ async fn main() -> anyhow::Result<()> {
                 // ! assuming silero is used
                 SileroVad::new().await.unwrap();
 
-                println!("screenpipe setup complete");
+                // Check if FFmpeg is working properly
+                match check_ffmpeg().await {
+                    Ok(_) => info!("FFmpeg is working properly"),
+                    Err(e) => {
+                        error!("FFmpeg check failed: {}", e);
+                        error!("Please ensure FFmpeg is installed correctly and is in your PATH");
+                        h.capture_error("Please ensure FFmpeg is installed correctly and is in your PATH");
+                        return Err(e.into());
+                    }
+                }
+
+                info!("screenpipe setup complete");
                 // TODO: ffmpeg sidecar thing here
                 return Ok(());
             }
@@ -259,6 +314,8 @@ async fn main() -> anyhow::Result<()> {
         cli.monitor_id.clone()
     };
 
+    let languages = cli.language.clone();
+
     let ocr_engine_clone = cli.ocr_engine.clone();
     let vad_engine = cli.vad_engine.clone();
     let vad_engine_clone = vad_engine.clone();
@@ -318,6 +375,7 @@ async fn main() -> anyhow::Result<()> {
                     &cli.included_windows,
                     cli.deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
+                    languages.clone(),
                 );
 
                 let result = tokio::select! {
@@ -367,14 +425,10 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
-        #[cfg(feature = "llm")]
-        cli.enable_llm,
-        #[cfg(feature = "llm")]
-        llm,
-
     );
 
-    let mut pipe_futures = FuturesUnordered::new();
+    let pipe_futures = Arc::new(tokio::sync::Mutex::new(FuturesUnordered::new()));
+    let pipe_futures_clone = pipe_futures.clone();
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -447,16 +501,46 @@ async fn main() -> anyhow::Result<()> {
     // Function to truncate and pad strings
     fn format_cell(s: &str, width: usize) -> String {
         if s.len() > width {
-            format!("{}...", &s[..width - 3])
+            let mut max_pos = 0;
+            for (i, c) in s.char_indices() {
+                if i + c.len_utf8() > width - 3 {
+                    break;
+                }
+                max_pos = i + c.len_utf8();
+            }
+    
+            format!("{}...", &s[..max_pos])
         } else {
             format!("{:<width$}", s, width = width)
+        }
+    }
+
+    // Add languages section
+    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("│ languages           │                                    │");
+    const MAX_ITEMS_TO_DISPLAY: usize = 5;
+
+    if cli.language.is_empty() {
+        println!("│ {:<19} │ {:<34} │", "", "all languages");
+    } else {
+        let total_languages = cli.language.len();
+        for (_, language) in cli.language.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+            let language_str = format!("id: {}", language);
+            let formatted_language = format_cell(&language_str, VALUE_WIDTH);
+            println!("│ {:<19} │ {:<34} │", "", formatted_language);
+        }
+        if total_languages > MAX_ITEMS_TO_DISPLAY {
+            println!(
+                "│ {:<19} │ {:<34} │",
+                "",
+                format!("... and {} more", total_languages - MAX_ITEMS_TO_DISPLAY)
+            );
         }
     }
 
     // Add monitors section
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ monitors            │                                    │");
-    const MAX_ITEMS_TO_DISPLAY: usize = 5;
 
     if cli.disable_vision {
         println!("│ {:<19} │ {:<34} │", "", "vision disabled");
@@ -529,6 +613,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
+
     println!("└─────────────────────┴────────────────────────────────────┘");
 
     // Add warning for cloud arguments and telemetry
@@ -557,6 +643,7 @@ async fn main() -> anyhow::Result<()> {
                 .bright_yellow()
         );
     } else {
+        h.shutdown();
         println!(
             "{}",
             "telemetry is disabled. no data will be sent to external services."
@@ -574,17 +661,17 @@ async fn main() -> anyhow::Result<()> {
             continue;
         }
         match pipe_manager.start_pipe(&pipe.id).await {
-            Ok(future) => pipe_futures.push(future),
+            Ok(future) => pipe_futures.lock().await.push(future),
             Err(e) => eprintln!("failed to start pipe {}: {}", pipe.id, e),
         }
     }
 
-    let server_future = server.start(devices_status, api_plugin);
+    let server_future = server.start(devices_status, api_plugin, cli.enable_frame_cache);
     pin_mut!(server_future);
 
     let pipes_future = async {
         loop {
-            if let Some(result) = pipe_futures.next().await {
+            if let Some(result) = pipe_futures_clone.lock().await.next().await {
                 info!("pipe completed: {:?}", result);
             } else {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -598,6 +685,8 @@ async fn main() -> anyhow::Result<()> {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
+            // sleep for 5 seconds 
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("watched pid {} has stopped, initiating shutdown", pid);
                 let _ = shutdown_tx_clone.send(());
@@ -607,6 +696,68 @@ async fn main() -> anyhow::Result<()> {
 
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
+
+    // only in beta and on macos
+    #[cfg(feature = "beta")]
+    {
+        if cli.enable_beta && cfg!(target_os = "macos") {
+            use screenpipe_actions::run;
+
+            info!("beta feature enabled, starting screenpipe actions");
+
+            let shutdown_tx_clone = shutdown_tx.clone();
+            tokio::spawn(async move {
+                let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                
+                tokio::select! {
+                    result = run() => {
+                        if let Err(e) = result {
+                            error!("Error running screenpipe actions: {}", e);
+                        }
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("Received shutdown signal, stopping screenpipe actions");
+                    }
+                }
+            });
+        }
+    }
+
+    // Start the UI monitoring task
+    #[cfg(target_os = "macos")]
+    if cli.enable_ui_monitoring {
+        let shutdown_tx_clone = shutdown_tx.clone();
+        tokio::spawn(async move {
+            let mut shutdown_rx = shutdown_tx_clone.subscribe();
+            
+            tokio::select! {
+                _ = run_ui() => {
+                    error!("ui monitoring stopped unexpectedly");
+                }
+                _ = shutdown_rx.recv() => {
+                    info!("received shutdown signal, stopping ui monitoring");
+                }
+            }
+        });
+    }
+
+    let pipe_control_future = async {
+        while let Some(control) = pipe_control_rx.recv().await {
+            match control {
+                PipeControl::Enable(pipe_id) => {
+                    debug!("enabling pipe: {}", pipe_id);
+                    match pipe_manager.start_pipe(&pipe_id).await {
+                        Ok(future) => pipe_futures_clone.lock().await.push(future),
+                        Err(e) => error!("failed to start pipe {}: {}", pipe_id, e),
+                    }
+                }
+                PipeControl::Disable(pipe_id) => {
+                    debug!("disabling pipe: {}", pipe_id);
+                }
+            }
+        }
+    };
+    pin_mut!(pipe_control_future);
 
     tokio::select! {
         _ = handle => info!("recording completed"),
@@ -619,12 +770,16 @@ async fn main() -> anyhow::Result<()> {
         _ = &mut pipes_future => {
             info!("all pipes completed, but server is still running");
         }
+        _ = &mut pipe_control_future => {
+            info!("pipe control channel closed");
+        }
         _ = ctrl_c_future => {
             info!("received ctrl+c, initiating shutdown");
             let _ = shutdown_tx.send(());
         }
     }
 
+    h.shutdown();
     info!("shutdown complete");
 
     Ok(())
@@ -698,5 +853,22 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
             }
         },
     }
+    Ok(())
+}
+
+// Add this function near the end of the file
+async fn check_ffmpeg() -> anyhow::Result<()> {
+    // TODO: this should also check if it can properly encode mp4 etc
+    use tokio::process::Command;
+
+    let output = Command::new("ffmpeg")
+        .arg("-version")
+        .output().await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("FFmpeg check failed: {}", stderr));
+    }
+
     Ok(())
 }

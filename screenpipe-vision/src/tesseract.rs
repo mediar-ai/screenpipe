@@ -1,11 +1,28 @@
-use std::collections::HashMap;
-
 use image::DynamicImage;
 use rusty_tesseract::{Args, DataOutput, Image};
+use screenpipe_core::{Language, TESSERACT_LANGUAGES};
+use std::collections::HashMap;
 
-pub fn perform_ocr_tesseract(image: &DynamicImage) -> (String, String, Option<f64>) {
+pub fn perform_ocr_tesseract(
+    image: &DynamicImage,
+    languages: Vec<Language>,
+) -> (String, String, Option<f64>) {
+    let language_string = match languages.is_empty() {
+        true => "eng".to_string(),
+        _ => TESSERACT_LANGUAGES
+            .iter()
+            .filter_map(|(key, val)| {
+                if let Some(_) = languages.iter().find(|l| l == &val) {
+                    Some(key.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
+            .join("+"),
+    };
     let args = Args {
-        lang: "eng".to_string(),
+        lang: language_string,
         config_variables: HashMap::from([("tessedit_create_tsv".into(), "1".into())]),
         dpi: Some(600), // 150 is a balanced option, 600 seems faster surprisingly, the bigger the number the more granualar result
         psm: Some(1), // PSM 1: Automatic page segmentation with OSD. PSM 3: Automatic page segmentation with OSD

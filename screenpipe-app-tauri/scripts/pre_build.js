@@ -15,23 +15,14 @@ const platform = {
 }[os.platform()]
 const cwd = process.cwd()
 console.log('cwd', cwd)
-function hasFeature(name) {
-	return process.argv.includes(`--${name}`) || process.argv.includes(name)
-}
+
 
 const config = {
 	ffmpegRealname: 'ffmpeg',
-	openblasRealname: 'openblas',
-	clblastRealname: 'clblast',
 	windows: {
 		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
 		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 
-		openBlasName: 'OpenBLAS-0.3.26-x64',
-		openBlasUrl: 'https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.26/OpenBLAS-0.3.26-x64.zip',
-
-		clblastName: 'CLBlast-1.6.2-windows-x64',
-		clblastUrl: 'https://github.com/CNugteren/CLBlast/releases/download/1.6.2/CLBlast-1.6.2-windows-x64.zip',
 
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
@@ -40,7 +31,6 @@ const config = {
 			'tesseract-ocr',
 			'libtesseract-dev',
 			'ffmpeg',
-			'libopenblas-dev', // Runtime
 			'pkg-config',
 			'build-essential',
 			'libglib2.0-dev',
@@ -53,8 +43,8 @@ const config = {
 			'libavfilter-dev',
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
-			'libomp-dev', // OpenMP in ggml.ai
-			'libstdc++-12-dev', //ROCm
+			'libxdo-dev',
+			'intel-openmp'
 		],
 	},
 	macos: {
@@ -89,121 +79,143 @@ async function findWget() {
 // Export for Github actions
 const exports = {
 	ffmpeg: path.join(cwd, config.ffmpegRealname),
-	openBlas: path.join(cwd, config.openblasRealname),
-	clblast: path.join(cwd, config.clblastRealname, 'lib/cmake/CLBlast'),
 	libClang: 'C:\\Program Files\\LLVM\\bin',
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
 
-// Add this function to install Deno
-async function installDeno() {
-	console.log('installing deno...');
+// Add this function to check if Bun is installed
+async function isBunInstalled() {
+	try {
+		await $`bun --version`.quiet();
+		return true;
+	} catch (error) {
+		return false;
+	}
+}
+
+// Add this function to install Bun
+async function installBun() {
+	if (await isBunInstalled()) {
+		console.log('bun is already installed.');
+		return;
+	}
+
+	console.log('installing bun...');
 
 	if (platform === 'windows') {
-		console.log('attempting to install deno using chocolatey...');
+		console.log('attempting to install bun using npm...');
 		try {
-			await $`choco upgrade deno -y`;
-			console.log('deno installed/upgraded successfully using chocolatey.');
-		} catch (chocoError) {
-			console.error('failed to install/upgrade deno using chocolatey:', chocoError);
-			console.error('please install deno manually.');
+			await $`npm install -g bun`;
+			console.log('bun installed successfully using npm.');
+		} catch (error) {
+			console.error('failed to install bun:', error);
+			console.error('please install bun manually.');
 		}
 	} else {
 		// for macos and linux
-		await $`curl -fsSL https://deno.land/install.sh | sh`;
+		await $`curl -fsSL https://bun.sh/install | bash`;
 	}
 
-	console.log('deno installation attempt completed.');
+	console.log('bun installation attempt completed.');
 }
 
-// Add this function to copy the Deno binary
-async function copyDenoBinary() {
-	console.log('copying deno binary for tauri...');
+// Add this function to copy the Bun binary
+async function copyBunBinary() {
+	console.log('checking bun binary for tauri...');
 
-	let denoSrc, denoDest1, denoDest2;
+	let bunSrc, bunDest1, bunDest2;
 	if (platform === 'windows') {
-		// Check both potential installation locations
-		const chocoPathTools = 'C:\\ProgramData\\chocolatey\\lib\\deno\\tools\\deno.exe';
-		const chocoPathDirect = 'C:\\ProgramData\\chocolatey\\lib\\deno\\deno.exe';
+		// Get and log npm global prefix
+		const npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
+		console.log('npm global prefix:', npmGlobalPrefix);
 
-		if (await fs.exists(chocoPathTools)) {
-			denoSrc = chocoPathTools;
-		} else if (await fs.exists(chocoPathDirect)) {
-			denoSrc = chocoPathDirect;
-		} else {
-			console.error('deno binary not found in expected locations');
-			return;
+		// Try to find bun location using system commands
+		let bunPathFromSystem;
+		try {
+			bunPathFromSystem = (await $`where.exe bun`.text()).trim().split('\n')[0];
+		} catch {
+			try {
+				bunPathFromSystem = (await $`which bun`.text()).trim();
+			} catch {
+				console.log('could not find bun using where.exe or which');
+			}
 		}
-		denoDest1 = path.join(cwd, 'deno-x86_64-pc-windows-msvc.exe');
+
+		if (bunPathFromSystem) {
+			console.log('found bun using system command at:', bunPathFromSystem);
+		}
+
+		const possibleBunPaths = [
+			// Add system-found path if it exists
+			bunPathFromSystem,
+			// Bun's default installer location
+			path.join(os.homedir(), '.bun', 'bin', 'bun.exe'),
+			// npm global paths
+			path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe'),
+			path.join(npmGlobalPrefix, 'bun.exe'),
+			path.join(npmGlobalPrefix, 'bin', 'bun.exe'),
+			// AppData paths
+			path.join(os.homedir(), 'AppData', 'Local', 'bun', 'bun.exe'),
+			// Direct paths
+			'C:\\Program Files\\bun\\bun.exe',
+			'C:\\Program Files (x86)\\bun\\bun.exe',
+			// System path
+			'bun.exe'
+		].filter(Boolean);
+
+		console.log('searching bun in these locations:');
+		possibleBunPaths.forEach(p => console.log('- ' + p));
+
+		bunSrc = null;
+		for (const possiblePath of possibleBunPaths) {
+			try {
+				await fs.access(possiblePath);
+				console.log('found bun at:', possiblePath);
+				bunSrc = possiblePath;
+				break;
+			} catch {
+				continue;
+			}
+		}
+
+		if (!bunSrc) {
+			throw new Error('Could not find bun.exe in any expected location. Please check if bun is installed correctly');
+		}
+
+		// Define the destination path
+		bunDest1 = path.join(cwd, 'bun-x86_64-pc-windows-msvc.exe');
+		console.log('copying bun from:', bunSrc);
+		console.log('copying bun to:', bunDest1);
 	} else if (platform === 'macos') {
-		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
-		denoDest1 = path.join(cwd, 'deno-aarch64-apple-darwin');
-		denoDest2 = path.join(cwd, 'deno-x86_64-apple-darwin');
+		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
+		bunDest1 = path.join(cwd, 'bun-aarch64-apple-darwin');
+		bunDest2 = path.join(cwd, 'bun-x86_64-apple-darwin');
 	} else if (platform === 'linux') {
-		denoSrc = path.join(os.homedir(), '.deno', 'bin', 'deno');
-		denoDest1 = path.join(cwd, 'deno-x86_64-unknown-linux-gnu');
-	} else {
-		console.error('unsupported platform for deno binary copy');
+		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
+		bunDest1 = path.join(cwd, 'bun-x86_64-unknown-linux-gnu');
+	}
+
+	if (await fs.exists(bunDest1)) {
+		console.log('bun binary already exists for tauri.');
 		return;
 	}
 
 	try {
-		// Check if the source file exists
-		await fs.access(denoSrc);
-
-		// If it exists, proceed with copying
-		await copyFile(denoSrc, denoDest1);
-		console.log(`deno binary copied successfully to ${denoDest1}`);
+		await fs.access(bunSrc);
+		await copyFile(bunSrc, bunDest1);
+		console.log(`bun binary copied successfully from ${bunSrc} to ${bunDest1}`);
 
 		if (platform === 'macos') {
-			await copyFile(denoSrc, denoDest2);
-			console.log(`deno binary also copied to ${denoDest2}`);
+			await copyFile(bunSrc, bunDest2);
+			console.log(`bun binary also copied to ${bunDest2}`);
 		}
 	} catch (error) {
-		if (error.code === 'ENOENT') {
-			console.error(`deno binary not found at expected location: ${denoSrc}`);
-			console.log('attempting to find deno in PATH...');
-
-			try {
-				const { stdout } = await $`where deno`.quiet();
-				const denoPath = stdout.trim();
-				console.log(`found deno at: ${denoPath}`);
-				await fs.copyFile(denoPath, denoDest1);
-				await fs.chmod(denoDest1, 0o755);
-				console.log(`deno binary copied successfully from PATH to ${denoDest1}`);
-
-				if (platform === 'macos') {
-					await fs.copyFile(denoPath, denoDest2);
-					await fs.chmod(denoDest2, 0o755);
-					console.log(`deno binary also copied to ${denoDest2}`);
-				}
-			} catch (pathError) {
-				console.error('failed to find deno in PATH:', pathError);
-				console.log('please ensure deno is installed and accessible in your PATH');
-			}
-		} else if (error.code === 'EPERM') {
-			console.error(`permission denied when copying deno binary. trying elevated copy...`);
-			await elevatedCopy(denoSrc, denoDest1);
-			console.log(`deno binary copied successfully to ${denoDest1} using elevated permissions`);
-		} else {
-			console.error(`unexpected error: ${error.message}`);
-			process.exit(1);
-		}
+		console.error('failed to copy bun binary:', error);
+		console.error('source path:', bunSrc);
+		process.exit(1);
 	}
 }
 
-// Helper function to copy file with elevated permissions on Windows
-async function elevatedCopy(src, dest) {
-	if (platform === 'win32') {
-		const { execSync } = require('child_process');
-		const command = `powershell -Command "Start-Process cmd -Verb RunAs -ArgumentList '/c copy ${src} ${dest}' -WindowStyle Hidden -Wait"`;
-		execSync(command);
-	} else {
-		// For non-Windows platforms, fall back to regular copy
-		await fs.copyFile(src, dest);
-	}
-	await fs.chmod(dest, 0o755); // ensure the binary is executable
-}
 
 // Helper function to copy file and set permissions
 async function copyFile(src, dest) {
@@ -214,20 +226,24 @@ async function copyFile(src, dest) {
 /* ########## Linux ########## */
 if (platform == 'linux') {
 	// Install APT packages
-	await $`sudo apt-get update`
-	if (hasFeature('opencl')) {
-		config.linux.aptPackages.push('libclblast-dev')
-	}
-	for (const name of config.linux.aptPackages) {
-		await $`sudo apt-get install -y ${name}`
+	try {
+		await $`sudo apt-get update`;
+
+		for (const name of config.linux.aptPackages) {
+			await $`sudo apt-get install -y ${name}`;
+		}
+	} catch (error) {
+		console.error("error installing apps via apt, %s", error.message);
 	}
 
+
 	// Copy screenpipe binary
-	console.log('Copying screenpipe binary for Linux...');
+	console.log('copying screenpipe binary for linux...');
 	const potentialPaths = [
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
+		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
 		'/home/runner/work/screenpipe/screenpipe/target/release/screenpipe',
 	];
@@ -254,8 +270,6 @@ if (platform == 'linux') {
 		// uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
 	}
-
-
 }
 
 /* ########## Windows ########## */
@@ -295,37 +309,14 @@ if (platform == 'windows') {
 		// process.exit(1);
 	}
 
-
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`${wgetPath} --tries=10 --retry-connrefused --waitretry=10 --secure-protocol=auto --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
+		await $`${wgetPath} --no-config --tries=10 --retry-connrefused --waitretry=10 --secure-protocol=auto --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
 	}
-
-	// Setup Tesseract
-	const tesseractName = 'tesseract-setup'
-	const tesseractUrl = 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe'
-	const tesseractInstaller = `${tesseractName}.exe`
-
-	if (!(await fs.exists('tesseract'))) {
-		console.log('Setting up Tesseract for Windows...')
-		await $`${wgetPath} -nc  --no-check-certificate --show-progress ${tesseractUrl} -O ${tesseractInstaller}`
-		await $`"${process.cwd()}\\${tesseractInstaller}" /S /D=C:\\Program Files\\Tesseract-OCR`
-		await $`rm ${tesseractInstaller}`
-		// Replace the mv command with xcopy
-		await $`xcopy "C:\\Program Files\\Tesseract-OCR" tesseract /E /I /H /Y`
-		// Optionally, remove the original directory if needed
-		// await $`rmdir "C:\\Program Files\\Tesseract-OCR" /S /Q`
-		console.log('Tesseract for Windows set up successfully.')
-	} else {
-		console.log('Tesseract for Windows already exists.')
-	}
-
-	// Add Tesseract to PATH
-	process.env.PATH = `${process.cwd()}\\tesseract;${process.env.PATH}`
 
 	// Setup ONNX Runtime
 	const onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
@@ -334,7 +325,7 @@ if (platform == 'windows') {
 	if (!(await fs.exists(onnxRuntimeName))) {
 		console.log('Setting up ONNX Runtime libraries for Windows...')
 		try {
-			await $`${wgetPath} -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
+			await $`${wgetPath} --no-config -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
 			await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
 			await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
 			console.log('ONNX Runtime libraries for Windows set up successfully.')
@@ -347,25 +338,7 @@ if (platform == 'windows') {
 		console.log('ONNX Runtime libraries for Windows already exists.')
 	}
 
-	// Setup OpenBlas
-	if (!(await fs.exists(config.openblasRealname)) && hasFeature('openblas')) {
-		await $`${wgetPath} -nc --show-progress ${config.windows.openBlasUrl} -O ${config.windows.openBlasName}.zip`
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.openBlasName}.zip -o${config.openblasRealname}`
-		await $`rm ${config.windows.openBlasName}.zip`
-		fs.cp(path.join(config.openblasRealname, 'include'), path.join(config.openblasRealname, 'lib'), { recursive: true, force: true })
-		// It tries to link only openblas.lib but our is libopenblas.lib`
-		fs.cp(path.join(config.openblasRealname, 'lib/libopenblas.lib'), path.join(config.openblasRealname, 'lib/openblas.lib'))
-	}
 
-	// Setup CLBlast
-	if (!(await fs.exists(config.clblastRealname)) && !hasFeature('cuda')) {
-		await $`${wgetPath} -nc --show-progress ${config.windows.clblastUrl} -O ${config.windows.clblastName}.zip`
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.zip` // 7z file inside
-		await $`"C:\\Program Files\\7-Zip\\7z.exe" x ${config.windows.clblastName}.7z` // Inner folder
-		await $`mv ${config.windows.clblastName} ${config.clblastRealname}`
-		await $`rm ${config.windows.clblastName}.zip`
-		await $`rm ${config.windows.clblastName}.7z`
-	}
 
 	// Setup vcpkg packages with environment variables set inline
 	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
@@ -419,16 +392,21 @@ if (platform == 'macos') {
 			} else {
 				console.error("No suitable arm64 screenpipe binary found");
 			}
-			// if the binary exists, hard code the fucking dylib
-			if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
-				console.log(`hard coded the FUCKING dylib`);
-			} else if (await fs.exists('screenpipe-aarch64-apple-darwin') && isDevMode) {
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
-				await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-aarch64-apple-darwin`
-				console.log(`Updated dylib paths for arm64 in dev mode`);
+
+			try {
+				// if the binary exists, hard code the fucking dylib
+				if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
+					console.log(`hard coded the dylib`);
+				} else if (await fs.exists('screenpipe-aarch64-apple-darwin') && isDevMode) {
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
+					await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-aarch64-apple-darwin`
+					console.log(`Updated dylib paths for arm64 in dev mode`);
+				}
+			} catch (error) {
+				console.error('Error updating dylib paths:', error);
 			}
 
 
@@ -447,11 +425,16 @@ if (platform == 'macos') {
 			} else {
 				console.error("No suitable x86_64 screenpipe binary found");
 			}
-			// hard code the fucking dylib
-			if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
-				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
-				console.log(`hard coded the FUCKING dylib`);
+
+			try {
+				// hard code the dylib
+				if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
+					console.log(`hard coded the dylib`);
+				}
+			} catch (error) {
+				console.error('Error updating dylib paths:', error);
 			}
 
 		}
@@ -462,7 +445,7 @@ if (platform == 'macos') {
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`wget -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
 		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.tar.xz`
@@ -483,88 +466,7 @@ if (platform == 'macos') {
 
 }
 
-// Nvidia
-let cudaPath
-if (hasFeature('cuda')) {
-	if (process.env['CUDA_PATH']) {
-		cudaPath = process.env['CUDA_PATH']
-	} else if (platform === 'windows') {
-		const cudaRoot = 'C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\'
-		cudaPath = 'C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5'
-		if (await fs.exists(cudaRoot)) {
-			const folders = await fs.readdir(cudaRoot)
-			if (folders.length > 0) {
-				cudaPath = cudaPath.replace('v12.5', folders[0])
-			}
-		}
-	}
 
-	if (process.env.GITHUB_ENV) {
-		console.log('CUDA_PATH', cudaPath)
-	}
-
-	if (platform === 'windows') {
-		const windowsConfig = {
-			bundle: {
-				resources: {
-					'ffmpeg\\bin\\x64\\*': './',
-					'openblas\\bin\\*.dll': './',
-					[`${cudaPath}\\bin\\cudart64_*`]: './',
-					[`${cudaPath}\\bin\\cublas64_*`]: './',
-					[`${cudaPath}\\bin\\cublasLt64_*`]: './',
-					'tesseract\\*': './',
-					'onnxruntime*\\lib\\*.dll': './',
-				},
-				externalBin: [
-					'screenpipe'
-				]
-			},
-		}
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(windowsConfig, null, 4))
-	}
-	if (platform === 'linux') {
-		// Add cuda toolkit depends package
-		const tauriConfigContent = await fs.readFile('tauri.linux.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.linux.deb.depends.push('nvidia-cuda-toolkit')
-		await fs.writeFile('tauri.linux.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-if (hasFeature('opencl')) {
-	if (platform === 'windows') {
-		const tauriConfigContent = await fs.readFile('tauri.windows.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.resources['clblast\\bin\\*.dll'] = './'
-		tauriConfig.bundle.resources['C:\\vcpkg\\packages\\opencl_x64-windows\\bin\\*.dll'] = './'
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-// OpenBlas
-if (hasFeature('openblas')) {
-	if (platform === 'windows') {
-		const tauriConfigContent = await fs.readFile('tauri.windows.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.resources['openblas\\bin\\*.dll'] = './'
-		await fs.writeFile('tauri.windows.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
-
-// ROCM
-let rocmPath = '/opt/rocm'
-if (hasFeature('rocm')) {
-	if (process.env.GITHUB_ENV) {
-		console.log('ROCM_PATH', rocmPath)
-	}
-	if (platform === 'linux') {
-		// Add rocm toolkit depends package
-		const tauriConfigContent = await fs.readFile('tauri.linux.conf.json', { encoding: 'utf-8' })
-		const tauriConfig = JSON.parse(tauriConfigContent)
-		tauriConfig.bundle.linux.deb.depends.push('rocm')
-		await fs.writeFile('tauri.linux.conf.json', JSON.stringify(tauriConfig, null, 4))
-	}
-}
 
 // Development hints
 if (!process.env.GITHUB_ENV) {
@@ -580,22 +482,6 @@ if (!process.env.GITHUB_ENV) {
 		console.log(`$env:OPENBLAS_PATH = "${exports.openBlas}"`)
 		console.log(`$env:LIBCLANG_PATH = "${exports.libClang}"`)
 		console.log(`$env:PATH += "${exports.cmake}"`)
-		if (hasFeature('older-cpu')) {
-			console.log(`$env:WHISPER_NO_AVX = "ON"`)
-			console.log(`$env:WHISPER_NO_AVX2 = "ON"`)
-			console.log(`$env:WHISPER_NO_FMA = "ON"`)
-			console.log(`$env:WHISPER_NO_F16C = "ON"`)
-		}
-		if (hasFeature('cuda')) {
-			console.log(`$env:CUDA_PATH = "${cudaPath}"`)
-		}
-		if (hasFeature('opencl')) {
-			console.log(`$env:CLBlast_DIR = "${exports.clblast}"`)
-		}
-		if (hasFeature('rocm')) {
-			console.log(`$env:ROCM_VERSION = "6.1.2"`)
-			console.log(`$env:ROCM_PATH = "${rocmPath}"`)
-		}
 	}
 	if (!process.env.GITHUB_ENV) {
 		console.log('bun tauri build')
@@ -618,27 +504,113 @@ if (process.env.GITHUB_ENV) {
 		const openblas = `OPENBLAS_PATH=${exports.openBlas}\n`
 		console.log('Adding ENV', openblas)
 		await fs.appendFile(process.env.GITHUB_ENV, openblas)
-
-		if (hasFeature('opencl')) {
-			const clblast = `CLBlast_DIR=${exports.clblast}\n`
-			console.log('Adding ENV', clblast)
-			await fs.appendFile(process.env.GITHUB_ENV, clblast)
-		}
-
-		if (hasFeature('older-cpu')) {
-			await fs.appendFile(process.env.GITHUB_ENV, `WHISPER_NO_AVX=ON\n`)
-			await fs.appendFile(process.env.GITHUB_ENV, `WHISPER_NO_AVX2=ON\n`)
-			await fs.appendFile(process.env.GITHUB_ENV, `WHISPER_NO_FMA=ON\n`)
-			await fs.appendFile(process.env.GITHUB_ENV, `WHISPER_NO_F16C=ON\n`)
-		}
 	}
 }
 
-// Install and setup Deno (add this near the end of the script)
-await installDeno();
-await copyDenoBinary();
+// Modify the installOllamaSidecar function
+async function installOllamaSidecar() {
+	const ollamaDir = path.join(__dirname, '..', 'src-tauri');
+	const ollamaVersion = 'v0.3.14';
+
+	let ollamaExe, ollamaUrl;
+
+	if (platform === 'windows') {
+		ollamaExe = 'ollama-x86_64-pc-windows-msvc.exe';
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-windows-amd64.zip`;
+	} else if (platform === 'macos') {
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-darwin`;
+	} else if (platform === 'linux') {
+		ollamaExe = 'ollama-x86_64-unknown-linux-gnu';
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-linux-amd64.tgz`;
+	} else {
+		throw new Error('Unsupported platform');
+	}
 
 
+	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
+		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
+		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
+		console.log('ollama sidecar already exists. skipping installation.');
+		return;
+	}
+
+	try {
+		await fs.mkdir(ollamaDir, { recursive: true });
+		const downloadPath = path.join(ollamaDir, path.basename(ollamaUrl));
+
+		console.log('Downloading Ollama...');
+		if (platform === 'windows') {
+			await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
+		} else {
+			await $`wget --no-config -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
+		}
+
+		console.log('Extracting Ollama...');
+		if (platform === 'windows') {
+			await $`powershell -command "Expand-Archive -Path '${downloadPath}' -DestinationPath '${ollamaDir}'"`;
+			await fs.rename(path.join(ollamaDir, 'ollama.exe'), path.join(ollamaDir, ollamaExe));
+		} else if (platform === 'linux') {
+			await $`tar -xzf "${downloadPath}" -C "${ollamaDir}"`;
+			await fs.rename(path.join(ollamaDir, 'bin/ollama'), path.join(ollamaDir, ollamaExe));
+		} else if (platform === 'macos') {
+			// just copy to both archs
+			await fs.copyFile(downloadPath, path.join(ollamaDir, "ollama-aarch64-apple-darwin"));
+			await fs.copyFile(downloadPath, path.join(ollamaDir, "ollama-x86_64-apple-darwin"));
+		}
+
+		console.log('Setting permissions...');
+		if (platform === 'linux') {
+			await fs.chmod(path.join(ollamaDir, ollamaExe), '755');
+		} else if (platform === 'macos') {
+			await fs.chmod(path.join(ollamaDir, "ollama-aarch64-apple-darwin"), '755');
+			await fs.chmod(path.join(ollamaDir, "ollama-x86_64-apple-darwin"), '755');
+		}
+
+		console.log('Cleaning up...');
+		if (platform !== 'macos') {
+			await fs.unlink(downloadPath);
+		}
+
+		if (platform === 'windows') {
+			// Remove older library versions to save storage
+			const libDir = path.join(ollamaDir, 'lib', 'ollama');
+			const oldLibs = [
+				'cublas64_11.dll',
+				'cublasLt64_11.dll',
+				'cudart64_110.dll',
+				'ggml_cuda_v11.dll',
+				'rocblas',
+				'rocblas.dll',
+				'ggml_rocm.dll'
+			];
+
+			for (const lib of oldLibs) {
+				try {
+					const libPath = path.join(libDir, lib);
+					const stat = await fs.stat(libPath);
+					if (stat.isDirectory()) {
+						await fs.rm(libPath, { recursive: true, force: true });
+					} else {
+						await fs.unlink(libPath);
+					}
+					console.log(`removed old library: ${lib}`);
+				} catch (error) {
+					console.warn(`failed to remove ${lib}:`, error.message);
+				}
+			}
+		}
+
+		console.log('ollama sidecar installed successfully');
+	} catch (error) {
+		console.error('error installing ollama sidecar:', error);
+		throw error;
+	}
+}
+
+// Near the end of the script, call these functions
+await installBun();
+await copyBunBinary();
+await installOllamaSidecar().catch(console.error);
 
 // --dev or --build
 const action = process.argv?.[2]
@@ -657,3 +629,5 @@ if (action?.includes('--build' || action.includes('--dev'))) {
 	await $`bun install`
 	await $`bunx tauri ${action.includes('--dev') ? 'dev' : 'build'}`
 }
+
+

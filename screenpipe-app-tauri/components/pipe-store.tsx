@@ -49,6 +49,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { LogFileButton } from "./log-file-button";
 
 export interface Pipe {
   enabled: boolean;
@@ -95,7 +96,6 @@ const PipeDialog: React.FC = () => {
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const { health } = useHealthCheck();
-  const [isLogOpen, setIsLogOpen] = useState(false);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -427,8 +427,19 @@ const PipeDialog: React.FC = () => {
             <Heart className="mr-2 h-4 w-4" />
             support us
           </Button>
+          <LogFileButton />
         </div>
         <Separator className="my-4" />
+
+        {selectedPipe && selectedPipe.enabled && selectedPipe?.config?.port && (
+          <div className="mt-4 h-[400px]">
+            <h3 className="text-xl font-semibold mb-2">pipe ui</h3>
+            <iframe
+              src={`http://localhost:${selectedPipe.config.port}`}
+              className="w-full h-full border-0"
+            />
+          </div>
+        )}
 
         {selectedPipe.enabled && (
           <>
@@ -491,6 +502,7 @@ const PipeDialog: React.FC = () => {
                   );
                 },
                 a({ href, children }) {
+                  console.log("Processing link:", href);
                   const isDirectVideo =
                     href?.match(/\.(mp4|webm|ogg)$/) ||
                     href?.includes("user-attachments/assets");
@@ -498,16 +510,16 @@ const PipeDialog: React.FC = () => {
                     /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
                   );
 
+                  console.log("Is direct video:", isDirectVideo);
+                  console.log("Is YouTube video:", !!youtubeMatch);
+
                   if (isDirectVideo) {
                     return (
-                      <video
+                      <RetryableVideo
                         src={href}
-                        controls
-                        className="max-w-full h-auto"
-                        style={{ maxHeight: "400px" }}
-                      >
-                        your browser does not support the video tag.
-                      </video>
+                        maxRetries={3}
+                        retryDelay={1000}
+                      />
                     );
                   } else if (youtubeMatch) {
                     const videoId = youtubeMatch[1];
@@ -525,6 +537,10 @@ const PipeDialog: React.FC = () => {
                     );
                   }
 
+                  // If it's not recognized as a video, log this info
+                  console.log(
+                    "Link not recognized as video, rendering as normal link"
+                  );
                   return (
                     <a href={href} target="_blank" rel="noopener noreferrer">
                       {children}
@@ -710,10 +726,7 @@ const PipeDialog: React.FC = () => {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    onClick={handleResetAllPipes}
-                  >
+                  <Button size="sm" onClick={handleResetAllPipes}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     reset all pipes
                   </Button>
@@ -753,3 +766,42 @@ const PipeDialog: React.FC = () => {
 };
 
 export default PipeDialog;
+
+// Add this new component
+const RetryableVideo = ({
+  src,
+  maxRetries = 3,
+  retryDelay = 1000,
+}: {
+  src?: string;
+  maxRetries?: number;
+  retryDelay?: number;
+}) => {
+  const [retries, setRetries] = useState(0);
+  const [key, setKey] = useState(0);
+
+  const handleError = (e: any) => {
+    console.error("Video loading error:", e);
+    if (retries < maxRetries) {
+      setTimeout(() => {
+        setRetries(retries + 1);
+        setKey(key + 1); // This forces a re-render of the video element
+      }, retryDelay);
+    }
+  };
+
+  return (
+    <video
+      key={key}
+      src={src}
+      controls
+      className="max-w-full h-auto"
+      style={{ maxHeight: "400px" }}
+      onError={handleError}
+      onLoadStart={() => console.log("Video load started:", src)}
+      onLoadedData={() => console.log("Video data loaded:", src)}
+    >
+      your browser does not support the video tag.
+    </video>
+  );
+};

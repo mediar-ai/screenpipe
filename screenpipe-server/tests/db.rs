@@ -14,8 +14,8 @@ mod tests {
     #[tokio::test]
     async fn test_insert_and_search_ocr() {
         let db = setup_test_db().await;
-        let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame().await.unwrap();
+        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let frame_id = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello, world!",
@@ -91,12 +91,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_update_and_search_audio() {
+        let db = setup_test_db().await;
+        let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+        )
+        .await
+        .unwrap();
+
+        let a = db
+            .update_audio_transcription(audio_chunk_id, "This is a test.")
+            .await
+            .unwrap();
+
+        assert_eq!(a, 1);
+
+        let results = db
+            .search(
+                "",
+                ContentType::Audio,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        if let SearchResult::Audio(audio_result) = &results[0] {
+            assert_eq!(audio_result.transcription, "This is a test.");
+            assert_eq!(audio_result.file_path, "test_audio.mp4");
+        } else {
+            panic!("Expected Audio result");
+        }
+    }
+
+    #[tokio::test]
     async fn test_search_all() {
         let db = setup_test_db().await;
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id = db.insert_frame().await.unwrap();
+        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let frame_id = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
@@ -158,8 +203,8 @@ mod tests {
         let start_time = Utc::now();
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id1 = db.insert_frame().await.unwrap();
+        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
@@ -193,7 +238,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame().await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
@@ -310,8 +355,8 @@ mod tests {
         let start_time = Utc::now();
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4").await.unwrap();
-        let frame_id1 = db.insert_frame().await.unwrap();
+        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
@@ -343,7 +388,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame().await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",

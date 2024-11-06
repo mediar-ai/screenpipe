@@ -94,6 +94,7 @@ async fn test_transcription_accuracy() {
                 None,
                 &output_path,
                 true,
+                vec![],
             )
             .await
             .unwrap();

@@ -1,0 +1,66 @@
+{
+  "fields": [
+    {
+      "name": "interval",
+      "type": "number",
+      "default": 60,
+      "description": "interval in seconds to read your screen data and extract structured logs"
+    },
+    {
+      "name": "aiApiUrl",
+      "type": "string",
+      "default": "http://localhost:11434/api",
+      "description": "ollama api url"
+    },
+    {
+      "name": "aiModel",
+      "type": "string",
+      "default": "llama3.2:3b-instruct-q4_K_M",
+      "description": "ai model name"
+    },
+    {
+      "name": "twitterBearerToken",
+      "type": "string",
+      "description": "twitter bearer token, find it here: https://developer.x.com/en/portal/apps"
+    },
+    {
+      "name": "customPrompt",
+      "type": "string",
+      "default": "you generate comments to tweets and optimise for the twitter algorithm to get maximum score\n\nrules:\n- be controversial but not offensive\n- use lowercase\n- be concise\n- sound like a real person, not a brand, nor an ai\n- optimize for engagement\n- don't use hashtags\n- don't be cringe\n- don't be fucking woke",
+      "description": "custom prompt for generating tweets"
+    },
+    {
+      "name": "aiProvider",
+      "type": "string",
+      "default": "ollama",
+      "description": "ai provider to use (ollama or openai)"
+    },
+    {
+      "name": "openaiApiKey",
+      "type": "string",
+      "description": "openai api key (required if using openai provider)",
+      "optional": true
+    },
+    {
+      "name": "openaiModel",
+      "type": "string",
+      "default": "gpt-4o",
+      "description": "openai model to use (if using openai provider)",
+      "optional": true
+    },
+    {
+      "name": "keywords",
+      "type": "string",
+      "default": "",
+      "description": "comma-separated list of keywords to search for (if empty, keywords will be extracted from screen data)",
+      "optional": true
+    },
+    {
+      "name": "targetUsers",
+      "type": "string",
+      "default": "",
+      "description": "comma-separated list of twitter usernames to search within their network (if empty, searches globally)",
+      "optional": true
+    }
+  ]
+}

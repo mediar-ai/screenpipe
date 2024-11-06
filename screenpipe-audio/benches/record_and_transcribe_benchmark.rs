@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
     create_whisper_channel, default_input_device, record_and_transcribe, AudioDevice, AudioInput,
-    AudioTranscriptionEngine,
+    AudioStream, AudioTranscriptionEngine,
 };
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -24,6 +24,7 @@ async fn setup_test() -> (
         None,
         &output_path,
         VadSensitivity::High,
+        vec![],
     )
     .await
     .unwrap();
@@ -56,9 +57,13 @@ fn bench_record_and_transcribe(c: &mut Criterion) {
                 let (audio_device, _, whisper_sender, is_running) = setup_test().await;
                 let duration = Duration::from_secs(5); // 5 seconds of recording
 
+                let audio_stream = AudioStream::from_device(audio_device, is_running.clone())
+                    .await
+                    .unwrap();
+
                 let start = std::time::Instant::now();
                 let result = record_and_transcribe(
-                    black_box(audio_device),
+                    black_box(Arc::new(audio_stream)),
                     black_box(duration),
                     black_box(whisper_sender),
                     black_box(is_running),

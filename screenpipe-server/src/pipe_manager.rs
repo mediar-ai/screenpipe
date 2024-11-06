@@ -6,6 +6,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tracing::{debug, info, warn};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -14,21 +15,36 @@ pub struct PipeInfo {
     pub enabled: bool,
     pub config: Value,
     pub source: String,
+    pub port: Option<u16>,
+}
+
+#[derive(Debug)]
+pub enum PipeControl {
+    Enable(String),
+    Disable(String),
 }
 
 pub struct PipeManager {
     screenpipe_dir: PathBuf,
+    control_tx: Sender<PipeControl>,
 }
 
 impl PipeManager {
-    pub fn new(screenpipe_dir: PathBuf) -> Self {
-        PipeManager { screenpipe_dir }
+    pub fn new(screenpipe_dir: PathBuf) -> (Self, Receiver<PipeControl>) {
+        let (control_tx, control_rx) = mpsc::channel(32);
+        (
+            PipeManager {
+                screenpipe_dir,
+                control_tx,
+            },
+            control_rx,
+        )
     }
 
     pub async fn start_pipe(
         &self,
         id: &str,
-    ) -> Result<impl Future<Output = Result<(), anyhow::Error>>> {
+    ) -> Result<impl Future<Output = Result<Option<u16>, anyhow::Error>>> {
         let pipes = self.list_pipes().await;
 
         if let Some(_) = pipes.iter().find(|pipe| pipe.id == id) {
@@ -72,6 +88,9 @@ impl PipeManager {
             })
         };
 
+        // Check enabled before moving new_config
+        let enabled = new_config.get("enabled").and_then(Value::as_bool);
+
         if let Value::Object(existing_config) = &mut config {
             if let Value::Object(updates) = new_config {
                 for (key, value) in updates {
@@ -82,6 +101,16 @@ impl PipeManager {
             }
         } else {
             return Err(anyhow::anyhow!("existing configuration is not an object"));
+        }
+
+        // Use the previously extracted enabled value
+        if let Some(enabled) = enabled {
+            let control = if enabled {
+                PipeControl::Enable(id.to_string())
+            } else {
+                PipeControl::Disable(id.to_string())
+            };
+            let _ = self.control_tx.send(control).await;
         }
 
         let updated_config_str = serde_json::to_string_pretty(&config)?;
@@ -118,7 +147,11 @@ impl PipeManager {
                 .as_str()
                 .unwrap_or("")
                 .to_string(),
-            config,
+            config: config.clone(),
+            port: config
+                .get("port")
+                .and_then(Value::as_u64)
+                .and_then(|p| u16::try_from(p).ok()),
         }
     }
 
@@ -131,15 +164,21 @@ impl PipeManager {
                 let file_name = entry.file_name();
                 let pipe_id = file_name.to_string_lossy();
 
-                // ignore hidden directories
-                if !pipe_id.starts_with('.') {
+                // ignore hidden directories and files
+                if !pipe_id.starts_with('.')
+                    && entry
+                        .file_type()
+                        .await
+                        .map(|ft| ft.is_dir())
+                        .unwrap_or(false)
+                {
                     let config_path = entry.path().join("pipe.json");
-                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path));
+                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path).await);
                 }
             }
         }
 
-        futures::future::join_all(pipe_infos).await
+        pipe_infos
     }
 
     pub async fn download_pipe(&self, url: &str) -> Result<String> {

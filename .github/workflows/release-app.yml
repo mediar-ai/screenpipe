@@ -11,6 +11,13 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      commit_hash:
+        description: "Commit hash to build from (optional)"
+        required: false
+      version:
+        description: "Version to set in Cargo.toml (required if commit_hash is provided)"
+        required: false
 
 jobs:
   generate_changelog:
@@ -44,12 +51,22 @@ jobs:
 
   draft:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_hash || github.ref }}
+
+      - name: Update version in Cargo.toml
+        if: github.event.inputs.commit_hash && github.event.inputs.version
+        run: |
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          else
+            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          fi
 
       - name: create draft release
-        uses: crabnebula-dev/cloud-release@v0
+        uses: crabnebula-dev/cloud-release@v0.2.0
         with:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
@@ -63,25 +80,35 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
-            args: "--target aarch64-apple-darwin --features metal"
+            args: "--target aarch64-apple-darwin --features metal,beta"
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin"
           - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin --features metal"
+            args: "--target x86_64-apple-darwin --features metal,beta"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "" # TODO CUDA, mkl
+            args: "--features mkl" # TODO CUDA
             tauri-args: ""
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
-          # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_hash || github.ref }}
+
+      - name: Update version in Cargo.toml
+        if: github.event.inputs.commit_hash && github.event.inputs.version
+        run: |
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          else
+            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          fi
 
       - name: setup Bun
         uses: oven-sh/setup-bun@v1
@@ -99,8 +126,15 @@ jobs:
 
       - uses: actions/cache@v3
         with:
-          path: "**/node_modules"
-          key: ${{ runner.os }}-modules-${{ hashFiles('**/bun.lockb') }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/${{ matrix.target }}/release/deps
+            target/${{ matrix.target }}/release/build
+          key: ${{ matrix.platform }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}-v1
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-v1-
 
       - name: Cache Homebrew packages
         if: matrix.platform == 'macos-latest'
@@ -125,20 +159,8 @@ jobs:
             screenpipe-app-tauri/src-tauri/tesseract-*
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build
 
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ matrix.platform }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
@@ -147,6 +169,19 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           brew install ffmpeg pkg-config
+
+      # - name: Install MKL
+      #   if: matrix.platform == 'windows-latest'
+      #   run: |
+      #     pip install mkl mkl-devel mkl-static
+
+      - name: Install MKL in Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          pip install mkl mkl-devel mkl-static
+          mkdir -p /opt/intel/mkl
+          cp -rfv ~/.local/lib/* ~/.local/include/* /opt/intel/mkl/
+          sudo cp -rfv ~/.local/lib/* /usr/lib/x86_64-linux-gnu/
 
       - name: Install frontend dependencies
         shell: bash
@@ -159,6 +194,10 @@ jobs:
       #   if: matrix.platform == 'windows-latest'
       #   uses: mxschmitt/action-tmate@v3
 
+      - name: Install wget on Linux
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
+        run: sudo apt-get install -y wget
+
       - name: Run pre_build.js
         shell: bash
         env:
@@ -167,28 +206,24 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
-      - name: Verify Tesseract Installation
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          $env:PATH += ";${{ github.workspace }}\screenpipe-app-tauri\src-tauri\tesseract"
-          tesseract --version
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Tesseract is not properly installed or not in PATH"
-            exit 1
-          }
-
       - name: Build CLI
         shell: bash
+        # TODO: too slow
+        # env:
+        #   CARGO_PROFILE_RELEASE_LTO: "true"
+        #   CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
+        #   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
-            export V8_FLAGS="--max-old-space-size=8192" # https://github.com/denoland/deno_core/issues/916
           fi
-          cargo build --release ${{ matrix.args }}
-
+          if [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            export PKG_CONFIG_PATH="~/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
+            export MKLROOT="/opt/intel/mkl"
+          fi
+          cargo build --release -p screenpipe-server ${{ matrix.args }}
 
       # Run pre build again to copy the CLI into app
       - name: Run pre_build.js
@@ -198,20 +233,37 @@ jobs:
         working-directory: ./screenpipe-app-tauri
 
       - name: Install vcpkg
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
+
+      - name: Free Disk Space (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+        
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
@@ -230,13 +282,22 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
+          # ubuntu mkl
+          PKG_CONFIG_PATH: ${{ matrix.platform == 'ubuntu-22.04' && '~/.local/lib/pkgconfig:$PKG_CONFIG_PATH' || '' }}
+          MKLROOT: ${{ matrix.platform == 'ubuntu-22.04' && '/opt/intel/mkl' || '' }}
+          # Optimize for build speed on Windows
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.platform == 'windows-latest' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.platform == 'windows-latest' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.platform == 'windows-latest' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
+          # Enable incremental compilation for Windows
+          CARGO_INCREMENTAL: ${{ matrix.platform == 'windows-latest' && '1' || '0' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0
+        uses: crabnebula-dev/cloud-release@v0.2.0
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}

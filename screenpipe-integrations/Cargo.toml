@@ -20,3 +20,4 @@ tempfile = "3.2"
 anyhow = "1.0"
 chrono-tz = "0.8"
 mime_guess = "2.0.5"
+screenpipe-core = { path = "../screenpipe-core" }

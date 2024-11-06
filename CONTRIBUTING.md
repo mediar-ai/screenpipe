@@ -47,11 +47,15 @@ this section guides you through submitting an enhancement suggestion for screen 
 
 ### rust styleguide
 
-all rust code must adhere to [rust style guide](https://github.com/rust-lang/style-team/blob/master/guide/guide.md).
+all rust code must adhere to [rust style guide](https://github.com/rust-lang/rust/tree/4f2f477fded0a47b21ed3f6aeddeafa5db8bf518/src/doc/style-guide/src).
 
 we follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) folder structure.
 
 ## additional notes
+
+### try to keep files small (under 600 lines of code)
+
+AI is quite bad when files are big, we should try to keep small so we move faster (also it's nice for humans too 🤓)
 
 ### ai system prompt
 
@@ -59,7 +63,7 @@ i use cursor with this prompt to help me with the code:
 
 ```
 Rules:
-- Coding: louis is working on screenpipe most of the time, it's an open source app, lib, and CLI, that record screens & mics 24/7, extract OCR & STT, save to local db, connect to AI, do magic, it's written in Rust + Tauri and we write plugins (pipes) in TS + Deno. the Rust CLI is embedded as a sidecar in Tauri. it works on macos, windows, linux
+- Coding: louis is working on screenpipe most of the time, it's an open source app, lib, and CLI, that record screens & mics 24/7, extract OCR & STT, save to local db, connect to AI, do magic, it's written in Rust + Tauri and we write plugins (pipes) in TS + Bun. the Rust CLI is embedded as a sidecar in Tauri. it works on macos, windows, linux
 - Coding: always keep my style black and white, with some nerdy style and fonts pixelated / scientific style
 - Coding: do not remove @ts-ignore except if i explicitly ask you
 - Coding: always use lower case for logging stuff or UI
@@ -157,6 +161,20 @@ this is @louis030195 whole `.vscode/settings.json` file:
 
 
 ## other hacks
+
+### running dev + prod in the same time
+
+one command i keep using to avoid having to kill my main "production" process is:
+
+```bash
+./target/release/screenpipe --port 3035 --data-dir /tmp/sp
+```
+
+it will avoid conflicts with the port and avoid conflicts with the data dir
+
+especially useful if you've done new database migrations and want to avoid breaking your previous months of data :)
+
+on macos the /tmp dir keeps being cleaned up by the system fyi
 
 ### debugging github action
 

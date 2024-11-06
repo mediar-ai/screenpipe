@@ -24,7 +24,14 @@ pub use llama::*;
 pub mod pipes;
 #[cfg(feature = "pipes")]
 pub use pipes::*;
+mod language;
 #[cfg(feature = "security")]
 pub mod pii_removal;
+
 #[cfg(feature = "security")]
 pub use pii_removal::*;
+
+pub mod network;
+pub use network::*;
+
+pub use language::{Language, TESSERACT_LANGUAGES};

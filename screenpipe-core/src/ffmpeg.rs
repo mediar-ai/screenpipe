@@ -1,6 +1,7 @@
 use log::{debug, error};
 use std::path::PathBuf;
 use which::which;
+use once_cell::sync::Lazy;
 
 #[cfg(not(windows))]
 const EXECUTABLE_NAME: &str = "ffmpeg";
@@ -8,7 +9,13 @@ const EXECUTABLE_NAME: &str = "ffmpeg";
 #[cfg(windows)]
 const EXECUTABLE_NAME: &str = "ffmpeg.exe";
 
+static FFMPEG_PATH: Lazy<Option<PathBuf>> = Lazy::new(find_ffmpeg_path_internal);
+
 pub fn find_ffmpeg_path() -> Option<PathBuf> {
+    FFMPEG_PATH.as_ref().map(|p| p.clone())
+}
+
+fn find_ffmpeg_path_internal() -> Option<PathBuf> {
     debug!("Starting search for ffmpeg executable");
 
     // Check if `ffmpeg` is in the PATH environment variable

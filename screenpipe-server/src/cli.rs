@@ -3,6 +3,7 @@ use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as C
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use clap::ValueEnum;
 use screenpipe_audio::vad_engine::VadEngineEnum;
+use screenpipe_core::Language;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
@@ -34,7 +35,7 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliOcrEngine {
     Unstructured,
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     Tesseract,
     #[cfg(target_os = "windows")]
     WindowsNative,
@@ -46,7 +47,7 @@ impl From<CliOcrEngine> for CoreOcrEngine {
     fn from(cli_engine: CliOcrEngine) -> Self {
         match cli_engine {
             CliOcrEngine::Unstructured => CoreOcrEngine::Unstructured,
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             CliOcrEngine::Tesseract => CoreOcrEngine::Tesseract,
             #[cfg(target_os = "windows")]
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
@@ -178,6 +179,9 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub monitor_id: Vec<u32>,
 
+    #[arg(short = 'l', long, value_enum)]
+    pub language: Vec<Language>,
+
     /// Enable PII removal from OCR text property that is saved to db and returned in search results
     #[arg(long, default_value_t = false)]
     pub use_pii_removal: bool,
@@ -192,7 +196,7 @@ pub struct Cli {
 
     /// List of windows to ignore (by title) for screen recording - we use contains to match, example:
     /// --ignored-windows "Spotify" --ignored-windows "Bit" will ignore both "Bitwarden" and "Bittorrent"
-    /// --ignored-windows "porn" will ignore "pornhub" and "youporn"
+    /// --ignored-windows "x" will ignore "Home / X" and "SpaceX"
     #[arg(long)]
     pub ignored_windows: Vec<String>,
 
@@ -226,6 +230,19 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_llm: bool,
 
+    /// Enable beta features
+    #[cfg(feature = "beta")]
+    #[arg(long, default_value_t = false)]
+    pub enable_beta: bool,
+
+    /// Enable UI monitoring (macOS only)
+    #[arg(long, default_value_t = false)]
+    pub enable_ui_monitoring: bool,
+    
+    /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
+    #[arg(long, default_value_t = false)]
+    pub enable_frame_cache: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 
@@ -239,7 +256,12 @@ pub enum Command {
         subcommand: PipeCommand,
     },
     /// Setup screenpipe environment
-    Setup,
+    Setup {
+        /// Enable beta features
+        // #[cfg(feature = "beta")] // ! TODO
+        #[arg(long, default_value_t = false)]
+        enable_beta: bool,
+    },
 }
 
 

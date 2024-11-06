@@ -1,0 +1,20 @@
+{
+  "name": "ai-proxy",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "cf-typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241011.0",
+    "@types/node": "^22.7.5",
+    "typescript": "^5.5.2",
+    "wrangler": "^3.60.3"
+  },
+  "dependencies": {
+    "langfuse-node": "^3.27.0"
+  }
+}

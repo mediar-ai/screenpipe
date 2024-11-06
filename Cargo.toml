@@ -5,6 +5,7 @@ members = [
     "screenpipe-audio",
     "screenpipe-server", 
     "screenpipe-integrations",
+    "screenpipe-actions",
 ]
 exclude = [
     "screenpipe-app-tauri/src-tauri",
@@ -13,7 +14,7 @@ resolver = "2"
 
 
 [workspace.package]
-version = "0.1.96"
+version = "0.1.98"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"
@@ -40,6 +41,7 @@ criterion = { version = "0.5.1", features = ["async_tokio"] }
 vcpkg = "0.2"
 
 [patch.crates-io]
+# enables chinese mirror (hf is banned in china)
 hf-hub = { git = "https://github.com/king-jingxiang/hf-hub" }
 
 [workspace.metadata.vcpkg]
@@ -47,9 +49,3 @@ git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
 
-[profile.release]
-lto = true
-
-[profile.dev-release]
-inherits = "release"
-lto = false
