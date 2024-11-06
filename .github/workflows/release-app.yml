@@ -60,7 +60,7 @@ jobs:
           - platform: "ubuntu-22.04" # Ubuntu x86_64
             args: "--features mkl" # TODO CUDA
             tauri-args: ""
-          - platform: [self-hosted, windows, x64] # Windows x86_64
+          - platform: windows-latest # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
