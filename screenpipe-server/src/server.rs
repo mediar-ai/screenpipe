@@ -1284,42 +1284,70 @@ async fn stream_frames_handler(
     );
 
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
-    let cache = state.frame_cache.as_ref().unwrap().clone();
 
-    // Calculate duration in minutes between start and end time
-    let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1) as i64;
+    // Create a stream that will be used for both success and error cases
+    let stream = async_stream::stream! {
+        // Early validation of frame cache
+        let cache = match state.frame_cache.as_ref() {
+            Some(cache) => cache.clone(),
+            None => {
+                error!("frame cache not initialized");
+                yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
+                return;
+            }
+        };
 
-    // Calculate center timestamp
-    let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
+        // Calculate duration in minutes between start and end time
+        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1) as i64;
 
-    // Use a cancellation token to handle client disconnection
-    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        // Calculate center timestamp
+        let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
 
-    // Spawn frame extraction task using get_frames
-    tokio::spawn({
-        let frame_tx = frame_tx.clone();
-        async move {
-            tokio::select! {
-                result = cache.get_frames(center_timestamp, duration_minutes, frame_tx, true) => {
-                    if let Err(e) = result {
-                        error!("frame extraction failed: {}", e);
+        // Use a cancellation token to handle client disconnection
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+
+        // Spawn frame extraction task using get_frames
+        tokio::spawn({
+            let frame_tx = frame_tx.clone();
+            async move {
+                tokio::select! {
+                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true) => {
+                        if let Err(e) = result {
+                            error!("frame extraction failed: {}", e);
+                            // Send error to client
+                            let _ = frame_tx.send(TimeSeriesFrame {
+                                timestamp: Utc::now(),
+                                frame_data: vec![],
+                                error: Some(format!("frame extraction failed: {}", e)),
+                            }).await;
+                        }
+                    }
+                    _ = cancel_rx => {
+                        debug!("client disconnected, stopping frame stream");
                     }
                 }
-                _ = cancel_rx => {
-                    debug!("client disconnected, stopping frame stream");
-                }
             }
-        }
-    });
+        });
 
-    let stream = async_stream::stream! {
         let _cancel_guard = scopeguard::guard(cancel_tx, |tx| {
             let _ = tx.send(());  // Signal cancellation when stream is dropped
         });
 
         while let Some(timeseries_frame) = frame_rx.recv().await {
-            if let Ok(json) = serde_json::to_string(&StreamTimeSeriesResponse::from(timeseries_frame)) {
-                yield Ok(Event::default().data(json));
+            // Handle potential error in the frame
+            if let Some(error) = timeseries_frame.error {
+                yield Ok(Event::default().data(format!("{{\"error\": \"{}\"}}", error)));
+                break; // Stop streaming on error
+            }
+
+            // Convert frame to response and send
+            match serde_json::to_string(&StreamTimeSeriesResponse::from(timeseries_frame)) {
+                Ok(json) => yield Ok(Event::default().data(json)),
+                Err(e) => {
+                    error!("failed to serialize frame: {}", e);
+                    yield Ok(Event::default().data(format!("{{\"error\": \"failed to serialize frame: {}\"}}", e)));
+                    break;
+                }
             }
         }
     };

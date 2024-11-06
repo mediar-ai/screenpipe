@@ -24,6 +24,7 @@ type FrameChannel = mpsc::Sender<TimeSeriesFrame>;
 pub struct TimeSeriesFrame {
     pub timestamp: DateTime<Utc>,
     pub frame_data: Vec<DeviceFrame>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -425,6 +426,7 @@ impl FrameCache {
             let mut timeseries_frame = TimeSeriesFrame {
                 timestamp: chunk.timestamp,
                 frame_data: Vec::new(),
+                error: None,
             };
 
             for device_data in &chunk.ocr_entries {
@@ -602,9 +604,11 @@ async fn extract_frame(
 
     // Calculate frame interval based on target FPS
     let frame_interval = (source_fps / 0.1).round() as i64; // Using 0.1 as target FPS
-    
-    debug!("extracting frames with interval {} (source: {}fps, target: {}fps)", 
-           frame_interval, source_fps, 0.1);
+
+    debug!(
+        "extracting frames with interval {} (source: {}fps, target: {}fps)",
+        frame_interval, source_fps, 0.1
+    );
 
     // Calculate which frames to extract
     let frame_positions: Vec<String> = tasks
@@ -612,26 +616,29 @@ async fn extract_frame(
         .filter_map(|(frame, _)| {
             // Only select frames that align with our target FPS
             if frame.offset_index as i64 % frame_interval == 0 {
-                Some(format!("select=eq(n\\,{})", frame.offset_index))
+                Some(frame.offset_index.to_string())
             } else {
                 None
             }
         })
         .collect();
-    
+
     if frame_positions.is_empty() {
         debug!("no frames to extract after applying fps filter");
         return Ok(0);
     }
 
-    let select_filter = frame_positions.join("+");
+    // Join frame numbers with commas and wrap in select filter
+    let select_filter = format!("select='eq(n,{})'", frame_positions.join(")+eq(n,"));
 
     let mut cmd = Command::new(&ffmpeg);
     cmd.args([
         "-i",
         &video_file_path,
         "-vf",
-        &select_filter,
+        &format!("{},format=yuv420p,scale=iw:ih", select_filter),
+        "-strict",
+        "unofficial",
         "-c:v",
         "mjpeg",
         "-q:v",
@@ -698,6 +705,7 @@ async fn extract_frame(
         // Then send the frame
         frame_tx
             .send(TimeSeriesFrame {
+                error: None,
                 timestamp: chunk.timestamp,
                 frame_data: vec![DeviceFrame {
                     device_id: device_data.device_name.clone(),
@@ -794,18 +802,18 @@ fn parse_timestamp(timestamp_str: &str) -> Result<DateTime<Utc>> {
 
 struct OrderedFrameStreamer {
     buffer: BTreeMap<DateTime<Utc>, Vec<TimeSeriesFrame>>,
-    window_size: Duration,
-    last_sent: Option<DateTime<Utc>>,
+    bucket_size: Duration,
+    current_bucket: Option<DateTime<Utc>>,
     tx: mpsc::Sender<TimeSeriesFrame>,
     descending: bool,
 }
 
 impl OrderedFrameStreamer {
-    fn new(tx: mpsc::Sender<TimeSeriesFrame>, window_size: Duration, descending: bool) -> Self {
+    fn new(tx: mpsc::Sender<TimeSeriesFrame>, bucket_size: Duration, descending: bool) -> Self {
         Self {
             buffer: BTreeMap::new(),
-            window_size,
-            last_sent: None,
+            bucket_size,
+            current_bucket: None,
             tx,
             descending,
         }
@@ -813,9 +821,16 @@ impl OrderedFrameStreamer {
 
     async fn push(&mut self, frame: TimeSeriesFrame) -> Result<()> {
         let ts = frame.timestamp;
+        
+        // Initialize current_bucket if not set
+        if self.current_bucket.is_none() {
+            self.current_bucket = Some(ts);
+            debug!("initialized first bucket at: {}", ts);
+        }
+
         self.buffer.entry(ts).or_default().push(frame);
 
-        // Sort frames within each timestamp by device_id for consistency
+        // Sort frames within timestamp for consistency
         if let Some(frames) = self.buffer.get_mut(&ts) {
             frames.sort_by(|a, b| {
                 a.frame_data
@@ -825,93 +840,87 @@ impl OrderedFrameStreamer {
             });
         }
 
-        self.flush_window().await
+        // Flush completed buckets
+        self.flush_completed_buckets().await
     }
 
-    async fn flush_window(&mut self) -> Result<()> {
-        if self.last_sent.is_none() && !self.buffer.is_empty() {
-            self.last_sent = if self.descending {
-                self.buffer.keys().next_back().copied()
-            } else {
-                self.buffer.keys().next().copied()
-            };
-        }
-
-        let Some(last_sent) = self.last_sent else {
+    async fn flush_completed_buckets(&mut self) -> Result<()> {
+        let Some(current_bucket) = self.current_bucket else {
             return Ok(());
         };
 
-        // Determine the window range based on direction
-        let window_range = if self.descending {
-            (last_sent - self.window_size)..=last_sent
+        // Determine bucket range
+        let bucket_range = if self.descending {
+            (current_bucket - self.bucket_size)..=current_bucket
         } else {
-            last_sent..=(last_sent + self.window_size)
+            current_bucket..=(current_bucket + self.bucket_size)
         };
 
-        // Collect frames that are ready to be sent
-        let mut ready_frames = Vec::new();
-        for (_, frames) in self.buffer.range(window_range) {
-            ready_frames.extend(frames.iter().cloned());
-        }
+        // Find frames ready to be sent (outside current bucket)
+        let mut ready_timestamps: Vec<DateTime<Utc>> = self.buffer
+            .keys()
+            .filter(|ts| !bucket_range.contains(ts))
+            .copied()
+            .collect();
 
-        // Sort all collected frames
-        ready_frames.sort_by_key(|frame| {
+        if !ready_timestamps.is_empty() {
+            // Sort timestamps based on direction
             if self.descending {
-                std::cmp::Reverse(frame.timestamp)
+                ready_timestamps.sort_by(|a, b| b.cmp(a));
             } else {
-                std::cmp::Reverse(std::cmp::Reverse(frame.timestamp)).0
+                ready_timestamps.sort();
             }
-        });
 
-        // Send frames and update buffer
-        for frame in ready_frames {
-            let ts = frame.timestamp;
-            self.tx.send(frame).await?;
-            self.buffer.remove(&ts);
-            self.last_sent = Some(ts);
+            // Send frames and update buffer
+            for ts in ready_timestamps {
+                if let Some(frames) = self.buffer.remove(&ts) {
+                    for frame in frames {
+                        self.tx.send(frame).await?;
+                    }
+                }
+            }
+
+            // Update current bucket
+            self.current_bucket = self.buffer.keys().next().copied();
+            debug!("flushed bucket, new current bucket: {:?}", self.current_bucket);
         }
 
         Ok(())
     }
 
     async fn finish(self) -> Result<()> {
-        let mut all_frames = Vec::new();
+        // Flush any remaining frames in buffer
+        let mut remaining: Vec<TimeSeriesFrame> = self.buffer
+            .into_values()
+            .flatten()
+            .collect();
 
-        // Collect all remaining frames
-        for frames in self.buffer.values() {
-            all_frames.extend(frames.iter().cloned());
+        // Sort remaining frames
+        if self.descending {
+            remaining.sort_by_key(|frame| std::cmp::Reverse(frame.timestamp));
+        } else {
+            remaining.sort_by_key(|frame| frame.timestamp);
         }
 
-        // Sort them according to the desired order
-        all_frames.sort_by_key(|frame| {
-            if self.descending {
-                std::cmp::Reverse(frame.timestamp)
-            } else {
-                std::cmp::Reverse(std::cmp::Reverse(frame.timestamp)).0
-            }
-        });
-
-        // Send all remaining frames
-        for frame in all_frames {
+        // Send remaining frames
+        for frame in remaining {
             self.tx.send(frame).await?;
         }
 
+        debug!("streamer finished, sent all remaining frames");
         Ok(())
     }
 }
 
 async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
     let output = Command::new(ffmpeg_path)
-        .args([
-            "-i",
-            video_path,
-        ])
+        .args(["-i", video_path])
         .output()
         .await?;
 
     // ffmpeg outputs metadata to stderr by design
     let metadata = String::from_utf8_lossy(&output.stderr);
-    
+
     // Look for fps info in patterns like: "23.98 fps" or "30 fps" or "29.97 fps"
     let fps = metadata
         .lines()

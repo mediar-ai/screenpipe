@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { OpenAI } from "openai";
 import { generateId, Message } from "ai";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -19,6 +19,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  TimelineDock,
+  TimelineDockIcon,
+  TimelineIconsSection,
+} from "@/components/timeline/timeline-dock";
+import { debounce, throttle } from "lodash";
+import { TimelineBlocks } from "@/components/timeline/timeline-block";
+import { TimeLabels } from "@/components/timeline/time-labels";
+import { CurrentTimeIndicator } from "@/components/timeline/current-time-indicator";
+import { ChatPanel } from "@/components/timeline/chat-panel";
 
 interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -59,6 +70,10 @@ interface Agent {
   name: string;
   description: string;
   dataSelector: (frames: StreamTimeSeriesResponse[]) => any;
+}
+
+interface AppIconCache {
+  [key: string]: string; // app_name -> base64 icon
 }
 
 const AGENTS: Agent[] = [
@@ -113,6 +128,157 @@ const AGENTS: Agent[] = [
   },
 ];
 
+export interface TimeBlock {
+  appName: string;
+  startTime: Date;
+  endTime: Date;
+  color: string; // We'll generate colors based on app names
+}
+export interface TimelineBlock extends TimeBlock {
+  left: number; // percentage position from left
+  width: number; // percentage width
+}
+
+function getAppColor(appName: string): string {
+  // Simple hash function to generate consistent colors for apps
+  let hash = 0;
+  for (let i = 0; i < appName.length; i++) {
+    hash = appName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  // Convert to RGB - using mostly blue and green hues for a tech feel
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 70%, 50%)`;
+}
+
+function calculateTimeBlocks(frames: any[]): TimeBlock[] {
+  if (frames.length === 0) return [];
+
+  const timeRange = getTimelineRange(frames);
+  const blocks: TimeBlock[] = [];
+  let currentBlock: TimeBlock | null = null;
+
+  // Sort frames by timestamp
+  // const sortedFrames = [...frames].sort(
+  //   (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  // );
+
+  frames.forEach((frame) => {
+    const timestamp = new Date(frame.timestamp);
+    const appName = frame.devices[0].metadata.app_name;
+
+    // Skip frames outside the timeline range
+    if (timestamp < timeRange.start || timestamp > timeRange.end) {
+      return;
+    }
+
+    if (!currentBlock) {
+      currentBlock = {
+        appName,
+        startTime: timestamp,
+        endTime: timestamp,
+        color: getAppColor(appName),
+      };
+    } else if (currentBlock.appName !== appName) {
+      // App changed, close current block and start new one
+      currentBlock.endTime = timestamp;
+      blocks.push(currentBlock);
+      currentBlock = {
+        appName,
+        startTime: timestamp,
+        endTime: timestamp,
+        color: getAppColor(appName),
+      };
+    } else {
+      // Same app, update end time
+      currentBlock.endTime = timestamp;
+    }
+  });
+
+  // Add the last block
+  if (currentBlock) {
+    blocks.push(currentBlock);
+  }
+
+  return blocks;
+}
+
+function getTimelineRange(frames: StreamTimeSeriesResponse[]): {
+  start: Date;
+  end: Date;
+} {
+  // Default range: 8am to current time
+  const now = new Date();
+  const defaultEnd = now;
+  const defaultStart = new Date(now);
+  defaultStart.setHours(8, 0, 0, 0);
+
+  if (frames.length === 0) {
+    return { start: defaultStart, end: defaultEnd };
+  }
+
+  // Find actual data range
+  const timestamps = frames.map((f) => new Date(f.timestamp));
+  const dataStart = new Date(Math.min(...timestamps.map((t) => t.getTime())));
+  const dataEnd = new Date(Math.max(...timestamps.map((t) => t.getTime())));
+
+  // Expand range if data exists outside default range
+  return {
+    start:
+      dataStart.getTime() < defaultStart.getTime() ? dataStart : defaultStart,
+    end: dataEnd.getTime() > defaultEnd.getTime() ? dataEnd : defaultEnd,
+  };
+}
+
+function getUniqueAppRanges(
+  blocks: TimeBlock[],
+  mergeThresholdMs: number = 300000
+): TimelineBlock[] {
+  if (blocks.length === 0) return [];
+
+  const sortedBlocks = [...blocks].sort(
+    (a, b) => a.startTime.getTime() - b.startTime.getTime()
+  );
+
+  const mergedBlocks = sortedBlocks.reduce((acc: TimeBlock[], curr) => {
+    const lastBlock = acc[acc.length - 1];
+
+    if (!lastBlock) {
+      return [curr];
+    }
+
+    if (
+      lastBlock.appName === curr.appName &&
+      curr.startTime.getTime() - lastBlock.endTime.getTime() <= mergeThresholdMs
+    ) {
+      lastBlock.endTime = new Date(
+        Math.max(lastBlock.endTime.getTime(), curr.endTime.getTime())
+      );
+      return acc;
+    }
+
+    return [...acc, curr];
+  }, []);
+
+  // Use dynamic range instead of full day
+  // @ts-ignore
+  const timeRange = getTimelineRange(frames);
+  const totalMs = timeRange.end.getTime() - timeRange.start.getTime();
+
+  return mergedBlocks.map((block) => {
+    const left =
+      ((block.startTime.getTime() - timeRange.start.getTime()) / totalMs) * 100;
+    const width =
+      ((block.endTime.getTime() - block.startTime.getTime()) / totalMs) * 100;
+
+    return {
+      ...block,
+      left: Math.max(0, Math.min(100, left)),
+      width: Math.max(0, Math.min(100 - left, width)),
+    };
+  });
+}
+
 export default function Timeline() {
   const [currentFrame, setCurrentFrame] = useState<DeviceFrameResponse | null>(
     null
@@ -152,6 +318,19 @@ export default function Timeline() {
     height: 500,
   });
   const resizerRef = useRef<HTMLDivElement | null>(null);
+  const [iconCache, setIconCache] = useState<AppIconCache>({});
+
+  // 1. Memoize time range calculation
+  const timelineRange = useMemo(() => getTimelineRange(frames), [frames]);
+
+  // 2. Memoize time blocks calculation
+  const timeBlocks = useMemo(() => calculateTimeBlocks(frames), [frames]);
+
+  // 3. Memoize app ranges calculation with merged threshold
+  const appRanges = useMemo(
+    () => getUniqueAppRanges(timeBlocks, 300000),
+    [timeBlocks]
+  );
 
   useEffect(() => {
     setPosition({
@@ -161,6 +340,17 @@ export default function Timeline() {
   }, []);
 
   const setupEventSource = () => {
+    // Reset states when reloading
+    setFrames([]);
+    setCurrentFrame(null);
+    setCurrentIndex(0);
+    setIsLoading(true);
+    setError(null);
+    setSelectionRange(null);
+    setIsAiPanelExpanded(false);
+    setChatMessages([]);
+    setAiInput("");
+
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
@@ -186,17 +376,32 @@ export default function Timeline() {
         const data = JSON.parse(event.data);
         if (data === "keep-alive-text") return;
 
+        // Add error handling for server-side errors
+        if (data.error) {
+          console.error("server error:", data.error);
+          setError(data.error);
+          setIsLoading(false);
+          return;
+        }
+
         if (data.timestamp && data.devices) {
+          console.log("new frame:", data.timestamp, data.devices);
           setFrames((prev) => {
             const exists = prev.some((f) => f.timestamp === data.timestamp);
             if (exists) return prev;
 
-            // Add new frame and sort
-            const newFrames = [...prev, data].sort((a, b) => {
-              return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-            });
+            const MAX_FRAMES = 1000;
 
-            return newFrames;
+            // Add new frame and maintain limit
+            // const newFrames = [...prev, data].sort(
+            //   (a, b) =>
+            //     new Date(b.timestamp).getTime() -
+            //     new Date(a.timestamp).getTime()
+            // );
+            // .slice(0, MAX_FRAMES); // TODO: likely rem
+
+            // return newFrames;
+            return [...prev, data];
           });
 
           // Only set initial frame if we don't have one
@@ -205,19 +410,21 @@ export default function Timeline() {
         }
       } catch (error) {
         console.error("failed to parse frame data:", error);
+        setError("failed to parse server response");
+        setIsLoading(false);
       }
     };
 
     eventSource.onerror = (error) => {
+      setIsLoading(false);
+
       if (eventSource.readyState === EventSource.CLOSED) {
         console.log("stream ended (expected behavior)", error);
-        setIsLoading(false);
         return;
       }
 
       console.error("eventsource error:", error);
-      setError("connection lost. retrying...");
-
+      setError("connection lost - please refresh the page");
       eventSource.close();
     };
 
@@ -226,47 +433,6 @@ export default function Timeline() {
       setError(null);
       retryCount.current = 0;
     };
-  };
-
-  const getLoadedTimeRangeStyles = () => {
-    if (!loadedTimeRange || frames.length === 0)
-      return { left: "0%", right: "100%" };
-
-    // Find the earliest frame timestamp
-    const firstFrame = [...frames].sort(
-      (a, b) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    )[0];
-    const earliestTime = new Date(firstFrame.timestamp);
-
-    // Create local date objects for today
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-
-    // Convert UTC loadedTimeRange to local time
-    const localStart = new Date(earliestTime);
-    const localEnd = new Date(loadedTimeRange.end);
-
-    const totalMs = endOfDay.getTime() - startOfDay.getTime();
-    const startPercent =
-      ((localStart.getTime() - startOfDay.getTime()) / totalMs) * 100;
-    const endPercent =
-      ((localEnd.getTime() - startOfDay.getTime()) / totalMs) * 100;
-
-    // Temporarily return empty values to disable grey areas
-    return {
-      right: "0%",
-      left: "0%",
-    };
-
-    // Original code commented out:
-    // return {
-    //   right: `${Math.max(0, Math.min(100, startPercent))}%`,  // Grey before data starts
-    //   left: `${Math.max(0, Math.min(100, 100 - endPercent))}%`,  // Grey after data ends
-    // };
   };
 
   useEffect(() => {
@@ -307,154 +473,111 @@ export default function Timeline() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectionRange, isAiPanelExpanded, aiInput]);
 
-  const handleScroll = (e: React.WheelEvent<HTMLDivElement>) => {
-    const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
-    if (isWithinAiPanel) {
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    const scrollSensitivity = 1;
-    const delta = -Math.sign(e.deltaY) / scrollSensitivity;
-
-    const newIndex = Math.min(
-      Math.max(
-        0,
-        currentIndex + (delta > 0 ? Math.ceil(delta) : Math.floor(delta))
-      ),
-      frames.length - 1
-    );
-
-    if (newIndex !== currentIndex) {
-      setCurrentIndex(newIndex);
-      setCurrentFrame(frames[newIndex].devices[0]);
-    }
-  };
-
-  const getCurrentTimePercentage = () => {
-    if (!currentFrame) return 0;
-
-    const frameTime = new Date(
-      currentFrame.metadata.timestamp || frames[currentIndex].timestamp
-    );
-    const startOfDay = new Date(frameTime);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(frameTime);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const totalDayMilliseconds = endOfDay.getTime() - startOfDay.getTime();
-    const currentMilliseconds = frameTime.getTime() - startOfDay.getTime();
-
-    return (currentMilliseconds / totalDayMilliseconds) * 100;
-  };
-
   const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!e.currentTarget) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = (clickX / rect.width) * 100;
 
-    // Clamp percentage between 0 and 100
-    const clampedPercentage = Math.max(0, Math.min(100, percentage));
-
     setIsDragging(true);
-    setDragStart(clampedPercentage);
+    setDragStart(percentage);
+    setIsAiPanelExpanded(false);
 
+    // Set initial selection range
     const totalMinutesInDay = 24 * 60;
-    const minutesFromMidnight = (clampedPercentage / 100) * totalMinutesInDay;
-    const hours = Math.floor(minutesFromMidnight / 60);
-    const minutes = Math.floor(minutesFromMidnight % 60);
-
-    const localDate = new Date();
-    localDate.setHours(hours, minutes, 0, 0);
-
-    const utcDate = new Date(
-      Date.UTC(
-        localDate.getUTCFullYear(),
-        localDate.getUTCMonth(),
-        localDate.getUTCDate(),
-        localDate.getUTCHours(),
-        localDate.getUTCMinutes(),
-        0,
-        0
-      )
-    );
+    const minutes = (percentage / 100) * totalMinutesInDay;
+    const date = new Date();
+    date.setHours(Math.floor(minutes / 60), Math.floor(minutes % 60), 0, 0);
 
     setSelectionRange({
-      start: utcDate,
-      end: utcDate,
+      start: date,
+      end: date,
     });
   };
 
-  const handleTimelineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || dragStart === null) return;
+  const debouncedMouseMove = useMemo(
+    () =>
+      throttle(
+        (e: React.MouseEvent<HTMLDivElement>) => {
+          if (!isDragging || dragStart === null || !e.currentTarget) return;
 
-    // Prevent text selection during drag
-    e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const moveX = e.clientX - rect.left;
+          const percentage = (moveX / rect.width) * 100;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const moveX = e.clientX - rect.left;
-    const percentage = (moveX / rect.width) * 100;
+          const totalMinutesInDay = 24 * 60;
+          const startMinutes =
+            (Math.min(dragStart, percentage) / 100) * totalMinutesInDay;
+          const endMinutes =
+            (Math.max(dragStart, percentage) / 100) * totalMinutesInDay;
 
-    // Clamp percentage between 0 and 100
-    const clampedPercentage = Math.max(0, Math.min(100, percentage));
+          const startLocal = new Date();
+          startLocal.setHours(
+            Math.floor(startMinutes / 60),
+            Math.floor(startMinutes % 60),
+            0,
+            0
+          );
 
-    const totalMinutesInDay = 24 * 60;
-    const startMinutes =
-      (Math.min(dragStart, clampedPercentage) / 100) * totalMinutesInDay;
-    const endMinutes =
-      (Math.max(dragStart, clampedPercentage) / 100) * totalMinutesInDay;
+          const endLocal = new Date();
+          endLocal.setHours(
+            Math.floor(endMinutes / 60),
+            Math.floor(endMinutes % 60),
+            0,
+            0
+          );
 
-    const startLocal = new Date();
-    startLocal.setHours(
-      Math.floor(startMinutes / 60),
-      Math.floor(startMinutes % 60),
-      0,
-      0
-    );
+          setSelectionRange({
+            start: startLocal,
+            end: endLocal,
+          });
+        },
+        16 // ~60fps
+      ),
+    [isDragging, dragStart]
+  );
 
-    const endLocal = new Date();
-    endLocal.setHours(
-      Math.floor(endMinutes / 60),
-      Math.floor(endMinutes % 60),
-      0,
-      0
-    );
+  const debouncedScroll = useMemo(
+    () =>
+      throttle((e: React.WheelEvent<HTMLDivElement>) => {
+        const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
+        if (isWithinAiPanel) return;
 
-    const utcStartDate = new Date(
-      Date.UTC(
-        startLocal.getUTCFullYear(),
-        startLocal.getUTCMonth(),
-        startLocal.getUTCDate(),
-        startLocal.getUTCHours(),
-        startLocal.getUTCMinutes(),
-        0,
-        0
-      )
-    );
+        e.preventDefault();
+        e.stopPropagation();
 
-    const utcEndDate = new Date(
-      Date.UTC(
-        endLocal.getUTCFullYear(),
-        endLocal.getUTCMonth(),
-        endLocal.getUTCDate(),
-        endLocal.getUTCHours(),
-        endLocal.getUTCMinutes(),
-        0,
-        0
-      )
-    );
+        const scrollSensitivity = 1;
+        const delta = -Math.sign(e.deltaY) / scrollSensitivity;
 
-    setSelectionRange({
-      start: utcStartDate,
-      end: utcEndDate,
-    });
-  };
+        const newIndex = Math.min(
+          Math.max(
+            0,
+            currentIndex + (delta > 0 ? Math.ceil(delta) : Math.floor(delta))
+          ),
+          frames.length - 1
+        );
+
+        if (newIndex !== currentIndex) {
+          setCurrentIndex(newIndex);
+          setCurrentFrame(frames[newIndex].devices[0]);
+        }
+      }, 16),
+    [currentIndex, frames]
+  );
 
   const handleTimelineMouseUp = () => {
-    setIsDragging(false);
-    setDragStart(null);
+    if (isDragging) {
+      setIsDragging(false);
+      setDragStart(null);
+
+      // Only show AI panel if we have a meaningful selection
+      // if (
+      //   selectionRange &&
+      //   selectionRange.start.getTime() !== selectionRange.end.getTime()
+      // ) {
+      //   setIsAiPanelExpanded(true);
+      // }
+    }
   };
 
   const handleAskAI = () => {
@@ -602,13 +725,12 @@ export default function Timeline() {
   };
 
   useEffect(() => {
-    const preventScroll = (e: WheelEvent) => {
-      const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
-      if (!isWithinAiPanel) {
-        e.preventDefault();
-      }
+    const preventScroll = (e: Event) => {
+      e.preventDefault();
+      return false;
     };
 
+    // Add more comprehensive scroll prevention
     document.addEventListener("wheel", preventScroll, { passive: false });
     return () => document.removeEventListener("wheel", preventScroll);
   }, []);
@@ -666,11 +788,6 @@ export default function Timeline() {
 
   const handleRefresh = () => {
     posthog.capture("timeline_refresh");
-
-    setFrames([]);
-    setCurrentFrame(null);
-    setCurrentIndex(0);
-    setIsLoading(true);
     setupEventSource();
   };
 
@@ -704,19 +821,70 @@ export default function Timeline() {
     document.addEventListener("mouseup", handleMouseUp);
   };
 
+  const loadAppIcon = async (appName: string, appPath?: string) => {
+    if (iconCache[appName]) return;
+
+    const icon = await invoke<{ base64: string; path: string } | null>(
+      "get_app_icon",
+      {
+        appName,
+        appPath,
+      }
+    );
+
+    if (icon) {
+      setIconCache((prev) => ({
+        ...prev,
+        [appName]: icon.base64,
+      }));
+    }
+  };
+
+  useEffect(() => {
+    const p = platform();
+    if (p !== "macos") return;
+    frames.forEach((frame) => {
+      frame.devices.forEach((device) => {
+        loadAppIcon(device.metadata.app_name);
+      });
+    });
+  }, [frames]);
+
+  useEffect(() => {
+    const cleanup = () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+
+    window.addEventListener("beforeunload", cleanup);
+    return () => {
+      cleanup();
+      window.removeEventListener("beforeunload", cleanup);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      debouncedMouseMove.cancel();
+      debouncedScroll.cancel();
+    };
+  }, [debouncedMouseMove, debouncedScroll]);
+
   return (
     <div
       className="fixed inset-0 flex flex-col bg-background text-foreground overflow-hidden relative"
-      onWheel={(e) => {
-        const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
-        if (!isWithinAiPanel) {
-          handleScroll(e);
-        }
-      }}
+      onWheel={debouncedScroll}
       style={{
         height: "100vh",
         overscrollBehavior: "none",
-        overflow: "hidden", 
+        overflow: "hidden",
         WebkitUserSelect: "none",
         userSelect: "none",
         MozUserSelect: "none",
@@ -739,7 +907,7 @@ export default function Timeline() {
       />
 
       <div className="flex-1 relative min-h-0">
-        {isLoading && (
+        {(isLoading || frames.length === 0) && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="bg-background/90 p-5 border rounded-lg shadow-lg text-center">
               <p>loading frames...</p>
@@ -747,7 +915,7 @@ export default function Timeline() {
             </div>
           </div>
         )}
-        {error && (
+        {error && !isLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="bg-destructive/10 p-5 border-destructive/20 border rounded-lg text-destructive">
               <AlertCircle className="h-4 w-4 mb-2 mx-auto" />
@@ -756,47 +924,24 @@ export default function Timeline() {
           </div>
         )}
         {currentFrame && (
-          <>
-            <div className="w-4/5 mx-auto mt-4 mb-4 text-center select-none">
-              <div className="inline-block bg-card p-2 rounded-lg shadow-lg border">
-                <div className="flex items-center gap-4 text-sm">
-                  <div>device: {currentFrame.device_id}</div>
-                  <div>app: {currentFrame.metadata.app_name || "n/a"}</div>
-                  <div>
-                    window: {currentFrame.metadata.window_name || "n/a"}
-                  </div>
-                  <div className="border-l pl-4 font-mono">
-                    {new Date(currentFrame.metadata.timestamp || frames[currentIndex].timestamp).toLocaleString()}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <img
-              src={`data:image/png;base64,${currentFrame.frame}`}
-              className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto mt-12"
-              alt="Current frame"
-            />
-          </>
+          <img
+            src={`data:image/png;base64,${currentFrame.frame}`}
+            className="absolute inset-0 w-full h-full object-contain mx-auto mt-6"
+            alt="Current frame"
+            loading="lazy"
+            decoding="async"
+          />
         )}
       </div>
 
       <div className="w-4/5 mx-auto my-8 relative select-none">
         <div
-          className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative"
+          className="h-[60px] bg-card border rounded-lg shadow-sm relative overflow-hidden"
           onMouseDown={handleTimelineMouseDown}
-          onMouseMove={handleTimelineMouseMove}
+          onMouseMove={debouncedMouseMove}
           onMouseUp={handleTimelineMouseUp}
           onMouseLeave={handleTimelineMouseUp}
         >
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              ...getLoadedTimeRangeStyles(),
-              background:
-                "linear-gradient(to right, rgba(255,255,255,0.8), rgba(255,255,255,0.2))",
-            }}
-          />
-
           <div
             className="absolute inset-0"
             style={{
@@ -805,201 +950,22 @@ export default function Timeline() {
               backgroundSize: "10% 100%",
             }}
           />
+          <TimelineBlocks frames={frames} timeRange={timelineRange} />
 
-          <div
-            className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
-            style={{
-              left: `${getCurrentTimePercentage()}%`,
-            }}
+          <CurrentTimeIndicator
+            currentFrame={currentFrame}
+            frames={frames}
+            currentIndex={currentIndex}
+            timeRange={timelineRange}
           />
 
-          {selectionRange && (
-            <div
-              className="absolute top-0 h-full bg-foreground/10"
-              style={{
-                left: `${
-                  (new Date(selectionRange.start).getHours() * 3600 +
-                    new Date(selectionRange.start).getMinutes() * 60) /
-                  864
-                }%`,
-                width: `${
-                  ((selectionRange.end.getTime() -
-                    selectionRange.start.getTime()) /
-                    (24 * 3600 * 1000)) *
-                  100
-                }%`,
-              }}
-            />
-          )}
-        </div>
+          {/* <TimelineIconsSection blocks={appRanges} /> */}
 
-        {selectionRange && (
-          <div
-            ref={aiPanelRef}
-            style={{
-              position: "fixed",
-              left: position.x,
-              top: position.y,
-              width: chatWindowSize.width,
-              height: isAiPanelExpanded ? chatWindowSize.height : 120,
-              cursor: isDraggingPanel ? "grabbing" : "default",
-            }}
-            className={`bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]`}
-          >
-            <div
-              className="select-none cursor-grab active:cursor-grabbing"
-              onMouseDown={handlePanelMouseDown}
-              onMouseMove={handlePanelMouseMove}
-              onMouseUp={handlePanelMouseUp}
-              onMouseLeave={handlePanelMouseUp}
-            >
-              <div className="p-4 border-b border-muted-foreground flex justify-between items-center group">
-                <div className="flex items-center gap-2 flex-1">
-                  <GripHorizontal className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-                  <div className="text-muted-foreground text-xs">
-                    {new Date(selectionRange.start.getTime()).toLocaleTimeString()} -{" "}
-                    {new Date(selectionRange.end.getTime()).toLocaleTimeString()}
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setSelectionRange(null);
-                    setIsAiPanelExpanded(false);
-                    setChatMessages([]);
-                    setAiInput("");
-                  }}
-                  className="text-muted-foreground hover:text-foreground transition-colors ml-2"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {!isAiPanelExpanded && (
-                <div className="p-4">
-                  <button
-                    className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsAiPanelExpanded(true);
-                      setTimeout(() => {
-                        inputRef.current?.focus();
-                      }, 100);
-                    }}
-                  >
-                    <span>ask ai</span>
-                    <span className="text-muted-foreground text-[10px]">
-                      {osType === "macos" ? "⌘K" : "Ctrl+K"}
-                    </span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {isAiPanelExpanded && (
-              <div className="flex flex-col h-[calc(100%-52px)]">
-                <div
-                  className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 hover:cursor-auto text-foreground font-mono text-sm leading-relaxed"
-                  style={{
-                    WebkitUserSelect: "text",
-                    userSelect: "text",
-                    MozUserSelect: "text",
-                    msUserSelect: "text",
-                    overscrollBehavior: "contain",
-                  }}
-                >
-                  {chatMessages.map((msg, index) => (
-                    <ChatMessage key={index} message={msg} />
-                  ))}
-                  {isAiLoading && (
-                    <div className="flex justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-foreground" />
-                    </div>
-                  )}
-                </div>
-
-                <form
-                  onSubmit={handleAiSubmit}
-                  className="p-3 border-t border-muted-foreground"
-                >
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={selectedAgent.id}
-                      onChange={(e) => handleAgentChange(e.target.value)}
-                      className="w-full bg-background border border-muted-foreground text-foreground rounded px-2 py-1 text-xs"
-                    >
-                      {AGENTS.map((agent) => (
-                        <option
-                          key={agent.id}
-                          value={agent.id}
-                          className="bg-background text-foreground"
-                        >
-                          {agent.name} - {agent.description}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-2">
-                      <Input
-                        ref={inputRef}
-                        type="text"
-                        value={aiInput}
-                        onChange={(e) => setAiInput(e.target.value)}
-                        placeholder="ask about this time range..."
-                        className="flex-1 bg-background border border-muted-foreground text-foreground placeholder-muted-foreground"
-                        disabled={isAiLoading}
-                      />
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        className="hover:bg-accent transition-colors"
-                        disabled={isAiLoading}
-                      >
-                        {isStreaming ? (
-                          <Square className="h-4 w-4" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            <div
-              ref={resizerRef}
-              onMouseDown={handleMouseDown}
-              className="absolute right-0 bottom-0 w-4 h-4 cursor-se-resize bg-transparent"
-              style={{
-                borderTopLeftRadius: "4px",
-                borderBottomRightRadius: "4px",
-                cursor: "se-resize",
-              }}
-            />
-          </div>
-        )}
-
-        <div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
-          {Array(7)
-            .fill(0)
-            .map((_, i) => {
-              const hour = (i * 4) % 24;
-              const date = new Date();
-              date.setHours(hour, 0, 0, 0);
-              return (
-                <div
-                  key={i}
-                  className="absolute transform -translate-x-1/2"
-                  style={{ left: `${(i * 100) / 6}%` }}
-                >
-                  {date.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </div>
-              );
-            })}
+          <TimeLabels timeRange={timelineRange} />
         </div>
       </div>
+
+      <div className="h-12" />
 
       <div className="fixed left-12 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
         <div className="flex flex-col items-center gap-1">
@@ -1008,6 +974,172 @@ export default function Timeline() {
           <span>▼</span>
         </div>
       </div>
+
+      {selectionRange && (
+        <div
+          className="absolute top-0 h-full bg-foreground/10"
+          style={{
+            left: `${
+              (new Date(selectionRange.start).getHours() * 3600 +
+                new Date(selectionRange.start).getMinutes() * 60) /
+              864
+            }%`,
+            width: `${
+              ((selectionRange.end.getTime() - selectionRange.start.getTime()) /
+                (24 * 3600 * 1000)) *
+              100
+            }%`,
+          }}
+        />
+      )}
+
+      {selectionRange && (
+        <div
+          ref={aiPanelRef}
+          style={{
+            position: "fixed",
+            left: position.x,
+            top: position.y,
+            width: chatWindowSize.width,
+            height: isAiPanelExpanded ? chatWindowSize.height : 120,
+            cursor: isDraggingPanel ? "grabbing" : "default",
+          }}
+          className={`bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]`}
+        >
+          <div
+            className="select-none cursor-grab active:cursor-grabbing"
+            onMouseDown={handlePanelMouseDown}
+            onMouseMove={handlePanelMouseMove}
+            onMouseUp={handlePanelMouseUp}
+            onMouseLeave={handlePanelMouseUp}
+          >
+            <div className="p-4 border-b border-muted-foreground flex justify-between items-center group">
+              <div className="flex items-center gap-2 flex-1">
+                <GripHorizontal className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+                <div className="text-muted-foreground text-xs">
+                  {new Date(
+                    selectionRange.start.getTime()
+                  ).toLocaleTimeString()}{" "}
+                  -{" "}
+                  {new Date(selectionRange.end.getTime()).toLocaleTimeString()}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectionRange(null);
+                  setIsAiPanelExpanded(false);
+                  setChatMessages([]);
+                  setAiInput("");
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors ml-2"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {!isAiPanelExpanded && (
+              <div className="p-4">
+                <button
+                  className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsAiPanelExpanded(true);
+                    setTimeout(() => {
+                      inputRef.current?.focus();
+                    }, 100);
+                  }}
+                >
+                  <span>ask ai</span>
+                  <span className="text-muted-foreground text-[10px]">
+                    {osType === "macos" ? "⌘K" : "Ctrl+K"}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {isAiPanelExpanded && (
+            <div className="flex flex-col h-[calc(100%-52px)]">
+              <div
+                className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 hover:cursor-auto text-foreground font-mono text-sm leading-relaxed"
+                style={{
+                  WebkitUserSelect: "text",
+                  userSelect: "text",
+                  MozUserSelect: "text",
+                  msUserSelect: "text",
+                  overscrollBehavior: "contain",
+                }}
+              >
+                {chatMessages.map((msg, index) => (
+                  <ChatMessage key={index} message={msg} />
+                ))}
+                {isAiLoading && (
+                  <div className="flex justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-foreground" />
+                  </div>
+                )}
+              </div>
+
+              <form
+                onSubmit={handleAiSubmit}
+                className="p-3 border-t border-muted-foreground"
+              >
+                <div className="flex flex-col gap-2">
+                  <select
+                    value={selectedAgent.id}
+                    onChange={(e) => handleAgentChange(e.target.value)}
+                    className="w-full bg-background border border-muted-foreground text-foreground rounded px-2 py-1 text-xs"
+                  >
+                    {AGENTS.map((agent) => (
+                      <option
+                        key={agent.id}
+                        value={agent.id}
+                        className="bg-background text-foreground"
+                      >
+                        {agent.name} - {agent.description}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <Input
+                      ref={inputRef}
+                      type="text"
+                      value={aiInput}
+                      onChange={(e) => setAiInput(e.target.value)}
+                      placeholder="ask about this time range..."
+                      className="flex-1 bg-background border border-muted-foreground text-foreground placeholder-muted-foreground"
+                      disabled={isAiLoading}
+                    />
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="hover:bg-accent transition-colors"
+                      disabled={isAiLoading}
+                    >
+                      {isStreaming ? (
+                        <Square className="h-4 w-4" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          )}
+
+          <div
+            ref={resizerRef}
+            onMouseDown={handleMouseDown}
+            className="absolute right-0 bottom-0 w-4 h-4 cursor-se-resize bg-transparent"
+            style={{
+              borderTopLeftRadius: "4px",
+              borderBottomRightRadius: "4px",
+              cursor: "se-resize",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,4 @@
-// #[tauri::command]
-// pub fn has_screen_capture_access() -> bool {
-//     scap::has_permission()
-// }
+
 
 use serde_json::Value;
 use tauri::Manager;
@@ -24,30 +21,6 @@ pub fn open_mic_preferences() {
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
         .spawn()
         .expect("failed to open system preferences");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn reset_screen_permissions() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("tccutil")
-        .arg("reset")
-        .arg("ScreenCapture")
-        .arg("so.cap.desktop")
-        .spawn()
-        .expect("failed to reset screen permissions");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn reset_microphone_permissions() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("tccutil")
-        .arg("reset")
-        .arg("Microphone")
-        .arg("so.cap.desktop")
-        .spawn()
-        .expect("failed to reset microphone permissions");
 }
 
 #[tauri::command]
