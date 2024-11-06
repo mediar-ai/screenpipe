@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import localforage from "localforage";
-import { getVersion } from "@tauri-apps/api/app";
+import { useAppVersion } from "./use-app-version";
 
 interface ChangelogDialogContextType {
   showChangelogDialog: boolean;
@@ -12,10 +12,10 @@ const ChangelogDialogContext = createContext<ChangelogDialogContextType | undefi
 export const ChangelogDialogProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [showChangelogDialog, setShowChangelogDialog] = useState(false);
   const hasMounted = useRef(false);
+  const version = useAppVersion();
 
   useEffect(() => {
     const checkChangelogStatus = async () => {
-      const version = await getVersion();
       const versionSeen = await localforage.getItem<string>("versionSeen");
 
       if (versionSeen === undefined || versionSeen !== version) {
@@ -23,13 +23,12 @@ export const ChangelogDialogProvider: React.FC<{ children: ReactNode }> = ({ chi
       }
     };
     checkChangelogStatus();
-  }, []);
+  }, [version]);
 
   useEffect(() => {
     if (hasMounted.current) {
       const setCurrentVersion = async () => {
-        const currentVersion = await getVersion();
-        await localforage.setItem("versionSeen", currentVersion);
+        await localforage.setItem("versionSeen", version);
       };
 
       if (!showChangelogDialog) {
@@ -38,7 +37,7 @@ export const ChangelogDialogProvider: React.FC<{ children: ReactNode }> = ({ chi
     } else {
       hasMounted.current = true;
     }
-  }, [showChangelogDialog]);
+  }, [showChangelogDialog, version]);
 
   return (
     <ChangelogDialogContext.Provider value={{ showChangelogDialog, setShowChangelogDialog }}>
