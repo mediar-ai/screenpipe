@@ -193,7 +193,7 @@ const getContextAroundKeyword = (text: string, keyword: string, contextLength: n
   return result;
 };
 
-export function SearchChat() {
+export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
   // Search state
   const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
