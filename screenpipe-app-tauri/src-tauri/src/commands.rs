@@ -209,7 +209,7 @@ pub fn check_accessibility_permissions() -> bool {
     #[cfg(target_os = "macos")]
     {
         // Check if the app has accessibility permissions
-        let options = unsafe {
+        let options = {
             let key = CFString::new("AXTrustedCheckOptionPrompt");
             let value = CFBoolean::false_value();
             let pairs = &[(key, value)];

@@ -81,8 +81,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { SearchHistory } from "@/lib/types/history";
 
-
-
 interface SearchChatProps {
   currentSearchId: string | null;
   onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
@@ -161,13 +159,18 @@ const AGENTS: Agent[] = [
 // Add this helper function to highlight keywords in text
 const highlightKeyword = (text: string, keyword: string): JSX.Element => {
   if (!keyword || !text) return <>{text}</>;
-  
-  const parts = text.split(new RegExp(`(${keyword})`, 'gi'));
+
+  const parts = text.split(new RegExp(`(${keyword})`, "gi"));
   return (
     <>
-      {parts.map((part, i) => 
+      {parts.map((part, i) =>
         part.toLowerCase() === keyword.toLowerCase() ? (
-          <span key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded px-0.5">{part}</span>
+          <span
+            key={i}
+            className="bg-yellow-200 dark:bg-yellow-800 rounded px-0.5"
+          >
+            {part}
+          </span>
         ) : (
           part
         )
@@ -177,23 +180,31 @@ const highlightKeyword = (text: string, keyword: string): JSX.Element => {
 };
 
 // Update the getContextAroundKeyword function to return both text and positions
-const getContextAroundKeyword = (text: string, keyword: string, contextLength: number = 40): string => {
+const getContextAroundKeyword = (
+  text: string,
+  keyword: string,
+  contextLength: number = 40
+): string => {
   if (!keyword || !text) return text;
-  
+
   const index = text.toLowerCase().indexOf(keyword.toLowerCase());
   if (index === -1) return text;
 
   const start = Math.max(0, index - contextLength);
   const end = Math.min(text.length, index + keyword.length + contextLength);
-  
+
   let result = text.slice(start, end);
-  if (start > 0) result = '...' + result;
-  if (end < text.length) result = result + '...';
-  
+  if (start > 0) result = "..." + result;
+  if (end < text.length) result = result + "...";
+
   return result;
 };
 
-export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
+export function SearchChat({
+  currentSearchId,
+  onAddSearch,
+  searches,
+}: SearchChatProps) {
   // Search state
   const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
@@ -262,27 +273,27 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
   });
 
   // Update content type when checkboxes change
-  const handleContentTypeChange = (type: 'ocr' | 'audio' | 'ui') => {
+  const handleContentTypeChange = (type: "ocr" | "audio" | "ui") => {
     const newTypes = { ...selectedTypes, [type]: !selectedTypes[type] };
     setSelectedTypes(newTypes);
-    
+
     // Convert checkbox state to content type
     if (!newTypes.ocr && !newTypes.audio && !newTypes.ui) {
-      setContentType('all'); // fallback to all if nothing selected
+      setContentType("all"); // fallback to all if nothing selected
     } else if (newTypes.audio && newTypes.ui && !newTypes.ocr) {
-      setContentType('audio+ui');
+      setContentType("audio+ui");
     } else if (newTypes.ocr && newTypes.ui && !newTypes.audio) {
-      setContentType('ocr+ui');
+      setContentType("ocr+ui");
     } else if (newTypes.audio && newTypes.ocr && !newTypes.ui) {
-      setContentType('audio+ocr');
+      setContentType("audio+ocr");
     } else if (newTypes.audio) {
-      setContentType('audio');
+      setContentType("audio");
     } else if (newTypes.ocr) {
-      setContentType('ocr');
+      setContentType("ocr");
     } else if (newTypes.ui) {
-      setContentType('ui');  // This was missing - single UI type
+      setContentType("ui"); // This was missing - single UI type
     } else {
-      setContentType('all');
+      setContentType("all");
     }
   };
 
@@ -649,7 +660,8 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
         content_type: overrides.contentType || contentType,
         limit: overrides.limit || limit,
         offset: newOffset,
-        start_time: overrides.startDate?.toISOString() || startDate.toISOString(),
+        start_time:
+          overrides.startDate?.toISOString() || startDate.toISOString(),
         end_time: endDate.toISOString(),
         app_name: overrides.appName || appName || undefined,
         window_name: overrides.windowName || windowName || undefined,
@@ -778,25 +790,17 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
                   <AccordionTrigger className="flex items-center">
                     <div className="flex items-center w-full">
                       <Badge className="mr-2">{item.type}</Badge>
-                      <span className="flex-grow truncate">
-                        {item.type === "UI" && highlightKeyword(
-                          getContextAroundKeyword(item.content.text, query),
-                          query
-                        )}
-                        {item.type === "OCR" && highlightKeyword(
-                          getContextAroundKeyword(item.content.text, query),
-                          query
-                        )}
-                        {item.type === "Audio" && highlightKeyword(
-                          getContextAroundKeyword(item.content.transcription, query),
-                          query
-                        )}
-                        {item.type === "FTS" && highlightKeyword(
-                          getContextAroundKeyword(item.content.matched_text, query),
-                          query
-                        )}
-                      </span>
                     </div>
+                    <span className="flex-grow text-center truncate w-full">
+                      {item.type === "OCR" &&
+                        item.content.text.substring(0, 50)}
+                      {item.type === "Audio" &&
+                        item.content.transcription.substring(0, 50)}
+                      {item.type === "FTS" &&
+                        item.content.matched_text.substring(0, 50)}
+                      {item.type === "UI" && item.content.text.substring(0, 50)}
+                      ...
+                    </span>
                   </AccordionTrigger>
                   <AccordionContent>
                     {item.type === "UI" && (
@@ -824,7 +828,10 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
                             <Badge
                               className="text-xs cursor-pointer"
                               onClick={() =>
-                                handleBadgeClick(item.content.window_name, "window")
+                                handleBadgeClick(
+                                  item.content.window_name,
+                                  "window"
+                                )
                               }
                             >
                               {item.content.window_name}
@@ -867,7 +874,9 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
                                   <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>this is the frame where the text appeared</p>
+                                  <p>
+                                    this is the frame where the text appeared
+                                  </p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -879,7 +888,10 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
                       <>
                         <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
                           <p className="whitespace-pre-line">
-                            {highlightKeyword(item.content.transcription, query)}
+                            {highlightKeyword(
+                              item.content.transcription,
+                              query
+                            )}
                           </p>
                         </div>
                         {item.content.file_path &&
@@ -952,33 +964,35 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
   // Add effect to restore search when currentSearchId changes
   useEffect(() => {
     if (currentSearchId) {
-      const selectedSearch = searches.find(s => s.id === currentSearchId);
+      const selectedSearch = searches.find((s) => s.id === currentSearchId);
       if (selectedSearch) {
         // Restore search parameters
-        setQuery(selectedSearch.searchParams.q || '');
+        setQuery(selectedSearch.searchParams.q || "");
         setContentType(selectedSearch.searchParams.content_type);
         setLimit(selectedSearch.searchParams.limit);
         setStartDate(new Date(selectedSearch.searchParams.start_time));
         setEndDate(new Date(selectedSearch.searchParams.end_time));
-        setAppName(selectedSearch.searchParams.app_name || '');
-        setWindowName(selectedSearch.searchParams.window_name || '');
+        setAppName(selectedSearch.searchParams.app_name || "");
+        setWindowName(selectedSearch.searchParams.window_name || "");
         setIncludeFrames(selectedSearch.searchParams.include_frames);
         setMinLength(selectedSearch.searchParams.min_length);
         setMaxLength(selectedSearch.searchParams.max_length);
-        
+
         // Restore results
         setResults(selectedSearch.results);
         setTotalResults(selectedSearch.results.length);
         setHasSearched(true);
         setShowExamples(false);
-        
+
         // Restore messages if any
         if (selectedSearch.messages) {
-          setChatMessages(selectedSearch.messages.map(msg => ({
-            id: msg.id,
-            role: msg.type === 'ai' ? 'assistant' : 'user',
-            content: msg.content
-          })));
+          setChatMessages(
+            selectedSearch.messages.map((msg) => ({
+              id: msg.id,
+              role: msg.type === "ai" ? "assistant" : "user",
+              content: msg.content,
+            }))
+          );
         }
       }
     }
@@ -990,13 +1004,15 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-1">
           <div className="flex items-center space-x-1">
-            <Checkbox 
+            <Checkbox
               id="audio-type"
               checked={selectedTypes.audio}
-              onCheckedChange={() => handleContentTypeChange('audio')}
+              onCheckedChange={() => handleContentTypeChange("audio")}
               className="h-4 w-4"
             />
-            <Label htmlFor="audio-type" className="text-xs">speech</Label>
+            <Label htmlFor="audio-type" className="text-xs">
+              speech
+            </Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1010,40 +1026,49 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
           </div>
           {settings.platform === "macos" && (
             <div className="flex items-center space-x-1">
-              <Checkbox 
+              <Checkbox
                 id="ui-type"
                 checked={selectedTypes.ui}
-                onCheckedChange={() => handleContentTypeChange('ui')}
+                onCheckedChange={() => handleContentTypeChange("ui")}
                 className="h-4 w-4"
               />
-              <Label htmlFor="ui-type" className="text-xs">screen UI</Label>
+              <Label htmlFor="ui-type" className="text-xs">
+                screen UI
+              </Label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>text emitted directly from the source code of the desktop applications</p>
+                    <p>
+                      text emitted directly from the source code of the desktop
+                      applications
+                    </p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
           )}
           <div className="flex items-center space-x-1">
-            <Checkbox 
+            <Checkbox
               id="ocr-type"
               checked={selectedTypes.ocr}
-              onCheckedChange={() => handleContentTypeChange('ocr')}
+              onCheckedChange={() => handleContentTypeChange("ocr")}
               className="h-4 w-4"
             />
-            <Label htmlFor="ocr-type" className="text-xs">screen capture</Label>
+            <Label htmlFor="ocr-type" className="text-xs">
+              screen capture
+            </Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>recognized text from screenshots taken every 5s by default</p>
+                  <p>
+                    recognized text from screenshots taken every 5s by default
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1053,10 +1078,7 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
         <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="text-sm">
-              <span className="flex items-center">
-                <IconCode className="h-4 w-4 mr-2" />
-                code
-              </span>
+              <IconCode className="h-4 w-4 mx-2" />
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
@@ -1099,7 +1121,7 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
           placeholder="filter by window"
           className="w-[300px]"
           icon={<Layout className="h-4 w-4" />}
-          />
+        />
 
         {/* Advanced button */}
         <Button
@@ -1230,7 +1252,7 @@ export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchCha
               </Label>
               ... query input ...
             </div> */}
-            
+
             {/* Keep other advanced search options */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="app-name" className="text-right">
