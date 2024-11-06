@@ -849,11 +849,11 @@ impl OrderedFrameStreamer {
             return Ok(());
         };
 
-        // Determine bucket range
+        // Determine bucket range - FIXED: Reversed logic for descending order
         let bucket_range = if self.descending {
-            (current_bucket - self.bucket_size)..=current_bucket
-        } else {
             current_bucket..=(current_bucket + self.bucket_size)
+        } else {
+            (current_bucket - self.bucket_size)..=current_bucket
         };
 
         // Find frames ready to be sent (outside current bucket)
@@ -865,11 +865,14 @@ impl OrderedFrameStreamer {
 
         if !ready_timestamps.is_empty() {
             // Sort timestamps based on direction
-            if self.descending {
-                ready_timestamps.sort_by(|a, b| b.cmp(a));
-            } else {
-                ready_timestamps.sort();
-            }
+            ready_timestamps.sort_by(|a, b| {
+                if self.descending {
+                    // FIXED: Ensure we process older timestamps first in descending mode
+                    a.cmp(b)
+                } else {
+                    b.cmp(a)
+                }
+            });
 
             // Send frames and update buffer
             for ts in ready_timestamps {

@@ -26,7 +26,7 @@ export function CurrentTimeIndicator({
     if (!currentFrame) return 0;
 
     const frameTime = new Date(
-      currentFrame.metadata.timestamp || frames[currentIndex].timestamp
+      currentFrame.metadata.timestamp || frames[currentIndex].timestamp || ""
     );
 
     const totalMs = timeRange.end.getTime() - timeRange.start.getTime();
@@ -50,10 +50,12 @@ export function CurrentTimeIndicator({
       <div className="w-0.5 h-full bg-foreground/50" />
       <div className="absolute bottom-[-20px] text-xs text-foreground bg-background px-1 rounded-sm border whitespace-nowrap">
         {new Date(
-          currentFrame.metadata.timestamp || frames[currentIndex].timestamp
+          currentFrame.metadata.timestamp ||
+            frames[currentIndex].timestamp ||
+            ""
         ).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
+          hour: "2-digit",
+          minute: "2-digit",
         })}
       </div>
     </div>

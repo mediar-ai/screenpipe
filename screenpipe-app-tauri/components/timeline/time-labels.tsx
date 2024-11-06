@@ -11,7 +11,7 @@ interface TimeLabelsProps {
 export function TimeLabels({ timeRange, className }: TimeLabelsProps) {
   const totalHours =
     (timeRange.end.getTime() - timeRange.start.getTime()) / (1000 * 60 * 60);
-  const labelCount = Math.min(14, Math.ceil(totalHours / 1)); // One label every ~2 hours, max 7 labels
+  const labelCount = Math.min(7, Math.ceil(totalHours / 2)); // One label every ~2 hours, max 7 labels
 
   return (
     <div
