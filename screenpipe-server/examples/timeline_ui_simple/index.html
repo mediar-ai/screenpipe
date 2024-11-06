@@ -97,6 +97,18 @@
         .icon:hover .tooltip {
             display: block;
         }
+        
+        .devices-container {
+            display: flex;
+            gap: 20px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 20px;
+        }
+        
+        .device-frame {
+            flex: 1;
+            min-width: 0;
+        }
     </style>
 </head>
 <body>
@@ -128,55 +140,72 @@
             document.getElementById('frames').innerHTML = '';
         }
         
-        function appendFrame(frame, timestamp, data) {
+        function appendFrame(data) {
             const container = document.createElement('div');
             container.className = 'frame-container';
             
-            const img = document.createElement('img');
-            img.onerror = (e) => console.error('Failed to load image:', e);
-            img.onload = () => console.log('Image loaded successfully');
-            
-            const cleanBase64 = frame.trim().replace(/\s/g, '');
-            img.src = `data:image/jpeg;base64,${cleanBase64}`;
-            
-            img.style.display = 'block';
-            img.style.minHeight = '100px';
-            
             const ts = document.createElement('div');
             ts.className = 'frame-timestamp';
-            ts.innerText = new Date(timestamp).toLocaleString();
-
-            const metadata = document.createElement('div');
-            metadata.className = 'metadata-icons';
-            
-            metadata.innerHTML = `
-                <span>window: ${(data && data.window_name) || 'N/A'}</span>
-                <span>app: ${(data && data.app_name) || 'N/A'}</span>
-            `;
-
-            if (data && data.ocr_text) {
-                const ocrIcon = document.createElement('div');
-                ocrIcon.className = 'icon';
-                ocrIcon.innerHTML = `
-                    📝
-                    <div class="tooltip">OCR: ${data.ocr_text}</div>
-                `;
-                metadata.appendChild(ocrIcon);
-            }
-
-            if (data && data.transcription) {
-                const transcriptionIcon = document.createElement('div');
-                transcriptionIcon.className = 'icon';
-                transcriptionIcon.innerHTML = `
-                    🎤
-                    <div class="tooltip">Transcription: ${data.transcription}</div>
-                `;
-                metadata.appendChild(transcriptionIcon);
-            }
-            
-            container.appendChild(img);
+            ts.innerText = new Date(data.timestamp).toLocaleString();
             container.appendChild(ts);
-            container.appendChild(metadata);
+            
+            const devicesContainer = document.createElement('div');
+            devicesContainer.className = 'devices-container';
+            
+            data.devices.forEach(device => {
+                const deviceFrame = document.createElement('div');
+                deviceFrame.className = 'device-frame';
+                
+                const img = document.createElement('img');
+                img.onerror = (e) => console.error('Failed to load image:', e);
+                img.onload = () => console.log('Image loaded successfully');
+                
+                const cleanBase64 = device.frame.trim().replace(/\s/g, '');
+                img.src = `data:image/jpeg;base64,${cleanBase64}`;
+                
+                img.style.display = 'block';
+                img.style.minHeight = '100px';
+                
+                const metadata = document.createElement('div');
+                metadata.className = 'metadata-icons';
+                
+                metadata.innerHTML = `
+                    <span>device: ${device.device_id}</span>
+                    <span>window: ${device.metadata.window_name || 'N/A'}</span>
+                    <span>app: ${device.metadata.app_name || 'N/A'}</span>
+                `;
+
+                if (device.metadata.ocr_text) {
+                    const ocrIcon = document.createElement('div');
+                    ocrIcon.className = 'icon';
+                    ocrIcon.innerHTML = `
+                        📝
+                        <div class="tooltip">OCR: ${device.metadata.ocr_text}</div>
+                    `;
+                    metadata.appendChild(ocrIcon);
+                }
+
+                device.audio.forEach(audio => {
+                    const audioIcon = document.createElement('div');
+                    audioIcon.className = 'icon';
+                    audioIcon.innerHTML = `
+                        ${audio.is_input ? '🎤' : '🔊'}
+                        <div class="tooltip">
+                            Device: ${audio.device_name}
+                            Duration: ${audio.duration_secs}s
+                            Offset: ${audio.start_offset}s
+                            Transcription: ${audio.transcription}
+                        </div>
+                    `;
+                    metadata.appendChild(audioIcon);
+                });
+                
+                deviceFrame.appendChild(img);
+                deviceFrame.appendChild(metadata);
+                devicesContainer.appendChild(deviceFrame);
+            });
+            
+            container.appendChild(devicesContainer);
             
             const frames = document.getElementById('frames');
             frames.appendChild(container);
@@ -203,9 +232,9 @@
                         return;
                     }
                     
-                    if (data.frame && data.timestamp) {
-                        console.log('appending frame from:', data.timestamp, data);
-                        appendFrame(data.frame, data.timestamp, data);
+                    if (data.timestamp && data.devices) {
+                        console.log('appending frames from:', data.timestamp, data);
+                        appendFrame(data);
                     }
                 } catch (e) {
                     console.error('Failed to parse frame data:', e);

@@ -13,19 +13,41 @@ import {
   X,
   GripHorizontal,
   RotateCcw,
+  AlertCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { platform } from "@tauri-apps/plugin-os";
+import posthog from "posthog-js";
+import { TimelineBlocks } from "@/components/timeline/timeline-block";
 
-interface StreamFramesResponse {
-  frame: string;
+interface StreamTimeSeriesResponse {
   timestamp: string;
+  devices: DeviceFrameResponse[];
+}
+
+interface DeviceFrameResponse {
+  device_id: string;
+  frame: string; // base64 encoded image
+  metadata: DeviceMetadata;
+  audio: AudioData[];
+}
+
+interface DeviceMetadata {
   file_path: string;
-  app_name?: string;
-  window_name?: string;
-  ocr_text?: string;
-  transcription?: string;
+  app_name: string;
+  window_name: string;
+  ocr_text: string;
+  timestamp: string;
+}
+
+interface AudioData {
+  device_name: string;
+  is_input: boolean;
+  transcription: string;
+  audio_file_path: string;
+  duration_secs: number;
+  start_offset: number;
 }
 
 interface TimeRange {
@@ -33,11 +55,70 @@ interface TimeRange {
   end: Date;
 }
 
+interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  dataSelector: (frames: StreamTimeSeriesResponse[]) => any;
+}
+
+const AGENTS: Agent[] = [
+  {
+    id: "context-master",
+    name: "context master",
+    description: "analyzes everything: apps, windows, text & audio",
+    dataSelector: (frames) =>
+      frames.map((frame) => ({
+        timestamp: frame.timestamp,
+        devices: frame.devices.map((device) => ({
+          device_id: device.device_id,
+          metadata: device.metadata,
+          audio: device.audio,
+        })),
+      })),
+  },
+  {
+    id: "window-tracker",
+    name: "window tracker",
+    description: "focuses on app switching patterns",
+    dataSelector: (frames) =>
+      frames.map((frame) => ({
+        timestamp: frame.timestamp,
+        windows: frame.devices.map((device) => ({
+          app: device.metadata.app_name,
+          window: device.metadata.window_name,
+        })),
+      })),
+  },
+  {
+    id: "text-scanner",
+    name: "text scanner",
+    description: "analyzes visible text (OCR)",
+    dataSelector: (frames) =>
+      frames.map((frame) => ({
+        timestamp: frame.timestamp,
+        text: frame.devices
+          .map((device) => device.metadata.ocr_text)
+          .filter(Boolean),
+      })),
+  },
+  {
+    id: "voice-analyzer",
+    name: "voice analyzer",
+    description: "focuses on audio transcriptions",
+    dataSelector: (frames) =>
+      frames.map((frame) => ({
+        timestamp: frame.timestamp,
+        audio: frame.devices.flatMap((device) => device.audio),
+      })),
+  },
+];
+
 export default function Timeline() {
-  const [currentFrame, setCurrentFrame] = useState<StreamFramesResponse | null>(
+  const [currentFrame, setCurrentFrame] = useState<DeviceFrameResponse | null>(
     null
   );
-  const [frames, setFrames] = useState<StreamFramesResponse[]>([]);
+  const [frames, setFrames] = useState<StreamTimeSeriesResponse[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +147,12 @@ export default function Timeline() {
   const [isDraggingPanel, setIsDraggingPanel] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [osType, setOsType] = useState<string>("");
+  const [selectedAgent, setSelectedAgent] = useState<Agent>(AGENTS[0]);
+  const [chatWindowSize, setChatWindowSize] = useState({
+    width: 400,
+    height: 500,
+  });
+  const resizerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setPosition({
@@ -79,15 +166,12 @@ export default function Timeline() {
       eventSourceRef.current.close();
     }
 
-    // now minus 2 minutes
     const endTime = new Date();
     endTime.setMinutes(endTime.getMinutes() - 2);
-    // at 00.01 am today
     const startTime = new Date();
     startTime.setHours(0, 1, 0, 0);
     const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
 
-    // Set the initial loaded time range
     setLoadedTimeRange({
       start: startTime,
       end: endTime,
@@ -100,26 +184,34 @@ export default function Timeline() {
 
     eventSource.onmessage = (event) => {
       try {
-        const frame = JSON.parse(event.data);
-        if (frame === "keep-alive-text" || !frame.frame) return;
+        const data = JSON.parse(event.data);
+        if (data === "keep-alive-text") return;
 
-        setFrames((prev) => {
-          // Deduplicate frames based on timestamp
-          const exists = prev.some((f) => f.timestamp === frame.timestamp);
-          if (exists) return prev;
-          return [...prev, frame];
-        });
+        if (data.timestamp && data.devices) {
+          setFrames((prev) => {
+            const exists = prev.some((f) => f.timestamp === data.timestamp);
+            if (exists) return prev;
 
-        // Only set current frame and loading state if it's our first frame
-        setCurrentFrame((prev) => prev || frame);
-        setIsLoading(false);
+            // ! HACK: Add new frame and sort in descending order
+            const newFrames = [...prev, data].sort((a, b) => {
+              return (
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime()
+              );
+            });
+
+            return newFrames;
+          });
+
+          setCurrentFrame((prev) => prev || data.devices[0]);
+          setIsLoading(false);
+        }
       } catch (error) {
         console.error("failed to parse frame data:", error);
       }
     };
 
     eventSource.onerror = (error) => {
-      // Ignore end of stream errors (expected behavior)
       if (eventSource.readyState === EventSource.CLOSED) {
         console.log("stream ended (expected behavior)", error);
         setIsLoading(false);
@@ -140,24 +232,44 @@ export default function Timeline() {
   };
 
   const getLoadedTimeRangeStyles = () => {
-    if (!loadedTimeRange) return { left: "0%", right: "100%" };
+    if (!loadedTimeRange || frames.length === 0)
+      return { left: "0%", right: "100%" };
 
+    // Find the earliest frame timestamp
+    const firstFrame = [...frames].sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    )[0];
+    const earliestTime = new Date(firstFrame.timestamp);
+
+    // Create local date objects for today
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
+
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
+    // Convert UTC loadedTimeRange to local time
+    const localStart = new Date(earliestTime);
+    const localEnd = new Date(loadedTimeRange.end);
+
     const totalMs = endOfDay.getTime() - startOfDay.getTime();
     const startPercent =
-      ((loadedTimeRange.start.getTime() - startOfDay.getTime()) / totalMs) *
-      100;
+      ((localStart.getTime() - startOfDay.getTime()) / totalMs) * 100;
     const endPercent =
-      ((loadedTimeRange.end.getTime() - startOfDay.getTime()) / totalMs) * 100;
+      ((localEnd.getTime() - startOfDay.getTime()) / totalMs) * 100;
 
+    // Temporarily return empty values to disable grey areas
     return {
-      left: `${startPercent}%`,
-      right: `${100 - endPercent}%`,
+      right: "0%",
+      left: "0%",
     };
+
+    // Original code commented out:
+    // return {
+    //   right: `${Math.max(0, Math.min(100, startPercent))}%`,  // Grey before data starts
+    //   left: `${Math.max(0, Math.min(100, 100 - endPercent))}%`,  // Grey after data ends
+    // };
   };
 
   useEffect(() => {
@@ -179,7 +291,6 @@ export default function Timeline() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) to open AI panel
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         if (selectionRange) {
@@ -187,7 +298,6 @@ export default function Timeline() {
         }
       }
 
-      // Cmd+Enter or Ctrl+Enter to send message
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
         if (isAiPanelExpanded && aiInput.trim()) {
@@ -201,10 +311,8 @@ export default function Timeline() {
   }, [selectionRange, isAiPanelExpanded, aiInput]);
 
   const handleScroll = (e: React.WheelEvent<HTMLDivElement>) => {
-    // Check if the event originated from within the AI panel
     const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
     if (isWithinAiPanel) {
-      // Allow normal scrolling behavior for AI panel
       return;
     }
 
@@ -224,40 +332,46 @@ export default function Timeline() {
 
     if (newIndex !== currentIndex) {
       setCurrentIndex(newIndex);
-      setCurrentFrame(frames[newIndex]);
+      setCurrentFrame(frames[newIndex].devices[0]);
     }
   };
 
   const getCurrentTimePercentage = () => {
-    const now = new Date();
-    const startOfDay = new Date(now);
+    if (!currentFrame) return 0;
+
+    const frameTime = new Date(
+      currentFrame.metadata.timestamp || frames[currentIndex].timestamp
+    );
+    const startOfDay = new Date(frameTime);
     startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(now);
+    const endOfDay = new Date(frameTime);
     endOfDay.setHours(23, 59, 59, 999);
 
     const totalDayMilliseconds = endOfDay.getTime() - startOfDay.getTime();
-    const currentMilliseconds = now.getTime() - startOfDay.getTime();
+    const currentMilliseconds = frameTime.getTime() - startOfDay.getTime();
 
     return (currentMilliseconds / totalDayMilliseconds) * 100;
   };
 
   const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const percentage = ((e.clientX - rect.left) / rect.width) * 100;
-    setIsDragging(true);
-    setDragStart(percentage);
+    const clickX = e.clientX - rect.left;
+    const percentage = (clickX / rect.width) * 100;
 
-    // Calculate time in local timezone
+    // Clamp percentage between 0 and 100
+    const clampedPercentage = Math.max(0, Math.min(100, percentage));
+
+    setIsDragging(true);
+    setDragStart(clampedPercentage);
+
     const totalMinutesInDay = 24 * 60;
-    const minutesFromMidnight = (percentage / 100) * totalMinutesInDay;
+    const minutesFromMidnight = (clampedPercentage / 100) * totalMinutesInDay;
     const hours = Math.floor(minutesFromMidnight / 60);
     const minutes = Math.floor(minutesFromMidnight % 60);
 
-    // Create date in local time
     const localDate = new Date();
     localDate.setHours(hours, minutes, 0, 0);
 
-    // Convert to UTC for storage
     const utcDate = new Date(
       Date.UTC(
         localDate.getUTCFullYear(),
@@ -279,17 +393,22 @@ export default function Timeline() {
   const handleTimelineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDragging || dragStart === null) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const percentage = ((e.clientX - rect.left) / rect.width) * 100;
+    // Prevent text selection during drag
+    e.preventDefault();
 
-    // Calculate times for both points in local time
+    const rect = e.currentTarget.getBoundingClientRect();
+    const moveX = e.clientX - rect.left;
+    const percentage = (moveX / rect.width) * 100;
+
+    // Clamp percentage between 0 and 100
+    const clampedPercentage = Math.max(0, Math.min(100, percentage));
+
     const totalMinutesInDay = 24 * 60;
     const startMinutes =
-      (Math.min(dragStart, percentage) / 100) * totalMinutesInDay;
+      (Math.min(dragStart, clampedPercentage) / 100) * totalMinutesInDay;
     const endMinutes =
-      (Math.max(dragStart, percentage) / 100) * totalMinutesInDay;
+      (Math.max(dragStart, clampedPercentage) / 100) * totalMinutesInDay;
 
-    // Create local dates
     const startLocal = new Date();
     startLocal.setHours(
       Math.floor(startMinutes / 60),
@@ -306,7 +425,6 @@ export default function Timeline() {
       0
     );
 
-    // Convert to UTC for storage
     const utcStartDate = new Date(
       Date.UTC(
         startLocal.getUTCFullYear(),
@@ -339,19 +457,21 @@ export default function Timeline() {
 
   const handleTimelineMouseUp = () => {
     setIsDragging(false);
+    setDragStart(null);
   };
 
   const handleAskAI = () => {
+    posthog.capture("timeline_toggle_ai_panel", {
+      action: isAiPanelExpanded ? "close" : "open",
+    });
+
     if (isAiPanelExpanded) {
-      // If panel is already open, clear messages and close
       setChatMessages([]);
       setIsAiPanelExpanded(false);
       setAiInput("");
     } else {
-      // Opening fresh panel - always expand directly to chat
       setChatMessages([]);
       setIsAiPanelExpanded(true);
-      // Focus the input after a brief delay to allow animation to complete
       setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
@@ -359,24 +479,30 @@ export default function Timeline() {
   };
 
   const handleAiSubmit = async (e: React.FormEvent) => {
+    posthog.capture("timeline_ai_chat", {
+      ai_url: settings.aiUrl,
+      model: settings.aiModel,
+      agent: selectedAgent.name,
+      selection_range_minutes: selectionRange
+        ? Math.round(
+            (selectionRange.end.getTime() - selectionRange.start.getTime()) /
+              60000
+          )
+        : 0,
+      // Don't include actual messages/content
+    });
+
     e.preventDefault();
     if (!aiInput.trim() || !selectionRange) return;
 
-    console.log("Selection range (UTC):", {
-      start: selectionRange.start.toISOString(),
-      end: selectionRange.end.toISOString(),
-    });
-
     const relevantFrames = frames.filter((frame) => {
       const frameTime = new Date(frame.timestamp);
-      // console.log("frameTime", frameTime);
       return (
         frameTime >= selectionRange.start && frameTime <= selectionRange.end
       );
     });
 
-    console.log("Total frames:", frames.length);
-    console.log("Relevant frames:", relevantFrames);
+    const contextData = selectedAgent.dataSelector(relevantFrames);
 
     const userMessage = {
       id: generateId(),
@@ -397,7 +523,9 @@ export default function Timeline() {
       const messages = [
         {
           role: "system" as const,
-          content: `You are a helpful assistant analyzing screen & mic 24/7 recordings including OCR, transcription, and more.
+          content: `You are a helpful assistant specialized as a "${
+            selectedAgent.name
+          }" analyzing screen & mic recordings.
             Rules:
             - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
             - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
@@ -405,21 +533,16 @@ export default function Timeline() {
             - All timestamps in the context data are in UTC
             - Convert timestamps to local time for human-readable responses
             - Never output UTC time unless explicitly asked
-            - Focus on app usage patterns and context switches
+            - Focus on ${selectedAgent.description}
+            - Follow the user's instructions carefully & to the letter: ${
+              settings.customPrompt
+            }
             `,
         },
         ...chatMessages,
         {
           role: "user" as const,
-          content: `Context data: ${JSON.stringify(
-            relevantFrames.map((frame) => ({
-              timestamp: frame.timestamp,
-              app_name: frame.app_name,
-              window_name: frame.window_name,
-              ocr_text: frame.ocr_text,
-              transcription: frame.transcription,
-            }))
-          )}
+          content: `Context data: ${JSON.stringify(contextData)}
           
           ${aiInput}`,
         },
@@ -460,21 +583,29 @@ export default function Timeline() {
       }
     } catch (error: any) {
       console.error("Error generating AI response:", error);
-      toast({
-        title: "Error",
-        description: "Failed to generate AI response. Please try again.",
-        variant: "destructive",
-      });
+      // if its max context error, show a different message
+      if (error.message.toLowerCase().includes("maximum context")) {
+        toast({
+          title: "error",
+          description:
+            "failed to generate AI response. max context length exceeded.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "error",
+          description: "failed to generate AI response. please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsAiLoading(false);
       setIsStreaming(false);
     }
   };
 
-  // Add this to prevent scroll on the document
   useEffect(() => {
     const preventScroll = (e: WheelEvent) => {
-      // Check if the event target is within the AI panel
       const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
       if (!isWithinAiPanel) {
         e.preventDefault();
@@ -486,13 +617,11 @@ export default function Timeline() {
   }, []);
 
   const handlePanelMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      setIsDraggingPanel(true);
-      setDragOffset({
-        x: e.clientX - position.x,
-        y: e.clientY - position.y,
-      });
-    }
+    setIsDraggingPanel(true);
+    setDragOffset({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
   };
 
   const handlePanelMouseMove = (e: React.MouseEvent) => {
@@ -505,7 +634,9 @@ export default function Timeline() {
   };
 
   const handlePanelMouseUp = () => {
-    setIsDraggingPanel(false);
+    if (isDraggingPanel) {
+      setIsDraggingPanel(false);
+    }
   };
 
   useEffect(() => {
@@ -519,7 +650,10 @@ export default function Timeline() {
     };
 
     const handleGlobalMouseUp = () => {
-      setIsDraggingPanel(false);
+      if (isDragging) {
+        setIsDragging(false);
+        setDragStart(null);
+      }
     };
 
     if (isDraggingPanel) {
@@ -534,6 +668,8 @@ export default function Timeline() {
   }, [isDraggingPanel, dragOffset]);
 
   const handleRefresh = () => {
+    posthog.capture("timeline_refresh");
+
     setFrames([]);
     setCurrentFrame(null);
     setCurrentIndex(0);
@@ -541,11 +677,40 @@ export default function Timeline() {
     setupEventSource();
   };
 
+  const handleAgentChange = (agentId: string) => {
+    const newAgent = AGENTS.find((a) => a.id === agentId) || AGENTS[0];
+    posthog.capture("timeline_change_agent", {
+      agent: newAgent.name,
+    });
+    setSelectedAgent(newAgent);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = chatWindowSize.width;
+    const startHeight = chatWindowSize.height;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.max(200, startWidth + moveEvent.clientX - startX); // Minimum width
+      const newHeight = Math.max(200, startHeight + moveEvent.clientY - startY); // Minimum height
+      setChatWindowSize({ width: newWidth, height: newHeight });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
   return (
     <div
-      className="fixed inset-0 flex flex-col bg-black text-white overflow-hidden font-['Press_Start_2P'] relative"
+      className="fixed inset-0 flex flex-col bg-background text-foreground overflow-hidden relative"
       onWheel={(e) => {
-        // Only handle wheel events if they're not from the AI panel
         const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
         if (!isWithinAiPanel) {
           handleScroll(e);
@@ -562,12 +727,11 @@ export default function Timeline() {
     >
       <button
         onClick={handleRefresh}
-        className="absolute top-4 right-4 p-2 text-[#0f0] hover:text-[#0f0]/70 bg-black/50 rounded border border-[#0f0]/20 hover:border-[#0f0]/50 transition-colors z-50"
+        className="absolute top-4 right-4 p-2 text-foreground hover:text-foreground/70 bg-background rounded border border-muted-foreground hover:border-foreground/50 transition-colors z-50"
       >
         <RotateCcw className="h-4 w-4" />
       </button>
 
-      {/* Scanline effect overlay */}
       <div
         className="fixed inset-0 pointer-events-none z-50"
         style={{
@@ -576,32 +740,33 @@ export default function Timeline() {
         }}
       />
 
-      {/* Frame viewer */}
       <div className="flex-1 relative min-h-0">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-black/90 p-5 border-4 border-[#333] shadow-2xl text-center">
+            <div className="bg-background/90 p-5 border rounded-lg shadow-lg text-center">
               <p>loading frames...</p>
-              <div className="animate-blink inline-block w-2 h-2 bg-white ml-1" />
+              <Loader2 className="h-4 w-4 animate-spin mx-auto mt-2" />
             </div>
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center text-red-500">
-            <p>{error}</p>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-destructive/10 p-5 border-destructive/20 border rounded-lg text-destructive">
+              <AlertCircle className="h-4 w-4 mb-2 mx-auto" />
+              <p>{error}</p>
+            </div>
           </div>
         )}
         {currentFrame && (
           <>
-            {/* App info centered above frame */}
             <div className="w-4/5 mx-auto mt-4 mb-4 text-center select-none">
-              <div className="inline-block bg-black/50 p-2 rounded shadow-lg backdrop-blur-sm border border-[#333] text-[#888] text-xs tracking-wider">
-                <div className="flex items-center gap-4">
+              <div className="inline-block bg-card p-2 rounded-lg shadow-lg border">
+                <div className="flex items-center gap-4 text-sm">
+                  <div>device: {currentFrame.device_id}</div>
+                  <div>app: {currentFrame.metadata.app_name || "n/a"}</div>
                   <div>
-                    {new Date(currentFrame?.timestamp).toLocaleTimeString()}
+                    window: {currentFrame.metadata.window_name || "n/a"}
                   </div>
-                  <div>app: {currentFrame?.app_name || "n/a"}</div>
-                  <div>window: {currentFrame?.window_name || "n/a"}</div>
                 </div>
               </div>
             </div>
@@ -614,16 +779,14 @@ export default function Timeline() {
         )}
       </div>
 
-      {/* Timeline bar */}
       <div className="w-4/5 mx-auto my-8 relative select-none">
         <div
-          className="h-[60px] bg-[#111] border-4 border-[#444] shadow-[0_0_16px_rgba(0,0,0,0.8),inset_0_0_8px_rgba(255,255,255,0.1)] cursor-crosshair relative"
+          className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative"
           onMouseDown={handleTimelineMouseDown}
           onMouseMove={handleTimelineMouseMove}
           onMouseUp={handleTimelineMouseUp}
           onMouseLeave={handleTimelineMouseUp}
         >
-          {/* Unloaded regions overlay - making it more visible with a different color and opacity */}
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
@@ -633,7 +796,13 @@ export default function Timeline() {
             }}
           />
 
-          {/* Grid lines */}
+          {/* {loadedTimeRange && (
+            <TimelineBlocks
+              frames={frames}
+              timeRange={loadedTimeRange}
+            />
+          )} */}
+
           <div
             className="absolute inset-0"
             style={{
@@ -643,18 +812,16 @@ export default function Timeline() {
             }}
           />
 
-          {/* Current position indicator */}
           <div
-            className="absolute top-0 h-full w-1 bg-[#0f0] shadow-[0_0_12px_#0f0] opacity-80 z-10"
+            className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
             style={{
               left: `${getCurrentTimePercentage()}%`,
             }}
           />
 
-          {/* Selection overlay */}
           {selectionRange && (
             <div
-              className="absolute top-0 h-full bg-[#0f0] opacity-20"
+              className="absolute top-0 h-full bg-foreground/10"
               style={{
                 left: `${
                   (new Date(selectionRange.start).getHours() * 3600 +
@@ -672,85 +839,83 @@ export default function Timeline() {
           )}
         </div>
 
-        {/* Floating window when selection exists */}
         {selectionRange && (
           <div
             ref={aiPanelRef}
-            onMouseEnter={() => setIsHoveringAiPanel(true)}
-            onMouseLeave={() => setIsHoveringAiPanel(false)}
             style={{
               position: "fixed",
               left: position.x,
               top: position.y,
-              cursor: isDraggingPanel ? "grabbing" : "grab",
+              width: chatWindowSize.width,
+              height: isAiPanelExpanded ? chatWindowSize.height : 120,
+              cursor: isDraggingPanel ? "grabbing" : "default",
             }}
-            className={`w-96 bg-black/90 border-2 border-[#0f0] shadow-[0_0_20px_rgba(0,255,0,0.3)] rounded transition-colors duration-300 ease-in-out z-[100] ${
-              isAiPanelExpanded ? "h-[70vh]" : "h-auto"
-            }`}
+            className={`bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]`}
           >
             <div
-              className="p-2 border-b border-[#0f0]/20 select-none flex justify-between items-center group"
+              className="select-none cursor-grab active:cursor-grabbing"
               onMouseDown={handlePanelMouseDown}
               onMouseMove={handlePanelMouseMove}
               onMouseUp={handlePanelMouseUp}
               onMouseLeave={handlePanelMouseUp}
             >
-              <div className="flex items-center gap-2 flex-1 cursor-grab active:cursor-grabbing">
-                <GripHorizontal className="w-4 h-4 text-[#0f0]/50 group-hover:text-[#0f0]" />
-                <div className="text-[#0f0] text-xs">
-                  {/* Convert UTC to local for display */}
-                  {new Date(
-                    selectionRange.start.getTime()
-                  ).toLocaleTimeString()}{" "}
-                  -{" "}
-                  {new Date(selectionRange.end.getTime()).toLocaleTimeString()}
+              <div className="p-4 border-b border-muted-foreground flex justify-between items-center group">
+                <div className="flex items-center gap-2 flex-1">
+                  <GripHorizontal className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+                  <div className="text-muted-foreground text-xs">
+                    {new Date(
+                      selectionRange.start.getTime()
+                    ).toLocaleTimeString()}{" "}
+                    -{" "}
+                    {new Date(
+                      selectionRange.end.getTime()
+                    ).toLocaleTimeString()}
+                  </div>
                 </div>
-              </div>
-              <button
-                onClick={() => {
-                  setSelectionRange(null);
-                  setIsAiPanelExpanded(false);
-                  setChatMessages([]); // Clear messages
-                  setAiInput(""); // Clear input
-                }}
-                className="text-[#0f0] hover:text-[#0f0]/70 ml-2"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="p-4">
-              {!isAiPanelExpanded && (
                 <button
-                  className="px-3 py-1 bg-[#0f0]/20 hover:bg-[#0f0]/30 border border-[#0f0] text-[#0f0] text-xs rounded flex items-center gap-2"
                   onClick={() => {
-                    setIsAiPanelExpanded(true);
-                    setTimeout(() => {
-                      inputRef.current?.focus();
-                    }, 100);
+                    setSelectionRange(null);
+                    setIsAiPanelExpanded(false);
+                    setChatMessages([]);
+                    setAiInput("");
                   }}
+                  className="text-muted-foreground hover:text-foreground transition-colors ml-2"
                 >
-                  <span>ask ai</span>
-                  <span className="text-[#0f0]/50 text-[10px]">
-                    {osType === "macos" ? "⌘K" : "Ctrl+K"}
-                  </span>
+                  <X className="h-4 w-4" />
                 </button>
+              </div>
+
+              {!isAiPanelExpanded && (
+                <div className="p-4">
+                  <button
+                    className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsAiPanelExpanded(true);
+                      setTimeout(() => {
+                        inputRef.current?.focus();
+                      }, 100);
+                    }}
+                  >
+                    <span>ask ai</span>
+                    <span className="text-muted-foreground text-[10px]">
+                      {osType === "macos" ? "⌘K" : "Ctrl+K"}
+                    </span>
+                  </button>
+                </div>
               )}
             </div>
 
             {isAiPanelExpanded && (
-              <div className="flex flex-col h-[calc(100%-100px)]">
-                {/* Chat messages - Fixed height and scrollable */}
+              <div className="flex flex-col h-[calc(100%-52px)]">
                 <div
-                  className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 hover:cursor-auto text-[#eee] font-mono text-sm leading-relaxed"
+                  className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 hover:cursor-auto text-foreground font-mono text-sm leading-relaxed"
                   style={{
                     WebkitUserSelect: "text",
                     userSelect: "text",
                     MozUserSelect: "text",
                     msUserSelect: "text",
                     overscrollBehavior: "contain",
-                    textShadow: "0 0 1px rgba(255, 255, 255, 0.5)",
-                    letterSpacing: "0.02em",
                   }}
                 >
                   {chatMessages.map((msg, index) => (
@@ -758,61 +923,77 @@ export default function Timeline() {
                   ))}
                   {isAiLoading && (
                     <div className="flex justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-[#0f0]" />
+                      <Loader2 className="h-6 w-6 animate-spin text-foreground" />
                     </div>
                   )}
                 </div>
 
-                {/* Input form */}
                 <form
                   onSubmit={handleAiSubmit}
-                  className="p-4 border-t border-[#0f0]/20"
-                  style={{
-                    WebkitUserSelect: "text",
-                    userSelect: "text",
-                    MozUserSelect: "text",
-                    msUserSelect: "text",
-                  }}
+                  className="p-3 border-t border-muted-foreground"
                 >
-                  <div className="flex gap-2">
-                    <Input
-                      ref={inputRef}
-                      type="text"
-                      value={aiInput}
-                      onChange={(e) => setAiInput(e.target.value)}
-                      placeholder="ask about this time range..."
-                      className="flex-1 bg-black/50 border-[#0f0] text-[#0f0] placeholder-[#0f0]/50"
-                      disabled={isAiLoading}
-                    />
-                    <Button
-                      type="submit"
-                      disabled={isAiLoading}
-                      className="bg-[#0f0]/20 hover:bg-[#0f0]/30 border border-[#0f0] text-[#0f0] group relative"
+                  <div className="flex flex-col gap-2">
+                    <select
+                      value={selectedAgent.id}
+                      onChange={(e) => handleAgentChange(e.target.value)}
+                      className="w-full bg-background border border-muted-foreground text-foreground rounded px-2 py-1 text-xs"
                     >
-                      {isStreaming ? (
-                        <Square className="h-4 w-4" />
-                      ) : (
-                        <>
+                      {AGENTS.map((agent) => (
+                        <option
+                          key={agent.id}
+                          value={agent.id}
+                          className="bg-background text-foreground"
+                        >
+                          {agent.name} - {agent.description}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <Input
+                        ref={inputRef}
+                        type="text"
+                        value={aiInput}
+                        onChange={(e) => setAiInput(e.target.value)}
+                        placeholder="ask about this time range..."
+                        className="flex-1 bg-background border border-muted-foreground text-foreground placeholder-muted-foreground"
+                        disabled={isAiLoading}
+                      />
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        className="hover:bg-accent transition-colors"
+                        disabled={isAiLoading}
+                      >
+                        {isStreaming ? (
+                          <Square className="h-4 w-4" />
+                        ) : (
                           <Send className="h-4 w-4" />
-                          <span className="absolute -top-8 right-0 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity bg-black/90 px-2 py-1 rounded whitespace-nowrap">
-                            {osType === "macos" ? "⌘↵" : "Ctrl+↵"}
-                          </span>
-                        </>
-                      )}
-                    </Button>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </form>
               </div>
             )}
+
+            <div
+              ref={resizerRef}
+              onMouseDown={handleMouseDown}
+              className="absolute right-0 bottom-0 w-4 h-4 cursor-se-resize bg-transparent"
+              style={{
+                borderTopLeftRadius: "4px",
+                borderBottomRightRadius: "4px",
+                cursor: "se-resize",
+              }}
+            />
           </div>
         )}
 
-        {/* Timeline timestamps */}
-        <div className="relative mt-1 px-2 text-[10px] text-[#0f0] shadow-[0_0_8px_#0f0] select-none">
+        <div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
           {Array(7)
             .fill(0)
             .map((_, i) => {
-              const hour = (i * 4) % 24; // Start at 0 and increment by 4 hours
+              const hour = (i * 4) % 24;
               const date = new Date();
               date.setHours(hour, 0, 0, 0);
               return (
@@ -831,11 +1012,10 @@ export default function Timeline() {
         </div>
       </div>
 
-      {/* Scroll indicator */}
-      <div className="fixed left-12 top-1/2 -translate-y-1/2 font-['Press_Start_2P'] text-xs text-[#0f0] animate-pulse select-none">
+      <div className="fixed left-12 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
         <div className="flex flex-col items-center gap-1">
           <span>▲</span>
-          <span className="tracking-wider">scroll</span>
+          <span>scroll</span>
           <span>▼</span>
         </div>
       </div>

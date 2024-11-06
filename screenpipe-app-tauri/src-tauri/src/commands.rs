@@ -1,7 +1,4 @@
-// #[tauri::command]
-// pub fn has_screen_capture_access() -> bool {
-//     scap::has_permission()
-// }
+
 
 use serde_json::Value;
 use tauri::Manager;
@@ -24,30 +21,6 @@ pub fn open_mic_preferences() {
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
         .spawn()
         .expect("failed to open system preferences");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn reset_screen_permissions() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("tccutil")
-        .arg("reset")
-        .arg("ScreenCapture")
-        .arg("so.cap.desktop")
-        .spawn()
-        .expect("failed to reset screen permissions");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn reset_microphone_permissions() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("tccutil")
-        .arg("reset")
-        .arg("Microphone")
-        .arg("so.cap.desktop")
-        .spawn()
-        .expect("failed to reset microphone permissions");
 }
 
 #[tauri::command]
@@ -132,8 +105,9 @@ pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
         #[cfg(target_os = "macos")]
         let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-        let _ = window.set_visible_on_all_workspaces(true);
-        let _ = window.set_always_on_top(true);
+        // let _ = window.set_visible_on_all_workspaces(true);
+        // let _ = window.set_always_on_top(true);
+        let _ = window.set_decorations(true);
         let _ = window.show();
         let _ = window.set_focus();
     } else {
@@ -143,10 +117,10 @@ pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
             tauri::WebviewUrl::App("timeline.html".into()),
         )
         .title("timeline")
-        .decorations(false)
+        .decorations(true)
         .transparent(true)
-        .always_on_top(true)
-        .visible_on_all_workspaces(true) // Added this
+        // .always_on_top(true)
+        // .visible_on_all_workspaces(true) // Added this
         .center()
         .build()
         .unwrap();
@@ -209,7 +183,6 @@ pub fn update_show_screenpipe_shortcut(
 
         return Err("failed to set shortcut, reverted to default".to_string());
     }
-
 
     Ok(())
 }

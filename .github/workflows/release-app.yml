@@ -163,7 +163,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf wget
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
@@ -255,7 +255,7 @@ jobs:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
           tool-cache: false
-        
+
           # all of these default to true, but feel free to set to
           # "false" if necessary for your workflow
           android: true
@@ -291,6 +291,7 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.platform == 'windows-latest' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
           # Enable incremental compilation for Windows
           CARGO_INCREMENTAL: ${{ matrix.platform == 'windows-latest' && '1' || '0' }}
+          RUSTFLAGS: "-A warnings"
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"

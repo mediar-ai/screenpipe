@@ -79,8 +79,88 @@ import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { SearchHistory } from "@/lib/types/history";
 
-export function SearchChat() {
+
+
+interface SearchChatProps {
+  currentSearchId: string | null;
+  onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
+  searches: SearchHistory[];
+}
+
+export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
+
+
+interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  dataSelector: (results: ContentItem[]) => any;
+  systemPrompt: string;
+}
+
+const AGENTS: Agent[] = [
+  {
+    id: "context-master",
+    name: "context master",
+    description: "analyzes everything: apps, windows, text & audio",
+    systemPrompt:
+      "you analyze all types of data from screen recordings and audio transcriptions. provide comprehensive insights.",
+    dataSelector: (results) => results,
+  },
+  {
+    id: "window-detective",
+    name: "window detective",
+    description: "focuses on app usage patterns",
+    systemPrompt:
+      "you specialize in analyzing app usage patterns and window switching behavior. help users understand their app usage.",
+    dataSelector: (results) =>
+      results
+        .filter(
+          (item) =>
+            item.type === "OCR" &&
+            (item.content.app_name || item.content.window_name)
+        )
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          // @ts-ignore
+          app_name: item.content.app_name,
+          // @ts-ignore
+          window_name: item.content.window_name,
+        })),
+  },
+  {
+    id: "text-oracle",
+    name: "text oracle",
+    description: "analyzes screen text (OCR)",
+    systemPrompt:
+      "you focus on text extracted from screen recordings. help users find and understand text content.",
+    dataSelector: (results) =>
+      results
+        .filter((item) => item.type === "OCR")
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          text: item.content.text,
+          app_name: item.content.app_name,
+        })),
+  },
+  {
+    id: "voice-sage",
+    name: "voice sage",
+    description: "focuses on audio transcriptions",
+    systemPrompt:
+      "you analyze audio transcriptions from recordings. help users understand spoken content.",
+    dataSelector: (results) =>
+      results
+        .filter((item) => item.type === "Audio")
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          transcription: item.content.transcription,
+        })),
+  },
+];
+
   // Search state
   const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
@@ -140,6 +220,8 @@ export function SearchChat() {
   const debouncedThreshold = useDebounce(similarityThreshold, 300);
 
   const [isQueryParamsDialogOpen, setIsQueryParamsDialogOpen] = useState(false);
+
+  const [selectedAgent, setSelectedAgent] = useState<Agent>(AGENTS[0]);
 
   useEffect(() => {
     const updateDates = () => {
@@ -359,7 +441,10 @@ export function SearchChat() {
       role: "user" as const,
       content: floatingInput,
     };
-    setChatMessages((prevMessages) => [...prevMessages, userMessage]);
+    setChatMessages((prevMessages) => [
+      ...prevMessages,
+      { id: generateId(), role: "assistant", content: "" },
+    ]);
     setFloatingInput("");
     setIsAiLoading(true);
 
@@ -382,23 +467,14 @@ export function SearchChat() {
       const messages = [
         {
           role: "system" as const,
-          content: `You are a helpful assistant.
-            The user is using a product called "screenpipe" which records
-            his screen and mics 24/7. The user ask you questions
-            and you use his screenpipe recordings to answer him. 
-            The user will provide you with a list of search results
-            and you will use them to answer his questions.
-
+          content: `You are a helpful assistant specialized as a "${
+            selectedAgent.name
+          }". ${selectedAgent.systemPrompt}
             Rules:
-            - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}. Adjust start/end times to match user intent.
+            - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
             - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
-            - User timezone offset (JavaScript Date.prototype.getTimezoneOffset): ${new Date().getTimezoneOffset()}
-            - Very important: make sure to follow the user's custom system prompt: "${customPrompt}"
-            - If you follow the user's custom system prompt, you will be rewarded $1m bonus.
-            - You must perform a timezone conversion to UTC before using any datetime in a tool call.
-            - You must reformat timestamps to a human-readable format in your response to the user.
-            - Never output UTC time unless explicitly asked by the user.
-            - Do not try to embed videos in table (would crash the app)
+            - User timezone offset: ${new Date().getTimezoneOffset()}
+            - ${customPrompt ? `Custom prompt: ${customPrompt}` : ""}
             `,
         },
         ...chatMessages.map((msg) => ({
@@ -408,7 +484,9 @@ export function SearchChat() {
         {
           role: "user" as const,
           content: `Context data: ${JSON.stringify(
-            results.filter((_, index) => selectedResults.has(index))
+            selectedAgent.dataSelector(
+              results.filter((_, index) => selectedResults.has(index))
+            )
           )}
           
           User query: ${floatingInput}`,
@@ -432,8 +510,8 @@ export function SearchChat() {
       let fullResponse = "";
       // @ts-ignore
       setChatMessages((prevMessages) => [
-        ...prevMessages,
-        { role: "assistant", content: "" },
+        ...prevMessages.slice(0, -1),
+        { id: generateId(), role: "assistant", content: fullResponse },
       ]);
 
       setIsUserScrolling(false);
@@ -446,7 +524,7 @@ export function SearchChat() {
         // @ts-ignore
         setChatMessages((prevMessages) => [
           ...prevMessages.slice(0, -1),
-          { role: "assistant", content: fullResponse },
+          { id: generateId(), role: "assistant", content: fullResponse },
         ]);
         scrollToBottom();
       }
@@ -501,20 +579,21 @@ export function SearchChat() {
     });
 
     try {
-      const response = await queryScreenpipe({
+      const searchParams = {
         q: query || undefined,
         content_type: overrides.contentType || contentType,
         limit: overrides.limit || limit,
         offset: newOffset,
-        start_time:
-          overrides.startDate?.toISOString() || startDate.toISOString(),
+        start_time: overrides.startDate?.toISOString() || startDate.toISOString(),
         end_time: endDate.toISOString(),
         app_name: overrides.appName || appName || undefined,
         window_name: overrides.windowName || windowName || undefined,
         include_frames: includeFrames,
         min_length: overrides.minLength || minLength,
         max_length: maxLength,
-      });
+      };
+
+      const response = await queryScreenpipe(searchParams);
 
       if (!response || !Array.isArray(response.data)) {
         throw new Error("invalid response data");
@@ -522,6 +601,9 @@ export function SearchChat() {
 
       setResults(response.data);
       setTotalResults(response.pagination.total);
+
+      // Save search to history
+      await onAddSearch(searchParams, response.data);
     } catch (error) {
       console.error("search error:", error);
       toast({
@@ -683,7 +765,8 @@ export function SearchChat() {
                     {item.type === "Audio" && (
                       <>
                         <p className="mt-2">{item.content.transcription}</p>
-                        {item.content.file_path && item.content.file_path.trim() !== "" ? (
+                        {item.content.file_path &&
+                        item.content.file_path.trim() !== "" ? (
                           <div className="flex justify-center mt-4">
                             <VideoComponent filePath={item.content.file_path} />
                           </div>
@@ -744,6 +827,41 @@ export function SearchChat() {
         </motion.div>
       ));
   };
+
+  // Add effect to restore search when currentSearchId changes
+  useEffect(() => {
+    if (currentSearchId) {
+      const selectedSearch = searches.find(s => s.id === currentSearchId);
+      if (selectedSearch) {
+        // Restore search parameters
+        setQuery(selectedSearch.searchParams.q || '');
+        setContentType(selectedSearch.searchParams.content_type);
+        setLimit(selectedSearch.searchParams.limit);
+        setStartDate(new Date(selectedSearch.searchParams.start_time));
+        setEndDate(new Date(selectedSearch.searchParams.end_time));
+        setAppName(selectedSearch.searchParams.app_name || '');
+        setWindowName(selectedSearch.searchParams.window_name || '');
+        setIncludeFrames(selectedSearch.searchParams.include_frames);
+        setMinLength(selectedSearch.searchParams.min_length);
+        setMaxLength(selectedSearch.searchParams.max_length);
+        
+        // Restore results
+        setResults(selectedSearch.results);
+        setTotalResults(selectedSearch.results.length);
+        setHasSearched(true);
+        setShowExamples(false);
+        
+        // Restore messages if any
+        if (selectedSearch.messages) {
+          setChatMessages(selectedSearch.messages.map(msg => ({
+            id: msg.id,
+            role: msg.type === 'ai' ? 'assistant' : 'user',
+            content: msg.content
+          })));
+        }
+      }
+    }
+  }, [currentSearchId, searches]);
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
@@ -1215,9 +1333,41 @@ export function SearchChat() {
           >
             <form
               onSubmit={handleFloatingInputSubmit}
-              className="flex space-x-2 bg-white shadow-lg rounded-lg overflow-hidden p-4 items-center"
+              className="flex flex-col space-y-2 bg-white shadow-lg rounded-lg overflow-hidden p-4"
             >
-              <div className="relative flex-grow">
+              <div className="flex items-center space-x-2">
+                <Select
+                  value={selectedAgent.id}
+                  onValueChange={(value) =>
+                    setSelectedAgent(
+                      AGENTS.find((a) => a.id === value) || AGENTS[0]
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="select agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGENTS.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        <span className="font-mono text-sm">{agent.name}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{selectedAgent.description}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+
+              <div className="relative flex-grow flex items-center space-x-2">
                 <Input
                   ref={floatingInputRef}
                   type="text"
@@ -1229,15 +1379,26 @@ export function SearchChat() {
                   onChange={(e) => setFloatingInput(e.target.value)}
                   className="w-full h-12 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border-b transition-all duration-200 pr-10"
                 />
+                <Button
+                  type="submit"
+                  className="w-12"
+                  disabled={
+                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
+                  }
+                >
+                  {isStreaming ? (
+                    <Square className="h-4 w-4" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <ContextUsageIndicator
-                          currentSize={calculateSelectedContentLength()}
-                          maxSize={MAX_CONTENT_LENGTH}
-                        />
-                      </div>
+                      <ContextUsageIndicator
+                        currentSize={calculateSelectedContentLength()}
+                        maxSize={MAX_CONTENT_LENGTH}
+                      />
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
@@ -1249,17 +1410,6 @@ export function SearchChat() {
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <Button
-                type="submit"
-                className={`w-12 `}
-                disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
-              >
-                {isStreaming ? (
-                  <Square className="h-4 w-4" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
             </form>
           </motion.div>
         )}
@@ -1267,13 +1417,17 @@ export function SearchChat() {
 
       {results.length > 0 && <Separator className="my-8" />}
 
-      {/* Display chat messages */}
-      <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto ">
-        {chatMessages.map((msg, index) => (
-          <ChatMessage key={index} message={msg} />
-        ))}
-        {isAiLoading && spinner}
-      </div>
+      {/* Display chat messages - Update this section */}
+      {(chatMessages.length > 0 || isAiLoading) && (
+        <>
+          <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
+            {chatMessages.map((msg, index) => (
+              <ChatMessage key={index} message={msg} />
+            ))}
+            {isAiLoading && spinner}
+          </div>
+        </>
+      )}
 
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
@@ -1284,7 +1438,7 @@ export function SearchChat() {
           <ChevronDown className="h-6 w-6" />
         </Button>
       )}
-      {results.length > 0 && <div className="h-24" />}
+      {results.length > 0 && <div className="h-32" />}
     </div>
   );
 }

@@ -31,7 +31,7 @@ jobs:
             --prerelease=false
 
       - name: Publish Release
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0.2
         with:
           command: release publish ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}

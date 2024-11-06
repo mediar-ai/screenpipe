@@ -910,7 +910,7 @@ export default function MeetingHistory() {
                                       s.deviceType?.toLowerCase() === "input"
                                         ? "you"
                                         : "others"
-                                    }]`;
+                                    }] ${s.transcription}`
                                   })
                                   .join("\n"),
                                 "transcription"
@@ -927,6 +927,7 @@ export default function MeetingHistory() {
                               .filter((s) =>
                                 meeting.selectedDevices.has(s.deviceName)
                               )
+                              .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
                               .map((s, i) => (
                                 <React.Fragment key={i}>
                                   <span className="font-bold">

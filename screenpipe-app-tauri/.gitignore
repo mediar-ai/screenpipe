@@ -41,6 +41,7 @@ next-env.d.ts
 ffmpeg*
 *src-tauri/screenpipe* 
 *src-tauri/tesseract* 
+*src-tauri/deno* 
+*src-tauri/ollama*
 *src-tauri/bun* 
 *src-tauri/ollama* 
-
