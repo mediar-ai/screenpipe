@@ -1,0 +1,70 @@
+{
+  "fields": [
+    {
+      "name": "interval",
+      "type": "number",
+      "default": 60,
+      "description": "Interval in seconds to trigger the Gumloop flow."
+    },
+    {
+      "name": "Frequency",
+      "type": "string",
+      "default": "daily",
+      "description": "Frequency of summary execution: 'daily' for once a day at flowTime, or 'hourly:X' for every X hours (e.g., 'hourly:4')."
+    },
+    {
+      "name": "flowTime",
+      "type": "time",
+      "default": "11:00",
+      "description": "Time to trigger the Gumloop flow daily (only if Frequency is 'daily')."
+    },
+    {
+      "name": "gumloopApiToken",
+      "type": "string",
+      "default": "<your_gumloop_api_token>",
+      "description": "API token for Gumloop authentication."
+    },
+    {
+      "name": "userId",
+      "type": "string",
+      "default": "<your_user_id>",
+      "description": "User ID for the Gumloop API request."
+    },
+    {
+      "name": "flowId",
+      "type": "string",
+      "default": "<your_flow_id>",
+      "description": "The saved item ID for the Gumloop flow to be triggered."
+    },
+    {
+      "name": "pageSize",
+      "type": "number",
+      "default": 100,
+      "description": "Number of records to retrieve from Screenpipe per page for structured extraction. Increase this value if using audio."
+    },
+    {
+      "name": "customPrompt",
+      "type": "string",
+      "default": "You are an AI assistant tasked with extracting structured information from screen data (OCR). Analyze the following screen data and extract relevant information about my daily activity.",
+      "description": "Custom prompt for the AI assistant that will be used to extract information from the screen data."
+    },
+    {
+      "name": "windowName",
+      "type": "string",
+      "default": "",
+      "description": "Filter by specific window name in screen data (e.g., 'gmail', 'slack', etc.)."
+    },
+    {
+      "name": "appName",
+      "type": "string",
+      "default": "",
+      "description": "Filter by specific application name in screen data (e.g., 'Chrome', 'Visual Studio Code', etc.)."
+    },
+    {
+      "name": "contentType",
+      "type": "string",
+      "default": "ocr",
+      "description": "Type of content to analyze: 'ocr', 'audio', or 'all'."
+    }
+  ]
+}
