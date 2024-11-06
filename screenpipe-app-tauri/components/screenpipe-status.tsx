@@ -110,20 +110,24 @@ const HealthStatus = ({ className }: { className?: string }) => {
     status: string,
     frameStatus: string,
     audioStatus: string,
-    audioDisabled: boolean
+    uiStatus: string,
+    audioDisabled: boolean,
+    uiMonitoringEnabled: boolean
   ) => {
     if (status === "loading") return "bg-yellow-500";
     const isVisionOk = frameStatus === "ok" || frameStatus === "disabled";
-    const isAudioOk =
-      audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
-    return isVisionOk && isAudioOk ? "bg-green-500" : "bg-red-500";
+    const isAudioOk = audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
+    const isUiOk = uiStatus === "ok" || uiStatus === "disabled" || !uiMonitoringEnabled;
+    return isVisionOk && isAudioOk && isUiOk ? "bg-green-500" : "bg-red-500";
   };
 
   const getStatusMessage = (
     status: string,
     frameStatus: string,
     audioStatus: string,
-    audioDisabled: boolean
+    uiStatus: string,
+    audioDisabled: boolean,
+    uiMonitoringEnabled: boolean
   ) => {
     if (status === "loading")
       return "screenpipe is starting up. this may take a few minutes...";
@@ -133,6 +137,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
       issues.push("screen recording");
     if (!audioDisabled && audioStatus !== "ok" && audioStatus !== "disabled")
       issues.push("audio recording");
+    if (uiMonitoringEnabled && uiStatus !== "ok" && uiStatus !== "disabled")
+      issues.push("ui monitoring");
 
     if (issues.length === 0) return "screenpipe is running smoothly";
     return `there might be an issue with ${issues.join(" and ")}`;
@@ -364,13 +370,17 @@ const HealthStatus = ({ className }: { className?: string }) => {
     health.status,
     health.frame_status,
     health.audio_status,
-    settings.disableAudio
+    health.ui_status,
+    settings.disableAudio,
+    settings.enableUiMonitoring
   );
   const statusMessage = getStatusMessage(
     health.status,
     health.frame_status,
     health.audio_status,
-    settings.disableAudio
+    health.ui_status,
+    settings.disableAudio,
+    settings.enableUiMonitoring
   );
 
   return (
@@ -414,23 +424,33 @@ const HealthStatus = ({ className }: { className?: string }) => {
             </div>
           </DialogHeader>
           <div className="flex-grow overflow-auto">
-            <p className="text-sm mb-2 font-semibold">{statusMessage}</p>
-            <div className="text-xs mb-4">
-              <p>screen recording: {health.frame_status}</p>
-              <p>
-                audio recording:{" "}
-                {settings.disableAudio ? "turned off" : health.audio_status}
-              </p>
-              <p>
-                last screen capture:{" "}
-                {formatTimestamp(health.last_frame_timestamp)}
-              </p>
-              <p>
-                last audio capture:{" "}
-                {settings.disableAudio
-                  ? "n/a"
-                  : formatTimestamp(health.last_audio_timestamp)}
-              </p>
+            <p className="text-sm mb-4 font-semibold">{statusMessage}</p>
+            <div className="space-y-2 text-xs mb-4">
+              {/* Screen Recording Status */}
+              <div className="flex items-center">
+                <div className={`w-2 h-2 rounded-full ${health.frame_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
+                <span>screen recording</span>
+                <span className="text-muted-foreground ml-2">status: {health.frame_status},</span>
+                <span className="text-muted-foreground ml-2">last update: {formatTimestamp(health.last_frame_timestamp)}</span>
+              </div>
+
+              {/* Audio Recording Status */}
+              <div className="flex items-center">
+                <div className={`w-2 h-2 rounded-full ${settings.disableAudio ? "bg-gray-400" : health.audio_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
+                <span>audio recording</span>
+                <span className="text-muted-foreground ml-2">status: {settings.disableAudio ? "turned off" : health.audio_status},</span>
+                <span className="text-muted-foreground ml-2">last update: {settings.disableAudio ? "n/a" : formatTimestamp(health.last_audio_timestamp)}</span>
+              </div>
+
+              {/* UI Monitoring Status - Only show if enabled */}
+              {settings.enableUiMonitoring && (
+                <div className="flex items-center">
+                  <div className={`w-2 h-2 rounded-full ${health.ui_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
+                  <span>ui monitoring</span>
+                  <span className="text-muted-foreground ml-2">status: {health.ui_status},</span>
+                  <span className="text-muted-foreground ml-2">last update: {formatTimestamp(health.last_ui_timestamp)}</span>
+                </div>
+              )}
             </div>
 
             <Separator className="my-12" />

@@ -15,7 +15,9 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
-use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::{monitor::list_monitors};
+#[cfg(target_os = "macos")]
+use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
@@ -419,6 +421,7 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
+        cli.enable_ui_monitoring,
     );
 
     let pipe_futures = Arc::new(tokio::sync::Mutex::new(FuturesUnordered::new()));
@@ -610,6 +613,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
     println!("└─────────────────────┴────────────────────────────────────┘");
 
     // Add warning for cloud arguments and telemetry
@@ -719,24 +724,31 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Start the UI monitoring task
-    if cfg!(target_os = "macos") {
-        use screenpipe_vision::run_ui;
-
-        if cli.enable_ui_monitoring {
-            let shutdown_tx_clone = shutdown_tx.clone();
-            tokio::spawn(async move {
-                let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                
+    #[cfg(target_os = "macos")]
+    if cli.enable_ui_monitoring {
+        let shutdown_tx_clone = shutdown_tx.clone();
+        tokio::spawn(async move {
+            let mut shutdown_rx = shutdown_tx_clone.subscribe();
+            
+            loop {
                 tokio::select! {
-                    _ = run_ui() => {
-                        error!("ui monitoring stopped unexpectedly");
+                    result = run_ui() => {
+                        match result {
+                            Ok(_) => break,
+                            Err(e) => {
+                                error!("ui monitoring error: {}", e);
+                                tokio::time::sleep(Duration::from_secs(5)).await;
+                                continue;
+                            }
+                        }
                     }
                     _ = shutdown_rx.recv() => {
                         info!("received shutdown signal, stopping ui monitoring");
+                        break;
                     }
                 }
-            });
-        }
+            }
+        });
     }
 
     let pipe_control_future = async {

@@ -56,6 +56,7 @@ export interface Settings {
   isFirstTimeUser: boolean;
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
+  platform: string; // Add this line
 }
 
 const defaultSettings: Settings = {
@@ -102,7 +103,8 @@ const defaultSettings: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
   enableFrameCache: false, // Add this line
-  enableUiMonitoring: false, // Add this line
+  enableUiMonitoring: false, // Change from true to false
+  platform: "unknown", // Add this line
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -138,13 +140,17 @@ export function useSettings() {
         await initStore();
       }
 
-      const ocrModel =
-        platform() === "macos"
-          ? "apple-native"
-          : platform() === "windows"
-          ? "windows-native"
-          : "tesseract";
       try {
+        const currentPlatform = await platform();
+        console.log("Current platform:", currentPlatform);
+
+        const ocrModel =
+          currentPlatform === "darwin"
+            ? "apple-native"
+            : currentPlatform === "win32"
+            ? "windows-native"
+            : "tesseract";
+        
         console.log("loading settings", store);
         // no need to call load() as it's done automatically
         const savedKey = (await store!.get<string>("openaiApiKey")) || "";
@@ -193,7 +199,7 @@ export function useSettings() {
           (await store!.get<number>("aiMaxContextChars")) || 30000;
         const savedFps =
           (await store!.get<number>("fps")) ||
-          (platform() === "macos" ? 0.2 : 1);
+          (currentPlatform === "darwin" ? 0.2 : 1);
         const savedVadSensitivity =
           (await store!.get<VadSensitivity>("vadSensitivity")) || "high";
         let savedAnalyticsEnabled = await store!.get<boolean>(
@@ -222,7 +228,6 @@ export function useSettings() {
         const savedLanguages =
           (await store!.get<Language[]>("languages")) || [];
 
-        const currentPlatform = platform();
         const ignoredWindowsInAllOS = [
           "bit",
           "VPN",
@@ -237,7 +242,7 @@ export function useSettings() {
           "OBS Studio",
         ];
         const defaultIgnoredWindows =
-          currentPlatform === "macos"
+          currentPlatform === "darwin"
             ? [
                 ...ignoredWindowsInAllOS,
                 ".env",
@@ -251,7 +256,7 @@ export function useSettings() {
                 "Dock",
                 "DeepL",
               ]
-            : currentPlatform === "windows"
+            : currentPlatform === "win32"
             ? [
                 ...ignoredWindowsInAllOS,
                 "Nvidia",
@@ -323,6 +328,7 @@ export function useSettings() {
           isFirstTimeUser: savedIsFirstTimeUser,
           enableFrameCache: savedEnableFrameCache,
           enableUiMonitoring: false,
+          platform: currentPlatform,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

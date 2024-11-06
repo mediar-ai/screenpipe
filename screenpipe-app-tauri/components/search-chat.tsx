@@ -89,9 +89,6 @@ interface SearchChatProps {
   searches: SearchHistory[];
 }
 
-export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
-
-
 interface Agent {
   id: string;
   name: string;
@@ -161,6 +158,42 @@ const AGENTS: Agent[] = [
   },
 ];
 
+// Add this helper function to highlight keywords in text
+const highlightKeyword = (text: string, keyword: string): JSX.Element => {
+  if (!keyword || !text) return <>{text}</>;
+  
+  const parts = text.split(new RegExp(`(${keyword})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) => 
+        part.toLowerCase() === keyword.toLowerCase() ? (
+          <span key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded px-0.5">{part}</span>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+};
+
+// Update the getContextAroundKeyword function to return both text and positions
+const getContextAroundKeyword = (text: string, keyword: string, contextLength: number = 40): string => {
+  if (!keyword || !text) return text;
+  
+  const index = text.toLowerCase().indexOf(keyword.toLowerCase());
+  if (index === -1) return text;
+
+  const start = Math.max(0, index - contextLength);
+  const end = Math.min(text.length, index + keyword.length + contextLength);
+  
+  let result = text.slice(start, end);
+  if (start > 0) result = '...' + result;
+  if (end < text.length) result = result + '...';
+  
+  return result;
+};
+
+export function SearchChat({ currentSearchId, onAddSearch, searches }: SearchChatProps) {
   // Search state
   const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
@@ -220,6 +253,38 @@ const AGENTS: Agent[] = [
   const debouncedThreshold = useDebounce(similarityThreshold, 300);
 
   const [isQueryParamsDialogOpen, setIsQueryParamsDialogOpen] = useState(false);
+
+  // Add state for individual content types
+  const [selectedTypes, setSelectedTypes] = useState({
+    ocr: false,
+    audio: false,
+    ui: false,
+  });
+
+  // Update content type when checkboxes change
+  const handleContentTypeChange = (type: 'ocr' | 'audio' | 'ui') => {
+    const newTypes = { ...selectedTypes, [type]: !selectedTypes[type] };
+    setSelectedTypes(newTypes);
+    
+    // Convert checkbox state to content type
+    if (!newTypes.ocr && !newTypes.audio && !newTypes.ui) {
+      setContentType('all'); // fallback to all if nothing selected
+    } else if (newTypes.audio && newTypes.ui && !newTypes.ocr) {
+      setContentType('audio+ui');
+    } else if (newTypes.ocr && newTypes.ui && !newTypes.audio) {
+      setContentType('ocr+ui');
+    } else if (newTypes.audio && newTypes.ocr && !newTypes.ui) {
+      setContentType('audio+ocr');
+    } else if (newTypes.audio) {
+      setContentType('audio');
+    } else if (newTypes.ocr) {
+      setContentType('ocr');
+    } else if (newTypes.ui) {
+      setContentType('ui');  // This was missing - single UI type
+    } else {
+      setContentType('all');
+    }
+  };
 
   const [selectedAgent, setSelectedAgent] = useState<Agent>(AGENTS[0]);
 
@@ -595,6 +660,9 @@ const AGENTS: Agent[] = [
 
       const response = await queryScreenpipe(searchParams);
 
+      // Add debug logging
+      console.log("search response:", response);
+
       if (!response || !Array.isArray(response.data)) {
         throw new Error("invalid response data");
       }
@@ -710,21 +778,68 @@ const AGENTS: Agent[] = [
                   <AccordionTrigger className="flex items-center">
                     <div className="flex items-center w-full">
                       <Badge className="mr-2">{item.type}</Badge>
+                      <span className="flex-grow truncate">
+                        {item.type === "UI" && highlightKeyword(
+                          getContextAroundKeyword(item.content.text, query),
+                          query
+                        )}
+                        {item.type === "OCR" && highlightKeyword(
+                          getContextAroundKeyword(item.content.text, query),
+                          query
+                        )}
+                        {item.type === "Audio" && highlightKeyword(
+                          getContextAroundKeyword(item.content.transcription, query),
+                          query
+                        )}
+                        {item.type === "FTS" && highlightKeyword(
+                          getContextAroundKeyword(item.content.matched_text, query),
+                          query
+                        )}
+                      </span>
                     </div>
-                    <span className="flex-grow text-center truncate">
-                      {item.type === "OCR" &&
-                        item.content.text.substring(0, 50)}
-                      {item.type === "Audio" &&
-                        item.content.transcription.substring(0, 50)}
-                      {item.type === "FTS" &&
-                        item.content.matched_text.substring(0, 50)}
-                      ...
-                    </span>
                   </AccordionTrigger>
                   <AccordionContent>
+                    {item.type === "UI" && (
+                      <>
+                        <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                          <p className="whitespace-pre-line">
+                            {highlightKeyword(item.content.text, query)}
+                          </p>
+                        </div>
+                        <div className="flex justify-center mt-4">
+                          <VideoComponent filePath={item.content.file_path} />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          {item.content.app_name && (
+                            <Badge
+                              className="text-xs cursor-pointer"
+                              onClick={() =>
+                                handleBadgeClick(item.content.app_name, "app")
+                              }
+                            >
+                              {item.content.app_name}
+                            </Badge>
+                          )}
+                          {item.content.window_name && (
+                            <Badge
+                              className="text-xs cursor-pointer"
+                              onClick={() =>
+                                handleBadgeClick(item.content.window_name, "window")
+                              }
+                            >
+                              {item.content.window_name}
+                            </Badge>
+                          )}
+                        </div>
+                      </>
+                    )}
                     {item.type === "OCR" && (
                       <>
-                        <p className="mt-2">{item.content.text}</p>
+                        <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                          <p className="whitespace-pre-line">
+                            {highlightKeyword(item.content.text, query)}
+                          </p>
+                        </div>
                         <div className="flex justify-center mt-4">
                           <VideoComponent filePath={item.content.file_path} />
                         </div>
@@ -752,9 +867,7 @@ const AGENTS: Agent[] = [
                                   <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>
-                                    this is the frame where the text appeared
-                                  </p>
+                                  <p>this is the frame where the text appeared</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -764,7 +877,11 @@ const AGENTS: Agent[] = [
                     )}
                     {item.type === "Audio" && (
                       <>
-                        <p className="mt-2">{item.content.transcription}</p>
+                        <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                          <p className="whitespace-pre-line">
+                            {highlightKeyword(item.content.transcription, query)}
+                          </p>
+                        </div>
                         {item.content.file_path &&
                         item.content.file_path.trim() !== "" ? (
                           <div className="flex justify-center mt-4">
@@ -772,19 +889,23 @@ const AGENTS: Agent[] = [
                           </div>
                         ) : (
                           <p className="text-gray-500 italic mt-2">
-                            No file path available for this audio.
+                            no file path available for this audio.
                           </p>
                         )}
                       </>
                     )}
                     {item.type === "FTS" && (
                       <>
-                        <p className="mt-2">{item.content.matched_text}</p>
-                        {item.content.original_frame_text && (
-                          <p className="mt-2 text-sm text-gray-600">
-                            Original: {item.content.original_frame_text}
+                        <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                          <p className="whitespace-pre-line">
+                            {highlightKeyword(item.content.matched_text, query)}
                           </p>
-                        )}
+                          {item.content.original_frame_text && (
+                            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">
+                              original: {item.content.original_frame_text}
+                            </p>
+                          )}
+                        </div>
                       </>
                     )}
                   </AccordionContent>
@@ -865,80 +986,158 @@ const AGENTS: Agent[] = [
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
-      <div className="flex flex-wrap items-center gap-4 mb-4">
-        <div className="flex-grow flex items-center space-x-4">
-          <SqlAutocompleteInput
-            id="window-name"
-            type="window"
-            icon={<Layers className="h-4 w-4" />}
-            value={windowName}
-            onChange={setWindowName}
-            placeholder="filter by window name"
-            className="w-3/4"
-          />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setIsQueryParamsDialogOpen(true)}
-          >
-            <Settings className="h-4 w-12" />
-          </Button>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    onClick={() => handleSearch(0)}
-                    disabled={
-                      isLoading || !health || health?.status === "error"
-                    }
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        searching...
-                      </>
-                    ) : (
-                      <>
-                        <Search className="mr-2 h-4 w-4" />
-                        search
-                      </>
-                    )}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {health?.status === "error" && (
+      {/* Content Type Checkboxes and Code Button */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1">
+            <Checkbox 
+              id="audio-type"
+              checked={selectedTypes.audio}
+              onCheckedChange={() => handleContentTypeChange('audio')}
+              className="h-4 w-4"
+            />
+            <Label htmlFor="audio-type" className="text-xs">speech</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
+                </TooltipTrigger>
                 <TooltipContent>
-                  <p>screenpipe is not running...</p>
+                  <p>audio transcripts</p>
                 </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-          <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="icon">
-                <IconCode className="h-4 w-12" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>curl command</DialogTitle>
-                <DialogDescription>
-                  you can use this curl command to make the same search request
-                  from the command line.
-                  <br />
-                  <br />
-                  <span className="text-xs text-gray-500">
-                    note: you need to have `jq` installed to use the command.
-                  </span>{" "}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="overflow-x-auto">
-                <CodeBlock language="bash" value={generateCurlCommand()} />
-              </div>
-            </DialogContent>
-          </Dialog>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          {settings.platform === "macos" && (
+            <div className="flex items-center space-x-1">
+              <Checkbox 
+                id="ui-type"
+                checked={selectedTypes.ui}
+                onCheckedChange={() => handleContentTypeChange('ui')}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="ui-type" className="text-xs">screen UI</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>text emitted directly from the source code of the desktop applications</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+          <div className="flex items-center space-x-1">
+            <Checkbox 
+              id="ocr-type"
+              checked={selectedTypes.ocr}
+              onCheckedChange={() => handleContentTypeChange('ocr')}
+              className="h-4 w-4"
+            />
+            <Label htmlFor="ocr-type" className="text-xs">screen capture</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>recognized text from screenshots taken every 5s by default</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
+
+        <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="text-sm">
+              <span className="flex items-center">
+                <IconCode className="h-4 w-4 mr-2" />
+                code
+              </span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>curl command</DialogTitle>
+              <DialogDescription>
+                you can use this curl command to make the same search request
+                from the command line.
+                <br />
+                <br />
+                <span className="text-xs text-gray-500">
+                  note: you need to have `jq` installed to use the command.
+                </span>{" "}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="overflow-x-auto">
+              <CodeBlock language="bash" value={generateCurlCommand()} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Existing search bar and other controls */}
+      <div className="flex items-center gap-4 mb-4">
+        {/* Keyword search - smaller width */}
+        <Input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="keyword search, you may leave it blank"
+          className="w-[350px]"
+        />
+
+        {/* Window name filter - increased width */}
+        <SqlAutocompleteInput
+          id="window-name"
+          type="window"
+          value={windowName}
+          onChange={setWindowName}
+          placeholder="filter by window"
+          className="w-[300px]"
+          icon={<Layout className="h-4 w-4" />}
+          />
+
+        {/* Advanced button */}
+        <Button
+          variant="outline"
+          onClick={() => setIsQueryParamsDialogOpen(true)}
+        >
+          advanced
+        </Button>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  onClick={() => handleSearch(0)}
+                  disabled={isLoading || !health || health?.status === "error"}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      searching...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="mr-2 h-4 w-4" />
+                      search
+                    </>
+                  )}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {health?.status === "error" && (
+              <TooltipContent>
+                <p>screenpipe is not running...</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 mb-4">
@@ -1024,36 +1223,15 @@ const AGENTS: Agent[] = [
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
+            {/* Remove the query section */}
+            {/* <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="query" className="text-right">
                 query
               </Label>
-              <div className="col-span-3 flex items-center">
-                <Input
-                  id="query"
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="flex-grow"
-                  placeholder="keyword matching audio transcription or screen text"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        enter keywords to search your recorded data, <br />
-                        for example: &quot;shoes&quot; or &quot;screenpipe&quot;
-                        or &quot;login&quot;, this will filter out all results
-                        that don&apos;t contain those keywords.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
+              ... query input ...
+            </div> */}
+            
+            {/* Keep other advanced search options */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="app-name" className="text-right">
                 app name
@@ -1136,36 +1314,6 @@ const AGENTS: Agent[] = [
               </div>
             </div>
 
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="content-type" className="text-right">
-                content type
-              </Label>
-              <div className="col-span-3 flex items-center">
-                <Select value={contentType} onValueChange={setContentType}>
-                  <SelectTrigger id="content-type" className="flex-grow">
-                    <SelectValue placeholder="content type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">all</SelectItem>
-                    <SelectItem value="ocr">ocr</SelectItem>
-                    <SelectItem value="audio">audio</SelectItem>
-                  </SelectContent>
-                </Select>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        select the type of content to search. ocr is the text
-                        found on your screen.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="limit-slider" className="text-right">
                 page size: {limit}
