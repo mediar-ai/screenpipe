@@ -1,6 +1,10 @@
 CURRENT_RELEASE=$1
 
-LAST_RELEASE=$(cn release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0]')
+# Download cn binary from https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/cn_linux
+curl -L -o cn https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/cn_linux
+chmod +x cn
+
+LAST_RELEASE=$(./cn release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0]')
 COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
 COMMIT_LAST_RELEASE=$(git log -1 --until="$COMMIT_DATE_LAST_RELEASE" --format="%H")
 
