@@ -242,7 +242,7 @@ export function useSettings() {
           "OBS Studio",
         ];
         const defaultIgnoredWindows =
-          currentPlatform === "darwin"
+          currentPlatform === "macos"
             ? [
                 ...ignoredWindowsInAllOS,
                 ".env",
@@ -257,7 +257,7 @@ export function useSettings() {
                 "DeepL",
                 "Control Center",
               ]
-            : currentPlatform === "win32"
+            : currentPlatform === "windows"
             ? [
                 ...ignoredWindowsInAllOS,
                 "Nvidia",
