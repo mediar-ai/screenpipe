@@ -1,4 +1,21 @@
-Thank you for providing the commits. Let's organize the changes for the upcoming version:\n\n### **New Features:**\n- **Added dark mode:** Enjoy a new visual experience with the addition of a dark mode feature, reducing eye strain and providing a sleek look for users who prefer a darker interface.\n\n### **Improvements:**\n- **Enhanced checkout process:** Streamlined the checkout process with improved navigation and added support for multiple payment methods, making it quicker and easier for users to complete their purchases.\n- **Improved performance of image gallery:** Optimized the loading speed of the image gallery, ensuring a faster and smoother browsing experience for users when viewing images.\n\n### **Fixes:**\n- **Fixed broken links in navigation:** Addressed an issue with broken links in the navigation menu, ensuring users can easily navigate through the platform without encountering errors.\n\n### **Others:**\n- **Updated terms of service:** Stay up-to-date with the latest changes to our terms of service for transparency and compliance with current regulations.\n- **Added language selection feature:** Users can now select their preferred language from a list of available options, enhancing accessibility for a broader range of users.\n\n#### **Full Changelog:** [v1.2.0...v1.3.0](https://github.com/your-repo/compare/v1.2.0...v1.3.0)
+### **New Features**
+- **Intel MKL Support**: Introduced support for Intel Math Kernel Library (MKL) acceleration on macOS, Windows, and Linux, enhancing computational performance significantly.
+- **Timeline UI Revamp**: Released a new timeline user interface for improved content organization and navigation, enhancing user interaction within the app.
 
-#### **Full Changelog:** [...](https://github.com/mediar-ai/screenpipe/compare/...)
+### **Improvements**
+- **Brew Version Update**: Ensured compatibility and optimized performance by updating Brew to version 0.1.97 on x86_64 and aarch64 Apple Darwin systems.
+- **Search Enhancement**: Improved UI search functionality to handle scenarios with no audio path, simplifying content location in the application.
+
+### **Fixes**
+- **Documentation Clarification**: Addressed and fixed a documentation issue, providing users with accurate and clear guidance.
+- **CSS and Reddit Pipe Fixes**: Resolved layout consistency issues and corrected a minor bug in the Reddit pipe functionality for a smoother user experience.
+- **CI Pipeline Stability**: Enhanced stability in the continuous integration pipeline for more reliable testing and deployment processes.
+- **Endpoint JSON Parsing**: Fixed a bug affecting endpoint JSON parsing, resulting in improved data handling.
+
+### **Others**
+- **Database Enhancements**: Made the `audio_chunk_id` not nullable in the `audio_transcriptions` table for improved data consistency, and added a new endpoint to the database.
+- **Entelligence Removal**: Deprecated the entelligence feature, ensuring cleaner and more efficient app performance.
+- **Code Cleanup and Refactoring**: Conducted various code cleanup and refactoring tasks to enhance code quality and maintainability.
+
+#### **Full Changelog:** [v0.1.97...v0.1.98](https://github.com/mediar-ai/screenpipe/compare/v0.1.97...v0.1.98)
 
