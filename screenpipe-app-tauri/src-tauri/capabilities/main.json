@@ -6,6 +6,7 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:default",
+    "core:app:allow-version",
     "process:allow-restart",
     "process:allow-exit",
     "notification:default",
