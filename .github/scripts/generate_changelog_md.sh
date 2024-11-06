@@ -4,7 +4,7 @@ LAST_RELEASE=$(echo "$TAGS" | sed -n '2p')
 
 COMMITS=$(git log --oneline $LAST_RELEASE..$CURRENT_RELEASE --oneline | tr '\n' ', ' | sed 's/"/\\"/g')
 
-LAST_CHANGELOG=$(awk '{printf "%s\\n", $0}' content/changelogs/CHANGELOG.md | sed 's/"/\\"/g')
+LAST_CHANGELOG=$(awk '{printf "%s\\n", $0}' screenpipe-app-tauri/public/CHANGELOG.md | sed 's/"/\\"/g')
 
 CONTENT=$(
   curl https://api.openai.com/v1/chat/completions \
@@ -28,6 +28,10 @@ CONTENT=$(
         {
           \"role\": \"user\",
           \"content\": \"Here are my commits: $COMMITS\"
+        },
+        {
+          \"role\": \"user\",
+          \"content\": \"The current version is $CURRENT_RELEASE. Be sure to add on the beginning of the markdown file '# $CURRENT_RELEASE\n'. \"
         }
       ]
     }"
@@ -42,8 +46,7 @@ mkdir -p content/changelogs
 echo ${CONTENT//\"/} > content/changelogs/$CURRENT_RELEASE.md
 
 # Copy the new changelog to the main changelog file
-cp content/changelogs/$CURRENT_RELEASE.md content/changelogs/CHANGELOG.md
 cp content/changelogs/$CURRENT_RELEASE.md screenpipe-app-tauri/public/CHANGELOG.md
 
 # Output the current release version to be used in the workflow
-echo "CURRENT_RELEASE=$CURRENT_RELEASE" >> $GITHUB_ENV
+# echo "CURRENT_RELEASE=$CURRENT_RELEASE" >> $GITHUB_ENV
