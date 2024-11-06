@@ -43,7 +43,7 @@ jobs:
           git commit -m "docs: add changelog for ${{ env.CURRENT_RELEASE }}"
           git pull origin main
           git push origin main
-      
+
   draft:
     runs-on: ubuntu-latest
     steps:
@@ -61,13 +61,12 @@ jobs:
           fi
 
       - name: create draft release
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0.2
         with:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
 
   publish-tauri:
-    needs: [draft, generate_changelog]
     permissions:
       contents: write
     strategy:
@@ -85,7 +84,7 @@ jobs:
           - platform: "ubuntu-22.04" # Ubuntu x86_64
             args: "--features mkl" # TODO CUDA
             tauri-args: ""
-          - platform: "windows-latest" # Windows x86_64
+          - platform: [self-hosted, Windows, X64] # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
@@ -105,21 +104,30 @@ jobs:
             sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
           fi
 
-      - name: setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        run: |
+          Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
+          .\rustup-init.exe -y
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
           target: ${{ matrix.target }}
+          cache: true
+          rustflags: ""
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index/
@@ -133,7 +141,7 @@ jobs:
 
       - name: Cache Homebrew packages
         if: matrix.platform == 'macos-latest'
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/Homebrew
@@ -157,8 +165,8 @@ jobs:
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf wget
+          sudo apt update
+          sudo apt install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf wget
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
@@ -166,7 +174,7 @@ jobs:
           brew install ffmpeg pkg-config
 
       # - name: Install MKL
-      #   if: matrix.platform == 'windows-latest'
+      #   if: matrix.args == '--target x86_64-pc-windows-msvc'
       #   run: |
       #     pip install mkl mkl-devel mkl-static
 
@@ -186,12 +194,24 @@ jobs:
           bun install
 
       # - name: Setup tmate session # HACK
-      #   if: matrix.platform == 'windows-latest'
+      #   if: matrix.args == '--target x86_64-pc-windows-msvc'
       #   uses: mxschmitt/action-tmate@v3
 
-      - name: Install wget on Linux
-        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
-        run: sudo apt-get install -y wget
+      - name: Install vcpkg
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
+
+      - name: Set up MSVC
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install LLVM and Clang
+        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
 
       - name: Run pre_build.js
         shell: bash
@@ -227,32 +247,11 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
-      - name: Install vcpkg
-        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
-
-      - name: Set up MSVC
-        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Install LLVM and Clang
-        if: matrix.platform == 'windows-latest' || matrix.platform == 'big-windows'
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "10.0"
-
       - name: Free Disk Space (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
         uses: jlumbroso/free-disk-space@main
         with:
-          # this might remove tools that are actually needed,
-          # if set to "true" but frees about 6 GB
           tool-cache: false
-
-          # all of these default to true, but feel free to set to
-          # "false" if necessary for your workflow
           android: true
           dotnet: true
           haskell: true
@@ -281,19 +280,18 @@ jobs:
           PKG_CONFIG_PATH: ${{ matrix.platform == 'ubuntu-22.04' && '~/.local/lib/pkgconfig:$PKG_CONFIG_PATH' || '' }}
           MKLROOT: ${{ matrix.platform == 'ubuntu-22.04' && '/opt/intel/mkl' || '' }}
           # Optimize for build speed on Windows
-          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.platform == 'windows-latest' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.platform == 'windows-latest' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.platform == 'windows-latest' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
           # Enable incremental compilation for Windows
-          CARGO_INCREMENTAL: ${{ matrix.platform == 'windows-latest' && '1' || '0' }}
-          RUSTFLAGS: "-A warnings"
+          CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '1' || '0' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0.2.0
+        uses: crabnebula-dev/cloud-release@v0.2
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
