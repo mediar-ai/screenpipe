@@ -273,6 +273,7 @@ export function TimelineIconsSection({
 
   return (
     <div className="absolute -top-12 inset-x-0 pointer-events-none h-8">
+
       {processedBlocks.map((block, i) => (
         <div
           key={`${block.appName}-${i}`}

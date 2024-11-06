@@ -25,6 +25,7 @@ import {
   TimelineDockIcon,
   TimelineIconsSection,
 } from "@/components/timeline/timeline-dock";
+import { AudioTranscript } from "@/components/timeline/audio-transcript";
 
 export interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -46,7 +47,7 @@ interface DeviceMetadata {
   timestamp: string;
 }
 
-interface AudioData {
+export interface AudioData {
   device_name: string;
   is_input: boolean;
   transcription: string;
@@ -302,7 +303,9 @@ export default function Timeline() {
 
   const handleScroll = (e: React.WheelEvent<HTMLDivElement>) => {
     const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
-    if (isWithinAiPanel) {
+    const isWithinAudioPanel = document.querySelector('.audio-transcript-panel')?.contains(e.target as Node);
+    
+    if (isWithinAiPanel || isWithinAudioPanel) {
       return;
     }
 
@@ -752,6 +755,13 @@ export default function Timeline() {
             src={`data:image/png;base64,${currentFrame.frame}`}
             className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto"
             alt="Current frame"
+          />
+        )}
+        {currentFrame && (
+          <AudioTranscript
+            frames={frames}
+            currentIndex={currentIndex}
+            groupingWindowMs={30000} // 30 seconds window
           />
         )}
       </div>
