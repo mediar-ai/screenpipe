@@ -37,11 +37,10 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
-          git checkout -b feat/changelog-${{ env.CURRENT_RELEASE }}
           git add .
           git commit -m "docs: add changelog for ${{ env.CURRENT_RELEASE }}"
-          git rebase origin/main
-          git push
+          git pull origin main
+          git push origin main
       
   draft:
     runs-on: ubuntu-latest
