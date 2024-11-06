@@ -777,10 +777,20 @@ export default function Timeline() {
 
           <div
             className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
-            style={{
-              left: `${getCurrentTimePercentage()}%`,
-            }}
-          />
+            style={{ left: `${getCurrentTimePercentage()}%` }}
+          >
+            <div className="relative -top-6 right-3 text-[10px] text-muted-foreground whitespace-nowrap">
+              {frames[currentIndex] &&
+                new Date(frames[currentIndex].timestamp).toLocaleTimeString(
+                  [],
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  }
+                )}
+            </div>
+          </div>
 
           {selectionRange && (
             <div
@@ -952,9 +962,9 @@ export default function Timeline() {
           </div>
         )}
 
-        {/* {loadedTimeRange && frames.length > 0 && (
+        {loadedTimeRange && frames.length > 0 && (
           <TimelineIconsSection blocks={frames} />
-        )} */}
+        )}
 
         <div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
           {Array(7)

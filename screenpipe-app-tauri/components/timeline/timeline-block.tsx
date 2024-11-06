@@ -23,22 +23,30 @@ export function TimelineBlocks({ frames, timeRange }: TimelineBlocksProps) {
   // Cache colors to avoid recalculating
   const colorCache = useMemo(() => new Map<string, string>(), []);
 
-  const getAppColor = (appName: string): string => {
-    const cached = colorCache.get(appName);
-    if (cached) return cached;
-
-    let hash = 0;
-    for (let i = 0; i < appName.length; i++) {
-      hash = appName.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = Math.abs(hash) % 360;
-    const color = `hsl(${hue}, 70%, 50%)`;
-    colorCache.set(appName, color);
-    return color;
-  };
-
   // Calculate blocks without sampling
   const blocks = useMemo(() => {
+    const getAppColor = (appName: string): string => {
+      const cached = colorCache.get(appName);
+      if (cached) return cached;
+
+      // Use a better hash distribution
+      const hash = Array.from(appName).reduce(
+        (h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0,
+        0
+      );
+
+      // Use golden ratio for better color distribution
+      const golden_ratio = 0.618033988749895;
+      const hue = ((hash * golden_ratio) % 1) * 360;
+
+      // Vary saturation and lightness slightly based on hash
+      const sat = 65 + (hash % 20); // 65-85%
+      const light = 45 + (hash % 15); // 45-60%
+
+      const color = `hsl(${hue}, ${sat}%, ${light}%)`;
+      colorCache.set(appName, color);
+      return color;
+    };
     if (frames.length === 0) return [];
 
     const blocks: TimeBlock[] = [];
@@ -83,7 +91,7 @@ export function TimelineBlocks({ frames, timeRange }: TimelineBlocksProps) {
 
     if (currentBlock) blocks.push(currentBlock);
     return blocks;
-  }, [frames, timeRange, getAppColor]);
+  }, [frames, timeRange]);
 
   // Debug output
   console.log("timeline blocks:", blocks);
