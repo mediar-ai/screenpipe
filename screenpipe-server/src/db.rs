@@ -169,6 +169,8 @@ pub struct UiContent {
     #[sqlx(rename = "window")]
     pub window_name: String,
     pub initial_traversal_at: Option<DateTime<Utc>>,
+    pub file_path: String,
+    pub offset_index: i64,
 }
 
 impl DatabaseManager {
@@ -875,51 +877,26 @@ impl DatabaseManager {
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
     ) -> Result<usize, sqlx::Error> {
-        let mut conditions = vec!["1=1"];
-        let mut params: Vec<String> = vec![];
-
-        if !query.is_empty() {
-            conditions.push("text_output LIKE ?");
-            params.push(format!("%{}%", query));
-        }
-
-        if let Some(app) = app_name {
-            conditions.push("app LIKE ?");
-            params.push(format!("%{}%", app));
-        }
-
-        if let Some(window) = window_name {
-            conditions.push("window LIKE ?");
-            params.push(format!("%{}%", window));
-        }
-
-        if let Some(start) = start_time {
-            conditions.push("timestamp >= ?");
-            params.push(start.to_rfc3339());
-        }
-
-        if let Some(end) = end_time {
-            conditions.push("timestamp <= ?");
-            params.push(end.to_rfc3339());
-        }
-
-        let sql = format!(
-            r#"
-            SELECT COUNT(*)
+        let sql = r#"
+            SELECT COUNT(DISTINCT ui_monitoring.id)
             FROM ui_monitoring
-            WHERE {}
-            "#,
-            conditions.join(" AND ")
-        );
+            WHERE 
+                (?1 = '' OR text_output LIKE '%' || ?1 || '%')
+                AND (?2 IS NULL OR app LIKE '%' || ?2 || '%')
+                AND (?3 IS NULL OR window LIKE '%' || ?3 || '%')
+                AND (?4 IS NULL OR timestamp >= ?4)
+                AND (?5 IS NULL OR timestamp <= ?5)
+        "#;
 
-        let mut query = sqlx::query_as::<_, (i64,)>(&sql);
-        
-        // Bind all the params
-        for param in params {
-            query = query.bind(param);
-        }
+        let (count,) = sqlx::query_as::<_, (i64,)>(sql)
+            .bind(query)
+            .bind(app_name)
+            .bind(window_name)
+            .bind(start_time)
+            .bind(end_time)
+            .fetch_one(&self.pool)
+            .await?;
 
-        let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count as usize)
     }
 
@@ -1404,59 +1381,85 @@ impl DatabaseManager {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<UiContent>, sqlx::Error> {
-        let mut conditions = vec!["1=1".to_string()];
-        let mut params: Vec<String> = vec![];
-
-        if !query.is_empty() {
-            conditions.push("text_output LIKE ?".to_string());
-            params.push(format!("%{}%", query));
-        }
-
-        if let Some(app) = app_name {
-            conditions.push("app LIKE ?".to_string());
-            params.push(format!("%{}%", app));
-        }
-
-        if let Some(window) = window_name {
-            conditions.push("window LIKE ?".to_string());
-            params.push(format!("%{}%", window));
-        }
-
-        if let Some(start) = start_time {
-            conditions.push("timestamp >= ?".to_string());
-            params.push(start.to_rfc3339());
-        }
-
-        if let Some(end) = end_time {
-            conditions.push("timestamp <= ?".to_string());
-            params.push(end.to_rfc3339());
-        }
-
-        let sql = format!(
-            r#"
+        let sql = r#"
+            WITH matching_frames AS (
+                SELECT 
+                    frames.id as frame_id,
+                    frames.video_chunk_id,
+                    frames.offset_index,
+                    frames.timestamp as frame_timestamp,
+                    ui_monitoring.id as ui_id,
+                    ui_monitoring.text_output,
+                    ui_monitoring.timestamp as ui_timestamp,
+                    ui_monitoring.app,
+                    ui_monitoring.window,
+                    ui_monitoring.initial_traversal_at,
+                    ABS(STRFTIME('%s', frames.timestamp) - STRFTIME('%s', ui_monitoring.timestamp)) as diff_seconds
+                FROM ui_monitoring
+                JOIN frames ON 
+                    ABS(STRFTIME('%s', frames.timestamp) - STRFTIME('%s', ui_monitoring.timestamp)) <= 1
+                WHERE 
+                    (?1 = '' OR ui_monitoring.text_output LIKE '%' || ?1 || '%')
+                    AND (?2 IS NULL OR ui_monitoring.app LIKE '%' || ?2 || '%')
+                    AND (?3 IS NULL OR ui_monitoring.window LIKE '%' || ?3 || '%')
+                    AND (?4 IS NULL OR ui_monitoring.timestamp >= ?4)
+                    AND (?5 IS NULL OR ui_monitoring.timestamp <= ?5)
+                ORDER BY ui_monitoring.timestamp DESC
+                LIMIT ?6 OFFSET ?7
+            )
             SELECT 
-                id,
-                text_output as "text_output",
-                timestamp,
-                app as "app",
-                window as "window",
-                initial_traversal_at
-            FROM ui_monitoring
-            WHERE {}
-            ORDER BY timestamp DESC
-            LIMIT ? OFFSET ?
-            "#,
-            conditions.join(" AND ")
-        );
+                ui_id as id,
+                text_output,
+                ui_timestamp as timestamp,
+                app,
+                window,
+                initial_traversal_at,
+                video_chunks.file_path,
+                offset_index,
+                diff_seconds
+            FROM matching_frames
+            JOIN video_chunks ON matching_frames.video_chunk_id = video_chunks.id
+            ORDER BY ui_timestamp DESC
+        "#;
 
-        let mut query = sqlx::query_as::<_, UiContent>(&sql);
-
-        for param in params {
-            query = query.bind(param);
-        }
-        query = query.bind(limit).bind(offset);
+        let query = sqlx::query_as::<_, UiContent>(sql)
+            .bind(query)
+            .bind(app_name)
+            .bind(window_name)
+            .bind(start_time)
+            .bind(end_time)
+            .bind(limit)
+            .bind(offset);
 
         query.fetch_all(&self.pool).await
+    }
+
+    // Add tags to UI monitoring entry
+    pub async fn add_tags_to_ui_monitoring(&self, ui_monitoring_id: i64, tag_ids: &[i64]) -> Result<(), anyhow::Error> {
+        for tag_id in tag_ids {
+            sqlx::query(
+                "INSERT OR IGNORE INTO ui_monitoring_tags (ui_monitoring_id, tag_id) VALUES (?, ?)"
+            )
+            .bind(ui_monitoring_id)
+            .bind(tag_id)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    // Get tags for UI monitoring entry
+    pub async fn get_ui_monitoring_tags(&self, ui_monitoring_id: i64) -> Result<Vec<String>, anyhow::Error> {
+        let tags = sqlx::query_as::<_, (String,)>(
+            "SELECT t.name FROM tags t 
+             JOIN ui_monitoring_tags ut ON t.id = ut.tag_id 
+             WHERE ut.ui_monitoring_id = ?"
+        )
+        .bind(ui_monitoring_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(tags.into_iter().map(|t| t.0).collect())
     }
 }
 
