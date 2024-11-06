@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
+import { TimelineBlocks } from "@/components/timeline/timeline-block";
 
 interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -191,15 +192,17 @@ export default function Timeline() {
             const exists = prev.some((f) => f.timestamp === data.timestamp);
             if (exists) return prev;
 
-            // Add new frame and sort
+            // ! HACK: Add new frame and sort in descending order
             const newFrames = [...prev, data].sort((a, b) => {
-              return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+              return (
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime()
+              );
             });
 
             return newFrames;
           });
 
-          // Only set initial frame if we don't have one
           setCurrentFrame((prev) => prev || data.devices[0]);
           setIsLoading(false);
         }
@@ -716,7 +719,6 @@ export default function Timeline() {
       style={{
         height: "100vh",
         overscrollBehavior: "none",
-        overflow: "hidden", 
         WebkitUserSelect: "none",
         userSelect: "none",
         MozUserSelect: "none",
@@ -765,9 +767,6 @@ export default function Timeline() {
                   <div>
                     window: {currentFrame.metadata.window_name || "n/a"}
                   </div>
-                  <div className="border-l pl-4 font-mono">
-                    {new Date(currentFrame.metadata.timestamp || frames[currentIndex].timestamp).toLocaleString()}
-                  </div>
                 </div>
               </div>
             </div>
@@ -796,6 +795,13 @@ export default function Timeline() {
                 "linear-gradient(to right, rgba(255,255,255,0.8), rgba(255,255,255,0.2))",
             }}
           />
+
+          {/* {loadedTimeRange && (
+            <TimelineBlocks
+              frames={frames}
+              timeRange={loadedTimeRange}
+            />
+          )} */}
 
           <div
             className="absolute inset-0"
@@ -857,8 +863,13 @@ export default function Timeline() {
                 <div className="flex items-center gap-2 flex-1">
                   <GripHorizontal className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
                   <div className="text-muted-foreground text-xs">
-                    {new Date(selectionRange.start.getTime()).toLocaleTimeString()} -{" "}
-                    {new Date(selectionRange.end.getTime()).toLocaleTimeString()}
+                    {new Date(
+                      selectionRange.start.getTime()
+                    ).toLocaleTimeString()}{" "}
+                    -{" "}
+                    {new Date(
+                      selectionRange.end.getTime()
+                    ).toLocaleTimeString()}
                   </div>
                 </div>
                 <button

@@ -33,6 +33,7 @@ use tracing_subscriber::EnvFilter;
 use updates::start_update_check;
 use uuid::Uuid;
 mod analytics;
+mod icons;
 
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
@@ -44,7 +45,6 @@ mod sidecar;
 mod updates;
 pub use commands::open_screen_capture_preferences;
 pub use commands::reset_all_pipes;
-pub use commands::reset_screen_permissions;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
@@ -108,7 +108,6 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             kill_all_sreenpipes,
-            reset_screen_permissions,
             open_screen_capture_preferences,
             load_pipe_config,
             save_pipe_config,
@@ -118,6 +117,7 @@ async fn main() {
             commands::update_show_screenpipe_shortcut,
             commands::show_timeline,
             commands::open_accessibility_preferences,
+            icons::get_app_icon
         ])
         .setup(|app| {
             // Logging setup

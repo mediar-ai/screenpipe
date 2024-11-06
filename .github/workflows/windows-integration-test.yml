@@ -19,7 +19,7 @@ jobs:
 
     - name: Install Rust
       run: |
-        wget https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe
+        Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
         .\rustup-init.exe -y
 
     - name: Set up Rust
@@ -29,6 +29,9 @@ jobs:
         override: true
         cache: true
         rustflags: ""
+
+    - name: Install Chocolatey
+      run: Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
     - name: Install dependencies
       shell: pwsh

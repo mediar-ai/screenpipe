@@ -56,7 +56,7 @@ jobs:
         working-directory: ./screenpipe-js
 
   test-windows:
-    runs-on: [self-hosted, windows, x64]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -73,7 +73,7 @@ jobs:
 
       - name: Install Rust
         run: |
-          wget https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe
+          Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
 
       - name: Set up Rust
