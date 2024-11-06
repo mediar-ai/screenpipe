@@ -35,6 +35,7 @@ jobs:
         run: .github/scripts/generate_changelog_md.sh ${{ github.event.inputs.version }} ${{ github.event.inputs.version }}
 
       - name: Commit and push changelog files
+        if: env.CHANGELOG_GENERATED == 1
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
