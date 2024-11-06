@@ -49,6 +49,7 @@ pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
 pub use commands::open_accessibility_preferences;
+pub use commands::check_accessibility_permissions;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -117,6 +118,7 @@ async fn main() {
             commands::update_show_screenpipe_shortcut,
             commands::show_timeline,
             commands::open_accessibility_preferences,
+            commands::check_accessibility_permissions,
             icons::get_app_icon
         ])
         .setup(|app| {
