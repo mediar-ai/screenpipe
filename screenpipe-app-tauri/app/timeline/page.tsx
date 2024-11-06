@@ -53,6 +53,8 @@ interface AudioData {
 interface TimeRange {
   start: Date;
   end: Date;
+  visibleStart?: Date;
+  visibleEnd?: Date;
 }
 
 interface Agent {
@@ -125,6 +127,8 @@ export default function Timeline() {
   const [loadedTimeRange, setLoadedTimeRange] = useState<{
     start: Date;
     end: Date;
+    visibleStart?: Date;
+    visibleEnd?: Date;
   } | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout>();
@@ -169,11 +173,20 @@ export default function Timeline() {
     endTime.setMinutes(endTime.getMinutes() - 2);
     const startTime = new Date();
     startTime.setHours(0, 1, 0, 0);
+
+    const visibleStart = new Date();
+    visibleStart.setHours(0, 0, 0, 0);
+    if (endTime < visibleStart) {
+      visibleStart.setDate(visibleStart.getDate() - 1);
+    }
+
     const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
 
     setLoadedTimeRange({
       start: startTime,
       end: endTime,
+      visibleStart,
+      visibleEnd: endTime,
     });
 
     console.log("starting stream:", url);
@@ -191,7 +204,18 @@ export default function Timeline() {
             const exists = prev.some((f) => f.timestamp === data.timestamp);
             if (exists) return prev;
 
-            // ! HACK: Add new frame and sort in descending order
+            if (prev.length === 0) {
+              const frameTime = new Date(data.timestamp);
+              setLoadedTimeRange((current) => {
+                if (!current) return null;
+                return {
+                  ...current,
+                  visibleStart: frameTime,
+                  visibleEnd: current.end,
+                };
+              });
+            }
+
             const newFrames = [...prev, data].sort((a, b) => {
               return (
                 new Date(b.timestamp).getTime() -
@@ -295,20 +319,19 @@ export default function Timeline() {
   };
 
   const getCurrentTimePercentage = () => {
-    if (!currentFrame) return 0;
+    if (!currentFrame || !loadedTimeRange) return 0;
 
     const frameTime = new Date(
       currentFrame.metadata.timestamp || frames[currentIndex].timestamp
     );
-    const startOfDay = new Date(frameTime);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(frameTime);
-    endOfDay.setHours(23, 59, 59, 999);
 
-    const totalDayMilliseconds = endOfDay.getTime() - startOfDay.getTime();
-    const currentMilliseconds = frameTime.getTime() - startOfDay.getTime();
+    const totalVisibleMilliseconds =
+      (loadedTimeRange.visibleEnd?.getTime() || 0) -
+      (loadedTimeRange.visibleStart?.getTime() || 0);
+    const currentMilliseconds =
+      frameTime.getTime() - (loadedTimeRange.visibleStart?.getTime() || 0);
 
-    return (currentMilliseconds / totalDayMilliseconds) * 100;
+    return (currentMilliseconds / totalVisibleMilliseconds) * 100;
   };
 
   const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -716,24 +739,11 @@ export default function Timeline() {
           </div>
         )}
         {currentFrame && (
-          <>
-            <div className="w-4/5 mx-auto mt-4 mb-4 text-center select-none">
-              <div className="inline-block bg-card p-2 rounded-lg shadow-lg border">
-                <div className="flex items-center gap-4 text-sm">
-                  <div>device: {currentFrame.device_id}</div>
-                  <div>app: {currentFrame.metadata.app_name || "n/a"}</div>
-                  <div>
-                    window: {currentFrame.metadata.window_name || "n/a"}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <img
-              src={`data:image/png;base64,${currentFrame.frame}`}
-              className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto mt-12"
-              alt="Current frame"
-            />
-          </>
+          <img
+            src={`data:image/png;base64,${currentFrame.frame}`}
+            className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto"
+            alt="Current frame"
+          />
         )}
       </div>
 
@@ -746,7 +756,9 @@ export default function Timeline() {
           onMouseLeave={handleTimelineMouseUp}
         >
           {loadedTimeRange && (
-            <TimelineBlocks frames={frames} timeRange={loadedTimeRange} />
+            <div className="relative h-full bg-muted rounded-md overflow-hidden">
+              <TimelineBlocks frames={frames} timeRange={loadedTimeRange} />
+            </div>
           )}
 
           <div
@@ -939,9 +951,16 @@ export default function Timeline() {
           {Array(7)
             .fill(0)
             .map((_, i) => {
-              const hour = (i * 4) % 24;
-              const date = new Date();
-              date.setHours(hour, 0, 0, 0);
+              if (!loadedTimeRange) return null;
+              const totalMinutes =
+                (loadedTimeRange.visibleEnd.getTime() -
+                  loadedTimeRange.visibleStart.getTime()) /
+                (1000 * 60);
+              const minutesPerStep = totalMinutes / 6;
+              const date = new Date(
+                loadedTimeRange.visibleStart.getTime() +
+                  i * minutesPerStep * 60 * 1000
+              );
               return (
                 <div
                   key={i}

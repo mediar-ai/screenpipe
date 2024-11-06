@@ -11,7 +11,12 @@ interface TimeBlock {
 
 interface TimelineBlocksProps {
   frames: StreamTimeSeriesResponse[];
-  timeRange: { start: Date; end: Date };
+  timeRange: {
+    start: Date;
+    end: Date;
+    visibleStart?: Date;
+    visibleEnd?: Date;
+  };
 }
 
 export function TimelineBlocks({ frames, timeRange }: TimelineBlocksProps) {
@@ -84,28 +89,29 @@ export function TimelineBlocks({ frames, timeRange }: TimelineBlocksProps) {
   console.log("timeline blocks:", blocks);
 
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 flex flex-col">
       {blocks.map((block, index) => {
-        // Convert block times to hours since start of day for proper scaling
-        const blockStartHours =
-          block.startTime.getHours() +
-          block.startTime.getMinutes() / 60 +
-          block.startTime.getSeconds() / 3600;
-        const blockEndHours =
-          block.endTime.getHours() +
-          block.endTime.getMinutes() / 60 +
-          block.endTime.getSeconds() / 3600;
+        // Calculate position relative to visible range instead of 24-hour scale
+        const visibleStartTime = timeRange.visibleStart || timeRange.start;
+        const visibleEndTime = timeRange.visibleEnd || timeRange.end;
+        const visibleRangeMs =
+          visibleEndTime.getTime() - visibleStartTime.getTime();
 
-        // Calculate position and width based on 24-hour scale
-        const blockStart = (blockStartHours / 24) * 100;
-        const blockWidth = ((blockEndHours - blockStartHours) / 24) * 100;
+        const blockStartMs =
+          block.startTime.getTime() - visibleStartTime.getTime();
+        const blockDurationMs =
+          block.endTime.getTime() - block.startTime.getTime();
 
-        if (blockWidth < 0.1) return null; // Skip tiny blocks
+        // Calculate percentages based on visible range
+        const blockStart = (blockStartMs / visibleRangeMs) * 100;
+        const blockWidth = (blockDurationMs / visibleRangeMs) * 100;
+
+        if (blockWidth < 0.01) return null; // Skip tiny blocks
 
         return (
           <div
             key={`${block.appName}-${index}`}
-            className="absolute top-0 h-full opacity-50 hover:opacity-80 transition-opacity z-10"
+            className="absolute top-0 bottom-0 opacity-50 hover:opacity-80 transition-opacity z-10"
             style={{
               left: `${blockStart}%`,
               width: `${blockWidth}%`,
