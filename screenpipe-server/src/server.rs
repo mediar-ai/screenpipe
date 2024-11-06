@@ -174,6 +174,8 @@ pub struct UiContent {
     pub app_name: String,
     pub window_name: String,
     pub initial_traversal_at: Option<DateTime<Utc>>,
+    pub file_path: String,
+    pub offset_index: i64,
 }
 
 #[derive(Serialize)]
@@ -335,6 +337,8 @@ pub(crate) async fn search(
                 app_name: ui.app_name.clone(),
                 window_name: ui.window_name.clone(),
                 initial_traversal_at: ui.initial_traversal_at,
+                file_path: ui.file_path.clone(),
+                offset_index: ui.offset_index,
             }),
         })
         .collect();
