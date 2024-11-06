@@ -91,7 +91,7 @@ export function SqlAutocompleteInput({
             value={inputValue}
             onChange={handleInputChange}
             onFocus={() => setOpen(true)}
-            className={cn("pr-8 w-full", icon ? "pl-10" : "pl-3")}
+            className={cn("pr-8 w-full", icon ? "pl-7" : "pl-3")}
             autoCorrect="off"
             aria-autocomplete="none"
             onKeyDown={onKeyDown}
