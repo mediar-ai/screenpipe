@@ -141,16 +141,16 @@ export function useSettings() {
       }
 
       try {
-        const currentPlatform = await platform();
+        const currentPlatform = platform();
         console.log("Current platform:", currentPlatform);
 
         const ocrModel =
-          currentPlatform === "darwin"
+          currentPlatform === "macos"
             ? "apple-native"
-            : currentPlatform === "win32"
+            : currentPlatform === "windows"
             ? "windows-native"
             : "tesseract";
-        
+
         console.log("loading settings", store);
         // no need to call load() as it's done automatically
         const savedKey = (await store!.get<string>("openaiApiKey")) || "";
@@ -199,7 +199,7 @@ export function useSettings() {
           (await store!.get<number>("aiMaxContextChars")) || 30000;
         const savedFps =
           (await store!.get<number>("fps")) ||
-          (currentPlatform === "darwin" ? 0.2 : 1);
+          (currentPlatform === "macos" ? 0.2 : 1);
         const savedVadSensitivity =
           (await store!.get<VadSensitivity>("vadSensitivity")) || "high";
         let savedAnalyticsEnabled = await store!.get<boolean>(
@@ -255,6 +255,7 @@ export function useSettings() {
                 "Clock",
                 "Dock",
                 "DeepL",
+                "Control Center",
               ]
             : currentPlatform === "win32"
             ? [

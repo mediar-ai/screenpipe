@@ -5,6 +5,7 @@ import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
+import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -22,7 +23,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <OnboardingProvider>
-      <PostHogProvider client={posthog}>{children}</PostHogProvider>
+      <ChangelogDialogProvider>
+        <PostHogProvider client={posthog}>{children}</PostHogProvider>
+      </ChangelogDialogProvider>
     </OnboardingProvider>
   );
 }

@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Heart, Menu, Bell, Play } from "lucide-react";
+import { MessageSquare, Heart, Menu, Bell, Play, Folder } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { InboxMessages, Message } from "@/components/inbox-messages";
 import { useState, useRef, useEffect } from "react";
@@ -29,6 +29,7 @@ import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
 
 function IconNewChat() {
   return (
@@ -111,6 +112,7 @@ export default function Header() {
   };
 
   const { setShowOnboarding } = useOnboarding();
+  const { setShowChangelogDialog } = useChangelogDialog();
 
   return (
     <div>
@@ -194,6 +196,13 @@ export default function Header() {
                 >
                   <Play className="mr-2 h-4 w-4" />
                   <span>show onboarding</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => setShowChangelogDialog(true)}
+                >
+                  <Folder className="mr-2 h-4 w-4" />
+                  <span>show changelog</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

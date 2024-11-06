@@ -1,101 +1,134 @@
+import { StreamTimeSeriesResponse } from "@/app/timeline/page";
 import { useMemo } from "react";
 
 interface TimeBlock {
   appName: string;
+  windowName: string;
   startTime: Date;
   endTime: Date;
   color: string;
 }
 
 interface TimelineBlocksProps {
-  frames: any[]; // Replace with your StreamTimeSeriesResponse type
-  timeRange: { start: Date; end: Date };
+  frames: StreamTimeSeriesResponse[];
+  timeRange: {
+    start: Date;
+    end: Date;
+    visibleStart?: Date;
+    visibleEnd?: Date;
+  };
 }
 
 export function TimelineBlocks({ frames, timeRange }: TimelineBlocksProps) {
   // Cache colors to avoid recalculating
   const colorCache = useMemo(() => new Map<string, string>(), []);
-  
-  const getAppColor = (appName: string): string => {
-    const cached = colorCache.get(appName);
-    if (cached) return cached;
-    
-    let hash = 0;
-    for (let i = 0; i < appName.length; i++) {
-      hash = appName.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = Math.abs(hash) % 360;
-    const color = `hsl(${hue}, 70%, 50%)`;
-    colorCache.set(appName, color);
-    return color;
-  };
 
-  // Optimize block calculation by sampling frames
+  // Calculate blocks without sampling
   const blocks = useMemo(() => {
+    const getAppColor = (appName: string): string => {
+      const cached = colorCache.get(appName);
+      if (cached) return cached;
+
+      // Use a better hash distribution
+      const hash = Array.from(appName).reduce(
+        (h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0,
+        0
+      );
+
+      // Use golden ratio for better color distribution
+      const golden_ratio = 0.618033988749895;
+      const hue = ((hash * golden_ratio) % 1) * 360;
+
+      // Vary saturation and lightness slightly based on hash
+      const sat = 65 + (hash % 20); // 65-85%
+      const light = 45 + (hash % 15); // 45-60%
+
+      const color = `hsl(${hue}, ${sat}%, ${light}%)`;
+      colorCache.set(appName, color);
+      return color;
+    };
     if (frames.length === 0) return [];
 
-    // Sample frames based on time range duration
-    const timeRangeMs = timeRange.end.getTime() - timeRange.start.getTime();
-    const sampleInterval = Math.max(1, Math.floor(timeRangeMs / 200)); // Adjust 200 to control detail level
-    
-    const sampledFrames = frames.filter((_, index) => index % sampleInterval === 0);
-    
     const blocks: TimeBlock[] = [];
     let currentBlock: TimeBlock | null = null;
 
-    sampledFrames
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .forEach((frame) => {
-        const timestamp = new Date(frame.timestamp);
-        const appName = frame.devices[0].metadata.app_name;
+    // Sort frames by timestamp first
+    const sortedFrames = [...frames].sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
 
-        if (timestamp < timeRange.start || timestamp > timeRange.end) return;
+    sortedFrames.forEach((frame) => {
+      const timestamp = new Date(frame.timestamp);
+      // Ensure we have devices data
+      if (!frame.devices?.[0]?.metadata?.app_name) return;
 
-        if (!currentBlock) {
-          currentBlock = {
-            appName,
-            startTime: timestamp,
-            endTime: timestamp,
-            color: getAppColor(appName),
-          };
-        } else if (currentBlock.appName !== appName) {
-          blocks.push(currentBlock);
-          currentBlock = {
-            appName,
-            startTime: timestamp,
-            endTime: timestamp,
-            color: getAppColor(appName),
-          };
-        } else {
-          currentBlock.endTime = timestamp;
-        }
-      });
+      const appName = frame.devices[0].metadata.app_name;
+      const windowName = frame.devices[0].metadata.window_name;
+      if (timestamp < timeRange.start || timestamp > timeRange.end) return;
+
+      if (!currentBlock) {
+        currentBlock = {
+          appName,
+          windowName,
+          startTime: timestamp,
+          endTime: timestamp,
+          color: getAppColor(appName),
+        };
+      } else if (currentBlock.appName !== appName) {
+        blocks.push(currentBlock);
+        currentBlock = {
+          appName,
+          windowName,
+          startTime: timestamp,
+          endTime: timestamp,
+          color: getAppColor(appName),
+        };
+      } else {
+        currentBlock.endTime = timestamp;
+      }
+    });
 
     if (currentBlock) blocks.push(currentBlock);
     return blocks;
-  }, [frames, timeRange, colorCache]);
+  }, [frames, timeRange]);
 
-  // Optimize rendering by using CSS transform instead of percentage calculations
+  // Debug output
+  console.log("timeline blocks:", blocks);
+
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 flex flex-col">
       {blocks.map((block, index) => {
-        const totalMs = timeRange.end.getTime() - timeRange.start.getTime();
-        const blockStart = (block.startTime.getTime() - timeRange.start.getTime()) / totalMs;
-        const blockWidth = (block.endTime.getTime() - block.startTime.getTime()) / totalMs;
+        // Calculate position relative to visible range instead of 24-hour scale
+        const visibleStartTime = timeRange.visibleStart || timeRange.start;
+        const visibleEndTime = timeRange.visibleEnd || timeRange.end;
+        const visibleRangeMs =
+          visibleEndTime.getTime() - visibleStartTime.getTime();
 
-        if (blockWidth < 0.001) return null; // Skip tiny blocks
+        const blockStartMs =
+          block.startTime.getTime() - visibleStartTime.getTime();
+        const blockDurationMs =
+          block.endTime.getTime() - block.startTime.getTime();
+
+        // Calculate percentages based on visible range
+        const blockStart = (blockStartMs / visibleRangeMs) * 100;
+        const blockWidth = (blockDurationMs / visibleRangeMs) * 100;
+
+        if (blockWidth < 0.01) return null; // Skip tiny blocks
 
         return (
           <div
             key={`${block.appName}-${index}`}
-            className="absolute top-0 h-full"
+            className="absolute top-0 bottom-0 opacity-50 hover:opacity-80 transition-opacity z-10"
             style={{
-              transform: `translateX(${blockStart * 100}%)`,
-              width: `${blockWidth * 100}%`,
+              left: `${blockStart}%`,
+              width: `${blockWidth}%`,
               backgroundColor: block.color,
-              willChange: 'transform',
+              willChange: "transform",
             }}
-            title={`${block.appName}\n${block.startTime.toLocaleTimeString()} - ${block.endTime.toLocaleTimeString()}`}
+            title={`${block.appName}\n${
+              block.windowName
+            }\n${block.startTime.toLocaleTimeString()} - ${block.endTime.toLocaleTimeString()}`}
           />
         );
       })}

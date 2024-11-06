@@ -1,16 +1,9 @@
-
-
 use serde_json::Value;
 use tauri::Manager;
 use tracing::info;
 
 #[cfg(target_os = "macos")]
-use core_foundation::{
-    base::TCFType,
-    boolean::CFBoolean,
-    string::CFString,
-};
-
+use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
 
 #[tauri::command]
 pub fn open_screen_capture_preferences() {
@@ -209,7 +202,7 @@ pub fn check_accessibility_permissions() -> bool {
     #[cfg(target_os = "macos")]
     {
         // Check if the app has accessibility permissions
-        let options = unsafe {
+        let options = {
             let key = CFString::new("AXTrustedCheckOptionPrompt");
             let value = CFBoolean::false_value();
             let pairs = &[(key, value)];
@@ -226,6 +219,10 @@ pub fn check_accessibility_permissions() -> bool {
             func(options.as_concrete_TypeRef() as *const _)
         };
 
-        trusted
+        return trusted;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        return true;
     }
 }
