@@ -8,8 +8,13 @@ pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
         .iter()
         .fold(0.0f32, |max, &sample| max.max(sample.abs()));
 
-    let target_rms = 0.2; // Adjust as needed
-    let target_peak = 0.95; // Adjust as needed
+    // Return the original audio if it's completely silent
+    if rms == 0.0 || peak == 0.0 {
+        return audio.to_vec();
+    }
+
+    let target_rms = 0.2;
+    let target_peak = 0.95;
 
     let rms_scaling = target_rms / rms;
     let peak_scaling = target_peak / peak;
