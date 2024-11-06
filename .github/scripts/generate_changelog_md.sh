@@ -28,10 +28,6 @@ CONTENT=$(
         {
           \"role\": \"user\",
           \"content\": \"Here are my commits: $COMMITS\"
-        },
-        {
-          \"role\": \"user\",
-          \"content\": \"The current version is $CURRENT_RELEASE. Be sure to add on the beginning of the markdown file '# $CURRENT_RELEASE\n'. \"
         }
       ]
     }"
