@@ -202,7 +202,10 @@ export default function Timeline() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data === "keep-alive-text") return;
+        if (data === "keep-alive-text") {
+          setIsLoading(false);
+          return;
+        }
 
         if (data.timestamp && data.devices) {
           setFrames((prev) => {
@@ -248,8 +251,6 @@ export default function Timeline() {
 
       console.error("eventsource error:", error);
       setError("connection lost. retrying...");
-
-      eventSource.close();
     };
 
     eventSource.onopen = () => {
@@ -269,6 +270,8 @@ export default function Timeline() {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
+      setIsLoading(false);
+      setError(null);
     };
   }, []);
 
@@ -656,6 +659,7 @@ export default function Timeline() {
   const handleRefresh = () => {
     posthog.capture("timeline_refresh");
 
+    window.location.reload();
     setFrames([]);
     setCurrentFrame(null);
     setCurrentIndex(0);
