@@ -27,7 +27,11 @@ import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { registerShortcuts } from "@/lib/shortcuts";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  SidebarProvider,
+  SidebarInset,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { useSearchHistory } from "@/lib/hooks/use-search-history";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -45,7 +49,7 @@ export default function Home() {
     addSearch,
     deleteSearch,
     isCollapsed,
-    toggleCollapse
+    toggleCollapse,
   } = useSearchHistory();
 
   useEffect(() => {
@@ -67,86 +71,86 @@ export default function Home() {
   };
 
   return (
-    <SidebarProvider defaultOpen={false}>
-      {settings.aiUrl && (
-        <AppSidebar
-          searches={searches}
-          currentSearchId={currentSearchId}
-          onSelectSearch={setCurrentSearchId}
-          onDeleteSearch={deleteSearch}
-        />
-      )}
-      <SidebarInset>
-        <div className="flex flex-col items-center flex-1">
-          <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
-            <SidebarTrigger className="h-8 w-8" />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleNewSearch}
-              className="h-8 w-8"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <NotificationHandler />
-          {showOnboarding && <Onboarding />}
-          <Header />
-          <div className="my-4" />
-          {settings.isLoading ? (
-            <div className="flex flex-col items-center justify-center h-full space-y-4">
-              <Skeleton className="w-[200px] h-[24px] rounded-full" />
-              <Skeleton className="w-[300px] h-[20px] rounded-full" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
-                {[...Array(5)].map((_, index) => (
-                  <Card key={index}>
-                    <CardContent className="p-4">
-                      <Skeleton className="w-full h-[40px]" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          ) : settings.aiUrl ? (
-            <>
-              <h1 className="text-2xl font-bold text-center mb-12">
-                where pixels become magic
-              </h1>
-              <SearchChat 
-                currentSearchId={currentSearchId}
-                onAddSearch={addSearch}
-                searches={searches}
-              />
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
-              <Card className="w-[600px]">
-                <CardHeader>
-                  <CardTitle>Welcome to Screenpipe playground</CardTitle>
-                  <CardDescription>
-                    Make sure to set your AI provider settings to ask questions
-                    about your data.
-                    <br />
-                    <br />
-                    <div className="aspect-w-16 aspect-h-9">
-                      <iframe
-                        src="https://www.youtube.com/embed/u2GfjvEY6tk"
-                        title="Onboarding Video"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-[300px] rounded-lg shadow-lg"
-                      ></iframe>
-                    </div>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Settings />
+    // <SidebarProvider defaultOpen={false}>
+    //   {settings.aiUrl && (
+    //     <AppSidebar
+    //       searches={searches}
+    //       currentSearchId={currentSearchId}
+    //       onSelectSearch={setCurrentSearchId}
+    //       onDeleteSearch={deleteSearch}
+    //     />
+    //   )}
+    //   <SidebarInset>
+    <div className="flex flex-col items-center flex-1">
+      <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
+        {/* <SidebarTrigger className="h-8 w-8" /> */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleNewSearch}
+          className="h-8 w-8"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+      <NotificationHandler />
+      {showOnboarding && <Onboarding />}
+      <Header />
+      <div className="my-4" />
+      {settings.isLoading ? (
+        <div className="flex flex-col items-center justify-center h-full space-y-4">
+          <Skeleton className="w-[200px] h-[24px] rounded-full" />
+          <Skeleton className="w-[300px] h-[20px] rounded-full" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+            {[...Array(5)].map((_, index) => (
+              <Card key={index}>
+                <CardContent className="p-4">
+                  <Skeleton className="w-full h-[40px]" />
                 </CardContent>
               </Card>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
-      </SidebarInset>
-    </SidebarProvider>
+      ) : settings.aiUrl ? (
+        <>
+          <h1 className="text-2xl font-bold text-center mb-12">
+            where pixels become magic
+          </h1>
+          <SearchChat
+            currentSearchId={currentSearchId}
+            onAddSearch={addSearch}
+            searches={searches}
+          />
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center h-[calc(80vh-200px)]">
+          <Card className="w-[600px]">
+            <CardHeader>
+              <CardTitle>Welcome to Screenpipe playground</CardTitle>
+              <CardDescription>
+                Make sure to set your AI provider settings to ask questions
+                about your data.
+                <br />
+                <br />
+                <div className="aspect-w-16 aspect-h-9">
+                  <iframe
+                    src="https://www.youtube.com/embed/u2GfjvEY6tk"
+                    title="Onboarding Video"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-[300px] rounded-lg shadow-lg"
+                  ></iframe>
+                </div>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Settings />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+    // </SidebarInset>
+    // </SidebarProvider>
   );
 }
