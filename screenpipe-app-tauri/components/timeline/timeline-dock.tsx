@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { platform } from "@tauri-apps/plugin-os";
 import { invoke } from "@tauri-apps/api/core";
-import { TimeBlock, TimelineBlock } from "@/app/timeline/page";
 import { debounce } from "lodash";
 
 interface TimelineDockProps {
@@ -39,7 +38,7 @@ export function TimelineDock({
       debounce((e: React.MouseEvent) => {
         const bounds = e.currentTarget.getBoundingClientRect();
         setMouseX(e.clientX - bounds.left);
-      }, 16),  // ~60fps
+      }, 16), // ~60fps
     []
   );
 
@@ -52,19 +51,20 @@ export function TimelineDock({
         className
       )}
     >
-      {useMemo(() => 
-        React.Children.map(children, (child, index) => {
-          if (!React.isValidElement(child)) return null;
-          return React.cloneElement(
-            child as React.ReactElement<TimelineDockIconProps>,
-            {
-              mouseX,
-              index,
-              magnification,
-              distance,
-            }
-          );
-        }),
+      {useMemo(
+        () =>
+          React.Children.map(children, (child, index) => {
+            if (!React.isValidElement(child)) return null;
+            return React.cloneElement(
+              child as React.ReactElement<TimelineDockIconProps>,
+              {
+                mouseX,
+                index,
+                magnification,
+                distance,
+              }
+            );
+          }),
         [children, mouseX, magnification, distance]
       )}
     </motion.div>
@@ -157,40 +157,44 @@ export const TimelineDockIcon = React.memo(function TimelineDockIcon({
 });
 
 // Optimize TimelineIconsSection
-export function TimelineIconsSection({ blocks }: { blocks: TimelineBlock[] }) {
+export function TimelineIconsSection({ blocks }: { blocks: any[] }) {
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
 
   // Memoize significant blocks calculation
-  const significantBlocks = useMemo(() => 
-    blocks.filter((block) => {
-      const minutesInDay = 24 * 60;
-      const blockMinutes = (block.width / 100) * minutesInDay;
-      return blockMinutes > 10;
-    }),
+  const significantBlocks = useMemo(
+    () =>
+      blocks.filter((block) => {
+        const minutesInDay = 24 * 60;
+        const blockMinutes = (block.width / 100) * minutesInDay;
+        return blockMinutes > 10;
+      }),
     [blocks]
   );
 
   // Memoize unique apps calculation
-  const uniqueApps = useMemo(() => 
-    [...new Set(significantBlocks.map((block) => block.appName))],
+  const uniqueApps = useMemo(
+    () => [...new Set(significantBlocks.map((block) => block.appName))],
     [significantBlocks]
   );
 
-  const loadAppIcon = useCallback(async (appName: string, appPath?: string) => {
-    if (iconCache[appName]) return;
-    
-    const icon = await invoke<{ base64: string; path: string } | null>(
-      "get_app_icon",
-      { appName, appPath }
-    );
+  const loadAppIcon = useCallback(
+    async (appName: string, appPath?: string) => {
+      if (iconCache[appName]) return;
 
-    if (icon) {
-      setIconCache(prev => ({
-        ...prev,
-        [appName]: icon.base64,
-      }));
-    }
-  }, [iconCache]);
+      const icon = await invoke<{ base64: string; path: string } | null>(
+        "get_app_icon",
+        { appName, appPath }
+      );
+
+      if (icon) {
+        setIconCache((prev) => ({
+          ...prev,
+          [appName]: icon.base64,
+        }));
+      }
+    },
+    [iconCache]
+  );
 
   useEffect(() => {
     const loadIcons = async () => {
