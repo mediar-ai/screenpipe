@@ -1043,7 +1043,7 @@ func buildTextOutput(from windowState: WindowState) -> String {
     // Then process any orphaned elements
     let orphanElements = windowState.elements.filter { !processedElements.contains($0.key) }
     if !orphanElements.isEmpty {
-        textOutput += "\n--- ACCESSIBILITY_NOTIFICATIONS_PROCESSING ---\n"
+        textOutput += "\n---\n"
         
         // Sort orphans by timestamp first (oldest first), then position if timestamps are equal
         let sortedOrphans = orphanElements.values.sorted { (e1, e2) -> Bool in
