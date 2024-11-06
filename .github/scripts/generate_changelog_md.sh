@@ -41,6 +41,11 @@ mkdir -p content/changelogs
 # Create a new file with the current release as the name
 echo ${CONTENT//\"/} > content/changelogs/$CURRENT_RELEASE.md
 
+# Add the full changelog on the end of the file
+echo """
+#### **Full Changelog:** [$LAST_RELEASE...$CURRENT_RELEASE](https://github.com/mediar-ai/screenpipe/compare/$LAST_RELEASE...$CURRENT_RELEASE)
+""" >> content/changelogs/$CURRENT_RELEASE.md
+
 # Copy the new changelog to the main changelog file
 cp content/changelogs/$CURRENT_RELEASE.md screenpipe-app-tauri/public/CHANGELOG.md
 
