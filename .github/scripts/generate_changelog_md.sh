@@ -49,4 +49,4 @@ echo ${CONTENT//\"/} > content/changelogs/$CURRENT_RELEASE.md
 cp content/changelogs/$CURRENT_RELEASE.md screenpipe-app-tauri/public/CHANGELOG.md
 
 # Output the current release version to be used in the workflow
-# echo "CURRENT_RELEASE=$CURRENT_RELEASE" >> $GITHUB_ENV
+echo "CURRENT_RELEASE=$CURRENT_RELEASE" >> $GITHUB_ENV
