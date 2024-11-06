@@ -30,6 +30,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate Changelog
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: .github/scripts/generate_changelog_md.sh
 
       - name: Commit and push changelog files
