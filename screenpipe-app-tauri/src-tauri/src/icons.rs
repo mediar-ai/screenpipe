@@ -1,7 +1,4 @@
-use base64::{engine::general_purpose::STANDARD, Engine};
-use cocoa::base::id;
-use cocoa::foundation::{NSData, NSString};
-use objc::{class, msg_send, sel, sel_impl};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,7 +14,10 @@ pub async fn get_app_icon(
     app_path: Option<String>,
 ) -> Result<Option<AppIcon>, String> {
     // info!("getting icon for {}", app_name);
-
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use cocoa::base::id;
+    use cocoa::foundation::{NSData, NSString};
+    use objc::{class, msg_send, sel, sel_impl};
     unsafe {
         let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
 
