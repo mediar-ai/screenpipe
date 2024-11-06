@@ -1,4 +1,4 @@
-import { check } from "@tauri-apps/plugin-updater";
+import { check,  } from "@tauri-apps/plugin-updater";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";

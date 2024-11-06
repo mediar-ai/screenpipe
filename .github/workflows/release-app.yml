@@ -20,6 +20,28 @@ on:
         required: false
 
 jobs:
+  generate_changelog:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Changelog
+        run: .github/scripts/generate_changelog_md.sh
+
+      - name: Commit and push changelog files
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          git add .
+          git commit -m "docs: add changelog for ${{ env.CURRENT_RELEASE }}"
+          git pull origin main
+          git push origin main
+      
   draft:
     runs-on: ubuntu-latest
     steps:
@@ -43,6 +65,7 @@ jobs:
           api-key: ${{ secrets.CN_API_KEY }}
 
   publish-tauri:
+    needs: [draft, generate_changelog]
     permissions:
       contents: write
     strategy:

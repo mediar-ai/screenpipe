@@ -26,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { registerShortcuts } from "@/lib/shortcuts";
+import { ChangelogDialog } from "@/components/changelog-dialog";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SidebarProvider,
@@ -95,6 +96,7 @@ export default function Home() {
       </div>
       <NotificationHandler />
       {showOnboarding && <Onboarding />}
+      <ChangelogDialog />
       <Header />
       <div className="my-4" />
       {settings.isLoading ? (
