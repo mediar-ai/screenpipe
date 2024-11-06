@@ -255,6 +255,7 @@ export function useSettings() {
                 "Clock",
                 "Dock",
                 "DeepL",
+                "Control Center",
               ]
             : currentPlatform === "windows"
             ? [

@@ -21,7 +21,7 @@ import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { TimelineBlocks } from "@/components/timeline/timeline-block";
 
-interface StreamTimeSeriesResponse {
+export interface StreamTimeSeriesResponse {
   timestamp: string;
   devices: DeviceFrameResponse[];
 }
@@ -142,7 +142,6 @@ export default function Timeline() {
   const [aiInput, setAiInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const aiPanelRef = useRef<HTMLDivElement>(null);
-  const [isHoveringAiPanel, setIsHoveringAiPanel] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDraggingPanel, setIsDraggingPanel] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -229,47 +228,6 @@ export default function Timeline() {
       setError(null);
       retryCount.current = 0;
     };
-  };
-
-  const getLoadedTimeRangeStyles = () => {
-    if (!loadedTimeRange || frames.length === 0)
-      return { left: "0%", right: "100%" };
-
-    // Find the earliest frame timestamp
-    const firstFrame = [...frames].sort(
-      (a, b) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    )[0];
-    const earliestTime = new Date(firstFrame.timestamp);
-
-    // Create local date objects for today
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-
-    // Convert UTC loadedTimeRange to local time
-    const localStart = new Date(earliestTime);
-    const localEnd = new Date(loadedTimeRange.end);
-
-    const totalMs = endOfDay.getTime() - startOfDay.getTime();
-    const startPercent =
-      ((localStart.getTime() - startOfDay.getTime()) / totalMs) * 100;
-    const endPercent =
-      ((localEnd.getTime() - startOfDay.getTime()) / totalMs) * 100;
-
-    // Temporarily return empty values to disable grey areas
-    return {
-      right: "0%",
-      left: "0%",
-    };
-
-    // Original code commented out:
-    // return {
-    //   right: `${Math.max(0, Math.min(100, startPercent))}%`,  // Grey before data starts
-    //   left: `${Math.max(0, Math.min(100, 100 - endPercent))}%`,  // Grey after data ends
-    // };
   };
 
   useEffect(() => {
@@ -787,21 +745,9 @@ export default function Timeline() {
           onMouseUp={handleTimelineMouseUp}
           onMouseLeave={handleTimelineMouseUp}
         >
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              ...getLoadedTimeRangeStyles(),
-              background:
-                "linear-gradient(to right, rgba(255,255,255,0.8), rgba(255,255,255,0.2))",
-            }}
-          />
-
-          {/* {loadedTimeRange && (
-            <TimelineBlocks
-              frames={frames}
-              timeRange={loadedTimeRange}
-            />
-          )} */}
+          {loadedTimeRange && (
+            <TimelineBlocks frames={frames} timeRange={loadedTimeRange} />
+          )}
 
           <div
             className="absolute inset-0"
