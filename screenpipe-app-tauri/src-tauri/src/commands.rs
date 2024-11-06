@@ -222,14 +222,3 @@ pub fn open_accessibility_preferences() {
         .spawn()
         .expect("failed to open system preferences");
 }
-
-#[tauri::command]
-pub fn reset_accessibility_permissions() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("tccutil")
-        .arg("reset")
-        .arg("Accessibility")
-        .arg("so.cap.desktop")
-        .spawn()
-        .expect("failed to reset accessibility permissions");
-}
