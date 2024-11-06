@@ -1,9 +1,8 @@
 CURRENT_RELEASE=$1
 
 LAST_RELEASE=$(cn release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0]')
-LAST_COMMIT_DATE=$(echo $LAST_RELEASE | jq '.createdAt')
-LAST_RELEASE_VERSION=$(echo $LAST_RELEASE | jq '.version')
-COMMIT_LAST_RELEASE=$(git log -1 --until="$LAST_COMMIT_DATE" --format="%H")
+COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
+COMMIT_LAST_RELEASE=$(git log -1 --until="$COMMIT_DATE_LAST_RELEASE" --format="%H")
 
 COMMIT_CURRENT_RELEASE=$(git log -1 --format="%H")
 COMMIT_CURRENT_RELEASE=${2:-$COMMIT_CURRENT_RELEASE}
@@ -65,7 +64,7 @@ echo ${CONTENT//\"/} > content/changelogs/$CURRENT_RELEASE.md
 
 # Add the full changelog on the end of the file
 echo """
-#### **Full Changelog:** [$LAST_RELEASE_VERSION...$CURRENT_RELEASE](https://github.com/mediar-ai/screenpipe/compare/$COMMIT_LAST_RELEASE...$COMMIT_CURRENT_RELEASE)
+#### **Full Changelog:** [$COMMIT_LAST_RELEASE...$COMMIT_CURRENT_RELEASE](https://github.com/mediar-ai/screenpipe/compare/$COMMIT_LAST_RELEASE...$COMMIT_CURRENT_RELEASE)
 """ >> content/changelogs/$CURRENT_RELEASE.md
 
 # Copy the new changelog to the main changelog file
