@@ -53,6 +53,7 @@ CONTENT=$(jq '.choices[0].message.content' <<< $CONTENT)
 # exit if the content is null
 if [ "$CONTENT" == "null" ]; then
   echo "Failed to generate changelog content. It may be an error with the OpenAI API key."
+  echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
   exit 1
 fi
 
