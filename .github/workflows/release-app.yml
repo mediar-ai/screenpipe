@@ -38,10 +38,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
           git checkout -b feat/changelog-${{ env.CURRENT_RELEASE }}
-          git add content/changelogs/$CURRENT_RELEASE.md content/changelogs/CHANGELOG.md screenpipe-app-tauri/public/CHANGELOG.md
+          git add .
           git commit -m "docs: add changelog for ${{ env.CURRENT_RELEASE }}"
-          git rebase origin main
-          git push origin main
+          git rebase origin/main
+          git push
       
   draft:
     runs-on: ubuntu-latest
