@@ -20,10 +20,8 @@ console.log('cwd', cwd)
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	windows: {
-		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
-		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
-
-
+		ffmpegName: 'ffmpeg-release-full',
+		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z',
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
 	linux: {
@@ -48,8 +46,8 @@ const config = {
 		],
 	},
 	macos: {
-		ffmpegName: 'ffmpeg-7.0-macOS-default',
-		ffmpegUrl: 'https://master.dl.sourceforge.net/project/avbuild/macOS/ffmpeg-7.0-macOS-default.tar.xz?viasf=1',
+		ffmpegName: 'ffmpeg-7.1',
+		ffmpegUrl: 'https://evermeet.cx/ffmpeg/ffmpeg-7.1.7z',
 	},
 }
 
@@ -445,10 +443,10 @@ if (platform == 'macos') {
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
-		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
+		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.7z`
+		await $`7z x ${config.macos.ffmpegName}.7z`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-		await $`rm ${config.macos.ffmpegName}.tar.xz`
+		await $`rm ${config.macos.ffmpegName}.7z`
 	} else {
 		console.log('FFMPEG already exists');
 	}
