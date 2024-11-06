@@ -110,25 +110,20 @@ struct CacheEntry {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct CacheConfig {
     cache_dir: PathBuf,
-    #[allow(dead_code)]
     max_cache_size_gb: f64,
-    #[allow(dead_code)]
     frame_retention_days: u64,
     compression_quality: u8,
-    fps: f64,
 }
 
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             cache_dir: PathBuf::from("frame_cache"),
-            max_cache_size_gb: 10.0,
-            frame_retention_days: 7,
+            max_cache_size_gb: 3.0,
+            frame_retention_days: 1,
             compression_quality: 50,
-            fps: 0.1,
         }
     }
 }
@@ -345,30 +340,87 @@ impl FrameDiskCache {
             device_id.replace(['/', '\\', ':'], "_")
         ))
     }
+
+    async fn cleanup(&mut self) -> Result<()> {
+        debug!("starting cache cleanup");
+        
+        // Calculate size limit in bytes
+        let max_size_bytes = (self.config.max_cache_size_gb * 1024.0 * 1024.0 * 1024.0) as u64;
+        
+        // Calculate retention cutoff
+        let retention_cutoff = Utc::now() - Duration::days(self.config.frame_retention_days as i64);
+        
+        let mut frames_to_remove = Vec::new();
+        
+        // Identify frames to remove based on age and total size
+        for (&(timestamp, ref device_id), _entry) in &self.entries {
+            if timestamp < retention_cutoff {
+                frames_to_remove.push((timestamp, device_id.clone()));
+                continue;
+            }
+            
+            // If we're still over size limit, remove oldest frames
+            if self.total_size > max_size_bytes {
+                frames_to_remove.push((timestamp, device_id.clone()));
+            }
+        }
+        
+        // Remove identified frames
+        for (timestamp, device_id) in frames_to_remove {
+            if let Some(entry) = self.entries.remove(&(timestamp, device_id)) {
+                self.total_size = self.total_size.saturating_sub(entry.frame.frame_size);
+                if let Err(e) = fs::remove_file(&entry.path).await {
+                    debug!("failed to remove cached frame: {}", e);
+                }
+            }
+        }
+        
+        // Save updated index
+        self.save_index().await?;
+        
+        debug!(
+            "cleanup complete - current cache size: {:.2} GB",
+            self.total_size as f64 / (1024.0 * 1024.0 * 1024.0)
+        );
+        
+        Ok(())
+    }
 }
 
 async fn run_cache_manager(mut cache: FrameDiskCache, mut rx: mpsc::Receiver<CacheMessage>) {
-    while let Some(msg) = rx.recv().await {
-        match msg {
-            CacheMessage::Store {
-                cache_key,
-                frame_data,
-                device_data,
-                audio_entries,
-                response,
-            } => {
-                let result = cache
-                    .store_frame(&cache_key, &frame_data, device_data, &audio_entries)
-                    .await;
-                let _ = response.send(result);
+    let mut cleanup_interval = tokio::time::interval(tokio::time::Duration::from_secs(3600)); // Hourly cleanup
+    
+    loop {
+        tokio::select! {
+            Some(msg) = rx.recv() => {
+                match msg {
+                    CacheMessage::Store {
+                        cache_key,
+                        frame_data,
+                        device_data,
+                        audio_entries,
+                        response,
+                    } => {
+                        let result = cache
+                            .store_frame(&cache_key, &frame_data, device_data, &audio_entries)
+                            .await;
+                        let _ = response.send(result);
+                    }
+                    CacheMessage::Get {
+                        cache_key,
+                        response,
+                    } => {
+                        let result = cache.get_frame_data(&cache_key).await;
+                        let _ = response.send(result);
+                    }
+                }
             }
-            CacheMessage::Get {
-                cache_key,
-                response,
-            } => {
-                let result = cache.get_frame_data(&cache_key).await;
-                let _ = response.send(result);
+            _ = cleanup_interval.tick() => {
+                if let Err(e) = cache.cleanup().await {
+                    debug!("cache cleanup failed: {}", e);
+                }
             }
+            else => break,
         }
     }
 }

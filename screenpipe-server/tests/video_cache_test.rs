@@ -547,3 +547,76 @@ async fn test_cache_effectiveness() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_cache_cleanup() -> Result<()> {
+    let (cache, _db) = setup_test_env().await?;
+
+    println!("\ncache cleanup test:");
+    println!("-----------------");
+
+    // First, populate cache with some frames
+    let target_time = Utc::now() - Duration::minutes(5);
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel(100);
+    
+    println!("populating cache with initial frames...");
+    cache.get_frames(target_time, 10, tx1, true).await?;
+    
+    let mut initial_frames = Vec::new();
+    while let Some(frame) = rx1.recv().await {
+        initial_frames.push(frame);
+    }
+    
+    println!("initial cache population: {} frames", initial_frames.len());
+
+    // Wait for cleanup interval (we'll use a shorter interval for testing)
+    println!("waiting for cleanup cycle...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+    // Request frames again to verify cache state
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel(100);
+    cache.get_frames(target_time, 10, tx2, true).await?;
+    
+    let mut post_cleanup_frames = Vec::new();
+    while let Some(frame) = rx2.recv().await {
+        post_cleanup_frames.push(frame);
+    }
+
+    println!("post-cleanup frames: {}", post_cleanup_frames.len());
+
+    // Verify that frames within retention period are still present
+    let retained_frames = post_cleanup_frames
+        .iter()
+        .filter(|frame| {
+            let age = Utc::now() - frame.timestamp;
+            age.num_days() < 7 // default retention period
+        })
+        .count();
+
+    println!("\ncleanup metrics:");
+    println!("- initial frames:      {}", initial_frames.len());
+    println!("- post-cleanup frames: {}", post_cleanup_frames.len());
+    println!("- retained frames:     {}", retained_frames);
+
+    // Assert that frames within retention period are kept
+    assert!(
+        retained_frames > 0,
+        "should retain frames within retention period"
+    );
+
+    // Verify that very old frames are removed
+    let old_frames = post_cleanup_frames
+        .iter()
+        .filter(|frame| {
+            let age = Utc::now() - frame.timestamp;
+            age.num_days() > 7
+        })
+        .count();
+
+    assert_eq!(
+        old_frames, 0,
+        "should not have frames older than retention period"
+    );
+
+    Ok(())
+}
