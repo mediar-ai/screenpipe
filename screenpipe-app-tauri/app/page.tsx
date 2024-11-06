@@ -26,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { registerShortcuts } from "@/lib/shortcuts";
+import { ChangelogDialog } from "@/components/changelog-dialog";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -49,6 +50,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center">
       <NotificationHandler />
       {showOnboarding && <Onboarding />}
+      <ChangelogDialog />
       {/* <UpdateNotification checkIntervalHours={3} /> */}
       {/* <ScreenpipeInstanceChecker /> */}
       <Header />
