@@ -562,37 +562,37 @@ export function RecordingSettings({
 
   const handleUiMonitoringToggle = async (checked: boolean) => {
     try {
-        // 1. Update the setting in the database
-        await updateSettings({ enableUiMonitoring: checked });
-        
-        // 2. Kill and respawn screenpipe with new settings
-        await invoke('kill_all_sreenpipes');
-        await invoke('spawn_screenpipe');
-        
-        // 3. Show success toast if enabled
         if (checked) {
-            toast({
-                title: "ui monitoring enabled",
-                description: "screenpipe will now monitor UI interactions",
-            });
+            // Check accessibility permissions first
+            const hasPermission = await invoke('check_accessibility_permissions');
+            if (!hasPermission) {
+                toast({
+                    title: "accessibility permission required",
+                    description: "please grant accessibility permission in system preferences",
+                    action: (
+                        <ToastAction altText="open preferences" onClick={() => invoke('open_accessibility_preferences')}>
+                            open preferences
+                        </ToastAction>
+                    ),
+                    variant: "destructive",
+                });
+                return;
+            }
         }
-    } catch (error) {
-        console.error("failed to toggle ui monitoring:", error);
         
-        // 4. If there's an error (likely permissions), show error toast with action
-        toast({
-            title: "accessibility permission required",
-            description: "please grant accessibility permission in system preferences",
-            action: (
-                <ToastAction altText="open preferences" onClick={() => invoke('open_accessibility_preferences')}>
-                    open preferences
-                </ToastAction>
-            ),
-            variant: "destructive",
+        // Just update the local setting - the update button will handle the restart
+        setLocalSettings({
+            ...localSettings,
+            enableUiMonitoring: checked
         });
         
-        // 5. Revert the setting if it fails
-        await updateSettings({ enableUiMonitoring: false });
+    } catch (error) {
+        console.error("failed to toggle ui monitoring:", error);
+        toast({
+            title: "error checking accessibility permissions",
+            description: "please try again or check the logs",
+            variant: "destructive",
+        });
     }
   };
 
