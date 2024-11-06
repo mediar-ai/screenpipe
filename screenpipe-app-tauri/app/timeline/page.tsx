@@ -20,6 +20,11 @@ import { Button } from "@/components/ui/button";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { TimelineBlocks } from "@/components/timeline/timeline-block";
+import {
+  TimelineDock,
+  TimelineDockIcon,
+  TimelineIconsSection,
+} from "@/components/timeline/timeline-dock";
 
 export interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -335,6 +340,8 @@ export default function Timeline() {
   };
 
   const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!e.currentTarget) return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = (clickX / rect.width) * 100;
@@ -372,11 +379,9 @@ export default function Timeline() {
   };
 
   const handleTimelineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || dragStart === null) return;
+    if (!isDragging || dragStart === null || !e.currentTarget) return;
 
-    // Prevent text selection during drag
     e.preventDefault();
-
     const rect = e.currentTarget.getBoundingClientRect();
     const moveX = e.clientX - rect.left;
     const percentage = (moveX / rect.width) * 100;
@@ -947,18 +952,22 @@ export default function Timeline() {
           </div>
         )}
 
+        {/* {loadedTimeRange && frames.length > 0 && (
+          <TimelineIconsSection blocks={frames} />
+        )} */}
+
         <div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
           {Array(7)
             .fill(0)
             .map((_, i) => {
               if (!loadedTimeRange) return null;
               const totalMinutes =
-                (loadedTimeRange.visibleEnd.getTime() -
-                  loadedTimeRange.visibleStart.getTime()) /
+                (loadedTimeRange.visibleEnd!.getTime() -
+                  loadedTimeRange.visibleStart!.getTime()) /
                 (1000 * 60);
               const minutesPerStep = totalMinutes / 6;
               const date = new Date(
-                loadedTimeRange.visibleStart.getTime() +
+                loadedTimeRange.visibleStart!.getTime() +
                   i * minutesPerStep * 60 * 1000
               );
               return (
