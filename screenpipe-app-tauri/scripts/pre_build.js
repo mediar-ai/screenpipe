@@ -533,7 +533,7 @@ if (platform == 'macos') {
 	}
 
 	// Move and rename ffmpeg and ffprobe binaries
-	const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'ffmpeg');
+	const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
 
 	// For x86_64
 	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
