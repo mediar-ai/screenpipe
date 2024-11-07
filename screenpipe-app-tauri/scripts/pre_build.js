@@ -3,10 +3,10 @@ import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
 
-const isDevMode = process.env.SCREENPIPE_APP_DEV === 'true' || 
-                 process.argv.includes('--dev') || 
-                 process.env.CARGO_PROFILE_DEV_DEBUG === 'true' ||
-                 false;
+const isDevMode = process.env.SCREENPIPE_APP_DEV === 'true' ||
+	process.argv.includes('--dev') ||
+	process.env.CARGO_PROFILE_DEV_DEBUG === 'true' ||
+	false;
 
 const originalCWD = process.cwd()
 // Change CWD to src-tauri
@@ -343,6 +343,25 @@ if (platform == 'windows') {
 
 	// Setup vcpkg packages with environment variables set inline
 	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
+
+	// Clean up unnecessary files
+	const cleanupPaths = [
+		'ffmpeg/doc',
+		'ffmpeg/presets',
+		'ffmpeg/licenses',
+		path.join(onnxRuntimeName, 'docs'),
+		path.join(onnxRuntimeName, 'examples'),
+		path.join(onnxRuntimeName, 'LICENSE'),
+	];
+
+	for (const cleanupPath of cleanupPaths) {
+		try {
+			await fs.rm(cleanupPath, { recursive: true, force: true });
+			console.log(`cleaned up ${cleanupPath}`);
+		} catch (error) {
+			console.warn(`failed to clean up ${cleanupPath}:`, error.message);
+		}
+	}
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {
@@ -384,8 +403,8 @@ if (platform == 'macos') {
 		}
 
 		// Check if we're doing a universal build
-		const isUniversal = process.env.CARGO_BUILD_TARGET === undefined && 
-						   process.platform === 'darwin';
+		const isUniversal = process.env.CARGO_BUILD_TARGET === undefined &&
+			process.platform === 'darwin';
 		if (isUniversal) return ['arm64', 'x86_64'];
 
 		// Default to host architecture
@@ -404,12 +423,12 @@ if (platform == 'macos') {
 			console.log(`skipping ${arch} (not in target architectures)`);
 			continue;
 		}
-		
+
 		if (process.env['SKIP_SCREENPIPE_SETUP']) {
 			console.log(`skipping ${arch} setup (SKIP_SCREENPIPE_SETUP=true)`);
 			continue;
 		}
-		
+
 		console.log(`setting up screenpipe bin for ${arch}...`);
 
 		if (arch === 'arm64') {
@@ -434,7 +453,7 @@ if (platform == 'macos') {
 					const existingRpaths = [];
 					let match;
 					const outputStr = String(otoolOutput);
-					
+
 					while ((match = rpathRegex.exec(outputStr)) !== null) {
 						existingRpaths.push(match[1]);
 					}
@@ -470,7 +489,7 @@ if (platform == 'macos') {
 					const dylib = 'libscreenpipe_arm64.dylib';
 					const dyLibSrc = path.join(cwd, 'screenpipe-vision', 'lib', dylib);
 					const dyLibDest = path.join(cwd, '..', 'Frameworks', dylib);
-					
+
 					if (await fs.exists(dyLibSrc)) {
 						await fs.copyFile(dyLibSrc, dyLibDest);
 						console.log(`copied ${dylib} to Frameworks directory`);
@@ -500,7 +519,7 @@ if (platform == 'macos') {
 			if (mostRecentPath) {
 				await $`cp ${mostRecentPath} screenpipe-x86_64-apple-darwin`;
 				console.log(`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`);
-				
+
 				try {
 					// hard code the dylib
 					if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
@@ -614,7 +633,7 @@ async function installOllamaSidecar() {
 	// For our self-hosted runners
 	if (platform === 'windows' && await fs.exists('C:\\ollama\\')) {
 		console.log('ollama sidecar already exists. skipping installation.');
-		await fs.cp('C:\\ollama\\', ollamaDir, {recursive: true});
+		await fs.cp('C:\\ollama\\', ollamaDir, { recursive: true });
 		await fs.rename(path.join(ollamaDir, 'ollama.exe'), path.join(ollamaDir, ollamaExe));
 		return;
 	}
