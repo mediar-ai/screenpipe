@@ -294,6 +294,8 @@ export function useSettings() {
         const savedEnableFrameCache =
           (await store!.get<boolean>("enableFrameCache")) || false;
 
+        const savedEnableUiMonitoring = await store!.get<boolean>("enableUiMonitoring") || false;
+
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -328,7 +330,7 @@ export function useSettings() {
           showScreenpipeShortcut: savedShowScreenpipeShortcut,
           isFirstTimeUser: savedIsFirstTimeUser,
           enableFrameCache: savedEnableFrameCache,
-          enableUiMonitoring: false,
+          enableUiMonitoring: savedEnableUiMonitoring,
           platform: currentPlatform,
         });
       } catch (error) {
