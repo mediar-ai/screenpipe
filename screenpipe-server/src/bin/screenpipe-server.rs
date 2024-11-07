@@ -613,8 +613,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
     println!("└─────────────────────┴────────────────────────────────────┘");
 
     // Add warning for cloud arguments and telemetry

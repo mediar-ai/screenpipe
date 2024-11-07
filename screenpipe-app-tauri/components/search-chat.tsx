@@ -874,7 +874,9 @@ export function SearchChat({
                                   <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>this is the frame where the text appeared</p>
+                                  <p>
+                                    this is the frame where the text appeared
+                                  </p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
