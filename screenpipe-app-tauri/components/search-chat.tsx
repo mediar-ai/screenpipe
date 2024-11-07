@@ -35,6 +35,7 @@ import {
   Square,
   Settings,
   Clock,
+  Check,
 } from "lucide-react";
 import { useToast } from "./ui/use-toast";
 import posthog from "posthog-js";
@@ -271,6 +272,9 @@ export function SearchChat({
     audio: false,
     ui: false,
   });
+
+  // Add new state near the top with other state declarations
+  const [hideDeselected, setHideDeselected] = useState(true);
 
   // Update content type when checkboxes change
   const handleContentTypeChange = (type: "ocr" | "audio" | "ui") => {
@@ -760,46 +764,42 @@ export function SearchChat({
 
     return results
       .filter((item) => item && item.type)
+      // Add this filter to hide deselected items when hideDeselected is true
+      .filter((_, index) => !hideDeselected || selectedResults.has(index))
       .map((item, index) => (
         <motion.div
           key={index}
           className="flex items-center mb-4 relative pl-8"
-          onHoverStart={() => setHoveredResult(index)}
-          onHoverEnd={() => setHoveredResult(null)}
         >
-          <AnimatePresence>
-            {hoveredResult === index && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="absolute left-0 top-1/2 transform -translate-y-1/2"
-              >
-                <Checkbox
-                  checked={selectedResults.has(index)}
-                  onCheckedChange={() => handleResultSelection(index)}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className="absolute left-0 top-1/2 transform -translate-y-1/2">
+            <Checkbox
+              checked={selectedResults.has(index)}
+              onCheckedChange={() => handleResultSelection(index)}
+            />
+          </div>
           <Card className="w-full">
             <CardContent className="p-4">
               <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value={`item-${index}`}>
-                  <AccordionTrigger className="flex items-center">
-                    <div className="flex items-center w-full">
-                      <Badge className="mr-2">{item.type}</Badge>
-                    </div>
-                    <span className="flex-grow text-center truncate w-full">
-                      {item.type === "OCR" &&
-                        item.content.text.substring(0, 50)}
-                      {item.type === "Audio" &&
-                        item.content.transcription.substring(0, 50)}
-                      {item.type === "FTS" &&
-                        item.content.matched_text.substring(0, 50)}
-                      {item.type === "UI" && item.content.text.substring(0, 50)}
-                      ...
+                  <AccordionTrigger className="flex flex-col w-full py-2">
+                    {/* Main content */}
+                    <span className="w-full text-left truncate">
+                      {item.type === "OCR" && highlightKeyword(
+                        getContextAroundKeyword(item.content.text, query),
+                        query
+                      )}
+                      {item.type === "Audio" && highlightKeyword(
+                        getContextAroundKeyword(item.content.transcription, query),
+                        query
+                      )}
+                      {item.type === "FTS" && highlightKeyword(
+                        getContextAroundKeyword(item.content.matched_text, query),
+                        query
+                      )}
+                      {item.type === "UI" && highlightKeyword(
+                        getContextAroundKeyword(item.content.text, query),
+                        query
+                      )}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
@@ -924,29 +924,36 @@ export function SearchChat({
                 </AccordionItem>
               </Accordion>
               <div className="flex flex-wrap items-center gap-2 mt-2">
-                <p className="text-xs text-gray-400">
+              <Badge variant="outline" className="text-xs">{item.type}</Badge>
+              <p className="text-xs text-gray-400">
                   {new Date(item.content.timestamp).toLocaleString()}{" "}
                   {/* Display local time */}
                 </p>
                 {item.type === "OCR" && item.content.app_name && (
-                  <Badge
-                    className="text-xs cursor-pointer"
-                    onClick={() =>
-                      handleBadgeClick(item.content.app_name, "app")
-                    }
-                  >
-                    {item.content.app_name}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">app:</span>
+                    <Badge
+                      className="text-xs cursor-pointer"
+                      onClick={() =>
+                        handleBadgeClick(item.content.app_name, "app")
+                      }
+                    >
+                      {item.content.app_name}
+                    </Badge>
+                  </div>
                 )}
                 {item.type === "OCR" && item.content.window_name && (
-                  <Badge
-                    className="text-xs cursor-pointer"
-                    onClick={() =>
-                      handleBadgeClick(item.content.window_name, "window")
-                    }
-                  >
-                    {item.content.window_name}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">window:</span>
+                    <Badge
+                      className="text-xs cursor-pointer"
+                      onClick={() =>
+                        handleBadgeClick(item.content.window_name, "window")
+                      }
+                    >
+                      {item.content.window_name}
+                    </Badge>
+                  </div>
                 )}
                 {item.content.tags &&
                   item.content.tags.map((tag, index) => (
@@ -1002,7 +1009,7 @@ export function SearchChat({
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
       {/* Content Type Checkboxes and Code Button */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-1">
             <Checkbox
               id="audio-type"
@@ -1206,7 +1213,7 @@ export function SearchChat({
         </div>
       </div>
 
-      <div className="flex mt-8 space-x-2 justify-center">
+      <div className="flex mt-4 space-x-2 justify-center">
         <Badge
           variant="outline"
           className="cursor-pointer hover:bg-secondary"
@@ -1230,6 +1237,22 @@ export function SearchChat({
         >
           <Clock className="mr-2 h-4 w-4" />
           last 24h
+        </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(7 * 24 * 60)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 7d
+        </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(30 * 24 * 60)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 30d
         </Badge>
       </div>
 
@@ -1417,50 +1440,62 @@ export function SearchChat({
       {results.length > 0 && (
         <div className="flex flex-col space-y-4 mb-4 my-8">
           <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="select-all"
-                checked={selectAll}
-                onCheckedChange={handleSelectAll}
-              />
-              <Label htmlFor="select-all">select all results</Label>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="select-all"
+                  checked={selectAll}
+                  onCheckedChange={handleSelectAll}
+                />
+                <Label htmlFor="select-all">select all results</Label>
+              </div>
+              
+              <Separator orientation="vertical" className="h-4" />
+              
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="hide-deselected"
+                  checked={hideDeselected}
+                  onCheckedChange={setHideDeselected}
+                />
+                <Label htmlFor="hide-deselected">hide unselected</Label>
+              </div>
             </div>
+
             <div className="flex items-center space-x-2">
-              <Label htmlFor="similarity-threshold" className="ml-4">
-                similarity threshold: {similarityThreshold.toFixed(2)}
-              </Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSimilarityThreshold(similarityThreshold === 0.5 ? 1 : 0.5);
+                  if (similarityThreshold === 0.5) {
+                    setSelectedResults(new Set(results.map((_, index) => index)));
+                    setSelectAll(true);
+                  }
+                }}
+                disabled={isFiltering}
+                className="flex items-center gap-2 disabled:opacity-100"
+              >
+                {isFiltering ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : similarityThreshold === 0.5 ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Layers className="h-4 w-4" />
+                )}
+                {similarityThreshold === 0.5 ? "duplicates removed" : "remove duplicates"}
+              </Button>
+
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>
-                      adjust this slider to unselect similar results. lower
-                      values mean stricter filtering.
-                    </p>
+                    <p>automatically unselect similar or duplicate results</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <div className="relative w-64">
-                <div className="flex items-center space-x-2">
-                  <Slider
-                    id="similarity-threshold"
-                    min={0.5}
-                    max={1}
-                    step={0.01}
-                    value={[similarityThreshold]}
-                    onValueChange={(value) => setSimilarityThreshold(value[0])}
-                    className={
-                      isFiltering ? "opacity-50 cursor-not-allowed" : ""
-                    }
-                    disabled={isFiltering}
-                  />
-                  {isFiltering && (
-                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         </div>
