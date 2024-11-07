@@ -37,6 +37,7 @@ export function AudioTranscript({
   const [windowSize, setWindowSize] = useState({ width: 300, height: 500 });
   const resizerRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const [isVisible, setIsVisible] = useState(true);
 
   // Group audio files from nearby frames
   useEffect(() => {
@@ -52,6 +53,14 @@ export function AudioTranscript({
       const frameTime = new Date(frame.timestamp);
       return frameTime >= windowStart && frameTime <= windowEnd;
     });
+
+    // Check if any nearby frames have audio
+    const hasNearbyAudio = nearbyFrames.some(frame => 
+      frame.devices.some(device => device.audio.length > 0)
+    );
+
+    // Show/hide panel based on nearby audio
+    setIsVisible(hasNearbyAudio);
 
     // Group audio by device
     const groups = new Map<string, AudioGroup>();
@@ -143,7 +152,13 @@ export function AudioTranscript({
     e.stopPropagation(); // Stop the event from reaching the timeline
   };
 
-  return (
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsVisible(false);
+    onClose?.();
+  };
+
+  return isVisible ? (
     <div
       ref={panelRef}
       style={{
@@ -172,19 +187,16 @@ export function AudioTranscript({
             variant="ghost"
             size="sm"
             className="h-6 w-6 p-0"
-            onClick={(e) => {
-              e.stopPropagation();  // Stop event from bubbling up
-              onClose?.();
-            }}
+            onClick={handleClose}
           >
             <X className="h-3 w-3" />
           </Button>
         </div>
       </div>
 
-      <div 
+      <div
         className="space-y-2 p-2 overflow-y-auto"
-        style={{ 
+        style={{
           height: "calc(100% - 37px)",
           overscrollBehavior: "contain", // Prevent scroll chaining
           WebkitOverflowScrolling: "touch", // Smooth scrolling on iOS
@@ -249,5 +261,5 @@ export function AudioTranscript({
         }}
       />
     </div>
-  );
+  ) : null;
 }

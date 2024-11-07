@@ -35,13 +35,13 @@ export function TimelineBlocks({ frames, timeRange }: TimelineBlocksProps) {
         0
       );
 
-      // Use golden ratio for better color distribution
+      // Use golden ratio with a larger step for more distinct hues
       const golden_ratio = 0.618033988749895;
-      const hue = ((hash * golden_ratio) % 1) * 360;
+      const hue = ((hash * golden_ratio * 1.5) % 1) * 360;
 
-      // Vary saturation and lightness slightly based on hash
-      const sat = 65 + (hash % 20); // 65-85%
-      const light = 45 + (hash % 15); // 45-60%
+      // Increase saturation and use fixed lightness for better distinction
+      const sat = 85 + (hash % 15); // 85-100%
+      const light = 60; // Fixed lightness for better visibility
 
       const color = `hsl(${hue}, ${sat}%, ${light}%)`;
       colorCache.set(appName, color);

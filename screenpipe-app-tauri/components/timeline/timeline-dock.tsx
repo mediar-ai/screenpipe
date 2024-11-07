@@ -193,39 +193,87 @@ export function TimelineIconsSection({
   const processedBlocks = useMemo<ProcessedBlock[]>(() => {
     if (!timeRange) return [];
 
-    const totalRange = timeRange.end.getTime() - timeRange.start.getTime();
+    // Use the same block calculation logic as timeline-block.tsx
+    const blocks: {
+      appName: string;
+      startTime: Date;
+      endTime: Date;
+    }[] = [];
+    
+    let currentBlock: {
+      appName: string;
+      startTime: Date;
+      endTime: Date;
+    } | null = null;
 
-    return (
-      significantBlocks
-        .map((block) => {
-          const appName = block.devices.find(
-            (device) => device.metadata.app_name
-          )?.metadata.app_name!;
-          const blockTime = new Date(block.timestamp);
-
-          // Calculate percentage based on visible time range
-          const percentPosition =
-            ((blockTime.getTime() - timeRange.start.getTime()) / totalRange) *
-            100;
-
-          return {
-            appName,
-            percentThroughDay: percentPosition,
-            timestamp: blockTime,
-            iconSrc: iconCache[appName],
-          };
-        })
-        // Filter out blocks that are too close to each other (less than 1% apart)
-        .filter((block, index, array) => {
-          if (index === 0) return true;
-          const prevBlock = array[index - 1];
-          const minDuration = 0.4; // 1% minimum gap between icons
-          return (
-            Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) >
-            minDuration
-          );
-        })
+    // Sort frames by timestamp first
+    const sortedFrames = [...significantBlocks].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
+
+    sortedFrames.forEach((frame) => {
+      const timestamp = new Date(frame.timestamp);
+      // Ensure we have devices data
+      if (!frame.devices?.[0]?.metadata?.app_name) return;
+
+      const appName = frame.devices[0].metadata.app_name;
+      if (timestamp < timeRange.start || timestamp > timeRange.end) return;
+
+      if (!currentBlock) {
+        currentBlock = {
+          appName,
+          startTime: timestamp,
+          endTime: timestamp,
+        };
+      } else if (currentBlock.appName !== appName) {
+        blocks.push(currentBlock);
+        currentBlock = {
+          appName,
+          startTime: timestamp,
+          endTime: timestamp,
+        };
+      } else {
+        currentBlock.endTime = timestamp;
+      }
+    });
+
+    if (currentBlock) blocks.push(currentBlock);
+
+    console.log("Initial blocks:", blocks);
+
+    // Convert blocks to icons
+    // Only show icons for blocks that are longer than 5% of total time
+    const totalRange = timeRange.end.getTime() - timeRange.start.getTime();
+    const minDuration = totalRange * 0.05;
+
+    return blocks
+      .filter(block => {
+        const duration = block.endTime.getTime() - block.startTime.getTime();
+        return duration > minDuration;
+      })
+      .map(block => {
+        // Place icon at the middle of the block
+        const middleTime = new Date(
+          block.startTime.getTime() + 
+          (block.endTime.getTime() - block.startTime.getTime()) / 2
+        );
+        
+        const percentPosition =
+          ((middleTime.getTime() - timeRange.start.getTime()) / totalRange) * 100;
+
+        return {
+          appName: block.appName,
+          percentThroughDay: percentPosition,
+          timestamp: middleTime,
+          iconSrc: iconCache[block.appName],
+        };
+      })
+      .filter((block, index, array) => {
+        if (index === 0) return true;
+        const prevBlock = array[index - 1];
+        // Ensure icons don't overlap
+        return Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) > 3;
+      });
   }, [significantBlocks, iconCache, timeRange]);
 
   const loadAppIcon = useCallback(
@@ -273,7 +321,6 @@ export function TimelineIconsSection({
 
   return (
     <div className="absolute -top-12 inset-x-0 pointer-events-none h-8">
-
       {processedBlocks.map((block, i) => (
         <div
           key={`${block.appName}-${i}`}
