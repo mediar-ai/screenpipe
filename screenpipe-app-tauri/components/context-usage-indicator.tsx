@@ -39,7 +39,7 @@ export function ContextUsageIndicator({
         />
       </svg>
       {percentage > 90 && (
-        <AlertTriangle className="w-5 h-5 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-black" />
+        <AlertTriangle className="w-5 h-5 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-red-500" />
       )}
     </div>
   );
