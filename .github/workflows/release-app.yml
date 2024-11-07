@@ -17,7 +17,7 @@ on:
         required: false
       version:
         description: "Version to set in Cargo.toml (required if commit_hash is provided)"
-        required: true
+        required: false
 
 jobs:
   generate_changelog:
@@ -29,10 +29,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get version from Cargo.toml if not provided
+        id: get_version
+        run: |
+          if [ -z "${{ github.event.inputs.version }}" ]; then
+            VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+          else
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          fi
+
       - name: Generate Changelog
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .github/scripts/generate_changelog_md.sh ${{ github.event.inputs.version }} ${{ github.event.inputs.commit_hash }}
+        run: .github/scripts/generate_changelog_md.sh ${{ env.VERSION }} ${{ github.event.inputs.commit_hash }}
 
       - name: Commit and push changelog files
         if: env.CHANGELOG_GENERATED == 1
@@ -41,7 +51,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
           git add .
-          git commit -m "docs: add changelog for ${{ github.event.inputs.version }}"
+          git commit -m "docs: add changelog for ${{ env.VERSION }}"
           git pull origin main
           git push origin main
 
