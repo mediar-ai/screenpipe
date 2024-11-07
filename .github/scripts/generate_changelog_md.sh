@@ -1,15 +1,18 @@
 CURRENT_RELEASE=$1
 
+CHANGELOG_PUBLIC_PATH=screenpipe-app-tauri/public/CHANGELOG.md
+
+LAST_CHANGELOG=$(awk '/^#### \*\*Full Changelog:\*\*/{exit} {print}' $CHANGELOG_PUBLIC_PATH | awk '{printf "%s\\n", $0}' | sed 's/"/\\"/g')
+
 # Download cn binary from https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/cn_linux
 # only download it if it doesn't exist
-if [ ! -f cn ]; then
-  curl -L -o cn https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/cn_linux
-  chmod +x cn
-  mv ./cn /usr/bin/cn
+if ! command -v cn &> /dev/null; then
+  echo "Downloading Crab Nebula binary"
+  curl -L -o /usr/bin/cn https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/cn_linux
+  chmod +x /usr/bin/cn
 fi
 
 LAST_RELEASE=$(cn release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0]')
-echo $LAST_RELEASE
 COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
 COMMIT_LAST_RELEASE=$(git log -1 --until="$COMMIT_DATE_LAST_RELEASE" --format="%H")
 
@@ -24,10 +27,6 @@ if [ "$COMMIT_LAST_RELEASE" == "$COMMIT_CURRENT_RELEASE" ]; then
 fi
 
 COMMITS=$(git log --oneline $COMMIT_LAST_RELEASE..$COMMIT_CURRENT_RELEASE --oneline | tr '\n' ', ' | sed 's/"/\\"/g')
-
-echo $COMMITS
-
-LAST_CHANGELOG=$(awk '{printf "%s\\n", $0}' screenpipe-app-tauri/public/CHANGELOG.md | sed 's/"/\\"/g')
 
 CONTENT=$(
   curl https://api.openai.com/v1/chat/completions \
@@ -60,7 +59,7 @@ CONTENT=$(jq '.choices[0].message.content' <<< $CONTENT)
 
 # exit if the content is null
 if [ "$CONTENT" == "null" ]; then
-  echo "Failed to generate changelog content. It may be an error with the OpenAI API key."
+  echo "Failed to generate changelog content."
   echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
   exit 1
 fi
@@ -75,11 +74,11 @@ SHORT_COMMIT_CURRENT_RELEASE=$(echo $COMMIT_CURRENT_RELEASE | cut -c 1-5)
 
 # Add the full changelog on the end of the file
 echo """
-#### **Full Changelog:** [$SHORT_COMMIT_LAST_RELEASE...$SHORT_COMMIT_CURRENT_RELEASE](https://github.com/mediar-ai/screenpipe/compare/$COMMIT_LAST_RELEASE...$COMMIT_CURRENT_RELEASE)
+#### **Full Changelog:** [$SHORT_COMMIT_LAST_RELEASE..$SHORT_COMMIT_CURRENT_RELEASE](https://github.com/mediar-ai/screenpipe/compare/$SHORT_COMMIT_LAST_RELEASE..$SHORT_COMMIT_CURRENT_RELEASE)
 """ >> content/changelogs/$CURRENT_RELEASE.md
 
 # Copy the new changelog to the main changelog file
-cp content/changelogs/$CURRENT_RELEASE.md screenpipe-app-tauri/public/CHANGELOG.md
+cp content/changelogs/$CURRENT_RELEASE.md $CHANGELOG_PUBLIC_PATH
 
 # Output the current release version to be used in the workflow
 echo "CURRENT_RELEASE=$CURRENT_RELEASE" >> $GITHUB_ENV
