@@ -15,7 +15,8 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
-use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::{monitor::list_monitors};
+#[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
@@ -420,6 +421,7 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
+        cli.enable_ui_monitoring,
     );
 
     let pipe_futures = Arc::new(tokio::sync::Mutex::new(FuturesUnordered::new()));
@@ -726,12 +728,22 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move {
             let mut shutdown_rx = shutdown_tx_clone.subscribe();
             
-            tokio::select! {
-                _ = run_ui() => {
-                    error!("ui monitoring stopped unexpectedly");
-                }
-                _ = shutdown_rx.recv() => {
-                    info!("received shutdown signal, stopping ui monitoring");
+            loop {
+                tokio::select! {
+                    result = run_ui() => {
+                        match result {
+                            Ok(_) => break,
+                            Err(e) => {
+                                error!("ui monitoring error: {}", e);
+                                tokio::time::sleep(Duration::from_secs(5)).await;
+                                continue;
+                            }
+                        }
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("received shutdown signal, stopping ui monitoring");
+                        break;
+                    }
                 }
             }
         });

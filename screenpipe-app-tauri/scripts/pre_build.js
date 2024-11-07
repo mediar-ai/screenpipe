@@ -3,7 +3,10 @@ import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
 
-const isDevMode = process.env.SCREENPIPE_APP_DEV === 'true' || false;
+const isDevMode = process.env.SCREENPIPE_APP_DEV === 'true' || 
+                 process.argv.includes('--dev') || 
+                 process.env.CARGO_PROFILE_DEV_DEBUG === 'true' ||
+                 false;
 
 const originalCWD = process.cwd()
 // Change CWD to src-tauri
@@ -16,14 +19,13 @@ const platform = {
 const cwd = process.cwd()
 console.log('cwd', cwd)
 
+const mkdirp = async (dir) => await fs.mkdir(dir, { recursive: true });
 
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	windows: {
-		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
-		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
-
-
+		ffmpegName: 'ffmpeg-7.0.2-full_build-shared',
+		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.0.2-full_build-shared.7z',
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
 	linux: {
@@ -315,7 +317,6 @@ if (platform == 'windows') {
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
-		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
 	}
 
 	// Setup ONNX Runtime
@@ -373,11 +374,43 @@ if (platform == 'macos') {
 
 	const architectures = ['arm64', 'x86_64'];
 
-	for (const arch of architectures) {
-		if (process.env['SKIP_SCREENPIPE_SETUP']) {
-			break;
+	// Near the top of the file, add target detection
+	const getTargetArchs = () => {
+		// Check Cargo target
+		const cargoTarget = process.env.CARGO_BUILD_TARGET;
+		if (cargoTarget) {
+			if (cargoTarget.includes('aarch64')) return ['arm64'];
+			if (cargoTarget.includes('x86_64')) return ['x86_64'];
 		}
-		console.log(`Setting up screenpipe bin for ${arch}...`);
+
+		// Check if we're doing a universal build
+		const isUniversal = process.env.CARGO_BUILD_TARGET === undefined && 
+						   process.platform === 'darwin';
+		if (isUniversal) return ['arm64', 'x86_64'];
+
+		// Default to host architecture
+		const hostArch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
+		console.log(`defaulting to host architecture: ${hostArch}`);
+		return [hostArch];
+	};
+
+	const targetArchs = getTargetArchs();
+	console.log('building for architectures:', targetArchs);
+
+	await mkdirp(path.join(cwd, '..', 'Frameworks'));
+
+	for (const arch of architectures) {
+		if (!targetArchs.includes(arch)) {
+			console.log(`skipping ${arch} (not in target architectures)`);
+			continue;
+		}
+		
+		if (process.env['SKIP_SCREENPIPE_SETUP']) {
+			console.log(`skipping ${arch} setup (SKIP_SCREENPIPE_SETUP=true)`);
+			continue;
+		}
+		
+		console.log(`setting up screenpipe bin for ${arch}...`);
 
 		if (arch === 'arm64') {
 			const paths = [
@@ -394,19 +427,64 @@ if (platform == 'macos') {
 			}
 
 			try {
-				// if the binary exists, hard code the fucking dylib
-				if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
-					console.log(`hard coded the dylib`);
-				} else if (await fs.exists('screenpipe-aarch64-apple-darwin') && isDevMode) {
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
-					await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-aarch64-apple-darwin`
-					console.log(`Updated dylib paths for arm64 in dev mode`);
+				if (await fs.exists('screenpipe-aarch64-apple-darwin')) {
+					// Get existing rpaths
+					const otoolOutput = await $`otool -l ./screenpipe-aarch64-apple-darwin`.catch(() => ({ stdout: '' }));
+					const rpathRegex = /LC_RPATH.*?\n.*?path\s+(.*?)\s/gs;
+					const existingRpaths = [];
+					let match;
+					const outputStr = String(otoolOutput);
+					
+					while ((match = rpathRegex.exec(outputStr)) !== null) {
+						existingRpaths.push(match[1]);
+					}
+
+					console.log('existing rpaths:', existingRpaths);
+
+					// Remove existing rpaths
+					for (const rpath of existingRpaths) {
+						await $`install_name_tool -delete_rpath "${rpath}" ./screenpipe-aarch64-apple-darwin`.catch(() => {
+							console.log(`note: couldn't delete rpath ${rpath}`);
+						});
+					}
+
+					// Add the rpaths we need
+					const rpathsToAdd = [
+						'@executable_path/../Frameworks',
+						'@loader_path/../Frameworks',
+						'@rpath/../Frameworks',
+						'@executable_path/screenpipe-vision/lib',
+						'@rpath/screenpipe-vision/lib'
+					];
+
+					for (const rpath of rpathsToAdd) {
+						await $`install_name_tool -add_rpath "${rpath}" ./screenpipe-aarch64-apple-darwin`.catch(() => {
+							console.log(`note: couldn't add rpath ${rpath}`);
+						});
+					}
+
+					// Update the dylib reference
+					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`;
+
+					// Copy dylib to Frameworks
+					const dylib = 'libscreenpipe_arm64.dylib';
+					const dyLibSrc = path.join(cwd, 'screenpipe-vision', 'lib', dylib);
+					const dyLibDest = path.join(cwd, '..', 'Frameworks', dylib);
+					
+					if (await fs.exists(dyLibSrc)) {
+						await fs.copyFile(dyLibSrc, dyLibDest);
+						console.log(`copied ${dylib} to Frameworks directory`);
+					} else {
+						console.error(`${dylib} not found at ${dyLibSrc}`);
+					}
+
+					console.log('verifying final configuration:');
+					await $`otool -L ./screenpipe-aarch64-apple-darwin`;
+					await $`otool -l ./screenpipe-aarch64-apple-darwin | grep -A2 LC_RPATH`;
 				}
 			} catch (error) {
-				console.error('Error updating dylib paths:', error);
+				console.error('error updating dylib paths:', error);
+				if (error.stack) console.error(error.stack);
 			}
 
 
@@ -422,21 +500,22 @@ if (platform == 'macos') {
 			if (mostRecentPath) {
 				await $`cp ${mostRecentPath} screenpipe-x86_64-apple-darwin`;
 				console.log(`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`);
-			} else {
-				console.error("No suitable x86_64 screenpipe binary found");
-			}
-
-			try {
-				// hard code the dylib
-				if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
-					console.log(`hard coded the dylib`);
+				
+				try {
+					// hard code the dylib
+					if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
+						await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`;
+						await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`;
+						console.log(`hard coded the dylib`);
+					}
+					console.log('screenpipe for x86_64 set up successfully.');
+				} catch (error) {
+					console.error('Error updating dylib paths:', error);
 				}
-			} catch (error) {
-				console.error('Error updating dylib paths:', error);
+			} else {
+				console.log("no x86_64 binary found - skipping x86_64 setup");
+				// Don't print "set up successfully" if we didn't actually set anything up
 			}
-
 		}
 
 		console.log(`screenpipe for ${arch} set up successfully.`);
@@ -463,7 +542,6 @@ if (platform == 'macos') {
 	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
 
 	console.log('Moved and renamed ffmpeg binary for externalBin');
-
 }
 
 
@@ -526,11 +604,18 @@ async function installOllamaSidecar() {
 		throw new Error('Unsupported platform');
 	}
 
-
 	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
 		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
 		console.log('ollama sidecar already exists. skipping installation.');
+		return;
+	}
+
+	// For our self-hosted runners
+	if (platform === 'windows' && await fs.exists('C:\\ollama\\')) {
+		console.log('ollama sidecar already exists. skipping installation.');
+		await fs.cp('C:\\ollama\\', ollamaDir, {recursive: true});
+		await fs.rename(path.join(ollamaDir, 'ollama.exe'), path.join(ollamaDir, ollamaExe));
 		return;
 	}
 

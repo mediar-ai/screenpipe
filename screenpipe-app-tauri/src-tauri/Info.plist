@@ -12,5 +12,7 @@
     <string>This app requires camera access to capture video.</string>
     <key>NSSystemExtensionUsageDescription</key>
     <string>This app requires system extension access to capture audio output.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Screenpipe needs accessibility permissions to monitor UI elements and their interactions.</string>
 </dict>
 </plist>

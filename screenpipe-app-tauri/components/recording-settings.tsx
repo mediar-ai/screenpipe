@@ -69,6 +69,7 @@ import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
+import { ToastAction } from "@/components/ui/toast";
 
 interface AudioDevice {
   name: string;
@@ -557,6 +558,42 @@ export function RecordingSettings({
 
   const handleShowTimeline = async () => {
     await invoke("show_timeline");
+  };
+
+  const handleUiMonitoringToggle = async (checked: boolean) => {
+    try {
+        if (checked) {
+            // Check accessibility permissions first
+            const hasPermission = await invoke('check_accessibility_permissions');
+            if (!hasPermission) {
+                toast({
+                    title: "accessibility permission required",
+                    description: "please grant accessibility permission in system preferences",
+                    action: (
+                        <ToastAction altText="open preferences" onClick={() => invoke('open_accessibility_preferences')}>
+                            open preferences
+                        </ToastAction>
+                    ),
+                    variant: "destructive",
+                });
+                return;
+            }
+        }
+        
+        // Just update the local setting - the update button will handle the restart
+        setLocalSettings({
+            ...localSettings,
+            enableUiMonitoring: checked
+        });
+        
+    } catch (error) {
+        console.error("failed to toggle ui monitoring:", error);
+        toast({
+            title: "error checking accessibility permissions",
+            description: "please try again or check the logs",
+            variant: "destructive",
+        });
+    }
   };
 
   return (
@@ -1389,43 +1426,38 @@ export function RecordingSettings({
                 )}
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="ui-monitoring-toggle"
-                checked={localSettings.enableUiMonitoring}
-                onCheckedChange={(checked) => 
-                  setLocalSettings({
-                    ...localSettings,
-                    enableUiMonitoring: checked,
-                  })
-                }
-              />
-              <Label
-                htmlFor="ui-monitoring-toggle"
-                className="flex items-center space-x-2"
-              >
-                <span>enable UI monitoring</span>
-                <Badge variant="outline" className="ml-2">macOS only</Badge>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>
-                        enables monitoring of UI elements and their interactions.
-                        <br />
-                        this allows for better context in search results
-                        <br />
-                        and more accurate activity tracking.
-                        <br />
-                        (macOS only)
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-            </div>
+            {isMacOS && (
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="ui-monitoring-toggle"
+                  checked={localSettings.enableUiMonitoring}
+                  onCheckedChange={handleUiMonitoringToggle}
+                />
+                <Label
+                  htmlFor="ui-monitoring-toggle"
+                  className="flex items-center space-x-2"
+                >
+                  <span>enable UI monitoring</span>
+                  <Badge variant="outline" className="ml-2">accessibility permissions</Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4 cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>
+                          enables monitoring of UI elements and their interactions.
+                          <br />
+                          this allows for better context in search results
+                          <br />
+                          * requires accessibility permission
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

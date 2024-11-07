@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use dirs::home_dir;
-use screenpipe_server::{db::OCREntry, video_cache::AudioEntry};
 use std::sync::Arc;
 use tracing::{debug, error};
 
@@ -437,6 +436,187 @@ async fn test_frame_ordering() -> Result<()> {
             println!("  {}", frame.timestamp);
         }
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_cache_effectiveness() -> Result<()> {
+    let (cache, _db) = setup_test_env().await?;
+
+    println!("\ncache effectiveness test:");
+    println!("-----------------------");
+
+    // First request - should process and cache frames
+    let target_time = Utc::now() - Duration::minutes(5);
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel(100);
+
+    println!("first request - should process and cache frames");
+    let start = std::time::Instant::now();
+    cache.get_frames(target_time, 2, tx1, true).await?;
+
+    let mut first_request_frames = Vec::new();
+    while let Some(frame) = rx1.recv().await {
+        first_request_frames.push(frame);
+    }
+    let first_request_time = start.elapsed();
+
+    println!(
+        "first request: {} frames in {:.2}s",
+        first_request_frames.len(),
+        first_request_time.as_secs_f64()
+    );
+
+    // Wait a moment to ensure async operations complete
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    // Second request - should use cached frames
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel(100);
+
+    println!("\nsecond request - should use cached frames");
+    let start = std::time::Instant::now();
+    cache.get_frames(target_time, 2, tx2, true).await?;
+
+    let mut second_request_frames = Vec::new();
+    while let Some(frame) = rx2.recv().await {
+        second_request_frames.push(frame);
+    }
+    let second_request_time = start.elapsed();
+
+    println!(
+        "second request: {} frames in {:.2}s",
+        second_request_frames.len(),
+        second_request_time.as_secs_f64()
+    );
+
+    // Verify cache effectiveness
+    assert_eq!(
+        first_request_frames.len(),
+        second_request_frames.len(),
+        "both requests should return the same number of frames"
+    );
+
+    // Second request should be significantly faster (at least 2x)
+    assert!(
+        second_request_time < first_request_time / 2,
+        "cached request should be at least 2x faster: first={:.2}s, second={:.2}s",
+        first_request_time.as_secs_f64(),
+        second_request_time.as_secs_f64()
+    );
+
+    // Verify frame data integrity between requests
+    for (i, (first, second)) in first_request_frames
+        .iter()
+        .zip(second_request_frames.iter())
+        .enumerate()
+    {
+        assert_eq!(
+            first.timestamp, second.timestamp,
+            "frame {} timestamps should match",
+            i
+        );
+
+        for (first_device, second_device) in first.frame_data.iter().zip(second.frame_data.iter()) {
+            assert_eq!(
+                first_device.device_id, second_device.device_id,
+                "frame {} device IDs should match",
+                i
+            );
+            assert_eq!(
+                first_device.image_data, second_device.image_data,
+                "frame {} image data should match",
+                i
+            );
+        }
+    }
+
+    println!("\ncache effectiveness metrics:");
+    println!(
+        "- first request time:  {:.2}s",
+        first_request_time.as_secs_f64()
+    );
+    println!(
+        "- second request time: {:.2}s",
+        second_request_time.as_secs_f64()
+    );
+    println!(
+        "- speedup factor:      {:.2}x",
+        first_request_time.as_secs_f64() / second_request_time.as_secs_f64()
+    );
+    println!("- frames processed:    {}", first_request_frames.len());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_cache_cleanup() -> Result<()> {
+    let (cache, _db) = setup_test_env().await?;
+
+    println!("\ncache cleanup test:");
+    println!("-----------------");
+
+    // First, populate cache with some frames
+    let target_time = Utc::now() - Duration::minutes(5);
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel(100);
+    
+    println!("populating cache with initial frames...");
+    cache.get_frames(target_time, 10, tx1, true).await?;
+    
+    let mut initial_frames = Vec::new();
+    while let Some(frame) = rx1.recv().await {
+        initial_frames.push(frame);
+    }
+    
+    println!("initial cache population: {} frames", initial_frames.len());
+
+    // Wait for cleanup interval (we'll use a shorter interval for testing)
+    println!("waiting for cleanup cycle...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+    // Request frames again to verify cache state
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel(100);
+    cache.get_frames(target_time, 10, tx2, true).await?;
+    
+    let mut post_cleanup_frames = Vec::new();
+    while let Some(frame) = rx2.recv().await {
+        post_cleanup_frames.push(frame);
+    }
+
+    println!("post-cleanup frames: {}", post_cleanup_frames.len());
+
+    // Verify that frames within retention period are still present
+    let retained_frames = post_cleanup_frames
+        .iter()
+        .filter(|frame| {
+            let age = Utc::now() - frame.timestamp;
+            age.num_days() < 7 // default retention period
+        })
+        .count();
+
+    println!("\ncleanup metrics:");
+    println!("- initial frames:      {}", initial_frames.len());
+    println!("- post-cleanup frames: {}", post_cleanup_frames.len());
+    println!("- retained frames:     {}", retained_frames);
+
+    // Assert that frames within retention period are kept
+    assert!(
+        retained_frames > 0,
+        "should retain frames within retention period"
+    );
+
+    // Verify that very old frames are removed
+    let old_frames = post_cleanup_frames
+        .iter()
+        .filter(|frame| {
+            let age = Utc::now() - frame.timestamp;
+            age.num_days() > 7
+        })
+        .count();
+
+    assert_eq!(
+        old_frames, 0,
+        "should not have frames older than retention period"
+    );
 
     Ok(())
 }

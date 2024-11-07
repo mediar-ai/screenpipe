@@ -37,10 +37,21 @@ export type FTSContent = {
   tags: string[];
 };
 
+export type UIContent = {
+  frame_id: number;
+  timestamp: string;
+  file_path: string;
+  text: string;
+  app_name: string;
+  window_name: string;
+  tags: string[];
+};
+
 export type ContentItem =
   | { type: "OCR"; content: OCRContent }
   | { type: "Audio"; content: AudioContent }
-  | { type: "FTS"; content: FTSContent };
+  | { type: "FTS"; content: FTSContent }
+  | { type: "UI"; content: UIContent };
 
 export type PaginationInfo = {
   limit: number;

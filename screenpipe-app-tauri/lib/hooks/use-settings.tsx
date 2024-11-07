@@ -56,11 +56,12 @@ export interface Settings {
   isFirstTimeUser: boolean;
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
+  platform: string; // Add this line
 }
 
 const defaultSettings: Settings = {
   openaiApiKey: "",
-  deepgramApiKey: "7ed2a159a094337b01fd8178b914b7ae0e77822d", // for now we hardcode our key (dw about using it, we have bunch of credits)
+  deepgramApiKey: "", // for now we hardcode our key (dw about using it, we have bunch of credits)
   isLoading: true,
   aiModel: "gpt-4o",
   installedPipes: [],
@@ -102,7 +103,8 @@ const defaultSettings: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
   enableFrameCache: false, // Add this line
-  enableUiMonitoring: false, // Add this line
+  enableUiMonitoring: false, // Change from true to false
+  platform: "unknown", // Add this line
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -138,19 +140,22 @@ export function useSettings() {
         await initStore();
       }
 
-      const ocrModel =
-        platform() === "macos"
-          ? "apple-native"
-          : platform() === "windows"
-          ? "windows-native"
-          : "tesseract";
       try {
+        const currentPlatform = platform();
+        console.log("Current platform:", currentPlatform);
+
+        const ocrModel =
+          currentPlatform === "macos"
+            ? "apple-native"
+            : currentPlatform === "windows"
+            ? "windows-native"
+            : "tesseract";
+
         console.log("loading settings", store);
         // no need to call load() as it's done automatically
         const savedKey = (await store!.get<string>("openaiApiKey")) || "";
         const savedDeepgramKey =
-          (await store!.get<string>("deepgramApiKey")) ||
-          "7ed2a159a094337b01fd8178b914b7ae0e77822d";
+          (await store!.get<string>("deepgramApiKey")) || "";
         const savedAiModel = (await store!.get<string>("aiModel")) || "gpt-4o";
         const savedInstalledPipes =
           (await store!.get<Pipe[]>("installedPipes")) || [];
@@ -194,7 +199,7 @@ export function useSettings() {
           (await store!.get<number>("aiMaxContextChars")) || 30000;
         const savedFps =
           (await store!.get<number>("fps")) ||
-          (platform() === "macos" ? 0.2 : 1);
+          (currentPlatform === "macos" ? 0.2 : 1);
         const savedVadSensitivity =
           (await store!.get<VadSensitivity>("vadSensitivity")) || "high";
         let savedAnalyticsEnabled = await store!.get<boolean>(
@@ -223,7 +228,6 @@ export function useSettings() {
         const savedLanguages =
           (await store!.get<Language[]>("languages")) || [];
 
-        const currentPlatform = platform();
         const ignoredWindowsInAllOS = [
           "bit",
           "VPN",
@@ -251,6 +255,7 @@ export function useSettings() {
                 "Clock",
                 "Dock",
                 "DeepL",
+                "Control Center",
               ]
             : currentPlatform === "windows"
             ? [
@@ -289,6 +294,8 @@ export function useSettings() {
         const savedEnableFrameCache =
           (await store!.get<boolean>("enableFrameCache")) || false;
 
+        const savedEnableUiMonitoring = await store!.get<boolean>("enableUiMonitoring") || false;
+
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -323,7 +330,8 @@ export function useSettings() {
           showScreenpipeShortcut: savedShowScreenpipeShortcut,
           isFirstTimeUser: savedIsFirstTimeUser,
           enableFrameCache: savedEnableFrameCache,
-          enableUiMonitoring: false,
+          enableUiMonitoring: savedEnableUiMonitoring,
+          platform: currentPlatform,
         });
       } catch (error) {
         console.error("failed to load settings:", error);

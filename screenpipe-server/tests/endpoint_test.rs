@@ -8,6 +8,7 @@ mod tests {
     use chrono::{Duration, Utc};
     use crossbeam::queue::SegQueue;
     use screenpipe_audio::{AudioDevice, DeviceType};
+    use screenpipe_server::video_cache::FrameCache;
     use screenpipe_server::ContentType;
     use screenpipe_server::SearchResult;
     use screenpipe_server::{
@@ -39,9 +40,12 @@ mod tests {
             devices_status: HashMap::new(),
             app_start_time: Utc::now(),
             screenpipe_dir: PathBuf::from(""),
-            pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
+            pipe_manager: Arc::new(PipeManager::new(PathBuf::from("")).0),
             vision_disabled: false,
             audio_disabled: false,
+            frame_cache: Some(Arc::new(
+                FrameCache::new(PathBuf::from(""), db).await.unwrap(),
+            )),
         });
 
         let router = create_router();
@@ -119,7 +123,10 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
 
         // Insert some recent data
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id = db.insert_frame("test_device", None).await.unwrap();
         let _ = db
             .insert_ocr_text(
@@ -179,7 +186,10 @@ mod tests {
 
         // Insert some stale data (more than 60 seconds old)
         let stale_time = Utc::now() - Duration::seconds(61);
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id = db.insert_frame("test_device", None).await.unwrap();
         let _ = db
             .insert_ocr_text(
@@ -351,7 +361,10 @@ mod tests {
         let db = &state.db;
 
         // Insert some test data
-        let _ = db.insert_video_chunk("test_video1.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video1.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
         let _ = db
@@ -503,7 +516,10 @@ mod tests {
         let db = &state.db;
 
         // insert test data with different timestamps
-        let _ = db.insert_video_chunk("test_video1.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video1.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
 
