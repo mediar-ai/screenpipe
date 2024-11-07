@@ -239,7 +239,7 @@ export function TimelineIconsSection({
 
     if (currentBlock) blocks.push(currentBlock);
 
-    console.log("Initial blocks:", blocks);
+    // console.log("Initial blocks:", blocks);
 
     // Convert blocks to icons
     // Only show icons for blocks that are longer than 5% of total time

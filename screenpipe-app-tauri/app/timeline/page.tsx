@@ -67,58 +67,263 @@ interface Agent {
   id: string;
   name: string;
   description: string;
-  dataSelector: (frames: StreamTimeSeriesResponse[]) => any;
+  analyze: (
+    frames: StreamTimeSeriesResponse[],
+    openai: OpenAI,
+    options: {
+      model: string;
+      onProgress: (chunk: string) => void;
+    }
+  ) => Promise<void>;
+}
+
+async function streamCompletion(
+  openai: OpenAI,
+  messages: ChatCompletionMessageParam[],
+  options: {
+    model: string;
+    onProgress: (chunk: string) => void;
+  }
+) {
+  console.log("streaming completion", messages);
+  const stream = await openai.chat.completions.create({
+    model: options.model,
+    messages,
+    stream: true,
+  });
+
+  let fullResponse = "";
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || "";
+    fullResponse += content;
+    options.onProgress(fullResponse);
+  }
+}
+
+async function analyzeChunk(
+  chunk: any[],
+  openai: OpenAI,
+  model: string
+): Promise<string> {
+  const response = await openai.chat.completions.create({
+    model,
+    messages: [
+      {
+        role: "system",
+        content:
+          "summarize this chunk of activity in 2-3 sentences, focus on key events and patterns",
+      },
+      {
+        role: "user",
+        content: JSON.stringify(chunk),
+      },
+    ],
+  });
+  return response.choices[0]?.message?.content || "";
 }
 
 const AGENTS: Agent[] = [
   {
+    id: "recursive-summarizer",
+    name: "recursive summarizer",
+    description: "good at processing long time ranges but quality decreases with shorter time ranges",
+    analyze: async (frames, openai, { model, onProgress = () => {} }) => {
+      if (!frames.length) {
+        onProgress("no frames to analyze\n\n");
+        return;
+      }
+
+      onProgress("analyzing chunks...\n\n");
+
+      const chunkSize = 5 * 60 * 1000;
+      const chunks: any[] = [];
+      let currentChunk: any[] = [];
+
+      frames.forEach((frame) => {
+        const frameTime = new Date(frame.timestamp);
+        if (
+          currentChunk.length === 0 ||
+          frameTime.getTime() - new Date(currentChunk[0].timestamp).getTime() <
+            chunkSize
+        ) {
+          currentChunk.push({
+            timestamp: frame.timestamp,
+            apps: frame.devices.map((d) => d.metadata.app_name),
+            windows: frame.devices.map((d) => d.metadata.window_name),
+            text: frame.devices.map((d) => d.metadata.ocr_text).filter(Boolean),
+            audio: frame.devices.flatMap((d) => d.audio),
+          });
+        } else {
+          chunks.push(currentChunk);
+          currentChunk = [frame];
+        }
+      });
+
+      if (currentChunk.length > 0) {
+        chunks.push(currentChunk);
+      }
+
+      const chunkSummaries = await Promise.all(
+        chunks.map(async (chunk, index) => {
+          const summary = await analyzeChunk(chunk, openai, model);
+          onProgress(`chunk ${index + 1}/${chunks.length}: ${summary}\n`);
+          return {
+            time: new Date(chunk[0].timestamp).toLocaleTimeString(),
+            summary,
+          };
+        })
+      );
+
+      onProgress("\ncreating final summary...\n\n");
+
+      await streamCompletion(
+        openai,
+        [
+          {
+            role: "system",
+            content: `create a hierarchical summary with these sections:
+              ### overview
+              (one paragraph summary of entire time range)
+              
+              ### timeline
+              (list of chunk summaries with timestamps)
+              
+              ### patterns
+              (key patterns or insights across chunks)`,
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              timeRange: {
+                start: new Date(frames[frames.length - 1].timestamp).toLocaleTimeString(),
+                end: new Date(frames[0].timestamp).toLocaleTimeString(),
+              },
+              chunkSummaries,
+            }),
+          },
+        ],
+        { model, onProgress }
+      );
+    },
+  },
+  {
     id: "context-master",
     name: "context master",
     description: "analyzes everything: apps, windows, text & audio",
-    dataSelector: (frames) =>
-      frames.map((frame) => ({
+    analyze: async (frames, openai, { model, onProgress }) => {
+      const contextData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         devices: frame.devices.map((device) => ({
           device_id: device.device_id,
           metadata: device.metadata,
           audio: device.audio,
         })),
-      })),
+      }));
+
+      console.log("context data", contextData);
+
+      await streamCompletion(
+        openai,
+        [
+          {
+            role: "system",
+            content:
+              "analyze all context including apps, windows, text & audio. provide insights about user activity patterns",
+          },
+          {
+            role: "user",
+            content: JSON.stringify(contextData),
+          },
+        ],
+        { model, onProgress }
+      );
+    },
   },
   {
     id: "window-tracker",
     name: "window tracker",
-    description: "focuses on app switching patterns",
-    dataSelector: (frames) =>
-      frames.map((frame) => ({
+    description: "focuses on app & window usage data",
+    analyze: async (frames, openai, { model, onProgress }) => {
+      const windowData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         windows: frame.devices.map((device) => ({
           app: device.metadata.app_name,
           window: device.metadata.window_name,
         })),
-      })),
+      }));
+
+      await streamCompletion(
+        openai,
+        [
+          {
+            role: "system",
+            content:
+              "analyze app and window usage patterns, focus on work habits and application transitions",
+          },
+          {
+            role: "user",
+            content: JSON.stringify(windowData),
+          },
+        ],
+        { model, onProgress }
+      );
+    },
   },
   {
     id: "text-scanner",
     name: "text scanner",
     description: "analyzes visible text (OCR)",
-    dataSelector: (frames) =>
-      frames.map((frame) => ({
+    analyze: async (frames, openai, { model, onProgress }) => {
+      const textData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         text: frame.devices
           .map((device) => device.metadata.ocr_text)
           .filter(Boolean),
-      })),
+      }));
+
+      await streamCompletion(
+        openai,
+        [
+          {
+            role: "system",
+            content:
+              "analyze OCR text content, identify key topics and information being viewed",
+          },
+          {
+            role: "user",
+            content: JSON.stringify(textData),
+          },
+        ],
+        { model, onProgress }
+      );
+    },
   },
   {
     id: "voice-analyzer",
     name: "voice analyzer",
     description: "focuses on audio transcriptions",
-    dataSelector: (frames) =>
-      frames.map((frame) => ({
+    analyze: async (frames, openai, { model, onProgress }) => {
+      const audioData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         audio: frame.devices.flatMap((device) => device.audio),
-      })),
+      }));
+
+      await streamCompletion(
+        openai,
+        [
+          {
+            role: "system",
+            content:
+              "analyze audio transcriptions, identify key conversations and spoken content",
+          },
+          {
+            role: "user",
+            content: JSON.stringify(audioData),
+          },
+        ],
+        { model, onProgress }
+      );
+    },
   },
 ];
 
@@ -152,7 +357,10 @@ export default function Timeline() {
   const [aiInput, setAiInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const aiPanelRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [position, setPosition] = useState({
+    x: window.innerWidth - 400,
+    y: window.innerHeight / 4,
+  });
   const [isDraggingPanel, setIsDraggingPanel] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [osType, setOsType] = useState<string>("");
@@ -303,8 +511,10 @@ export default function Timeline() {
 
   const handleScroll = (e: React.WheelEvent<HTMLDivElement>) => {
     const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
-    const isWithinAudioPanel = document.querySelector('.audio-transcript-panel')?.contains(e.target as Node);
-    
+    const isWithinAudioPanel = document
+      .querySelector(".audio-transcript-panel")
+      ?.contains(e.target as Node);
+
     if (isWithinAiPanel || isWithinAudioPanel) {
       return;
     }
@@ -471,19 +681,6 @@ export default function Timeline() {
   };
 
   const handleAiSubmit = async (e: React.FormEvent) => {
-    posthog.capture("timeline_ai_chat", {
-      ai_url: settings.aiUrl,
-      model: settings.aiModel,
-      agent: selectedAgent.name,
-      selection_range_minutes: selectionRange
-        ? Math.round(
-            (selectionRange.end.getTime() - selectionRange.start.getTime()) /
-              60000
-          )
-        : 0,
-      // Don't include actual messages/content
-    });
-
     e.preventDefault();
     if (!aiInput.trim() || !selectionRange) return;
 
@@ -494,7 +691,7 @@ export default function Timeline() {
       );
     });
 
-    const contextData = selectedAgent.dataSelector(relevantFrames);
+    console.log("relevant frames", relevantFrames);
 
     const userMessage = {
       id: generateId(),
@@ -512,84 +709,29 @@ export default function Timeline() {
         dangerouslyAllowBrowser: true,
       });
 
-      const messages = [
-        {
-          role: "system" as const,
-          content: `You are a helpful assistant specialized as a "${
-            selectedAgent.name
-          }" analyzing screen & mic recordings.
-            Rules:
-            - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
-            - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
-            - User timezone offset: ${new Date().getTimezoneOffset()}
-            - All timestamps in the context data are in UTC
-            - Convert timestamps to local time for human-readable responses
-            - Never output UTC time unless explicitly asked
-            - Focus on ${selectedAgent.description}
-            - Follow the user's instructions carefully & to the letter: ${
-              settings.customPrompt
-            }
-            `,
-        },
-        ...chatMessages,
-        {
-          role: "user" as const,
-          content: `Context data: ${JSON.stringify(contextData)}
-          
-          ${aiInput}`,
-        },
-      ];
-
-      console.log(
-        "messages",
-        messages.findLast((m) => m.role === "user")?.content
-      );
-
-      abortControllerRef.current = new AbortController();
-      setIsStreaming(true);
-
-      const stream = await openai.chat.completions.create(
-        {
-          model: settings.aiModel,
-          messages: messages as ChatCompletionMessageParam[],
-          stream: true,
-        },
-        {
-          signal: abortControllerRef.current.signal,
-        }
-      );
-
-      let fullResponse = "";
+      let currentResponse = "";
       setChatMessages((prev) => [
         ...prev,
         { id: generateId(), role: "assistant", content: "" },
       ]);
 
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || "";
-        fullResponse += content;
-        setChatMessages((prev) => [
-          ...prev.slice(0, -1),
-          { id: generateId(), role: "assistant", content: fullResponse },
-        ]);
-      }
-    } catch (error: any) {
+      await selectedAgent.analyze(relevantFrames, openai, {
+        model: settings.aiModel,
+        onProgress: (chunk) => {
+          currentResponse = chunk;
+          setChatMessages((prev) => [
+            ...prev.slice(0, -1),
+            { id: generateId(), role: "assistant", content: currentResponse },
+          ]);
+        },
+      });
+    } catch (error) {
       console.error("Error generating AI response:", error);
-      // if its max context error, show a different message
-      if (error.message.toLowerCase().includes("maximum context")) {
-        toast({
-          title: "error",
-          description:
-            "failed to generate AI response. max context length exceeded.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "error",
-          description: "failed to generate AI response. please try again.",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "error",
+        description: "failed to generate AI response. please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsAiLoading(false);
       setIsStreaming(false);
@@ -609,6 +751,7 @@ export default function Timeline() {
   }, []);
 
   const handlePanelMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
     setIsDraggingPanel(true);
     setDragOffset({
       x: e.clientX - position.x,
@@ -616,48 +759,37 @@ export default function Timeline() {
     });
   };
 
-  const handlePanelMouseMove = (e: React.MouseEvent) => {
-    if (isDraggingPanel) {
-      setPosition({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y,
-      });
-    }
-  };
-
-  const handlePanelMouseUp = () => {
-    if (isDraggingPanel) {
-      setIsDraggingPanel(false);
-    }
-  };
-
   useEffect(() => {
     const handleGlobalMouseMove = (e: MouseEvent) => {
       if (isDraggingPanel) {
+        e.preventDefault();
+        const newX = e.clientX - dragOffset.x;
+        const newY = e.clientY - dragOffset.y;
+        
+        const maxX = window.innerWidth - chatWindowSize.width;
+        const maxY = window.innerHeight - chatWindowSize.height;
+        
         setPosition({
-          x: e.clientX - dragOffset.x,
-          y: e.clientY - dragOffset.y,
+          x: Math.max(0, Math.min(maxX, newX)),
+          y: Math.max(0, Math.min(maxY, newY)),
         });
       }
     };
 
     const handleGlobalMouseUp = () => {
-      if (isDragging) {
-        setIsDragging(false);
-        setDragStart(null);
-      }
+      setIsDraggingPanel(false);
     };
 
     if (isDraggingPanel) {
-      document.addEventListener("mousemove", handleGlobalMouseMove);
-      document.addEventListener("mouseup", handleGlobalMouseUp);
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      document.addEventListener('mouseup', handleGlobalMouseUp);
     }
 
     return () => {
-      document.removeEventListener("mousemove", handleGlobalMouseMove);
-      document.removeEventListener("mouseup", handleGlobalMouseUp);
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [isDraggingPanel, dragOffset]);
+  }, [isDraggingPanel, dragOffset, chatWindowSize.width, chatWindowSize.height]);
 
   const handleRefresh = () => {
     posthog.capture("timeline_refresh");
@@ -772,7 +904,6 @@ export default function Timeline() {
           onMouseDown={handleTimelineMouseDown}
           onMouseMove={handleTimelineMouseMove}
           onMouseUp={handleTimelineMouseUp}
-          onMouseLeave={handleTimelineMouseUp}
         >
           {loadedTimeRange && (
             <div className="relative h-full bg-muted rounded-md overflow-hidden">
@@ -837,14 +968,11 @@ export default function Timeline() {
               height: isAiPanelExpanded ? chatWindowSize.height : 120,
               cursor: isDraggingPanel ? "grabbing" : "default",
             }}
-            className={`bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]`}
+            className="bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]"
           >
             <div
               className="select-none cursor-grab active:cursor-grabbing"
               onMouseDown={handlePanelMouseDown}
-              onMouseMove={handlePanelMouseMove}
-              onMouseUp={handlePanelMouseUp}
-              onMouseLeave={handlePanelMouseUp}
             >
               <div className="p-4 border-b border-muted-foreground flex justify-between items-center group">
                 <div className="flex items-center gap-2 flex-1">
