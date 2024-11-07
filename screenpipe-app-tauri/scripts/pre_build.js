@@ -443,7 +443,7 @@ if (platform == 'macos') {
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.7z`
-		await $`7z e ${config.macos.ffmpegName}.7z -o ./${config.macos.ffmpegName}`
+		await $`7z e ${config.macos.ffmpegName}.7z -o${config.macos.ffmpegName}`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.7z`
 	} else {
@@ -523,11 +523,17 @@ async function installOllamaSidecar() {
 		throw new Error('Unsupported platform');
 	}
 
-
 	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
 		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
 		console.log('ollama sidecar already exists. skipping installation.');
+		return;
+	}
+
+	// For our self-hosted runners
+	if (platform === 'windows' && await fs.exists('C:\\ollama\\')) {
+		console.log('ollama sidecar already exists. skipping installation.');
+		await fs.cp('C:\\ollama\\', ollamaDir, {recursive: true});
 		return;
 	}
 

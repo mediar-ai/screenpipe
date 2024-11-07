@@ -6,7 +6,7 @@
             "ollama"
         ],
         "resources": {
-            "ffmpeg\\bin\\x64\\*": "./",
+            "ffmpeg\\bin\\*": "./",
             "ffmpeg\\lib\\*": "./",
             "onnxruntime*\\lib\\*.dll": "./",
             "lib\\ollama\\*": "./"
