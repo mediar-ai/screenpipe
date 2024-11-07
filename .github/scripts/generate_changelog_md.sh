@@ -45,7 +45,7 @@ CONTENT=$(
         },
         {
           \"role\": \"system\",
-          \"content\": \"Here is an example of it, please write it based on this version: $LAST_CHANGELOG. Be sure to write in markdown language, and avoid adding the #### **Full Changelog:** section, as this will be added manually via scripts\"
+          \"content\": \"Here is an example of it, please write it based on this version: $LAST_CHANGELOG\"
         },
         {
           \"role\": \"user\",
