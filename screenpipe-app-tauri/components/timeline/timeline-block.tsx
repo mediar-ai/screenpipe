@@ -93,9 +93,6 @@ export function TimelineBlocks({ frames, timeRange }: TimelineBlocksProps) {
     return blocks;
   }, [frames, timeRange]);
 
-  // Debug output
-  console.log("timeline blocks:", blocks);
-
   return (
     <div className="absolute inset-0 flex flex-col">
       {blocks.map((block, index) => {

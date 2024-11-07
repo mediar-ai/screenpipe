@@ -101,7 +101,6 @@ export const VideoComponent = memo(function VideoComponent({
     <div className="w-full max-w-2xl text-center">
       {isAudio ? (
         <div className="bg-gray-100 p-4 rounded-md">
-          <p className="mb-2 text-gray-700">Audio Device Recording</p>
           <audio controls className="w-full">
             <source src={mediaSrc} type="audio/mpeg" />
             Your browser does not support the audio element.
