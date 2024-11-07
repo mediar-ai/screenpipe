@@ -32,7 +32,7 @@ jobs:
       - name: Generate Changelog
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .github/scripts/generate_changelog_md.sh ${{ github.event.inputs.version }} ${{ github.event.inputs.version }}
+        run: .github/scripts/generate_changelog_md.sh ${{ github.event.inputs.version }} ${{ github.event.inputs.commit_hash }}
 
       - name: Commit and push changelog files
         if: env.CHANGELOG_GENERATED == 1
