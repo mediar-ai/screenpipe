@@ -96,7 +96,7 @@ export default function Home() {
       </div>
       <NotificationHandler />
       {showOnboarding && <Onboarding />}
-      <ChangelogDialog />
+      {/* <ChangelogDialog /> */}
       <Header />
       <div className="my-4" />
       {settings.isLoading ? (

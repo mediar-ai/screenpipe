@@ -25,6 +25,7 @@ import {
   TimelineDockIcon,
   TimelineIconsSection,
 } from "@/components/timeline/timeline-dock";
+import { AudioTranscript } from "@/components/timeline/audio-transcript";
 
 export interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -46,7 +47,7 @@ interface DeviceMetadata {
   timestamp: string;
 }
 
-interface AudioData {
+export interface AudioData {
   device_name: string;
   is_input: boolean;
   transcription: string;
@@ -202,7 +203,10 @@ export default function Timeline() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data === "keep-alive-text") return;
+        if (data === "keep-alive-text") {
+          setIsLoading(false);
+          return;
+        }
 
         if (data.timestamp && data.devices) {
           setFrames((prev) => {
@@ -248,8 +252,6 @@ export default function Timeline() {
 
       console.error("eventsource error:", error);
       setError("connection lost. retrying...");
-
-      eventSource.close();
     };
 
     eventSource.onopen = () => {
@@ -269,6 +271,8 @@ export default function Timeline() {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
+      setIsLoading(false);
+      setError(null);
     };
   }, []);
 
@@ -299,7 +303,9 @@ export default function Timeline() {
 
   const handleScroll = (e: React.WheelEvent<HTMLDivElement>) => {
     const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
-    if (isWithinAiPanel) {
+    const isWithinAudioPanel = document.querySelector('.audio-transcript-panel')?.contains(e.target as Node);
+    
+    if (isWithinAiPanel || isWithinAudioPanel) {
       return;
     }
 
@@ -656,6 +662,7 @@ export default function Timeline() {
   const handleRefresh = () => {
     posthog.capture("timeline_refresh");
 
+    window.location.reload();
     setFrames([]);
     setCurrentFrame(null);
     setCurrentIndex(0);
@@ -750,6 +757,13 @@ export default function Timeline() {
             alt="Current frame"
           />
         )}
+        {currentFrame && (
+          <AudioTranscript
+            frames={frames}
+            currentIndex={currentIndex}
+            groupingWindowMs={30000} // 30 seconds window
+          />
+        )}
       </div>
 
       <div className="w-4/5 mx-auto my-8 relative select-none">
@@ -777,10 +791,20 @@ export default function Timeline() {
 
           <div
             className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
-            style={{
-              left: `${getCurrentTimePercentage()}%`,
-            }}
-          />
+            style={{ left: `${getCurrentTimePercentage()}%` }}
+          >
+            <div className="relative -top-6 right-3 text-[10px] text-muted-foreground whitespace-nowrap">
+              {frames[currentIndex] &&
+                new Date(frames[currentIndex].timestamp).toLocaleTimeString(
+                  [],
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  }
+                )}
+            </div>
+          </div>
 
           {selectionRange && (
             <div
@@ -952,9 +976,9 @@ export default function Timeline() {
           </div>
         )}
 
-        {/* {loadedTimeRange && frames.length > 0 && (
+        {loadedTimeRange && frames.length > 0 && (
           <TimelineIconsSection blocks={frames} />
-        )} */}
+        )}
 
         <div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
           {Array(7)

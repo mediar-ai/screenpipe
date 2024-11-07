@@ -197,13 +197,13 @@ export default function Header() {
                   <Play className="mr-2 h-4 w-4" />
                   <span>show onboarding</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem
+                {/* <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={() => setShowChangelogDialog(true)}
                 >
                   <Folder className="mr-2 h-4 w-4" />
                   <span>show changelog</span>
-                </DropdownMenuItem>
+                </DropdownMenuItem> */}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
