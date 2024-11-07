@@ -1,4 +1,21 @@
-Thank you for providing the commits. Let's organize the changes for the upcoming version:\n\n### **New Features:**\n- **Added new dashboard customization options:** Tailor your dashboard to your needs with new customization features, allowing you to arrange and display data in a way that boosts productivity.\n\n### **Improvements:**\n- **Enhanced search functionality:** Improved the search algorithm to deliver more accurate results in less time, helping users find information efficiently.\n- **Optimized mobile responsiveness:** Ensured seamless user experience on mobile devices by optimizing responsiveness across various screen sizes.\n\n### **Fixes:**\n- **Resolved issue with user login:** Addressed a bug causing login errors for some users, ensuring smooth access to accounts without disruption.\n\n### **Others:**\n- **Updated terms of service:** Stay informed about the latest modifications to our terms of service for compliance and transparency.\n\n#### **Full Changelog:** [Link to full changelog](https://github.com/your-repo/compare/previous-version...upcoming-version)
+### **New Features**
+- **Intel MKL Support**: Introduced support for Intel Math Kernel Library (MKL) acceleration on macOS, Windows, and Linux, enhancing computational performance significantly.
+- **Timeline UI Revamp**: Released a new timeline user interface for improved content organization and navigation, enhancing user interaction within the app.
 
-#### **Full Changelog:** [...](https://github.com/mediar-ai/screenpipe/compare/...)
+### **Improvements**
+- **Brew Version Update**: Ensured compatibility and optimized performance by updating Brew to version 0.1.97 on x86_64 and aarch64 Apple Darwin systems.
+- **Search Enhancement**: Improved UI search functionality to handle scenarios with no audio path, simplifying content location in the application.
+
+### **Fixes**
+- **Documentation Clarification**: Addressed and fixed a documentation issue, providing users with accurate and clear guidance.
+- **CSS and Reddit Pipe Fixes**: Resolved layout consistency issues and corrected a minor bug in the Reddit pipe functionality for a smoother user experience.
+- **CI Pipeline Stability**: Enhanced stability in the continuous integration pipeline for more reliable testing and deployment processes.
+- **Endpoint JSON Parsing**: Fixed a bug affecting endpoint JSON parsing, resulting in improved data handling.
+
+### **Others**
+- **Database Enhancements**: Made the `audio_chunk_id` not nullable in the `audio_transcriptions` table for improved data consistency, and added a new endpoint to the database.
+- **Entelligence Removal**: Deprecated the entelligence feature, ensuring cleaner and more efficient app performance.
+- **Code Cleanup and Refactoring**: Conducted various code cleanup and refactoring tasks to enhance code quality and maintainability.
+
+#### **Full Changelog:** [v0.1.97...v0.1.98](https://github.com/mediar-ai/screenpipe/compare/v0.1.97...v0.1.98)
 

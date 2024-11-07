@@ -17,7 +17,7 @@ on:
         required: false
       version:
         description: "Version to set in Cargo.toml (required if commit_hash is provided)"
-        required: false
+        required: true
 
 jobs:
   generate_changelog:
@@ -32,15 +32,16 @@ jobs:
       - name: Generate Changelog
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .github/scripts/generate_changelog_md.sh
+        run: .github/scripts/generate_changelog_md.sh ${{ github.event.inputs.version }} ${{ github.event.inputs.commit_hash }}
 
       - name: Commit and push changelog files
+        if: env.CHANGELOG_GENERATED == 1
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
           git add .
-          git commit -m "docs: add changelog for ${{ env.CURRENT_RELEASE }}"
+          git commit -m "docs: add changelog for ${{ github.event.inputs.version }}"
           git pull origin main
           git push origin main
 
