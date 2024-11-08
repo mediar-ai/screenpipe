@@ -68,7 +68,6 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { Separator } from "./ui/separator";
-import { useInputHistory } from "@/lib/hooks/use-input-history";
 import { ContextUsageIndicator } from "./context-usage-indicator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatISO } from "date-fns";

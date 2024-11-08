@@ -24,8 +24,8 @@ const mkdirp = async (dir) => await fs.mkdir(dir, { recursive: true });
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	windows: {
-		ffmpegName: 'ffmpeg-7.0.2-full_build-shared',
-		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.0.2-full_build-shared.7z',
+		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
+		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
 	linux: {
@@ -317,6 +317,7 @@ if (platform == 'windows') {
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
+		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
 	}
 
 	// Setup ONNX Runtime
@@ -448,8 +449,8 @@ if (platform == 'macos') {
 
 			try {
 				if (await fs.exists('screenpipe-aarch64-apple-darwin')) {
-					// Get existing rpaths
-					const otoolOutput = await $`otool -l ./screenpipe-aarch64-apple-darwin`.catch(() => ({ stdout: '' }));
+					// Get existing rpaths but suppress detailed output
+					const otoolOutput = await $`otool -l ./screenpipe-aarch64-apple-darwin`.quiet();
 					const rpathRegex = /LC_RPATH.*?\n.*?path\s+(.*?)\s/gs;
 					const existingRpaths = [];
 					let match;
@@ -459,13 +460,9 @@ if (platform == 'macos') {
 						existingRpaths.push(match[1]);
 					}
 
-					console.log('existing rpaths:', existingRpaths);
-
-					// Remove existing rpaths
+					// Remove existing rpaths silently
 					for (const rpath of existingRpaths) {
-						await $`install_name_tool -delete_rpath "${rpath}" ./screenpipe-aarch64-apple-darwin`.catch(() => {
-							console.log(`note: couldn't delete rpath ${rpath}`);
-						});
+						await $`install_name_tool -delete_rpath "${rpath}" ./screenpipe-aarch64-apple-darwin`.quiet();
 					}
 
 					// Add the rpaths we need
@@ -478,9 +475,7 @@ if (platform == 'macos') {
 					];
 
 					for (const rpath of rpathsToAdd) {
-						await $`install_name_tool -add_rpath "${rpath}" ./screenpipe-aarch64-apple-darwin`.catch(() => {
-							console.log(`note: couldn't add rpath ${rpath}`);
-						});
+						await $`install_name_tool -add_rpath "${rpath}" ./screenpipe-aarch64-apple-darwin`.quiet();
 					}
 
 					// Update the dylib reference
@@ -498,9 +493,9 @@ if (platform == 'macos') {
 						console.error(`${dylib} not found at ${dyLibSrc}`);
 					}
 
-					console.log('verifying final configuration:');
-					await $`otool -L ./screenpipe-aarch64-apple-darwin`;
-					await $`otool -l ./screenpipe-aarch64-apple-darwin | grep -A2 LC_RPATH`;
+					// console.log('verifying final configuration:');
+					// await $`otool -L ./screenpipe-aarch64-apple-darwin`;
+					// await $`otool -l ./screenpipe-aarch64-apple-darwin | grep -A2 LC_RPATH`;
 				}
 			} catch (error) {
 				console.error('error updating dylib paths:', error);
