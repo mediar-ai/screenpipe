@@ -4,15 +4,20 @@ CHANGELOG_PUBLIC_PATH=screenpipe-app-tauri/public/CHANGELOG.md
 
 LAST_CHANGELOG=$(awk '/^#### \*\*Full Changelog:\*\*/{exit} {print}' $CHANGELOG_PUBLIC_PATH | awk '{printf "%s\\n", $0}' | sed 's/"/\\"/g')
 
+# The if else is necessary to ensure it works both locally and on cloud
+
 # Download cn binary from https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/cn_linux
 # only download it if it doesn't exist
 if ! command -v cn &> /dev/null; then
   echo "Downloading Crab Nebula binary"
-  curl -L -o /usr/bin/cn https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/cn_linux
-  chmod +x /usr/bin/cn
+  curl -L -o cn https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/cn_linux
+  chmod +x cn
+  CN_CMD=./cn
+else
+  CN_CMD=cn
 fi
 
-LAST_RELEASE=$(cn release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0]')
+LAST_RELEASE=$($CN_CMD release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0]')
 COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
 COMMIT_LAST_RELEASE=$(git log -1 --until="$COMMIT_DATE_LAST_RELEASE" --format="%H")
 
