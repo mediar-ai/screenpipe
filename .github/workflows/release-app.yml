@@ -234,11 +234,11 @@ jobs:
 
       - name: Build CLI
         shell: bash
-        # TODO: too slow
-        # env:
-        #   CARGO_PROFILE_RELEASE_LTO: "true"
-        #   CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
-        #   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+        env:
+          # Windows specific optimizations (only applied when building for Windows)
+          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'symbols' || '' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'abort' || '' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -273,15 +273,35 @@ jobs:
       - name: Free Disk Space (Windows)
         if: matrix.args == '--target x86_64-pc-windows-msvc'
         run: |
-          # Remove unnecessary Windows components
-          Get-ChildItem -Path "C:\Windows\SoftwareDistribution\Download\" -Force | Remove-Item -Force -Recurse
+          # Remove Windows defender
+          powershell -Command "Set-MpPreference -DisableRealtimeMonitoring $true"
+
+          # Aggressive cleanup
+          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Force -Recurse
           Remove-Item -Path "C:\Windows\Temp\*" -Force -Recurse
-          # Clean npm cache
+          Remove-Item -Path "C:\Windows\Prefetch\*" -Force -Recurse
+          Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Force -Recurse
+
+          # Clean development tools caches
           npm cache clean --force
-          # Clean cargo cache
           cargo cache --autoclean
-          # Remove unused Windows features
+          Remove-Item -Path "$env:USERPROFILE\.cargo\registry\cache\*" -Force -Recurse
+
+          # Clean Windows components
           dism.exe /online /cleanup-image /startcomponentcleanup /resetbase
+
+          # Display available space
+          Get-PSDrive C | Select-Object Used,Free
+
+          # Optional: Disable Windows Search and Superfetch
+          Stop-Service -Name "Windows Search" -Force
+          Stop-Service -Name "SysMain" -Force
+
+      - name: Clean NSIS temp files
+        if: matrix.args == '--target x86_64-pc-windows-msvc'
+        run: |
+          Remove-Item -Path "$env:TEMP\*.tmp" -Force -Recurse
+          Remove-Item -Path "$env:TEMP\nsis*" -Force -Recurse
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
