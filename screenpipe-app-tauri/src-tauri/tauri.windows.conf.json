@@ -6,9 +6,7 @@
             "ollama"
         ],
         "resources": {
-            "ffmpeg\\bin\\ffmpeg.exe": "./",
-            "ffmpeg\\bin\\ffprobe.exe": "./",
-            "ffmpeg\\bin\\*.dll": "./",
+            "ffmpeg\\bin\\x64\\*": "./",
             "ffmpeg\\lib\\*": "./",
             "onnxruntime*\\lib\\onnxruntime.dll": "./",
             "onnxruntime*\\lib\\onnxruntime_providers_cuda.dll": "./",
