@@ -169,6 +169,8 @@ pub fn get_speaker(
 ) -> String {
     let search_threshold = 0.5;
     let embedding_result: Vec<f32> = embedding_extractor.compute(samples).unwrap().collect();
+    // TODO: remove this
+    println!("embedding_length: {}", embedding_result.len());
 
     embedding_manager
         .search_speaker(embedding_result.clone(), search_threshold)
