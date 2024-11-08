@@ -416,9 +416,7 @@ pub async fn stt(
     let transcription: Result<String> =
         if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
             // Deepgram implementation
-            let api_key = deepgram_api_key
-                .clone()
-                .unwrap_or_else(get_deepgram_api_key);
+            let api_key = deepgram_api_key.unwrap();
             info!(
                 "device: {}, using deepgram api key: {}...",
                 audio_input.device,
