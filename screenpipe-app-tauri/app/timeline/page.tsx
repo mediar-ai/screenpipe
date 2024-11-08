@@ -4,7 +4,7 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
 import posthog from "posthog-js";
 import { TimelineBlocks } from "@/components/timeline/timeline-block";
-import { TimelineIconsSection } from "@/components/timeline/timeline-dock";
+import { TimelineIconsSection } from "@/components/timeline/timeline-dock-section";
 import { AudioTranscript } from "@/components/timeline/audio-transcript";
 import { AIPanel } from "@/components/timeline/ai-panel";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
@@ -219,25 +219,21 @@ export default function Timeline() {
   );
 
   const timePercentage = useMemo(() => {
-    if (
-      !currentFrame ||
-      !loadedTimeRange ||
-      !frames.length ||
-      currentIndex >= frames.length
-    )
+    if (!frames.length || currentIndex >= frames.length || !loadedTimeRange) {
       return 0;
+    }
 
-    const frameTime = new Date(
-      currentFrame.metadata.timestamp || frames[currentIndex].timestamp
-    );
+    const currentFrame = frames[currentIndex];
+    if (!currentFrame?.timestamp) {
+      return 0;
+    }
 
-    const totalVisibleMilliseconds =
-      loadedTimeRange.end.getTime() - loadedTimeRange.start.getTime();
-    const currentMilliseconds =
-      frameTime.getTime() - loadedTimeRange.start.getTime();
+    const frameTime = new Date(currentFrame.timestamp);
+    const totalVisibleMilliseconds = loadedTimeRange.end.getTime() - loadedTimeRange.start.getTime();
+    const currentMilliseconds = frameTime.getTime() - loadedTimeRange.start.getTime();
 
     return (currentMilliseconds / totalVisibleMilliseconds) * 100;
-  }, [currentFrame, loadedTimeRange, currentIndex, frames]);
+  }, [currentIndex, frames, loadedTimeRange]);
 
   useEffect(() => {
     const preventScroll = (e: WheelEvent) => {
@@ -333,18 +329,19 @@ export default function Timeline() {
 
         <div className="w-4/5 mx-auto my-8 relative select-none">
           <div className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative">
-            <div className="relative h-full bg-muted rounded-md overflow-hidden">
+            {/* <div className="relative h-full bg-muted rounded-md overflow-hidden">
               {loadedTimeRange && (
                 <TimelineBlocks frames={frames} timeRange={loadedTimeRange!} />
               )}
-            </div>
+            </div> */}
 
             <div
               className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
               style={{ left: `${timePercentage}%` }}
             >
               <div className="relative -top-6 right-3 text-[10px] text-muted-foreground whitespace-nowrap">
-                {frames[currentIndex] &&
+                {currentIndex < frames.length &&
+                  frames[currentIndex] &&
                   frames[currentIndex].timestamp &&
                   (() => {
                     try {

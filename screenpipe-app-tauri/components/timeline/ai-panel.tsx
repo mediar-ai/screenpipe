@@ -63,7 +63,7 @@ export function AIPanel({
   const aiPanelRef = useRef<HTMLDivElement>(null);
   const resizerRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
-  const { selectionRange } = useTimelineSelection();
+  const { selectionRange, setSelectionRange } = useTimelineSelection();
 
   useEffect(() => {
     setOsType(platform());
@@ -226,6 +226,7 @@ export function AIPanel({
     setChatMessages([]);
     setAiInput("");
     onClose();
+    setSelectionRange(null);
   };
 
   if (!selectionRange) return null;
