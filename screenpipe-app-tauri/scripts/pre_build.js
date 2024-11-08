@@ -688,7 +688,8 @@ async function installOllamaSidecar() {
 				'ggml_cuda_v11.dll',
 				'rocblas',
 				'rocblas.dll',
-				'ggml_rocm.dll'
+				'ggml_rocm.dll',
+				'runners/rocm_v6.1'
 			];
 
 			for (const lib of oldLibs) {
