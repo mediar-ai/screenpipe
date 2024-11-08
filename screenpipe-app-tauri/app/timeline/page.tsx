@@ -3,7 +3,6 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
 import posthog from "posthog-js";
-import { TimelineBlocks } from "@/components/timeline/timeline-block";
 import { TimelineIconsSection } from "@/components/timeline/timeline-dock-section";
 import { AudioTranscript } from "@/components/timeline/audio-transcript";
 import { AIPanel } from "@/components/timeline/ai-panel";
