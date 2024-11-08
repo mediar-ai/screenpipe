@@ -684,7 +684,13 @@ async function installOllamaSidecar() {
 				'rocblas',
 				'rocblas.dll',
 				'ggml_rocm.dll',
-				'runners/rocm_v6.1'
+				'runners/rocm_v6.1',
+
+				// just delete cuda files bcs build broken - Nvidia users will have to just their own ollama
+				'cublas64_12.dll',
+				'cublasLt64_12.dll',
+				'cudart64_120.dll',
+				'ggml_cuda_v12.dll',
 			];
 
 			for (const lib of oldLibs) {
