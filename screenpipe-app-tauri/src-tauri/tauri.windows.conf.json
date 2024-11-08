@@ -16,8 +16,7 @@
             "lib\\ollama\\cublas64_12.dll": "./",
             "lib\\ollama\\cublasLt64_12.dll": "./",
             "lib\\ollama\\cudart64_12.dll": "./",
-            "lib\\ollama\\runners\\cuda_v12\\**": "./runners/cuda_v12/",
-            "lib\\ollama\\runners\\cpu_avx2\\**": "./runners/cpu_avx2/"
+            "lib\\ollama\\runners\\**": "./runners/"
         }
     }
 }
