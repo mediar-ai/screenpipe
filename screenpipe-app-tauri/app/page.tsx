@@ -72,19 +72,19 @@ export default function Home() {
   };
 
   return (
-    <SidebarProvider defaultOpen={false}>
-      {settings.aiUrl && (
-        <AppSidebar
-          searches={searches}
-          currentSearchId={currentSearchId}
-          onSelectSearch={setCurrentSearchId}
-          onDeleteSearch={deleteSearch}
-        />
-      )}
-      <SidebarInset>
+    // <SidebarProvider defaultOpen={false}>
+    //   {settings.aiUrl && (
+    //     <AppSidebar
+    //       searches={searches}
+    //       currentSearchId={currentSearchId}
+    //       onSelectSearch={setCurrentSearchId}
+    //       onDeleteSearch={deleteSearch}
+    //     />
+    //   )}
+    //   <SidebarInset>
         <div className="flex flex-col items-center flex-1">
           <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
-            <SidebarTrigger className="h-8 w-8" />
+            {/* <SidebarTrigger className="h-8 w-8" /> */}
             <Button
               variant="ghost"
               size="icon"
@@ -176,7 +176,7 @@ export default function Home() {
             </div>
           )}
         </div>
-      </SidebarInset>
-    </SidebarProvider>
+    //   </SidebarInset>
+    // </SidebarProvider>
   );
 }

@@ -3,6 +3,7 @@ import { platform } from "@tauri-apps/plugin-os";
 import { invoke } from "@tauri-apps/api/core";
 import { StreamTimeSeriesResponse } from "@/app/timeline/page";
 import { stringToColor } from "@/lib/utils";
+import { motion, useAnimation } from "framer-motion";
 
 interface ProcessedBlock {
   appName: string;
@@ -17,6 +18,7 @@ export function TimelineIconsSection({
   blocks: StreamTimeSeriesResponse[];
 }) {
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   // Get the visible time range
   const timeRange = useMemo(() => {
@@ -153,23 +155,38 @@ export function TimelineIconsSection({
   }, [processedBlocks, loadAppIcon]);
 
   return (
-    <div className="absolute -top-8 inset-x-0 pointer-events-none h-8">
+    <div className="absolute -top-8 inset-x-0 h-8">
       {processedBlocks.map((block, i) => {
         const bgColor = stringToColor(block.appName);
+        
         return (
-          <div
+          <motion.div
             key={`${block.appName}-${i}`}
-            className="absolute top-0 h-full w-full"
+            className="absolute top-0 h-full pointer-events-auto cursor-pointer"
             style={{
               left: `${block.percentThroughDay}%`,
-              transform: "translateX(-50%)",
+              transform: 'translateX(-50%)',
+              border: '1px solid red',
+              zIndex: 50,
+            }}
+            onMouseEnter={() => {
+              console.log('hover on:', block.appName);
+            }}
+            whileHover={{
+              scale: 1.5,
+              backgroundColor: 'red',
+            }}
+            transition={{
+              type: "spring",
+              stiffness: 300,
+              damping: 30
             }}
           >
             {block.iconSrc ? (
-              <div
+              <motion.div
                 className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
                 style={{
-                  backgroundColor: `${bgColor}40`, // 40 is for 25% opacity
+                  backgroundColor: `${bgColor}40`,
                   padding: "2px",
                 }}
               >
@@ -180,14 +197,14 @@ export function TimelineIconsSection({
                   loading="lazy"
                   decoding="async"
                 />
-              </div>
+              </motion.div>
             ) : (
-              <div
+              <motion.div
                 className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
                 style={{ backgroundColor: bgColor }}
               />
             )}
-          </div>
+          </motion.div>
         );
       })}
     </div>
