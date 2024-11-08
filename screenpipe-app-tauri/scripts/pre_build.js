@@ -349,6 +349,7 @@ if (platform == 'windows') {
 		'ffmpeg/doc',
 		'ffmpeg/presets',
 		'ffmpeg/licenses',
+		'ffmpeg/include',
 		path.join(onnxRuntimeName, 'docs'),
 		path.join(onnxRuntimeName, 'examples'),
 		path.join(onnxRuntimeName, 'LICENSE'),
@@ -628,32 +629,6 @@ async function installOllamaSidecar() {
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
 		console.log('ollama sidecar already exists. skipping installation.');
 
-		// Remove older library versions to save storage
-		const libDir = path.join(ollamaDir, 'lib', 'ollama');
-		const oldLibs = [
-			'cublas64_11.dll',
-			'cublasLt64_11.dll',
-			'cudart64_110.dll',
-			'ggml_cuda_v11.dll',
-			'rocblas',
-			'rocblas.dll',
-			'ggml_rocm.dll'
-		];
-
-		for (const lib of oldLibs) {
-			try {
-				const libPath = path.join(libDir, lib);
-				const stat = await fs.stat(libPath);
-				if (stat.isDirectory()) {
-					await fs.rm(libPath, { recursive: true, force: true });
-				} else {
-					await fs.unlink(libPath);
-				}
-				console.log(`removed old library: ${lib}`);
-			} catch (error) {
-				console.warn(`failed to remove ${lib}:`, error.message);
-			}
-		}
 
 		return;
 	}
