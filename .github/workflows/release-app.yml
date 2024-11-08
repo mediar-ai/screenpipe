@@ -42,6 +42,7 @@ jobs:
       - name: Generate Changelog
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CN_API_KEY: ${{ secrets.CN_API_KEY }}
         run: .github/scripts/generate_changelog_md.sh ${{ env.VERSION }} ${{ github.event.inputs.commit_hash }}
 
       - name: Commit and push changelog files
