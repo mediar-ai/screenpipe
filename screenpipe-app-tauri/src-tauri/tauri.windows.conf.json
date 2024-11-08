@@ -13,10 +13,7 @@
             "onnxruntime*\\lib\\onnxruntime.dll": "./",
             "onnxruntime*\\lib\\onnxruntime_providers_cuda.dll": "./",
             "onnxruntime*\\lib\\onnxruntime_providers_shared.dll": "./",
-            "lib\\ollama\\cublas64_12.dll": "./",
-            "lib\\ollama\\cublasLt64_12.dll": "./",
-            "lib\\ollama\\cudart64_12.dll": "./",
-            "lib\\ollama\\runners\\**": "./runners/"
+            "lib\\ollama\\*": "./"
         }
     }
 }
