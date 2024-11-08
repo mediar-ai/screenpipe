@@ -273,29 +273,15 @@ jobs:
       - name: Free Disk Space (Windows)
         if: matrix.args == '--target x86_64-pc-windows-msvc'
         run: |
-          # Remove Windows defender
-          powershell -Command "Set-MpPreference -DisableRealtimeMonitoring $true"
-
-          # Aggressive cleanup
-          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Force -Recurse
+          # Remove unnecessary Windows components
+          Get-ChildItem -Path "C:\Windows\SoftwareDistribution\Download\" -Force | Remove-Item -Force -Recurse
           Remove-Item -Path "C:\Windows\Temp\*" -Force -Recurse
-          Remove-Item -Path "C:\Windows\Prefetch\*" -Force -Recurse
-          Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Force -Recurse
-
-          # Clean development tools caches
+          # Clean npm cache
           npm cache clean --force
+          # Clean cargo cache
           cargo cache --autoclean
-          Remove-Item -Path "$env:USERPROFILE\.cargo\registry\cache\*" -Force -Recurse
-
-          # Clean Windows components
+          # Remove unused Windows features
           dism.exe /online /cleanup-image /startcomponentcleanup /resetbase
-
-          # Display available space
-          Get-PSDrive C | Select-Object Used,Free
-
-          # Optional: Disable Windows Search and Superfetch
-          Stop-Service -Name "Windows Search" -Force
-          Stop-Service -Name "SysMain" -Force
 
       - name: Clean NSIS temp files
         if: matrix.args == '--target x86_64-pc-windows-msvc'
