@@ -35,6 +35,7 @@ import {
   Square,
   Settings,
   Clock,
+  Check,
 } from "lucide-react";
 import { useToast } from "./ui/use-toast";
 import posthog from "posthog-js";
@@ -271,6 +272,9 @@ export function SearchChat({
     audio: false,
     ui: false,
   });
+
+  // Add new state near the top with other state declarations
+  const [hideDeselected, setHideDeselected] = useState(false);
 
   // Update content type when checkboxes change
   const handleContentTypeChange = (type: "ocr" | "audio" | "ui") => {
@@ -758,177 +762,179 @@ export function SearchChat({
       return null;
     }
 
-    return results
-      .filter((item) => item && item.type)
-      .map((item, index) => (
-        <motion.div
-          key={index}
-          className="flex items-center mb-4 relative pl-8"
-          onHoverStart={() => setHoveredResult(index)}
-          onHoverEnd={() => setHoveredResult(null)}
-        >
-          <AnimatePresence>
-            {hoveredResult === index && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="absolute left-0 top-1/2 transform -translate-y-1/2"
-              >
-                <Checkbox
-                  checked={selectedResults.has(index)}
-                  onCheckedChange={() => handleResultSelection(index)}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <Card className="w-full">
-            <CardContent className="p-4">
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value={`item-${index}`}>
-                  <AccordionTrigger className="flex items-center">
-                    <div className="flex items-center w-full">
-                      <Badge className="mr-2">{item.type}</Badge>
-                    </div>
-                    <span className="flex-grow text-center truncate w-full">
-                      {item.type === "OCR" &&
-                        item.content.text.substring(0, 50)}
-                      {item.type === "Audio" &&
-                        item.content.transcription.substring(0, 50)}
-                      {item.type === "FTS" &&
-                        item.content.matched_text.substring(0, 50)}
-                      {item.type === "UI" && item.content.text.substring(0, 50)}
-                      ...
+    // First filter results based on hideDeselected setting
+    const visibleResults = results
+      .map((item, index) => ({ item, originalIndex: index }))
+      .filter(({ originalIndex }) => !hideDeselected || selectedResults.has(originalIndex));
+
+    return visibleResults.map(({ item, originalIndex }) => (
+      <motion.div
+        key={originalIndex}
+        className="flex items-center mb-4 relative pl-8"
+      >
+        <div className="absolute left-0 top-1/2 transform -translate-y-1/2">
+          <Checkbox
+            checked={selectedResults.has(originalIndex)}
+            onCheckedChange={() => handleResultSelection(originalIndex)}
+          />
+        </div>
+        <Card className="w-full">
+          <CardContent className="p-4">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value={`item-${originalIndex}`}>
+                <AccordionTrigger className="flex flex-col w-full py-2">
+                  {/* Main content */}
+                  <div className="flex w-full items-center gap-2">
+                    <span className="text-left truncate">
+                      {item.type === "OCR" && highlightKeyword(
+                        getContextAroundKeyword(item.content.text, query),
+                        query
+                      )}
+                      {item.type === "Audio" && highlightKeyword(
+                        getContextAroundKeyword(item.content.transcription, query),
+                        query
+                      )}
+                      {item.type === "FTS" && highlightKeyword(
+                        getContextAroundKeyword(item.content.matched_text, query),
+                        query
+                      )}
+                      {item.type === "UI" && highlightKeyword(
+                        getContextAroundKeyword(item.content.text, query),
+                        query
+                      )}
                     </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    {item.type === "UI" && (
-                      <>
-                        <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
-                          <p className="whitespace-pre-line">
-                            {highlightKeyword(item.content.text, query)}
-                          </p>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {item.type === "UI" && (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="whitespace-pre-line">
+                          {highlightKeyword(item.content.text, query)}
+                        </p>
+                      </div>
+                      <div className="flex justify-center mt-4">
+                        <VideoComponent filePath={item.content.file_path} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {item.content.app_name && (
+                          <Badge
+                            className="text-xs cursor-pointer"
+                            onClick={() =>
+                              handleBadgeClick(item.content.app_name, "app")
+                            }
+                          >
+                            {item.content.app_name}
+                          </Badge>
+                        )}
+                        {item.content.window_name && (
+                          <Badge
+                            className="text-xs cursor-pointer"
+                            onClick={() =>
+                              handleBadgeClick(
+                                item.content.window_name,
+                                "window"
+                              )
+                            }
+                          >
+                            {item.content.window_name}
+                          </Badge>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {item.type === "OCR" && (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="whitespace-pre-line">
+                          {highlightKeyword(item.content.text, query)}
+                        </p>
+                      </div>
+                      <div className="flex justify-center mt-4">
+                        <VideoComponent filePath={item.content.file_path} />
+                      </div>
+                      {includeFrames && item.content.frame && (
+                        <div className="mt-2 flex items-center">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <img
+                                src={`data:image/jpeg;base64,${item.content.frame}`}
+                                alt="Frame"
+                                className="w-24 h-auto cursor-pointer"
+                              />
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[80vw]">
+                              <img
+                                src={`data:image/jpeg;base64,${item.content.frame}`}
+                                alt="Frame"
+                                className="w-full h-auto"
+                              />
+                            </DialogContent>
+                          </Dialog>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>
+                                  this is the frame where the text appeared
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
+                      )}
+                    </>
+                  )}
+                  {item.type === "Audio" && (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="whitespace-pre-line">
+                          {highlightKeyword(
+                            item.content.transcription,
+                            query
+                          )}
+                        </p>
+                      </div>
+                      {item.content.file_path &&
+                      item.content.file_path.trim() !== "" ? (
                         <div className="flex justify-center mt-4">
                           <VideoComponent filePath={item.content.file_path} />
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
-                          {item.content.app_name && (
-                            <Badge
-                              className="text-xs cursor-pointer"
-                              onClick={() =>
-                                handleBadgeClick(item.content.app_name, "app")
-                              }
-                            >
-                              {item.content.app_name}
-                            </Badge>
-                          )}
-                          {item.content.window_name && (
-                            <Badge
-                              className="text-xs cursor-pointer"
-                              onClick={() =>
-                                handleBadgeClick(
-                                  item.content.window_name,
-                                  "window"
-                                )
-                              }
-                            >
-                              {item.content.window_name}
-                            </Badge>
-                          )}
-                        </div>
-                      </>
-                    )}
-                    {item.type === "OCR" && (
-                      <>
-                        <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
-                          <p className="whitespace-pre-line">
-                            {highlightKeyword(item.content.text, query)}
-                          </p>
-                        </div>
-                        <div className="flex justify-center mt-4">
-                          <VideoComponent filePath={item.content.file_path} />
-                        </div>
-                        {includeFrames && item.content.frame && (
-                          <div className="mt-2 flex items-center">
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <img
-                                  src={`data:image/jpeg;base64,${item.content.frame}`}
-                                  alt="Frame"
-                                  className="w-24 h-auto cursor-pointer"
-                                />
-                              </DialogTrigger>
-                              <DialogContent className="sm:max-w-[80vw]">
-                                <img
-                                  src={`data:image/jpeg;base64,${item.content.frame}`}
-                                  alt="Frame"
-                                  className="w-full h-auto"
-                                />
-                              </DialogContent>
-                            </Dialog>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>
-                                    this is the frame where the text appeared
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {item.type === "Audio" && (
-                      <>
-                        <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
-                          <p className="whitespace-pre-line">
-                            {highlightKeyword(
-                              item.content.transcription,
-                              query
-                            )}
-                          </p>
-                        </div>
-                        {item.content.file_path &&
-                        item.content.file_path.trim() !== "" ? (
-                          <div className="flex justify-center mt-4">
-                            <VideoComponent filePath={item.content.file_path} />
-                          </div>
-                        ) : (
-                          <p className="text-gray-500 italic mt-2">
-                            no file path available for this audio.
+                      ) : (
+                        <p className="text-gray-500 italic mt-2">
+                          no file path available for this audio.
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {item.type === "FTS" && (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="whitespace-pre-line">
+                          {highlightKeyword(item.content.matched_text, query)}
+                        </p>
+                        {item.content.original_frame_text && (
+                          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">
+                            original: {item.content.original_frame_text}
                           </p>
                         )}
-                      </>
-                    )}
-                    {item.type === "FTS" && (
-                      <>
-                        <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
-                          <p className="whitespace-pre-line">
-                            {highlightKeyword(item.content.matched_text, query)}
-                          </p>
-                          {item.content.original_frame_text && (
-                            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">
-                              original: {item.content.original_frame_text}
-                            </p>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <p className="text-xs text-gray-400">
-                  {new Date(item.content.timestamp).toLocaleString()}{" "}
-                  {/* Display local time */}
-                </p>
-                {item.type === "OCR" && item.content.app_name && (
+                      </div>
+                    </>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+            <Badge variant="outline" className="text-xs">{item.type}</Badge>
+            <p className="text-xs text-gray-400">
+                {new Date(item.content.timestamp).toLocaleString()}{" "}
+                {/* Display local time */}
+              </p>
+              {item.type === "OCR" && item.content.app_name && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">app:</span>
                   <Badge
                     className="text-xs cursor-pointer"
                     onClick={() =>
@@ -937,8 +943,11 @@ export function SearchChat({
                   >
                     {item.content.app_name}
                   </Badge>
-                )}
-                {item.type === "OCR" && item.content.window_name && (
+                </div>
+              )}
+              {item.type === "OCR" && item.content.window_name && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">window:</span>
                   <Badge
                     className="text-xs cursor-pointer"
                     onClick={() =>
@@ -947,18 +956,19 @@ export function SearchChat({
                   >
                     {item.content.window_name}
                   </Badge>
-                )}
-                {item.content.tags &&
-                  item.content.tags.map((tag, index) => (
-                    <Badge key={index} className="text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      ));
+                </div>
+              )}
+              {item.content.tags &&
+                item.content.tags.map((tag, index) => (
+                  <Badge key={index} className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    ));
   };
 
   // Add effect to restore search when currentSearchId changes
@@ -1002,7 +1012,7 @@ export function SearchChat({
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
       {/* Content Type Checkboxes and Code Button */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-1">
             <Checkbox
               id="audio-type"
@@ -1108,6 +1118,11 @@ export function SearchChat({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleSearch(0);
+            }
+          }}
           placeholder="keyword search, you may leave it blank"
           className="w-[350px]"
         />
@@ -1206,7 +1221,7 @@ export function SearchChat({
         </div>
       </div>
 
-      <div className="flex mt-8 space-x-2 justify-center">
+      <div className="flex mt-4 space-x-2 justify-center">
         <Badge
           variant="outline"
           className="cursor-pointer hover:bg-secondary"
@@ -1230,6 +1245,22 @@ export function SearchChat({
         >
           <Clock className="mr-2 h-4 w-4" />
           last 24h
+        </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(7 * 24 * 60)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 7d
+        </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(30 * 24 * 60)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 30d
         </Badge>
       </div>
 
@@ -1417,50 +1448,62 @@ export function SearchChat({
       {results.length > 0 && (
         <div className="flex flex-col space-y-4 mb-4 my-8">
           <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="select-all"
-                checked={selectAll}
-                onCheckedChange={handleSelectAll}
-              />
-              <Label htmlFor="select-all">select all results</Label>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="select-all"
+                  checked={selectAll}
+                  onCheckedChange={handleSelectAll}
+                />
+                <Label htmlFor="select-all">select all results</Label>
+              </div>
+              
+              <Separator orientation="vertical" className="h-4" />
+              
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="hide-deselected"
+                  checked={hideDeselected}
+                  onCheckedChange={setHideDeselected}
+                />
+                <Label htmlFor="hide-deselected">hide unselected</Label>
+              </div>
             </div>
+
             <div className="flex items-center space-x-2">
-              <Label htmlFor="similarity-threshold" className="ml-4">
-                similarity threshold: {similarityThreshold.toFixed(2)}
-              </Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSimilarityThreshold(similarityThreshold === 0.5 ? 1 : 0.5);
+                  if (similarityThreshold === 0.5) {
+                    setSelectedResults(new Set(results.map((_, index) => index)));
+                    setSelectAll(true);
+                  }
+                }}
+                disabled={isFiltering}
+                className="flex items-center gap-2 disabled:opacity-100"
+              >
+                {isFiltering ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : similarityThreshold === 0.5 ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Layers className="h-4 w-4" />
+                )}
+                {similarityThreshold === 0.5 ? "duplicates removed" : "remove duplicates"}
+              </Button>
+
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>
-                      adjust this slider to unselect similar results. lower
-                      values mean stricter filtering.
-                    </p>
+                    <p>automatically unselect similar or duplicate results</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <div className="relative w-64">
-                <div className="flex items-center space-x-2">
-                  <Slider
-                    id="similarity-threshold"
-                    min={0.5}
-                    max={1}
-                    step={0.01}
-                    value={[similarityThreshold]}
-                    onValueChange={(value) => setSimilarityThreshold(value[0])}
-                    className={
-                      isFiltering ? "opacity-50 cursor-not-allowed" : ""
-                    }
-                    disabled={isFiltering}
-                  />
-                  {isFiltering && (
-                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1503,9 +1546,19 @@ export function SearchChat({
           >
             <form
               onSubmit={handleFloatingInputSubmit}
-              className="flex flex-col space-y-2 bg-white shadow-lg rounded-lg overflow-hidden p-4"
+              className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
             >
-              <div className="flex items-center space-x-2">
+              <div className="relative flex-grow flex items-center space-x-1">
+                <Input
+                  ref={floatingInputRef}
+                  type="text"
+                  placeholder="ask a question about the results..."
+                  value={floatingInput}
+                  disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
+                  onChange={(e) => setFloatingInput(e.target.value)}
+                  className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
+                />
+
                 <Select
                   value={selectedAgent.id}
                   onValueChange={(value) =>
@@ -1514,7 +1567,7 @@ export function SearchChat({
                     )
                   }
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-[170px] h-12">
                     <SelectValue placeholder="select agent" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1525,6 +1578,7 @@ export function SearchChat({
                     ))}
                   </SelectContent>
                 </Select>
+
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1535,26 +1589,11 @@ export function SearchChat({
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              </div>
 
-              <div className="relative flex-grow flex items-center space-x-2">
-                <Input
-                  ref={floatingInputRef}
-                  type="text"
-                  placeholder="ask a question about the results..."
-                  value={floatingInput}
-                  disabled={
-                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
-                  }
-                  onChange={(e) => setFloatingInput(e.target.value)}
-                  className="w-full h-12 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border-b transition-all duration-200 pr-10"
-                />
                 <Button
                   type="submit"
                   className="w-12"
-                  disabled={
-                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
-                  }
+                  disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
                 >
                   {isStreaming ? (
                     <Square className="h-4 w-4" />
@@ -1562,6 +1601,7 @@ export function SearchChat({
                     <Send className="h-4 w-4" />
                   )}
                 </Button>
+
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1575,6 +1615,21 @@ export function SearchChat({
                         {calculateSelectedContentLength() > MAX_CONTENT_LENGTH
                           ? `selected content exceeds maximum allowed: ${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters. unselect some items to use AI.`
                           : `${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters used for AI message`}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-muted-foreground ml-1 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-sm">
+                        ai models can only process a limited amount of text at once.<br />
+                        this circle shows how much of that limit you arere using.<br />
+                        ! the exclamation mark indicates when you exceed the limit.
                       </p>
                     </TooltipContent>
                   </Tooltip>

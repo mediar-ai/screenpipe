@@ -29,18 +29,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get version from Cargo.toml if not provided
+        id: get_version
+        run: |
+          if [ -z "${{ github.event.inputs.version }}" ]; then
+            VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+          else
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          fi
+
       - name: Generate Changelog
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .github/scripts/generate_changelog_md.sh
+        run: .github/scripts/generate_changelog_md.sh ${{ env.VERSION }} ${{ github.event.inputs.commit_hash }}
 
       - name: Commit and push changelog files
+        if: env.CHANGELOG_GENERATED == 1
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
           git add .
-          git commit -m "docs: add changelog for ${{ env.CURRENT_RELEASE }}"
+          git commit -m "docs: add changelog for ${{ env.VERSION }}"
           git pull origin main
           git push origin main
 
@@ -223,11 +234,11 @@ jobs:
 
       - name: Build CLI
         shell: bash
-        # TODO: too slow
-        # env:
-        #   CARGO_PROFILE_RELEASE_LTO: "true"
-        #   CARGO_PROFILE_RELEASE_OPT_LEVEL: "z"
-        #   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+        env:
+          # Windows specific optimizations (only applied when building for Windows)
+          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -259,6 +270,19 @@ jobs:
           docker-images: true
           swap-storage: true
 
+      - name: Free Disk Space (Windows)
+        if: matrix.args == '--target x86_64-pc-windows-msvc'
+        run: |
+          # Remove unnecessary Windows components
+          Get-ChildItem -Path "C:\Windows\SoftwareDistribution\Download\" -Force | Remove-Item -Force -Recurse
+          Remove-Item -Path "C:\Windows\Temp\*" -Force -Recurse
+          # Clean npm cache
+          npm cache clean --force
+          # Clean cargo cache
+          cargo cache --autoclean
+          # Remove unused Windows features
+          dism.exe /online /cleanup-image /startcomponentcleanup /resetbase
+
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
@@ -284,7 +308,12 @@ jobs:
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
           # Enable incremental compilation for Windows
-          CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '1' || '0' }}
+          CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
+          # Windows specific optimizations (only applied when building for Windows)
+          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
+          RUSTFLAGS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"

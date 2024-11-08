@@ -6,10 +6,18 @@
             "ollama"
         ],
         "resources": {
-            "ffmpeg\\bin\\*": "./",
+            "ffmpeg\\bin\\ffmpeg.exe": "./",
+            "ffmpeg\\bin\\ffprobe.exe": "./",
+            "ffmpeg\\bin\\*.dll": "./",
             "ffmpeg\\lib\\*": "./",
-            "onnxruntime*\\lib\\*.dll": "./",
-            "lib\\ollama\\*": "./"
+            "onnxruntime*\\lib\\onnxruntime.dll": "./",
+            "onnxruntime*\\lib\\onnxruntime_providers_cuda.dll": "./",
+            "onnxruntime*\\lib\\onnxruntime_providers_shared.dll": "./",
+            "lib\\ollama\\cublas64_12.dll": "./",
+            "lib\\ollama\\cublasLt64_12.dll": "./",
+            "lib\\ollama\\cudart64_12.dll": "./",
+            "lib\\ollama\\runners\\cuda_v12\\**": "./runners/cuda_v12/",
+            "lib\\ollama\\runners\\cpu_avx2\\**": "./runners/cpu_avx2/"
         }
     }
 }

@@ -115,9 +115,27 @@ export default function Home() {
         </div>
       ) : settings.aiUrl ? (
         <>
-          <h1 className="text-2xl font-bold text-center mb-12">
-            where pixels become magic
-          </h1>
+          <div className="mb-8 text-center">
+            <h1 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-3">
+              <span className="flex items-center gap-1">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">1</span>
+                search for a keyword
+              </span>
+              <span className="text-gray-400">→</span>
+              <span className="flex items-center gap-1">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">2</span>
+                filter results
+              </span>
+              <span className="text-gray-400">→</span>
+              <span className="flex items-center gap-1">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">3</span>
+                ask AI a question
+              </span>
+            </h1>
+            <p className="text-xl text-muted-foreground -mt-0">
+              where pixels become magic
+            </p>
+          </div> 
           <SearchChat
             currentSearchId={currentSearchId}
             onAddSearch={addSearch}

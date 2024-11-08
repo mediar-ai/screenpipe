@@ -1,10 +1,7 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { platform } from "@tauri-apps/plugin-os";
-import { invoke } from "@tauri-apps/api/core";
 import { debounce } from "lodash";
-import { StreamTimeSeriesResponse } from "@/app/timeline/page";
 
 interface TimelineDockProps {
   children: React.ReactNode;
@@ -101,15 +98,15 @@ export const TimelineDockIcon = React.memo(function TimelineDockIcon({
     // Calculate distance as percentage difference
     const distanceFromMouse = Math.abs(mousePosition - iconPosition);
 
-    if (distanceFromMouse < 5) {
-      // Reduced distance threshold to 5%
+    if (distanceFromMouse < 15) {
+      // Increased distance threshold to 15%
       scale = Math.max(
         1,
-        magnification - (distanceFromMouse / 5) * magnification
+        magnification - (distanceFromMouse / 15) * (magnification - 1)
       );
 
-      spacing = scale > 1 ? 2 * (1 - distanceFromMouse / 5) : 0;
-      isClosest = distanceFromMouse < 2; // Show tooltip when within 2%
+      spacing = scale > 1 ? 4 * (1 - distanceFromMouse / 15) : 0;
+      isClosest = distanceFromMouse < 5; // Increased tooltip threshold to 5%
     }
   }
 
@@ -157,143 +154,3 @@ export const TimelineDockIcon = React.memo(function TimelineDockIcon({
     </motion.div>
   );
 });
-
-interface ProcessedBlock {
-  appName: string;
-  percentThroughDay: number;
-  timestamp: Date;
-  iconSrc?: string;
-}
-
-export function TimelineIconsSection({
-  blocks,
-}: {
-  blocks: StreamTimeSeriesResponse[];
-}) {
-  const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
-
-  // Memoize significant blocks calculation
-  const significantBlocks = useMemo(
-    () =>
-      blocks.filter((block) => {
-        return block.devices.every((device) => device.metadata.app_name);
-      }),
-    [blocks]
-  );
-
-  // Get the visible time range
-  const timeRange = useMemo(() => {
-    if (blocks.length === 0) return null;
-    const startTime = new Date(blocks[blocks.length - 1].timestamp);
-    const endTime = new Date(blocks[0].timestamp);
-    return { start: startTime, end: endTime };
-  }, [blocks]);
-
-  // Memoize processed blocks with position calculations
-  const processedBlocks = useMemo<ProcessedBlock[]>(() => {
-    if (!timeRange) return [];
-
-    const totalRange = timeRange.end.getTime() - timeRange.start.getTime();
-
-    return (
-      significantBlocks
-        .map((block) => {
-          const appName = block.devices.find(
-            (device) => device.metadata.app_name
-          )?.metadata.app_name!;
-          const blockTime = new Date(block.timestamp);
-
-          // Calculate percentage based on visible time range
-          const percentPosition =
-            ((blockTime.getTime() - timeRange.start.getTime()) / totalRange) *
-            100;
-
-          return {
-            appName,
-            percentThroughDay: percentPosition,
-            timestamp: blockTime,
-            iconSrc: iconCache[appName],
-          };
-        })
-        // Filter out blocks that are too close to each other (less than 1% apart)
-        .filter((block, index, array) => {
-          if (index === 0) return true;
-          const prevBlock = array[index - 1];
-          const minDuration = 0.4; // 1% minimum gap between icons
-          return (
-            Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) >
-            minDuration
-          );
-        })
-    );
-  }, [significantBlocks, iconCache, timeRange]);
-
-  const loadAppIcon = useCallback(
-    async (appName: string, appPath?: string) => {
-      try {
-        // Check platform first to avoid unnecessary invokes
-        const p = platform();
-        if (p !== "macos") return; // Early return for unsupported platforms
-
-        if (iconCache[appName]) return;
-
-        const icon = await invoke<{ base64: string; path: string } | null>(
-          "get_app_icon",
-          { appName, appPath }
-        );
-
-        if (icon?.base64) {
-          // Add null check for base64
-          setIconCache((prev) => ({
-            ...prev,
-            [appName]: icon.base64,
-          }));
-        }
-      } catch (error) {
-        console.error(`failed to load icon for ${appName}:`, error);
-        // Fail silently - the UI will just not show an icon
-      }
-    },
-    [iconCache]
-  );
-
-  useEffect(() => {
-    const loadIcons = async () => {
-      const p = platform();
-      if (p !== "macos") return;
-
-      // Load icons for unique app names only
-      processedBlocks.forEach((block) => {
-        loadAppIcon(block.appName);
-      });
-    };
-
-    loadIcons();
-  }, [processedBlocks, loadAppIcon]);
-
-  return (
-    <div className="absolute -top-12 inset-x-0 pointer-events-none h-8">
-
-      {processedBlocks.map((block, i) => (
-        <div
-          key={`${block.appName}-${i}`}
-          className="absolute top-0 h-full w-full"
-          style={{
-            left: `${block.percentThroughDay}%`,
-            transform: "translateX(-50%)",
-          }}
-        >
-          {block.iconSrc && (
-            <img
-              src={`data:image/png;base64,${block.iconSrc}`}
-              className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-70"
-              alt={block.appName}
-              loading="lazy"
-              decoding="async"
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}

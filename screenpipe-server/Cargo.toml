@@ -100,9 +100,6 @@ uuid = "1.5.0"
 
 tempfile = "3.3.0"
 
-# video cache 
-glob = "0.3.1"
-lru = "0.12.5"
 
 url = { version = "2.2.0", optional = true }
 
@@ -154,4 +151,4 @@ path = "src/bin/screenpipe-server.rs"
 
 
 [package.metadata.cargo-machete]
-ignored = ["url"]
+ignored = ["url", "opentelemetry-appender-tracing"]
