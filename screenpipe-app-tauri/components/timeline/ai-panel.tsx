@@ -234,6 +234,7 @@ export function AIPanel({
   return (
     <div
       ref={aiPanelRef}
+      className="ai-panel bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]"
       style={{
         position: "fixed",
         left: position.x,
@@ -242,7 +243,6 @@ export function AIPanel({
         height: isExpanded ? chatWindowSize.height : 120,
         cursor: isDraggingPanel ? "grabbing" : "default",
       }}
-      className="bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]"
     >
       <div
         className="select-none cursor-grab active:cursor-grabbing"
@@ -295,6 +295,8 @@ export function AIPanel({
               MozUserSelect: "text",
               msUserSelect: "text",
               overscrollBehavior: "contain",
+              overflowY: "scroll",
+              height: "100%",
             }}
           >
             {chatMessages.map((msg, index) => (

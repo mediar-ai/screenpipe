@@ -30,14 +30,13 @@ export function TimelineIconsSection({
   const processedBlocks = useMemo<ProcessedBlock[]>(() => {
     if (!timeRange) return [];
 
-    // Group frames by app name first
     const appGroups: { [key: string]: Date[] } = {};
 
     blocks.forEach((frame) => {
-      // Remove any filtering on devices/metadata to show more apps
+      // Show all devices without filtering
       frame.devices.forEach((device) => {
         if (!device.metadata?.app_name) return;
-
+        
         const timestamp = new Date(frame.timestamp);
         const appName = device.metadata.app_name;
 
@@ -55,8 +54,8 @@ export function TimelineIconsSection({
     Object.entries(appGroups).forEach(([appName, timestamps]) => {
       timestamps.sort((a, b) => a.getTime() - b.getTime());
 
-      // Reduce gap threshold to 5 seconds to create more blocks
-      const GAP_THRESHOLD = 5000; // 5 seconds in milliseconds
+      // Changed from 30s to 15s for a more balanced approach
+      const GAP_THRESHOLD = 15000; // 15 seconds in milliseconds
       let blockStart = timestamps[0];
       let lastTimestamp = timestamps[0];
 
@@ -81,6 +80,7 @@ export function TimelineIconsSection({
         lastTimestamp = timestamp;
       });
 
+      // Always add the last block
       b.push({
         appName,
         timestamp: new Date(
@@ -97,14 +97,14 @@ export function TimelineIconsSection({
       });
     });
 
-    // Reduce minimum spacing between blocks to 0.5%
+    // Changed from 0.1% to 0.25% for better spacing while still showing more icons
     return b
       .sort((a, b) => a.percentThroughDay - b.percentThroughDay)
       .filter((block, index, array) => {
         if (index === 0) return true;
         const prevBlock = array[index - 1];
         return (
-          Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) > 0.5
+          Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) > 0.25
         );
       });
   }, [blocks, iconCache, timeRange]);

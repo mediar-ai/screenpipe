@@ -283,12 +283,6 @@ jobs:
           # Remove unused Windows features
           dism.exe /online /cleanup-image /startcomponentcleanup /resetbase
 
-      - name: Clean NSIS temp files
-        if: matrix.args == '--target x86_64-pc-windows-msvc'
-        run: |
-          Remove-Item -Path "$env:TEMP\*.tmp" -Force -Recurse
-          Remove-Item -Path "$env:TEMP\nsis*" -Force -Recurse
-
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:

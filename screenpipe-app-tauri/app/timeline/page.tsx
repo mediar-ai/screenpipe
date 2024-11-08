@@ -10,6 +10,7 @@ import { AIPanel } from "@/components/timeline/ai-panel";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
 import { AGENTS } from "@/components/timeline/agents";
+import { TimelineSelection } from "@/components/timeline/timeline-selection";
 
 export interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -187,12 +188,15 @@ export default function Timeline() {
   const handleScroll = useMemo(
     () =>
       throttle((e: React.WheelEvent<HTMLDivElement>) => {
-        const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
+        const isWithinAiPanel = document
+          .querySelector('.ai-panel')
+          ?.contains(e.target as Node);
         const isWithinAudioPanel = document
-          .querySelector(".audio-transcript-panel")
+          .querySelector('.audio-transcript-panel')
           ?.contains(e.target as Node);
 
         if (isWithinAiPanel || isWithinAudioPanel) {
+          e.stopPropagation();
           return;
         }
 
@@ -214,7 +218,7 @@ export default function Timeline() {
           setCurrentIndex(newIndex);
           frames[newIndex] && setCurrentFrame(frames[newIndex].devices[0]);
         }
-      }, 16), // Throttle to ~60fps
+      }, 16),
     [currentIndex, frames]
   );
 
@@ -229,16 +233,24 @@ export default function Timeline() {
     }
 
     const frameTime = new Date(currentFrame.timestamp);
-    const totalVisibleMilliseconds = loadedTimeRange.end.getTime() - loadedTimeRange.start.getTime();
-    const currentMilliseconds = frameTime.getTime() - loadedTimeRange.start.getTime();
+    const totalVisibleMilliseconds =
+      loadedTimeRange.end.getTime() - loadedTimeRange.start.getTime();
+    const currentMilliseconds =
+      frameTime.getTime() - loadedTimeRange.start.getTime();
 
     return (currentMilliseconds / totalVisibleMilliseconds) * 100;
   }, [currentIndex, frames, loadedTimeRange]);
 
   useEffect(() => {
     const preventScroll = (e: WheelEvent) => {
-      const isWithinAiPanel = aiPanelRef.current?.contains(e.target as Node);
-      if (!isWithinAiPanel) {
+      const isWithinAiPanel = document
+        .querySelector('.ai-panel')
+        ?.contains(e.target as Node);
+      const isWithinAudioPanel = document
+        .querySelector('.audio-transcript-panel')
+        ?.contains(e.target as Node);
+
+      if (!isWithinAiPanel && !isWithinAudioPanel) {
         e.preventDefault();
       }
     };
@@ -329,12 +341,9 @@ export default function Timeline() {
 
         <div className="w-4/5 mx-auto my-8 relative select-none">
           <div className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative">
-            {/* <div className="relative h-full bg-muted rounded-md overflow-hidden">
-              {loadedTimeRange && (
-                <TimelineBlocks frames={frames} timeRange={loadedTimeRange!} />
-              )}
-            </div> */}
-
+            {loadedTimeRange && (
+              <TimelineSelection loadedTimeRange={loadedTimeRange} />
+            )}
             <div
               className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
               style={{ left: `${timePercentage}%` }}
