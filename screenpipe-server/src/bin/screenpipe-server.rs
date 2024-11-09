@@ -124,6 +124,17 @@ async fn main() -> anyhow::Result<()> {
     let (pipe_manager, mut pipe_control_rx) = PipeManager::new(local_data_dir_clone.clone());
     let pipe_manager = Arc::new(pipe_manager);
 
+    // Check if Screenpipe is present in PATH
+    match ensure_screenpipe_in_path().await {
+        Ok(_) => info!("Screenpipe is available and properly set in the PATH"),
+        Err(e) => {
+            error!("Screenpipe PATH check failed: {}", e);
+            error!("Please ensure Screenpipe is installed correctly and is in your PATH");
+            h.capture_error("Please ensure Screenpipe is installed correctly and is in your PATH");
+            return Err(e.into());
+        }
+    }
+
     if let Some(pipe_command) = cli.command {
         match pipe_command {
             Command::Pipe { subcommand } => {
@@ -862,6 +873,121 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
         },
     }
     Ok(())
+}
+
+async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
+    use tokio::process::Command;
+
+    // Check if 'screenpipe' is already in the PATH
+    let output = if cfg!(target_os = "windows") {
+        Command::new("where").arg("screenpipe").output().await?
+    } else {
+        Command::new("which").arg("screenpipe").output().await?
+    };
+
+    // If 'screenpipe' is found, log and return early
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let screenpipe_path = PathBuf::from(stdout.trim());
+        println!("screenpipe already in PATH at: {}", screenpipe_path.display());
+        return Ok(());
+    }
+
+    // If not found, add 'screenpipe' to the PATH permanently
+    let current_exe = env::current_exe()?;
+    let current_dir = match current_exe.parent() {
+        Some(dir) => dir,
+        None => return Err(anyhow::anyhow!("Failed to get current executable directory")),
+    };
+    let screenpipe_bin = current_dir.join("screenpipe");
+
+    let paths = env::split_paths(&env::var("PATH")?).collect::<Vec<_>>();
+    if !paths.contains(&current_dir.to_path_buf()) {
+        // Platform-specific persistence
+        if cfg!(target_os = "windows") {
+            persist_path_windows(current_dir.to_path_buf())?;
+        } else if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
+            persist_path_unix(current_dir.to_path_buf())?;
+        }
+        println!("Added {} to the PATH permanently", screenpipe_bin.display());
+    }
+
+    Ok(())
+}
+
+fn persist_path_windows(new_path: PathBuf) -> anyhow::Result<()> {
+    let current_path = env::var("PATH")?;
+
+    // Check if the new path is already in the current PATH
+    if current_path.contains(new_path.to_str().unwrap()) {
+        println!("PATH already contains {}", new_path.display());
+        return Ok(());
+    }
+
+    // Ensure 'setx' command can handle the new PATH length
+    if current_path.len() + new_path.to_str().unwrap().len() + 1 > 1024 {
+        return Err(anyhow::anyhow!("The PATH is too long to persist using 'setx'. Please shorten the PATH."));
+    }
+
+    // Use 'setx' to make the new PATH persistent
+    let new_path_env = format!("{};{}", current_path, new_path.display());
+    let output = std::process::Command::new("setx")
+        .arg("PATH")
+        .arg(&new_path_env)
+        .output()?;
+
+    if output.status.success() {
+        println!("Persisted PATH on Windows using setx");
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Failed to persist PATH on Windows"))
+    }
+}
+
+fn persist_path_unix(new_path: PathBuf) -> anyhow::Result<()> {
+    let home_dir = env::var("HOME")?;
+    let shell_config = get_shell_config()?;
+    let shell_config_path = PathBuf::from(format!("{}/{}", home_dir, shell_config));
+
+    let new_path_entry = format!("\nexport PATH=\"$PATH:{}\"\n", new_path.display());
+
+    // Check if the new path is already in the config file
+    if let Ok(config_content) = fs::read_to_string(&shell_config_path) {
+        if config_content.contains(new_path.to_str().unwrap()) {
+            println!("PATH is already persisted in {}", shell_config_path.display());
+            return Ok(());
+        }
+    }
+
+    // Create the config file if it doesn't exist
+    if !shell_config_path.exists() {
+        fs::File::create(&shell_config_path)?;
+    }
+
+    // Append the new path entry to the config file
+    let mut file = fs::OpenOptions::new().append(true).open(&shell_config_path)?;
+    file.write_all(new_path_entry.as_bytes())?;
+    println!("Persisted PATH in {}", shell_config_path.display());
+    println!("Please run 'source {}' or restart your shell to apply the changes.", shell_config_path.display());
+
+    Ok(())
+}
+
+fn get_shell_config() -> anyhow::Result<&'static str> {
+    let shell = env::var("SHELL").unwrap_or_default();
+    if shell.contains("zsh") {
+        Ok(".zshrc")
+    } else if shell.contains("bash") {
+        if cfg!(target_os = "macos") {
+            Ok(".bash_profile")
+        } else {
+            Ok(".bashrc")
+        }
+    } else if shell.contains("fish") {
+        Ok(".config/fish/config.fish")
+    } else {
+        Ok(".profile")
+    }
 }
 
 // Add this function near the end of the file
