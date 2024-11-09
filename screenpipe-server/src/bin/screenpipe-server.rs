@@ -916,31 +916,43 @@ async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
 }
 
 fn persist_path_windows(new_path: PathBuf) -> anyhow::Result<()> {
-    let current_path = env::var("PATH")?;
+    // Try to read the current PATH environment variable
+    let current_path = env::var("PATH").map_err(|e| anyhow::anyhow!("Failed to read current PATH: {}", e))?;
 
     // Check if the new path is already in the current PATH
-    if current_path.contains(new_path.to_str().unwrap()) {
+    if current_path.contains(new_path.to_str().unwrap_or("")) {
         println!("PATH already contains {}", new_path.display());
         return Ok(());
     }
 
     // Ensure 'setx' command can handle the new PATH length
-    if current_path.len() + new_path.to_str().unwrap().len() + 1 > 1024 {
-        return Err(anyhow::anyhow!("The PATH is too long to persist using 'setx'. Please shorten the PATH."));
+    if current_path.len() + new_path.to_str().unwrap_or("").len() + 1 > 1024 {
+        return Err(anyhow::anyhow!(
+            "The PATH is too long to persist using 'setx'. Please shorten the PATH."
+        ));
     }
 
-    // Use 'setx' to make the new PATH persistent
+    // Construct the new PATH string
     let new_path_env = format!("{};{}", current_path, new_path.display());
+
+    // Execute the 'setx' command to persist the PATH
     let output = std::process::Command::new("setx")
         .arg("PATH")
         .arg(&new_path_env)
-        .output()?;
+        .output()
+        .map_err(|e| anyhow::anyhow!("Failed to execute 'setx' command: {}", e))?;
 
+    // Check if the 'setx' command was successful
     if output.status.success() {
         println!("Persisted PATH on Windows using setx");
         Ok(())
     } else {
-        Err(anyhow::anyhow!("Failed to persist PATH on Windows"))
+        // Capture the stderr output from 'setx' if the command fails
+        let error_message = String::from_utf8_lossy(&output.stderr);
+        Err(anyhow::anyhow!(
+            "Failed to persist PATH using 'setx': {}",
+            error_message
+        ))
     }
 }
 
