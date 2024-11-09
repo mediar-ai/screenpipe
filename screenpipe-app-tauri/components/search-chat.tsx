@@ -522,6 +522,7 @@ export function SearchChat({
     };
     setChatMessages((prevMessages) => [
       ...prevMessages,
+      userMessage,
       { id: generateId(), role: "assistant", content: "" },
     ]);
     setFloatingInput("");
@@ -571,6 +572,8 @@ export function SearchChat({
           User query: ${floatingInput}`,
         },
       ];
+
+      console.log("messages", messages);
 
       abortControllerRef.current = new AbortController();
       setIsStreaming(true);
@@ -764,7 +767,10 @@ export function SearchChat({
     // First filter results based on hideDeselected setting
     const visibleResults = results
       .map((item, index) => ({ item, originalIndex: index }))
-      .filter(({ originalIndex }) => !hideDeselected || selectedResults.has(originalIndex));
+      .filter(
+        ({ originalIndex }) =>
+          !hideDeselected || selectedResults.has(originalIndex)
+      );
 
     return visibleResults.map(({ item, originalIndex }) => (
       <motion.div
@@ -785,22 +791,32 @@ export function SearchChat({
                   {/* Main content */}
                   <div className="flex w-full items-center gap-2">
                     <span className="text-left truncate">
-                      {item.type === "OCR" && highlightKeyword(
-                        getContextAroundKeyword(item.content.text, query),
-                        query
-                      )}
-                      {item.type === "Audio" && highlightKeyword(
-                        getContextAroundKeyword(item.content.transcription, query),
-                        query
-                      )}
-                      {item.type === "FTS" && highlightKeyword(
-                        getContextAroundKeyword(item.content.matched_text, query),
-                        query
-                      )}
-                      {item.type === "UI" && highlightKeyword(
-                        getContextAroundKeyword(item.content.text, query),
-                        query
-                      )}
+                      {item.type === "OCR" &&
+                        highlightKeyword(
+                          getContextAroundKeyword(item.content.text, query),
+                          query
+                        )}
+                      {item.type === "Audio" &&
+                        highlightKeyword(
+                          getContextAroundKeyword(
+                            item.content.transcription,
+                            query
+                          ),
+                          query
+                        )}
+                      {item.type === "FTS" &&
+                        highlightKeyword(
+                          getContextAroundKeyword(
+                            item.content.matched_text,
+                            query
+                          ),
+                          query
+                        )}
+                      {item.type === "UI" &&
+                        highlightKeyword(
+                          getContextAroundKeyword(item.content.text, query),
+                          query
+                        )}
                     </span>
                   </div>
                 </AccordionTrigger>
@@ -876,9 +892,7 @@ export function SearchChat({
                                 <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>
-                                  this is the frame where the text appeared
-                                </p>
+                                <p>this is the frame where the text appeared</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -890,10 +904,7 @@ export function SearchChat({
                     <>
                       <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
                         <p className="whitespace-pre-line">
-                          {highlightKeyword(
-                            item.content.transcription,
-                            query
-                          )}
+                          {highlightKeyword(item.content.transcription, query)}
                         </p>
                       </div>
                       {item.content.file_path &&
@@ -926,8 +937,10 @@ export function SearchChat({
               </AccordionItem>
             </Accordion>
             <div className="flex flex-wrap items-center gap-2 mt-2">
-            <Badge variant="outline" className="text-xs">{item.type}</Badge>
-            <p className="text-xs text-gray-400">
+              <Badge variant="outline" className="text-xs">
+                {item.type}
+              </Badge>
+              <p className="text-xs text-gray-400">
                 {new Date(item.content.timestamp).toLocaleString()}{" "}
                 {/* Display local time */}
               </p>
@@ -1118,7 +1131,7 @@ export function SearchChat({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
               handleSearch(0);
             }
           }}
@@ -1456,9 +1469,9 @@ export function SearchChat({
                 />
                 <Label htmlFor="select-all">select all results</Label>
               </div>
-              
+
               <Separator orientation="vertical" className="h-4" />
-              
+
               <div className="flex items-center space-x-2">
                 <Switch
                   id="hide-deselected"
@@ -1476,7 +1489,9 @@ export function SearchChat({
                 onClick={() => {
                   setSimilarityThreshold(similarityThreshold === 0.5 ? 1 : 0.5);
                   if (similarityThreshold === 0.5) {
-                    setSelectedResults(new Set(results.map((_, index) => index)));
+                    setSelectedResults(
+                      new Set(results.map((_, index) => index))
+                    );
                     setSelectAll(true);
                   }
                 }}
@@ -1490,7 +1505,9 @@ export function SearchChat({
                 ) : (
                   <Layers className="h-4 w-4" />
                 )}
-                {similarityThreshold === 0.5 ? "duplicates removed" : "remove duplicates"}
+                {similarityThreshold === 0.5
+                  ? "duplicates removed"
+                  : "remove duplicates"}
               </Button>
 
               <TooltipProvider>
@@ -1553,7 +1570,9 @@ export function SearchChat({
                   type="text"
                   placeholder="ask a question about the results..."
                   value={floatingInput}
-                  disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
+                  disabled={
+                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
+                  }
                   onChange={(e) => setFloatingInput(e.target.value)}
                   className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
                 />
@@ -1592,7 +1611,9 @@ export function SearchChat({
                 <Button
                   type="submit"
                   className="w-12"
-                  disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
+                  disabled={
+                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
+                  }
                 >
                   {isStreaming ? (
                     <Square className="h-4 w-4" />
@@ -1626,9 +1647,13 @@ export function SearchChat({
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-sm">
-                        ai models can only process a limited amount of text at once.<br />
-                        this circle shows how much of that limit you arere using.<br />
-                        ! the exclamation mark indicates when you exceed the limit.
+                        ai models can only process a limited amount of text at
+                        once.
+                        <br />
+                        this circle shows how much of that limit you arere
+                        using.
+                        <br />! the exclamation mark indicates when you exceed
+                        the limit.
                       </p>
                     </TooltipContent>
                   </Tooltip>
