@@ -501,6 +501,7 @@ pub struct AudioInput {
 pub struct TranscriptionResult {
     pub path: String,
     pub input: AudioInput,
+    pub speaker_embedding: Vec<f32>,
     pub transcription: Option<String>,
     pub timestamp: u64,
     pub error: Option<String>,
@@ -610,6 +611,7 @@ pub async fn create_whisper_channel(
                                                 path,
                                                 timestamp,
                                                 error: None,
+                                                speaker_embedding: segment.embedding.clone(),
                                             },
                                             Err(e) => {
                                                 error!("STT error for input {}: {:?}", audio.device, e);
@@ -624,6 +626,7 @@ pub async fn create_whisper_channel(
                                                     path: "".to_string(),
                                                     timestamp,
                                                     error: Some(e.to_string()),
+                                                    speaker_embedding: Vec::new(),
                                                 }
                                             },
                                         }
@@ -646,6 +649,7 @@ pub async fn create_whisper_channel(
                                         path,
                                         timestamp,
                                         error: None,
+                                        speaker_embedding: segment.embedding.clone(),
                                     },
                                     Err(e) => {
                                         error!("STT error for input {}: {:?}", audio.device, e);
@@ -660,6 +664,7 @@ pub async fn create_whisper_channel(
                                             path: "".to_string(),
                                             timestamp,
                                             error: Some(e.to_string()),
+                                            speaker_embedding: Vec::new(),
                                         }
                                     },
                                 }

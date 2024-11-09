@@ -200,7 +200,10 @@ async fn record_video(
             let db_chunk_callback = Arc::clone(&db_chunk_callback);
             let device_name = Arc::clone(&device_name);
             rt.spawn(async move {
-                if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path, &device_name).await {
+                if let Err(e) = db_chunk_callback
+                    .insert_video_chunk(&file_path, &device_name)
+                    .await
+                {
                     error!("Failed to insert new video chunk: {}", e);
                 }
                 debug!("record_video: Inserted new video chunk: {}", file_path);
