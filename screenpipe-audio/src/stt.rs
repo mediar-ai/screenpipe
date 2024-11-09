@@ -2,7 +2,6 @@ use crate::{
     audio_processing::normalize_v2,
     encode_single_audio, multilingual,
     pyannote::{
-        self,
         embedding::EmbeddingExtractor,
         identify::EmbeddingManager,
         segment::{get_segments, SpeechSegment},
