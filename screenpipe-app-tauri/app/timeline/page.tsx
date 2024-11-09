@@ -195,6 +195,9 @@ export default function Timeline() {
         const isWithinTimelineDialog = document
           .querySelector('[role="dialog"]')
           ?.contains(e.target as Node);
+        const isWithinTimelineDialog = document
+          .querySelector('[role="dialog"]')
+          ?.contains(e.target as Node);
 
         if (isWithinAiPanel || isWithinAudioPanel || isWithinTimelineDialog) {
           e.stopPropagation();
@@ -249,6 +252,9 @@ export default function Timeline() {
         ?.contains(e.target as Node);
       const isWithinAudioPanel = document
         .querySelector(".audio-transcript-panel")
+        ?.contains(e.target as Node);
+      const isWithinTimelineDialog = document
+        .querySelector('[role="dialog"]')
         ?.contains(e.target as Node);
       const isWithinTimelineDialog = document
         .querySelector('[role="dialog"]')
