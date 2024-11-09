@@ -531,6 +531,13 @@ async function installOllamaSidecar() {
 		return;
 	}
 
+	// For our self-hosted runners
+	if (platform === 'windows' && await fs.exists('C:\\ollama\\')) {
+		console.log('ollama sidecar already exists. skipping installation.');
+		await fs.cp('C:\\ollama\\', ollamaDir, { recursive: true });
+		return;
+	}
+
 	try {
 		await fs.mkdir(ollamaDir, { recursive: true });
 		const downloadPath = path.join(ollamaDir, path.basename(ollamaUrl));

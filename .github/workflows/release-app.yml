@@ -271,18 +271,18 @@ jobs:
           docker-images: true
           swap-storage: true
 
-      - name: Free Disk Space (Windows)
-        if: matrix.args == '--target x86_64-pc-windows-msvc'
-        run: |
-          # Remove unnecessary Windows components
-          Get-ChildItem -Path "C:\Windows\SoftwareDistribution\Download\" -Force | Remove-Item -Force -Recurse
-          Remove-Item -Path "C:\Windows\Temp\*" -Force -Recurse
-          # Clean npm cache
-          npm cache clean --force
-          # Clean cargo cache
-          cargo cache --autoclean
-          # Remove unused Windows features
-          dism.exe /online /cleanup-image /startcomponentcleanup /resetbase
+      # - name: Free Disk Space (Windows)
+      #   if: matrix.args == '--target x86_64-pc-windows-msvc'
+      #   run: |
+      #     # Remove unnecessary Windows components
+      #     Get-ChildItem -Path "C:\Windows\SoftwareDistribution\Download\" -Force | Remove-Item -Force -Recurse
+      #     Remove-Item -Path "C:\Windows\Temp\*" -Force -Recurse
+      #     # Clean npm cache
+      #     npm cache clean --force
+      #     # Clean cargo cache
+      #     cargo cache --autoclean
+      #     # Remove unused Windows features
+      #     dism.exe /online /cleanup-image /startcomponentcleanup /resetbase
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
