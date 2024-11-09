@@ -35,8 +35,6 @@ export function TimelineIconsSection({
   blocks: StreamTimeSeriesResponse[];
 }) {
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
-  const [selectedApp, setSelectedApp] = useState<ProcessedBlock | null>(null);
-  const { setSelectionRange } = useTimelineSelection();
 
   // Get the visible time range
   const timeRange = useMemo(() => {
@@ -213,141 +211,58 @@ export function TimelineIconsSection({
   }, [processedBlocks, loadAppIcon]);
 
   return (
-    <>
-      <div className="absolute -top-8 inset-x-0 h-8">
-        {processedBlocks.map((block, i) => {
-          const bgColor = stringToColor(block.appName);
+    <div className="absolute -top-8 inset-x-0 h-8">
+      {processedBlocks.map((block, i) => {
+        const bgColor = stringToColor(block.appName);
 
-          return (
-            <motion.div
-              key={`${block.appName}-${i}`}
-              className="absolute h-full pointer-events-auto cursor-pointer"
-              style={{
-                left: `${block.percentThroughDay}%`,
-                transform: "translateX(-50%)",
-                zIndex: 50,
-              }}
-              onClick={() => setSelectedApp(block)}
-              whileHover={{
-                scale: 1.5,
-                backgroundColor: "red",
-                y: -20,
-              }}
-              transition={{
-                type: "spring",
-                stiffness: 300,
-                damping: 30,
-              }}
-            >
-              {block.iconSrc ? (
-                <motion.div
-                  className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                  style={{
-                    backgroundColor: `${bgColor}40`,
-                    padding: "2px",
-                  }}
-                >
-                  <img
-                    src={`data:image/png;base64,${block.iconSrc}`}
-                    className="w-full h-full opacity-70"
-                    alt={block.appName}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                  style={{ backgroundColor: bgColor }}
-                />
-              )}
-            </motion.div>
-          );
-        })}
-
-        {/* Add this new section for audio markers */}
-        {processedAudioGroups.map((audio, i) => (
-          <div
-            key={`audio-${i}`}
-            className="absolute h-full pointer-events-auto "
+        return (
+          <motion.div
+            key={`${block.appName}-${i}`}
+            className="absolute h-full pointer-events-auto cursor-pointer"
             style={{
-              left: `${audio.percentThroughDay}%`,
+              left: `${block.percentThroughDay}%`,
               transform: "translateX(-50%)",
-              zIndex: 40,
-              top: "-16px", // Moved higher
+              zIndex: 50,
+            }}
+            onMouseEnter={() => {
+              console.log("hover on:", block.appName);
+            }}
+            whileHover={{
+              scale: 1.5,
+              backgroundColor: "red",
+              y: -20,
+            }}
+            transition={{
+              type: "spring",
+              stiffness: 300,
+              damping: 30,
             }}
           >
-            <div
-              className="w-4 h-4 flex items-center justify-center rounded-full bg-muted/50 backdrop-blur"
-              style={{
-                border: `1px solid ${
-                  audio.isInput ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.4)"
-                }`,
-              }}
-            >
-              <Volume2
-                className="w-2 h-2"
+            {block.iconSrc ? (
+              <motion.div
+                className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
                 style={{
-                  color: audio.isInput
-                    ? "rgba(0, 0, 0, 0.7)"
-                    : "rgba(0, 0, 0, 0.4)",
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <Dialog
-        open={selectedApp !== null}
-        onOpenChange={() => setSelectedApp(null)}
-      >
-        <DialogContent className="max-w-md p-8">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {selectedApp?.iconSrc && (
-                  <img
-                    src={`data:image/png;base64,${selectedApp.iconSrc}`}
-                    className="w-6 h-6"
-                    alt={selectedApp.appName}
-                  />
-                )}
-                <span>{selectedApp?.appName}</span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => {
-                  if (!selectedApp) return;
-                  setSelectedApp(null);
-                  setSelectionRange({
-                    start: selectedApp.timestamp,
-                    end: new Date(selectedApp.timestamp.getTime() + 60000),
-                  });
+                  backgroundColor: `${bgColor}40`,
+                  padding: "2px",
                 }}
               >
-                <MessageSquarePlus className="h-4 w-4" />
-                <span className="text-xs">ask ai about this</span>
-              </Button>
-            </DialogTitle>
-          </DialogHeader>
-
-          <ScrollArea className="max-h-[60vh]">
-            <div className="space-y-2">
-              {selectedApp?.windows.map((window, i) => (
-                <div key={i} className="p-2 rounded-lg bg-muted/50 text-sm">
-                  <p className="font-medium">{window.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {window.timestamp.toLocaleTimeString()}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-    </>
+                <img
+                  src={`data:image/png;base64,${block.iconSrc}`}
+                  className="w-full h-full opacity-70"
+                  alt={block.appName}
+                  loading="lazy"
+                  decoding="async"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{ backgroundColor: bgColor }}
+              />
+            )}
+          </motion.div>
+        );
+      })}
+    </div>
   );
 }
