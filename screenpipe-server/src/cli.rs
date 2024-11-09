@@ -248,6 +248,20 @@ pub struct Cli {
 
 }
 
+
+
+impl Cli {
+    pub fn unique_languages(&self) -> Result<Vec<Language>, String> {
+        let mut unique_langs = std::collections::HashSet::new();
+        for lang in &self.language {
+            if !unique_langs.insert(lang.clone()) {
+                // continue don't care
+            }
+        }
+        Ok(unique_langs.into_iter().collect())
+    }
+}
+
 #[derive(Subcommand)]
 pub enum Command {
     /// Pipe management commands

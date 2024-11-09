@@ -515,6 +515,12 @@ export function SearchChat({
       return;
     }
 
+    // Track AI usage metrics
+    posthog.capture("ai_chat_usage", {
+      agent: selectedAgent.name,
+      total_chars: floatingInput.length + selectedContentLength
+    });
+
     const userMessage = {
       id: generateId(),
       role: "user" as const,

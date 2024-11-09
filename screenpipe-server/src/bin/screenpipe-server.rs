@@ -321,7 +321,8 @@ async fn main() -> anyhow::Result<()> {
         cli.monitor_id.clone()
     };
 
-    let languages = cli.language.clone();
+    let languages = cli.unique_languages().unwrap();
+    let languages_clone = languages.clone();
 
     let ocr_engine_clone = cli.ocr_engine.clone();
     let vad_engine = cli.vad_engine.clone();
@@ -535,7 +536,7 @@ async fn main() -> anyhow::Result<()> {
         println!("│ {:<19} │ {:<34} │", "", "all languages");
     } else {
         let total_languages = cli.language.len();
-        for (_, language) in cli.language.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+        for (_, language) in languages_clone.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let language_str = format!("id: {}", language);
             let formatted_language = format_cell(&language_str, VALUE_WIDTH);
             println!("│ {:<19} │ {:<34} │", "", formatted_language);
