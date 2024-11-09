@@ -508,6 +508,9 @@ mod tests {
         let sample_embedding = vec![0.1; 512];
         let speaker_id = db.insert_speaker(&sample_embedding).await.unwrap();
         assert_eq!(speaker_id, 1);
+
+        let speaker = db.get_speaker_by_id(speaker_id).await.unwrap();
+        assert_eq!(speaker.id, 1);
     }
 
     #[tokio::test]
