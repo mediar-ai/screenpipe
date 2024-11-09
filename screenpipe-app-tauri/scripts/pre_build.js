@@ -46,8 +46,8 @@ const config = {
 		],
 	},
 	macos: {
-		ffmpegName: 'ffmpeg-7.0-macOS-default',
-		ffmpegUrl: 'https://master.dl.sourceforge.net/project/avbuild/macOS/ffmpeg-7.0-macOS-default.tar.xz?viasf=1',
+		ffmpegName: 'ffmpeg-7.1',
+		ffmpegUrl: 'https://evermeet.cx/ffmpeg/ffmpeg-7.1.7z',
 	},
 }
 
@@ -440,15 +440,15 @@ if (platform == 'macos') {
 	}
 
 
-	// // Setup FFMPEG
-	// if (!(await fs.exists(config.ffmpegRealname))) {
-	// 	await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
-	// 	await $`tar xf ${config.macos.ffmpegName}.tar.xz`
-	// 	await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-	// 	await $`rm ${config.macos.ffmpegName}.tar.xz`
-	// } else {
-	// 	console.log('FFMPEG already exists');
-	// }
+	// Setup FFMPEG
+	if (!(await fs.exists(config.ffmpegRealname))) {
+		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.7z`
+		await $`7z e ${config.macos.ffmpegName}.7z -o ./${config.macos.ffmpegName}`
+		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
+		await $`rm ${config.macos.ffmpegName}.7z`
+	} else {
+		console.log('FFMPEG already exists');
+	}
 
 	// // Move and rename ffmpeg and ffprobe binaries
 	// const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
@@ -459,7 +459,7 @@ if (platform == 'macos') {
 	// // For arm64
 	// await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
 
-	// console.log('Moved and renamed ffmpeg binary for externalBin');
+	console.log('Moved and renamed ffmpeg binary for externalBin');
 
 }
 
@@ -524,43 +524,11 @@ async function installOllamaSidecar() {
 	}
 
 
+
 	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
 		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
 		console.log('ollama sidecar already exists. skipping installation.');
-		return;
-	}
-
-	// For our self-hosted runners
-	if (platform === 'windows' && await fs.exists('C:\\ollama\\')) {
-		console.log('ollama sidecar already exists. skipping installation.');
-		await fs.cp('C:\\ollama\\', ollamaDir, { recursive: true });
-		// Remove older library versions to save storage
-		const libDir = path.join(ollamaDir, 'lib', 'ollama');
-		const oldLibs = [
-			'cublas64_11.dll',
-			'cublasLt64_11.dll',
-			'cudart64_110.dll',
-			'ggml_cuda_v11.dll',
-			'rocblas',
-			'rocblas.dll',
-			'ggml_rocm.dll'
-		];
-
-		for (const lib of oldLibs) {
-			try {
-				const libPath = path.join(libDir, lib);
-				const stat = await fs.stat(libPath);
-				if (stat.isDirectory()) {
-					await fs.rm(libPath, { recursive: true, force: true });
-				} else {
-					await fs.unlink(libPath);
-				}
-				console.log(`removed old library: ${lib}`);
-			} catch (error) {
-				console.warn(`failed to remove ${lib}:`, error.message);
-			}
-		}
 		return;
 	}
 
