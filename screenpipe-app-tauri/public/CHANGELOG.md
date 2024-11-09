@@ -1,4 +1,4 @@
-### **Fixes:**\n- **Fixed focus issue:** Resolved focus problem with combobox items, improving user interaction.\n- **Fixed release usage:** Ensure the correct usage of published releases for stability.
+Great! Please go ahead and provide me with the list of commits so that I can assist you in generating the changelog for the new screenpipe update based on these commits.
 
-#### **Full Changelog:** [f80f9..e8b71](https://github.com/mediar-ai/screenpipe/compare/f80f9..e8b71)
+#### **Full Changelog:** [..e2157](https://github.com/mediar-ai/screenpipe/compare/..e2157)
 
