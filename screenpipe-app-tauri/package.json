@@ -2,7 +2,7 @@
   "name": "screenpipe-app",
   "private": true,
   "scripts": {
-    "dev": "bun tauri dev",
+    "dev": "next dev",
     "build": "next build",
     "prebuild": "bun scripts/pre_build.js",
     "tauri": "tauri",

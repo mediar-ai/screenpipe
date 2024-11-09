@@ -25,13 +25,21 @@ import localforage from "localforage";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
-
-
+import { useSettings } from "@/lib/hooks/use-settings";
+import { invoke } from "@tauri-apps/api/core";
+import { Clock } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const { health } = useHealthCheck();
+  const { settings } = useSettings();
 
   const isLoading = !health;
 
@@ -92,6 +100,10 @@ export default function Header() {
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
 
+  const handleShowTimeline = async () => {
+    await invoke("show_timeline");
+  };
+
   return (
     <div>
       {isLoading ? (
@@ -105,8 +117,34 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="cursor-pointer"
+                      onClick={handleShowTimeline}
+                      disabled={
+                        !settings.enableFrameCache ||
+                        !health ||
+                        health.status === "error"
+                      }
+                    >
+                      <Clock className="mr-2 h-4 w-4" />
+                      timeline
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                {!settings.enableFrameCache && (
+                  <TooltipContent>
+                    <p>enable timeline in settings first</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
             <MeetingHistory />
-            <PipeDialog />
             <Settings />
 
             <Button
@@ -126,6 +164,12 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="mr-4" align="end">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={(e) => e.preventDefault()}
+                >
+                  <PipeDialog />
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={() =>
