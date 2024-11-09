@@ -18,7 +18,6 @@ export function TimelineIconsSection({
   blocks: StreamTimeSeriesResponse[];
 }) {
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   // Get the visible time range
   const timeRange = useMemo(() => {
@@ -38,7 +37,7 @@ export function TimelineIconsSection({
       // Show all devices without filtering
       frame.devices.forEach((device) => {
         if (!device.metadata?.app_name) return;
-        
+
         const timestamp = new Date(frame.timestamp);
         const appName = device.metadata.app_name;
 
@@ -158,28 +157,28 @@ export function TimelineIconsSection({
     <div className="absolute -top-8 inset-x-0 h-8">
       {processedBlocks.map((block, i) => {
         const bgColor = stringToColor(block.appName);
-        
+
         return (
           <motion.div
             key={`${block.appName}-${i}`}
-            className="absolute top-0 h-full pointer-events-auto cursor-pointer"
+            className="absolute h-full pointer-events-auto cursor-pointer"
             style={{
               left: `${block.percentThroughDay}%`,
-              transform: 'translateX(-50%)',
-              border: '1px solid red',
+              transform: "translateX(-50%)",
               zIndex: 50,
             }}
             onMouseEnter={() => {
-              console.log('hover on:', block.appName);
+              console.log("hover on:", block.appName);
             }}
             whileHover={{
               scale: 1.5,
-              backgroundColor: 'red',
+              backgroundColor: "red",
+              y: -20,
             }}
             transition={{
               type: "spring",
               stiffness: 300,
-              damping: 30
+              damping: 30,
             }}
           >
             {block.iconSrc ? (
