@@ -5,7 +5,7 @@ use crate::{
         self,
         embedding::EmbeddingExtractor,
         identify::EmbeddingManager,
-        segment::{get_segments, get_speaker, Segment},
+        segment::{get_segments, SpeechSegment},
     },
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
     whisper::{Decoder, WhisperModel},
@@ -24,9 +24,10 @@ use rubato::{
 use std::collections::HashSet;
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
+use tokio::sync::Mutex;
 
 use hound::{WavSpec, WavWriter};
 use regex::Regex;
@@ -142,28 +143,29 @@ async fn transcribe_with_deepgram(
 }
 
 pub fn stt_sync(
-    audio_input: &AudioInput,
+    audio: &[f32],
+    sample_rate: u32,
+    device: &str,
     whisper_model: &mut WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>, // Changed type here
     deepgram_api_key: Option<String>,
     output_path: &PathBuf,
     languages: Vec<Language>,
 ) -> Result<(String, String)> {
-    let audio_input = audio_input.clone();
     let mut whisper_model = whisper_model.clone();
     let output_path = output_path.clone();
-    let vad_engine = vad_engine.clone(); // Clone the Arc to move into the closure
+    let audio = audio.to_vec();
 
+    let device = device.to_string();
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let mut vad_engine_guard = vad_engine.lock().unwrap();
 
         rt.block_on(stt(
-            &audio_input,
+            &audio,
+            sample_rate,
+            &device,
             &mut whisper_model,
             audio_transcription_engine,
-            &mut **vad_engine_guard, // Obtain &mut dyn VadEngine
             deepgram_api_key,
             &output_path,
             false,
@@ -176,85 +178,73 @@ pub fn stt_sync(
 
 fn process_with_whisper(
     whisper_model: &mut WhisperModel,
-    segments: Vec<Segment>,
+    audio: &[f32],
     mel_filters: &[f32],
     languages: Vec<Language>,
 ) -> Result<String> {
     let model = &mut whisper_model.model;
     let tokenizer = &whisper_model.tokenizer;
     let device = &whisper_model.device;
-    let mut final_transcript = String::new();
 
-    let mut iter = 1;
-    for segment in segments {
-        info!("processing segment {}", iter);
-        let segment_samples = segment.samples;
-        debug!("converting pcm to mel spectrogram");
-        let mel = audio::pcm_to_mel(model.config(), &segment_samples, mel_filters);
-        let mel_len = mel.len();
+    debug!("converting pcm to mel spectrogram");
+    let mel = audio::pcm_to_mel(model.config(), &audio, mel_filters);
+    let mel_len = mel.len();
 
-        debug!("creating tensor from mel spectrogram");
-        let mel = Tensor::from_vec(
-            mel,
-            (
-                1,
-                model.config().num_mel_bins,
-                mel_len / model.config().num_mel_bins,
-            ),
-            device,
-        )?;
+    debug!("creating tensor from mel spectrogram");
+    let mel = Tensor::from_vec(
+        mel,
+        (
+            1,
+            model.config().num_mel_bins,
+            mel_len / model.config().num_mel_bins,
+        ),
+        device,
+    )?;
 
-        debug!("detecting language");
-        let language_token = Some(multilingual::detect_language(
-            model,
-            tokenizer,
-            &mel,
-            languages.clone(),
-        )?);
+    debug!("detecting language");
+    let language_token = Some(multilingual::detect_language(
+        model,
+        tokenizer,
+        &mel,
+        languages.clone(),
+    )?);
 
-        debug!("initializing decoder");
-        let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
+    debug!("initializing decoder");
+    let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
 
-        debug!("starting decoding process");
-        let segments = dc.run(&mel)?;
-        debug!("decoding complete");
+    debug!("starting decoding process");
+    let segments = dc.run(&mel)?;
+    debug!("decoding complete");
 
-        let mut ranges: HashSet<String> = HashSet::new();
-        let token_regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>")?;
-        let mut transcript = String::new();
+    let mut ranges: HashSet<String> = HashSet::new();
+    let token_regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>")?;
+    let mut transcript = String::new();
 
-        let mut min_time: f32 = f32::MAX;
-        let mut max_time: f32 = f32::MIN;
-        let segments_len = segments.len();
+    let mut min_time: f32 = f32::MAX;
+    let mut max_time: f32 = f32::MIN;
+    let segments_len = segments.len();
 
-        for (i, segment) in segments.iter().enumerate() {
-            let mut text = segment.dr.text.clone();
+    for (i, segment) in segments.iter().enumerate() {
+        let mut text = segment.dr.text.clone();
 
-            // Extract start and end times
-            let (start, end) = extract_time_tokens(&text, &token_regex);
-            let (s_time, e_time) = parse_time_tokens(&start, &end, &mut min_time, &mut max_time);
+        // Extract start and end times
+        let (start, end) = extract_time_tokens(&text, &token_regex);
+        let (s_time, e_time) = parse_time_tokens(&start, &end, &mut min_time, &mut max_time);
 
-            let range = format!("{}{}", start, end);
-            if ranges.insert(range) {
-                if segments_len > 1
-                    && i == segments_len - 1
-                    && s_time == min_time
-                    && e_time == max_time
-                {
-                    continue;
-                }
-
-                text = token_regex.replace_all(&text, "").to_string();
-                text.push('\n');
-                transcript.push_str(&text);
+        let range = format!("{}{}", start, end);
+        if ranges.insert(range) {
+            if segments_len > 1 && i == segments_len - 1 && s_time == min_time && e_time == max_time
+            {
+                continue;
             }
-        }
 
-        final_transcript.push_str(&transcript);
-        iter += 1;
+            text = token_regex.replace_all(&text, "").to_string();
+            text.push('\n');
+            transcript.push_str(&text);
+        }
     }
 
-    Ok(final_transcript)
+    Ok(transcript)
 }
 
 fn extract_time_tokens(text: &str, token_regex: &Regex) -> (String, String) {
@@ -290,28 +280,10 @@ fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut 
     (s_time, e_time)
 }
 
-#[allow(clippy::too_many_arguments)]
-pub async fn stt(
+pub async fn prepare_segments(
     audio_input: &AudioInput,
-    whisper_model: &mut WhisperModel,
-    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    vad_engine: &mut dyn VadEngine,
-    deepgram_api_key: Option<String>,
-    output_path: &PathBuf,
-    skip_encoding: bool,
-    languages: Vec<Language>,
-) -> Result<(String, String)> {
-    let model = &whisper_model.model;
-
-    debug!("Loading mel filters");
-    let mel_bytes = match model.config().num_mel_bins {
-        80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
-        128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
-        nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
-    };
-    let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
-    <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
-
+    vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
+) -> Result<Vec<SpeechSegment>> {
     let audio_data = if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
         info!(
             "device: {}, resampling from {} Hz to {} Hz",
@@ -364,20 +336,25 @@ pub async fn stt(
 
     let mut noise = 0.;
 
+    let mut vad_engine_guard = vad_engine.lock().await;
     for segment in segments.iter_mut() {
         let mut audio_frames = Vec::new();
         for chunk in segment.samples.chunks(frame_size) {
             total_frames += 1;
-            match vad_engine.audio_type(chunk) {
+            match vad_engine_guard.audio_type(chunk) {
                 Ok(status) => match status {
                     VadStatus::Speech => {
                         let processed_audio = spectral_subtraction(chunk, noise)?;
                         audio_frames.extend(processed_audio);
                         speech_frame_count += 1;
                     }
-                    _ => {
+                    VadStatus::Unknown => {
                         noise = average_noise_spectrum(chunk);
+                        let processed_audio = spectral_subtraction(chunk, noise)?;
+                        audio_frames.extend(processed_audio);
+                        speech_frame_count += 1;
                     }
+                    VadStatus::Silence => {}
                 },
                 Err(e) => {
                     debug!("VAD failed for chunk: {:?}", e);
@@ -390,7 +367,7 @@ pub async fn stt(
 
     let speech_duration_ms = speech_frame_count * 100; // Each frame is 100ms
     let speech_ratio = speech_frame_count as f32 / total_frames as f32;
-    let min_speech_ratio = vad_engine.get_min_speech_ratio();
+    let min_speech_ratio = vad_engine_guard.get_min_speech_ratio();
 
     info!(
         "device: {}, total audio frames processed: {}, frames that include speech: {}, speech duration: {}ms, speech ratio: {:.2}, min required ratio: {:.2}",
@@ -410,49 +387,65 @@ pub async fn stt(
             speech_ratio,
             min_speech_ratio
         );
-        return Ok(("".to_string(), "".to_string()));
+        return Ok(Vec::new());
     }
 
-    let transcription: Result<String> =
-        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
-            // Deepgram implementation
-            let api_key = deepgram_api_key.unwrap();
-            info!(
-                "device: {}, using deepgram api key: {}...",
-                audio_input.device,
-                &api_key[..8]
-            );
-            match transcribe_with_deepgram(
-                &api_key,
-                &speech_frames,
-                &audio_input.device.name,
-                audio_input.sample_rate,
-                languages.clone(),
-            )
+    Ok(segments)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn stt(
+    audio: &[f32],
+    sample_rate: u32,
+    device: &str,
+    whisper_model: &mut WhisperModel,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    deepgram_api_key: Option<String>,
+    output_path: &PathBuf,
+    skip_encoding: bool,
+    languages: Vec<Language>,
+) -> Result<(String, String)> {
+    let model = &whisper_model.model;
+
+    debug!("Loading mel filters");
+    let mel_bytes = match model.config().num_mel_bins {
+        80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
+        128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
+        nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
+    };
+    let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
+    <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
+
+    let transcription: Result<String> = if audio_transcription_engine
+        == AudioTranscriptionEngine::Deepgram.into()
+    {
+        // Deepgram implementation
+        let api_key = deepgram_api_key.unwrap();
+        info!(
+            "device: {}, using deepgram api key: {}...",
+            device,
+            &api_key[..8]
+        );
+        match transcribe_with_deepgram(&api_key, &audio, &device, sample_rate, languages.clone())
             .await
-            {
-                Ok(transcription) => Ok(transcription),
-                Err(e) => {
-                    error!(
-                        "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
-                        audio_input.device, e
-                    );
-                    // Fallback to Whisper
-                    process_with_whisper(
-                        &mut *whisper_model,
-                        segments,
-                        &mel_filters,
-                        languages.clone(),
-                    )
-                }
+        {
+            Ok(transcription) => Ok(transcription),
+            Err(e) => {
+                error!(
+                    "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
+                    device, e
+                );
+                // Fallback to Whisper
+                process_with_whisper(&mut *whisper_model, &audio, &mel_filters, languages.clone())
             }
-        } else {
-            // Existing Whisper implementation
-            process_with_whisper(&mut *whisper_model, segments, &mel_filters, languages)
-        };
+        }
+    } else {
+        // Existing Whisper implementation
+        process_with_whisper(&mut *whisper_model, &audio, &mel_filters, languages)
+    };
 
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-    let sanitized_device_name = audio_input.device.to_string().replace(['/', '\\'], "_");
+    let sanitized_device_name = device.replace(['/', '\\'], "_");
     let file_path = PathBuf::from(output_path)
         .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
         .to_str()
@@ -462,8 +455,8 @@ pub async fn stt(
     // Run FFmpeg in a separate task
     if !skip_encoding {
         encode_single_audio(
-            bytemuck::cast_slice(&audio_input.data),
-            audio_input.sample_rate,
+            bytemuck::cast_slice(&audio),
+            sample_rate,
             1,
             &file_path.into(),
         )?;
@@ -585,29 +578,49 @@ pub async fn create_whisper_channel(
             crossbeam::select! {
                 recv(input_receiver) -> input_result => {
                     match input_result {
-                        Ok(input) => {
+                        Ok(audio) => {
                             debug!("Received input from input_receiver");
                             let timestamp = SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
                                 .expect("Time went backwards")
                                 .as_secs();
 
-                            let transcription_result = if cfg!(target_os = "macos") {
+
+
+                            let segments = match prepare_segments(&audio, vad_engine.clone()).await {
+                                Ok(segments) => segments,
+                                Err(e) => {
+                                    error!("Error preparing segments: {:?}", e);
+                                    continue;
+                                }
+                            };
+
+                            for segment in segments {let transcription_result = if cfg!(target_os = "macos") {
                                 #[cfg(target_os = "macos")]
                                 {
                                     autoreleasepool(|| {
-                                        match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
+                                        match stt_sync(&segment.samples, audio.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
                                             Ok((transcription, path)) => TranscriptionResult {
-                                                input: input.clone(),
+                                                input: AudioInput {
+                                                    data: Arc::new(segment.samples),
+                                                    sample_rate: audio.sample_rate,
+                                                    channels: 1,
+                                                    device: audio.device.clone(),
+                                                },
                                                 transcription: Some(transcription),
                                                 path,
                                                 timestamp,
                                                 error: None,
                                             },
                                             Err(e) => {
-                                                error!("STT error for input {}: {:?}", input.device, e);
+                                                error!("STT error for input {}: {:?}", audio.device, e);
                                                 TranscriptionResult {
-                                                    input: input.clone(),
+                                                    input: AudioInput {
+                                                        data: Arc::new(segment.samples),
+                                                        sample_rate: audio.sample_rate,
+                                                        channels: 1,
+                                                        device: audio.device.clone(),
+                                                    },
                                                     transcription: None,
                                                     path: "".to_string(),
                                                     timestamp,
@@ -622,18 +635,28 @@ pub async fn create_whisper_channel(
                                     unreachable!("This code should not be reached on non-macOS platforms")
                                 }
                             } else {
-                                match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
+                                match stt_sync(&segment.samples, audio.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
                                     Ok((transcription, path)) => TranscriptionResult {
-                                        input: input.clone(),
+                                        input: AudioInput {
+                                            data: Arc::new(segment.samples),
+                                            sample_rate: audio.sample_rate,
+                                            channels: 1,
+                                            device: audio.device.clone(),
+                                        },
                                         transcription: Some(transcription),
                                         path,
                                         timestamp,
                                         error: None,
                                     },
                                     Err(e) => {
-                                        error!("STT error for input {}: {:?}", input.device, e);
+                                        error!("STT error for input {}: {:?}", audio.device, e);
                                         TranscriptionResult {
-                                            input: input.clone(),
+                                            input: AudioInput {
+                                                data: Arc::new(segment.samples),
+                                                sample_rate: audio.sample_rate,
+                                                channels: 1,
+                                                device: audio.device.clone(),
+                                            },
                                             transcription: None,
                                             path: "".to_string(),
                                             timestamp,
@@ -645,7 +668,7 @@ pub async fn create_whisper_channel(
 
                             if output_sender.send(transcription_result).is_err() {
                                 break;
-                            }
+                            }}
                         },
                         Err(e) => {
                             error!("Error receiving input: {:?}", e);

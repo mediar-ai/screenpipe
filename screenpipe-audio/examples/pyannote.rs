@@ -6,7 +6,7 @@ cargo run --example infinite 6_speakers.wav
 */
 
 use anyhow::{anyhow, Result};
-use screenpipe_audio::pyannote::segment::{get_segments, Segment};
+use screenpipe_audio::pyannote::segment::{get_segments, SpeechSegment};
 use screenpipe_audio::pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
 use screenpipe_audio::resample;
 use std::{
@@ -15,7 +15,7 @@ use std::{
 };
 
 fn process_segment(
-    segment: Segment,
+    segment: SpeechSegment,
     embedding_extractor: &mut EmbeddingExtractor,
     embedding_manager: &mut EmbeddingManager,
     search_threshold: f32,
