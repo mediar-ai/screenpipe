@@ -41,7 +41,7 @@ if [ "$COMMIT_CURRENT_RELEASE" == "" ]; then
 fi
 
 # If both are equal, then there's nothing to add to the changelog
-if [ "$COMMIT_LAST_RELEASE" == "$COMMIT_CURRENT_RELEASE" ]; then
+if [ "$COMMIT_LAST_RELEASE" == "$COMMIT_CURRENT_RELEASE" ] || [ "$COMMIT_LAST_RELEASE" == "" ] || [ "$COMMIT_CURRENT_RELEASE" == "" ]; then
   echo "No new commits to add to the changelog"
   echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
   exit 0
