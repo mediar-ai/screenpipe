@@ -126,11 +126,11 @@ async fn main() -> anyhow::Result<()> {
 
     // Check if Screenpipe is present in PATH
     match ensure_screenpipe_in_path().await {
-        Ok(_) => info!("Screenpipe is available and properly set in the PATH"),
+        Ok(_) => info!("screenpipe is available and properly set in the PATH"),
         Err(e) => {
-            error!("Screenpipe PATH check failed: {}", e);
-            error!("Please ensure Screenpipe is installed correctly and is in your PATH");
-            h.capture_error("Please ensure Screenpipe is installed correctly and is in your PATH");
+            error!("screenpipe PATH check failed: {}", e);
+            error!("please ensure screenpipe is installed correctly and is in your PATH");
+            h.capture_error("please ensure screenpipe is installed correctly and is in your PATH");
             return Err(e.into());
         }
     }
@@ -889,7 +889,7 @@ async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let screenpipe_path = PathBuf::from(stdout.trim());
-        println!("screenpipe already in PATH at: {}", screenpipe_path.display());
+        info!("screenpipe already in PATH at: {}", screenpipe_path.display());
         return Ok(());
     }
 
@@ -897,7 +897,7 @@ async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
     let current_exe = env::current_exe()?;
     let current_dir = match current_exe.parent() {
         Some(dir) => dir,
-        None => return Err(anyhow::anyhow!("Failed to get current executable directory")),
+        None => return Err(anyhow::anyhow!("failed to get current executable directory")),
     };
     let screenpipe_bin = current_dir.join("screenpipe");
 
@@ -909,7 +909,7 @@ async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
         } else if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
             persist_path_unix(current_dir.to_path_buf())?;
         }
-        println!("Added {} to the PATH permanently", screenpipe_bin.display());
+        info!("added {} to the PATH permanently", screenpipe_bin.display());
     }
 
     Ok(())
@@ -921,14 +921,14 @@ fn persist_path_windows(new_path: PathBuf) -> anyhow::Result<()> {
 
     // Check if the new path is already in the current PATH
     if current_path.contains(new_path.to_str().unwrap_or("")) {
-        println!("PATH already contains {}", new_path.display());
+        info!("PATH already contains {}", new_path.display());
         return Ok(());
     }
 
     // Ensure 'setx' command can handle the new PATH length
     if current_path.len() + new_path.to_str().unwrap_or("").len() + 1 > 1024 {
         return Err(anyhow::anyhow!(
-            "The PATH is too long to persist using 'setx'. Please shorten the PATH."
+            "the PATH is too long to persist using 'setx'. please shorten the PATH."
         ));
     }
 
@@ -940,17 +940,17 @@ fn persist_path_windows(new_path: PathBuf) -> anyhow::Result<()> {
         .arg("PATH")
         .arg(&new_path_env)
         .output()
-        .map_err(|e| anyhow::anyhow!("Failed to execute 'setx' command: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("failed to execute 'setx' command: {}", e))?;
 
     // Check if the 'setx' command was successful
     if output.status.success() {
-        println!("Persisted PATH on Windows using setx");
+        info!("persisted PATH on Windows using setx");
         Ok(())
     } else {
         // Capture the stderr output from 'setx' if the command fails
         let error_message = String::from_utf8_lossy(&output.stderr);
         Err(anyhow::anyhow!(
-            "Failed to persist PATH using 'setx': {}",
+            "failed to persist PATH using 'setx': {}",
             error_message
         ))
     }
@@ -966,7 +966,7 @@ fn persist_path_unix(new_path: PathBuf) -> anyhow::Result<()> {
     // Check if the new path is already in the config file
     if let Ok(config_content) = fs::read_to_string(&shell_config_path) {
         if config_content.contains(new_path.to_str().unwrap()) {
-            println!("PATH is already persisted in {}", shell_config_path.display());
+            info!("PATH is already persisted in {}", shell_config_path.display());
             return Ok(());
         }
     }
@@ -979,8 +979,8 @@ fn persist_path_unix(new_path: PathBuf) -> anyhow::Result<()> {
     // Append the new path entry to the config file
     let mut file = fs::OpenOptions::new().append(true).open(&shell_config_path)?;
     file.write_all(new_path_entry.as_bytes())?;
-    println!("Persisted PATH in {}", shell_config_path.display());
-    println!("Please run 'source {}' or restart your shell to apply the changes.", shell_config_path.display());
+    info!("persisted PATH in {}", shell_config_path.display());
+    info!("please run 'source {}' or restart your shell to apply the changes.", shell_config_path.display());
 
     Ok(())
 }
