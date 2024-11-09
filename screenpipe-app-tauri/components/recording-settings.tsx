@@ -69,6 +69,7 @@ import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
+import { ToastAction } from "@/components/ui/toast";
 
 interface AudioDevice {
   name: string;
@@ -227,6 +228,8 @@ export function RecordingSettings({
         useChineseMirror: localSettings.useChineseMirror,
         languages: localSettings.languages,
         enableBeta: localSettings.enableBeta,
+        enableFrameCache: localSettings.enableFrameCache,
+        enableUiMonitoring: localSettings.enableUiMonitoring,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -260,14 +263,14 @@ export function RecordingSettings({
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       toast({
-        title: "Settings updated successfully",
-        description: "Screenpipe has been restarted with new settings.",
+        title: "settings updated successfully",
+        description: "screenpipe has been restarted with new settings.",
       });
     } catch (error) {
-      console.error("Failed to update settings:", error);
+      console.error("failed to update settings:", error);
       toast({
-        title: "Error updating settings",
-        description: "Please try again or check the logs for more information.",
+        title: "error updating settings",
+        description: "please try again or check the logs for more information.",
         variant: "destructive",
       });
     } finally {
@@ -543,6 +546,53 @@ export function RecordingSettings({
         // Revert the toggle if setup fails
         setLocalSettings({ ...localSettings, enableBeta: false });
       }
+    }
+  };
+
+  const handleFrameCacheToggle = (checked: boolean) => {
+    setLocalSettings({
+      ...localSettings,
+      enableFrameCache: checked,
+    });
+  };
+
+  const handleShowTimeline = async () => {
+    await invoke("show_timeline");
+  };
+
+  const handleUiMonitoringToggle = async (checked: boolean) => {
+    try {
+        if (checked) {
+            // Check accessibility permissions first
+            const hasPermission = await invoke('check_accessibility_permissions');
+            if (!hasPermission) {
+                toast({
+                    title: "accessibility permission required",
+                    description: "please grant accessibility permission in system preferences",
+                    action: (
+                        <ToastAction altText="open preferences" onClick={() => invoke('open_accessibility_preferences')}>
+                            open preferences
+                        </ToastAction>
+                    ),
+                    variant: "destructive",
+                });
+                return;
+            }
+        }
+        
+        // Just update the local setting - the update button will handle the restart
+        setLocalSettings({
+            ...localSettings,
+            enableUiMonitoring: checked
+        });
+        
+    } catch (error) {
+        console.error("failed to toggle ui monitoring:", error);
+        toast({
+            title: "error checking accessibility permissions",
+            description: "please try again or check the logs",
+            variant: "destructive",
+        });
     }
   };
 
@@ -1327,6 +1377,80 @@ export function RecordingSettings({
                           </a>
                           <br />
                           (only tested on US or German qwertz keyboards)
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+              </div>
+            )}
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="frame-cache-toggle"
+                    checked={localSettings.enableFrameCache}
+                    onCheckedChange={handleFrameCacheToggle}
+                  />
+                  <Label
+                    htmlFor="frame-cache-toggle"
+                    className="flex items-center space-x-2"
+                  >
+                    <span>enable timeline UI</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>
+                            experimental feature that provides a timeline UI
+                            (like rewind.ai).
+                            <br />
+                            may increase CPU usage and memory consumption.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                </div>
+                {localSettings.enableFrameCache && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleShowTimeline}
+                    className="ml-2"
+                  >
+                    show timeline
+                  </Button>
+                )}
+              </div>
+            </div>
+            {isMacOS && (
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="ui-monitoring-toggle"
+                  checked={localSettings.enableUiMonitoring}
+                  onCheckedChange={handleUiMonitoringToggle}
+                />
+                <Label
+                  htmlFor="ui-monitoring-toggle"
+                  className="flex items-center space-x-2"
+                >
+                  <span>enable UI monitoring</span>
+                  <Badge variant="outline" className="ml-2">accessibility permissions</Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4 cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>
+                          enables monitoring of UI elements and their interactions.
+                          <br />
+                          this allows for better context in search results
+                          <br />
+                          * requires accessibility permission
                         </p>
                       </TooltipContent>
                     </Tooltip>

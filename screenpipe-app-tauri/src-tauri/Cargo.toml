@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.7.8"
+version = "0.10.1"
 description = ""
 authors = ["you"]
 license = ""
@@ -85,6 +85,13 @@ tauri-plugin-global-shortcut = "2"
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = "2.0.0"
 tauri-plugin-updater = "2.0.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9.4"
+libc = "0.2.152"
+cocoa = "0.26.0"
+objc = "0.2.7"
+base64 = "0.22.1"
 
 [features]
 cudart = []

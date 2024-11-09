@@ -1,35 +1,40 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
-    response::Json as JsonResponse,
+    response::{sse::Event, Json as JsonResponse, Sse},
     routing::{get, post},
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
-use futures::future::{try_join, try_join_all};
-#[cfg(feature = "llm")]
-use screenpipe_core::LLM;
-#[cfg(feature = "llm")]
-use screenpipe_core::{ChatRequest, ChatResponse};
-use screenpipe_vision::monitor::list_monitors;
+use futures::{
+    future::{try_join, try_join_all},
+    Stream,
+};
+use image::ImageFormat::{self};
 
 use crate::{
     db::TagContentType,
     pipe_manager::{PipeInfo, PipeManager},
+    video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
+    video_cache::{FrameCache, TimeSeriesFrame},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
     ContentType, DatabaseManager, SearchResult,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
+use base64::prelude::*;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
     DeviceType,
 };
+use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
+    convert::Infallible,
     net::SocketAddr,
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
@@ -37,7 +42,7 @@ use std::{
 };
 
 use tokio::net::TcpListener;
-use tower_http::trace::TraceLayer;
+use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
 // At the top of the file, add:
@@ -54,10 +59,8 @@ pub struct AppState {
     pub pipe_manager: Arc<PipeManager>,
     pub vision_disabled: bool,
     pub audio_disabled: bool,
-    #[cfg(feature = "llm")]
-    pub llm_enabled: bool,
-    #[cfg(feature = "llm")]
-    pub llm: Option<LLM>,
+    pub ui_monitoring_enabled: bool,
+    pub frame_cache: Option<Arc<FrameCache>>,
 }
 
 // Update the SearchQuery struct
@@ -122,6 +125,7 @@ pub enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
     FTS(FTSContent),
+    UI(UiContent),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -160,6 +164,18 @@ pub struct FTSContent {
     pub file_path: String,
     pub original_frame_text: Option<String>,
     pub tags: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UiContent {
+    pub id: i64,
+    pub text: String,
+    pub timestamp: DateTime<Utc>,
+    pub app_name: String,
+    pub window_name: String,
+    pub initial_traversal_at: Option<DateTime<Utc>>,
+    pub file_path: String,
+    pub offset_index: i64,
 }
 
 #[derive(Serialize)]
@@ -207,8 +223,10 @@ pub struct HealthCheckResponse {
     pub status: String,
     pub last_frame_timestamp: Option<DateTime<Utc>>,
     pub last_audio_timestamp: Option<DateTime<Utc>>,
+    pub last_ui_timestamp: Option<DateTime<Utc>>,
     pub frame_status: String,
     pub audio_status: String,
+    pub ui_status: String,
     pub message: String,
     pub verbose_instructions: Option<String>,
 }
@@ -241,13 +259,13 @@ pub(crate) async fn search(
     let content_type = if query.app_name.is_some() || query.window_name.is_some() {
         ContentType::OCR
     } else {
-        query.content_type
+        query.content_type.clone()
     };
 
     let (results, total) = try_join(
         state.db.search(
             query_str,
-            content_type,
+            content_type.clone(),
             query.pagination.limit,
             query.pagination.offset,
             query.start_time,
@@ -311,6 +329,16 @@ pub(crate) async fn search(
                 file_path: fts.video_file_path.clone(),
                 original_frame_text: fts.original_frame_text.clone(),
                 tags: fts.tags.clone(),
+            }),
+            SearchResult::UI(ui) => ContentItem::UI(UiContent {
+                id: ui.id,
+                text: ui.text.clone(),
+                timestamp: ui.timestamp,
+                app_name: ui.app_name.clone(),
+                window_name: ui.window_name.clone(),
+                initial_traversal_at: ui.initial_traversal_at,
+                file_path: ui.file_path.clone(),
+                offset_index: ui.offset_index,
             }),
         })
         .collect();
@@ -477,15 +505,13 @@ pub(crate) async fn remove_tags(
 }
 
 pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<HealthCheckResponse> {
-    let (last_frame, last_audio) = match state.db.get_latest_timestamps().await {
-        Ok((frame, audio)) => (frame, audio),
+    let (last_frame, last_audio, last_ui) = match state.db.get_latest_timestamps().await {
+        Ok((frame, audio, ui)) => (frame, audio, ui),
         Err(e) => {
             error!("failed to get latest timestamps: {}", e);
-            (None, None)
+            (None, None, None)
         }
     };
-    debug!("last frame timestamp: {:?}", last_frame);
-    debug!("last audio timestamp: {:?}", last_audio);
 
     let now = Utc::now();
     let threshold = Duration::from_secs(60);
@@ -525,9 +551,19 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         }
     };
 
-    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
-        || frame_status == "disabled")
+    let ui_status = if !state.ui_monitoring_enabled {
+        "disabled"
+    } else {
+        match last_ui {
+            Some(timestamp) if now.signed_duration_since(timestamp) < chrono::Duration::from_std(threshold).unwrap() => "ok",
+            Some(_) => "stale",
+            None => "no data"
+        }
+    };
+
+    let (overall_status, message, verbose_instructions) = if (frame_status == "ok" || frame_status == "disabled") 
         && (audio_status == "ok" || audio_status == "disabled")
+        && (ui_status == "ok" || ui_status == "disabled")
     {
         (
             "healthy",
@@ -542,11 +578,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         if audio_status != "ok" && audio_status != "disabled" {
             unhealthy_systems.push("audio");
         }
+        if ui_status != "ok" && ui_status != "disabled" {
+            unhealthy_systems.push("ui monitoring");
+        }
 
         (
             "unhealthy",
-            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}", 
-                    unhealthy_systems.join(", "), frame_status, audio_status),
+            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}", 
+                    unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
             Some("if you're experiencing issues, please try the following steps:\n\
                   1. restart the application.\n\
                   2. if using a desktop app, reset your screenpipe os audio/screen recording permissions.\n\
@@ -559,8 +598,10 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         status: overall_status.to_string(),
         last_frame_timestamp: last_frame,
         last_audio_timestamp: last_audio,
+        last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status: audio_status.to_string(),
+        ui_status: ui_status.to_string(),
         message,
         verbose_instructions,
     })
@@ -706,10 +747,7 @@ pub struct Server {
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
     audio_disabled: bool,
-    #[cfg(feature = "llm")]
-    enable_llm: bool,
-    #[cfg(feature = "llm")]
-    llm: Option<LLM>,
+    ui_monitoring_enabled: bool,
 }
 
 impl Server {
@@ -723,8 +761,7 @@ impl Server {
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
         audio_disabled: bool,
-        #[cfg(feature = "llm")] enable_llm: bool,
-        #[cfg(feature = "llm")] llm: Option<LLM>,
+        ui_monitoring_enabled: bool,
     ) -> Self {
         Server {
             db,
@@ -735,10 +772,7 @@ impl Server {
             pipe_manager,
             vision_disabled,
             audio_disabled,
-            #[cfg(feature = "llm")]
-            enable_llm,
-            #[cfg(feature = "llm")]
-            llm,
+            ui_monitoring_enabled,
         }
     }
 
@@ -746,12 +780,13 @@ impl Server {
         self,
         device_status: HashMap<AudioDevice, DeviceControl>,
         api_plugin: F,
+        enable_frame_cache: bool,
     ) -> Result<(), std::io::Error>
     where
         F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
     {
         let app_state = Arc::new(AppState {
-            db: self.db,
+            db: self.db.clone(),
             vision_control: self.vision_control,
             audio_devices_control: self.audio_devices_control,
             devices_status: device_status,
@@ -760,15 +795,30 @@ impl Server {
             pipe_manager: self.pipe_manager,
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
-            #[cfg(feature = "llm")]
-            llm_enabled: self.enable_llm,
-            #[cfg(feature = "llm")]
-            llm: self.llm,
+            ui_monitoring_enabled: self.ui_monitoring_enabled,
+            frame_cache: if enable_frame_cache {
+                Some(Arc::new(
+                    FrameCache::new(self.screenpipe_dir.clone().join("data"), self.db.clone())
+                        .await
+                        .unwrap(),
+                ))
+            } else {
+                None
+            },
         });
 
         let app = create_router()
             .layer(ApiPluginLayer::new(api_plugin))
-            .layer(CorsLayer::permissive())
+            .layer(
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods(Any)
+                    .allow_headers(Any)
+                    .expose_headers([
+                        axum::http::header::CONTENT_TYPE,
+                        axum::http::header::CACHE_CONTROL,
+                    ]), // Important for SSE
+            )
             .layer(
                 TraceLayer::new_for_http()
                     .make_span_with(DefaultMakeSpan::new().include_headers(true)),
@@ -808,40 +858,6 @@ async fn merge_frames_handler(
     }
 }
 
-#[cfg(feature = "llm")]
-async fn llm_chat_handler(
-    State(state): State<Arc<AppState>>,
-    JsonResponse(payload): JsonResponse<ChatRequest>,
-) -> Result<JsonResponse<ChatResponse>, (StatusCode, JsonResponse<Value>)> {
-    if payload.stream {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            JsonResponse(json!({"error": "Stream not supported"})),
-        ));
-    }
-
-    let llm = match &state.llm {
-        Some(llm) => llm,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                JsonResponse(json!({"error": "LLM is not enabled"})),
-            ))
-        }
-    };
-
-    match llm.chat(payload) {
-        Ok(res) => Ok(JsonResponse(res)),
-        Err(e) => {
-            error!("Failed to chat: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": e.to_string()})),
-            ))
-        }
-    }
-}
-
 #[derive(Deserialize)]
 struct RawSqlQuery {
     query: String,
@@ -861,6 +877,241 @@ async fn execute_raw_sql(
             ))
         }
     }
+}
+
+#[derive(Deserialize)]
+pub struct AddContentRequest {
+    pub device_name: String,     // Moved device_name to the top level
+    pub content: AddContentData, // The actual content (either Frame or Transcription)
+}
+
+#[derive(Deserialize)]
+pub struct AddContentData {
+    pub content_type: String,
+    pub data: ContentData,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum ContentData {
+    Frames(Vec<FrameContent>),
+    Transcription(AudioTranscription),
+}
+
+#[derive(Deserialize)]
+pub struct FrameContent {
+    pub file_path: String,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub app_name: Option<String>,
+    pub window_name: Option<String>,
+    pub ocr_results: Option<Vec<OCRResult>>,
+    pub tags: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OCRResult {
+    pub text: String,
+    pub text_json: Option<String>,
+    pub ocr_engine: Option<String>,
+    pub focused: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct AudioTranscription {
+    pub transcription: String,
+    pub transcription_engine: String,
+}
+
+#[derive(Serialize)]
+pub struct AddContentResponse {
+    pub success: bool,
+    pub message: Option<String>,
+}
+
+async fn add_frame_to_db(
+    state: &AppState,
+    frame: &FrameContent,
+    device_name: &str,
+) -> Result<(), anyhow::Error> {
+    let db = &state.db;
+
+    let frame_id = db
+        .insert_frame(&device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
+        .await?;
+
+    if let Some(ocr_results) = &frame.ocr_results {
+        for ocr in ocr_results {
+            db.insert_ocr_text(
+                frame_id,
+                &ocr.text,
+                &ocr.text_json.as_deref().unwrap_or(""),
+                &frame.app_name.as_deref().unwrap_or(""),
+                &frame.window_name.as_deref().unwrap_or(""),
+                Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
+                false,
+            )
+            .await?;
+        }
+    }
+
+    if let Some(tags) = &frame.tags {
+        db.add_tags(frame_id, TagContentType::Vision, tags.clone())
+            .await?;
+    }
+
+    Ok(())
+}
+
+fn encode_frame_from_file_path(file_path: &str) -> Result<Vec<u8>, anyhow::Error> {
+    let image = image::open(file_path)?;
+    let mut buffer = Vec::new();
+    image.write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)?;
+    Ok(buffer)
+}
+
+async fn write_frames_to_video(
+    frames: &Vec<FrameContent>,
+    video_file_path: &str,
+    fps: f64,
+) -> Result<(), anyhow::Error> {
+    let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps).await?;
+    let mut ffmpeg_stdin = ffmpeg_child
+        .stdin
+        .take()
+        .expect("Failed to open stdin for FFmpeg");
+
+    for frame in frames {
+        let encoded_frame = encode_frame_from_file_path(&frame.file_path)?;
+        if let Err(e) = write_frame_to_ffmpeg(&mut ffmpeg_stdin, &encoded_frame).await {
+            error!("Failed to write frame to FFmpeg: {}", e);
+            return Err(e);
+        }
+    }
+
+    finish_ffmpeg_process(ffmpeg_child, Some(ffmpeg_stdin)).await;
+    Ok(())
+}
+
+async fn add_transcription_to_db(
+    state: &AppState,
+    transcription: &AudioTranscription,
+    device_name: &str,
+) -> Result<(), anyhow::Error> {
+    let db = &state.db;
+
+    let device = AudioDevice {
+        name: device_name.to_string(),
+        device_type: DeviceType::Input,
+    };
+
+    let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
+
+    db.insert_audio_transcription(
+        dummy_audio_chunk_id, // No associated audio chunk
+        &transcription.transcription,
+        -1,
+        &transcription.transcription_engine,
+        &device,
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub(crate) async fn add_to_database(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AddContentRequest>,
+) -> Result<JsonResponse<AddContentResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+    let mut success_messages = Vec::new();
+
+    match payload.content.content_type.as_str() {
+        "frames" => {
+            if let ContentData::Frames(frames) = &payload.content.data {
+                if !frames.is_empty() {
+                    let output_dir = state.screenpipe_dir.join("data");
+                    let time = Utc::now();
+                    let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
+                    let video_file_path = PathBuf::from(output_dir)
+                        .join(format!("{}_{}.mp4", device_name, formatted_time))
+                        .to_str()
+                        .expect("Failed to create valid path")
+                        .to_string();
+
+                    if let Err(e) = state
+                        .db
+                        .insert_video_chunk(&video_file_path, &device_name)
+                        .await
+                    {
+                        error!(
+                            "Failed to insert video chunk for device {}: {}",
+                            device_name, e
+                        );
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(
+                                json!({"error": format!("Failed to insert video chunk: {}", e)}),
+                            ),
+                        ));
+                    }
+
+                    if let Err(e) = write_frames_to_video(frames, &video_file_path, MAX_FPS).await {
+                        error!(
+                            "Failed to write frames to video file {}: {}",
+                            video_file_path, e
+                        );
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(
+                                json!({"error": format!("Failed to write frames to video: {}", e)}),
+                            ),
+                        ));
+                    }
+
+                    for frame in frames {
+                        if let Err(e) = add_frame_to_db(&state, frame, &device_name).await {
+                            error!(
+                                "Failed to add frame content for device {}: {}",
+                                device_name, e
+                            );
+                        }
+                    }
+
+                    success_messages.push("Frames added successfully".to_string());
+                }
+            }
+        }
+        "transcription" => {
+            if let ContentData::Transcription(transcription) = &payload.content.data {
+                if let Err(e) = add_transcription_to_db(&state, transcription, &device_name).await {
+                    error!(
+                        "Failed to add transcription for device {}: {}",
+                        device_name, e
+                    );
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(
+                            json!({"error": format!("Failed to add transcription: {}", e)}),
+                        ),
+                    ));
+                }
+
+                success_messages.push("Transcription added successfully".to_string());
+            }
+        }
+        _ => {
+            error!("Unknown content type: {}", payload.content.content_type);
+            return Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({"error": "Unsupported content type"})),
+            ));
+        }
+    }
+
+    Ok(JsonResponse(AddContentResponse {
+        success: true,
+        message: Some(success_messages.join(", ")),
+    }))
 }
 
 #[cfg(feature = "experimental")]
@@ -949,8 +1200,103 @@ struct InputControlResponse {
     success: bool,
 }
 
+#[derive(Deserialize, PartialEq)]
+enum Order {
+    Ascending,
+    Descending,
+}
+
+// Add this new struct
+#[derive(Deserialize)]
+pub struct StreamFramesRequest {
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    // #[serde(rename = "order")]
+    // #[serde(default = "descending")]
+    // order: Order,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StreamTimeSeriesResponse {
+    pub timestamp: DateTime<Utc>,
+    pub devices: Vec<DeviceFrameResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeviceFrameResponse {
+    pub device_id: String,
+    pub frame: String, // base64 encoded image
+    pub metadata: DeviceMetadata,
+    pub audio: Vec<AudioData>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeviceMetadata {
+    pub file_path: String,
+    pub app_name: String,
+    pub window_name: String,
+    pub ocr_text: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AudioData {
+    pub device_name: String,
+    pub is_input: bool,
+    pub transcription: String,
+    pub audio_file_path: String,
+    pub duration_secs: f64,
+    pub start_offset: f64, // offset from frame timestamp
+}
+
+impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
+    fn from(frame: TimeSeriesFrame) -> Self {
+        StreamTimeSeriesResponse {
+            timestamp: frame.timestamp,
+            devices: frame
+                .frame_data
+                .into_iter()
+                .map(|device_frame| {
+                    DeviceFrameResponse {
+                        device_id: device_frame.device_id,
+                        frame: BASE64_STANDARD.encode(&device_frame.image_data),
+                        metadata: DeviceMetadata {
+                            file_path: device_frame.metadata.file_path,
+                            app_name: device_frame.metadata.app_name,
+                            window_name: device_frame.metadata.window_name,
+                            ocr_text: device_frame.metadata.ocr_text,
+                        },
+                        audio: device_frame
+                            .audio_entries
+                            .into_iter()
+                            .map(|audio| {
+                                AudioData {
+                                    device_name: audio.device_name,
+                                    is_input: audio.is_input,
+                                    transcription: audio.transcription,
+                                    audio_file_path: audio.audio_file_path,
+                                    duration_secs: audio.duration_secs,
+                                    start_offset: 0.0, // calculate based on audio timestamp vs frame timestamp
+                                }
+                            })
+                            .collect(),
+                    }
+                })
+                .collect(),
+        }
+    }
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
-    let router = Router::new()
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .expose_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::CACHE_CONTROL,
+        ]); // Important for SSE
+
+    Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
         .route("/vision/list", post(api_list_monitors))
@@ -966,15 +1312,96 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
-        .route("/raw_sql", post(execute_raw_sql));
+        .route("/raw_sql", post(execute_raw_sql))
+        .route("/add", post(add_to_database))
+        .route("/stream/frames", get(stream_frames_handler))
+        .layer(cors)
+}
 
-    #[cfg(feature = "llm")]
-    let router = router.route("/llm/chat", post(llm_chat_handler));
+// Add the new handler
+async fn stream_frames_handler(
+    Query(request): Query<StreamFramesRequest>,
+    State(state): State<Arc<AppState>>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    info!(
+        "streaming frames from {} to {}",
+        request.start_time, request.end_time
+    );
 
-    #[cfg(feature = "experimental")]
-    let router = router.route("/experimental/input_control", post(input_control_handler));
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
 
-    router
+    // Create a stream that will be used for both success and error cases
+    let stream = async_stream::stream! {
+        // Early validation of frame cache
+        let cache = match state.frame_cache.as_ref() {
+            Some(cache) => cache.clone(),
+            None => {
+                error!("frame cache not initialized");
+                yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
+                return;
+            }
+        };
+
+        // Calculate duration in minutes between start and end time
+        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1) as i64;
+
+        // Calculate center timestamp
+        let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
+
+        // Use a cancellation token to handle client disconnection
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+
+        // Spawn frame extraction task using get_frames
+        tokio::spawn({
+            let frame_tx = frame_tx.clone();
+            async move {
+                tokio::select! {
+                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true) => {
+                        if let Err(e) = result {
+                            error!("frame extraction failed: {}", e);
+                            // Send error to client
+                            let _ = frame_tx.send(TimeSeriesFrame {
+                                timestamp: Utc::now(),
+                                frame_data: vec![],
+                                error: Some(format!("frame extraction failed: {}", e)),
+                            }).await;
+                        }
+                    }
+                    _ = cancel_rx => {
+                        debug!("client disconnected, stopping frame stream");
+                    }
+                }
+            }
+        });
+
+        let _cancel_guard = scopeguard::guard(cancel_tx, |tx| {
+            let _ = tx.send(());  // Signal cancellation when stream is dropped
+        });
+
+        while let Some(timeseries_frame) = frame_rx.recv().await {
+            // Handle potential error in the frame
+            if let Some(error) = timeseries_frame.error {
+                yield Ok(Event::default().data(format!("{{\"error\": \"{}\"}}", error)));
+                break; // Stop streaming on error
+            }
+
+            // Convert frame to response and send
+            match serde_json::to_string(&StreamTimeSeriesResponse::from(timeseries_frame)) {
+                Ok(json) => yield Ok(Event::default().data(json)),
+                Err(e) => {
+                    error!("failed to serialize frame: {}", e);
+                    yield Ok(Event::default().data(format!("{{\"error\": \"failed to serialize frame: {}\"}}", e)));
+                    break;
+                }
+            }
+        }
+    };
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    )
 }
 
 /*
@@ -1015,8 +1442,6 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_fra
 # 30 min to 25 min ago
 curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
-
-curl "http://localhost:3030/search?limit=1&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 curl "http://localhost:3030/search?limit=1&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
 
@@ -1186,4 +1611,3 @@ MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
 
 */
-

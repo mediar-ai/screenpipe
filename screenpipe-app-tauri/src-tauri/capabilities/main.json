@@ -2,10 +2,11 @@
   "identifier": "migrated",
   "description": "permissions that were migrated from v1",
   "local": true,
-  "windows": ["main"],
+  "windows": ["main", "timeline"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:default",
+    "core:app:allow-version",
     "process:allow-restart",
     "process:allow-exit",
     "notification:default",

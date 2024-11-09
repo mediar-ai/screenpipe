@@ -35,6 +35,7 @@ import {
   Square,
   Settings,
   Clock,
+  Check,
 } from "lucide-react";
 import { useToast } from "./ui/use-toast";
 import posthog from "posthog-js";
@@ -67,7 +68,6 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { Separator } from "./ui/separator";
-import { useInputHistory } from "@/lib/hooks/use-input-history";
 import { ContextUsageIndicator } from "./context-usage-indicator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatISO } from "date-fns";
@@ -79,8 +79,132 @@ import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { SearchHistory } from "@/lib/types/history";
 
-export function SearchChat() {
+interface SearchChatProps {
+  currentSearchId: string | null;
+  onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
+  searches: SearchHistory[];
+}
+
+interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  dataSelector: (results: ContentItem[]) => any;
+  systemPrompt: string;
+}
+
+const AGENTS: Agent[] = [
+  {
+    id: "context-master",
+    name: "context master",
+    description: "analyzes everything: apps, windows, text & audio",
+    systemPrompt:
+      "you analyze all types of data from screen recordings and audio transcriptions. provide comprehensive insights.",
+    dataSelector: (results) => results,
+  },
+  {
+    id: "window-detective",
+    name: "window detective",
+    description: "focuses on app usage patterns",
+    systemPrompt:
+      "you specialize in analyzing app usage patterns and window switching behavior. help users understand their app usage.",
+    dataSelector: (results) =>
+      results
+        .filter(
+          (item) =>
+            item.type === "OCR" &&
+            (item.content.app_name || item.content.window_name)
+        )
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          // @ts-ignore
+          app_name: item.content.app_name,
+          // @ts-ignore
+          window_name: item.content.window_name,
+        })),
+  },
+  {
+    id: "text-oracle",
+    name: "text oracle",
+    description: "analyzes screen text (OCR)",
+    systemPrompt:
+      "you focus on text extracted from screen recordings. help users find and understand text content.",
+    dataSelector: (results) =>
+      results
+        .filter((item) => item.type === "OCR")
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          text: item.content.text,
+          app_name: item.content.app_name,
+        })),
+  },
+  {
+    id: "voice-sage",
+    name: "voice sage",
+    description: "focuses on audio transcriptions",
+    systemPrompt:
+      "you analyze audio transcriptions from recordings. help users understand spoken content.",
+    dataSelector: (results) =>
+      results
+        .filter((item) => item.type === "Audio")
+        .map((item) => ({
+          timestamp: item.content.timestamp,
+          transcription: item.content.transcription,
+        })),
+  },
+];
+
+// Add this helper function to highlight keywords in text
+const highlightKeyword = (text: string, keyword: string): JSX.Element => {
+  if (!keyword || !text) return <>{text}</>;
+
+  const parts = text.split(new RegExp(`(${keyword})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === keyword.toLowerCase() ? (
+          <span
+            key={i}
+            className="bg-yellow-200 dark:bg-yellow-800 rounded px-0.5"
+          >
+            {part}
+          </span>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+};
+
+// Update the getContextAroundKeyword function to return both text and positions
+const getContextAroundKeyword = (
+  text: string,
+  keyword: string,
+  contextLength: number = 40
+): string => {
+  if (!keyword || !text) return text;
+
+  const index = text.toLowerCase().indexOf(keyword.toLowerCase());
+  if (index === -1) return text;
+
+  const start = Math.max(0, index - contextLength);
+  const end = Math.min(text.length, index + keyword.length + contextLength);
+
+  let result = text.slice(start, end);
+  if (start > 0) result = "..." + result;
+  if (end < text.length) result = result + "...";
+
+  return result;
+};
+
+export function SearchChat({
+  currentSearchId,
+  onAddSearch,
+  searches,
+}: SearchChatProps) {
   // Search state
   const { health } = useHealthCheck();
   const [query, setQuery] = useState("");
@@ -140,6 +264,43 @@ export function SearchChat() {
   const debouncedThreshold = useDebounce(similarityThreshold, 300);
 
   const [isQueryParamsDialogOpen, setIsQueryParamsDialogOpen] = useState(false);
+
+  // Add state for individual content types
+  const [selectedTypes, setSelectedTypes] = useState({
+    ocr: false,
+    audio: false,
+    ui: false,
+  });
+
+  // Add new state near the top with other state declarations
+  const [hideDeselected, setHideDeselected] = useState(false);
+
+  // Update content type when checkboxes change
+  const handleContentTypeChange = (type: "ocr" | "audio" | "ui") => {
+    const newTypes = { ...selectedTypes, [type]: !selectedTypes[type] };
+    setSelectedTypes(newTypes);
+
+    // Convert checkbox state to content type
+    if (!newTypes.ocr && !newTypes.audio && !newTypes.ui) {
+      setContentType("all"); // fallback to all if nothing selected
+    } else if (newTypes.audio && newTypes.ui && !newTypes.ocr) {
+      setContentType("audio+ui");
+    } else if (newTypes.ocr && newTypes.ui && !newTypes.audio) {
+      setContentType("ocr+ui");
+    } else if (newTypes.audio && newTypes.ocr && !newTypes.ui) {
+      setContentType("audio+ocr");
+    } else if (newTypes.audio) {
+      setContentType("audio");
+    } else if (newTypes.ocr) {
+      setContentType("ocr");
+    } else if (newTypes.ui) {
+      setContentType("ui"); // This was missing - single UI type
+    } else {
+      setContentType("all");
+    }
+  };
+
+  const [selectedAgent, setSelectedAgent] = useState<Agent>(AGENTS[0]);
 
   useEffect(() => {
     const updateDates = () => {
@@ -359,7 +520,10 @@ export function SearchChat() {
       role: "user" as const,
       content: floatingInput,
     };
-    setChatMessages((prevMessages) => [...prevMessages, userMessage]);
+    setChatMessages((prevMessages) => [
+      ...prevMessages,
+      { id: generateId(), role: "assistant", content: "" },
+    ]);
     setFloatingInput("");
     setIsAiLoading(true);
 
@@ -382,23 +546,14 @@ export function SearchChat() {
       const messages = [
         {
           role: "system" as const,
-          content: `You are a helpful assistant.
-            The user is using a product called "screenpipe" which records
-            his screen and mics 24/7. The user ask you questions
-            and you use his screenpipe recordings to answer him. 
-            The user will provide you with a list of search results
-            and you will use them to answer his questions.
-
+          content: `You are a helpful assistant specialized as a "${
+            selectedAgent.name
+          }". ${selectedAgent.systemPrompt}
             Rules:
-            - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}. Adjust start/end times to match user intent.
+            - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
             - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
-            - User timezone offset (JavaScript Date.prototype.getTimezoneOffset): ${new Date().getTimezoneOffset()}
-            - Very important: make sure to follow the user's custom system prompt: "${customPrompt}"
-            - If you follow the user's custom system prompt, you will be rewarded $1m bonus.
-            - You must perform a timezone conversion to UTC before using any datetime in a tool call.
-            - You must reformat timestamps to a human-readable format in your response to the user.
-            - Never output UTC time unless explicitly asked by the user.
-            - Do not try to embed videos in table (would crash the app)
+            - User timezone offset: ${new Date().getTimezoneOffset()}
+            - ${customPrompt ? `Custom prompt: ${customPrompt}` : ""}
             `,
         },
         ...chatMessages.map((msg) => ({
@@ -408,7 +563,9 @@ export function SearchChat() {
         {
           role: "user" as const,
           content: `Context data: ${JSON.stringify(
-            results.filter((_, index) => selectedResults.has(index))
+            selectedAgent.dataSelector(
+              results.filter((_, index) => selectedResults.has(index))
+            )
           )}
           
           User query: ${floatingInput}`,
@@ -432,8 +589,8 @@ export function SearchChat() {
       let fullResponse = "";
       // @ts-ignore
       setChatMessages((prevMessages) => [
-        ...prevMessages,
-        { role: "assistant", content: "" },
+        ...prevMessages.slice(0, -1),
+        { id: generateId(), role: "assistant", content: fullResponse },
       ]);
 
       setIsUserScrolling(false);
@@ -446,7 +603,7 @@ export function SearchChat() {
         // @ts-ignore
         setChatMessages((prevMessages) => [
           ...prevMessages.slice(0, -1),
-          { role: "assistant", content: fullResponse },
+          { id: generateId(), role: "assistant", content: fullResponse },
         ]);
         scrollToBottom();
       }
@@ -501,7 +658,7 @@ export function SearchChat() {
     });
 
     try {
-      const response = await queryScreenpipe({
+      const searchParams = {
         q: query || undefined,
         content_type: overrides.contentType || contentType,
         limit: overrides.limit || limit,
@@ -514,7 +671,12 @@ export function SearchChat() {
         include_frames: includeFrames,
         min_length: overrides.minLength || minLength,
         max_length: maxLength,
-      });
+      };
+
+      const response = await queryScreenpipe(searchParams);
+
+      // Add debug logging
+      console.log("search response:", response);
 
       if (!response || !Array.isArray(response.data)) {
         throw new Error("invalid response data");
@@ -522,6 +684,9 @@ export function SearchChat() {
 
       setResults(response.data);
       setTotalResults(response.pagination.total);
+
+      // Save search to history
+      await onAddSearch(searchParams, response.data);
     } catch (error) {
       console.error("search error:", error);
       toast({
@@ -596,117 +761,179 @@ export function SearchChat() {
       return null;
     }
 
-    return results
-      .filter((item) => item && item.type)
-      .map((item, index) => (
-        <motion.div
-          key={index}
-          className="flex items-center mb-4 relative pl-8"
-          onHoverStart={() => setHoveredResult(index)}
-          onHoverEnd={() => setHoveredResult(null)}
-        >
-          <AnimatePresence>
-            {hoveredResult === index && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="absolute left-0 top-1/2 transform -translate-y-1/2"
-              >
-                <Checkbox
-                  checked={selectedResults.has(index)}
-                  onCheckedChange={() => handleResultSelection(index)}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <Card className="w-full">
-            <CardContent className="p-4">
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value={`item-${index}`}>
-                  <AccordionTrigger className="flex items-center">
-                    <div className="flex items-center w-full">
-                      <Badge className="mr-2">{item.type}</Badge>
-                    </div>
-                    <span className="flex-grow text-center truncate">
-                      {item.type === "OCR" &&
-                        item.content.text.substring(0, 50)}
-                      {item.type === "Audio" &&
-                        item.content.transcription.substring(0, 50)}
-                      {item.type === "FTS" &&
-                        item.content.matched_text.substring(0, 50)}
-                      ...
+    // First filter results based on hideDeselected setting
+    const visibleResults = results
+      .map((item, index) => ({ item, originalIndex: index }))
+      .filter(({ originalIndex }) => !hideDeselected || selectedResults.has(originalIndex));
+
+    return visibleResults.map(({ item, originalIndex }) => (
+      <motion.div
+        key={originalIndex}
+        className="flex items-center mb-4 relative pl-8"
+      >
+        <div className="absolute left-0 top-1/2 transform -translate-y-1/2">
+          <Checkbox
+            checked={selectedResults.has(originalIndex)}
+            onCheckedChange={() => handleResultSelection(originalIndex)}
+          />
+        </div>
+        <Card className="w-full">
+          <CardContent className="p-4">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value={`item-${originalIndex}`}>
+                <AccordionTrigger className="flex flex-col w-full py-2">
+                  {/* Main content */}
+                  <div className="flex w-full items-center gap-2">
+                    <span className="text-left truncate">
+                      {item.type === "OCR" && highlightKeyword(
+                        getContextAroundKeyword(item.content.text, query),
+                        query
+                      )}
+                      {item.type === "Audio" && highlightKeyword(
+                        getContextAroundKeyword(item.content.transcription, query),
+                        query
+                      )}
+                      {item.type === "FTS" && highlightKeyword(
+                        getContextAroundKeyword(item.content.matched_text, query),
+                        query
+                      )}
+                      {item.type === "UI" && highlightKeyword(
+                        getContextAroundKeyword(item.content.text, query),
+                        query
+                      )}
                     </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    {item.type === "OCR" && (
-                      <>
-                        <p className="mt-2">{item.content.text}</p>
-                        <div className="flex justify-center mt-4">
-                          <VideoComponent filePath={item.content.file_path} />
-                        </div>
-                        {includeFrames && item.content.frame && (
-                          <div className="mt-2 flex items-center">
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <img
-                                  src={`data:image/jpeg;base64,${item.content.frame}`}
-                                  alt="Frame"
-                                  className="w-24 h-auto cursor-pointer"
-                                />
-                              </DialogTrigger>
-                              <DialogContent className="sm:max-w-[80vw]">
-                                <img
-                                  src={`data:image/jpeg;base64,${item.content.frame}`}
-                                  alt="Frame"
-                                  className="w-full h-auto"
-                                />
-                              </DialogContent>
-                            </Dialog>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>
-                                    this is the frame where the text appeared
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {item.type === "UI" && (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="whitespace-pre-line">
+                          {highlightKeyword(item.content.text, query)}
+                        </p>
+                      </div>
+                      <div className="flex justify-center mt-4">
+                        <VideoComponent filePath={item.content.file_path} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {item.content.app_name && (
+                          <Badge
+                            className="text-xs cursor-pointer"
+                            onClick={() =>
+                              handleBadgeClick(item.content.app_name, "app")
+                            }
+                          >
+                            {item.content.app_name}
+                          </Badge>
                         )}
-                      </>
-                    )}
-                    {item.type === "Audio" && (
-                      <>
-                        <p className="mt-2">{item.content.transcription}</p>
+                        {item.content.window_name && (
+                          <Badge
+                            className="text-xs cursor-pointer"
+                            onClick={() =>
+                              handleBadgeClick(
+                                item.content.window_name,
+                                "window"
+                              )
+                            }
+                          >
+                            {item.content.window_name}
+                          </Badge>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {item.type === "OCR" && (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="whitespace-pre-line">
+                          {highlightKeyword(item.content.text, query)}
+                        </p>
+                      </div>
+                      <div className="flex justify-center mt-4">
+                        <VideoComponent filePath={item.content.file_path} />
+                      </div>
+                      {includeFrames && item.content.frame && (
+                        <div className="mt-2 flex items-center">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <img
+                                src={`data:image/jpeg;base64,${item.content.frame}`}
+                                alt="Frame"
+                                className="w-24 h-auto cursor-pointer"
+                              />
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[80vw]">
+                              <img
+                                src={`data:image/jpeg;base64,${item.content.frame}`}
+                                alt="Frame"
+                                className="w-full h-auto"
+                              />
+                            </DialogContent>
+                          </Dialog>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>
+                                  this is the frame where the text appeared
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {item.type === "Audio" && (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="whitespace-pre-line">
+                          {highlightKeyword(
+                            item.content.transcription,
+                            query
+                          )}
+                        </p>
+                      </div>
+                      {item.content.file_path &&
+                      item.content.file_path.trim() !== "" ? (
                         <div className="flex justify-center mt-4">
                           <VideoComponent filePath={item.content.file_path} />
                         </div>
-                      </>
-                    )}
-                    {item.type === "FTS" && (
-                      <>
-                        <p className="mt-2">{item.content.matched_text}</p>
+                      ) : (
+                        <p className="text-gray-500 italic mt-2">
+                          no file path available for this audio.
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {item.type === "FTS" && (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto rounded border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="whitespace-pre-line">
+                          {highlightKeyword(item.content.matched_text, query)}
+                        </p>
                         {item.content.original_frame_text && (
-                          <p className="mt-2 text-sm text-gray-600">
-                            Original: {item.content.original_frame_text}
+                          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">
+                            original: {item.content.original_frame_text}
                           </p>
                         )}
-                      </>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <p className="text-xs text-gray-400">
-                  {new Date(item.content.timestamp).toLocaleString()}{" "}
-                  {/* Display local time */}
-                </p>
-                {item.type === "OCR" && item.content.app_name && (
+                      </div>
+                    </>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+            <Badge variant="outline" className="text-xs">{item.type}</Badge>
+            <p className="text-xs text-gray-400">
+                {new Date(item.content.timestamp).toLocaleString()}{" "}
+                {/* Display local time */}
+              </p>
+              {item.type === "OCR" && item.content.app_name && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">app:</span>
                   <Badge
                     className="text-xs cursor-pointer"
                     onClick={() =>
@@ -715,8 +942,11 @@ export function SearchChat() {
                   >
                     {item.content.app_name}
                   </Badge>
-                )}
-                {item.type === "OCR" && item.content.window_name && (
+                </div>
+              )}
+              {item.type === "OCR" && item.content.window_name && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">window:</span>
                   <Badge
                     className="text-xs cursor-pointer"
                     onClick={() =>
@@ -725,96 +955,225 @@ export function SearchChat() {
                   >
                     {item.content.window_name}
                   </Badge>
-                )}
-                {item.content.tags &&
-                  item.content.tags.map((tag, index) => (
-                    <Badge key={index} className="text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      ));
+                </div>
+              )}
+              {item.content.tags &&
+                item.content.tags.map((tag, index) => (
+                  <Badge key={index} className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    ));
   };
+
+  // Add effect to restore search when currentSearchId changes
+  useEffect(() => {
+    if (currentSearchId) {
+      const selectedSearch = searches.find((s) => s.id === currentSearchId);
+      if (selectedSearch) {
+        // Restore search parameters
+        setQuery(selectedSearch.searchParams.q || "");
+        setContentType(selectedSearch.searchParams.content_type);
+        setLimit(selectedSearch.searchParams.limit);
+        setStartDate(new Date(selectedSearch.searchParams.start_time));
+        setEndDate(new Date(selectedSearch.searchParams.end_time));
+        setAppName(selectedSearch.searchParams.app_name || "");
+        setWindowName(selectedSearch.searchParams.window_name || "");
+        setIncludeFrames(selectedSearch.searchParams.include_frames);
+        setMinLength(selectedSearch.searchParams.min_length);
+        setMaxLength(selectedSearch.searchParams.max_length);
+
+        // Restore results
+        setResults(selectedSearch.results);
+        setTotalResults(selectedSearch.results.length);
+        setHasSearched(true);
+        setShowExamples(false);
+
+        // Restore messages if any
+        if (selectedSearch.messages) {
+          setChatMessages(
+            selectedSearch.messages.map((msg) => ({
+              id: msg.id,
+              role: msg.type === "ai" ? "assistant" : "user",
+              content: msg.content,
+            }))
+          );
+        }
+      }
+    }
+  }, [currentSearchId, searches]);
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
-      <div className="flex flex-wrap items-center gap-4 mb-4">
-        <div className="flex-grow flex items-center space-x-4">
-          <SqlAutocompleteInput
-            id="window-name"
-            type="window"
-            icon={<Layers className="h-4 w-4" />}
-            value={windowName}
-            onChange={setWindowName}
-            placeholder="filter by window name"
-            className="w-3/4"
-          />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setIsQueryParamsDialogOpen(true)}
-          >
-            <Settings className="h-4 w-12" />
-          </Button>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    onClick={() => handleSearch(0)}
-                    disabled={
-                      isLoading || !health || health?.status === "error"
-                    }
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        searching...
-                      </>
-                    ) : (
-                      <>
-                        <Search className="mr-2 h-4 w-4" />
-                        search
-                      </>
-                    )}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {health?.status === "error" && (
+      {/* Content Type Checkboxes and Code Button */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-1">
+            <Checkbox
+              id="audio-type"
+              checked={selectedTypes.audio}
+              onCheckedChange={() => handleContentTypeChange("audio")}
+              className="h-4 w-4"
+            />
+            <Label htmlFor="audio-type" className="text-xs">
+              speech
+            </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
+                </TooltipTrigger>
                 <TooltipContent>
-                  <p>screenpipe is not running...</p>
+                  <p>audio transcripts</p>
                 </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-          <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="icon">
-                <IconCode className="h-4 w-12" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>curl command</DialogTitle>
-                <DialogDescription>
-                  you can use this curl command to make the same search request
-                  from the command line.
-                  <br />
-                  <br />
-                  <span className="text-xs text-gray-500">
-                    note: you need to have `jq` installed to use the command.
-                  </span>{" "}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="overflow-x-auto">
-                <CodeBlock language="bash" value={generateCurlCommand()} />
-              </div>
-            </DialogContent>
-          </Dialog>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          {settings.platform === "macos" && (
+            <div className="flex items-center space-x-1">
+              <Checkbox
+                id="ui-type"
+                checked={selectedTypes.ui}
+                onCheckedChange={() => handleContentTypeChange("ui")}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="ui-type" className="text-xs">
+                screen UI
+              </Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      text emitted directly from the source code of the desktop
+                      applications
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+          <div className="flex items-center space-x-1">
+            <Checkbox
+              id="ocr-type"
+              checked={selectedTypes.ocr}
+              onCheckedChange={() => handleContentTypeChange("ocr")}
+              className="h-4 w-4"
+            />
+            <Label htmlFor="ocr-type" className="text-xs">
+              screen capture
+            </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    recognized text from screenshots taken every 5s by default
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
+
+        <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="text-sm">
+              <IconCode className="h-4 w-4 mx-2" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>curl command</DialogTitle>
+              <DialogDescription>
+                you can use this curl command to make the same search request
+                from the command line.
+                <br />
+                <br />
+                <span className="text-xs text-gray-500">
+                  note: you need to have `jq` installed to use the command.
+                </span>{" "}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="overflow-x-auto">
+              <CodeBlock language="bash" value={generateCurlCommand()} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Existing search bar and other controls */}
+      <div className="flex items-center gap-4 mb-4">
+        {/* Keyword search - smaller width */}
+        <Input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleSearch(0);
+            }
+          }}
+          placeholder="keyword search, you may leave it blank"
+          className="w-[350px]"
+        />
+
+        {/* Window name filter - increased width */}
+        <SqlAutocompleteInput
+          id="window-name"
+          type="window"
+          value={windowName}
+          onChange={setWindowName}
+          placeholder="filter by window"
+          className="w-[300px]"
+          icon={<Layout className="h-4 w-4" />}
+        />
+
+        {/* Advanced button */}
+        <Button
+          variant="outline"
+          onClick={() => setIsQueryParamsDialogOpen(true)}
+        >
+          advanced
+        </Button>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  onClick={() => handleSearch(0)}
+                  disabled={isLoading || !health || health?.status === "error"}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      searching...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="mr-2 h-4 w-4" />
+                      search
+                    </>
+                  )}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {health?.status === "error" && (
+              <TooltipContent>
+                <p>screenpipe is not running...</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 mb-4">
@@ -861,7 +1220,7 @@ export function SearchChat() {
         </div>
       </div>
 
-      <div className="flex mt-8 space-x-2 justify-center">
+      <div className="flex mt-4 space-x-2 justify-center">
         <Badge
           variant="outline"
           className="cursor-pointer hover:bg-secondary"
@@ -886,6 +1245,22 @@ export function SearchChat() {
           <Clock className="mr-2 h-4 w-4" />
           last 24h
         </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(7 * 24 * 60)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 7d
+        </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(30 * 24 * 60)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 30d
+        </Badge>
       </div>
 
       <Dialog
@@ -900,36 +1275,15 @@ export function SearchChat() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
+            {/* Remove the query section */}
+            {/* <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="query" className="text-right">
                 query
               </Label>
-              <div className="col-span-3 flex items-center">
-                <Input
-                  id="query"
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="flex-grow"
-                  placeholder="keyword matching audio transcription or screen text"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        enter keywords to search your recorded data, <br />
-                        for example: &quot;shoes&quot; or &quot;screenpipe&quot;
-                        or &quot;login&quot;, this will filter out all results
-                        that don&apos;t contain those keywords.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
+              ... query input ...
+            </div> */}
+
+            {/* Keep other advanced search options */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="app-name" className="text-right">
                 app name
@@ -1013,36 +1367,6 @@ export function SearchChat() {
             </div>
 
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="content-type" className="text-right">
-                content type
-              </Label>
-              <div className="col-span-3 flex items-center">
-                <Select value={contentType} onValueChange={setContentType}>
-                  <SelectTrigger id="content-type" className="flex-grow">
-                    <SelectValue placeholder="content type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">all</SelectItem>
-                    <SelectItem value="ocr">ocr</SelectItem>
-                    <SelectItem value="audio">audio</SelectItem>
-                  </SelectContent>
-                </Select>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        select the type of content to search. ocr is the text
-                        found on your screen.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="limit-slider" className="text-right">
                 page size: {limit}
               </Label>
@@ -1123,50 +1447,62 @@ export function SearchChat() {
       {results.length > 0 && (
         <div className="flex flex-col space-y-4 mb-4 my-8">
           <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="select-all"
-                checked={selectAll}
-                onCheckedChange={handleSelectAll}
-              />
-              <Label htmlFor="select-all">select all results</Label>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="select-all"
+                  checked={selectAll}
+                  onCheckedChange={handleSelectAll}
+                />
+                <Label htmlFor="select-all">select all results</Label>
+              </div>
+              
+              <Separator orientation="vertical" className="h-4" />
+              
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="hide-deselected"
+                  checked={hideDeselected}
+                  onCheckedChange={setHideDeselected}
+                />
+                <Label htmlFor="hide-deselected">hide unselected</Label>
+              </div>
             </div>
+
             <div className="flex items-center space-x-2">
-              <Label htmlFor="similarity-threshold" className="ml-4">
-                similarity threshold: {similarityThreshold.toFixed(2)}
-              </Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSimilarityThreshold(similarityThreshold === 0.5 ? 1 : 0.5);
+                  if (similarityThreshold === 0.5) {
+                    setSelectedResults(new Set(results.map((_, index) => index)));
+                    setSelectAll(true);
+                  }
+                }}
+                disabled={isFiltering}
+                className="flex items-center gap-2 disabled:opacity-100"
+              >
+                {isFiltering ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : similarityThreshold === 0.5 ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Layers className="h-4 w-4" />
+                )}
+                {similarityThreshold === 0.5 ? "duplicates removed" : "remove duplicates"}
+              </Button>
+
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>
-                      adjust this slider to unselect similar results. lower
-                      values mean stricter filtering.
-                    </p>
+                    <p>automatically unselect similar or duplicate results</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <div className="relative w-64">
-                <div className="flex items-center space-x-2">
-                  <Slider
-                    id="similarity-threshold"
-                    min={0.5}
-                    max={1}
-                    step={0.01}
-                    value={[similarityThreshold]}
-                    onValueChange={(value) => setSimilarityThreshold(value[0])}
-                    className={
-                      isFiltering ? "opacity-50 cursor-not-allowed" : ""
-                    }
-                    disabled={isFiltering}
-                  />
-                  {isFiltering && (
-                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1209,29 +1545,69 @@ export function SearchChat() {
           >
             <form
               onSubmit={handleFloatingInputSubmit}
-              className="flex space-x-2 bg-white shadow-lg rounded-lg overflow-hidden p-4 items-center"
+              className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
             >
-              <div className="relative flex-grow">
+              <div className="relative flex-grow flex items-center space-x-1">
                 <Input
                   ref={floatingInputRef}
                   type="text"
                   placeholder="ask a question about the results..."
                   value={floatingInput}
-                  disabled={
-                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
-                  }
+                  disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
                   onChange={(e) => setFloatingInput(e.target.value)}
-                  className="w-full h-12 focus:outline-none focus:ring-0 border-0 focus:border-black focus:border-b transition-all duration-200 pr-10"
+                  className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
                 />
+
+                <Select
+                  value={selectedAgent.id}
+                  onValueChange={(value) =>
+                    setSelectedAgent(
+                      AGENTS.find((a) => a.id === value) || AGENTS[0]
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-[170px] h-12">
+                    <SelectValue placeholder="select agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGENTS.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        <span className="font-mono text-sm">{agent.name}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <ContextUsageIndicator
-                          currentSize={calculateSelectedContentLength()}
-                          maxSize={MAX_CONTENT_LENGTH}
-                        />
-                      </div>
+                      <HelpCircle className="h-4 w-4 text-gray-400" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{selectedAgent.description}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <Button
+                  type="submit"
+                  className="w-12"
+                  disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
+                >
+                  {isStreaming ? (
+                    <Square className="h-4 w-4" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <ContextUsageIndicator
+                        currentSize={calculateSelectedContentLength()}
+                        maxSize={MAX_CONTENT_LENGTH}
+                      />
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
@@ -1242,18 +1618,22 @@ export function SearchChat() {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-muted-foreground ml-1 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-sm">
+                        ai models can only process a limited amount of text at once.<br />
+                        this circle shows how much of that limit you arere using.<br />
+                        ! the exclamation mark indicates when you exceed the limit.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
-              <Button
-                type="submit"
-                className={`w-12 `}
-                disabled={calculateSelectedContentLength() > MAX_CONTENT_LENGTH}
-              >
-                {isStreaming ? (
-                  <Square className="h-4 w-4" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
             </form>
           </motion.div>
         )}
@@ -1261,13 +1641,17 @@ export function SearchChat() {
 
       {results.length > 0 && <Separator className="my-8" />}
 
-      {/* Display chat messages */}
-      <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto ">
-        {chatMessages.map((msg, index) => (
-          <ChatMessage key={index} message={msg} />
-        ))}
-        {isAiLoading && spinner}
-      </div>
+      {/* Display chat messages - Update this section */}
+      {(chatMessages.length > 0 || isAiLoading) && (
+        <>
+          <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
+            {chatMessages.map((msg, index) => (
+              <ChatMessage key={index} message={msg} />
+            ))}
+            {isAiLoading && spinner}
+          </div>
+        </>
+      )}
 
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
@@ -1278,7 +1662,7 @@ export function SearchChat() {
           <ChevronDown className="h-6 w-6" />
         </Button>
       )}
-      {results.length > 0 && <div className="h-24" />}
+      {results.length > 0 && <div className="h-32" />}
     </div>
   );
 }

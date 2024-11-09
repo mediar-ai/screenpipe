@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>screenpipe frame stream</title>
+    <style>
+        body {
+            background: #000;
+            color: #fff;
+            font-family: monospace;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        #controls {
+            position: sticky;
+            top: 0;
+            background: #000;
+            padding: 20px 0;
+            margin-bottom: 20px;
+            z-index: 100;
+        }
+        
+        #frames {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .frame-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid #333;
+        }
+        
+        .frame-container img {
+            max-width: 100%;
+        }
+        
+        .frame-timestamp {
+            color: #666;
+        }
+        
+        input, button {
+            background: #111;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 8px;
+            font-family: monospace;
+        }
+        
+        button:hover {
+            background: #222;
+            cursor: pointer;
+        }
+        
+        .frame-metadata {
+            display: none;
+            color: #666;
+            white-space: pre-wrap;
+            font-size: 12px;
+            max-width: 100%;
+            overflow-wrap: break-word;
+        }
+        
+        .frame-container:hover .frame-metadata {
+            display: block;
+        }
+        
+        .metadata-icons {
+            display: flex;
+            gap: 8px;
+            color: #666;
+        }
+        
+        .icon {
+            position: relative;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background: #111;
+            padding: 8px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            max-width: 300px;
+            z-index: 1000;
+        }
+        
+        .icon:hover .tooltip {
+            display: block;
+        }
+        
+        .devices-container {
+            display: flex;
+            gap: 20px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 20px;
+        }
+        
+        .device-frame {
+            flex: 1;
+            min-width: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <input type="datetime-local" id="startTime" step="1">
+        <input type="datetime-local" id="endTime" step="1">
+        <button onclick="startStream()">start stream</button>
+        <button onclick="stopStream()">stop</button>
+        <button onclick="clearFrames()">clear</button>
+    </div>
+
+    <div id="frames"></div>
+
+    <script>
+        let eventSource = null;
+        
+        function setDefaultTimes() {
+            const end = new Date();
+            end.setMinutes(end.getMinutes() - 2);
+            
+            const start = new Date();
+            start.setHours(0, 1, 0, 0);
+            
+            document.getElementById('startTime').value = start.toISOString().slice(0, -1);
+            document.getElementById('endTime').value = end.toISOString().slice(0, -1);
+        }
+        
+        function clearFrames() {
+            document.getElementById('frames').innerHTML = '';
+        }
+        
+        function appendFrame(data) {
+            const container = document.createElement('div');
+            container.className = 'frame-container';
+            
+            const ts = document.createElement('div');
+            ts.className = 'frame-timestamp';
+            ts.innerText = new Date(data.timestamp).toLocaleString();
+            container.appendChild(ts);
+            
+            const devicesContainer = document.createElement('div');
+            devicesContainer.className = 'devices-container';
+            
+            data.devices.forEach(device => {
+                const deviceFrame = document.createElement('div');
+                deviceFrame.className = 'device-frame';
+                
+                const img = document.createElement('img');
+                img.onerror = (e) => console.error('Failed to load image:', e);
+                img.onload = () => console.log('Image loaded successfully');
+                
+                const cleanBase64 = device.frame.trim().replace(/\s/g, '');
+                img.src = `data:image/jpeg;base64,${cleanBase64}`;
+                
+                img.style.display = 'block';
+                img.style.minHeight = '100px';
+                
+                const metadata = document.createElement('div');
+                metadata.className = 'metadata-icons';
+                
+                metadata.innerHTML = `
+                    <span>device: ${device.device_id}</span>
+                    <span>window: ${device.metadata.window_name || 'N/A'}</span>
+                    <span>app: ${device.metadata.app_name || 'N/A'}</span>
+                `;
+
+                if (device.metadata.ocr_text) {
+                    const ocrIcon = document.createElement('div');
+                    ocrIcon.className = 'icon';
+                    ocrIcon.innerHTML = `
+                        📝
+                        <div class="tooltip">OCR: ${device.metadata.ocr_text}</div>
+                    `;
+                    metadata.appendChild(ocrIcon);
+                }
+
+                device.audio.forEach(audio => {
+                    const audioIcon = document.createElement('div');
+                    audioIcon.className = 'icon';
+                    audioIcon.innerHTML = `
+                        ${audio.is_input ? '🎤' : '🔊'}
+                        <div class="tooltip">
+                            Device: ${audio.device_name}
+                            Duration: ${audio.duration_secs}s
+                            Offset: ${audio.start_offset}s
+                            Transcription: ${audio.transcription}
+                        </div>
+                    `;
+                    metadata.appendChild(audioIcon);
+                });
+                
+                deviceFrame.appendChild(img);
+                deviceFrame.appendChild(metadata);
+                devicesContainer.appendChild(deviceFrame);
+            });
+            
+            container.appendChild(devicesContainer);
+            
+            const frames = document.getElementById('frames');
+            frames.appendChild(container);
+            frames.scrollTop = frames.scrollHeight;
+        }
+        
+        function startStream() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            const startTime = new Date(document.getElementById('startTime').value).toISOString();
+            const endTime = new Date(document.getElementById('endTime').value).toISOString();
+            
+            const url = `http://localhost:3030/stream/frames?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`;
+            console.log('starting stream:', url);
+            eventSource = new EventSource(url);
+            
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data === 'keep-alive-text') {
+                        return;
+                    }
+                    
+                    if (data.timestamp && data.devices) {
+                        console.log('appending frames from:', data.timestamp, data);
+                        appendFrame(data);
+                    }
+                } catch (e) {
+                    console.error('Failed to parse frame data:', e);
+                }
+            };
+            
+            eventSource.onerror = (error) => {
+                // console.error('sse error:', error);
+                // eventSource.close();
+            };
+        }
+        
+        function stopStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        }
+        
+        setDefaultTimes();
+    </script>
+</body>
+</html>

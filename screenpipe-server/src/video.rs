@@ -5,6 +5,7 @@ use log::{debug, error};
 use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
+use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
 
-const MAX_FPS: f64 = 30.0; // Adjust based on your needs
+pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
 
 pub struct VideoCapture {
@@ -38,7 +39,6 @@ impl VideoCapture {
         include_list: &[String],
         languages: Vec<Language>,
     ) -> Self {
-        info!("Starting new video capture");
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
         } else {
@@ -70,7 +70,6 @@ impl VideoCapture {
             .await;
         });
 
-        info!("Started capture thread");
 
         // In the _queue_thread
         let _queue_thread = tokio::spawn(async move {
@@ -144,7 +143,7 @@ impl VideoCapture {
     }
 }
 
-async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
+pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
         warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
@@ -187,7 +186,10 @@ async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyh
     Ok(child)
 }
 
-async fn write_frame_to_ffmpeg(stdin: &mut ChildStdin, buffer: &[u8]) -> Result<(), anyhow::Error> {
+pub async fn write_frame_to_ffmpeg(
+    stdin: &mut ChildStdin,
+    buffer: &[u8],
+) -> Result<(), anyhow::Error> {
     stdin.write_all(buffer).await?;
     Ok(())
 }
@@ -369,7 +371,7 @@ async fn flush_ffmpeg_input(stdin: &mut ChildStdin, frame_count: usize, fps: f64
     }
 }
 
-async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
+pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
     drop(stdin); // Ensure stdin is closed
     match child.wait_with_output().await {
         Ok(output) => {
@@ -381,5 +383,3 @@ async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
         Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
     }
 }
-
-use std::env;

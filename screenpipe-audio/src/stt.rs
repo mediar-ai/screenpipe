@@ -29,10 +29,7 @@ use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
 
-// Replace the get_deepgram_api_key function with this:
-fn get_deepgram_api_key() -> String {
-    "7ed2a159a094337b01fd8178b914b7ae0e77822d".to_string()
-}
+
 
 async fn transcribe_with_deepgram(
     api_key: &str,
@@ -369,45 +366,39 @@ pub async fn stt(
         return Ok(("".to_string(), "".to_string()));
     }
 
-    let transcription: Result<String> =
-        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
-            // Deepgram implementation
-            let api_key = deepgram_api_key
-                .clone()
-                .unwrap_or_else(get_deepgram_api_key);
-            info!(
-                "device: {}, using deepgram api key: {}...",
-                audio_input.device,
-                &api_key[..8]
-            );
-            match transcribe_with_deepgram(
-                &api_key,
-                &speech_frames,
-                &audio_input.device.name,
-                audio_input.sample_rate,
-                languages.clone(),
-            )
-            .await
-            {
-                Ok(transcription) => Ok(transcription),
-                Err(e) => {
-                    error!(
-                        "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
-                        audio_input.device, e
-                    );
-                    // Fallback to Whisper
-                    process_with_whisper(
-                        &mut *whisper_model,
-                        &speech_frames,
-                        &mel_filters,
-                        languages.clone(),
-                    )
-                }
+    let transcription: Result<String> = if audio_transcription_engine
+        == AudioTranscriptionEngine::Deepgram.into()
+    {
+        // Deepgram implementation
+        let api_key = deepgram_api_key.unwrap();
+        info!(
+            "device: {}, using deepgram api key: {}...",
+            audio_input.device,
+            &api_key[..8]
+        );
+        match transcribe_with_deepgram(
+            &api_key,
+            &speech_frames,
+            &audio_input.device.name,
+            audio_input.sample_rate,
+            languages.clone(),
+        )
+        .await
+        {
+            Ok(transcription) => Ok(transcription),
+            Err(e) => {
+                error!(
+                    "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
+                    audio_input.device, e
+                );
+                // Fallback to Whisper
+                process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
             }
-        } else {
-            // Existing Whisper implementation
-            process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
-        };
+        }
+    } else {
+        // Existing Whisper implementation
+        process_with_whisper(&mut *whisper_model, &speech_frames, &mel_filters, languages)
+    };
 
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
     let sanitized_device_name = audio_input.device.to_string().replace(['/', '\\'], "_");

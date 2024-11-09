@@ -14,8 +14,8 @@ use std::{collections::HashMap, path::PathBuf};
 use tower::ServiceExt;
 
 use screenpipe_server::{
-    create_router, AppState, ContentItem, ContentSource, DatabaseManager, PaginatedResponse,
-    PipeManager,
+    create_router, video_cache::FrameCache, AppState, ContentItem, DatabaseManager,
+    PaginatedResponse, PipeManager,
 };
 
 // Add this function to initialize the logger
@@ -34,7 +34,10 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         devices_status: HashMap::new(),
         app_start_time: Utc::now(),
         screenpipe_dir: PathBuf::from(""),
-        pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
+        pipe_manager: Arc::new(PipeManager::new(PathBuf::from("")).0),
+        frame_cache: Some(Arc::new(
+            FrameCache::new(PathBuf::from(""), db).await.unwrap(),
+        )),
     });
 
     let app = create_router().with_state(app_state.clone());
@@ -357,10 +360,13 @@ async fn test_search_by_multiple_tags() {
 
 async fn insert_test_data(db: &Arc<DatabaseManager>) {
     // Insert test video chunk
-    let _video_chunk_id = db.insert_video_chunk("test_video_file.mp4", "test_device").await.unwrap();
+    let _video_chunk_id = db
+        .insert_video_chunk("test_video_file.mp4", "test_device")
+        .await
+        .unwrap();
 
     // Insert test frame
-    let frame_id = db.insert_frame("test_device").await.unwrap();
+    let frame_id = db.insert_frame("test_device", None).await.unwrap();
 
     // Insert test OCR data
     db.insert_ocr_text(
@@ -385,18 +391,6 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         0,
         "test_engine",
         &AudioDevice::new("test".to_string(), DeviceType::Output),
-    )
-    .await
-    .unwrap();
-
-    // Insert test FTS data
-    db.insert_chunked_text(
-        frame_id,
-        "Test FTS text",
-        Utc::now(),
-        "tesseract",
-        "local_simple",
-        ContentSource::Screen,
     )
     .await
     .unwrap();

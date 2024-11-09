@@ -6,13 +6,18 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
    </a>
 </p>
 
-<pre align="center">
-   ___  ___ _ __ ___  ___ _ __  _ __ (_)_ __   ___ 
-  / __|/ __| '__/ _ \/ _ \ '_ \| '_ \| | '_ \ / _ \
-  \__ \ (__| | |  __/  __/ | | | |_) | | |_) |  __/
-  |___/\___|_|  \___|\___|_| |_| .__/|_| .__/ \___|
-                               |_|     |_|         
-</pre>
+
+
+<!-- ScreenPipe Title and Subtitle -->
+<p align="center" style="font-family: 'Press Start 2P', monospace;">
+   <h1 align="center">[ screenpipe ]</h1>
+   <p align="center">rewind.ai x cursor.com = your AI assistant that has all the context.</p>
+</p>
+
+<!-- Slogan -->
+<p align="center" style="font-family: monospace;">
+   <code>[ recording reality, one pixel at a time ]</code>
+</p>
 
 <p align="center">
     <a href="https://screenpi.pe" target="_blank">
@@ -49,7 +54,7 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 
 <p align="center">
    <a href ="https://screenpi.pe">
-       <video alt="demo" src="https://github.com/user-attachments/assets/00a6af05-0c29-436e-88cc-83bb91f6211d" width="800" />
+         <img alt="demo" src="https://github.com/user-attachments/assets/bde07ed9-fb56-4f3c-86df-a58eb2bbc2b6" width="800" />
    </a>
 </p>
 
