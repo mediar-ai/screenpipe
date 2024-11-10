@@ -541,7 +541,6 @@ export default function MeetingHistory() {
     );
   }
 
-  console.log("rendering meetings:", meetings);
 
   // Memoize expensive computations
   const sortedMeetings = useMemo(() => {

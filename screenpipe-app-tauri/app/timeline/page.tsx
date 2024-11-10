@@ -193,8 +193,11 @@ export default function Timeline() {
         const isWithinAudioPanel = document
           .querySelector('.audio-transcript-panel')
           ?.contains(e.target as Node);
+        const isWithinTimelineDialog = document
+          .querySelector('[role="dialog"]')
+          ?.contains(e.target as Node);
 
-        if (isWithinAiPanel || isWithinAudioPanel) {
+        if (isWithinAiPanel || isWithinAudioPanel || isWithinTimelineDialog) {
           e.stopPropagation();
           return;
         }
@@ -248,8 +251,11 @@ export default function Timeline() {
       const isWithinAudioPanel = document
         .querySelector('.audio-transcript-panel')
         ?.contains(e.target as Node);
+      const isWithinTimelineDialog = document
+        .querySelector('[role="dialog"]')
+        ?.contains(e.target as Node);
 
-      if (!isWithinAiPanel && !isWithinAudioPanel) {
+      if (!isWithinAiPanel && !isWithinAudioPanel && !isWithinTimelineDialog) {
         e.preventDefault();
       }
     };

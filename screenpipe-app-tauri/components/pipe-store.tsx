@@ -709,7 +709,7 @@ const PipeDialog: React.FC = () => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost">
+        <Button variant="ghost" className="h-[20px] px-0 py-0">
           <Puzzle className="mr-2 h-4 w-4" />
           pipe store
         </Button>

@@ -36,6 +36,7 @@ import {
 import { useSearchHistory } from "@/lib/hooks/use-search-history";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { platform } from "@tauri-apps/plugin-os";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -61,7 +62,9 @@ export default function Home() {
 
   useEffect(() => {
     if (settings.userId) {
-      posthog?.identify(settings.userId);
+      posthog?.identify(settings.userId, {
+        os: platform(),
+      });
     }
   }, [settings.userId, posthog]);
 
@@ -96,7 +99,7 @@ export default function Home() {
       </div>
       <NotificationHandler />
       {showOnboarding && <Onboarding />}
-      {/* <ChangelogDialog /> */}
+      <ChangelogDialog />
       <Header />
       <div className="my-4" />
       {settings.isLoading ? (
@@ -118,24 +121,30 @@ export default function Home() {
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-3">
               <span className="flex items-center gap-1">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">1</span>
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">
+                  1
+                </span>
                 search for a keyword
               </span>
               <span className="text-gray-400">→</span>
               <span className="flex items-center gap-1">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">2</span>
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">
+                  2
+                </span>
                 filter results
               </span>
               <span className="text-gray-400">→</span>
               <span className="flex items-center gap-1">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">3</span>
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black text-white text-sm">
+                  3
+                </span>
                 ask AI a question
               </span>
             </h1>
             <p className="text-xl text-muted-foreground -mt-0">
               where pixels become magic
             </p>
-          </div> 
+          </div>
           <SearchChat
             currentSearchId={currentSearchId}
             onAddSearch={addSearch}
@@ -170,7 +179,7 @@ export default function Home() {
         </div>
       )}
     </div>
-    // </SidebarInset>
+    //   </SidebarInset>
     // </SidebarProvider>
   );
 }

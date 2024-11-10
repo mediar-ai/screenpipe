@@ -28,6 +28,7 @@ export const ChangelogDialog: React.FC = () => {
         <div className="max-w-max prose prose-medium prose-slate w-full h-full">
           <h1>Changelog</h1>
           <MemoizedReactMarkdown
+            // className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0"
             remarkPlugins={[remarkGfm, remarkMath]}
             components={{
               p({ children }) {
@@ -48,6 +49,17 @@ export const ChangelogDialog: React.FC = () => {
               code({ node, className, children, ...props }) {
                 const content = String(children).replace(/\n$/, "");
                 const match = /language-(\w+)/.exec(className || "");
+
+                if (!match) {
+                  return (
+                    <code
+                      className="px-1 py-0.5 rounded-sm font-mono text-sm"
+                      {...props}
+                    >
+                      {content}
+                    </code>
+                  );
+                }
 
                 return (
                   <CodeBlock

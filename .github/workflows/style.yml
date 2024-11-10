@@ -1,4 +1,4 @@
-name: Rust Style
+name: Code Quality & Optimization
 
 on: [push]
 
@@ -6,11 +6,39 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  machete:
-    name: Cargo Machete
-    runs-on: ubuntu-latest
+  optimize:
+    name: Dependency & Performance Checks
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Check for unused dependencies
         uses: bnjbvr/cargo-machete@main
+
+      - name: Install cargo-udeps
+        run: cargo install cargo-udeps --locked
+
+      - name: Run cargo-udeps
+        run: cargo udeps
+
+      - name: Install cargo-bloat
+        run: cargo install cargo-bloat
+
+      - name: Analyze binary size
+        run: cargo bloat --release
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Security audit
+        run: cargo audit
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Check duplicate dependencies
+        run: cargo deny check duplicates
