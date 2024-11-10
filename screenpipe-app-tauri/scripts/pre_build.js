@@ -461,6 +461,42 @@ if (platform == 'macos') {
 
 	console.log('Moved and renamed ffmpeg binary for externalBin');
 
+	// Setup Swift UI monitoring
+	console.log('Setting up Swift UI monitoring...');
+	try {
+		const swiftSrc = path.join(cwd, '../../screenpipe-vision/src/ui_monitoring_macos.swift');
+		const architectures = ['arm64', 'x86_64'];
+
+		for (const arch of architectures) {
+			console.log(`Compiling Swift UI monitor for ${arch}...`);
+			
+			const binaryName = `ui_monitor-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
+			const outputPath = path.join(cwd, binaryName);
+			
+			// Use array of arguments instead of template literal
+			await $`swiftc -O -whole-module-optimization -enforce-exclusivity=unchecked -num-threads 8 -target ${arch}-apple-macos11.0 -o ${outputPath} ${swiftSrc} -framework Cocoa -framework ApplicationServices -framework Foundation`;
+
+			console.log(`Swift UI monitor for ${arch} compiled successfully`);
+			await fs.chmod(outputPath, 0o755);
+		}
+	} catch (error) {
+		console.error('Error setting up Swift UI monitoring:', error);
+		// Log the actual paths to help debug
+		console.log('Current working directory:', cwd);
+		console.log('Expected Swift source path:', path.join(cwd, '../../screenpipe-vision/src/ui_monitoring_macos.swift'));
+	}
+
+	// Copy Swift UI monitor binary
+	console.log('Copying Swift UI monitor...');
+	const visionDir = path.join(cwd, '../../screenpipe-vision');
+	const binDir = path.join(visionDir, 'bin');
+	const arch = os.arch() === 'arm64' ? 'aarch64' : 'x86_64';
+	const binaryName = `ui_monitor-${arch}-apple-darwin`;
+	
+	await fs.copyFile(
+		path.join(binDir, binaryName),
+		path.join(cwd, binaryName)
+	);
 }
 
 
