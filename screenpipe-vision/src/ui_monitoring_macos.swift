@@ -3,81 +3,16 @@ import ApplicationServices
 import Foundation
 import SQLite3
 
-// Add logging typealias and global variable
-public typealias LogFunction = @convention(c) (UnsafePointer<CChar>?, Int32) -> Void
-var rustLogFunction: LogFunction?
-
-// Add logging function setter
-@_cdecl("set_logging_function")
-public func setLoggingFunction(_ fn: @escaping LogFunction) {
-    rustLogFunction = fn
-}
-
-// Add log levels enum
-enum LogLevel: Int32 {
-    case debug = 1
-    case info = 2
-    case warn = 3
-    case error = 4
-}
-
-// Add logging helper function
-func logMessage(_ message: String, level: LogLevel = .info) {
-    if let logFn = rustLogFunction {
-        message.withCString { ptr in
-            logFn(ptr, level.rawValue)
-        }
-    }
-}
-
-@_cdecl("start_ui_monitoring")
-public func startUIMonitoring() {
-    setbuf(__stdoutp, nil)
-    logMessage("hello from swift, ui monitoring starting...", level: .debug)
-    
-    DispatchQueue.global(qos: .background).async {
-        startMonitoring()
-    }
-}
-
-@_cdecl("stop_ui_monitoring")
-public func stopUIMonitoring() {
-    cleanup()
-}
-
-@_cdecl("get_current_output")
-public func getCurrentOutput(_ app: UnsafePointer<CChar>, _ window: UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>? {
-    let appStr = String(cString: app)
-    let windowStr = window.map { String(cString: $0) }
-    
-    guard let output = UIMonitor.getInstance().getCurrentOutput(app: appStr, window: windowStr) else {
-        return nil
-    }
-    
-    return strdup(output)
-}
-
-@_cdecl("get_monitored_apps")
-public func getMonitoredAppsC() -> UnsafeMutablePointer<CChar>? {
-    let apps = UIMonitor.getInstance().getMonitoredApps()
-    let joinedApps = apps.joined(separator: ",")
-    return strdup(joinedApps)
-}
-
-@_cdecl("get_windows_for_app")
-public func getWindowsForAppC(_ app: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>? {
-    let appStr = String(cString: app)
-    let windows = UIMonitor.getInstance().getWindowsForApp(appStr)
-    let joinedWindows = windows.joined(separator: ",")
-    return strdup(joinedWindows)
-}
+// Force stdout to flush immediately
+setbuf(__stdoutp, nil)
+print("swift script starting...")
 
 // Add early error handling
 func checkAccessibilityPermissions() -> Bool {
     let checkOptPrompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue()
     let options = [checkOptPrompt: true] as CFDictionary
     let trusted = AXIsProcessTrustedWithOptions(options)
-    logMessage("accessibility permissions check: \(trusted)")
+    print("accessibility permissions check: \(trusted)")
     return trusted
 }
 
@@ -250,27 +185,32 @@ func loadOrCreateState() -> UIMonitoringState {
     return defaultState
 }
 
+// Start monitoring
+startMonitoring()
+
 func startMonitoring() {
-    logMessage("entering startMonitoring()", level: .debug)
+    print("entering startMonitoring()")
     
+    // Check permissions first
     if !checkAccessibilityPermissions() {
-        logMessage("error: accessibility permissions not granted", level: .error)
+        print("error: accessibility permissions not granted")
         exit(1)
     }
     
+    // Set up signal handling
     signal(SIGINT) { _ in
-        logMessage("received SIGINT, cleaning up...", level: .info)
+        print("received SIGINT, cleaning up...")
         cleanup()
         exit(0)
     }
 
     setupDatabase()
-    logMessage("loaded ui_monitoring logs state", level: .debug)
+    print("loaded ui_monitoring logs state")
     
-    logMessage("setting up application observer...", level: .debug)
+    print("setting up application observer...")
     setupApplicationChangeObserver()
     
-    logMessage("monitoring current application...", level: .debug)
+    print("monitoring current application...")
     monitorCurrentFrontmostApplication()
 
     Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
@@ -284,10 +224,10 @@ func startMonitoring() {
 }
 
 func setupDatabase() {
-    logMessage("setting up database connection...", level: .debug)
+    print("setting up database connection...")
     do {
         screenPipeDb = try ScreenPipeDB()
-        logMessage("database connected successfully", level: .debug)
+        print("database connected successfully")
         
         // Create table if not exists (original schema)
         let createTableSQL = """
@@ -304,7 +244,7 @@ func setupDatabase() {
         
         if sqlite3_exec(screenPipeDb?.db, createTableSQL, nil, nil, nil) != SQLITE_OK {
             let error = String(cString: sqlite3_errmsg(screenPipeDb?.db))
-            logMessage("error creating table: \(error)", level: .error)
+            print("error creating table: \(error)")
             return
         }
         
@@ -325,7 +265,7 @@ func setupDatabase() {
         sqlite3_finalize(stmt)
         
         if !columnExists {
-            logMessage("adding initial_traversal_at column...")
+            print("adding initial_traversal_at column...")
             let alterTableSQL = """
                 ALTER TABLE ui_monitoring 
                 ADD COLUMN initial_traversal_at TEXT;
@@ -338,15 +278,15 @@ func setupDatabase() {
             
             if sqlite3_exec(screenPipeDb?.db, alterTableSQL, nil, nil, nil) != SQLITE_OK {
                 let error = String(cString: sqlite3_errmsg(screenPipeDb?.db))
-                logMessage("error adding column: \(error)", level: .error)
+                print("error adding column: \(error)")
             } else {
-                logMessage("added initial_traversal_at column successfully")
+                print("added initial_traversal_at column successfully")
             }
         }
         
-        logMessage("database setup completed", level: .debug)
+        print("database setup completed")
     } catch {
-        logMessage("error setting up database: \(error)", level: .error)
+        print("error setting up database: \(error)")
         exit(1)
     }
 }
@@ -373,7 +313,7 @@ func monitorCurrentFrontmostApplication() {
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
 
     guard let app = NSWorkspace.shared.frontmostApplication else {
-        logMessage("no frontmost application found", level: .error)
+        print("no frontmost application found")
         return
     }
 
@@ -385,7 +325,7 @@ func monitorCurrentFrontmostApplication() {
     // First check if app should be ignored
     let state = loadOrCreateState()
     if state.ignoredApps.contains(appName) {
-        logMessage("skipping ignored app: \(appName)", level: .info)
+        print("skipping ignored app: \(appName)")
         return
     }
 
@@ -419,17 +359,17 @@ func monitorCurrentFrontmostApplication() {
 
     if !windowExists || !isWindowRecent {
         // Only traverse if window doesn't exist or data is old
-        logMessage("traversing ui elements for \(appName), window: \(windowName)...", level: .debug)
+        print("traversing ui elements for \(appName), window: \(windowName)...")
         traverseAndStoreUIElements(axApp, appName: appName, windowName: windowName)
         hasChanges = true
     } else {
-        logMessage("reusing existing ui elements for \(appName), window: \(windowName)...", level: .debug)
+        print("reusing existing ui elements for \(appName), window: \(windowName)...")
     }
 
     // Always set up notifications
     setupAccessibilityNotifications(pid: pid, axApp: axApp, appName: appName, windowName: windowName)
 
-    logMessage("monitoring changes for \(appName), window: \(windowName)...", level: .debug)
+    print("monitoring changes for \(appName), window: \(windowName)...")
 }
 
 func setupApplicationChangeObserver() {
@@ -497,14 +437,14 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
 
             // Add depth limit check
             if depth > 100 {
-                logMessage("max depth reached: depth=\(depth), app=\(appName), window=\(windowName)", level: .warn)
+                print("max depth reached: depth=\(depth), app=\(appName), window=\(windowName)")
                 return nil
             }
 
             // Check for cancellation or character limit
             if shouldCancelTraversal || totalCharacterCount >= 100_000 {
                 if totalCharacterCount >= 1_000_000 {
-                    logMessage("hit 1mln char limit for app: \(appName), window: \(windowName)", level: .warn)
+                    print("hit 1mln char limit for app: \(appName), window: \(windowName)")
                 }
                 return nil
             }
@@ -579,7 +519,7 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
                     // Check if it's an array of AXUIElements first
                     if let elementArray = childrenValue as? [AXUIElement] {
                         if elementArray.count > 1000 {
-                            logMessage("element at path \(path) has \(elementArray.count) children", level: .warn)
+                            print("element at path \(path) has \(elementArray.count) children")
                         }
                         for childElement in elementArray {
                             if let childAttributes = traverse(childElement, depth: depth + 1) {
@@ -596,18 +536,18 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
             elementAttributes.children = childrenElements
 
             if hasRelevantValue || !childrenElements.isEmpty {
+                // Update character count before storing
+                if hasRelevantValue {
+                    for value in elementAttributes.attributes.values {
+                        totalCharacterCount += value.count
+                    }
+                }
+                
                 // Store the element with its attributes using identifier as key
                 globalElementValues[appName]?[windowName]?.elements[elementAttributes.identifier] = elementAttributes
                 return elementAttributes
             } else {
                 return nil
-            }
-
-            // Update character count when storing values
-            if hasRelevantValue {
-                for value in elementAttributes.attributes.values {
-                    totalCharacterCount += value.count
-                }
             }
         }
 
@@ -629,7 +569,7 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
             let endTime = DispatchTime.now()
             let nanoTime = endTime.uptimeNanoseconds - startTime.uptimeNanoseconds
             let timeInterval = Double(nanoTime) / 1_000_000
-            logMessage("\(String(format: "%.2f", timeInterval))ms - ui traversal", level: .debug)
+            print("\(String(format: "%.2f", timeInterval))ms - ui traversal")
 
             measureGlobalElementValuesSize()
         }
@@ -727,7 +667,7 @@ func updateElementAndChildren(
     if let children = getAttributeValue(element, forAttribute: kAXChildrenAttribute) as? [AXUIElement] {
         if children.count > 1000 {
             let (path, _) = getElementPath(element)
-            logMessage("element at path \(path) has \(children.count) children", level: .warn)
+            print("element at path \(path) has \(children.count) children")
         }
         for child in children {
             if updateElementAndChildren(child, appName: appName, windowName: windowName, visitedElements: &visitedElements) {
@@ -765,7 +705,7 @@ func handleFocusedWindowChange(element: AXUIElement) {
     // If it's a new window, create fresh state
     if isNewWindow {
         globalElementValues[appName]?[windowName] = WindowState()
-        logMessage("new window detected: \(windowName)", level: .debug)
+        print("new window detected: \(windowName)")
     }
 
     // Start traversing the new window
@@ -861,7 +801,7 @@ func processPendingNotifications() {
     
     let endTime = DispatchTime.now()
     let timeInterval = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000
-    logMessage("\(String(format: "%.2f", timeInterval))ms - processed pending notifications", level: .debug)
+    print("\(String(format: "%.2f", timeInterval))ms - processed pending notifications")
     
     // Clear pending notifications and reset debounceTimer
     pendingNotifications.removeAll()
@@ -873,7 +813,7 @@ func processPendingNotifications() {
 func setupAccessibilityNotifications(pid: pid_t, axApp: AXUIElement, appName: String, windowName: String) {
     // Add safety check for invalid pid
     if pid <= 0 {
-        logMessage("invalid pid: \(pid)", level: .error)
+        print("invalid pid: \(pid)")
         return
     }
 
@@ -885,7 +825,7 @@ func setupAccessibilityNotifications(pid: pid_t, axApp: AXUIElement, appName: St
     var observer: AXObserver?
     let createResult = AXObserverCreate(pid, axObserverCallback, &observer)
     if createResult != .success || observer == nil {
-        logMessage("failed to create accessibility observer: \(createResult)", level: .error)
+        print("failed to create accessibility observer: \(createResult)")
         return
     }
 
@@ -1125,7 +1065,7 @@ func buildTextOutput(from windowState: WindowState) -> String {
 
 func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp: String) {
     guard let db = screenPipeDb?.db else {
-        logMessage("database not initialized", level: .error)
+        print("database not initialized")
         return
     }
     
@@ -1207,12 +1147,11 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
             sqlite3_bind_text(updateStmt, 3, sanitizedWindow, -1, SQLITE_TRANSIENT)
             
             if sqlite3_step(updateStmt) != SQLITE_DONE {
-                let error = String(cString: sqlite3_errmsg(db))
-                logMessage("error updating row: \(error)", level: .error)
+                print("error updating timestamp")
             }
             sqlite3_finalize(updateStmt)
         }
-        logMessage("no new content, updated timestamp only", level: .debug)
+        print("no new content, updated timestamp only")
         return
     }
 
@@ -1252,8 +1191,7 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
             sqlite3_bind_text(updateStmt, 4, sanitizedWindow, -1, SQLITE_TRANSIENT)
             
             if sqlite3_step(updateStmt) != SQLITE_DONE {
-                let error = String(cString: sqlite3_errmsg(db))
-                logMessage("error updating row: \(error)", level: .error)
+                print("error updating row")
             }
             sqlite3_finalize(updateStmt)
         }
@@ -1273,7 +1211,7 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
             sqlite3_bind_text(insertStmt, 5, finalText, -1, SQLITE_TRANSIENT)
             
             if sqlite3_step(insertStmt) != SQLITE_DONE {
-                logMessage("error inserting row", level: .error)
+                print("error inserting row")
             }
             sqlite3_finalize(insertStmt)
         }
@@ -1281,7 +1219,7 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
 
     let endTime = DispatchTime.now()
     let timeInterval = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000
-    logMessage("\(String(format: "%.2f", timeInterval))ms - saved to db for \(windowId.app)/\(String(windowId.window.prefix(30)))... (\(uniqueNewLines.count) new lines, \(extensionsFound) extensions, \(newCharsCount) new chars), skipped \(exactMatchesFound) exact matches", level: .debug)
+    print("\(String(format: "%.2f", timeInterval))ms - saved to db for \(windowId.app)/\(String(windowId.window.prefix(30)))... (\(uniqueNewLines.count) new lines, \(extensionsFound) extensions, \(newCharsCount) new chars), skipped \(exactMatchesFound) exact matches")
 }
 
 func saveElementValues() {
@@ -1370,7 +1308,7 @@ func pruneGlobalState() {
         return
     }
     
-    logMessage("pruning global state: current size \(String(format: "%.2f", Double(totalSize) * 2 / 1024 / 1024))mb", level: .debug)
+    print("pruning global state: current size \(String(format: "%.2f", Double(totalSize) * 2 / 1024 / 1024))mb")
     
     // Sort by timestamp (oldest first)
     elementsByTimestamp.sort { $0.timestamp < $1.timestamp }
@@ -1388,10 +1326,10 @@ func pruneGlobalState() {
         }
         
         removedSize += entry.size
-        logMessage("pruned UI monitoring state for \(entry.app)/\(entry.window): \(String(format: "%.2f", Double(entry.size) * 2 / 1024))kb", level: .info)
+        print("pruned \(entry.app)/\(entry.window): \(String(format: "%.2f", Double(entry.size) * 2 / 1024))kb")
     }
     
-    logMessage("pruned UI monitoring global state to \(String(format: "%.2f", Double(totalSize - removedSize) * 2 / 1024 / 1024))mb", level: .info)
+    print("pruned global state to \(String(format: "%.2f", Double(totalSize - removedSize) * 2 / 1024 / 1024))mb")
 }
 
 func measureGlobalElementValuesSize() {
@@ -1408,7 +1346,7 @@ func measureGlobalElementValuesSize() {
     }
 
     let mbSize = Double(totalStringLength) * 2 / 1024.0 / 1024.0
-    logMessage("global state size: \(String(format: "%.3f", mbSize))mb", level: .debug)
+    print("global state size: \(String(format: "%.3f", mbSize))mb")
     
     // Add pruning check
     if mbSize > 10.0 {
