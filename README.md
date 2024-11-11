@@ -99,11 +99,11 @@ there are multiple ways to install screenpipe:
 
 [**👉 install screenpipe now**](https://docs.screenpi.pe/docs/getting-started)
 
-## usage
+## create plugins
 
 screenpipe has a plugin system called "pipe" which lets you run code in a sandboxed environment within the Rust code, [get started](https://docs.screenpi.pe/docs/plugins)
 
-## examples
+## other examples
 
 [check examples](https://docs.screenpi.pe/docs/examples)
 
