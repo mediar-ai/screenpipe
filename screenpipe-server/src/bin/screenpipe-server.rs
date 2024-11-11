@@ -131,7 +131,7 @@ async fn main() -> anyhow::Result<()> {
             error!("screenpipe PATH check failed: {}", e);
             error!("please ensure screenpipe is installed correctly and is in your PATH");
             h.capture_error("please ensure screenpipe is installed correctly and is in your PATH");
-            return Err(e.into());
+            // do not crash
         }
     }
 
