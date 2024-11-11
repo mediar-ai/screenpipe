@@ -168,21 +168,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
     ];
 
-    if env::consts::OS == "windows" {
-        // TODO switch back to libx264 when ffmpeg is updated in pre_build.js
-        // Use H264_mf encoder for Windows
-        args.extend_from_slice(&[
-            "-vcodec",
-            "h264_mf",
-            "-q:v",
-            "5", // Adjust quality (1-31, lower is better)
-            "-preset",
-            "ultrafast",
-        ]);
-    } else {
-        // Use libx264 for other platforms
-        args.extend_from_slice(&["-vcodec", "libx264", "-preset", "ultrafast", "-crf", "23"]);
-    }
+    args.extend_from_slice(&["-vcodec", "libx265", "-preset", "ultrafast", "-crf", "23"]);
 
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 
