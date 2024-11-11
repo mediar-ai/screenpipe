@@ -1336,7 +1336,7 @@ async fn stream_frames_handler(
         let cache = match state.frame_cache.as_ref() {
             Some(cache) => cache.clone(),
             None => {
-                error!("frame cache not initialized");
+                // error!("frame cache not initialized");
                 yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
                 return;
             }

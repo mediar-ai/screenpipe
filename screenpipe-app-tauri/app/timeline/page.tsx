@@ -165,7 +165,6 @@ export default function Timeline() {
     eventSource.onopen = () => {
       console.log("eventsource connection opened");
       setError(null);
-      retryCount.current = 0;
     };
   };
 
