@@ -24,8 +24,20 @@ COMMIT_LAST_RELEASE=$(git log -1 --until="$COMMIT_DATE_LAST_RELEASE" --format="%
 COMMIT_CURRENT_RELEASE=$(git log -1 --format="%H")
 COMMIT_CURRENT_RELEASE=${2:-$COMMIT_CURRENT_RELEASE}
 
+if [ "$COMMIT_LAST_RELEASE" == "" ]; then
+  echo "Failed to get the commit hash for the last release"
+  echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
+  exit 1
+fi
+
+if [ "$COMMIT_CURRENT_RELEASE" == "" ]; then
+  echo "Failed to get the commit hash for the current release"
+  echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
+  exit 1
+fi
+
 # If both are equal, then there's nothing to add to the changelog
-if [ "$COMMIT_LAST_RELEASE" == "$COMMIT_CURRENT_RELEASE" ] || [ "$COMMIT_LAST_RELEASE" == "" ] || [ "$COMMIT_CURRENT_RELEASE" == "" ]; then
+if [ "$COMMIT_LAST_RELEASE" == "$COMMIT_CURRENT_RELEASE" ]; then
   echo "No new commits to add to the changelog"
   echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
   exit 0
