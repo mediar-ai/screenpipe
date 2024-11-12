@@ -345,11 +345,11 @@ impl<'a> Decoder<'a> {
                 dr,
             };
             if self.timestamps {
-                info!(
-                    "{:.1}s -- {:.1}s",
-                    segment.start,
-                    segment.start + segment.duration,
-                );
+                // info!(
+                //     "{:.1}s -- {:.1}s",
+                //     segment.start,
+                //     segment.start + segment.duration,
+                // );
                 let mut tokens_to_decode = vec![];
                 let mut prev_timestamp_s = 0f32;
                 for &token in segment.dr.tokens.iter() {
@@ -382,12 +382,12 @@ impl<'a> Decoder<'a> {
                     tokens_to_decode.clear()
                 }
             } else {
-                info!(
-                    "{:.1}s -- {:.1}s: {}",
-                    segment.start,
-                    segment.start + segment.duration,
-                    segment.dr.text,
-                )
+                // info!(
+                //     "{:.1}s -- {:.1}s: {}",
+                //     segment.start,
+                //     segment.start + segment.duration,
+                //     segment.dr.text,
+                // )
             }
             if self.verbose {
                 info!("{seek}: {segment:?}, in {:?}", start.elapsed());

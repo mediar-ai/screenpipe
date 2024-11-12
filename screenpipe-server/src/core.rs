@@ -410,6 +410,10 @@ async fn process_audio_result(
         return Ok(None);
     }
 
+    let speaker_id = get_or_create_speaker_id(db, &result.speaker_embedding).await?;
+
+    info!("Detected speaker: {}", speaker_id);
+
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
     let mut chunk_id: Option<i64> = None;
@@ -443,6 +447,7 @@ async fn process_audio_result(
                     0,
                     &transcription_engine,
                     &result.input.device,
+                    Some(speaker_id),
                 )
                 .await
             {
@@ -465,4 +470,17 @@ async fn process_audio_result(
         ),
     }
     Ok(chunk_id)
+}
+
+async fn get_or_create_speaker_id(
+    db: &DatabaseManager,
+    embedding: &[f32],
+) -> Result<i64, anyhow::Error> {
+    let speaker_id = db.get_speaker_id(embedding).await?;
+    if let Some(id) = speaker_id {
+        Ok(id)
+    } else {
+        let id = db.insert_speaker(embedding).await?;
+        Ok(id)
+    }
 }

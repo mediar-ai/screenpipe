@@ -18,6 +18,7 @@ use sqlx::{
     sqlite::{SqlitePool, SqlitePoolOptions},
     FromRow,
 };
+use tracing::info;
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -262,12 +263,13 @@ impl DatabaseManager {
         offset_index: i64,
         transcription_engine: &str,
         device: &AudioDevice,
+        speaker_id: Option<i64>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
         let id = sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
@@ -276,6 +278,7 @@ impl DatabaseManager {
         .bind(transcription_engine)
         .bind(&device.name)
         .bind(device.device_type == DeviceType::Input)
+        .bind(speaker_id)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -343,19 +346,32 @@ impl DatabaseManager {
         Ok(speaker)
     }
 
-    pub async fn get_speaker_id(&self, embedding: &[f32]) -> Result<i64, SqlxError> {
+    pub async fn get_speaker_id(&self, embedding: &[f32]) -> Result<Option<i64>, SqlxError> {
         let bytes: &[u8] = embedding.as_bytes();
-        let speaker_id = sqlx::query_scalar(
+        let row = sqlx::query(
             "select
                     id,
-                    vec_distance_L2(embedding, vec_f32(?1)) as distance
+                    vec_distance_cosine(embedding, vec_f32(?1)) as distance
                     from speakers
                     order by distance;",
         )
         .bind(bytes)
-        .fetch_one(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
-        Ok(speaker_id)
+
+        Ok(match row {
+            Some(row) => {
+                let id: i64 = row.get("id");
+                let distance: f64 = row.get("distance");
+                info!("Speaker distance: {}", distance);
+                if distance < 1.0 {
+                    Some(id)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        })
     }
 
     pub async fn update_speaker_name(&self, speaker_id: i64, name: &str) -> Result<i64, SqlxError> {

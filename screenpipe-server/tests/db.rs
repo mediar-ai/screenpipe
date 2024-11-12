@@ -65,6 +65,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -103,6 +104,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -168,6 +170,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -234,6 +237,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -266,6 +270,7 @@ mod tests {
             1,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -389,6 +394,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -419,6 +425,7 @@ mod tests {
             1,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -481,7 +488,7 @@ mod tests {
 
         let sample_embedding = vec![0.1; 512];
         let speaker_id = db.get_speaker_id(&sample_embedding).await.unwrap();
-        assert_eq!(speaker_id, 1);
+        assert_eq!(speaker_id, Some(1));
     }
 
     #[tokio::test]
