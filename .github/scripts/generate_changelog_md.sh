@@ -23,8 +23,6 @@ COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
 # Format date for git (remove quotes if present)
 COMMIT_DATE_LAST_RELEASE=$(echo "$COMMIT_DATE_LAST_RELEASE" | tr -d '"')
 
-echo "Last release date: $COMMIT_DATE_LAST_RELEASE"
-
 COMMIT_LAST_RELEASE=$(git log -1 --until="$COMMIT_DATE_LAST_RELEASE" --format="%H")
 
 COMMIT_CURRENT_RELEASE=$(git log -1 --format="%H")
