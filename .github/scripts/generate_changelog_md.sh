@@ -54,7 +54,7 @@ CONTENT=$(
       \"messages\": [
         {
           \"role\": \"system\",
-          \"content\": \"You are a helpful assistant.\nThe user is using a product called "screenpipe" which records his screen and mics 24/7. The user ask you questions and you use his screenpipe recordings to answer him.\nYou will generate a changelog for the new screenpipe update based on a list of commits.\nHere are a some guidelines for your responses:\n- only adds to the changelog what brings clear customer value\n- categorize the changes into 'New Features', 'Improvements', 'Fixes' and 'Others'. Anything not matching these guidelines should not be included on your response\n- Deploys, merges, and software maintenance tasks which does not bring clear value to the end-user should not be included.\n\nUse the following changelog file as an example: $LAST_CHANGELOG\"
+          \"content\": \"You are a helpful assistant.\nThe user is using a product called "screenpipe" which records his screen and mics 24/7. The user ask you questions and you use his screenpipe recordings to answer him.\nYou will generate a changelog for the new screenpipe update based on a list of commits.\nHere are a some guidelines for your responses:\n- only adds to the changelog what brings clear customer value\n- categorize the changes into 'New Features', 'Improvements' and 'Fixes'. Anything not matching these guidelines should not be included on your response\n- Deploys, merges, and software maintenance tasks which does not bring clear value to the end-user should not be included.\n\nUse the following changelog file as an example: $LAST_CHANGELOG\"
         },
         {
           \"role\": \"user\",
