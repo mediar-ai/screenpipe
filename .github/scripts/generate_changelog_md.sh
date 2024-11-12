@@ -2,7 +2,7 @@ CURRENT_RELEASE=$1
 
 CHANGELOG_PUBLIC_PATH=screenpipe-app-tauri/public/CHANGELOG.md
 
-LAST_CHANGELOG=$(awk '/^#### \*\*Full Changelog:\*\*/{exit} {print}' $CHANGELOG_PUBLIC_PATH | awk '{printf "%s\\n", $0}' | sed 's/"/\\"/g')
+LAST_CHANGELOG=$(awk '{printf "%s\\n", $0}' contents/changelogs/v0.1.95.md | sed 's/"/\\"/g')
 
 # The if else is necessary to ensure it works both locally and on cloud
 
