@@ -313,12 +313,20 @@ impl DatabaseManager {
 
     pub async fn insert_speaker(&self, embedding: &[f32]) -> Result<i64, SqlxError> {
         let mut tx = self.pool.begin().await?;
-        let bytes: &[u8] = embedding.as_bytes();
-        let id = sqlx::query("INSERT INTO speakers (embedding) VALUES (vec_f32(?1))")
-            .bind(bytes)
+
+        let id = sqlx::query("INSERT INTO speakers (name) VALUES (NULL)")
             .execute(&mut *tx)
             .await?
             .last_insert_rowid();
+
+        let bytes: &[u8] = embedding.as_bytes();
+        let _ = sqlx::query(
+            "INSERT INTO speaker_embeddings (embedding, speaker_id) VALUES (vec_f32(?1), ?2)",
+        )
+        .bind(bytes)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(id)
     }
@@ -350,9 +358,9 @@ impl DatabaseManager {
         let bytes: &[u8] = embedding.as_bytes();
         let row = sqlx::query(
             "select
-                    id,
+                    speaker_id,
                     vec_distance_cosine(embedding, vec_f32(?1)) as distance
-                    from speakers
+                    from speaker_embeddings
                     order by distance;",
         )
         .bind(bytes)
@@ -361,7 +369,7 @@ impl DatabaseManager {
 
         Ok(match row {
             Some(row) => {
-                let id: i64 = row.get("id");
+                let id: i64 = row.get("speaker_id");
                 let distance: f64 = row.get("distance");
                 info!("Speaker distance: {}", distance);
                 if distance < 0.6 {
