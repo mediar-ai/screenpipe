@@ -19,6 +19,9 @@ fi
 
 LAST_RELEASE=$($CN_CMD release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0]')
 COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
+
+echo "Last release date: $COMMIT_DATE_LAST_RELEASE"
+
 COMMIT_LAST_RELEASE=$(git log -1 --until="$COMMIT_DATE_LAST_RELEASE" --format="%H")
 
 COMMIT_CURRENT_RELEASE=$(git log -1 --format="%H")
