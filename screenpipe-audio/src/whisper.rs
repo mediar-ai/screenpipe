@@ -377,7 +377,7 @@ impl<'a> Decoder<'a> {
                         .decode(&tokens_to_decode, true)
                         .map_err(E::msg)?;
                     if !text.is_empty() {
-                        info!("  {:.1}s-...: {}", prev_timestamp_s, text);
+                        // info!("  {:.1}s-...: {}", prev_timestamp_s, text);
                     }
                     tokens_to_decode.clear()
                 }

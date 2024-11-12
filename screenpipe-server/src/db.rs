@@ -364,7 +364,7 @@ impl DatabaseManager {
                 let id: i64 = row.get("id");
                 let distance: f64 = row.get("distance");
                 info!("Speaker distance: {}", distance);
-                if distance < 1.0 {
+                if distance < 0.6 {
                     Some(id)
                 } else {
                     None

@@ -2,6 +2,7 @@ use crate::pyannote::session;
 use anyhow::{format_err, Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
 use std::{cmp::Ordering, path::Path};
+use tracing::error;
 
 use super::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
 
@@ -47,7 +48,19 @@ fn create_speech_segment(
     let end_idx = end_f64.min(samples.len() as f64) as usize;
 
     let segment_samples = &padded_samples[start_idx..end_idx];
-    let embedding = get_speaker_embedding(embedding_extractor, segment_samples);
+    let embedding = match get_speaker_embedding(embedding_extractor, segment_samples) {
+        Ok(embedding) => embedding,
+        Err(e) => {
+            error!("Failed to compute speaker embedding: {}", e);
+            return Ok(SpeechSegment {
+                start,
+                end,
+                samples: segment_samples.to_vec(),
+                speaker: "?".to_string(),
+                embedding: Vec::new(),
+            });
+        }
+    };
     let speaker = get_speaker_from_embedding(embedding_manager, embedding.clone());
 
     Ok(SpeechSegment {
@@ -168,8 +181,17 @@ pub fn get_segments<P: AsRef<Path>>(
 fn get_speaker_embedding(
     embedding_extractor: &mut EmbeddingExtractor,
     samples: &[f32],
-) -> Vec<f32> {
-    embedding_extractor.compute(samples).unwrap().collect()
+) -> Result<Vec<f32>> {
+    match embedding_extractor.compute(samples) {
+        Ok(embedding) => Ok(embedding.collect::<Vec<f32>>()),
+        Err(e) => {
+            error!("Failed to compute speaker embedding: {}", e);
+            Err(anyhow::anyhow!(
+                "Failed to compute speaker embedding: {}",
+                e
+            ))
+        }
+    }
 }
 
 pub fn get_speaker_from_embedding(
