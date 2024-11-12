@@ -2,7 +2,7 @@ CURRENT_RELEASE=$1
 
 CHANGELOG_PUBLIC_PATH=screenpipe-app-tauri/public/CHANGELOG.md
 
-LAST_CHANGELOG=$(awk '/^#### \*\*Full Changelog:\*\*/{exit} {print}' $CHANGELOG_PUBLIC_PATH | awk '{printf "%s\\n", $0}' | sed 's/"/\\"/g')
+LAST_CHANGELOG=$(awk '{printf "%s\\n", $0}' content/changelogs/v0.1.98.md | sed 's/"/\\"/g')
 
 # The if else is necessary to ensure it works both locally and on cloud
 
@@ -19,13 +19,29 @@ fi
 
 LAST_RELEASE=$($CN_CMD release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0]')
 COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
+
+# Format date for git (remove quotes if present)
+COMMIT_DATE_LAST_RELEASE=$(echo "$COMMIT_DATE_LAST_RELEASE" | tr -d '"')
+
 COMMIT_LAST_RELEASE=$(git log -1 --until="$COMMIT_DATE_LAST_RELEASE" --format="%H")
 
 COMMIT_CURRENT_RELEASE=$(git log -1 --format="%H")
 COMMIT_CURRENT_RELEASE=${2:-$COMMIT_CURRENT_RELEASE}
 
+if [ "$COMMIT_LAST_RELEASE" == "" ]; then
+  echo "Failed to get the commit hash for the last release"
+  echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
+  exit 1
+fi
+
+if [ "$COMMIT_CURRENT_RELEASE" == "" ]; then
+  echo "Failed to get the commit hash for the current release"
+  echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
+  exit 1
+fi
+
 # If both are equal, then there's nothing to add to the changelog
-if [ "$COMMIT_LAST_RELEASE" == "$COMMIT_CURRENT_RELEASE" ] || [ "$COMMIT_LAST_RELEASE" == "" ] || [ "$COMMIT_CURRENT_RELEASE" == "" ]; then
+if [ "$COMMIT_LAST_RELEASE" == "$COMMIT_CURRENT_RELEASE" ]; then
   echo "No new commits to add to the changelog"
   echo "CHANGELOG_GENERATED=0" >> $GITHUB_ENV
   exit 0
@@ -42,7 +58,7 @@ CONTENT=$(
       \"messages\": [
         {
           \"role\": \"system\",
-          \"content\": \"You are a helpful assistant.\nThe user is using a product called "screenpipe" which records his screen and mics 24/7. The user ask you questions and you use his screenpipe recordings to answer him.\nYou will generate a changelog for the new screenpipe update based on a list of commits.\nHere are a some guidelines for your responses:\n- only adds to the changelog what brings clear customer value\n- categorize the changes into 'New Features', 'Improvements', 'Fixes' and 'Others'. Anything not matching these guidelines should not be included on your response\n- Deploys, merges, and software maintenance tasks which does not bring clear value to the end-user should not be included.\n\nUse the following changelog file as an example: $LAST_CHANGELOG\"
+          \"content\": \"You are a helpful assistant.\nThe user is using a product called "screenpipe" which records his screen and mics 24/7. The user ask you questions and you use his screenpipe recordings to answer him.\nYou will generate a changelog for the new screenpipe update based on a list of commits.\nHere are a some guidelines for your responses:\n- only adds to the changelog what brings clear customer value\n- categorize the changes into 'New Features', 'Improvements' and 'Fixes'. Anything not matching these guidelines should not be included on your response\n- Deploys, merges, and software maintenance tasks which does not bring clear value to the end-user should not be included.\n\nUse the following changelog file as an example: $LAST_CHANGELOG\"
         },
         {
           \"role\": \"user\",
