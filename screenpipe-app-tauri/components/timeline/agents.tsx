@@ -2,7 +2,7 @@ import { StreamTimeSeriesResponse } from "@/app/timeline/page";
 import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources/index.mjs";
 
-interface Agent {
+export interface Agent {
   id: string;
   name: string;
   description: string;
@@ -12,22 +12,31 @@ interface Agent {
     options: {
       model: string;
       onProgress: (chunk: string) => void;
-    }
+    },
+    userQuery: string
   ) => Promise<void>;
 }
 
 async function streamCompletion(
   openai: OpenAI,
   messages: ChatCompletionMessageParam[],
+  userQuery: string,
   options: {
     model: string;
     onProgress: (chunk: string) => void;
   }
 ) {
-  console.log("streaming completion", messages);
+  const messagesWithQuery = [
+    ...messages,
+    {
+      role: "user" as const,
+      content: `User question: "${userQuery}"\nPlease analyze the data in context of this question.`,
+    },
+  ];
+
   const stream = await openai.chat.completions.create({
     model: options.model,
-    messages,
+    messages: messagesWithQuery,
     stream: true,
   });
 
@@ -67,7 +76,12 @@ export const AGENTS: Agent[] = [
     name: "recursive summarizer",
     description:
       "good at processing long time ranges but quality decreases with shorter time ranges",
-    analyze: async (frames, openai, { model, onProgress = () => {} }) => {
+    analyze: async (
+      frames,
+      openai,
+      { model, onProgress = () => {} },
+      userQuery
+    ) => {
       if (!frames.length) {
         onProgress("no frames to analyze\n\n");
         return;
@@ -123,7 +137,7 @@ export const AGENTS: Agent[] = [
             role: "system",
             content: `create a hierarchical summary with these sections:
                 ### overview
-                (one paragraph summary of entire time range)
+                (one paragraph summary of entire time range, focusing on answering the user's question)
                 
                 ### timeline
                 (list of chunk summaries with timestamps)
@@ -144,6 +158,7 @@ export const AGENTS: Agent[] = [
             }),
           },
         ],
+        userQuery,
         { model, onProgress }
       );
     },
@@ -152,7 +167,7 @@ export const AGENTS: Agent[] = [
     id: "context-master",
     name: "context master",
     description: "analyzes everything: apps, windows, text & audio",
-    analyze: async (frames, openai, { model, onProgress }) => {
+    analyze: async (frames, openai, { model, onProgress }, userQuery) => {
       const contextData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         devices: frame.devices.map((device) => ({
@@ -161,8 +176,6 @@ export const AGENTS: Agent[] = [
           audio: device.audio,
         })),
       }));
-
-      console.log("context data", contextData);
 
       await streamCompletion(
         openai,
@@ -177,6 +190,7 @@ export const AGENTS: Agent[] = [
             content: JSON.stringify(contextData),
           },
         ],
+        userQuery,
         { model, onProgress }
       );
     },
@@ -185,7 +199,7 @@ export const AGENTS: Agent[] = [
     id: "window-tracker",
     name: "window tracker",
     description: "focuses on app & window usage data",
-    analyze: async (frames, openai, { model, onProgress }) => {
+    analyze: async (frames, openai, { model, onProgress }, userQuery) => {
       const windowData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         windows: frame.devices.map((device) => ({
@@ -207,6 +221,7 @@ export const AGENTS: Agent[] = [
             content: JSON.stringify(windowData),
           },
         ],
+        userQuery,
         { model, onProgress }
       );
     },
@@ -215,7 +230,7 @@ export const AGENTS: Agent[] = [
     id: "text-scanner",
     name: "text scanner",
     description: "analyzes visible text (OCR)",
-    analyze: async (frames, openai, { model, onProgress }) => {
+    analyze: async (frames, openai, { model, onProgress }, userQuery) => {
       const textData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         text: frame.devices
@@ -236,6 +251,7 @@ export const AGENTS: Agent[] = [
             content: JSON.stringify(textData),
           },
         ],
+        userQuery,
         { model, onProgress }
       );
     },
@@ -244,7 +260,7 @@ export const AGENTS: Agent[] = [
     id: "voice-analyzer",
     name: "voice analyzer",
     description: "focuses on audio transcriptions",
-    analyze: async (frames, openai, { model, onProgress }) => {
+    analyze: async (frames, openai, { model, onProgress }, userQuery) => {
       const audioData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         audio: frame.devices.flatMap((device) => device.audio),
@@ -263,6 +279,7 @@ export const AGENTS: Agent[] = [
             content: JSON.stringify(audioData),
           },
         ],
+        userQuery,
         { model, onProgress }
       );
     },
