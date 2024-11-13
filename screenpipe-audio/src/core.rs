@@ -5,6 +5,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -492,6 +493,37 @@ impl AudioStream {
             stream_thread: Some(stream_thread),
         })
     }
+
+    // pub async fn from_file(file_path: &PathBuf) -> Result<Self> {
+    //     // read the audio file
+    //     let (pcm_data, sample_rate) = crate::pcm_decode(file_path)?;
+
+    //     // Create broadcast channel for audio data
+    //     let (tx, _) = broadcast::channel::<Vec<f32>>(1000);
+    //     let tx_clone = tx.clone();
+
+    //     // Create a default stream config for file input (e.g., 16kHz mono)
+    //     let config = cpal::SupportedStreamConfig::new(
+    //         1, // channels
+    //         cpal::SampleRate(sample_rate),
+    //         cpal::SupportedBufferSize::Range {
+    //             min: 1,
+    //             max: sample_rate,
+    //         },
+    //         cpal::SampleFormat::F32,
+    //     );
+
+    //     // Create dummy stream control channel (not used for file input)
+    //     let (stream_control_tx, _) = mpsc::channel();
+
+    //     Ok(AudioStream {
+    //         device: Arc::new(AudioDevice::new("file".to_string(), DeviceType::Input)),
+    //         device_config: config,
+    //         transmitter: Arc::new(tx_clone),
+    //         stream_control: stream_control_tx,
+    //         stream_thread: None,
+    //     })
+    // }
 
     pub async fn subscribe(&self) -> broadcast::Receiver<Vec<f32>> {
         self.transmitter.subscribe()

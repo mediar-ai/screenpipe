@@ -283,6 +283,7 @@ pub async fn prepare_segments(
     audio_input: &AudioInput,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
 ) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
+    info!("Preparing segments");
     let audio_data = if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
         info!(
             "device: {}, resampling from {} Hz to {} Hz",
