@@ -11,11 +11,15 @@ use tauri::Emitter;
 use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_store::StoreExt;
+use tokio::time::Instant;
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::Config;
 use tauri::Manager;
 use tauri::{
@@ -55,6 +59,10 @@ pub use sidecar::spawn_screenpipe;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
+static SHORTCUT_LOCK: AtomicBool = AtomicBool::new(false);
+static mut LAST_TRIGGER: Option<Instant> = None;
+const DEBOUNCE_DURATION: Duration = Duration::from_millis(500);
+
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
@@ -62,6 +70,33 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
 
     fs::create_dir_all(&local_data_dir.join("data"))?;
     Ok(local_data_dir)
+}
+
+fn send_recording_notification(
+    app_handle: &tauri::AppHandle,
+    success: bool,
+    action: &str,
+    error_msg: Option<&str>
+) {
+    let (title, body, event) = if success {
+        ("Screenpipe", 
+         format!("Recording {}", action),
+         format!("recording_{}", action))
+    } else {
+        ("Screenpipe",
+         format!("Failed to {} recording", action),
+         "recording_failed".to_string())
+    };
+
+    if let Some(err) = error_msg {
+        error!("Recording operation failed: {}", err);
+    }
+
+    let _ = app_handle.notification().builder()
+        .title(title)
+        .body(&body)
+        .show();
+    let _ = app_handle.emit(&event, body);
 }
 
 #[tokio::main]
@@ -122,6 +157,21 @@ async fn main() {
                     format!("{}{}", modifiers.join("+"), key)
                 }
 
+                if !SHORTCUT_LOCK.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+                    debug!("Shortcut handler already running");
+                    return;
+                }
+
+                unsafe {
+                    if let Some(last) = LAST_TRIGGER {
+                        if last.elapsed() < DEBOUNCE_DURATION {
+                            SHORTCUT_LOCK.store(false, Ordering::Release);
+                            return;
+                        }
+                    }
+                    LAST_TRIGGER = Some(Instant::now());
+                }
+
                 match event.state() {
                     ShortcutState::Pressed => {
                         let normalized_shortcut = normalize_shortcut(&shortcut.to_string());
@@ -157,46 +207,46 @@ async fn main() {
                             
                             tauri::async_runtime::spawn(async move {
                                 let state = app_handle.state::<SidecarState>();
-                                let mut sidecar = state.0.lock().await;
-                                let is_running = sidecar.is_some() && sidecar.as_ref().unwrap().child.is_some();
-                                debug!("sidecar.is_some(): {:?}", sidecar.is_some());
-                                // debug!("sidecar.as_ref().unwrap().child.is_some(): {:?}", sidecar.as_ref().unwrap().child.is_some());
-                                debug!("Sidecar running state: {}", is_running);
                                 
-                                // Drop the lock before performing actions
-                                drop(sidecar);
-
-                                if is_running {
-                                    debug!("Stopping screenpipe via shortcut");
-                                    if let Err(err) = kill_all_sreenpipes(state.clone(), app_handle.clone()).await {
-                                        error!("Failed to stop recording: {}", err);
-                                        let _ = app_handle.notification().builder()
-                                            .title("Screenpipe")
-                                            .body("Failed to stop recording")
-                                            .show();
-                                        let _ = app_handle.emit("recording_failed", "Failed to stop recording");
-                                    } else {
-                                        let _ = app_handle.notification().builder()
-                                            .title("Screenpipe")
-                                            .body("Recording stopped")
-                                            .show();
-                                        let _ = app_handle.emit("recording_stopped", "Recording stopped");
+                                let is_running = {
+                                    let sidecar = state.0.lock().await;
+                                    match &*sidecar {
+                                        Some(manager) => manager.child.is_some(),
+                                        None => false
                                     }
+                                }; 
+                                
+                                debug!("Sidecar running state: {}", is_running);
+
+                                let result = if is_running {
+                                    debug!("Stopping screenpipe via shortcut");
+                                    kill_all_sreenpipes(state.clone(), app_handle.clone()).await
                                 } else {
                                     debug!("Starting screenpipe via shortcut");
-                                    if let Err(err) = spawn_screenpipe(state.clone(), app_handle.clone()).await {
-                                        error!("Failed to start recording: {}", err);
+                                    spawn_screenpipe(state.clone(), app_handle.clone()).await
+                                };
+
+                                match result {
+                                    Ok(_) => {
+                                        let (title, body, event) = if is_running {
+                                            ("Screenpipe", "Recording stopped", "recording_stopped")
+                                        } else {
+                                            ("Screenpipe", "Recording started", "recording_started")
+                                        };
+                                        
+                                        let _ = app_handle.notification().builder()
+                                            .title(title)
+                                            .body(body)
+                                            .show();
+                                        let _ = app_handle.emit(event, body);
+                                    },
+                                    Err(err) => {
+                                        error!("Recording operation failed: {}", err);
                                         let _ = app_handle.notification().builder()
                                             .title("Screenpipe")
-                                            .body("Failed to start recording")
+                                            .body("Recording operation failed")
                                             .show();
-                                        let _ = app_handle.emit("recording_failed", "Failed to start recording");
-                                    } else {
-                                        let _ = app_handle.notification().builder()
-                                            .title("Screenpipe")
-                                            .body("Recording started")
-                                            .show();
-                                        let _ = app_handle.emit("recording_started", "Recording started");
+                                        let _ = app_handle.emit("recording_failed", "Recording operation failed");
                                     }
                                 }
                             });
@@ -206,6 +256,7 @@ async fn main() {
                         debug!("Shortcut released: {:?}", shortcut);
                     },
                 }
+                SHORTCUT_LOCK.store(false, Ordering::Release);
             })
             .build())
         .manage(sidecar_state)
@@ -313,48 +364,46 @@ async fn main() {
                         show_main_window(app_handle, false);
                     }
                     "quit" => {
-                        println!("quit clicked");
+                        debug!("Quit requested");
+                        // First try to stop any running recordings
+                        let state = app_handle.state::<SidecarState>();
+                        tauri::async_runtime::block_on(async {
+                            if let Err(e) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                                error!("Error stopping recordings during quit: {}", e);
+                            }
+                        });
+                        // Then exit
                         app_handle.exit(0);
                     }
                     "start_recording" => {
+                        let app_handle = app_handle.clone();
                         tauri::async_runtime::spawn(async move {
                             let state = app_handle.state::<SidecarState>();
-                                if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
-                                    error!("Failed to start recording: {}", err);
-                                    let _ = app_handle.notification().builder()
-                                        .title("Screenpipe")
-                                        .body("Failed to start recording")
-                                        .show();
-                                    let _ = app_handle.emit("recording_failed", "Failed to start recording");
-                                } else {
-                                    let _ = app_handle.notification().builder()
-                                        .title("Screenpipe")
-                                        .body("Recording started")
-                                        .show();
-                                    let _ = app_handle.emit("recording_started", "Recording started");
-                                }
-                            });
-                        
+                            if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
+                                send_recording_notification(&app_handle, false, "start", Some(&err.to_string()));
+                            } else {
+                                send_recording_notification(&app_handle, true, "started", None);
+                            }
+                        });
                     }
                     "stop_recording" => {
+                        let app_handle = app_handle.clone();
                         tauri::async_runtime::spawn(async move {
-                            Handle::current().block_on(async move {
-                                let state = app_handle.state::<SidecarState>();
-                                if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
-                                    error!("Failed to stop recording: {}", err);
-                                    let _ = app_handle.notification().builder()
-                                        .title("Screenpipe")
-                                        .body("Failed to stop recording")
-                                        .show();
-                                    let _ = app_handle.emit("recording_failed", "Failed to stop recording");
-                                } else {
-                                    let _ = app_handle.notification().builder()
-                                        .title("Screenpipe")
-                                        .body("Recording stopped")
-                                        .show();
-                                    let _ = app_handle.emit("recording_stopped", "Recording stopped");
-                                }
-                            });
+                            let state = app_handle.state::<SidecarState>();
+                            if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                                error!("Failed to stop recording: {}", err);
+                                let _ = app_handle.notification().builder()
+                                    .title("Screenpipe")
+                                    .body("Failed to stop recording")
+                                    .show();
+                                let _ = app_handle.emit("recording_failed", "Failed to stop recording");
+                            } else {
+                                let _ = app_handle.notification().builder()
+                                    .title("Screenpipe")
+                                    .body("Recording stopped")
+                                    .show();
+                                let _ = app_handle.emit("recording_stopped", "Recording stopped");
+                            }
                         });
                     }
                     "update_now" => {
