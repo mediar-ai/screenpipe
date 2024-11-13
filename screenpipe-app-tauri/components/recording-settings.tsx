@@ -562,37 +562,40 @@ export function RecordingSettings({
 
   const handleUiMonitoringToggle = async (checked: boolean) => {
     try {
-        if (checked) {
-            // Check accessibility permissions first
-            const hasPermission = await invoke('check_accessibility_permissions');
-            if (!hasPermission) {
-                toast({
-                    title: "accessibility permission required",
-                    description: "please grant accessibility permission in system preferences",
-                    action: (
-                        <ToastAction altText="open preferences" onClick={() => invoke('open_accessibility_preferences')}>
-                            open preferences
-                        </ToastAction>
-                    ),
-                    variant: "destructive",
-                });
-                return;
-            }
-        }
-        
-        // Just update the local setting - the update button will handle the restart
-        setLocalSettings({
-            ...localSettings,
-            enableUiMonitoring: checked
-        });
-        
-    } catch (error) {
-        console.error("failed to toggle ui monitoring:", error);
-        toast({
-            title: "error checking accessibility permissions",
-            description: "please try again or check the logs",
+      if (checked) {
+        // Check accessibility permissions first
+        const hasPermission = await invoke("check_accessibility_permissions");
+        if (!hasPermission) {
+          toast({
+            title: "accessibility permission required",
+            description:
+              "please grant accessibility permission in system preferences",
+            action: (
+              <ToastAction
+                altText="open preferences"
+                onClick={() => invoke("open_accessibility_preferences")}
+              >
+                open preferences
+              </ToastAction>
+            ),
             variant: "destructive",
-        });
+          });
+          return;
+        }
+      }
+
+      // Just update the local setting - the update button will handle the restart
+      setLocalSettings({
+        ...localSettings,
+        enableUiMonitoring: checked,
+      });
+    } catch (error) {
+      console.error("failed to toggle ui monitoring:", error);
+      toast({
+        title: "error checking accessibility permissions",
+        description: "please try again or check the logs",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1331,7 +1334,7 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
             </div>
-            {isMacOS && (
+            {/* {isMacOS && (
               <div className="flex items-center space-x-2">
                 <Switch
                   id="enable-beta-toggle"
@@ -1383,7 +1386,7 @@ export function RecordingSettings({
                   </TooltipProvider>
                 </Label>
               </div>
-            )}
+            )} */}
             <div className="flex flex-col space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -1414,16 +1417,6 @@ export function RecordingSettings({
                     </TooltipProvider>
                   </Label>
                 </div>
-                {localSettings.enableFrameCache && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleShowTimeline}
-                    className="ml-2"
-                  >
-                    show timeline
-                  </Button>
-                )}
               </div>
             </div>
             {isMacOS && (
@@ -1438,7 +1431,9 @@ export function RecordingSettings({
                   className="flex items-center space-x-2"
                 >
                   <span>enable UI monitoring</span>
-                  <Badge variant="outline" className="ml-2">accessibility permissions</Badge>
+                  <Badge variant="outline" className="ml-2">
+                    accessibility permissions
+                  </Badge>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
@@ -1446,11 +1441,11 @@ export function RecordingSettings({
                       </TooltipTrigger>
                       <TooltipContent side="right">
                         <p>
-                          enables monitoring of UI elements and their interactions.
+                          enables monitoring of UI elements and their
+                          interactions.
                           <br />
                           this allows for better context in search results
-                          <br />
-                          * requires accessibility permission
+                          <br />* requires accessibility permission
                         </p>
                       </TooltipContent>
                     </Tooltip>

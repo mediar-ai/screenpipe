@@ -276,7 +276,8 @@ export function useSettings() {
             ? savedIgnoredWindows
             : defaultIgnoredWindows;
 
-        let savedEnableBeta = await store!.get<boolean>("enableBeta");
+        // TODO: temporary
+        let savedEnableBeta = false; // await store!.get<boolean>("enableBeta");
         if (savedEnableBeta === null) {
           savedEnableBeta = false;
         }
@@ -294,7 +295,8 @@ export function useSettings() {
         const savedEnableFrameCache =
           (await store!.get<boolean>("enableFrameCache")) || false;
 
-        const savedEnableUiMonitoring = await store!.get<boolean>("enableUiMonitoring") || false;
+        const savedEnableUiMonitoring =
+          (await store!.get<boolean>("enableUiMonitoring")) || false;
 
         setSettings({
           openaiApiKey: savedKey,
