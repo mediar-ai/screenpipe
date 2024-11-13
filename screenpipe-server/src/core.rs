@@ -279,33 +279,30 @@ async fn record_audio(
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
+    
     loop {
         while let Some((audio_device, device_control)) = audio_devices_control.pop() {
-            debug!("Received audio device: {}", &audio_device);
+            debug!("received audio device: {}", &audio_device);
             let device_id = audio_device.to_string();
 
             if !device_control.is_running {
-                info!("Device control signaled stop for device {}", &audio_device);
+                info!("device control signaled stop for device {}", &audio_device);
                 if let Some(handle) = handles.remove(&device_id) {
                     handle.abort();
-                    info!("Stopped thread for device {}", &audio_device);
+                    info!("stopped thread for device {}", &audio_device);
                 }
                 continue;
             }
 
             let whisper_sender_clone = whisper_sender.clone();
-
             let audio_device = Arc::new(audio_device);
             let device_control = Arc::new(device_control);
 
             let handle = tokio::spawn(async move {
                 let audio_device_clone = Arc::clone(&audio_device);
-                // let error = Arc::new(AtomicBool::new(false));
-                debug!(
-                    "Starting audio capture thread for device: {}",
-                    &audio_device
-                );
+                debug!("starting audio capture thread for device: {}", &audio_device);
 
+                // Try to create audio stream, with more graceful error handling
                 let audio_stream = match AudioStream::from_device(
                     audio_device_clone.clone(),
                     Arc::new(AtomicBool::new(device_control.clone().is_running)),
@@ -314,7 +311,10 @@ async fn record_audio(
                 {
                     Ok(stream) => stream,
                     Err(e) => {
-                        error!("Failed to create audio stream: {}", e);
+                        error!("failed to create audio stream for device {}: {}", audio_device_clone, e);
+                        warn!("device might not be available, but will keep trying");
+                        // Sleep before retrying
+                        tokio::time::sleep(Duration::from_secs(5)).await;
                         return;
                     }
                 };
