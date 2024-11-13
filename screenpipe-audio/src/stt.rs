@@ -320,67 +320,54 @@ pub async fn prepare_segments(
     )?;
     let embedding_manager = EmbeddingManager::new(usize::MAX);
 
-    let (tx, rx) = tokio::sync::mpsc::channel::<SpeechSegment>(100);
-    let segments = get_segments(
-        &audio_data,
-        16000,
-        &segmentation_model_path,
-        embedding_extractor,
-        embedding_manager,
-    )?;
-
     let frame_size = 1600;
     let vad_engine = vad_engine.clone();
 
-    tokio::spawn(async move {
-        for segment_result in segments {
-            let segment = match segment_result {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("Failed to process segment: {:?}", e);
-                    continue;
-                }
-            };
+    let mut noise = 0.;
+    let mut audio_frames = Vec::new();
+    let mut total_frames = 0;
+    let mut speech_frame_count = 0;
 
-            let mut audio_frames = Vec::new();
-            let mut total_frames = 0;
-            let mut speech_frame_count = 0;
-            let mut noise = 0.;
+    for chunk in audio_data.chunks(frame_size) {
+        total_frames += 1;
 
-            for chunk in segment.samples.chunks(frame_size) {
-                total_frames += 1;
-
-                let status = vad_engine.lock().await.audio_type(chunk);
-                match status {
-                    Ok(VadStatus::Speech) => {
-                        if let Ok(processed_audio) = spectral_subtraction(chunk, noise) {
-                            audio_frames.extend(processed_audio);
-                            speech_frame_count += 1;
-                        }
-                    }
-                    Ok(VadStatus::Unknown) => {
-                        noise = average_noise_spectrum(chunk);
-                        if let Ok(processed_audio) = spectral_subtraction(chunk, noise) {
-                            audio_frames.extend(processed_audio);
-                            speech_frame_count += 1;
-                        }
-                    }
-                    _ => {}
+        let mut new_chunk = chunk.to_vec();
+        let status = vad_engine.lock().await.audio_type(chunk);
+        match status {
+            Ok(VadStatus::Speech) => {
+                if let Ok(processed_audio) = spectral_subtraction(chunk, noise) {
+                    new_chunk = processed_audio;
+                    speech_frame_count += 1;
                 }
             }
+            Ok(VadStatus::Unknown) => {
+                noise = average_noise_spectrum(chunk);
+            }
+            _ => {}
+        }
+        audio_frames.extend(new_chunk);
+    }
 
-            let speech_ratio = speech_frame_count as f32 / total_frames as f32;
-            let min_speech_ratio = vad_engine.lock().await.get_min_speech_ratio();
+    let speech_ratio = speech_frame_count as f32 / total_frames as f32;
+    let min_speech_ratio = vad_engine.lock().await.get_min_speech_ratio();
 
-            if !audio_frames.is_empty() && speech_ratio >= min_speech_ratio {
-                let mut valid_segment = segment;
-                valid_segment.samples = audio_frames;
-                if tx.send(valid_segment).await.is_err() {
-                    return; // Exit if receiver is dropped
-                }
+    let (tx, rx) = tokio::sync::mpsc::channel(100);
+    if !audio_frames.is_empty() && speech_ratio >= min_speech_ratio {
+        let segments = get_segments(
+            &audio_data,
+            16000,
+            &segmentation_model_path,
+            embedding_extractor,
+            embedding_manager,
+        )?;
+
+        for segment in segments.flatten() {
+            if let Err(e) = tx.send(segment).await {
+                error!("failed to send segment: {:?}", e);
+                break;
             }
         }
-    });
+    }
 
     Ok(rx)
 }
