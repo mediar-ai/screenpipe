@@ -56,6 +56,8 @@ export interface Settings {
   recordingShortcut: string;
   isFirstTimeUser: boolean;
   enableFrameCache: boolean; // Add this line
+  enableUiMonitoring: boolean;
+  platform: string;
 }
 
 const defaultSettings: Settings = {
@@ -103,6 +105,8 @@ const defaultSettings: Settings = {
   recordingShortcut: "Super+Alt+E",      // Update default
   isFirstTimeUser: true,
   enableFrameCache: false, // Add this line
+  enableUiMonitoring: false,
+  platform: "unknown",
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -123,7 +127,8 @@ export async function loadSettingsFromStore(setSettings: React.Dispatch<React.Se
 
   try {
     console.log("loading settings", store);
-    const currentPlatform = platform();
+    const currentPlatform = await platform();
+    console.log("Current platform:", currentPlatform);
     const ocrModel = currentPlatform === "macos" 
       ? "apple-native" 
       : currentPlatform === "windows" 
@@ -217,6 +222,9 @@ export async function loadSettingsFromStore(setSettings: React.Dispatch<React.Se
     const savedEnableFrameCache =
           (await store!.get<boolean>("enableFrameCache")) || false;
 
+    // Add loading of new fields
+    const savedEnableUiMonitoring = await store!.get<boolean>("enableUiMonitoring") || false;
+
     // Create merged settings with all values
     const mergedSettings: Settings = {
       openaiApiKey: savedKey,
@@ -253,6 +261,8 @@ export async function loadSettingsFromStore(setSettings: React.Dispatch<React.Se
       recordingShortcut: savedRecordingShortcut || defaultSettings.recordingShortcut,
       isFirstTimeUser: savedIsFirstTimeUser,
       enableFrameCache: savedEnableFrameCache,
+      enableUiMonitoring: savedEnableUiMonitoring,
+      platform: currentPlatform,
     };
 
     // Update UI state

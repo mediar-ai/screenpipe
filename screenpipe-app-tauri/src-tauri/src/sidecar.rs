@@ -176,6 +176,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let enable_ui_monitoring = store
+        .get("enableUiMonitoring")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -275,6 +280,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if enable_frame_cache {
         args.push("--enable-frame-cache");
+    }
+
+    if enable_ui_monitoring {
+        args.push("--enable-ui-monitoring");
     }
 
     if cfg!(windows) {

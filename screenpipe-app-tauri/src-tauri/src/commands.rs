@@ -1,8 +1,3 @@
-// #[tauri::command]
-// pub fn has_screen_capture_access() -> bool {
-//     scap::has_permission()
-// }
-
 use serde_json::Value;
 use tauri:: Manager;
 use tracing::info;
@@ -60,6 +55,9 @@ pub async fn register_shortcuts(
 
 
 
+#[cfg(target_os = "macos")]
+use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
+
 #[tauri::command]
 pub fn open_screen_capture_preferences() {
     #[cfg(target_os = "macos")]
@@ -77,30 +75,6 @@ pub fn open_mic_preferences() {
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
         .spawn()
         .expect("failed to open system preferences");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn reset_screen_permissions() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("tccutil")
-        .arg("reset")
-        .arg("ScreenCapture")
-        .arg("so.cap.desktop")
-        .spawn()
-        .expect("failed to reset screen permissions");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn reset_microphone_permissions() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("tccutil")
-        .arg("reset")
-        .arg("Microphone")
-        .arg("so.cap.desktop")
-        .spawn()
-        .expect("failed to reset microphone permissions");
 }
 
 #[tauri::command]
@@ -205,8 +179,9 @@ pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
         #[cfg(target_os = "macos")]
         let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-        let _ = window.set_visible_on_all_workspaces(true);
-        let _ = window.set_always_on_top(true);
+        // let _ = window.set_visible_on_all_workspaces(true);
+        // let _ = window.set_always_on_top(true);
+        let _ = window.set_decorations(true);
         let _ = window.show();
         let _ = window.set_focus();
     } else {
@@ -216,10 +191,10 @@ pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
             tauri::WebviewUrl::App("timeline.html".into()),
         )
         .title("timeline")
-        .decorations(false)
+        .decorations(true)
         .transparent(true)
-        .always_on_top(true)
-        .visible_on_all_workspaces(true) // Added this
+        // .always_on_top(true)
+        // .visible_on_all_workspaces(true) // Added this
         .center()
         .build()
         .unwrap();
@@ -319,6 +294,7 @@ fn parse_shortcut(shortcut: &str) -> Result<Shortcut, String> {
 
 
 
+
 #[tauri::command]
 pub async fn unregister_all_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
     app_handle
@@ -328,4 +304,43 @@ pub async fn unregister_all_shortcuts(app_handle: tauri::AppHandle) -> Result<()
 
     Ok(())
 
+}
+
+#[tauri::command]
+pub fn open_accessibility_preferences() {
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        .spawn()
+        .expect("failed to open system preferences");
+}
+
+#[tauri::command]
+pub fn check_accessibility_permissions() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        // Check if the app has accessibility permissions
+        let options = {
+            let key = CFString::new("AXTrustedCheckOptionPrompt");
+            let value = CFBoolean::false_value();
+            let pairs = &[(key, value)];
+            core_foundation::dictionary::CFDictionary::from_CFType_pairs(pairs)
+        };
+
+        let trusted = unsafe {
+            let accessibility = CFString::new("AXIsProcessTrustedWithOptions");
+            let func: extern "C" fn(*const core_foundation::dictionary::CFDictionary) -> bool =
+                std::mem::transmute(libc::dlsym(
+                    libc::RTLD_DEFAULT,
+                    accessibility.to_string().as_ptr() as *const _,
+                ));
+            func(options.as_concrete_TypeRef() as *const _)
+        };
+
+        return trusted;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        return true;
+    }
 }

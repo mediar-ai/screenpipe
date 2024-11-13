@@ -41,6 +41,7 @@ use tracing_subscriber::EnvFilter;
 use updates::start_update_check;
 use uuid::Uuid;
 mod analytics;
+mod icons;
 
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
@@ -52,10 +53,11 @@ mod sidecar;
 mod updates;
 pub use commands::open_screen_capture_preferences;
 pub use commands::reset_all_pipes;
-pub use commands::reset_screen_permissions;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+pub use commands::open_accessibility_preferences;
+pub use commands::check_accessibility_permissions;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -263,7 +265,6 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             kill_all_sreenpipes,
-            reset_screen_permissions,
             open_screen_capture_preferences,
             load_pipe_config,
             save_pipe_config,
@@ -273,6 +274,9 @@ async fn main() {
             commands::register_shortcuts,
             commands::unregister_all_shortcuts,  
             commands::show_timeline,
+            commands::open_accessibility_preferences,
+            commands::check_accessibility_permissions,
+            icons::get_app_icon
         ])
         .setup(|app| {
             // Logging setup
@@ -341,14 +345,24 @@ async fn main() {
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
+
                 let start_recording =
                     MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
                 let stop_recording =
                     MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
+
+                let version = MenuItemBuilder::with_id(
+                    "version",
+                    format!("version {}", app.package_info().version),
+                )
+                .enabled(false)
+                .build(app)?;
+
                 let menu_divider = PredefinedMenuItem::separator(app)?;
                 let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app)
                     .items(&[
+                        &version,
                         &show,
                         &start_recording,
                         &stop_recording,

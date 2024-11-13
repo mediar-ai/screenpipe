@@ -5,8 +5,10 @@ interface HealthCheckResponse {
   status_code: number;
   last_frame_timestamp: string | null;
   last_audio_timestamp: string | null;
+  last_ui_timestamp: string | null;
   frame_status: string;
   audio_status: string;
+  ui_status: string;
   message: string;
 }
 
@@ -20,8 +22,10 @@ function isHealthChanged(
     oldHealth.status_code !== newHealth.status_code ||
     oldHealth.last_frame_timestamp !== newHealth.last_frame_timestamp ||
     oldHealth.last_audio_timestamp !== newHealth.last_audio_timestamp ||
+    oldHealth.last_ui_timestamp !== newHealth.last_ui_timestamp ||
     oldHealth.frame_status !== newHealth.frame_status ||
     oldHealth.audio_status !== newHealth.audio_status ||
+    oldHealth.ui_status !== newHealth.ui_status ||
     oldHealth.message !== newHealth.message
   );
 }
@@ -53,8 +57,10 @@ export function useHealthCheck() {
         const errorHealth: HealthCheckResponse = {
           last_frame_timestamp: null,
           last_audio_timestamp: null,
+          last_ui_timestamp: null,
           frame_status: "error",
           audio_status: "error",
+          ui_status: "error",
           status: "error",
           status_code: 500,
           message: "failed to fetch health status. server might be down.",

@@ -5,6 +5,9 @@ use tokio::select;
 use tokio::process::Command as TokioCommand;
 use anyhow::Result;
 use log::{info, warn, error, debug};
+use once_cell::sync::Lazy;
+use which::which;
+use std::path::PathBuf;
 
 // UPDATE THIS STRING EVERY TIME YOU MAKE CHANGES IN THE UI_MONITORING_MACOS.SWIFT FILE
 const UI_MONITORING_SCRIPT: &str = r#"
@@ -54,6 +57,7 @@ var currentObserver: AXObserver? {
 }
 var monitoringEventLoop: CFRunLoop?
 var hasChanges = false
+var windowsNeedingTimestampUpdate = Set<WindowIdentifier>()
 // Debounce mechanism variables
 var pendingNotifications = [(startElement: AXUIElement, depth: Int)]()
 var debounceTimer: DispatchSourceTimer?
@@ -238,7 +242,7 @@ func setupDatabase() {
         screenPipeDb = try ScreenPipeDB()
         print("database connected successfully")
         
-        // Create table if not exists
+        // Create table if not exists (original schema)
         let createTableSQL = """
             CREATE TABLE IF NOT EXISTS ui_monitoring (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -254,9 +258,46 @@ func setupDatabase() {
         if sqlite3_exec(screenPipeDb?.db, createTableSQL, nil, nil, nil) != SQLITE_OK {
             let error = String(cString: sqlite3_errmsg(screenPipeDb?.db))
             print("error creating table: \(error)")
-        } else {
-            print("database tables created successfully")
+            return
         }
+        
+        // Add initial_traversal_at column if it doesn't exist
+        let addColumnSQL = """
+            SELECT COUNT(*) FROM pragma_table_info('ui_monitoring') 
+            WHERE name='initial_traversal_at';
+        """
+        
+        var stmt: OpaquePointer?
+        var columnExists = false
+        
+        if sqlite3_prepare_v2(screenPipeDb?.db, addColumnSQL, -1, &stmt, nil) == SQLITE_OK {
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                columnExists = sqlite3_column_int(stmt, 0) > 0
+            }
+        }
+        sqlite3_finalize(stmt)
+        
+        if !columnExists {
+            print("adding initial_traversal_at column...")
+            let alterTableSQL = """
+                ALTER TABLE ui_monitoring 
+                ADD COLUMN initial_traversal_at TEXT;
+                
+                -- Set initial_traversal_at to timestamp for existing records
+                UPDATE ui_monitoring 
+                SET initial_traversal_at = timestamp 
+                WHERE initial_traversal_at IS NULL;
+            """
+            
+            if sqlite3_exec(screenPipeDb?.db, alterTableSQL, nil, nil, nil) != SQLITE_OK {
+                let error = String(cString: sqlite3_errmsg(screenPipeDb?.db))
+                print("error adding column: \(error)")
+            } else {
+                print("added initial_traversal_at column successfully")
+            }
+        }
+        
+        print("database setup completed")
     } catch {
         print("error setting up database: \(error)")
         exit(1)
@@ -762,6 +803,9 @@ func processPendingNotifications() {
         let startElement = selectedNotification.startElement
         var visitedElements = Set<AXUIElementWrapper>()
         
+        // Always add to timestamp update set
+        windowsNeedingTimestampUpdate.insert(WindowIdentifier(app: context.appName, window: context.windowName))
+        
         if updateElementAndChildren(startElement, appName: context.appName, windowName: context.windowName, visitedElements: &visitedElements) {
             hasChanges = true
             changedWindows.insert(WindowIdentifier(app: context.appName, window: context.windowName))
@@ -999,7 +1043,7 @@ func buildTextOutput(from windowState: WindowState) -> String {
     // Then process any orphaned elements
     let orphanElements = windowState.elements.filter { !processedElements.contains($0.key) }
     if !orphanElements.isEmpty {
-        textOutput += "\n--- ACCESSIBILITY_NOTIFICATIONS_PROCESSING ---\n"
+        textOutput += "\n---\n"
         
         // Sort orphans by timestamp first (oldest first), then position if timestamps are equal
         let sortedOrphans = orphanElements.values.sorted { (e1, e2) -> Bool in
@@ -1050,8 +1094,9 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
         .components(separatedBy: CharacterSet.controlCharacters).joined()
         .trimmingCharacters(in: .whitespacesAndNewlines)
     
-    // First, get existing text_output
+    // First, get existing text_output and check if record exists
     var existingText = ""
+    var recordExists = false
     let selectSQL = "SELECT text_output FROM ui_monitoring WHERE app = ? AND window = ?;"
     var selectStmt: OpaquePointer?
     
@@ -1060,6 +1105,7 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
         sqlite3_bind_text(selectStmt, 2, sanitizedWindow, -1, SQLITE_TRANSIENT)
         
         if sqlite3_step(selectStmt) == SQLITE_ROW {
+            recordExists = true
             if let text = sqlite3_column_text(selectStmt, 0) {
                 existingText = String(cString: text)
             }
@@ -1105,7 +1151,20 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
     
     // Skip if no unique lines or extensions found
     if uniqueNewLines.isEmpty && extensionsFound == 0 {
-        print("no new lines or extensions (found \(exactMatchesFound) exact matches)")
+        // Update timestamp only
+        let updateSQL = "UPDATE ui_monitoring SET timestamp = ? WHERE app = ? AND window = ?;"
+        var updateStmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, updateSQL, -1, &updateStmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(updateStmt, 1, timestamp, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(updateStmt, 2, sanitizedApp, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(updateStmt, 3, sanitizedWindow, -1, SQLITE_TRANSIENT)
+            
+            if sqlite3_step(updateStmt) != SQLITE_DONE {
+                print("error updating timestamp")
+            }
+            sqlite3_finalize(updateStmt)
+        }
+        print("no new content, updated timestamp only")
         return
     }
 
@@ -1129,28 +1188,46 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
     
     let finalText = allLines[startIndex...].joined(separator: "\n")
     
-    // Update database
-    let upsertSQL = """
-        INSERT INTO ui_monitoring (
-            timestamp, app, window, text_output
-        ) VALUES (?, ?, ?, ?)
-        ON CONFLICT(app, window) DO UPDATE SET
-            timestamp = excluded.timestamp,
-            text_output = excluded.text_output;
-    """
-    
-    var upsertStmt: OpaquePointer?
-    if sqlite3_prepare_v2(db, upsertSQL, -1, &upsertStmt, nil) == SQLITE_OK {
-        sqlite3_bind_text(upsertStmt, 1, timestamp, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(upsertStmt, 2, sanitizedApp, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(upsertStmt, 3, sanitizedWindow, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(upsertStmt, 4, finalText, -1, SQLITE_TRANSIENT)
+    // Update database with different SQL based on whether record exists
+    if recordExists {
+        let updateSQL = """
+            UPDATE ui_monitoring 
+            SET timestamp = ?, text_output = ? 
+            WHERE app = ? AND window = ?;
+        """
         
-        if sqlite3_step(upsertStmt) != SQLITE_DONE {
-            print("error updating row")
+        var updateStmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, updateSQL, -1, &updateStmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(updateStmt, 1, timestamp, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(updateStmt, 2, finalText, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(updateStmt, 3, sanitizedApp, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(updateStmt, 4, sanitizedWindow, -1, SQLITE_TRANSIENT)
+            
+            if sqlite3_step(updateStmt) != SQLITE_DONE {
+                print("error updating row")
+            }
+            sqlite3_finalize(updateStmt)
         }
+    } else {
+        let insertSQL = """
+            INSERT INTO ui_monitoring (
+                timestamp, initial_traversal_at, app, window, text_output
+            ) VALUES (?, ?, ?, ?, ?);
+        """
         
-        sqlite3_finalize(upsertStmt)
+        var insertStmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, insertSQL, -1, &insertStmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(insertStmt, 1, timestamp, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(insertStmt, 2, timestamp, -1, SQLITE_TRANSIENT) // Set initial_traversal_at same as timestamp for new records
+            sqlite3_bind_text(insertStmt, 3, sanitizedApp, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(insertStmt, 4, sanitizedWindow, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(insertStmt, 5, finalText, -1, SQLITE_TRANSIENT)
+            
+            if sqlite3_step(insertStmt) != SQLITE_DONE {
+                print("error inserting row")
+            }
+            sqlite3_finalize(insertStmt)
+        }
     }
 
     let endTime = DispatchTime.now()
@@ -1159,13 +1236,15 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
 }
 
 func saveElementValues() {
-    if !hasChanges || changedWindows.isEmpty { return }
+    // Check both sets
+    if (changedWindows.isEmpty && windowsNeedingTimestampUpdate.isEmpty) { return }
     
     let timestamp = ISO8601DateFormatter().string(from: Date())
     var totalChars = 0
     
     sqlite3_exec(screenPipeDb?.db, "BEGIN TRANSACTION", nil, nil, nil)
     
+    // Process windows with content changes
     for windowId in changedWindows {
         guard let windowState = globalElementValues[windowId.app]?[windowId.window] else { continue }
         
@@ -1180,10 +1259,16 @@ func saveElementValues() {
         saveToDatabase(windowId: windowId, newTextOutput: textOutput, timestamp: timestamp)
     }
     
+    // Process windows that only need timestamp updates
+    for windowId in windowsNeedingTimestampUpdate where !changedWindows.contains(windowId) {
+        saveToDatabase(windowId: windowId, newTextOutput: "", timestamp: timestamp)
+    }
+    
     sqlite3_exec(screenPipeDb?.db, "COMMIT", nil, nil, nil)
     
     // Clear the changed windows set
     changedWindows.removeAll()
+    windowsNeedingTimestampUpdate.removeAll()
     hasChanges = false
 }
 
@@ -1394,7 +1479,48 @@ class ScreenPipeDB {
 
 "#;
 
+static SWIFT_PATH: Lazy<Option<PathBuf>> = Lazy::new(find_swift_path_internal);
+
+fn find_swift_path_internal() -> Option<PathBuf> {
+    debug!("Starting search for swift executable");
+
+    // Check if `swift` is in the PATH environment variable
+    if let Ok(path) = which("swift") {
+        debug!("Found swift in PATH: {:?}", path);
+        return Some(path);
+    }
+    debug!("swift not found in PATH");
+
+    // Common Swift installation paths on macOS
+    let common_paths = [
+        "/usr/bin/swift",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift",
+        "/Library/Developer/CommandLineTools/usr/bin/swift",
+    ];
+
+    for path in common_paths {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            debug!("Found swift at common path: {:?}", path);
+            return Some(path);
+        }
+    }
+
+    error!("swift not found");
+    None
+}
+
+pub fn find_swift_path() -> Option<PathBuf> {
+    SWIFT_PATH.as_ref().map(|p| p.clone())
+}
+
 pub async fn run_ui() -> Result<()> {
+    // Check for Swift availability first
+    if find_swift_path().is_none() {
+        return Err(anyhow::anyhow!(
+            "swift not found. Please install Xcode Command Line Tools or Xcode"
+        ));
+    }
     // Create a temporary file for the Swift script
     let temp_dir = std::env::temp_dir();
     let script_path = temp_dir.join("ui_monitoring_macos.swift");
@@ -1405,11 +1531,9 @@ pub async fn run_ui() -> Result<()> {
         info!("starting ui monitoring...");
         debug!("running swift script from: {}", script_path.display());
         
-        // Add error handling wrapper
         match run_ui_monitoring(&script_path).await {
             Ok(_) => {
-                info!("ui monitoring exited normally");
-                return Ok(());
+                return Err(anyhow::anyhow!("ui monitoring exited unexpectedly"));
             },
             Err(e) => {
                 error!("ui monitoring crashed: {}", e);
@@ -1423,7 +1547,12 @@ pub async fn run_ui() -> Result<()> {
 
 // Separate function to handle the monitoring process
 async fn run_ui_monitoring(script_path: &std::path::Path) -> Result<()> {
-    let mut child = TokioCommand::new("swift")
+    // Get Swift path
+    let swift_path = find_swift_path().ok_or_else(|| {
+        anyhow::anyhow!("swift not found. Please install Xcode Command Line Tools or Xcode")
+    })?;
+
+    let mut child = TokioCommand::new(swift_path)
         .arg(script_path.to_str().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

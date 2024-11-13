@@ -452,17 +452,6 @@ export function Settings({ className }: { className?: string }) {
     });
   };
 
-  const handleAiUrlChange = (newValue: string) => {
-    if (newValue === "custom") {
-      setLocalSettings({ ...localSettings, aiUrl: "" });
-    } else if (newValue === "embedded") {
-      setLocalSettings({ ...localSettings, aiUrl: "embedded" });
-    } else {
-      setLocalSettings({ ...localSettings, aiUrl: newValue });
-    }
-    updateSettings({ aiUrl: newValue });
-  };
-
   const isApiKeyRequired =
     localSettings.aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
     localSettings.aiUrl !== "http://localhost:11434/v1" &&
@@ -592,6 +581,7 @@ export function Settings({ className }: { className?: string }) {
     "embedded",
   ].includes(localSettings.aiUrl);
 
+
   const getSelectValue = () => {
     if (isCustomUrl) return "custom";
     if (localSettings.aiUrl === "embedded" && embeddedAIStatus !== "running") {
@@ -600,7 +590,6 @@ export function Settings({ className }: { className?: string }) {
     }
     return localSettings.aiUrl;
   };
-
 
   // Add this function to check the embedded AI status
   const checkEmbeddedAIStatus = useCallback(async () => {
@@ -642,7 +631,7 @@ export function Settings({ className }: { className?: string }) {
       onOpenChange={(open) => {
         if (!open) {
           // hack bcs something does not update settings for some reason
-          window.location.reload();
+          window.location.reload(); // TODO: event trigger
         }
       }}
     >

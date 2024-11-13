@@ -2,7 +2,7 @@ use clap::ValueEnum;
 use serde::Serialize;
 use std::fmt;
 
-#[derive(ValueEnum, Clone, Debug, Serialize)]
+#[derive(ValueEnum, Clone, Debug, Serialize, Hash, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 #[repr(usize)]
 pub enum Language {

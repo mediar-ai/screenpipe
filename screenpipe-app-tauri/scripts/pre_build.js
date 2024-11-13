@@ -20,10 +20,8 @@ console.log('cwd', cwd)
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	windows: {
-		ffmpegName: 'ffmpeg-7.0-windows-desktop-vs2022-default',
-		ffmpegUrl: 'https://unlimited.dl.sourceforge.net/project/avbuild/windows-desktop/ffmpeg-7.0-windows-desktop-vs2022-default.7z?viasf=1',
-
-
+		ffmpegName: 'ffmpeg-7.0.2-full_build-shared',
+		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.0.2-full_build-shared.7z',
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
 	linux: {
@@ -315,7 +313,6 @@ if (platform == 'windows') {
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
-		await $`mv ${config.ffmpegRealname}/lib/x64/* ${config.ffmpegRealname}/lib/`
 	}
 
 	// Setup ONNX Runtime
@@ -443,26 +440,26 @@ if (platform == 'macos') {
 	}
 
 
-	// Setup FFMPEG
-	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
-		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
-		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-		await $`rm ${config.macos.ffmpegName}.tar.xz`
-	} else {
-		console.log('FFMPEG already exists');
-	}
+	// // Setup FFMPEG
+	// if (!(await fs.exists(config.ffmpegRealname))) {
+	// 	await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+	// 	await $`tar xf ${config.macos.ffmpegName}.tar.xz`
+	// 	await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
+	// 	await $`rm ${config.macos.ffmpegName}.tar.xz`
+	// } else {
+	// 	console.log('FFMPEG already exists');
+	// }
 
-	// Move and rename ffmpeg and ffprobe binaries
-	const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
+	// // Move and rename ffmpeg and ffprobe binaries
+	// const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
 
-	// For x86_64
-	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
+	// // For x86_64
+	// await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
 
-	// For arm64
-	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
+	// // For arm64
+	// await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
 
-	console.log('Moved and renamed ffmpeg binary for externalBin');
+	// console.log('Moved and renamed ffmpeg binary for externalBin');
 
 }
 
@@ -531,6 +528,39 @@ async function installOllamaSidecar() {
 		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
 		console.log('ollama sidecar already exists. skipping installation.');
+		return;
+	}
+
+	// For our self-hosted runners
+	if (platform === 'windows' && await fs.exists('C:\\ollama\\')) {
+		console.log('ollama sidecar already exists. skipping installation.');
+		await fs.cp('C:\\ollama\\', ollamaDir, { recursive: true });
+		// Remove older library versions to save storage
+		const libDir = path.join(ollamaDir, 'lib', 'ollama');
+		const oldLibs = [
+			'cublas64_11.dll',
+			'cublasLt64_11.dll',
+			'cudart64_110.dll',
+			'ggml_cuda_v11.dll',
+			'rocblas',
+			'rocblas.dll',
+			'ggml_rocm.dll'
+		];
+
+		for (const lib of oldLibs) {
+			try {
+				const libPath = path.join(libDir, lib);
+				const stat = await fs.stat(libPath);
+				if (stat.isDirectory()) {
+					await fs.rm(libPath, { recursive: true, force: true });
+				} else {
+					await fs.unlink(libPath);
+				}
+				console.log(`removed old library: ${lib}`);
+			} catch (error) {
+				console.warn(`failed to remove ${lib}:`, error.message);
+			}
+		}
 		return;
 	}
 
@@ -629,5 +659,3 @@ if (action?.includes('--build' || action.includes('--dev'))) {
 	await $`bun install`
 	await $`bunx tauri ${action.includes('--dev') ? 'dev' : 'build'}`
 }
-
-

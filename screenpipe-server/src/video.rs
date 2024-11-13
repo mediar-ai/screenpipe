@@ -5,7 +5,6 @@ use log::{debug, error};
 use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
-use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -39,7 +38,6 @@ impl VideoCapture {
         include_list: &[String],
         languages: Vec<Language>,
     ) -> Self {
-        info!("Starting new video capture");
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
         } else {
@@ -71,7 +69,6 @@ impl VideoCapture {
             .await;
         });
 
-        info!("Started capture thread");
 
         // In the _queue_thread
         let _queue_thread = tokio::spawn(async move {
@@ -170,21 +167,12 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
     ];
 
-    if env::consts::OS == "windows" {
-        // TODO switch back to libx264 when ffmpeg is updated in pre_build.js
-        // Use H264_mf encoder for Windows
-        args.extend_from_slice(&[
-            "-vcodec",
-            "h264_mf",
-            "-q:v",
-            "5", // Adjust quality (1-31, lower is better)
-            "-preset",
-            "ultrafast",
-        ]);
-    } else {
-        // Use libx264 for other platforms
-        args.extend_from_slice(&["-vcodec", "libx264", "-preset", "ultrafast", "-crf", "23"]);
-    }
+    // TODO: issue on macos https://github.com/mediar-ai/screenpipe/pull/580
+    #[cfg(target_os = "macos")]
+    args.extend_from_slice(&["-vcodec", "libx264", "-preset", "ultrafast", "-crf", "23"]);
+    
+    #[cfg(not(target_os = "macos"))]
+    args.extend_from_slice(&["-vcodec", "libx265", "-preset", "ultrafast", "-crf", "23"]);
 
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 
