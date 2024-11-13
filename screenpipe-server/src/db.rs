@@ -18,7 +18,6 @@ use sqlx::{
     sqlite::{SqlitePool, SqlitePoolOptions},
     FromRow,
 };
-use tracing::info;
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -311,7 +310,7 @@ impl DatabaseManager {
         Ok(affected as i64)
     }
 
-    pub async fn insert_speaker(&self, embedding: &[f32]) -> Result<i64, SqlxError> {
+    pub async fn insert_speaker(&self, embedding: &[f32]) -> Result<Speaker, SqlxError> {
         let mut tx = self.pool.begin().await?;
 
         let id = sqlx::query("INSERT INTO speakers (name) VALUES (NULL)")
@@ -328,7 +327,12 @@ impl DatabaseManager {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
-        Ok(id)
+
+        Ok(Speaker {
+            id,
+            name: String::new(),
+            metadata: String::new(),
+        })
     }
 
     pub async fn update_speaker_metadata(
@@ -354,32 +358,31 @@ impl DatabaseManager {
         Ok(speaker)
     }
 
-    pub async fn get_speaker_id(&self, embedding: &[f32]) -> Result<Option<i64>, SqlxError> {
+    pub async fn get_speaker_from_embedding(
+        &self,
+        embedding: &[f32],
+    ) -> Result<Option<Speaker>, SqlxError> {
+        let speaker_threshold = 0.6;
         let bytes: &[u8] = embedding.as_bytes();
-        let row = sqlx::query(
-            "select
-                    speaker_id,
-                    vec_distance_cosine(embedding, vec_f32(?1)) as distance
-                    from speaker_embeddings
-                    order by distance;",
+
+        // Using subquery with LIMIT 1 instead of JOIN
+        let speaker = sqlx::query_as(
+            "SELECT id, name, metadata
+             FROM speakers 
+             WHERE id = (
+                 SELECT speaker_id 
+                 FROM speaker_embeddings
+                 WHERE vec_distance_cosine(embedding, vec_f32(?1)) < ?2
+                 ORDER BY vec_distance_cosine(embedding, vec_f32(?1))
+                 LIMIT 1
+             )",
         )
         .bind(bytes)
+        .bind(speaker_threshold)
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(match row {
-            Some(row) => {
-                let id: i64 = row.get("speaker_id");
-                let distance: f64 = row.get("distance");
-                info!("Speaker distance: {}", distance);
-                if distance < 0.6 {
-                    Some(id)
-                } else {
-                    None
-                }
-            }
-            None => None,
-        })
+        Ok(speaker)
     }
 
     pub async fn update_speaker_name(&self, speaker_id: i64, name: &str) -> Result<i64, SqlxError> {

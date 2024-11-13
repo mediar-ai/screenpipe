@@ -1,4 +1,5 @@
 use crate::cli::{CliVadEngine, CliVadSensitivity};
+use crate::db::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
@@ -410,9 +411,9 @@ async fn process_audio_result(
         return Ok(None);
     }
 
-    let speaker_id = get_or_create_speaker_id(db, &result.speaker_embedding).await?;
+    let speaker = get_or_create_speaker_from_embedding(db, &result.speaker_embedding).await?;
 
-    info!("Detected speaker: {}", speaker_id);
+    info!("Detected speaker: {:?}", speaker);
 
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
@@ -447,7 +448,7 @@ async fn process_audio_result(
                     0,
                     &transcription_engine,
                     &result.input.device,
-                    Some(speaker_id),
+                    Some(speaker.id),
                 )
                 .await
             {
@@ -472,15 +473,15 @@ async fn process_audio_result(
     Ok(chunk_id)
 }
 
-async fn get_or_create_speaker_id(
+async fn get_or_create_speaker_from_embedding(
     db: &DatabaseManager,
     embedding: &[f32],
-) -> Result<i64, anyhow::Error> {
-    let speaker_id = db.get_speaker_id(embedding).await?;
-    if let Some(id) = speaker_id {
-        Ok(id)
+) -> Result<Speaker, anyhow::Error> {
+    let speaker = db.get_speaker_from_embedding(embedding).await?;
+    if let Some(speaker) = speaker {
+        Ok(speaker)
     } else {
-        let id = db.insert_speaker(embedding).await?;
-        Ok(id)
+        let speaker = db.insert_speaker(embedding).await?;
+        Ok(speaker)
     }
 }

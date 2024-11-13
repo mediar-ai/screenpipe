@@ -186,7 +186,7 @@ fn process_with_whisper(
     let device = &whisper_model.device;
 
     debug!("converting pcm to mel spectrogram");
-    let mel = audio::pcm_to_mel(model.config(), &audio, mel_filters);
+    let mel = audio::pcm_to_mel(model.config(), audio, mel_filters);
     let mel_len = mel.len();
 
     debug!("creating tensor from mel spectrogram");
@@ -282,7 +282,7 @@ fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut 
 pub async fn prepare_segments(
     audio_input: &AudioInput,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
-) -> Result<Vec<SpeechSegment>> {
+) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
     let audio_data = if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
         info!(
             "device: {}, resampling from {} Hz to {} Hz",
@@ -313,83 +313,76 @@ pub async fn prepare_segments(
         .join("pyannote")
         .join("segmentation-3.0.onnx");
 
-    let mut embedding_extractor = EmbeddingExtractor::new(
+    let embedding_extractor = EmbeddingExtractor::new(
         embedding_model_path
             .to_str()
             .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
     )?;
-    let mut embedding_manager = EmbeddingManager::new(usize::MAX);
+    let embedding_manager = EmbeddingManager::new(usize::MAX);
 
-    let mut segments = get_segments(
+    let (tx, rx) = tokio::sync::mpsc::channel::<SpeechSegment>(100);
+    let segments = get_segments(
         &audio_data,
         16000,
         &segmentation_model_path,
-        &mut embedding_extractor,
-        &mut embedding_manager,
+        embedding_extractor,
+        embedding_manager,
     )?;
 
-    let frame_size = 1600; // 100ms frame size for 16kHz audio
-    let mut speech_frames = Vec::new();
-    let mut total_frames = 0;
-    let mut speech_frame_count = 0;
+    let frame_size = 1600;
+    let vad_engine = vad_engine.clone();
 
-    let mut noise = 0.;
-
-    let mut vad_engine_guard = vad_engine.lock().await;
-    for segment in segments.iter_mut() {
-        let mut audio_frames = Vec::new();
-        for chunk in segment.samples.chunks(frame_size) {
-            total_frames += 1;
-            match vad_engine_guard.audio_type(chunk) {
-                Ok(status) => match status {
-                    VadStatus::Speech => {
-                        let processed_audio = spectral_subtraction(chunk, noise)?;
-                        audio_frames.extend(processed_audio);
-                        speech_frame_count += 1;
-                    }
-                    VadStatus::Unknown => {
-                        noise = average_noise_spectrum(chunk);
-                        let processed_audio = spectral_subtraction(chunk, noise)?;
-                        audio_frames.extend(processed_audio);
-                        speech_frame_count += 1;
-                    }
-                    VadStatus::Silence => {}
-                },
+    tokio::spawn(async move {
+        for segment_result in segments {
+            let segment = match segment_result {
+                Ok(s) => s,
                 Err(e) => {
-                    debug!("VAD failed for chunk: {:?}", e);
+                    error!("Failed to process segment: {:?}", e);
+                    continue;
+                }
+            };
+
+            let mut audio_frames = Vec::new();
+            let mut total_frames = 0;
+            let mut speech_frame_count = 0;
+            let mut noise = 0.;
+
+            for chunk in segment.samples.chunks(frame_size) {
+                total_frames += 1;
+
+                let status = vad_engine.lock().await.audio_type(chunk);
+                match status {
+                    Ok(VadStatus::Speech) => {
+                        if let Ok(processed_audio) = spectral_subtraction(chunk, noise) {
+                            audio_frames.extend(processed_audio);
+                            speech_frame_count += 1;
+                        }
+                    }
+                    Ok(VadStatus::Unknown) => {
+                        noise = average_noise_spectrum(chunk);
+                        if let Ok(processed_audio) = spectral_subtraction(chunk, noise) {
+                            audio_frames.extend(processed_audio);
+                            speech_frame_count += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            let speech_ratio = speech_frame_count as f32 / total_frames as f32;
+            let min_speech_ratio = vad_engine.lock().await.get_min_speech_ratio();
+
+            if !audio_frames.is_empty() && speech_ratio >= min_speech_ratio {
+                let mut valid_segment = segment;
+                valid_segment.samples = audio_frames;
+                if tx.send(valid_segment).await.is_err() {
+                    return; // Exit if receiver is dropped
                 }
             }
         }
-        segment.samples = audio_frames.clone();
-        speech_frames.extend(audio_frames);
-    }
+    });
 
-    let speech_duration_ms = speech_frame_count * 100; // Each frame is 100ms
-    let speech_ratio = speech_frame_count as f32 / total_frames as f32;
-    let min_speech_ratio = vad_engine_guard.get_min_speech_ratio();
-
-    info!(
-        "device: {}, total audio frames processed: {}, frames that include speech: {}, speech duration: {}ms, speech ratio: {:.2}, min required ratio: {:.2}",
-        audio_input.device,
-        total_frames,
-        speech_frame_count,
-        speech_duration_ms,
-        speech_ratio,
-        min_speech_ratio
-    );
-
-    // If no speech frames detected or speech ratio is too low, skip processing
-    if speech_frames.is_empty() || speech_ratio < min_speech_ratio {
-        debug!(
-            "device: {}, insufficient speech detected (ratio: {:.2}, min required: {:.2}), skipping audio processing",
-            audio_input.device,
-            speech_ratio,
-            min_speech_ratio
-        );
-        return Ok(Vec::new());
-    }
-
-    Ok(segments)
+    Ok(rx)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -425,7 +418,7 @@ pub async fn stt(
             device,
             &api_key[..8]
         );
-        match transcribe_with_deepgram(&api_key, &audio, &device, sample_rate, languages.clone())
+        match transcribe_with_deepgram(&api_key, audio, device, sample_rate, languages.clone())
             .await
         {
             Ok(transcription) => Ok(transcription),
@@ -435,12 +428,12 @@ pub async fn stt(
                     device, e
                 );
                 // Fallback to Whisper
-                process_with_whisper(&mut *whisper_model, &audio, &mel_filters, languages.clone())
+                process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages.clone())
             }
         }
     } else {
         // Existing Whisper implementation
-        process_with_whisper(&mut *whisper_model, &audio, &mel_filters, languages)
+        process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
     };
 
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
@@ -454,7 +447,7 @@ pub async fn stt(
     // Run FFmpeg in a separate task
     if !skip_encoding {
         encode_single_audio(
-            bytemuck::cast_slice(&audio),
+            bytemuck::cast_slice(audio),
             sample_rate,
             1,
             &file_path.into(),
@@ -587,7 +580,7 @@ pub async fn create_whisper_channel(
 
 
 
-                            let segments = match prepare_segments(&audio, vad_engine.clone()).await {
+                            let mut segments = match prepare_segments(&audio, vad_engine.clone()).await {
                                 Ok(segments) => segments,
                                 Err(e) => {
                                     error!("Error preparing segments: {:?}", e);
@@ -595,84 +588,87 @@ pub async fn create_whisper_channel(
                                 }
                             };
 
-                            for segment in segments {let transcription_result = if cfg!(target_os = "macos") {
-                                #[cfg(target_os = "macos")]
-                                {
-                                    autoreleasepool(|| {
-                                        match stt_sync(&segment.samples, audio.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
-                                            Ok((transcription, path)) => TranscriptionResult {
-                                                input: AudioInput {
-                                                    data: Arc::new(segment.samples),
-                                                    sample_rate: audio.sample_rate,
-                                                    channels: 1,
-                                                    device: audio.device.clone(),
-                                                },
-                                                transcription: Some(transcription),
-                                                path,
-                                                timestamp,
-                                                error: None,
-                                                speaker_embedding: segment.embedding.clone(),
-                                            },
-                                            Err(e) => {
-                                                error!("STT error for input {}: {:?}", audio.device, e);
-                                                TranscriptionResult {
+                            while let Some(segment) = segments.recv().await {
+                                let transcription_result = if cfg!(target_os = "macos") {
+                                    let timestamp = timestamp + segment.start.round() as u64;
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        autoreleasepool(|| {
+                                            match stt_sync(&segment.samples, audio.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
+                                                Ok((transcription, path)) => TranscriptionResult {
                                                     input: AudioInput {
                                                         data: Arc::new(segment.samples),
                                                         sample_rate: audio.sample_rate,
                                                         channels: 1,
                                                         device: audio.device.clone(),
                                                     },
-                                                    transcription: None,
-                                                    path: "".to_string(),
+                                                    transcription: Some(transcription),
+                                                    path,
                                                     timestamp,
-                                                    error: Some(e.to_string()),
-                                                    speaker_embedding: Vec::new(),
-                                                }
-                                            },
-                                        }
-                                    })
-                                }
-                                #[cfg(not(target_os = "macos"))]
-                                {
-                                    unreachable!("This code should not be reached on non-macOS platforms")
-                                }
-                            } else {
-                                match stt_sync(&segment.samples, audio.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
-                                    Ok((transcription, path)) => TranscriptionResult {
-                                        input: AudioInput {
-                                            data: Arc::new(segment.samples),
-                                            sample_rate: audio.sample_rate,
-                                            channels: 1,
-                                            device: audio.device.clone(),
-                                        },
-                                        transcription: Some(transcription),
-                                        path,
-                                        timestamp,
-                                        error: None,
-                                        speaker_embedding: segment.embedding.clone(),
-                                    },
-                                    Err(e) => {
-                                        error!("STT error for input {}: {:?}", audio.device, e);
-                                        TranscriptionResult {
+                                                    error: None,
+                                                    speaker_embedding: segment.embedding.clone(),
+                                                },
+                                                Err(e) => {
+                                                    error!("STT error for input {}: {:?}", audio.device, e);
+                                                    TranscriptionResult {
+                                                        input: AudioInput {
+                                                            data: Arc::new(segment.samples),
+                                                            sample_rate: audio.sample_rate,
+                                                            channels: 1,
+                                                            device: audio.device.clone(),
+                                                        },
+                                                        transcription: None,
+                                                        path: "".to_string(),
+                                                        timestamp,
+                                                        error: Some(e.to_string()),
+                                                        speaker_embedding: Vec::new(),
+                                                    }
+                                                },
+                                            }
+                                        })
+                                    }
+                                    #[cfg(not(target_os = "macos"))]
+                                    {
+                                        unreachable!("This code should not be reached on non-macOS platforms")
+                                    }
+                                } else {
+                                    match stt_sync(&segment.samples, audio.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
+                                        Ok((transcription, path)) => TranscriptionResult {
                                             input: AudioInput {
                                                 data: Arc::new(segment.samples),
                                                 sample_rate: audio.sample_rate,
                                                 channels: 1,
                                                 device: audio.device.clone(),
                                             },
-                                            transcription: None,
-                                            path: "".to_string(),
+                                            transcription: Some(transcription),
+                                            path,
                                             timestamp,
-                                            error: Some(e.to_string()),
-                                            speaker_embedding: Vec::new(),
-                                        }
-                                    },
-                                }
-                            };
+                                            error: None,
+                                            speaker_embedding: segment.embedding.clone(),
+                                        },
+                                        Err(e) => {
+                                            error!("STT error for input {}: {:?}", audio.device, e);
+                                            TranscriptionResult {
+                                                input: AudioInput {
+                                                    data: Arc::new(segment.samples),
+                                                    sample_rate: audio.sample_rate,
+                                                    channels: 1,
+                                                    device: audio.device.clone(),
+                                                },
+                                                transcription: None,
+                                                path: "".to_string(),
+                                                timestamp,
+                                                error: Some(e.to_string()),
+                                                speaker_embedding: Vec::new(),
+                                            }
+                                        },
+                                    }
+                                };
 
-                            if output_sender.send(transcription_result).is_err() {
-                                break;
-                            }}
+                                if output_sender.send(transcription_result).is_err() {
+                                    break;
+                                }
+                            }
                         },
                         Err(e) => {
                             error!("Error receiving input: {:?}", e);

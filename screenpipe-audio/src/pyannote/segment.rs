@@ -93,35 +93,57 @@ fn handle_new_segment(
     }
 }
 
-pub fn get_segments<P: AsRef<Path>>(
-    samples: &[f32],
+pub struct SegmentIterator {
+    samples: Vec<f32>,
     sample_rate: u32,
-    model_path: P,
-    embedding_extractor: &mut EmbeddingExtractor,
-    embedding_manager: &mut EmbeddingManager,
-) -> Result<Vec<SpeechSegment>> {
-    let session = session::create_session(model_path.as_ref())?;
+    session: ort::Session,
+    embedding_extractor: EmbeddingExtractor,
+    embedding_manager: EmbeddingManager,
+    current_position: usize,
+    frame_size: i32,
+    window_size: usize,
+    is_speeching: bool,
+    offset: i32,
+    start_offset: f64,
+    current_segment: Option<SpeechSegment>,
+    padded_samples: Vec<f32>,
+}
 
-    let frame_size = 270;
-    let frame_start = 721;
-    let window_size = (sample_rate * 10) as usize;
-    let mut is_speeching = false;
-    let mut offset: i32 = frame_start;
-    let mut start_offset = 0.0;
+impl SegmentIterator {
+    pub fn new<P: AsRef<Path>>(
+        samples: Vec<f32>,
+        sample_rate: u32,
+        model_path: P,
+        embedding_extractor: EmbeddingExtractor,
+        embedding_manager: EmbeddingManager,
+    ) -> Result<Self> {
+        let session = session::create_session(model_path.as_ref())?;
+        let window_size = (sample_rate * 10) as usize;
 
-    let padded_samples = {
-        let mut padded = Vec::from(samples);
-        padded.extend(vec![0.0; window_size - (samples.len() % window_size)]);
-        padded
-    };
+        let padded_samples = {
+            let mut padded = samples.clone();
+            padded.extend(vec![0.0; window_size - (samples.len() % window_size)]);
+            padded
+        };
 
-    let mut segments = Vec::new();
-    let mut current_segment: Option<SpeechSegment> = None;
+        Ok(Self {
+            samples,
+            sample_rate,
+            session,
+            embedding_extractor,
+            embedding_manager,
+            current_position: 0,
+            frame_size: 270,
+            window_size,
+            is_speeching: false,
+            offset: 721, // frame_start
+            start_offset: 0.0,
+            current_segment: None,
+            padded_samples,
+        })
+    }
 
-    for start in (0..padded_samples.len()).step_by(window_size) {
-        let end = (start + window_size).min(padded_samples.len());
-        let window = &padded_samples[start..end];
-
+    fn process_window(&mut self, window: &[f32]) -> Result<Option<SpeechSegment>> {
         let array = ndarray::Array1::from_vec(window.to_vec());
         let array = array
             .view()
@@ -130,52 +152,96 @@ pub fn get_segments<P: AsRef<Path>>(
             .to_owned();
 
         let inputs = ort::inputs![array].context("Failed to prepare inputs")?;
-        let ort_outs = session.run(inputs).context("Failed to run the session")?;
-
+        let ort_outs = self
+            .session
+            .run(inputs)
+            .context("Failed to run the session")?;
         let ort_out = ort_outs.get("output").context("Output tensor not found")?;
 
-        let ort_out = match ort_out
+        let ort_out = ort_out
             .try_extract_tensor::<f32>()
-            .context("Failed to extract tensor")
-        {
-            Ok(tensor) => tensor,
-            Err(e) => return Err(format_err!("Tensor extraction error: {:?}", e)),
-        };
+            .context("Failed to extract tensor")?;
+
+        let mut result = None;
 
         for row in ort_out.outer_iter() {
             for sub_row in row.axis_iter(Axis(0)) {
                 let max_index = find_max_index(sub_row)?;
 
                 if max_index != 0 {
-                    if !is_speeching {
-                        start_offset = offset as f64;
-                        is_speeching = true;
+                    if !self.is_speeching {
+                        self.start_offset = self.offset as f64;
+                        self.is_speeching = true;
                     }
-                } else if is_speeching {
+                } else if self.is_speeching {
                     let new_segment = create_speech_segment(
-                        start_offset,
-                        offset,
-                        sample_rate,
-                        samples,
-                        &padded_samples,
-                        embedding_extractor,
-                        embedding_manager,
+                        self.start_offset,
+                        self.offset,
+                        self.sample_rate,
+                        &self.samples,
+                        &self.padded_samples,
+                        &mut self.embedding_extractor,
+                        &mut self.embedding_manager,
                     )?;
 
-                    current_segment =
-                        handle_new_segment(current_segment, new_segment, &mut segments);
-                    is_speeching = false;
+                    let mut segments = Vec::new();
+                    self.current_segment =
+                        handle_new_segment(self.current_segment.take(), new_segment, &mut segments);
+
+                    if !segments.is_empty() {
+                        result = segments.pop();
+                    }
+
+                    self.is_speeching = false;
                 }
-                offset += frame_size;
+                self.offset += self.frame_size;
             }
         }
-    }
 
-    if let Some(last_segment) = current_segment {
-        segments.push(last_segment);
+        Ok(result)
     }
+}
 
-    Ok(segments)
+impl Iterator for SegmentIterator {
+    type Item = Result<SpeechSegment>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.current_position < self.padded_samples.len() - 1 {
+            let end = (self.current_position + self.window_size).min(self.padded_samples.len());
+            let window = self.padded_samples[self.current_position..end].to_vec();
+
+            match self.process_window(&window) {
+                Ok(Some(segment)) => return Some(Ok(segment)),
+                Ok(None) => {}
+                Err(e) => return Some(Err(e)),
+            }
+
+            self.current_position += self.window_size;
+        }
+
+        // Return final segment if exists
+        if let Some(last_segment) = self.current_segment.take() {
+            return Some(Ok(last_segment));
+        }
+
+        None
+    }
+}
+
+pub fn get_segments<P: AsRef<Path>>(
+    samples: &[f32],
+    sample_rate: u32,
+    model_path: P,
+    embedding_extractor: EmbeddingExtractor,
+    embedding_manager: EmbeddingManager,
+) -> Result<SegmentIterator> {
+    SegmentIterator::new(
+        samples.to_vec(),
+        sample_rate,
+        model_path,
+        embedding_extractor,
+        embedding_manager,
+    )
 }
 
 fn get_speaker_embedding(

@@ -480,15 +480,18 @@ mod tests {
         let mut speaker_ids = Vec::new();
         for i in 0..5 {
             let sample_embedding = vec![0.1 * (i as f32 + 1.0); 512];
-            let speaker_id = db.insert_speaker(&sample_embedding).await.unwrap();
-            speaker_ids.push(speaker_id);
+            let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+            speaker_ids.push(speaker.id);
         }
         let speaker_id = speaker_ids[0];
         assert_eq!(speaker_id, 1);
 
         let sample_embedding = vec![0.1; 512];
-        let speaker_id = db.get_speaker_id(&sample_embedding).await.unwrap();
-        assert_eq!(speaker_id, Some(1));
+        let speaker = db
+            .get_speaker_from_embedding(&sample_embedding)
+            .await
+            .unwrap();
+        assert_eq!(speaker.unwrap().id, 1);
     }
 
     #[tokio::test]
@@ -496,15 +499,15 @@ mod tests {
         let db = setup_test_db().await;
 
         let sample_embedding = vec![0.1; 512];
-        let speaker_id = db.insert_speaker(&sample_embedding).await.unwrap();
-        assert_eq!(speaker_id, 1);
+        let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+        assert_eq!(speaker.id, 1);
 
-        db.update_speaker_metadata(speaker_id, "test metadata")
+        db.update_speaker_metadata(speaker.id, "test metadata")
             .await
             .unwrap();
 
         // Add verification
-        let speaker = db.get_speaker_by_id(speaker_id).await.unwrap();
+        let speaker = db.get_speaker_by_id(speaker.id).await.unwrap();
         assert_eq!(speaker.metadata, "test metadata");
     }
 
@@ -513,10 +516,10 @@ mod tests {
         let db = setup_test_db().await;
 
         let sample_embedding = vec![0.1; 512];
-        let speaker_id = db.insert_speaker(&sample_embedding).await.unwrap();
-        assert_eq!(speaker_id, 1);
+        let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+        assert_eq!(speaker.id, 1);
 
-        let speaker = db.get_speaker_by_id(speaker_id).await.unwrap();
+        let speaker = db.get_speaker_by_id(speaker.id).await.unwrap();
         assert_eq!(speaker.id, 1);
     }
 
@@ -525,15 +528,14 @@ mod tests {
         let db = setup_test_db().await;
 
         let sample_embedding = vec![0.1; 512];
-        let speaker_id = db.insert_speaker(&sample_embedding).await.unwrap();
-        assert_eq!(speaker_id, 1);
+        let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+        assert_eq!(speaker.id, 1);
 
-        db.update_speaker_name(speaker_id, "test name")
+        db.update_speaker_name(speaker.id, "test name")
             .await
             .unwrap();
-        assert_eq!(speaker_id, 1);
 
-        let speaker = db.get_speaker_by_id(speaker_id).await.unwrap();
+        let speaker = db.get_speaker_by_id(speaker.id).await.unwrap();
 
         println!("Speaker: {:?}", speaker);
         assert_eq!(speaker.name, "test name");
