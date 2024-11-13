@@ -55,7 +55,7 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 
 <p align="center">
    <a href ="https://screenpi.pe">
-         <img alt="demo" src="https://github.com/user-attachments/assets/bde07ed9-fb56-4f3c-86df-a58eb2bbc2b6" width="800" />
+      <img alt="demo" src="https://github.com/user-attachments/assets/6f4e80d9-89b6-4ed3-a82c-121abc849852" width="800" />
    </a>
 </p>
 
