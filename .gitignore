@@ -894,4 +894,4 @@ node_modules/zwitch/license
 node_modules/zwitch/package.json
 node_modules/zwitch/readme.md
 screenpipe-vision/bin/ui_monitor-*
-screenpipe-vision/bin/*
+screenpipe-vision/src/ui_monitoring_past_versions/
