@@ -143,7 +143,6 @@ impl VideoCapture {
 }
 
 pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
-    // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
         warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
         MAX_FPS
@@ -167,12 +166,47 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
     ];
 
-    // TODO: issue on macos https://github.com/mediar-ai/screenpipe/pull/580
     #[cfg(target_os = "macos")]
-    args.extend_from_slice(&["-vcodec", "libx264", "-preset", "ultrafast", "-crf", "23"]);
-    
+    let use_x265 = screenpipe_core::check_x265_support();
+
+    #[cfg(target_os = "macos")]
+    {
+        if use_x265 {
+            info!("Using x265 codec on macOS");
+            args.extend_from_slice(&[
+                "-vcodec",
+                "libx265",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "23",
+                "-x265-params",
+                "log-level=error:pools=4"
+            ]);
+        } else {
+            warn!("x265 not available on macOS, using x264");
+            args.extend_from_slice(&[
+                "-vcodec",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "23"
+            ]);
+        }
+    }
+
     #[cfg(not(target_os = "macos"))]
-    args.extend_from_slice(&["-vcodec", "libx265", "-preset", "ultrafast", "-crf", "23"]);
+    args.extend_from_slice(&[
+        "-vcodec",
+        "libx265",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "23",
+        "-x265-params",
+        "log-level=error:pools=4"
+    ]);
 
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 
@@ -387,3 +421,4 @@ pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
         Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
     }
 }
+

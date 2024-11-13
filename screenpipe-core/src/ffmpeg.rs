@@ -21,6 +21,23 @@ pub fn find_ffmpeg_path() -> Option<PathBuf> {
     FFMPEG_PATH.as_ref().map(|p| p.clone())
 }
 
+pub fn check_x265_support() -> bool {
+    if let Some(ffmpeg_path) = find_ffmpeg_path() {
+        match std::process::Command::new(ffmpeg_path)
+            .args(&["-codecs"])
+            .output() 
+        {
+            Ok(output) => {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                output_str.contains("x265")
+            },
+            Err(_) => false
+        }
+    } else {
+        false
+    }
+}
+
 fn find_ffmpeg_path_internal() -> Option<PathBuf> {
     debug!("Starting search for ffmpeg executable");
 
@@ -114,8 +131,24 @@ fn find_ffmpeg_path_internal() -> Option<PathBuf> {
 
 fn handle_ffmpeg_installation() -> Result<(), String> {
     if ffmpeg_is_installed() {
-        debug!("ffmpeg is already installed");
-        return Ok(());
+        #[cfg(target_os = "macos")]
+        {
+            if !check_x265_support() {
+                debug!("FFmpeg installed but x265 not found. Reinstalling...");
+                if let Some(path) = find_ffmpeg_path() {
+                    let _ = std::fs::remove_file(path);
+                }
+            } else {
+                debug!("ffmpeg is already installed with x265 support");
+                return Ok(());
+            }
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            debug!("ffmpeg is already installed");
+            return Ok(());
+        }
     }
 
     debug!("ffmpeg not found. installing...");
@@ -140,3 +173,5 @@ fn handle_ffmpeg_installation() -> Result<(), String> {
     debug!("done! installed ffmpeg version {}", version);
     Ok(())
 }
+
+

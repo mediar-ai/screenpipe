@@ -1,5 +1,5 @@
 pub mod ffmpeg;
-pub use ffmpeg::find_ffmpeg_path;
+pub use ffmpeg::{find_ffmpeg_path, check_x265_support};
 #[cfg(feature = "llm")]
 pub mod llm;
 #[cfg(feature = "llm")]
