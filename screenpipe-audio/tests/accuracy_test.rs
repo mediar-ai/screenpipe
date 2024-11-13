@@ -70,13 +70,13 @@ async fn test_transcription_accuracy() {
                 device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
             };
 
-            let segments = prepare_segments(&audio_input, vad_engine.clone())
+            let mut segments = prepare_segments(&audio_input, vad_engine.clone())
                 .await
                 .unwrap();
             let mut whisper_model_guard = whisper_model.lock().await;
 
             let mut transcription = String::new();
-            for segment in segments {
+            while let Some(segment) = segments.recv().await {
                 let (transcript, _) = stt(
                     &segment.samples,
                     audio_input.sample_rate,
