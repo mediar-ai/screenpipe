@@ -1,5 +1,5 @@
 use crate::pyannote::session;
-use anyhow::{format_err, Context, Result};
+use anyhow::{Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
 use std::{cmp::Ordering, path::Path};
 use tracing::error;

@@ -126,8 +126,8 @@ pub struct DecodingResult {
 
 #[derive(Debug, Clone)]
 pub struct Segment {
-    start: f64,
-    duration: f64,
+    pub start: f64,
+    pub duration: f64,
     pub dr: DecodingResult,
 }
 
