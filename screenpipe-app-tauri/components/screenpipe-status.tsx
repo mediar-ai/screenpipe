@@ -55,7 +55,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const { health } = useHealthCheck();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMac, setIsMac] = useState(false);
-  const { settings } = useSettings();
+  const { settings, getDataDir } = useSettings();
+  const [localDataDir, setLocalDataDir] = useState('');
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isFixingSetup, setIsFixingSetup] = useState(false);
   const [isTroubleshootOpen, setIsTroubleshootOpen] = useState(false);
@@ -88,13 +89,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
   const handleOpenDataDir = async () => {
     try {
-      const homeDirPath = await homeDir();
-
-      const dataDir =
-        platform() === "macos" || platform() === "linux"
-          ? `${homeDirPath}/.screenpipe`
-          : `${homeDirPath}\\.screenpipe`;
-      await open(dataDir as string);
+      const dataDir = await getDataDir()
+      await open(dataDir);
     } catch (error) {
       console.error("failed to open data directory:", error);
       toast({
@@ -383,19 +379,23 @@ const HealthStatus = ({ className }: { className?: string }) => {
     settings.enableUiMonitoring
   );
 
+  const handleOpenStatusDialog = async () => {
+    setLocalDataDir(await getDataDir())
+    setIsDialogOpen(true)
+  }
+
   return (
     <>
       <Badge
         variant="outline"
         className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
-        onClick={() => setIsDialogOpen(true)}
+        onClick={handleOpenStatusDialog}
       >
         <Activity className="mr-2 h-4 w-4" />
         status{" "}
         <span
-          className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
-            statusColor === "bg-red-500" ? "animate-pulse" : ""
-          }`}
+          className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${statusColor === "bg-red-500" ? "animate-pulse" : ""
+            }`}
         />
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -454,7 +454,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
             </div>
 
             <Separator className="my-12" />
-            <DevModeSettings />
+            <DevModeSettings localDataDir={localDataDir} />
 
             <Collapsible
               open={isLogOpen}

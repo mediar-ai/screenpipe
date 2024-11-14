@@ -50,6 +50,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { LogFileButton } from "./log-file-button";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 export interface Pipe {
   enabled: boolean;
@@ -96,6 +97,7 @@ const PipeDialog: React.FC = () => {
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const { health } = useHealthCheck();
+  const { getDataDir } = useSettings();
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -133,7 +135,7 @@ const PipeDialog: React.FC = () => {
     if (!health || health?.status === "error") {
       return;
     }
-
+    const dataDir = await getDataDir();
     try {
       const response = await fetch("http://localhost:3030/pipes/list");
 
@@ -143,10 +145,8 @@ const PipeDialog: React.FC = () => {
       const data = await response.json();
       for (const pipe of data) {
         // read the README.md file from disk and set the fullDescription
-        const home = await homeDir();
         const pathToReadme = await join(
-          home,
-          ".screenpipe",
+          dataDir,
           "pipes",
           pipe.id,
           "README.md"

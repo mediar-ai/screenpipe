@@ -62,6 +62,27 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     Ok(local_data_dir)
 }
 
+fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    let base_dir = get_base_dir(app, None)?;
+    let path = base_dir.join("store.bin");
+    let store = StoreBuilder::new(app, path).build();
+
+    let default_path = app.path().home_dir().unwrap().join(".screenpipe");
+    match store.get("dataDir") {
+        Some(value) => {
+            if let Some(dir) = value.as_str() {
+                // create .screenpipe_dir file within default_path and write new dir to it
+                let path = default_path.join(".screenpipe_dir");
+                fs::write(path, dir).unwrap();
+                get_base_dir(app, Some(dir.to_string()))
+            } else {
+                Ok(default_path)
+            }
+        }
+        None => Ok(default_path)
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
@@ -119,6 +140,7 @@ async fn main() {
             commands::show_timeline,
             commands::open_accessibility_preferences,
             commands::check_accessibility_permissions,
+            commands::update_screenpipe_dir,
             icons::get_app_icon
         ])
         .setup(|app| {
@@ -133,7 +155,7 @@ async fn main() {
                 .filename_prefix("screenpipe-app")
                 .filename_suffix("log")
                 .max_log_files(5)
-                .build(&app.path().home_dir().unwrap().join(".screenpipe"))?;
+                .build(&get_data_dir(&app.handle()).unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")))?;
 
             // Create a custom layer for file logging
             let file_layer = tracing_subscriber::fmt::layer()
