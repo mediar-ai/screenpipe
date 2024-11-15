@@ -7,7 +7,7 @@ i'd love to personally onboard you to the project. let's [schedule a call](https
 ## getting started
 
 before you begin:
-- make sure you have installed all the necessary dependencies as mentioned in the [readme.md](README.md).
+- make sure you have installed all the necessary dependencies as mentioned in the [docs](https://docs.screenpi.pe/).
 - familiarize yourself with the project structure and architecture.
 
 ## how can i contribute?
