@@ -46,16 +46,15 @@ export function useHealthCheck() {
         throw new Error(`http error! status: ${response.status}`);
       }
       const data: HealthCheckResponse = await response.json();
-      console.log(data);
-      if(data.status=="unhealthy"){
+      if (data.status == "unhealthy") {
         try {
           await invoke("set_tray_unhealth_icon");
         } catch (error) {
           console.error("set unhealthy icon:", error);
-        };
-      }else{
-          await invoke("set_tray_health_icon");
-          console.log("set healthy icon:" );
+        }
+      } else {
+        await invoke("set_tray_health_icon");
+        console.log("set healthy icon:");
       }
 
       if (isHealthChanged(healthRef.current, data)) {
