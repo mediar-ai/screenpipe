@@ -51,14 +51,11 @@ fn create_speech_segment(
     let embedding = match get_speaker_embedding(embedding_extractor, segment_samples) {
         Ok(embedding) => embedding,
         Err(e) => {
-            error!("Failed to compute speaker embedding: {}", e);
-            return Ok(SpeechSegment {
-                start,
-                end,
-                samples: segment_samples.to_vec(),
-                speaker: "?".to_string(),
-                embedding: Vec::new(),
-            });
+            error!("Start_offset: {}, Offset: {}", start_offset, offset);
+            return Err(anyhow::anyhow!(
+                "Failed to compute speaker embedding: {}",
+                e
+            ));
         }
     };
     let speaker = get_speaker_from_embedding(embedding_manager, embedding.clone());
@@ -174,7 +171,7 @@ impl SegmentIterator {
                         self.is_speeching = true;
                     }
                 } else if self.is_speeching {
-                    let new_segment = create_speech_segment(
+                    let new_segment = match create_speech_segment(
                         self.start_offset,
                         self.offset,
                         self.sample_rate,
@@ -182,7 +179,12 @@ impl SegmentIterator {
                         &self.padded_samples,
                         &mut self.embedding_extractor,
                         &mut self.embedding_manager,
-                    )?;
+                    ) {
+                        Ok(segment) => segment,
+                        Err(_) => {
+                            return Ok(None);
+                        }
+                    };
 
                     let mut segments = Vec::new();
                     self.current_segment =
@@ -206,17 +208,31 @@ impl Iterator for SegmentIterator {
     type Item = Result<SpeechSegment>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let mut result = None;
+
         while self.current_position < self.padded_samples.len() - 1 {
             let end = (self.current_position + self.window_size).min(self.padded_samples.len());
             let window = self.padded_samples[self.current_position..end].to_vec();
 
+            // Process the window
             match self.process_window(&window) {
-                Ok(Some(segment)) => return Some(Ok(segment)),
+                Ok(Some(segment)) => {
+                    result = Some(Ok(segment));
+                }
                 Ok(None) => {}
-                Err(e) => return Some(Err(e)),
+                Err(e) => {
+                    result = Some(Err(e));
+                    break;
+                }
             }
 
+            // Update current_position after processing the window
             self.current_position += self.window_size;
+        }
+
+        // If a segment was found, return it
+        if let Some(segment) = result {
+            return Some(segment);
         }
 
         // Return final segment if exists
@@ -250,13 +266,7 @@ fn get_speaker_embedding(
 ) -> Result<Vec<f32>> {
     match embedding_extractor.compute(samples) {
         Ok(embedding) => Ok(embedding.collect::<Vec<f32>>()),
-        Err(e) => {
-            error!("Failed to compute speaker embedding: {}", e);
-            Err(anyhow::anyhow!(
-                "Failed to compute speaker embedding: {}",
-                e
-            ))
-        }
+        Err(e) => Err(e),
     }
 }
 
