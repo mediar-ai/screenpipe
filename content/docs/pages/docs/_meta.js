@@ -6,6 +6,7 @@ export default {
   "architecture": "architecture overview",
   "api-reference": "api reference",
   "contributing": "contributing",
-  "faq": "faq",
-  "integrations": "integrations"
+  "integrations": "integrations",
+  "server": "use screenpipe on a server",
+  "faq": "faq"
 };
