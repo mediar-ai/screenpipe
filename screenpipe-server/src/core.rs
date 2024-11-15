@@ -13,6 +13,7 @@ use screenpipe_audio::{
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
 use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
+use screenpipe_vision::core::CaptureSource;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -35,7 +36,7 @@ pub async fn start_continuous_recording(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
     friend_wearable_uid: Option<String>,
-    monitor_ids: Vec<u32>,
+    capture_sources: Vec<CaptureSource<'static>>,
     use_pii_removal: bool,
     vision_disabled: bool,
     vad_engine: CliVadEngine,
@@ -55,11 +56,11 @@ pub async fn start_continuous_recording(
         ));
     }
 
-    debug!("Starting video recording for monitor {:?}", monitor_ids);
+    debug!("Starting video recording for {:?}", capture_sources);
     let video_tasks = if !vision_disabled {
-        monitor_ids
-            .iter()
-            .map(|&monitor_id| {
+        capture_sources
+            .into_iter()
+            .map(|capture_source| {
                 let db_manager_video = Arc::clone(&db);
                 let output_path_video = Arc::clone(&output_path);
                 let is_running_video = Arc::clone(&vision_control);
@@ -70,7 +71,7 @@ pub async fn start_continuous_recording(
 
                 let languages = languages.clone();
 
-                debug!("Starting video recording for monitor {}", monitor_id);
+                debug!("Starting video recording for {}", capture_source);
                 vision_handle.spawn(async move {
                     record_video(
                         db_manager_video,
@@ -80,7 +81,7 @@ pub async fn start_continuous_recording(
                         save_text_files,
                         ocr_engine,
                         friend_wearable_uid_video,
-                        monitor_id,
+                        capture_source,
                         use_pii_removal,
                         &ignored_windows_video,
                         &include_windows_video,
@@ -180,7 +181,7 @@ async fn record_video(
     save_text_files: bool,
     ocr_engine: Arc<OcrEngine>,
     _friend_wearable_uid: Option<String>,
-    monitor_id: u32,
+    capture_source: CaptureSource<'static>,
     use_pii_removal: bool,
     ignored_windows: &[String],
     include_windows: &[String],
@@ -190,7 +191,7 @@ async fn record_video(
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
     let rt = Handle::current();
-    let device_name = Arc::new(format!("monitor_{}", monitor_id));
+    let device_name = Arc::new(format!("{}", capture_source));
 
     let new_chunk_callback = {
         let db_chunk_callback = Arc::clone(&db_chunk_callback);
@@ -200,7 +201,10 @@ async fn record_video(
             let db_chunk_callback = Arc::clone(&db_chunk_callback);
             let device_name = Arc::clone(&device_name);
             rt.spawn(async move {
-                if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path, &device_name).await {
+                if let Err(e) = db_chunk_callback
+                    .insert_video_chunk(&file_path, &device_name)
+                    .await
+                {
                     error!("Failed to insert new video chunk: {}", e);
                 }
                 debug!("record_video: Inserted new video chunk: {}", file_path);
@@ -215,7 +219,7 @@ async fn record_video(
         new_chunk_callback,
         save_text_files,
         Arc::clone(&ocr_engine),
-        monitor_id,
+        capture_source,
         ignored_windows,
         include_windows,
         languages,

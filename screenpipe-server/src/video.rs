@@ -4,6 +4,7 @@ use image::ImageFormat::{self};
 use log::{debug, error};
 use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
+use screenpipe_vision::core::CaptureSource;
 use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -33,7 +34,7 @@ impl VideoCapture {
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         save_text_files: bool,
         ocr_engine: Arc<OcrEngine>,
-        monitor_id: u32,
+        capture_source: CaptureSource<'static>,
         ignore_list: &[String],
         include_list: &[String],
         languages: Vec<Language>,
@@ -61,14 +62,13 @@ impl VideoCapture {
                 interval,
                 save_text_files,
                 *ocr_engine,
-                monitor_id,
+                capture_source,
                 &ignore_list_clone,
                 &include_list_clone,
                 languages.clone(),
             )
             .await;
         });
-
 
         // In the _queue_thread
         let _queue_thread = tokio::spawn(async move {
@@ -129,7 +129,7 @@ impl VideoCapture {
                 &output_path,
                 fps,
                 new_chunk_callback_clone,
-                monitor_id,
+                capture_source,
                 video_chunk_duration,
             )
             .await;
@@ -170,7 +170,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
     // TODO: issue on macos https://github.com/mediar-ai/screenpipe/pull/580
     #[cfg(target_os = "macos")]
     args.extend_from_slice(&["-vcodec", "libx264", "-preset", "ultrafast", "-crf", "23"]);
-    
+
     #[cfg(not(target_os = "macos"))]
     args.extend_from_slice(&["-vcodec", "libx265", "-preset", "ultrafast", "-crf", "23"]);
 
@@ -211,7 +211,7 @@ async fn save_frames_as_video(
     output_path: &str,
     fps: f64,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
-    monitor_id: u32,
+    capture_source: CaptureSource<'static>,
     video_chunk_duration: Duration,
 ) {
     debug!("Starting save_frames_as_video function");
@@ -230,7 +230,7 @@ async fn save_frames_as_video(
             let first_frame = wait_for_first_frame(frame_queue).await;
             let buffer = encode_frame(&first_frame);
 
-            let output_file = create_output_file(output_path, monitor_id);
+            let output_file = create_output_file(output_path, capture_source);
             new_chunk_callback(&output_file);
 
             match start_ffmpeg_process(&output_file, fps).await {
@@ -289,11 +289,11 @@ fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
     buffer
 }
 
-fn create_output_file(output_path: &str, monitor_id: u32) -> String {
+fn create_output_file(output_path: &str, capture_source: CaptureSource) -> String {
     let time = Utc::now();
     let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
     PathBuf::from(output_path)
-        .join(format!("monitor_{}_{}.mp4", monitor_id, formatted_time))
+        .join(format!("{}_{}.mp4", capture_source, formatted_time))
         .to_str()
         .expect("Failed to create valid path")
         .to_string()

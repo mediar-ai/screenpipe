@@ -15,7 +15,7 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
-use screenpipe_vision::{monitor::list_monitors};
+use screenpipe_vision::{core::CaptureSource, monitor::{get_default_monitor, list_monitors}};
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
@@ -347,7 +347,6 @@ async fn main() -> anyhow::Result<()> {
     let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
     let friend_wearable_uid_clone: Option<String> = friend_wearable_uid.clone(); // Clone here
-    let monitor_ids_clone = monitor_ids.clone();
     let ignored_windows_clone = cli.ignored_windows.clone();
     let included_windows_clone = cli.included_windows.clone();
 
@@ -366,6 +365,13 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                let capture_source = if cli.rdp_session_id.len() > 0 {
+                    cli.rdp_session_id.iter().map(|s| CaptureSource::RdpSession(Box::leak(s.clone().into_boxed_str()))).collect()
+                } else if cli.monitor_id.len() > 0 {
+                    cli.monitor_id.iter().map(|id| CaptureSource::LocalMonitor(*id)).collect()
+                } else {
+                    vec![CaptureSource::LocalMonitor(get_default_monitor().await.id())]
+                };
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     output_path_clone.clone(),
@@ -379,7 +385,7 @@ async fn main() -> anyhow::Result<()> {
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
                     friend_wearable_uid_clone.clone(),
-                    monitor_ids_clone.clone(),
+                    capture_source,
                     cli.use_pii_removal,
                     cli.disable_vision,
                     vad_engine_clone,
