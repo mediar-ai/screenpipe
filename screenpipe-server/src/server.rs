@@ -141,6 +141,7 @@ pub struct OCRContent {
     pub window_name: String,
     pub tags: Vec<String>,
     pub frame: Option<String>,
+    pub focused: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -310,6 +311,7 @@ pub(crate) async fn search(
                 app_name: ocr.app_name.clone(),
                 window_name: ocr.window_name.clone(),
                 tags: ocr.tags.clone(),
+                focused: ocr.focused,
                 frame: None,
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {

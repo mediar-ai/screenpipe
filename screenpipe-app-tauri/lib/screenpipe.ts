@@ -10,6 +10,7 @@ export type OCRContent = {
   offset_index: number;
   app_name: string;
   window_name: string;
+  focused: boolean;
   tags: string[];
   frame?: string;
 };
@@ -135,6 +136,7 @@ export const screenpipeQuery = z.object({
     .number()
     .default(10000)
     .describe("Maximum length of the text to include in the response"),
+  focused: z.boolean().default(false).describe("Only include focused windows"),
 });
 
 export const screenpipeMultiQuery = z.object({
@@ -167,6 +169,7 @@ export async function queryScreenpipe(
       min_length: params.min_length.toString(),
       max_length: params.max_length.toString(),
       include_frames: params.include_frames.toString(),
+      focused: params.focused.toString(),
     });
 
     if (params.q) queryParams.append("q", params.q);

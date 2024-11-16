@@ -225,6 +225,7 @@ export function SearchChat({
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [minLength, setMinLength] = useState(50);
   const [maxLength, setMaxLength] = useState(10000);
+  const [focused, setFocused] = useState(false);
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<Array<Message>>([]);
@@ -518,7 +519,7 @@ export function SearchChat({
     // Track AI usage metrics
     posthog.capture("ai_chat_usage", {
       agent: selectedAgent.name,
-      total_chars: floatingInput.length + selectedContentLength
+      total_chars: floatingInput.length + selectedContentLength,
     });
 
     const userMessage = {
@@ -680,6 +681,7 @@ export function SearchChat({
         include_frames: includeFrames,
         min_length: overrides.minLength || minLength,
         max_length: maxLength,
+        focused: overrides.focused || focused || undefined,
       };
 
       const response = await queryScreenpipe(searchParams);
@@ -737,6 +739,10 @@ export function SearchChat({
     } else {
       setSelectedResults(new Set());
     }
+  };
+
+  const handleFocusedChange = (checked: boolean) => {
+    setFocused(checked);
   };
 
   const handleQuickTimeFilter = (minutes: number) => {
@@ -1097,6 +1103,27 @@ export function SearchChat({
                   <p>
                     recognized text from screenshots taken every 5s by default
                   </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <div className="flex items-center space-x-1">
+            <Checkbox
+              id="focused"
+              checked={focused}
+              onCheckedChange={(checked) => setFocused(checked === true)}
+              className="h-4 w-4"
+            />
+            <Label htmlFor="focused" className="text-xs">
+              Focused Windows
+            </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Only search windows that were focused</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
