@@ -243,7 +243,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, focused={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -253,7 +253,8 @@ pub(crate) async fn search(
         query.app_name,
         query.window_name,
         query.min_length,
-        query.max_length
+        query.max_length,
+        query.focused,
     );
 
     let query_str = query.q.as_deref().unwrap_or("");

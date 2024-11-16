@@ -681,7 +681,7 @@ export function SearchChat({
         include_frames: includeFrames,
         min_length: overrides.minLength || minLength,
         max_length: maxLength,
-        focused: overrides.focused || focused || undefined,
+        focused: overrides.focused || focused || false,
       };
 
       const response = await queryScreenpipe(searchParams);

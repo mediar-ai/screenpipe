@@ -727,8 +727,8 @@ impl DatabaseManager {
                 AND (?5 IS NULL OR LENGTH(ocr_text.text) <= ?5)
                 AND (?6 IS NULL OR ocr_text.app_name LIKE '%' || ?6 || '%' COLLATE NOCASE)
                 AND (?7 IS NULL OR ocr_text.window_name LIKE '%' || ?7 || '%' COLLATE NOCASE)
-                AND (?8 IS NULL OR ?8 = false OR ocr_text.focused = ?8)
-        "#,
+                AND (?8 IS NULL OR ?8 IS FALSE OR ocr_text.focused = true)
+            "#,
         );
 
         sql.push_str(
