@@ -51,7 +51,6 @@ fn create_speech_segment(
     let embedding = match get_speaker_embedding(embedding_extractor, segment_samples) {
         Ok(embedding) => embedding,
         Err(e) => {
-            error!("Start_offset: {}, Offset: {}", start_offset, offset);
             return Err(anyhow::anyhow!(
                 "Failed to compute speaker embedding: {}",
                 e
