@@ -115,7 +115,7 @@ async fn get_device_and_config(
     let is_output_device = audio_device.device_type == DeviceType::Output;
     let is_display = audio_device.to_string().contains("Display");
 
-    let cpal_audio_device = if audio_device.to_string() == "default" {
+    let cpal_audio_device = if (audio_device.to_string() == "default") {
         match audio_device.device_type {
             DeviceType::Input => host.default_input_device(),
             DeviceType::Output => host.default_output_device(),

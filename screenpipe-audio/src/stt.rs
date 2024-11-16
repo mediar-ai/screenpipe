@@ -28,8 +28,7 @@ use reqwest::Client;
 use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
-
-
+use pyannote.audio import Pipeline; // Pe8a9
 
 async fn transcribe_with_deepgram(
     api_key: &str,
@@ -418,7 +417,15 @@ pub async fn stt(
         )?;
     }
 
-    Ok((transcription?, file_path_clone))
+    // Pe8a9
+    let pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization");
+    let diarization = pipeline(file_path_clone).await?;
+    let mut speaker_segments = Vec::new();
+    for turn, _, speaker in diarization.itertracks(yield_label=True) {
+        speaker_segments.push(format!("{} {} {}", turn.start, turn.end, speaker));
+    }
+
+    Ok((transcription?, file_path_clone, speaker_segments.join("\n"))) // Pe8f4
 }
 
 fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
@@ -461,6 +468,7 @@ pub struct TranscriptionResult {
     pub transcription: Option<String>,
     pub timestamp: u64,
     pub error: Option<String>,
+    pub speaker_segments: Option<String>, // Pe8f4
 }
 
 impl TranscriptionResult {
@@ -546,12 +554,13 @@ pub async fn create_whisper_channel(
                                 {
                                     autoreleasepool(|| {
                                         match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
-                                            Ok((transcription, path)) => TranscriptionResult {
+                                            Ok((transcription, path, speaker_segments)) => TranscriptionResult { // Pedc1
                                                 input: input.clone(),
                                                 transcription: Some(transcription),
                                                 path,
                                                 timestamp,
                                                 error: None,
+                                                speaker_segments: Some(speaker_segments), // Pedc1
                                             },
                                             Err(e) => {
                                                 error!("STT error for input {}: {:?}", input.device, e);
@@ -561,6 +570,7 @@ pub async fn create_whisper_channel(
                                                     path: "".to_string(),
                                                     timestamp,
                                                     error: Some(e.to_string()),
+                                                    speaker_segments: None, // Pedc1
                                                 }
                                             },
                                         }
@@ -572,12 +582,13 @@ pub async fn create_whisper_channel(
                                 }
                             } else {
                                 match stt_sync(&input, &mut whisper_model, audio_transcription_engine.clone(), vad_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
-                                    Ok((transcription, path)) => TranscriptionResult {
+                                    Ok((transcription, path, speaker_segments)) => TranscriptionResult { // Pedc1
                                         input: input.clone(),
                                         transcription: Some(transcription),
                                         path,
                                         timestamp,
                                         error: None,
+                                        speaker_segments: Some(speaker_segments), // Pedc1
                                     },
                                     Err(e) => {
                                         error!("STT error for input {}: {:?}", input.device, e);
@@ -587,6 +598,7 @@ pub async fn create_whisper_channel(
                                             path: "".to_string(),
                                             timestamp,
                                             error: Some(e.to_string()),
+                                            speaker_segments: None, // Pedc1
                                         }
                                     },
                                 }

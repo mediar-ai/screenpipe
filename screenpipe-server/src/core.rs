@@ -455,6 +455,38 @@ async fn process_audio_result(
                 );
                 chunk_id = Some(audio_chunk_id);
             }
+
+            // Insert speaker identification data
+            if let Some(speaker_segments) = result.speaker_segments {
+                for segment in speaker_segments.lines() {
+                    let parts: Vec<&str> = segment.split_whitespace().collect();
+                    if parts.len() == 3 {
+                        let start_time: f64 = parts[0].parse().unwrap_or(0.0);
+                        let end_time: f64 = parts[1].parse().unwrap_or(0.0);
+                        let speaker = parts[2].to_string();
+
+                        if let Err(e) = db
+                            .insert_speaker_identification(
+                                audio_chunk_id,
+                                start_time,
+                                end_time,
+                                &speaker,
+                            )
+                            .await
+                        {
+                            error!(
+                                "Failed to insert speaker identification for device {}: {}",
+                                result.input.device, e
+                            );
+                        } else {
+                            debug!(
+                                "Inserted speaker identification for chunk {} from device {}",
+                                audio_chunk_id, result.input.device
+                            );
+                        }
+                    }
+                }
+            }
         }
         Err(e) => error!(
             "Failed to insert audio chunk for device {}: {}",
