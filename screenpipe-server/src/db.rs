@@ -84,6 +84,7 @@ struct OCRResultRaw {
     app_name: String,
     ocr_engine: String,
     window_name: String,
+    focused: bool,
     tags: Option<String>,
 }
 
@@ -99,6 +100,7 @@ pub struct OCRResult {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Vec<String>,
+    pub focused: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default, Clone)]
@@ -483,52 +485,173 @@ impl DatabaseManager {
         window_name: Option<&str>,
         min_length: Option<usize>,
         max_length: Option<usize>,
+        focused: Option<bool>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
         match content_type {
             ContentType::All => {
-                let ocr_results = self.search_ocr(query, limit, offset, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                let audio_results = self.search_audio(query, limit, offset, start_time, end_time, min_length, max_length).await?;
-                let ui_results = self.search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit, offset).await?;
-                
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                        focused,
+                    )
+                    .await?;
+                let audio_results = self
+                    .search_audio(
+                        query, limit, offset, start_time, end_time, min_length, max_length,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit,
+                        offset,
+                    )
+                    .await?;
+
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
-            },
+            }
             ContentType::OCR => {
-                let ocr_results = self.search_ocr(query, limit, offset, start_time, end_time, app_name, window_name, min_length, max_length).await?;
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                        focused,
+                    )
+                    .await?;
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-            },
+            }
             ContentType::Audio => {
-                let audio_results = self.search_audio(query, limit, offset, start_time, end_time, min_length, max_length).await?;
+                let audio_results = self
+                    .search_audio(
+                        query, limit, offset, start_time, end_time, min_length, max_length,
+                    )
+                    .await?;
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
-            },
+            }
             ContentType::UI => {
-                let ui_results = self.search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit, offset).await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit,
+                        offset,
+                    )
+                    .await?;
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
-            },
+            }
             ContentType::AudioAndUi => {
-                let audio_results = self.search_audio(query, limit/2, offset, start_time, end_time, min_length, max_length).await?;
-                let ui_results = self.search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit/2, offset).await?;
-                
+                let audio_results = self
+                    .search_audio(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 2,
+                        offset,
+                    )
+                    .await?;
+
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
-            },
+            }
             ContentType::OcrAndUi => {
-                let ocr_results = self.search_ocr(query, limit/2, offset, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                let ui_results = self.search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit/2, offset).await?;
-                
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                        focused,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 2,
+                        offset,
+                    )
+                    .await?;
+
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
-            },
+            }
             ContentType::AudioAndOcr => {
-                let audio_results = self.search_audio(query, limit/2, offset, start_time, end_time, min_length, max_length).await?;
-                let ocr_results = self.search_ocr(query, limit/2, offset, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                
+                let audio_results = self
+                    .search_audio(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                        focused,
+                    )
+                    .await?;
+
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-            },
+            }
         }
 
         // Sort results by timestamp in descending order
@@ -549,7 +672,11 @@ impl DatabaseManager {
         });
 
         // Apply offset and limit after sorting
-        results = results.into_iter().skip(offset as usize).take(limit as usize).collect();
+        results = results
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
 
         Ok(results)
     }
@@ -565,6 +692,7 @@ impl DatabaseManager {
         window_name: Option<&str>,
         min_length: Option<usize>,
         max_length: Option<usize>,
+        focused: Option<bool>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let mut sql = format!(
             r#"
@@ -578,6 +706,7 @@ impl DatabaseManager {
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
+                ocr_text.focused as focused,
                 GROUP_CONCAT(tags.name, ',') as tags
             FROM 
                 ocr_text
@@ -598,6 +727,7 @@ impl DatabaseManager {
                 AND (?5 IS NULL OR LENGTH(ocr_text.text) <= ?5)
                 AND (?6 IS NULL OR ocr_text.app_name LIKE '%' || ?6 || '%' COLLATE NOCASE)
                 AND (?7 IS NULL OR ocr_text.window_name LIKE '%' || ?7 || '%' COLLATE NOCASE)
+                AND (?8 IS NULL OR ocr_text.focused = ?8)
         "#,
         );
 
@@ -607,7 +737,7 @@ impl DatabaseManager {
                 ocr_text.frame_id
             ORDER BY 
                 frames.timestamp DESC
-            LIMIT ?8 OFFSET ?9
+            LIMIT ?9 OFFSET ?10
             "#,
         );
 
@@ -619,6 +749,7 @@ impl DatabaseManager {
             .bind(max_length.map(|l| l as i64))
             .bind(app_name)
             .bind(window_name)
+            .bind(focused)
             .bind(limit)
             .bind(offset);
 
@@ -636,6 +767,7 @@ impl DatabaseManager {
                 app_name: raw.app_name,
                 ocr_engine: raw.ocr_engine,
                 window_name: raw.window_name,
+                focused: raw.focused,
                 tags: raw
                     .tags
                     .map(|s| s.split(',').map(String::from).collect())
@@ -769,31 +901,87 @@ impl DatabaseManager {
 
         match content_type {
             ContentType::All => {
-                total += self.count_ocr_results(query, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                total += self.count_audio_results(query, start_time, end_time, min_length, max_length).await?;
-                total += self.count_ui_results(query, app_name, window_name, start_time, end_time).await?;
-            },
+                total += self
+                    .count_ocr_results(
+                        query,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                total += self
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
+                    .await?;
+                total += self
+                    .count_ui_results(query, app_name, window_name, start_time, end_time)
+                    .await?;
+            }
             ContentType::OCR => {
-                total += self.count_ocr_results(query, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-            },
+                total += self
+                    .count_ocr_results(
+                        query,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+            }
             ContentType::Audio => {
-                total += self.count_audio_results(query, start_time, end_time, min_length, max_length).await?;
-            },
+                total += self
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
+                    .await?;
+            }
             ContentType::UI => {
-                total += self.count_ui_results(query, app_name, window_name, start_time, end_time).await?;
-            },
+                total += self
+                    .count_ui_results(query, app_name, window_name, start_time, end_time)
+                    .await?;
+            }
             ContentType::AudioAndUi => {
-                total += self.count_audio_results(query, start_time, end_time, min_length, max_length).await?;
-                total += self.count_ui_results(query, app_name, window_name, start_time, end_time).await?;
-            },
+                total += self
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
+                    .await?;
+                total += self
+                    .count_ui_results(query, app_name, window_name, start_time, end_time)
+                    .await?;
+            }
             ContentType::OcrAndUi => {
-                total += self.count_ocr_results(query, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                total += self.count_ui_results(query, app_name, window_name, start_time, end_time).await?;
-            },
+                total += self
+                    .count_ocr_results(
+                        query,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                total += self
+                    .count_ui_results(query, app_name, window_name, start_time, end_time)
+                    .await?;
+            }
             ContentType::AudioAndOcr => {
-                total += self.count_audio_results(query, start_time, end_time, min_length, max_length).await?;
-                total += self.count_ocr_results(query, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-            },
+                total += self
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
+                    .await?;
+                total += self
+                    .count_ocr_results(
+                        query,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+            }
         }
 
         Ok(total)
@@ -902,7 +1090,14 @@ impl DatabaseManager {
 
     pub async fn get_latest_timestamps(
         &self,
-    ) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>, Option<DateTime<Utc>>), sqlx::Error> {
+    ) -> Result<
+        (
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+        ),
+        sqlx::Error,
+    > {
         let latest_frame: Option<(DateTime<Utc>,)> =
             sqlx::query_as("SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1")
                 .fetch_optional(&self.pool)
@@ -915,15 +1110,17 @@ impl DatabaseManager {
 
         // Check if ui_monitoring table exists first
         let latest_ui: Option<(DateTime<Utc>,)> = match sqlx::query_scalar::<_, i32>(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ui_monitoring'"
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ui_monitoring'",
         )
         .fetch_optional(&self.pool)
         .await?
         {
             Some(_) => {
-                sqlx::query_as("SELECT timestamp FROM ui_monitoring ORDER BY timestamp DESC LIMIT 1")
-                    .fetch_optional(&self.pool)
-                    .await?
+                sqlx::query_as(
+                    "SELECT timestamp FROM ui_monitoring ORDER BY timestamp DESC LIMIT 1",
+                )
+                .fetch_optional(&self.pool)
+                .await?
             }
             None => {
                 debug!("ui_monitoring table does not exist");
@@ -1435,10 +1632,14 @@ impl DatabaseManager {
     }
 
     // Add tags to UI monitoring entry
-    pub async fn add_tags_to_ui_monitoring(&self, ui_monitoring_id: i64, tag_ids: &[i64]) -> Result<(), anyhow::Error> {
+    pub async fn add_tags_to_ui_monitoring(
+        &self,
+        ui_monitoring_id: i64,
+        tag_ids: &[i64],
+    ) -> Result<(), anyhow::Error> {
         for tag_id in tag_ids {
             sqlx::query(
-                "INSERT OR IGNORE INTO ui_monitoring_tags (ui_monitoring_id, tag_id) VALUES (?, ?)"
+                "INSERT OR IGNORE INTO ui_monitoring_tags (ui_monitoring_id, tag_id) VALUES (?, ?)",
             )
             .bind(ui_monitoring_id)
             .bind(tag_id)
@@ -1449,11 +1650,14 @@ impl DatabaseManager {
     }
 
     // Get tags for UI monitoring entry
-    pub async fn get_ui_monitoring_tags(&self, ui_monitoring_id: i64) -> Result<Vec<String>, anyhow::Error> {
+    pub async fn get_ui_monitoring_tags(
+        &self,
+        ui_monitoring_id: i64,
+    ) -> Result<Vec<String>, anyhow::Error> {
         let tags = sqlx::query_as::<_, (String,)>(
             "SELECT t.name FROM tags t 
              JOIN ui_monitoring_tags ut ON t.id = ut.tag_id 
-             WHERE ut.ui_monitoring_id = ?"
+             WHERE ut.ui_monitoring_id = ?",
         )
         .bind(ui_monitoring_id)
         .fetch_all(&self.pool)

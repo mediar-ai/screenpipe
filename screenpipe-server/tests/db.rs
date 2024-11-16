@@ -14,7 +14,10 @@ mod tests {
     #[tokio::test]
     async fn test_insert_and_search_ocr() {
         let db = setup_test_db().await;
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
@@ -34,6 +37,7 @@ mod tests {
                 ContentType::OCR,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -72,6 +76,7 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -123,6 +128,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -140,7 +146,10 @@ mod tests {
         let db = setup_test_db().await;
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
@@ -178,6 +187,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -203,7 +213,10 @@ mod tests {
         let start_time = Utc::now();
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
@@ -282,6 +295,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -297,6 +311,7 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,
@@ -324,6 +339,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -342,6 +358,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -355,7 +372,10 @@ mod tests {
         let start_time = Utc::now();
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
@@ -422,6 +442,7 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,

@@ -85,6 +85,8 @@ pub(crate) struct SearchQuery {
     min_length: Option<usize>,
     #[serde(default)]
     max_length: Option<usize>,
+    #[serde(default)]
+    focused: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -274,6 +276,7 @@ pub(crate) async fn search(
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
+            query.focused,
         ),
         state.db.count_search_results(
             query_str,
@@ -555,13 +558,19 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         "disabled"
     } else {
         match last_ui {
-            Some(timestamp) if now.signed_duration_since(timestamp) < chrono::Duration::from_std(threshold).unwrap() => "ok",
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "ok"
+            }
             Some(_) => "stale",
-            None => "no data"
+            None => "no data",
         }
     };
 
-    let (overall_status, message, verbose_instructions) = if (frame_status == "ok" || frame_status == "disabled") 
+    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
+        || frame_status == "disabled")
         && (audio_status == "ok" || audio_status == "disabled")
         && (ui_status == "ok" || ui_status == "disabled")
     {
