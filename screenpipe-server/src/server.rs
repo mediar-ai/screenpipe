@@ -85,6 +85,8 @@ pub(crate) struct SearchQuery {
     min_length: Option<usize>,
     #[serde(default)]
     max_length: Option<usize>,
+    #[serde(default)]
+    focused: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -139,6 +141,7 @@ pub struct OCRContent {
     pub window_name: String,
     pub tags: Vec<String>,
     pub frame: Option<String>,
+    pub focused: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -240,7 +243,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, focused={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -250,7 +253,8 @@ pub(crate) async fn search(
         query.app_name,
         query.window_name,
         query.min_length,
-        query.max_length
+        query.max_length,
+        query.focused,
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -274,6 +278,7 @@ pub(crate) async fn search(
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
+            query.focused,
         ),
         state.db.count_search_results(
             query_str,
@@ -307,6 +312,7 @@ pub(crate) async fn search(
                 app_name: ocr.app_name.clone(),
                 window_name: ocr.window_name.clone(),
                 tags: ocr.tags.clone(),
+                focused: ocr.focused,
                 frame: None,
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
@@ -555,13 +561,19 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         "disabled"
     } else {
         match last_ui {
-            Some(timestamp) if now.signed_duration_since(timestamp) < chrono::Duration::from_std(threshold).unwrap() => "ok",
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "ok"
+            }
             Some(_) => "stale",
-            None => "no data"
+            None => "no data",
         }
     };
 
-    let (overall_status, message, verbose_instructions) = if (frame_status == "ok" || frame_status == "disabled") 
+    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
+        || frame_status == "disabled")
         && (audio_status == "ok" || audio_status == "disabled")
         && (ui_status == "ok" || ui_status == "disabled")
     {

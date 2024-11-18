@@ -101,11 +101,12 @@ fn is_valid_window(
     include_list: &[String],
 ) -> bool {
     // Early returns for simple checks
-    if window.current_monitor().id() != monitor.id() 
-        || window.is_minimized() 
+    if window.current_monitor().id() != monitor.id()
+        || window.is_minimized()
         || window.app_name() == "Window Server"
         || window.app_name() == "Contexts"
-        || window.title().is_empty() {
+        || window.title().is_empty()
+    {
         return false;
     }
 
@@ -126,10 +127,10 @@ fn is_valid_window(
         return true;
     }
 
-    return include_list.iter().any(|include| {
+    include_list.iter().any(|include| {
         let include_lower = include.to_lowercase();
         app_name_lower.contains(&include_lower) || title_lower.contains(&include_lower)
-    });
+    })
 }
 
 async fn retry_with_backoff<F, T, E>(
