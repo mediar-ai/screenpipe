@@ -24,6 +24,7 @@ use std::collections::HashSet;
 use std::{
     path::PathBuf,
     sync::Arc,
+    sync::Mutex as StdMutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
@@ -282,6 +283,9 @@ fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut 
 pub async fn prepare_segments(
     audio_input: &AudioInput,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
+    segmentation_model_path: &PathBuf,
+    embedding_manager: EmbeddingManager,
+    embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
 ) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
     info!("Preparing segments");
     let audio_data = if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
@@ -301,25 +305,6 @@ pub async fn prepare_segments(
     };
 
     let audio_data = normalize_v2(&audio_data);
-
-    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-
-    let embedding_model_path = project_dir
-        .join("models")
-        .join("pyannote")
-        .join("wespeaker_en_voxceleb_CAM++.onnx");
-
-    let segmentation_model_path = project_dir
-        .join("models")
-        .join("pyannote")
-        .join("segmentation-3.0.onnx");
-
-    let embedding_extractor = EmbeddingExtractor::new(
-        embedding_model_path
-            .to_str()
-            .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
-    )?;
-    let embedding_manager = EmbeddingManager::new(usize::MAX);
 
     let frame_size = 1600;
     let vad_engine = vad_engine.clone();
@@ -357,7 +342,7 @@ pub async fn prepare_segments(
         let segments = get_segments(
             &audio_data,
             16000,
-            &segmentation_model_path,
+            segmentation_model_path,
             embedding_extractor,
             embedding_manager,
         )?;
@@ -548,6 +533,26 @@ pub async fn create_whisper_channel(
     let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.clone();
 
+    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let embedding_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("wespeaker_en_voxceleb_CAM++.onnx");
+
+    let segmentation_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("segmentation-3.0.onnx");
+
+    let embedding_extractor = Arc::new(StdMutex::new(EmbeddingExtractor::new(
+        embedding_model_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
+    )?));
+
+    let embedding_manager = EmbeddingManager::new(usize::MAX);
+
     tokio::spawn(async move {
         loop {
             if shutdown_flag_clone.load(Ordering::Relaxed) {
@@ -566,9 +571,7 @@ pub async fn create_whisper_channel(
                                 .expect("Time went backwards")
                                 .as_secs();
 
-
-
-                            let mut segments = match prepare_segments(&audio, vad_engine.clone()).await {
+                            let mut segments = match prepare_segments(&audio, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone()).await {
                                 Ok(segments) => segments,
                                 Err(e) => {
                                     error!("Error preparing segments: {:?}", e);

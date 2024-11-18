@@ -1,8 +1,7 @@
 use crate::pyannote::session;
 use anyhow::{Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
-use std::{cmp::Ordering, path::Path};
-use tracing::error;
+use std::{cmp::Ordering, path::Path, sync::Arc, sync::Mutex};
 
 use super::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
 
@@ -36,7 +35,7 @@ fn create_speech_segment(
     sample_rate: u32,
     samples: &[f32],
     padded_samples: &[f32],
-    embedding_extractor: &mut EmbeddingExtractor,
+    embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
     embedding_manager: &mut EmbeddingManager,
 ) -> Result<SpeechSegment> {
     let start = start_offset / sample_rate as f64;
@@ -95,7 +94,7 @@ pub struct SegmentIterator {
     samples: Vec<f32>,
     sample_rate: u32,
     session: ort::Session,
-    embedding_extractor: EmbeddingExtractor,
+    embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
     embedding_manager: EmbeddingManager,
     current_position: usize,
     frame_size: i32,
@@ -112,7 +111,7 @@ impl SegmentIterator {
         samples: Vec<f32>,
         sample_rate: u32,
         model_path: P,
-        embedding_extractor: EmbeddingExtractor,
+        embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
         embedding_manager: EmbeddingManager,
     ) -> Result<Self> {
         let session = session::create_session(model_path.as_ref())?;
@@ -178,7 +177,7 @@ impl SegmentIterator {
                         self.sample_rate,
                         &self.samples,
                         &self.padded_samples,
-                        &mut self.embedding_extractor,
+                        self.embedding_extractor.clone(),
                         &mut self.embedding_manager,
                     ) {
                         Ok(segment) => segment,
@@ -249,7 +248,7 @@ pub fn get_segments<P: AsRef<Path>>(
     samples: &[f32],
     sample_rate: u32,
     model_path: P,
-    embedding_extractor: EmbeddingExtractor,
+    embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
     embedding_manager: EmbeddingManager,
 ) -> Result<SegmentIterator> {
     SegmentIterator::new(
@@ -262,10 +261,10 @@ pub fn get_segments<P: AsRef<Path>>(
 }
 
 fn get_speaker_embedding(
-    embedding_extractor: &mut EmbeddingExtractor,
+    embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
     samples: &[f32],
 ) -> Result<Vec<f32>> {
-    match embedding_extractor.compute(samples) {
+    match embedding_extractor.lock().unwrap().compute(samples) {
         Ok(embedding) => Ok(embedding.collect::<Vec<f32>>()),
         Err(e) => Err(e),
     }
