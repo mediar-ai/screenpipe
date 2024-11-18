@@ -582,11 +582,11 @@ pub async fn create_whisper_channel(
                                     #[cfg(target_os = "macos")]
                                     {
                                         autoreleasepool(|| {
-                                            match stt_sync(&segment.samples, audio.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
+                                            match stt_sync(&segment.samples, segment.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
                                                 Ok((transcription, path)) => TranscriptionResult {
                                                     input: AudioInput {
                                                         data: Arc::new(segment.samples),
-                                                        sample_rate: audio.sample_rate,
+                                                        sample_rate: segment.sample_rate,
                                                         channels: 1,
                                                         device: audio.device.clone(),
                                                     },
@@ -601,7 +601,7 @@ pub async fn create_whisper_channel(
                                                     TranscriptionResult {
                                                         input: AudioInput {
                                                             data: Arc::new(segment.samples),
-                                                            sample_rate: audio.sample_rate,
+                                                            sample_rate: segment.sample_rate,
                                                             channels: 1,
                                                             device: audio.device.clone(),
                                                         },
@@ -620,11 +620,11 @@ pub async fn create_whisper_channel(
                                         unreachable!("This code should not be reached on non-macOS platforms")
                                     }
                                 } else {
-                                    match stt_sync(&segment.samples, audio.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
+                                    match stt_sync(&segment.samples, segment.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
                                         Ok((transcription, path)) => TranscriptionResult {
                                             input: AudioInput {
                                                 data: Arc::new(segment.samples),
-                                                sample_rate: audio.sample_rate,
+                                                sample_rate: segment.sample_rate,
                                                 channels: 1,
                                                 device: audio.device.clone(),
                                             },
@@ -639,7 +639,7 @@ pub async fn create_whisper_channel(
                                             TranscriptionResult {
                                                 input: AudioInput {
                                                     data: Arc::new(segment.samples),
-                                                    sample_rate: audio.sample_rate,
+                                                    sample_rate: segment.sample_rate,
                                                     channels: 1,
                                                     device: audio.device.clone(),
                                                 },

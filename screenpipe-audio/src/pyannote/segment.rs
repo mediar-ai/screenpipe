@@ -14,6 +14,7 @@ pub struct SpeechSegment {
     pub samples: Vec<f32>,
     pub speaker: String,
     pub embedding: Vec<f32>,
+    pub sample_rate: u32,
 }
 
 fn find_max_index(row: ArrayBase<ViewRepr<&f32>, IxDyn>) -> Result<usize> {
@@ -65,6 +66,7 @@ fn create_speech_segment(
         samples: segment_samples.to_vec(),
         speaker,
         embedding,
+        sample_rate,
     })
 }
 
