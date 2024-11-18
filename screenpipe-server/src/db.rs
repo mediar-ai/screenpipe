@@ -1,11 +1,13 @@
 use crate::filtering::filter_texts;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use libsqlite3_sys::sqlite3_auto_extension;
 use log::{debug, error, warn};
 use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_integrations::friend_wearable::FriendWearableDatabase;
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Serialize};
+use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::Column;
 use sqlx::Error as SqlxError;
@@ -25,6 +27,7 @@ use std::time::Duration;
 use std::collections::BTreeMap;
 use tokio::time::{timeout, Duration as TokioDuration};
 
+use zerocopy::AsBytes;
 #[derive(Debug)]
 pub struct DatabaseError(String);
 
@@ -133,6 +136,13 @@ struct AudioResultRaw {
     is_input_device: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Speaker {
+    pub id: i64,
+    pub name: String,
+    pub metadata: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioResult {
     pub audio_chunk_id: i64,
@@ -180,6 +190,14 @@ impl DatabaseManager {
             database_path
         );
         let connection_string = format!("sqlite:{}", database_path);
+
+        unsafe {
+            sqlite3_auto_extension(Some(
+                std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    sqlite3_vec_init as *const (),
+                ),
+            ));
+        }
 
         // Create the database if it doesn't exist
         if !sqlx::Sqlite::database_exists(&connection_string).await? {
@@ -244,12 +262,13 @@ impl DatabaseManager {
         offset_index: i64,
         transcription_engine: &str,
         device: &AudioDevice,
+        speaker_id: Option<i64>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
         let id = sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
@@ -258,6 +277,7 @@ impl DatabaseManager {
         .bind(transcription_engine)
         .bind(&device.name)
         .bind(device.device_type == DeviceType::Input)
+        .bind(speaker_id)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -288,6 +308,92 @@ impl DatabaseManager {
         tx.commit().await?;
 
         Ok(affected as i64)
+    }
+
+    pub async fn insert_speaker(&self, embedding: &[f32]) -> Result<Speaker, SqlxError> {
+        let mut tx = self.pool.begin().await?;
+
+        let id = sqlx::query("INSERT INTO speakers (name) VALUES (NULL)")
+            .execute(&mut *tx)
+            .await?
+            .last_insert_rowid();
+
+        let bytes: &[u8] = embedding.as_bytes();
+        let _ = sqlx::query(
+            "INSERT INTO speaker_embeddings (embedding, speaker_id) VALUES (vec_f32(?1), ?2)",
+        )
+        .bind(bytes)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+
+        Ok(Speaker {
+            id,
+            name: String::new(),
+            metadata: String::new(),
+        })
+    }
+
+    pub async fn update_speaker_metadata(
+        &self,
+        speaker_id: i64,
+        metadata: &str,
+    ) -> Result<i64, SqlxError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("UPDATE speakers SET metadata = ?1 WHERE id = ?2")
+            .bind(metadata)
+            .bind(speaker_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(speaker_id)
+    }
+
+    pub async fn get_speaker_by_id(&self, speaker_id: i64) -> Result<Speaker, SqlxError> {
+        let speaker = sqlx::query_as("SELECT id, name, metadata FROM speakers WHERE id = ?1")
+            .bind(speaker_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(speaker)
+    }
+
+    pub async fn get_speaker_from_embedding(
+        &self,
+        embedding: &[f32],
+    ) -> Result<Option<Speaker>, SqlxError> {
+        let speaker_threshold = 0.6;
+        let bytes: &[u8] = embedding.as_bytes();
+
+        // Using subquery with LIMIT 1 instead of JOIN
+        let speaker = sqlx::query_as(
+            "SELECT id, name, metadata
+             FROM speakers 
+             WHERE id = (
+                 SELECT speaker_id 
+                 FROM speaker_embeddings
+                 WHERE vec_distance_cosine(embedding, vec_f32(?1)) < ?2
+                 ORDER BY vec_distance_cosine(embedding, vec_f32(?1))
+                 LIMIT 1
+             )",
+        )
+        .bind(bytes)
+        .bind(speaker_threshold)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(speaker)
+    }
+
+    pub async fn update_speaker_name(&self, speaker_id: i64, name: &str) -> Result<i64, SqlxError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("UPDATE speakers SET name = ?1 WHERE id = ?2")
+            .bind(name)
+            .bind(speaker_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(speaker_id)
     }
 
     pub async fn insert_video_chunk(
@@ -488,47 +594,163 @@ impl DatabaseManager {
 
         match content_type {
             ContentType::All => {
-                let ocr_results = self.search_ocr(query, limit, offset, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                let audio_results = self.search_audio(query, limit, offset, start_time, end_time, min_length, max_length).await?;
-                let ui_results = self.search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit, offset).await?;
-                
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                let audio_results = self
+                    .search_audio(
+                        query, limit, offset, start_time, end_time, min_length, max_length,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit,
+                        offset,
+                    )
+                    .await?;
+
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
-            },
+            }
             ContentType::OCR => {
-                let ocr_results = self.search_ocr(query, limit, offset, start_time, end_time, app_name, window_name, min_length, max_length).await?;
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-            },
+            }
             ContentType::Audio => {
-                let audio_results = self.search_audio(query, limit, offset, start_time, end_time, min_length, max_length).await?;
+                let audio_results = self
+                    .search_audio(
+                        query, limit, offset, start_time, end_time, min_length, max_length,
+                    )
+                    .await?;
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
-            },
+            }
             ContentType::UI => {
-                let ui_results = self.search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit, offset).await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit,
+                        offset,
+                    )
+                    .await?;
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
-            },
+            }
             ContentType::AudioAndUi => {
-                let audio_results = self.search_audio(query, limit/2, offset, start_time, end_time, min_length, max_length).await?;
-                let ui_results = self.search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit/2, offset).await?;
-                
+                let audio_results = self
+                    .search_audio(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 2,
+                        offset,
+                    )
+                    .await?;
+
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
-            },
+            }
             ContentType::OcrAndUi => {
-                let ocr_results = self.search_ocr(query, limit/2, offset, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                let ui_results = self.search_ui_monitoring(query, app_name, window_name, start_time, end_time, limit/2, offset).await?;
-                
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 2,
+                        offset,
+                    )
+                    .await?;
+
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
-            },
+            }
             ContentType::AudioAndOcr => {
-                let audio_results = self.search_audio(query, limit/2, offset, start_time, end_time, min_length, max_length).await?;
-                let ocr_results = self.search_ocr(query, limit/2, offset, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                
+                let audio_results = self
+                    .search_audio(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-            },
+            }
         }
 
         // Sort results by timestamp in descending order
@@ -549,7 +771,11 @@ impl DatabaseManager {
         });
 
         // Apply offset and limit after sorting
-        results = results.into_iter().skip(offset as usize).take(limit as usize).collect();
+        results = results
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
 
         Ok(results)
     }
@@ -769,31 +995,87 @@ impl DatabaseManager {
 
         match content_type {
             ContentType::All => {
-                total += self.count_ocr_results(query, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                total += self.count_audio_results(query, start_time, end_time, min_length, max_length).await?;
-                total += self.count_ui_results(query, app_name, window_name, start_time, end_time).await?;
-            },
+                total += self
+                    .count_ocr_results(
+                        query,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                total += self
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
+                    .await?;
+                total += self
+                    .count_ui_results(query, app_name, window_name, start_time, end_time)
+                    .await?;
+            }
             ContentType::OCR => {
-                total += self.count_ocr_results(query, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-            },
+                total += self
+                    .count_ocr_results(
+                        query,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+            }
             ContentType::Audio => {
-                total += self.count_audio_results(query, start_time, end_time, min_length, max_length).await?;
-            },
+                total += self
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
+                    .await?;
+            }
             ContentType::UI => {
-                total += self.count_ui_results(query, app_name, window_name, start_time, end_time).await?;
-            },
+                total += self
+                    .count_ui_results(query, app_name, window_name, start_time, end_time)
+                    .await?;
+            }
             ContentType::AudioAndUi => {
-                total += self.count_audio_results(query, start_time, end_time, min_length, max_length).await?;
-                total += self.count_ui_results(query, app_name, window_name, start_time, end_time).await?;
-            },
+                total += self
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
+                    .await?;
+                total += self
+                    .count_ui_results(query, app_name, window_name, start_time, end_time)
+                    .await?;
+            }
             ContentType::OcrAndUi => {
-                total += self.count_ocr_results(query, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-                total += self.count_ui_results(query, app_name, window_name, start_time, end_time).await?;
-            },
+                total += self
+                    .count_ocr_results(
+                        query,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                total += self
+                    .count_ui_results(query, app_name, window_name, start_time, end_time)
+                    .await?;
+            }
             ContentType::AudioAndOcr => {
-                total += self.count_audio_results(query, start_time, end_time, min_length, max_length).await?;
-                total += self.count_ocr_results(query, start_time, end_time, app_name, window_name, min_length, max_length).await?;
-            },
+                total += self
+                    .count_audio_results(query, start_time, end_time, min_length, max_length)
+                    .await?;
+                total += self
+                    .count_ocr_results(
+                        query,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+            }
         }
 
         Ok(total)
@@ -902,7 +1184,14 @@ impl DatabaseManager {
 
     pub async fn get_latest_timestamps(
         &self,
-    ) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>, Option<DateTime<Utc>>), sqlx::Error> {
+    ) -> Result<
+        (
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+        ),
+        sqlx::Error,
+    > {
         let latest_frame: Option<(DateTime<Utc>,)> =
             sqlx::query_as("SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1")
                 .fetch_optional(&self.pool)
@@ -915,15 +1204,17 @@ impl DatabaseManager {
 
         // Check if ui_monitoring table exists first
         let latest_ui: Option<(DateTime<Utc>,)> = match sqlx::query_scalar::<_, i32>(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ui_monitoring'"
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ui_monitoring'",
         )
         .fetch_optional(&self.pool)
         .await?
         {
             Some(_) => {
-                sqlx::query_as("SELECT timestamp FROM ui_monitoring ORDER BY timestamp DESC LIMIT 1")
-                    .fetch_optional(&self.pool)
-                    .await?
+                sqlx::query_as(
+                    "SELECT timestamp FROM ui_monitoring ORDER BY timestamp DESC LIMIT 1",
+                )
+                .fetch_optional(&self.pool)
+                .await?
             }
             None => {
                 debug!("ui_monitoring table does not exist");
@@ -1435,10 +1726,14 @@ impl DatabaseManager {
     }
 
     // Add tags to UI monitoring entry
-    pub async fn add_tags_to_ui_monitoring(&self, ui_monitoring_id: i64, tag_ids: &[i64]) -> Result<(), anyhow::Error> {
+    pub async fn add_tags_to_ui_monitoring(
+        &self,
+        ui_monitoring_id: i64,
+        tag_ids: &[i64],
+    ) -> Result<(), anyhow::Error> {
         for tag_id in tag_ids {
             sqlx::query(
-                "INSERT OR IGNORE INTO ui_monitoring_tags (ui_monitoring_id, tag_id) VALUES (?, ?)"
+                "INSERT OR IGNORE INTO ui_monitoring_tags (ui_monitoring_id, tag_id) VALUES (?, ?)",
             )
             .bind(ui_monitoring_id)
             .bind(tag_id)
@@ -1449,11 +1744,14 @@ impl DatabaseManager {
     }
 
     // Get tags for UI monitoring entry
-    pub async fn get_ui_monitoring_tags(&self, ui_monitoring_id: i64) -> Result<Vec<String>, anyhow::Error> {
+    pub async fn get_ui_monitoring_tags(
+        &self,
+        ui_monitoring_id: i64,
+    ) -> Result<Vec<String>, anyhow::Error> {
         let tags = sqlx::query_as::<_, (String,)>(
             "SELECT t.name FROM tags t 
              JOIN ui_monitoring_tags ut ON t.id = ut.tag_id 
-             WHERE ut.ui_monitoring_id = ?"
+             WHERE ut.ui_monitoring_id = ?",
         )
         .bind(ui_monitoring_id)
         .fetch_all(&self.pool)
