@@ -81,7 +81,7 @@ fi
 mkdir -p content/changelogs
 
 # Create a new file with the current release as the name
-echo ${CONTENT//\"/} > content/changelogs/$CURRENT_RELEASE.md
+echo -e ${CONTENT//\"/} > content/changelogs/$CURRENT_RELEASE.md
 SHORT_COMMIT_LAST_RELEASE=$(echo $COMMIT_LAST_RELEASE | cut -c 1-5)
 SHORT_COMMIT_CURRENT_RELEASE=$(echo $COMMIT_CURRENT_RELEASE | cut -c 1-5)
 
