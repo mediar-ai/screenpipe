@@ -1,6 +1,8 @@
 ### obsidian time log
 
-automates logging of engineering work to obsidian using screenpipe and openai/ollama
+![image](https://github.com/user-attachments/assets/8bf4e730-ec5e-4e6b-9660-09c982db574a)
+
+automates logging of work to obsidian using screenpipe and openai/ollama
 
 #### quick setup
 
