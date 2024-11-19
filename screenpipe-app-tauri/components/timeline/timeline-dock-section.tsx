@@ -131,16 +131,16 @@ export function TimelineIconsSection({
       });
     });
 
-    return {
-      processedBlocks: b
-        .sort((a, b) => a.percentThroughDay - b.percentThroughDay)
-        .filter((block, index, array) => {
-          if (index === 0) return true;
-          const prevBlock = array[index - 1];
-          return Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) > 0.25;
-        }),
-      processedAudioGroups: audioGroups
-    };
+    // Changed from 0.1% to 0.25% for better spacing while still showing more icons
+    return b
+      .sort((a, b) => a.percentThroughDay - b.percentThroughDay)
+      .filter((block, index, array) => {
+        if (index === 0) return true;
+        const prevBlock = array[index - 1];
+        return (
+          Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) > 0.25
+        );
+      });
   }, [blocks, iconCache, timeRange]);
 
   const loadAppIcon = useCallback(

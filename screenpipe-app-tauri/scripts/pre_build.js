@@ -443,9 +443,10 @@ if (platform == 'macos') {
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.7z`
-		await $`7z e ${config.macos.ffmpegName}.7z -o ./${config.macos.ffmpegName}`
-		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-		await $`rm ${config.macos.ffmpegName}.7z`
+		await $`mkdir -p ${config.macos.ffmpegName}`
+		await $`7z x ${config.macos.ffmpegName}.7z -o${config.macos.ffmpegName}`
+		await $`mv ${config.macos.ffmpegName}/ffmpeg ${config.ffmpegRealname}`
+		await $`rm -rf ${config.macos.ffmpegName} ${config.macos.ffmpegName}.7z`
 	} else {
 		console.log('FFMPEG already exists');
 	}
