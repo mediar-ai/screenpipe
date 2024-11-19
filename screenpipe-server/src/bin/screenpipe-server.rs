@@ -15,7 +15,7 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
-use screenpipe_vision::{core::CaptureSource, monitor::{get_default_monitor, list_monitors}};
+use screenpipe_vision::{core::CaptureSource, monitor::{get_default_monitor, list_monitors}, remote_desktop::list_rdp_sessions};
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
@@ -365,8 +365,8 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                let capture_source = if cli.rdp_session_id.len() > 0 {
-                    cli.rdp_session_id.iter().map(|s| CaptureSource::RdpSession(Box::leak(s.clone().into_boxed_str()))).collect()
+                let capture_source = if cli.use_remote_desktop {
+                    list_rdp_sessions().await.unwrap().iter().map(|(id, _username)| CaptureSource::RdpSession(Box::leak(id.to_string().into_boxed_str()))).collect()
                 } else if cli.monitor_id.len() > 0 {
                     cli.monitor_id.iter().map(|id| CaptureSource::LocalMonitor(*id)).collect()
                 } else {

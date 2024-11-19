@@ -243,9 +243,9 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_frame_cache: bool,
 
-    /// RDP session ID to use for screen capture - this will override the monitor ID
+    /// If enabled will capture all RDP sessions on the machine
     #[arg(long)]
-    pub rdp_session_id: Vec<String>,
+    pub use_remote_desktop: bool,
 
     #[command(subcommand)]
     pub command: Option<Command>,

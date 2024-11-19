@@ -4,6 +4,7 @@ pub mod core;
 #[cfg(target_os = "windows")]
 pub mod microsoft;
 pub mod monitor;
+pub mod remote_desktop;
 pub mod run_ui_monitoring_macos;
 pub mod tesseract;
 pub mod utils;

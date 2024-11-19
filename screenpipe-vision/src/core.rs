@@ -5,6 +5,7 @@ use crate::apple::perform_ocr_apple;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
+use crate::remote_desktop::capture_rdp_session;
 use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image, save_text_files};
@@ -353,34 +354,4 @@ pub fn trigger_screen_capture_permission() -> Result<()> {
     // The mere attempt to capture it should trigger the permission request
 
     Ok(())
-}
-#[allow(unused)]
-pub async fn capture_rdp_session(session_id: &str) -> Result<DynamicImage> {
-    #[cfg(target_os = "windows")]
-    {
-        // windows terminal services api
-        use windows::Win32::System::TerminalServices::{
-            WTSQuerySessionInformation, WTSVirtualChannelQuery, WTS_CURRENT_SERVER_HANDLE,
-        };
-
-        // capture the rdp session buffer
-        // this is a simplified version - you'll need proper error handling
-        let buffer = unsafe {
-            WTSVirtualChannelQuery(
-                WTS_CURRENT_SERVER_HANDLE,
-                session_id,
-                WTSVirtualChannelQuery::WTSVirtualChannelGetData,
-                std::ptr::null_mut(),
-            )?
-        };
-
-        // convert buffer to image
-        // you'll need to implement the actual conversion based on your needs
-        DynamicImage::from_buffer(&buffer)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(anyhow!("rdp capture only supported on windows"))
-    }
 }
