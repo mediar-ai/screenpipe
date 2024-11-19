@@ -18,8 +18,7 @@
             "screenpipe",
             "bun",
             "ollama",
-            "ui_monitor-aarch64-apple-darwin",
-            "ui_monitor-x86_64-apple-darwin"
+            "ui_monitor"
         ]
     }
 }

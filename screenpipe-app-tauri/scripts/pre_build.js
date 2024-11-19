@@ -46,8 +46,8 @@ const config = {
 		],
 	},
 	macos: {
-		ffmpegName: 'ffmpeg-7.1',
-		ffmpegUrl: 'https://evermeet.cx/ffmpeg/ffmpeg-7.1.7z',
+		ffmpegName: 'ffmpeg-7.0-macOS-default',
+		ffmpegUrl: 'https://master.dl.sourceforge.net/project/avbuild/macOS/ffmpeg-7.0-macOS-default.tar.xz?viasf=1',
 	},
 }
 
@@ -442,11 +442,10 @@ if (platform == 'macos') {
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.7z`
-		await $`mkdir -p ${config.macos.ffmpegName}`
-		await $`7z x ${config.macos.ffmpegName}.7z -o${config.macos.ffmpegName}`
-		await $`mv ${config.macos.ffmpegName}/ffmpeg ${config.ffmpegRealname}`
-		await $`rm -rf ${config.macos.ffmpegName} ${config.macos.ffmpegName}.7z`
+		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
+		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
+		await $`rm ${config.macos.ffmpegName}.tar.xz`
 	} else {
 		console.log('FFMPEG already exists');
 	}
@@ -470,10 +469,10 @@ if (platform == 'macos') {
 
 		for (const arch of architectures) {
 			console.log(`Compiling Swift UI monitor for ${arch}...`);
-			
+
 			const binaryName = `ui_monitor-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
 			const outputPath = path.join(cwd, binaryName);
-			
+
 			// Compile directly to the final destination
 			await $`swiftc -O -whole-module-optimization -enforce-exclusivity=unchecked -num-threads 8 -target ${arch}-apple-macos11.0 -o ${outputPath} ${swiftSrc} -framework Cocoa -framework ApplicationServices -framework Foundation`;
 

@@ -91,7 +91,7 @@
         "title": "timeline",
         "url": "/timeline",
         "width": 1200,
-        "height": 600,
+        "height": 1000,
         "minWidth": 1000,
         "minHeight": 600,
         "visible": false,
