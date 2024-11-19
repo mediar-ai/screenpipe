@@ -309,7 +309,7 @@ async fn record_audio(
                     "Starting audio capture thread for device: {}",
                     &audio_device
                 );
-                // if device_control.is_running {
+
                 let mut did_warn = false;
                 let is_running = Arc::new(AtomicBool::new(device_control.is_running));
 
@@ -357,7 +357,7 @@ async fn record_audio(
                         handle.await.unwrap();
                     }
                 }
-                // }
+
                 info!("exiting audio capture thread for device: {}", &audio_device);
             });
 
