@@ -365,7 +365,7 @@ async fn record_audio(
 
             // Insert the new transcript after fetching
             let mut current_transcript: Option<String> = transcription.transcription.clone();
-            let mut processed_previous = "".to_string();
+            let mut processed_previous = previous_transcript.clone();
             if let Some((previous, current)) =
                 transcription.cleanup_overlap(previous_transcript.clone())
             {
