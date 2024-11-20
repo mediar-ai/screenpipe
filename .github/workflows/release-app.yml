@@ -266,6 +266,9 @@ jobs:
             export PKG_CONFIG_PATH="~/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
             export MKLROOT="/opt/intel/mkl"
           fi
+          if [[ "${{ matrix.args }}" == "--target x86_64-pc-windows-msvc" ]]; then
+            export RUSTFLAGS="-C target-feature=+crt-static"
+          fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
 
       # Run pre build again to copy the CLI into app
