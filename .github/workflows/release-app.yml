@@ -180,7 +180,21 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
         run: |
           sudo apt update
-          sudo apt install -y libappindicator3-1 libappindicator3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf wget
+          sudo apt install -y \
+            libappindicator3-1 \
+            libappindicator3-dev \
+            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            wget \
+            libasound2-dev \
+            libgtk-3-dev \
+            libbsd-dev \
+            libmd-dev \
+            libssl-dev \
+            libglib2.0-dev
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
@@ -317,6 +331,7 @@ jobs:
           CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
           CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
           RUSTFLAGS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
+          VCPKG_STATIC_LINKAGE: "true"
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
