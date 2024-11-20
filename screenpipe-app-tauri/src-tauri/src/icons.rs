@@ -107,6 +107,7 @@ pub async fn get_app_icon(
     }))
 }
 
+#[cfg(target_os = "windows")]
 fn get_exe_by_reg_key(
     app_name: &str
 ) -> Option<String> {
@@ -145,7 +146,7 @@ fn get_exe_by_reg_key(
     None
 }
 
-
+#[cfg(target_os = "windows")]
 async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
     let app_name = app_name.strip_suffix(".exe").unwrap_or(&app_name);
     let potential_paths = [
@@ -188,6 +189,7 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
     None
 }
 
+#[cfg(target_os = "windows")]
 async fn get_exe_by_appx(
     app_name: &str
 ) -> Option<String> {
