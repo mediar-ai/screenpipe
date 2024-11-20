@@ -69,6 +69,7 @@ import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
 import { open } from '@tauri-apps/plugin-dialog';
+import { exists } from '@tauri-apps/plugin-fs';
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
@@ -97,6 +98,8 @@ export function RecordingSettings({
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openMonitors, setOpenMonitors] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
+  const [dataDirInputVisible, setDataDirInputVisible] = React.useState(false);
+  const [clickTimeout, setClickTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [windowsForIgnore, setWindowsForIgnore] = useState("");
   const [windowsForInclude, setWindowsForInclude] = useState("");
 
@@ -441,30 +444,82 @@ export function RecordingSettings({
   };
 
   const handleDataDirChange = async () => {
-    try {
-      const dataDir = await getDataDir()
-
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        defaultPath: dataDir
-      });
-      // TODO: check permission of selected dir for server to write into
-
-      if (selected) {
-        setLocalSettings({ ...localSettings, dataDir: selected })
-      } else {
-        console.log('canceled');
-      }
-    } catch (error) {
-      console.error("failed to change data directory:", error);
-      toast({
-        title: "error",
-        description: "failed to change data directory.",
-        variant: "destructive",
-        duration: 3000,
-      });
+    if (clickTimeout) {
+      // Double Click
+      clearTimeout(clickTimeout);
+      setClickTimeout(null);
+      setDataDirInputVisible(true)
+    } else {
+      const timeout = setTimeout(() => {
+        // Single Click
+        selectDataDir()
+        setClickTimeout(null);
+      }, 250);
+      setClickTimeout(timeout);
     }
+
+    async function selectDataDir() {
+      try {
+        const dataDir = await getDataDir()
+
+        const selected = await open({
+          directory: true,
+          multiple: false,
+          defaultPath: dataDir
+        });
+        // TODO: check permission of selected dir for server to write into
+
+        if (selected) {
+          setLocalSettings({ ...localSettings, dataDir: selected })
+        } else {
+          console.log('canceled');
+        }
+      } catch (error) {
+        console.error("failed to change data directory:", error);
+        toast({
+          title: "error",
+          description: "failed to change data directory.",
+          variant: "destructive",
+          duration: 3000,
+        });
+      }
+    }
+  }
+
+  const handleDataDirInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setLocalSettings({ ...localSettings, dataDir: newValue });
+  }
+
+  const handleDataDirInputBlur = () => {
+    console.log('wcw blur');
+    setDataDirInputVisible(false)
+    validateDataDirInput()
+  }
+
+  const handleDataDirInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      setDataDirInputVisible(false)
+      validateDataDirInput()
+    }
+  }
+
+  const validateDataDirInput = async () => {
+    try {
+      if (await exists(localSettings.dataDir)) {
+        return
+      }
+    } catch (err) {
+    }
+
+    toast({
+      title: "error",
+      description: "failed to change data directory.",
+      variant: "destructive",
+      duration: 3000,
+    });
+
+    setLocalSettings({ ...localSettings, dataDir: settings.dataDir });
   }
 
   const runSetup = async () => {
@@ -928,21 +983,35 @@ export function RecordingSettings({
                 <span>data directory</span>
               </Label>
 
-              <Button
-                variant="outline"
-                role="combobox"
-                className="w-full justify-between"
-                onClick={handleDataDirChange}
-              >
-                <div className="inline-block flex gap-4">
-                  {!!settings.dataDir ? "change directory" : "select directory"}
-                  {localSettings.dataDir === settings.dataDir ?
-                    <span className="text-muted-foreground text-sm"> current at: {settings.dataDir || "default directory"}</span> :
-                    <span className="text-muted-foreground text-sm"> change to: {localSettings.dataDir || "default directory"}</span>
-                  }
-                </div>
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
+              {
+                !dataDirInputVisible
+                  ?
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between"
+                    onClick={handleDataDirChange}
+                  >
+                    <div className="inline-block flex gap-4">
+                      {!!settings.dataDir ? "change directory" : "select directory"}
+                      {localSettings.dataDir === settings.dataDir ?
+                        <span className="text-muted-foreground text-sm"> current at: {settings.dataDir || "default directory"}</span> :
+                        <span className="text-muted-foreground text-sm"> change to: {localSettings.dataDir || "default directory"}</span>
+                      }
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                  : <Input
+                    id="dataDir"
+                    type="text"
+                    autoFocus={true}
+                    value={localSettings.dataDir}
+                    onChange={handleDataDirInputChange}
+                    onBlur={handleDataDirInputBlur}
+                    onKeyDown={handleDataDirInputKeyDown}
+                  >
+                  </Input>
+              }
             </div>
 
             <div className="flex flex-col space-y-2">
