@@ -596,6 +596,8 @@ async function installOllamaSidecar() {
 		console.log('Downloading Ollama...');
 		if (platform === 'windows') {
 			await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
+		} else if (platform === 'linux') {
+			await $`wget --no-config -q ${ollamaUrl} -O ${downloadPath}`;
 		} else {
 			await $`wget --no-config -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
 		}
