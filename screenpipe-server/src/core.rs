@@ -365,12 +365,20 @@ async fn record_audio(
 
             // Insert the new transcript after fetching
             let mut current_transcript: Option<String> = transcription.transcription.clone();
-            let mut processed_previous = "".to_string();
+            let mut processed_previous: Option<String> = None;
             if let Some((previous, current)) =
                 transcription.cleanup_overlap(previous_transcript.clone())
             {
-                current_transcript = Some(current);
-                processed_previous = previous;
+                if !previous.is_empty() && !current.is_empty() {
+                    if previous != previous_transcript {
+                        processed_previous = Some(previous);
+                    }
+                    if current_transcript.is_some()
+                        && current != current_transcript.clone().unwrap_or_default()
+                    {
+                        current_transcript = Some(current);
+                    }
+                }
             }
 
             transcription.transcription = current_transcript.clone();
@@ -400,7 +408,7 @@ async fn process_audio_result(
     result: TranscriptionResult,
     _friend_wearable_uid: Option<&str>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    previous_transcript: String,
+    previous_transcript: Option<String>,
     previous_transcript_id: Option<i64>,
 ) -> Result<Option<i64>, anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
@@ -424,15 +432,17 @@ async fn process_audio_result(
         result.input.device, result.path
     );
     if let Some(id) = previous_transcript_id {
-        match db
-            .update_audio_transcription(id, previous_transcript.as_str())
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => error!(
-                "Failed to update transcription for {}: audio_chunk_id {}",
-                result.input.device, e
-            ),
+        if let Some(prev_transcript) = previous_transcript {
+            match db
+                .update_audio_transcription(id, prev_transcript.as_str())
+                .await
+            {
+                Ok(_) => {}
+                Err(e) => error!(
+                    "Failed to update transcription for {}: audio_chunk_id {}",
+                    result.input.device, e
+                ),
+            }
         }
     }
     match db.insert_audio_chunk(&result.path).await {
