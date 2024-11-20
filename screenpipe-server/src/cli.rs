@@ -1,9 +1,11 @@
-use clap::{Parser, Subcommand};
-use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
-use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use clap::ValueEnum;
+use clap::{Parser, Subcommand};
 use screenpipe_audio::vad_engine::VadEngineEnum;
+use screenpipe_audio::{
+    vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine,
+};
 use screenpipe_core::Language;
+use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
@@ -105,9 +107,9 @@ pub struct Cli {
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
-    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))]
     pub fps: f64, // ! not crazy about this (inconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
-    
+
     /// Audio chunk duration in seconds
     #[arg(short = 'd', long, default_value_t = 30)]
     pub audio_chunk_duration: u64,
@@ -238,17 +240,14 @@ pub struct Cli {
     /// Enable UI monitoring (macOS only)
     #[arg(long, default_value_t = false)]
     pub enable_ui_monitoring: bool,
-    
+
     /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
     #[arg(long, default_value_t = false)]
     pub enable_frame_cache: bool,
 
     #[command(subcommand)]
     pub command: Option<Command>,
-
 }
-
-
 
 impl Cli {
     pub fn unique_languages(&self) -> Result<Vec<Language>, String> {
@@ -277,7 +276,6 @@ pub enum Command {
         enable_beta: bool,
     },
 }
-
 
 #[derive(Subcommand)]
 pub enum PipeCommand {
@@ -316,4 +314,19 @@ pub enum PipeCommand {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+}
+
+#[derive(Subcommand)]
+pub enum Command {
+    /// Audio-related commands
+    Audio {
+        #[command(subcommand)]
+        subcommand: AudioCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AudioCommand {
+    /// List all available audio devices
+    List,
 }

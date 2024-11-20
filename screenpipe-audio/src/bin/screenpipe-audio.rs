@@ -38,6 +38,21 @@ struct Args {
     deepgram_api_key: Option<String>,
 }
 
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Audio-related commands
+    Audio {
+        #[clap(subcommand)]
+        subcommand: AudioCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AudioCommand {
+    /// List all available audio devices
+    List,
+}
+
 fn print_devices(devices: &[AudioDevice]) {
     println!("Available audio devices:");
     for device in devices.iter() {
@@ -65,8 +80,21 @@ async fn main() -> Result<()> {
     let devices = list_audio_devices().await?;
 
     if args.list_audio_devices {
+        eprintln!(
+            "Warning: '--list-audio-devices' is deprecated and will be removed in a future release. Use 'screenpipe audio list' instead."
+        );
         print_devices(&devices);
         return Ok(());
+    }
+
+    if let Some(Command::Audio { subcommand }) = args.command {
+        match subcommand {
+            AudioCommand::List => {
+                let devices = list_audio_devices().await?;
+                print_devices(&devices);
+                return Ok(());
+            }
+        }
     }
 
     let languages = args.language;

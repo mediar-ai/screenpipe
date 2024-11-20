@@ -1,5 +1,12 @@
 use std::{
-    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env, io::Write
+    collections::HashMap,
+    env, fs, io,
+    io::Write,
+    net::SocketAddr,
+    ops::Deref,
+    path::PathBuf,
+    sync::{atomic::AtomicBool, Arc},
+    time::Duration,
 };
 
 use clap::Parser;
@@ -9,23 +16,53 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
+    AudioDevice, DeviceControl,
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand},
+    highlight::{Highlight, HighlightConfig},
+    start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager,
+    ResourceMonitor, Server,
 };
-use screenpipe_vision::{monitor::list_monitors};
+use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
+use tracing::{debug, error, info};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-use tracing::{info, debug, error};
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_appender::non_blocking::WorkerGuard;
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Audio-related commands
+    Audio {
+        #[clap(subcommand)]
+        subcommand: AudioCommand,
+    },
+    /// Monitor-related commands
+    Monitors {
+        #[clap(subcommand)]
+        subcommand: MonitorCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AudioCommand {
+    /// List all available audio devices
+    List,
+}
+
+#[derive(Subcommand, Debug)]
+enum MonitorCommand {
+    /// List all available monitors
+    List,
+}
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -52,7 +89,10 @@ fn get_base_dir(custom_path: &Option<String>) -> anyhow::Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("failed to get home directory"))?
         .join(".screenpipe");
 
-    let base_dir = custom_path.as_ref().map(PathBuf::from).unwrap_or(default_path);
+    let base_dir = custom_path
+        .as_ref()
+        .map(PathBuf::from)
+        .unwrap_or(default_path);
     let data_dir = base_dir.join("data");
 
     fs::create_dir_all(&data_dir)?;
@@ -79,15 +119,19 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .unwrap_or_default()
         .split(',')
         .filter(|s| !s.is_empty())
-        .fold(env_filter, |filter, module_directive| {
-            match module_directive.parse() {
+        .fold(
+            env_filter,
+            |filter, module_directive| match module_directive.parse() {
                 Ok(directive) => filter.add_directive(directive),
                 Err(e) => {
-                    eprintln!("warning: invalid log directive '{}': {}", module_directive, e);
+                    eprintln!(
+                        "warning: invalid log directive '{}': {}",
+                        module_directive, e
+                    );
                     filter
                 }
-            }
-        });
+            },
+        );
 
     let env_filter = if cli.debug {
         env_filter.add_directive("screenpipe=debug".parse().unwrap())
@@ -106,7 +150,6 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-
     debug!("starting screenpipe server");
     let cli = Cli::parse();
 
@@ -116,7 +159,7 @@ async fn main() -> anyhow::Result<()> {
     let _log_guard = setup_logging(&local_data_dir, &cli)?;
 
     let h = Highlight::init(HighlightConfig {
-        project_id:String::from("82688"),
+        project_id: String::from("82688"),
         ..Default::default()
     })
     .expect("Failed to initialize Highlight.io");
@@ -151,19 +194,27 @@ async fn main() -> anyhow::Result<()> {
                     if let Err(e) = trigger_keyboard_permission() {
                         error!("Failed to trigger keyboard permission: {:?}", e);
                         error!("Please grant keyboard permission manually in System Preferences.");
-                        h.capture_error("Please grant keyboard permission manually in System Preferences.");
+                        h.capture_error(
+                            "Please grant keyboard permission manually in System Preferences.",
+                        );
                     } else {
-                        info!("Keyboard permission requested. Please grant permission if prompted.");
+                        info!(
+                            "Keyboard permission requested. Please grant permission if prompted."
+                        );
                     }
                 }
-                use screenpipe_audio::{trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel};
+                use screenpipe_audio::{
+                    trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel,
+                };
                 use screenpipe_vision::core::trigger_screen_capture_permission;
 
                 // Trigger audio permission request
                 if let Err(e) = trigger_audio_permission() {
                     error!("Failed to trigger audio permission: {:?}", e);
                     error!("Please grant microphone permission manually in System Preferences.");
-                    h.capture_error("Please grant microphone permission manually in System Preferences.");
+                    h.capture_error(
+                        "Please grant microphone permission manually in System Preferences.",
+                    );
                 } else {
                     info!("Audio permission requested. Please grant permission if prompted.");
                 }
@@ -171,10 +222,16 @@ async fn main() -> anyhow::Result<()> {
                 // Trigger screen capture permission request
                 if let Err(e) = trigger_screen_capture_permission() {
                     error!("Failed to trigger screen capture permission: {:?}", e);
-                    error!("Please grant screen recording permission manually in System Preferences.");
-                    h.capture_error("Please grant microphone permission manually in System Preferences.");
+                    error!(
+                        "Please grant screen recording permission manually in System Preferences."
+                    );
+                    h.capture_error(
+                        "Please grant microphone permission manually in System Preferences.",
+                    );
                 } else {
-                    info!("Screen capture permission requested. Please grant permission if prompted.");
+                    info!(
+                        "Screen capture permission requested. Please grant permission if prompted."
+                    );
                 }
 
                 // this command just download models and stuff (useful to have specific step to display in UI)
@@ -197,7 +254,9 @@ async fn main() -> anyhow::Result<()> {
                     Err(e) => {
                         error!("FFmpeg check failed: {}", e);
                         error!("Please ensure FFmpeg is installed correctly and is in your PATH");
-                        h.capture_error("Please ensure FFmpeg is installed correctly and is in your PATH");
+                        h.capture_error(
+                            "Please ensure FFmpeg is installed correctly and is in your PATH",
+                        );
                         return Err(e.into());
                     }
                 }
@@ -216,6 +275,9 @@ async fn main() -> anyhow::Result<()> {
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
     if cli.list_audio_devices {
+        eprintln!(
+            "Warning: '--list-audio-devices' is deprecated and will be removed in a future release. Use 'screenpipe audio list' instead."
+        );
         print_devices(&all_audio_devices);
         return Ok(());
     }
@@ -226,6 +288,18 @@ async fn main() -> anyhow::Result<()> {
             println!("  {}. {:?}", monitor.id(), monitor);
         }
         return Ok(());
+    }
+
+    if let Some(command) = cli.command {
+        match command {
+            Command::Audio { subcommand } => match subcommand {
+                AudioCommand::List => {
+                    let devices = list_audio_devices().await?;
+                    print_devices(&devices);
+                    return Ok(());
+                }
+            },
+        }
     }
 
     let mut audio_devices = Vec::new();
@@ -281,7 +355,6 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("no audio devices available. audio recording will be disabled.");
         } else {
             for device in &audio_devices {
-
                 let device_control = DeviceControl {
                     is_running: true,
                     is_paused: false,
@@ -417,10 +490,12 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "llm")]
     let llm = {
         match cli.enable_llm {
-            true => Some(screenpipe_core::LLM::new(screenpipe_core::ModelName::Llama)?),
+            true => Some(screenpipe_core::LLM::new(
+                screenpipe_core::ModelName::Llama,
+            )?),
             false => None,
         }
-        }; 
+    };
 
     #[cfg(feature = "llm")]
     debug!("LLM initialized");
@@ -526,7 +601,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 max_pos = i + c.len_utf8();
             }
-    
+
             format!("{}...", &s[..max_pos])
         } else {
             format!("{:<width$}", s, width = width)
@@ -542,7 +617,11 @@ async fn main() -> anyhow::Result<()> {
         println!("│ {:<19} │ {:<34} │", "", "all languages");
     } else {
         let total_languages = cli.language.len();
-        for (_, language) in languages_clone.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+        for (_, language) in languages_clone
+            .iter()
+            .enumerate()
+            .take(MAX_ITEMS_TO_DISPLAY)
+        {
             let language_str = format!("id: {}", language);
             let formatted_language = format_cell(&language_str, VALUE_WIDTH);
             println!("│ {:<19} │ {:<34} │", "", formatted_language);
@@ -662,8 +741,7 @@ async fn main() -> anyhow::Result<()> {
         h.shutdown();
         println!(
             "{}",
-            "telemetry is disabled. no data will be sent to external services."
-                .bright_green()
+            "telemetry is disabled. no data will be sent to external services.".bright_green()
         );
     }
 
@@ -701,7 +779,7 @@ async fn main() -> anyhow::Result<()> {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
-            // sleep for 5 seconds 
+            // sleep for 5 seconds
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("watched pid {} has stopped, initiating shutdown", pid);
@@ -724,7 +802,7 @@ async fn main() -> anyhow::Result<()> {
             let shutdown_tx_clone = shutdown_tx.clone();
             tokio::spawn(async move {
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                
+
                 tokio::select! {
                     result = run() => {
                         if let Err(e) = result {
@@ -745,7 +823,7 @@ async fn main() -> anyhow::Result<()> {
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
             let mut shutdown_rx = shutdown_tx_clone.subscribe();
-            
+
             loop {
                 tokio::select! {
                     result = run_ui() => {
@@ -896,7 +974,10 @@ async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let screenpipe_path = PathBuf::from(stdout.trim());
-        info!("screenpipe already in PATH at: {}", screenpipe_path.display());
+        info!(
+            "screenpipe already in PATH at: {}",
+            screenpipe_path.display()
+        );
         return Ok(());
     }
 
@@ -904,7 +985,11 @@ async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
     let current_exe = env::current_exe()?;
     let current_dir = match current_exe.parent() {
         Some(dir) => dir,
-        None => return Err(anyhow::anyhow!("failed to get current executable directory")),
+        None => {
+            return Err(anyhow::anyhow!(
+                "failed to get current executable directory"
+            ))
+        }
     };
     let screenpipe_bin = current_dir.join("screenpipe");
 
@@ -924,7 +1009,8 @@ async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
 
 fn persist_path_windows(new_path: PathBuf) -> anyhow::Result<()> {
     // Try to read the current PATH environment variable
-    let current_path = env::var("PATH").map_err(|e| anyhow::anyhow!("Failed to read current PATH: {}", e))?;
+    let current_path =
+        env::var("PATH").map_err(|e| anyhow::anyhow!("Failed to read current PATH: {}", e))?;
 
     // Check if the new path is already in the current PATH
     if current_path.contains(new_path.to_str().unwrap_or("")) {
@@ -973,7 +1059,10 @@ fn persist_path_unix(new_path: PathBuf) -> anyhow::Result<()> {
     // Check if the new path is already in the config file
     if let Ok(config_content) = fs::read_to_string(&shell_config_path) {
         if config_content.contains(new_path.to_str().unwrap()) {
-            info!("PATH is already persisted in {}", shell_config_path.display());
+            info!(
+                "PATH is already persisted in {}",
+                shell_config_path.display()
+            );
             return Ok(());
         }
     }
@@ -984,10 +1073,15 @@ fn persist_path_unix(new_path: PathBuf) -> anyhow::Result<()> {
     }
 
     // Append the new path entry to the config file
-    let mut file = fs::OpenOptions::new().append(true).open(&shell_config_path)?;
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(&shell_config_path)?;
     file.write_all(new_path_entry.as_bytes())?;
     info!("persisted PATH in {}", shell_config_path.display());
-    info!("please run 'source {}' or restart your shell to apply the changes.", shell_config_path.display());
+    info!(
+        "please run 'source {}' or restart your shell to apply the changes.",
+        shell_config_path.display()
+    );
 
     Ok(())
 }
@@ -1014,9 +1108,7 @@ async fn check_ffmpeg() -> anyhow::Result<()> {
     // TODO: this should also check if it can properly encode mp4 etc
     use tokio::process::Command;
 
-    let output = Command::new("ffmpeg")
-        .arg("-version")
-        .output().await?;
+    let output = Command::new("ffmpeg").arg("-version").output().await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

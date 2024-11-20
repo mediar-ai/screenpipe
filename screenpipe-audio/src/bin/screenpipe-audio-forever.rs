@@ -70,8 +70,20 @@ async fn main() -> Result<()> {
     let devices = list_audio_devices().await?;
 
     if args.list_audio_devices {
+        eprintln!(
+            "Warning: '--list-audio-devices' is deprecated and will be removed in a future release. Use 'screenpipe audio list' instead."
+        );
         print_devices(&devices);
         return Ok(());
+    }
+
+    if let Some(Command::Audio { subcommand }) = args.command {
+        match subcommand {
+            AudioCommand::List => {
+                print_devices(&devices);
+                return Ok(());
+            }
+        }
     }
 
     let devices = if args.audio_device.is_empty() {
