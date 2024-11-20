@@ -93,6 +93,10 @@ cocoa = "0.26.0"
 objc = "0.2.7"
 base64 = "0.22.1"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.52.0"
+windows-icons = { git = "https://github.com/tribhuwan-kumar/windows-icons.git" }
+
 [features]
 cudart = []
 metal = []

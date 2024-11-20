@@ -172,10 +172,6 @@ export function TimelineIconsSection({
   const loadAppIcon = useCallback(
     async (appName: string, appPath?: string) => {
       try {
-        // Check platform first to avoid unnecessary invokes
-        const p = platform();
-        if (p !== "macos") return; // Early return for unsupported platforms
-
         if (iconCache[appName]) return;
 
         const icon = await invoke<{ base64: string; path: string } | null>(
@@ -200,8 +196,6 @@ export function TimelineIconsSection({
 
   useEffect(() => {
     const loadIcons = async () => {
-      const p = platform();
-      if (p !== "macos") return;
 
       // Load icons for unique app names only
       processedBlocks.forEach((block) => {
