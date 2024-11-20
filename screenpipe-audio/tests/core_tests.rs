@@ -2,7 +2,7 @@
 mod tests {
     use chrono::Utc;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::stt::stt;
+    use screenpipe_audio::stt::{prepare_segments, stt};
     use screenpipe_audio::vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
     use screenpipe_audio::whisper::WhisperModel;
     use screenpipe_audio::{
@@ -15,8 +15,9 @@ mod tests {
     use std::process::Command;
     use std::str::FromStr;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
+    use tokio::sync::Mutex;
 
     fn setup() {
         // Initialize the logger with an info level filter
@@ -296,7 +297,7 @@ mod tests {
             tokio::sync::Mutex::new(Box::new(SileroVad::new().await.unwrap())),
         );
         let output_path = Arc::new(PathBuf::from("test_output"));
-        let audio_data = screenpipe_audio::pcm_decode(&"test_data/Arifi.wav")
+        let audio_data = screenpipe_audio::pcm_decode("test_data/Arifi.wav")
             .expect("Failed to decode audio file");
 
         let audio_input = AudioInput {
@@ -306,21 +307,29 @@ mod tests {
             device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
         };
 
-        let mut vad_engine_guard = vad_engine.lock().await;
+        let mut segments = prepare_segments(&audio_input, vad_engine.clone())
+            .await
+            .unwrap();
         let mut whisper_model_guard = whisper_model.lock().await;
-        let (transcription_result, _) = stt(
-            &audio_input,
-            &mut *whisper_model_guard,
-            Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
-            &mut **vad_engine_guard,
-            None,
-            &output_path,
-            true,
-            vec![],
-        )
-        .await
-        .unwrap();
-        drop(vad_engine_guard);
+
+        let mut transcription_result = String::new();
+        while let Some(segment) = segments.recv().await {
+            let (transcript, _) = stt(
+                &segment.samples,
+                audio_input.sample_rate,
+                &audio_input.device.to_string(),
+                &mut whisper_model_guard,
+                Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
+                None,
+                &output_path,
+                true,
+                vec![Language::English],
+            )
+            .await
+            .unwrap();
+
+            transcription_result.push_str(&transcript);
+        }
         drop(whisper_model_guard);
 
         debug!("Received transcription: {:?}", transcription_result);
@@ -372,17 +381,28 @@ mod tests {
         // Measure transcription time
         let start_time = Instant::now();
 
-        let _ = stt(
-            &audio_input,
-            &mut whisper_model,
-            Arc::new(AudioTranscriptionEngine::WhisperTiny),
-            &mut **vad_engine.lock().unwrap(),
-            None,
-            &output_path,
-            true,
-            vec![Language::Arabic],
-        )
-        .await;
+        let mut segments = prepare_segments(&audio_input, vad_engine.clone())
+            .await
+            .unwrap();
+
+        let mut transcription = String::new();
+        while let Some(segment) = segments.recv().await {
+            let (transcript, _) = stt(
+                &segment.samples,
+                audio_input.sample_rate,
+                &audio_input.device.to_string(),
+                &mut whisper_model,
+                Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
+                None,
+                &output_path,
+                true,
+                vec![Language::English],
+            )
+            .await
+            .unwrap();
+
+            transcription.push_str(&transcript);
+        }
 
         let elapsed_time = start_time.elapsed();
 

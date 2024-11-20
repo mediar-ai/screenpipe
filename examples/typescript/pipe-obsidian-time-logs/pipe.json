@@ -8,7 +8,7 @@
       },
       {
         "name": "obsidianPath",
-        "type": "string",
+        "type": "path",
         "default": "",
         "description": "Path to the Obsidian vault where time entries will be saved"
       },

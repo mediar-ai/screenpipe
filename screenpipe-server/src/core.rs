@@ -1,4 +1,5 @@
 use crate::cli::{CliVadEngine, CliVadSensitivity};
+use crate::db::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
@@ -200,7 +201,10 @@ async fn record_video(
             let db_chunk_callback = Arc::clone(&db_chunk_callback);
             let device_name = Arc::clone(&device_name);
             rt.spawn(async move {
-                if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path, &device_name).await {
+                if let Err(e) = db_chunk_callback
+                    .insert_video_chunk(&file_path, &device_name)
+                    .await
+                {
                     error!("Failed to insert new video chunk: {}", e);
                 }
                 debug!("record_video: Inserted new video chunk: {}", file_path);
@@ -407,6 +411,10 @@ async fn process_audio_result(
         return Ok(None);
     }
 
+    let speaker = get_or_create_speaker_from_embedding(db, &result.speaker_embedding).await?;
+
+    info!("Detected speaker: {:?}", speaker);
+
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
     let mut chunk_id: Option<i64> = None;
@@ -440,6 +448,7 @@ async fn process_audio_result(
                     0,
                     &transcription_engine,
                     &result.input.device,
+                    Some(speaker.id),
                 )
                 .await
             {
@@ -462,4 +471,17 @@ async fn process_audio_result(
         ),
     }
     Ok(chunk_id)
+}
+
+async fn get_or_create_speaker_from_embedding(
+    db: &DatabaseManager,
+    embedding: &[f32],
+) -> Result<Speaker, anyhow::Error> {
+    let speaker = db.get_speaker_from_embedding(embedding).await?;
+    if let Some(speaker) = speaker {
+        Ok(speaker)
+    } else {
+        let speaker = db.insert_speaker(embedding).await?;
+        Ok(speaker)
+    }
 }

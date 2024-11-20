@@ -14,7 +14,10 @@ mod tests {
     #[tokio::test]
     async fn test_insert_and_search_ocr() {
         let db = setup_test_db().await;
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
@@ -62,6 +65,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -100,6 +104,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -140,7 +145,10 @@ mod tests {
         let db = setup_test_db().await;
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
@@ -162,6 +170,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -203,7 +212,10 @@ mod tests {
         let start_time = Utc::now();
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
@@ -225,6 +237,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -257,6 +270,7 @@ mod tests {
             1,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -355,7 +369,10 @@ mod tests {
         let start_time = Utc::now();
 
         // Insert OCR data
-        let _ = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
@@ -377,6 +394,7 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -407,6 +425,7 @@ mod tests {
             1,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
         )
         .await
         .unwrap();
@@ -452,5 +471,73 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_insert_and_search_speaker() {
+        let db = setup_test_db().await;
+
+        let mut speaker_ids = Vec::new();
+        for i in 0..5 {
+            let sample_embedding = vec![0.1 * (i as f32 + 1.0); 512];
+            let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+            speaker_ids.push(speaker.id);
+        }
+        let speaker_id = speaker_ids[0];
+        assert_eq!(speaker_id, 1);
+
+        let sample_embedding = vec![0.1; 512];
+        let speaker = db
+            .get_speaker_from_embedding(&sample_embedding)
+            .await
+            .unwrap();
+        assert_eq!(speaker.unwrap().id, 1);
+    }
+
+    #[tokio::test]
+    async fn test_update_speaker_metadata() {
+        let db = setup_test_db().await;
+
+        let sample_embedding = vec![0.1; 512];
+        let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+        assert_eq!(speaker.id, 1);
+
+        db.update_speaker_metadata(speaker.id, "test metadata")
+            .await
+            .unwrap();
+
+        // Add verification
+        let speaker = db.get_speaker_by_id(speaker.id).await.unwrap();
+        assert_eq!(speaker.metadata, "test metadata");
+    }
+
+    #[tokio::test]
+    async fn test_get_speaker_by_id() {
+        let db = setup_test_db().await;
+
+        let sample_embedding = vec![0.1; 512];
+        let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+        assert_eq!(speaker.id, 1);
+
+        let speaker = db.get_speaker_by_id(speaker.id).await.unwrap();
+        assert_eq!(speaker.id, 1);
+    }
+
+    #[tokio::test]
+    async fn test_update_speaker_name() {
+        let db = setup_test_db().await;
+
+        let sample_embedding = vec![0.1; 512];
+        let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+        assert_eq!(speaker.id, 1);
+
+        db.update_speaker_name(speaker.id, "test name")
+            .await
+            .unwrap();
+
+        let speaker = db.get_speaker_by_id(speaker.id).await.unwrap();
+
+        println!("Speaker: {:?}", speaker);
+        assert_eq!(speaker.name, "test name");
     }
 }

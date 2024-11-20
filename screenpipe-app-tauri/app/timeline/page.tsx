@@ -187,10 +187,10 @@ export default function Timeline() {
     () =>
       throttle((e: React.WheelEvent<HTMLDivElement>) => {
         const isWithinAiPanel = document
-          .querySelector('.ai-panel')
+          .querySelector(".ai-panel")
           ?.contains(e.target as Node);
         const isWithinAudioPanel = document
-          .querySelector('.audio-transcript-panel')
+          .querySelector(".audio-transcript-panel")
           ?.contains(e.target as Node);
         const isWithinTimelineDialog = document
           .querySelector('[role="dialog"]')
@@ -245,10 +245,10 @@ export default function Timeline() {
   useEffect(() => {
     const preventScroll = (e: WheelEvent) => {
       const isWithinAiPanel = document
-        .querySelector('.ai-panel')
+        .querySelector(".ai-panel")
         ?.contains(e.target as Node);
       const isWithinAudioPanel = document
-        .querySelector('.audio-transcript-panel')
+        .querySelector(".audio-transcript-panel")
         ?.contains(e.target as Node);
       const isWithinTimelineDialog = document
         .querySelector('[role="dialog"]')
@@ -301,14 +301,6 @@ export default function Timeline() {
         >
           <RotateCcw className="h-4 w-4" />
         </button>
-
-        <div
-          className="fixed inset-0 pointer-events-none z-50"
-          style={{
-            background:
-              "repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px)",
-          }}
-        />
 
         <div className="flex-1 relative min-h-0">
           {isLoading && (

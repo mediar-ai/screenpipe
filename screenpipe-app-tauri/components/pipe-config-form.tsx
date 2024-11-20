@@ -26,6 +26,8 @@ import { MemoizedReactMarkdown } from "./markdown";
 import { CodeBlock } from "./ui/codeblock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { open } from "@tauri-apps/plugin-dialog";
+import { FolderOpen } from "lucide-react";
 
 type PipeConfigFormProps = {
   pipe: Pipe;
@@ -64,12 +66,22 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Submitting config:", config);
+    console.log("submitting config:", config);
+    
+    if (!config?.fields) {
+      console.log("no config fields found, aborting");
+      return;
+    }
+
     try {
       toast({
-        title: "Updating pipe configuration",
-        description: "Please wait...",
+        title: "updating pipe configuration",
+        description: "please wait...",
       });
+
+      if (!pipe.id) {
+        throw new Error("pipe id is missing");
+      }
 
       const response = await fetch(`http://localhost:3030/pipes/update`, {
         method: "POST",
@@ -83,10 +95,14 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update pipe config");
+        const errorText = await response.text();
+        throw new Error(`failed to update pipe config: ${errorText}`);
       }
 
-      onConfigSave(config || {});
+      const result = await response.json();
+      console.log("update response:", result);
+
+      onConfigSave(config);
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -298,6 +314,65 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
                 </Tooltip>
               </TooltipProvider>
             </div>
+          </div>
+        );
+      case "path":
+        return (
+          <div className="flex items-center space-x-2">
+            <Input
+              id={field.name}
+              type="text"
+              value={value}
+              onChange={(e) => handleInputChange(field.name, e.target.value)}
+              autoCorrect="off"
+              spellCheck="false"
+            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={async () => {
+                      try {
+                        const selectedPath = await open({
+                          directory: true,
+                          multiple: false,
+                        });
+                        if (selectedPath) {
+                          handleInputChange(field.name, selectedPath);
+                        }
+                      } catch (error) {
+                        console.error("failed to select path:", error);
+                      }
+                    }}
+                    className="h-8 w-8"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Select folder</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={resetToDefault}
+                    className="h-8 w-8"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Reset to default</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         );
       default:
