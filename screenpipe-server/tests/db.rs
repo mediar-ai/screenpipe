@@ -616,4 +616,48 @@ mod tests {
         println!("Speaker: {:?}", speaker);
         assert_eq!(speaker.name, "test name");
     }
+
+    #[tokio::test]
+    async fn test_get_unnamed_speakers() {
+        let db = setup_test_db().await;
+
+        // Insert a speaker with empty name
+        let sample_embedding = vec![0.1; 512];
+        let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+
+        // Insert audio data
+        let audio_chunk_id = db.insert_audio_chunk("audio1.mp4").await.unwrap();
+        println!("Inserted audio chunk with id: {}", audio_chunk_id);
+
+        // Insert transcription
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "test transcription",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            Some(speaker.id),
+        )
+        .await
+        .unwrap();
+
+        // Get unnamed speakers
+        let unnamed_speakers = db.get_unnamed_speakers(10, 0).await.unwrap();
+
+        assert_eq!(unnamed_speakers.len(), 1, "Should find one unnamed speaker");
+
+        let speaker = &unnamed_speakers[0];
+        assert_eq!(speaker.id, 1);
+        assert!(speaker.name.is_empty());
+
+        let metadata: serde_json::Value =
+            serde_json::from_str(&speaker.metadata).expect("Metadata should be valid JSON");
+
+        let audio_paths = metadata["audio_paths"]
+            .as_array()
+            .expect("Audio paths should be an array");
+
+        assert_eq!(audio_paths.len(), 1);
+        assert_eq!(audio_paths[0].as_str().unwrap(), "audio1.mp4");
+    }
 }
