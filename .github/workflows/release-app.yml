@@ -218,7 +218,7 @@ jobs:
         shell: bash
         working-directory: ./screenpipe-app-tauri
         run: |
-          ls . 
+          ls .
           bun install
 
       # - name: Setup tmate session # HACK
@@ -341,6 +341,26 @@ jobs:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
+
+      - name: Upload screenpipe binary for signing
+        id: upload-unsigned-artifact
+        if: matrix.args == '--target x86_64-pc-windows-msvc'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-screenpipe
+          path: ./screenpipe-app-tauri/src-tauri/target/release/screenpipe.exe
+
+      - name: Sign artifact
+        if: matrix.args == '--target x86_64-pc-windows-msvc'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+          organization-id: '9cd36272-53da-46a4-9d5c-a0870243ba97'
+          project-slug: 'screenpipe'
+          signing-policy-slug: 'test-signing'
+          github-artifact-id: '${{ steps.upload-unsigned-artifact.outputs.artifact-id }}'
+          wait-for-completion: true
+          output-artifact-directory: './screenpipe-app-tauri/src-tauri/target/release/screenpipe.exe'
 
       - name: Upload Assets to CrabNebula Cloud
         uses: crabnebula-dev/cloud-release@v0.2.6
