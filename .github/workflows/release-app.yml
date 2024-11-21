@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: create draft release
-        uses: crabnebula-dev/cloud-release@v0.2
+        uses: crabnebula-dev/cloud-release@v0.2.6
         with:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
@@ -96,7 +96,7 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "--features mkl" # TODO CUDA
+            args: "" # # ! we're not supporting mkl nor cuda for linux anymore, too much effort, nobody cares
             tauri-args: ""
           - platform: [self-hosted, Windows, X64] # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
@@ -206,13 +206,13 @@ jobs:
       #   run: |
       #     pip install mkl mkl-devel mkl-static
 
-      - name: Install MKL in Linux
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          pip install mkl mkl-devel mkl-static
-          mkdir -p /opt/intel/mkl
-          cp -rfv ~/.local/lib/* ~/.local/include/* /opt/intel/mkl/
-          sudo cp -rfv ~/.local/lib/* /usr/lib/x86_64-linux-gnu/
+      # - name: Install MKL in Linux
+      #   if: matrix.platform == 'ubuntu-22.04'
+      #   run: |
+      #     pip install mkl mkl-devel mkl-static
+      #     mkdir -p /opt/intel/mkl
+      #     cp -rfv ~/.local/lib/* ~/.local/include/* /opt/intel/mkl/
+      #     sudo cp -rfv ~/.local/lib/* /usr/lib/x86_64-linux-gnu/
 
       - name: Install frontend dependencies
         shell: bash
@@ -343,7 +343,7 @@ jobs:
           tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0.2
+        uses: crabnebula-dev/cloud-release@v0.2.6
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
