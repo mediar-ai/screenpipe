@@ -256,10 +256,6 @@ jobs:
             export PKG_CONFIG_ALLOW_CROSS=1
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
           fi
-          if [[ "${{ matrix.args }}" == "--target x86_64-pc-windows-msvc" ]]; then
-            export RUSTFLAGS="-C target-feature=+crt-static"
-            export KNF_STATIC_CRT="1"
-          fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
 
       # Run pre build again to copy the CLI into app
