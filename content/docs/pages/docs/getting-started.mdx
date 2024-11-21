@@ -10,7 +10,6 @@ for non technical users or those who want to get started quickly, we recommend g
 
 quickly start the CLI on MacOS with:
 ```bash copy
-brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
 brew install screenpipe
 screenpipe
 ```
@@ -67,31 +66,31 @@ for users preferring full control or customization, building the app manually fr
 ### **option 1: build from source (for advanced users)**
 
 1. start by installing rust and all necessary dependencies:
-   ```bash copy
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   brew install pkg-config ffmpeg jq cmake wget
-   ```
+```bash copy
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+brew install pkg-config ffmpeg jq cmake wget
+```
 
 2. install bun cli (required for building):
-   ```bash copy
-   curl -fsSL https://bun.sh/install | bash
-   ```
+```bash copy
+curl -fsSL https://bun.sh/install | bash
+```
 
 3. clone the screenpipe repository:
-   ```bash copy
-   git clone https://github.com/mediar-ai/screenpipe
-   cd screenpipe
-   ```
+```bash copy
+git clone https://github.com/mediar-ai/screenpipe
+cd screenpipe
+```
 
 4. build the project with:
-   ```bash copy
-   cargo build --release --features metal
-   ```
+```bash copy
+cargo build --release --features metal
+```
 
 5. finally, run screenpipe:
-   ```bash copy
-   ./target/release/screenpipe
-   ```
+```bash copy
+./target/release/screenpipe
+```
 
 
 add this to your vscode settings in the root of the project `.vscode/settings.json`:
@@ -132,20 +131,20 @@ bun tauri build
 ### **option 2: homebrew installation (installs only CLI)**
 
 1. to install screenpipe using homebrew, simply execute the following commands:
-   ```bash copy
-   brew update
-   brew install screenpipe
-   ```
+```bash copy
+brew update
+brew install screenpipe
+```
 
 2. once installed, run screenpipe with the following:
-   ```bash copy
-   screenpipe
-   ```
+```bash copy
+screenpipe
+```
 
 3. optional flags:
-   ```bash copy
-   screenpipe -h
-   ```
+```bash copy
+screenpipe -h
+```
 
 if you require additional configurations such as running in debug mode or switching to webrtc for audio processing, you can refer to the official [screenpipe cli documentation](https://github.com/mediar-ai/screenpipe).
 
@@ -158,9 +157,6 @@ if you require additional configurations such as running in debug mode or switch
 <MotionDiv delay={1.7}>
 
 ### **steps to install on windows**
-
-> This is experimental support for Windows build. This assumes you already have the CUDA Toolkit installed and the CUDA_PATH set to my CUDA v12.6 folder.
-> Replace `V:\projects` and `V:\packages` with your own folders.
 
 If this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
 
@@ -185,7 +181,9 @@ SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
 cd V:\projects\screenpipe
 
 rustup default stable
-cargo build --release --features cuda
+cargo build --release 
+# add --features cuda for gpu support (experimental)
+# add --features mkl for intel accelerated cpu support (experimental)
 
 cd screenpipe-app-tauri
 bun install
@@ -202,27 +200,29 @@ bun tauri build
 ### **option 1: build from source**
 
 1. install dependencies with the following commands:
-   ```bash copy
-   sudo apt-get install -y ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
+```bash copy
+sudo apt-get install -y ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
 2. install bun cli (required for building):
-   ```bash copy
-   curl -fsSL https://bun.sh/install | bash
-   ```
+```bash copy
+curl -fsSL https://bun.sh/install | bash
+```
 
 3. clone the repository and build the application:
-   ```bash copy
-   git clone https://github.com/mediar-ai/screenpipe
-   cd screenpipe
-   cargo build --release
-   ```
+```bash copy
+git clone https://github.com/mediar-ai/screenpipe
+cd screenpipe
+cargo build --release
+# add --features cuda for gpu support (experimental)
+# add --features mkl for intel accelerated cpu support (experimental)
+```
 
 4. to run the application, use:
-   ```bash copy
-   ./target/release/screenpipe
-   ```
+```bash copy
+./target/release/screenpipe
+```
 
 5. to build the desktop app:
 
@@ -242,21 +242,21 @@ bun tauri build
 screenpipe can be easily installed on nix-based systems. follow the instructions below:
 
 1. run in a nix shell:
-   ```bash copy
-   nix-shell -p screen-pipe
-   ```
+```bash copy
+nix-shell -p screen-pipe
+```
 
 2. or add it to your system packages:
-   ```nix copy
-   environment.systemPackages = with pkgs; [
-     screen-pipe
-   ];
-   ```
+```nix copy
+environment.systemPackages = with pkgs; [
+   screen-pipe
+];
+```
 
 after editing the configuration, rebuild your system using:
-   ```bash copy
-   sudo nixos-rebuild switch
-   ```
+```bash copy
+sudo nixos-rebuild switch
+```
 
 </MotionDiv>
 
@@ -295,6 +295,7 @@ you can use screenpipe in your business either by:
 - running the app on your customer's computer
 - embedding the library or CLI in your own software
 - running the CLI in the cloud and forward the video/audio through SSH
+- using our Microsoft Remote Desktop integration 
 
 [book a demo with our team](https://cal.com/louis030195/screenpipe-for-businesses)
 
