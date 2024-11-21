@@ -11,7 +11,7 @@ fn main() {
         io::copy(&mut body.as_bytes(), &mut out).expect("failed to copy content");
         let status = Command::new("unzip")
             .args(["onnxruntime-win-x64-gpu-1.19.2.zip"])
-            .output()
+            .status()
             .expect("failed to execute process");
         if !status.success() {
             panic!("failed to install onnx binary");
