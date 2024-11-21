@@ -119,18 +119,24 @@ pub async fn continuous_capture(
                 })
             })
         }
-        CaptureSource::RdpSession(session_id) => Box::new(move || {
-            Box::pin(async move {
-                match capture_rdp_session(&session_id).await {
-                    Ok(image) => {
-                        let window_images = vec![];
-                        let image_hash = 0;
-                        Some((image, window_images, image_hash, Duration::from_secs(0)))
-                    }
-                    Err(_) => None,
-                }
+        CaptureSource::RdpSession(session_id) => {
+            let session_id = session_id.to_string();
+            let ignore_list = ignore_list.to_vec();
+            let include_list = include_list.to_vec();
+            
+            Box::new(move || {
+                let session_id = session_id.clone();
+                let ignore_list = ignore_list.clone();
+                let include_list = include_list.clone();
+                
+                Box::pin(async move {
+                    capture_rdp_session(&session_id, &ignore_list, &include_list).await
+                        .map(|(image, window_images, image_hash, capture_duration)| 
+                            (image, window_images, image_hash, capture_duration))
+                        .ok()
+                })
             })
-        }),
+        }
     };
 
     let mut frame_counter: u64 = 0;
