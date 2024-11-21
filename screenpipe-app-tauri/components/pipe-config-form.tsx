@@ -467,7 +467,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
         </div>
       ))}
       {config?.fields && config.fields.length > 0 && (
-        <Button type="submit">save configuration</Button>
+        <Button type="submit" onClick={handleSubmit}>save configuration</Button>
       )}
     </form>
   );
