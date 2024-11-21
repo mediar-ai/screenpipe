@@ -197,9 +197,10 @@ jobs:
             libglib2.0-dev
 
       - name: Install dependencies
-        if: matrix.platform == 'macos-latest'
         run: |
+          brew unlink pkg-config@0.29.2 || true
           brew install ffmpeg pkg-config
+          brew link --overwrite pkg-config
 
       # - name: Install MKL
       #   if: matrix.args == '--target x86_64-pc-windows-msvc'
