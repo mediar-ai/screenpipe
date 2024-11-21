@@ -45,7 +45,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          brew unlink pkg-config@0.29.2 || true
           brew install ffmpeg pkg-config
+          brew link --overwrite pkg-config
 
       - uses: actions/cache@v4
         with:
