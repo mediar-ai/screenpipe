@@ -41,8 +41,7 @@ const config = {
 			'libavfilter-dev',
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
-			'libxdo-dev',
-			'intel-openmp'
+			'libxdo-dev'
 		],
 	},
 	macos: {
