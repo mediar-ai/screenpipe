@@ -37,7 +37,7 @@ chrono = { version = "0.4.31", features = ["serde"] }
 candle = { workspace = true }
 candle-nn = { workspace = true }
 candle-transformers = { workspace = true }
-vad-rs = "0.1.3"
+vad-rs = "0.1.4"
 tokenizers = { workspace = true }
 anyhow = "1.0.86"
 byteorder = "1.5.0"
@@ -76,12 +76,12 @@ lazy_static = { version = "1.4.0" }
 realfft = "3.4.0"
 regex = "1.11.0"
 ndarray = "0.16"
-ort = "=2.0.0-rc.5"
+ort = "=2.0.0-rc.6"
 knf-rs = { git = "https://github.com/thewh1teagle/knf-rs.git" }
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
-ort = { version = "=2.0.0-rc.5", features = [
+ort = { version = "=2.0.0-rc.6", features = [
   "download-binaries",
   "copy-dylibs",
   "directml",
