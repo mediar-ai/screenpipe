@@ -78,7 +78,7 @@ regex = "1.11.0"
 ndarray = "0.16"
 ort = "=2.0.0-rc.6"
 knf-rs = { git = "https://github.com/thewh1teagle/knf-rs.git" }
-
+ort-sys = "=2.0.0-rc.8"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "=2.0.0-rc.6", features = [
