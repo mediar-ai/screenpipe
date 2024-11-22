@@ -1,9 +1,6 @@
 # # Run for macOS
 # act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P macos-latest=-self-hosted
 
-# # Run for Linux
-# act -W .github/workflows/release-app.yml --container-architecture linux/amd64 -j publish-tauri -P ubuntu-22.04
-
 name: Release App
 
 on:
@@ -95,9 +92,6 @@ jobs:
             args: "--target x86_64-apple-darwin --features metal,beta"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
-          - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "" # # ! we're not supporting mkl nor cuda for linux anymore, too much effort, nobody cares
-            tauri-args: ""
           - platform: [self-hosted, Windows, X64] # Windows x86_64
             args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
             pre-build-args: "" # --openblas
@@ -176,31 +170,6 @@ jobs:
             screenpipe-app-tauri/src-tauri/tesseract-*
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build
 
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            libappindicator3-1 \
-            libappindicator3-dev \
-            libwebkit2gtk-4.0-dev \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            wget \
-            libasound2-dev \
-            libgtk-3-dev \
-            libbsd-dev \
-            libmd-dev \
-            libssl-dev \
-            libglib2.0-dev \
-            # Add these new dependencies:
-            libgdk-pixbuf2.0-dev \
-            shared-mime-info \
-            desktop-file-utils \
-            libgtk-3-0
-
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
         run: |
@@ -208,21 +177,12 @@ jobs:
           brew install ffmpeg pkg-config
           brew link --overwrite pkg-config
 
-      # - name: Install MKL
-      #   if: matrix.args == '--target x86_64-pc-windows-msvc'
-      #   run: |
-      #     pip install mkl mkl-devel mkl-static
-
       - name: Install frontend dependencies
         shell: bash
         working-directory: ./screenpipe-app-tauri
         run: |
           ls . 
           bun install
-
-      # - name: Setup tmate session # HACK
-      #   if: matrix.args == '--target x86_64-pc-windows-msvc'
-      #   uses: mxschmitt/action-tmate@v3
 
       - name: Install vcpkg
         if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
@@ -270,18 +230,6 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
-      - name: Free Disk Space (Ubuntu)
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
@@ -300,9 +248,9 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
           # Optimize for build speed on Windows
-          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'thin' || matrix.platform == 'ubuntu-22.04' && 'true' || 'false' }}
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '2' || matrix.platform == 'ubuntu-22.04' && 'z' || '3' }}
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || matrix.platform == 'ubuntu-22.04' && '1' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
           # Enable incremental compilation for Windows
           CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
           # Windows specific optimizations (only applied when building for Windows)
