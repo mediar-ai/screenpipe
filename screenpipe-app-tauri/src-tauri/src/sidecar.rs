@@ -41,7 +41,7 @@ pub async fn kill_all_sreenpipes(
         }
         #[cfg(target_os = "windows")]
         {
-use std::os::windows::process::CommandExt;
+            use std::os::windows::process::CommandExt;
 
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::process::Command::new("taskkill")
@@ -285,13 +285,12 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if enable_ui_monitoring {
         args.push("--enable-ui-monitoring");
     }
-
+    let exe_dir = env::current_exe()
+        .expect("Failed to get current executable path")
+        .parent()
+        .expect("Failed to get parent directory of executable")
+        .to_path_buf();
     if cfg!(windows) {
-        let exe_dir = env::current_exe()
-            .expect("Failed to get current executable path")
-            .parent()
-            .expect("Failed to get parent directory of executable")
-            .to_path_buf();
         let tessdata_path = exe_dir.join("tessdata");
         let mut c = app
             .shell()
@@ -303,9 +302,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
+        let mut c = c.args(&args);
 
-
-        let c = c.args(&args);
+        c = c.env("SCREENPIPE_EXE_DIR", exe_dir.display().to_string());
 
         let (_, child) = c.spawn().map_err(|e| {
             error!("Failed to spawn sidecar: {}", e);
@@ -323,7 +322,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
     }
 
-    let command = command.args(&args);
+    let mut command = command.args(&args);
+
+    command = command.env("SCREENPIPE_EXE_DIR", exe_dir.display().to_string());
 
     let result = command.spawn();
     if let Err(e) = result {
