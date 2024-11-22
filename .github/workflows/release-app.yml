@@ -177,7 +177,7 @@ jobs:
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'big-linux'
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt update
           sudo apt install -y \
@@ -194,7 +194,12 @@ jobs:
             libbsd-dev \
             libmd-dev \
             libssl-dev \
-            libglib2.0-dev
+            libglib2.0-dev \
+            # Add these new dependencies:
+            libgdk-pixbuf2.0-dev \
+            shared-mime-info \
+            desktop-file-utils \
+            libgtk-3-0
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
