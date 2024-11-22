@@ -1,7 +1,7 @@
 #[cfg(target_os = "windows")]
 use windows::Win32::System::RemoteDesktop::{
     WTSActive, WTSEnumerateSessionsW, WTSQuerySessionInformationW, WTS_CURRENT_SERVER_HANDLE,
-    WTS_INFO_CLASS, WTS_SESSION_INFOW,
+    WTS_INFO_CLASS, WTS_SESSION_INFOW, WTSVirtualChannelQuery, WTSFreeMemory, WTSQueryUserToken,
 };
 
 #[cfg(target_os = "windows")]
@@ -28,12 +28,97 @@ use windows::Win32::System::Memory::{LocalAlloc, LPTR};
 #[cfg(target_os = "windows")]
 use windows::core::PWSTR;
 
+#[cfg(target_os = "windows")]
+use windows::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
+
 use std::ffi::c_void;
 use std::fs;
 use std::path::Path;
 
 #[cfg(target_os = "windows")]
+use windows::Win32::Security::{
+    AdjustTokenPrivileges, LookupPrivilegeValueW, TOKEN_ADJUST_PRIVILEGES,
+    LUID_AND_ATTRIBUTES
+};
+
+#[cfg(target_os = "windows")]
+fn enable_required_privileges() -> anyhow::Result<()> {
+    use windows::Win32::Foundation::CloseHandle;
+
+    unsafe {
+        let mut token_handle = HANDLE::default();
+        OpenProcessToken(
+            GetCurrentProcess(),
+            TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES,
+            &mut token_handle,
+        )?;
+
+        // List of privileges we need
+        let required_privilege_names = [
+            "SeTcbPrivilege",
+            "SeDebugPrivilege",
+            "SeImpersonatePrivilege",
+            "SeAssignPrimaryTokenPrivilege",
+            "SeIncreaseQuotaPrivilege",
+        ];
+
+        for privilege_name in required_privilege_names.iter() {
+            let mut tp = TOKEN_PRIVILEGES {
+                PrivilegeCount: 1,
+                Privileges: [LUID_AND_ATTRIBUTES {
+                    Luid: windows::Win32::Foundation::LUID::default(),
+                    Attributes: SE_PRIVILEGE_ENABLED,
+                }],
+            };
+
+            let priv_name = format!("{}\0", privilege_name);
+            let utf16_name = priv_name.encode_utf16().collect::<Vec<u16>>();
+            
+            println!("attempting to enable {}...", privilege_name);
+            
+            if let Err(e) = LookupPrivilegeValueW(
+                None,
+                PWSTR(utf16_name.as_ptr() as *mut u16),
+                &mut tp.Privileges[0].Luid,
+            ) {
+                println!("warning: failed to lookup {}: {:?}", privilege_name, e);
+                continue;
+            }
+
+            match AdjustTokenPrivileges(
+                token_handle,
+                false,
+                Some(&tp),
+                0,
+                None,
+                None,
+            ) {
+                Ok(_) => {
+                    let result = windows::Win32::Foundation::GetLastError();
+                    if result == windows::Win32::Foundation::ERROR_SUCCESS {
+                        println!("successfully enabled {}", privilege_name);
+                    } else {
+                        println!("failed to enable {} (error: {:?})", privilege_name, result);
+                    }
+                }
+                Err(e) => println!("failed to adjust privileges for {}: {:?}", privilege_name, e),
+            }
+        }
+
+        CloseHandle(token_handle);
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
 async fn capture_all_sessions() -> anyhow::Result<()> {
+    use windows::Win32::Foundation::CloseHandle;
+
+    println!("enabling privileges...");
+    if let Err(e) = enable_required_privileges() {
+        println!("failed to enable privileges: {:?}", e);
+    }
+    
     // Create screenshots directory if it doesn't exist
     let screenshots_dir = Path::new("screenshots");
     if !screenshots_dir.exists() {
@@ -43,6 +128,10 @@ async fn capture_all_sessions() -> anyhow::Result<()> {
 
     loop {
         println!("capturing new round of screenshots...");
+        
+        // Check privileges before attempting capture
+        println!("checking current privileges...");
+        check_rdp_permissions().await?;
         
         let mut session_count: u32 = 0;
         let mut sessions: *mut WTS_SESSION_INFOW = std::ptr::null_mut();
@@ -63,110 +152,108 @@ async fn capture_all_sessions() -> anyhow::Result<()> {
 
         for session in sessions_slice {
             if session.State == WTSActive {
-                println!("processing session {}", session.SessionId);
+                println!("processing session {} (state: {:?})", session.SessionId, session.State);
 
-                // Get session username to verify we have access
-                let mut bytes_returned: u32 = 0;
-                let mut username = PWSTR::null();
-
+                // Get user token for the session
+                let mut user_token = HANDLE::default();
                 unsafe {
-                    match WTSQuerySessionInformationW(
-                        WTS_CURRENT_SERVER_HANDLE,
-                        session.SessionId,
-                        WTS_INFO_CLASS(5), // WTSUserName
-                        &mut username,
-                        &mut bytes_returned,
-                    ) {
+                    match WTSQueryUserToken(session.SessionId, &mut user_token) {
                         Ok(_) => {
-                            let username_str = username.to_string()?;
-                            println!(
-                                "session {} belongs to user: {}",
-                                session.SessionId, username_str
-                            );
+                            println!("successfully got user token for session {}", session.SessionId);
+                            // Impersonate the user
+                            if let Ok(_) = ImpersonateLoggedOnUser(user_token) {
+                                // Now create DC and capture screen
+                                let dc_name = format!("DISPLAY#{}\0", session.SessionId);
+                                println!("creating DC with name: {}", dc_name.trim_end_matches('\0'));
+
+                                let hdc = unsafe {
+                                    CreateDCA(
+                                        windows::core::PCSTR(b"DISPLAY\0".as_ptr()),
+                                        windows::core::PCSTR(dc_name.as_bytes().as_ptr()),
+                                        None,
+                                        None,
+                                    )
+                                };
+
+                                // Create compatible DC and bitmap
+                                let hdc_mem = unsafe { CreateCompatibleDC(hdc) };
+                                let hbitmap = unsafe {
+                                    CreateCompatibleBitmap(
+                                        hdc, 1920, // width - you might want to get this from session info
+                                        1080, // height - you might want to get this from session info
+                                    )
+                                };
+
+                                unsafe {
+                                    SelectObject(hdc_mem, hbitmap);
+                                    BitBlt(hdc_mem, 0, 0, 1920, 1080, hdc, 0, 0, SRCCOPY)?;
+
+                                    // Setup bitmap info
+                                    let mut bi = BITMAPINFO {
+                                        bmiHeader: BITMAPINFOHEADER {
+                                            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                                            biWidth: 1920,
+                                            biHeight: -1080, // Negative for top-down
+                                            biPlanes: 1,
+                                            biBitCount: 32,
+                                            biCompression: 0,
+                                            biSizeImage: 0,
+                                            biXPelsPerMeter: 0,
+                                            biYPelsPerMeter: 0,
+                                            biClrUsed: 0,
+                                            biClrImportant: 0,
+                                        },
+                                        ..Default::default()
+                                    };
+
+                                    // Get the actual pixels
+                                    let mut buffer = vec![0u8; (1920 * 1080 * 4) as usize];
+                                    GetDIBits(
+                                        hdc_mem,
+                                        hbitmap,
+                                        0,
+                                        1080,
+                                        Some(buffer.as_mut_ptr() as *mut std::ffi::c_void),
+                                        &mut bi,
+                                        DIB_RGB_COLORS,
+                                    );
+
+                                    // Save the image
+                                    let timestamp = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)?
+                                        .as_secs();
+
+                                    let filename = format!(
+                                        "screenshots/session_{}_capture_{}.png",
+                                        session.SessionId, timestamp
+                                    );
+                                    save_buffer_as_png(&buffer, 1920, 1080, &filename)?;
+
+                                    // Cleanup
+                                    DeleteObject(hbitmap);
+                                    DeleteDC(hdc_mem);
+                                    DeleteDC(hdc);
+                                }
+
+                                // Revert impersonation when done
+                                RevertToSelf()?;
+                            }
+                            CloseHandle(user_token);
                         }
                         Err(e) => {
                             println!(
-                                "warning: couldn't get username for session {}: {:?}",
-                                session.SessionId, e
+                                "failed to get user token for session {}: {:?}", 
+                                session.SessionId, 
+                                e
                             );
+                            println!("please ensure you're running as SYSTEM using: psexec -s -i cmd.exe");
+                            println!("or try: runas /user:SYSTEM <program>");
+                            return Err(anyhow::anyhow!("Access denied - needs to run as SYSTEM"));
                         }
                     }
                 }
-
-                // Create DC for this session
-                let dc_name = format!("DISPLAY#{}\0", session.SessionId);
-                println!("creating DC with name: {}", dc_name.trim_end_matches('\0'));
-
-                let hdc = unsafe {
-                    CreateDCA(
-                        windows::core::PCSTR(b"DISPLAY\0".as_ptr()),
-                        windows::core::PCSTR(dc_name.as_bytes().as_ptr()),
-                        None,
-                        None,
-                    )
-                };
-
-                // Create compatible DC and bitmap
-                let hdc_mem = unsafe { CreateCompatibleDC(hdc) };
-                let hbitmap = unsafe {
-                    CreateCompatibleBitmap(
-                        hdc, 1920, // width - you might want to get this from session info
-                        1080, // height - you might want to get this from session info
-                    )
-                };
-
-                unsafe {
-                    SelectObject(hdc_mem, hbitmap);
-                    BitBlt(hdc_mem, 0, 0, 1920, 1080, hdc, 0, 0, SRCCOPY)?;
-
-                    // Setup bitmap info
-                    let mut bi = BITMAPINFO {
-                        bmiHeader: BITMAPINFOHEADER {
-                            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                            biWidth: 1920,
-                            biHeight: -1080, // Negative for top-down
-                            biPlanes: 1,
-                            biBitCount: 32,
-                            biCompression: 0,
-                            biSizeImage: 0,
-                            biXPelsPerMeter: 0,
-                            biYPelsPerMeter: 0,
-                            biClrUsed: 0,
-                            biClrImportant: 0,
-                        },
-                        ..Default::default()
-                    };
-
-                    // Get the actual pixels
-                    let mut buffer = vec![0u8; (1920 * 1080 * 4) as usize];
-                    GetDIBits(
-                        hdc_mem,
-                        hbitmap,
-                        0,
-                        1080,
-                        Some(buffer.as_mut_ptr() as *mut std::ffi::c_void),
-                        &mut bi,
-                        DIB_RGB_COLORS,
-                    );
-
-                    // Save the image
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)?
-                        .as_secs();
-
-                    let filename = format!(
-                        "screenshots/session_{}_capture_{}.png",
-                        session.SessionId, timestamp
-                    );
-                    save_buffer_as_png(&buffer, 1920, 1080, &filename)?;
-
-                    // Cleanup
-                    DeleteObject(hbitmap);
-                    DeleteDC(hdc_mem);
-                    DeleteDC(hdc);
-                }
             } else {
-                println!("skipping inactive session {}", session.SessionId);
+                println!("skipping inactive session {} (state: {:?})", session.SessionId, session.State);
             }
         }
 
@@ -299,18 +386,17 @@ async fn capture_all_sessions() -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     println!("starting rdp example...");
 
-    println!("checking permissions...");
-    let err = check_rdp_permissions().await;
-    if let Err(e) = err {
-        println!("error checking permissions: {:?}", e);
-    }
+    println!("checking permissions before enabling privileges...");
+    check_rdp_permissions().await?;
+
+    println!("enabling privileges...");
+    enable_required_privileges()?;
+
+    println!("checking permissions after enabling privileges...");
+    check_rdp_permissions().await?;
 
     println!("starting continuous capture...");
-    let err = capture_all_sessions().await;
-    if let Err(e) = err {
-        println!("error capturing session: {:?}", e);
-    }
+    capture_all_sessions().await?;
 
-    println!("example completed successfully");
     Ok(())
 }
