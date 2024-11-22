@@ -243,11 +243,13 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_frame_cache: bool,
 
+    /// If enabled will capture all RDP sessions on the machine
+    #[arg(long)]
+    pub use_remote_desktop: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
-
 }
-
 
 
 impl Cli {

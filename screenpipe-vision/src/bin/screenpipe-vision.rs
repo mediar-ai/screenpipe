@@ -1,6 +1,8 @@
 use clap::Parser;
 use screenpipe_core::Language;
-use screenpipe_vision::{continuous_capture, monitor::get_default_monitor, OcrEngine};
+use screenpipe_vision::{
+    continuous_capture, core::CaptureSource, monitor::get_default_monitor, OcrEngine,
+};
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
@@ -18,6 +20,12 @@ struct Cli {
 
     #[arg(short = 'l', long, value_enum)]
     language: Vec<Language>,
+
+    #[arg(long)]
+    rdp_session_id: Option<String>,
+
+    #[arg(long)]
+    monitor_id: Option<u32>,
 }
 
 #[tokio::main]
@@ -37,19 +45,24 @@ async fn main() {
     let save_text_files = cli.save_text_files;
     let languages = cli.language;
 
-    let monitor = get_default_monitor().await;
-    let id = monitor.id();
-
     tokio::spawn(async move {
+        let capture_source = if let Some(session_id) = cli.rdp_session_id {
+            CaptureSource::RdpSession(Box::leak(session_id.into_boxed_str()))
+        } else if let Some(monitor_id) = cli.monitor_id {
+            CaptureSource::LocalMonitor(monitor_id)
+        } else {
+            CaptureSource::LocalMonitor(get_default_monitor().await.id())
+        };
+
         continuous_capture(
             result_tx,
             Duration::from_secs_f32(1.0 / cli.fps),
             save_text_files,
             OcrEngine::AppleNative,
-            id,
+            capture_source,
             &[],
             &[],
-            languages.clone(),
+            languages,
         )
         .await
     });

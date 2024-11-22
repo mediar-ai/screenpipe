@@ -5,6 +5,7 @@ use crate::apple::perform_ocr_apple;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
+use crate::remote_desktop::capture_rdp_session;
 use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image, save_text_files};
@@ -14,12 +15,30 @@ use log::{debug, error};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde_json;
+use std::future::Future;
+use std::pin::Pin;
 use std::{
     collections::HashMap,
+    fmt,
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Sender;
 use xcap::Monitor;
+
+#[derive(Debug, Clone, Copy)]
+pub enum CaptureSource<'a> {
+    LocalMonitor(u32),
+    RdpSession(&'a str),
+}
+
+impl<'a> fmt::Display for CaptureSource<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CaptureSource::LocalMonitor(id) => write!(f, "monitor_{}", id),
+            CaptureSource::RdpSession(session) => write!(f, "rdp_{}", session),
+        }
+    }
+}
 
 pub struct CaptureResult {
     pub image: DynamicImage,
@@ -51,47 +70,84 @@ pub async fn continuous_capture(
     interval: Duration,
     save_text_files_flag: bool,
     ocr_engine: OcrEngine,
-    monitor_id: u32,
+    capture_source: CaptureSource<'static>,
     ignore_list: &[String],
     include_list: &[String],
     languages: Vec<Language>,
 ) {
     debug!(
-        "continuous_capture: Starting using monitor: {:?}",
-        monitor_id
+        "continuous_capture: Starting with source: {:?}",
+        capture_source
     );
+
+    let capture_fn: Box<
+        dyn Fn() -> Pin<
+                Box<
+                    dyn Future<
+                            Output = Option<(
+                                DynamicImage,
+                                Vec<(DynamicImage, String, String, bool)>,
+                                u64,
+                                Duration,
+                            )>,
+                        > + Send,
+                >,
+            > + Send
+            + Sync,
+    > = match capture_source {
+        CaptureSource::LocalMonitor(monitor_id) => {
+            let monitor = match get_monitor_by_id(monitor_id).await {
+                Some(m) => m,
+                None => {
+                    error!("Failed to get monitor with id: {}", monitor_id);
+                    return;
+                }
+            };
+            let ignore_list = ignore_list.to_vec();
+            let include_list = include_list.to_vec();
+
+            Box::new(move || {
+                let monitor_clone = monitor.clone();
+                let ignore_list = ignore_list.clone();
+                let include_list = include_list.clone();
+
+                Box::pin(async move {
+                    match capture_screenshot(&monitor_clone, &ignore_list, &include_list).await {
+                        Ok(result) => Some(result),
+                        Err(_) => None,
+                    }
+                })
+            })
+        }
+        CaptureSource::RdpSession(session_id) => {
+            let session_id = session_id.to_string();
+            let ignore_list = ignore_list.to_vec();
+            let include_list = include_list.to_vec();
+            
+            Box::new(move || {
+                let session_id = session_id.clone();
+                let ignore_list = ignore_list.clone();
+                let include_list = include_list.clone();
+                
+                Box::pin(async move {
+                    capture_rdp_session(&session_id, &ignore_list, &include_list).await
+                        .map(|(image, window_images, image_hash, capture_duration)| 
+                            (image, window_images, image_hash, capture_duration))
+                        .ok()
+                })
+            })
+        }
+    };
+
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<DynamicImage> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
-    let monitor = match get_monitor_by_id(monitor_id).await {
-        Some(m) => m,
-        None => {
-            error!(
-                "Failed to get monitor with id: {}. Exiting continuous_capture.",
-                monitor_id
-            );
-            return;
-        }
-    };
-
     loop {
-        let capture_result = match capture_screenshot(&monitor, &ignore_list, &include_list).await {
-            Ok((image, window_images, image_hash, _capture_duration)) => {
-                debug!(
-                    "Captured screenshot on monitor {} with hash: {}",
-                    monitor_id, image_hash
-                );
-                Some((image, window_images, image_hash))
-            }
-            Err(e) => {
-                error!("Failed to capture screenshot: {}", e);
-                None
-            }
-        };
+        let capture_result = capture_fn().await;
 
-        if let Some((image, window_images, image_hash)) = capture_result {
+        if let Some((image, window_images, image_hash, _capture_duration)) = capture_result {
             let current_average = match compare_with_previous_image(
                 previous_image.as_ref(),
                 &image,
