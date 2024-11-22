@@ -119,7 +119,7 @@ jobs:
           brew bump-formula-pr screenpipe \
             --url="${URL}" \
             --sha256="${SHA}" \
-            --message="Automated update to version ${{ env.VERSION }} for ${{ matrix.target }}" \
+            --message="Automated update to version ${VERSION}" \
             --no-browse \
             --no-audit
 
