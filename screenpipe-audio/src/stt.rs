@@ -289,14 +289,7 @@ pub async fn prepare_segments(
     embedding_manager: EmbeddingManager,
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
 ) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
-    info!("Preparing segments");
     let audio_data = if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
-        info!(
-            "device: {}, resampling from {} Hz to {} Hz",
-            audio_input.device,
-            audio_input.sample_rate,
-            m::SAMPLE_RATE
-        );
         resample(
             audio_input.data.as_ref(),
             audio_input.sample_rate,
@@ -339,6 +332,14 @@ pub async fn prepare_segments(
     let speech_ratio = speech_frame_count as f32 / total_frames as f32;
     let min_speech_ratio = vad_engine.lock().await.get_min_speech_ratio();
 
+    info!(
+        "device: {}, speech ratio: {}, min_speech_ratio: {}, audio_frames: {}, speech_frames: {}",
+        audio_input.device,
+        speech_ratio,
+        min_speech_ratio,
+        audio_frames.len(),
+        speech_frame_count
+    );
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     if !audio_frames.is_empty() && speech_ratio >= min_speech_ratio {
         let segments = get_segments(

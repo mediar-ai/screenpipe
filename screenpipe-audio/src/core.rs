@@ -110,8 +110,6 @@ pub async fn get_device_and_config(
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = cpal::default_host();
 
-    info!("device: {:?}", audio_device.to_string());
-
     let is_output_device = audio_device.device_type == DeviceType::Output;
     let is_display = audio_device.to_string().contains("Display");
 
@@ -183,6 +181,7 @@ pub async fn record_and_transcribe(
                     // Normal shutdown
                     break;
                 }
+
                 error!("record_and_transcribe error, restarting: {}", e);
                 // Add a small delay before restarting to prevent rapid restart loops
                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -211,7 +210,9 @@ async fn run_record_and_transcribe(
     let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
     let overlap_samples = OVERLAP_SECONDS * sample_rate;
 
-    while is_running.load(Ordering::Relaxed) {
+    while is_running.load(Ordering::Relaxed)
+        && !audio_stream.is_disconnected.load(Ordering::Relaxed)
+    {
         let start_time = tokio::time::Instant::now();
 
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
@@ -387,6 +388,7 @@ pub struct AudioStream {
     transmitter: Arc<tokio::sync::broadcast::Sender<Vec<f32>>>,
     stream_control: mpsc::Sender<StreamControl>,
     stream_thread: Option<Arc<tokio::sync::Mutex<Option<thread::JoinHandle<()>>>>>,
+    is_disconnected: Arc<AtomicBool>,
 }
 
 enum StreamControl {
@@ -404,19 +406,38 @@ impl AudioStream {
         let channels = config.channels();
 
         let is_running_weak_2 = Arc::downgrade(&is_running);
+        let is_disconnected = Arc::new(AtomicBool::new(false));
         let device_clone = device.clone();
         let config_clone = config.clone();
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
 
+        let is_disconnected_clone = is_disconnected.clone();
+        let stream_control_tx_clone = stream_control_tx.clone();
         let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn(move || {
             let device = device_clone;
+            let device_name = device.to_string();
             let config = config_clone;
             let error_callback = move |err: StreamError| {
-                error!("an error occurred on the audio stream: {}", err);
-                if err.to_string().contains("device is no longer valid") {
-                    warn!("audio device disconnected. stopping recording.");
-                    if let Some(arc) = is_running_weak_2.upgrade() {
-                        arc.store(false, Ordering::Relaxed);
+                if err
+                    .to_string()
+                    .contains("The requested device is no longer available")
+                {
+                    warn!(
+                        "audio device {} disconnected. stopping recording.",
+                        device_name
+                    );
+                    stream_control_tx_clone
+                        .send(StreamControl::Stop(oneshot::channel().0))
+                        .unwrap();
+
+                    is_disconnected_clone.store(true, Ordering::Relaxed);
+                } else {
+                    error!("an error occurred on the audio stream: {}", err);
+                    if err.to_string().contains("device is no longer valid") {
+                        warn!("audio device disconnected. stopping recording.");
+                        if let Some(arc) = is_running_weak_2.upgrade() {
+                            arc.store(false, Ordering::Relaxed);
+                        }
                     }
                 }
             };
@@ -490,6 +511,7 @@ impl AudioStream {
             transmitter: Arc::new(tx_clone),
             stream_control: stream_control_tx,
             stream_thread: Some(stream_thread),
+            is_disconnected,
         })
     }
 
@@ -498,6 +520,7 @@ impl AudioStream {
     }
 
     pub async fn stop(mut self) -> Result<()> {
+        self.is_disconnected.store(true, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         self.stream_control.send(StreamControl::Stop(tx))?;
         rx.await?;

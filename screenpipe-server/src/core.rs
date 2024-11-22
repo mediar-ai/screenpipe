@@ -310,38 +310,54 @@ async fn record_audio(
                     &audio_device
                 );
 
-                let audio_stream = match AudioStream::from_device(
-                    audio_device_clone.clone(),
-                    Arc::new(AtomicBool::new(device_control.clone().is_running)),
-                )
-                .await
-                {
-                    Ok(stream) => stream,
-                    Err(e) => {
-                        error!("Failed to create audio stream: {}", e);
-                        return;
-                    }
-                };
+                let mut did_warn = false;
+                let is_running = Arc::new(AtomicBool::new(device_control.is_running));
 
-                let audio_stream = Arc::new(audio_stream);
-                let device_control_clone = Arc::clone(&device_control);
-                let whisper_sender_clone = whisper_sender_clone.clone();
-                let audio_device = Arc::clone(&audio_device_clone);
-                let record_handle = tokio::spawn(async move {
-                    let _ = record_and_transcribe(
-                        audio_stream,
-                        chunk_duration,
-                        whisper_sender_clone.clone(),
-                        Arc::new(AtomicBool::new(device_control_clone.is_running)),
+                while is_running.load(Ordering::Relaxed) {
+                    let is_running_loop = Arc::clone(&is_running); // Create separate reference for the loop
+                    let audio_stream = match AudioStream::from_device(
+                        audio_device_clone.clone(),
+                        Arc::clone(&is_running_loop), // Clone from original Arc
                     )
-                    .await;
-                });
+                    .await
+                    {
+                        Ok(stream) => stream,
+                        Err(e) => {
+                            if e.to_string().contains("Audio device not found") {
+                                if !did_warn {
+                                    warn!("Audio device not found: {}", audio_device.name);
+                                    did_warn = true;
+                                }
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                                continue;
+                            } else {
+                                error!("Failed to create audio stream: {}", e);
+                                return;
+                            }
+                        }
+                    };
 
-                // let live_transcription_handle = tokio::spawn(async move {
-                //     let _ = live_transcription(audio_stream, whisper_sender_clone.clone()).await;
-                // });
+                    let audio_stream = Arc::new(audio_stream);
+                    let whisper_sender_clone = whisper_sender_clone.clone();
+                    let record_handle = Some(tokio::spawn(async move {
+                        let _ = record_and_transcribe(
+                            audio_stream,
+                            chunk_duration,
+                            whisper_sender_clone.clone(),
+                            is_running_loop.clone(),
+                        )
+                        .await;
+                    }));
 
-                record_handle.await.unwrap();
+                    // let live_transcription_handle = tokio::spawn(async move {
+                    //     let _ = live_transcription(audio_stream, whisper_sender_clone.clone()).await;
+                    // });
+
+                    if let Some(handle) = record_handle {
+                        handle.await.unwrap();
+                    }
+                }
+
                 info!("exiting audio capture thread for device: {}", &audio_device);
             });
 
