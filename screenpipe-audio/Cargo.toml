@@ -77,7 +77,7 @@ realfft = "3.4.0"
 regex = "1.11.0"
 ndarray = "0.16"
 ort = "=2.0.0-rc.6"
-knf-rs = { git = "https://github.com/thewh1teagle/knf-rs.git" }
+knf-rs = { git = "https://github.com/Neptune650/knf-rs.git" }
 ort-sys = "=2.0.0-rc.8"
 
 [target.'cfg(target_os = "windows")'.dependencies]
