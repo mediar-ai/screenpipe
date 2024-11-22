@@ -111,12 +111,12 @@ jobs:
           eval "$(/opt/homebrew/bin/brew shellenv)"
           
           # Prepare URL and SHA
-          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${{ env.VERSION }}/screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz"
-          SHA=$(echo "$MAC_SHA256_${{ matrix.target }}")
+          URL="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/v${VERSION}.tar.gz"
+          curl -L -o source.tar.gz "${URL}"
+          SHA=$(shasum -a 256 source.tar.gz | awk '{print $1}')
           
           # Create PR using brew bump-formula-pr
           brew bump-formula-pr screenpipe \
-            --version=${{ env.VERSION }} \
             --url="${URL}" \
             --sha256="${SHA}" \
             --message="Automated update to version ${{ env.VERSION }} for ${{ matrix.target }}" \
