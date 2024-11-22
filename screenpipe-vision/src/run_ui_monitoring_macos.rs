@@ -1,19 +1,15 @@
-use tokio::process::Command;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use std::process::Stdio;
 use anyhow::Result;
-use log::{info, warn, error, debug};
-use tokio::time::{sleep, Duration};
+use log::{debug, error, info, warn};
 use std::path::PathBuf;
+use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use tokio::time::{sleep, Duration};
 
 pub async fn run_ui() -> Result<()> {
     info!("starting ui monitoring service...");
 
-    let binary_name = if cfg!(target_arch = "aarch64") {
-        "ui_monitor-aarch64-apple-darwin"
-    } else {
-        "ui_monitor-x86_64-apple-darwin"
-    };
+    let binary_name = "ui_monitor";
 
     // Try screenpipe-vision/bin first
     let bin_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

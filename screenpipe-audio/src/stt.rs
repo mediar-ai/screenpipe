@@ -36,6 +36,8 @@ use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
 
+use crate::pyannote::models::{get_or_download_model, PyannoteModel};
+
 async fn transcribe_with_deepgram(
     api_key: &str,
     audio_data: &[f32],
@@ -533,17 +535,8 @@ pub async fn create_whisper_channel(
     let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.clone();
 
-    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-
-    let embedding_model_path = project_dir
-        .join("models")
-        .join("pyannote")
-        .join("wespeaker_en_voxceleb_CAM++.onnx");
-
-    let segmentation_model_path = project_dir
-        .join("models")
-        .join("pyannote")
-        .join("segmentation-3.0.onnx");
+    let embedding_model_path = get_or_download_model(PyannoteModel::Embedding).await?;
+    let segmentation_model_path = get_or_download_model(PyannoteModel::Segmentation).await?;
 
     let embedding_extractor = Arc::new(StdMutex::new(EmbeddingExtractor::new(
         embedding_model_path
