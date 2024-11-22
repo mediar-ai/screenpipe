@@ -1294,6 +1294,30 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
     }
 }
 
+#[derive(Deserialize)]
+pub struct GetUnnamedSpeakersRequest {
+    limit: u32,
+    offset: u32,
+}
+
+async fn get_unnamed_speakers(
+    State(state): State<Arc<AppState>>,
+    Query(request): Query<GetUnnamedSpeakersRequest>,
+) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
+    let speakers = state
+        .db
+        .get_unnamed_speakers(request.limit, request.offset)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    Ok(JsonResponse(speakers))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1323,6 +1347,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))
+        .route("/speakers/unnamed", get(get_unnamed_speakers))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .layer(cors);
 
