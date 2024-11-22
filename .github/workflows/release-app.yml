@@ -344,6 +344,7 @@ jobs:
 
       - name: Get version from Cargo.toml
         shell: bash
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         run: |
           VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
