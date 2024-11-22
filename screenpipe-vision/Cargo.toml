@@ -97,5 +97,3 @@ xcap = "0.0.13"
 libc = "0.2"
 xcap = "0.0.14"
 
-[target.'cfg(target_env = "msvc")'.dependencies.vcpkg]
-version = "0.2"
