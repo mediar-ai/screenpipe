@@ -76,12 +76,12 @@ lazy_static = { version = "1.4.0" }
 realfft = "3.4.0"
 regex = "1.11.0"
 ndarray = "0.16"
-ort = "2.0.0-rc.5"
+ort = "=2.0.0-rc.5"
 knf-rs = { git = "https://github.com/thewh1teagle/knf-rs.git" }
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
-ort = { version = "2.0.0-rc.5", features = [
+ort = { version = "=2.0.0-rc.5", features = [
   "download-binaries",
   "copy-dylibs",
   "directml",
