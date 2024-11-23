@@ -4170,7 +4170,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "screenpipe-app"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -4179,6 +4179,7 @@ dependencies = [
  "core-foundation 0.9.4",
  "dirs 5.0.1",
  "fix-path-env",
+ "gtk",
  "http 0.2.12",
  "libc",
  "log",

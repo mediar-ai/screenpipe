@@ -1,42 +1,11 @@
-// _meta.js
-const docsPages = {
-
-  "getting-started": {
-    title: "getting started",
-    type: "page",
-  },
-  plugins: {
-    title: "plugins (pipes)",
-    type: "page",
-  },
-  examples: {
-    title: "examples & use cases",
-    type: "page",
-  },
-  architecture: {
-    title: "architecture overview",
-    type: "page",
-  },
-  "api-reference": {
-    title: "api reference",
-    type: "page",
-  },
-  contributing: {
-    title: "contributing",
-    type: "page",
-  },
-  integrations: {
-    title: "integrations",
-    type: "page",
-  },
-  server: {
-    title: "use screenpipe on a server",
-    type: "page",
-  },
-  faq: {
-    title: "faq",
-    type: "page",
-  },
+export default {
+  "getting-started": "getting started",
+  "plugins": "plugins (pipes)",
+  "examples": "examples & use cases",
+  "architecture": "architecture overview",
+  "api-reference": "api reference",
+  "contributing": "contributing",
+  "integrations": "integrations",
+  "server": "use screenpipe on a server",
+  "faq": "faq"
 };
-
-export default docsPages;
