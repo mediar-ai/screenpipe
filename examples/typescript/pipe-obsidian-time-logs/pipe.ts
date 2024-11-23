@@ -6,52 +6,50 @@ import { pipe, ContentItem } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
 
-const engineeringLog = z.object({
+const workLog = z.object({
   title: z.string(),
   description: z.string(),
   tags: z.array(z.string()),
   timeSpent: z.number(), // in seconds
 });
 
-type EngineeringLog = z.infer<typeof engineeringLog>;
+type WorkLog = z.infer<typeof workLog>;
 
 function getAIProvider(config: any) {
   if (config.openaiApiKey.length > 0 && config.gptModel.length > 0) {
     return createOpenAI({
-      apiKey: config.openaiApiKey
+      apiKey: config.openaiApiKey,
     });
   }
   return createOllama({ baseURL: config.ollamaApiUrl });
 }
 
-async function generateEngineeringLog(
+async function generateWorkLog(
   screenData: ContentItem[],
-  interval: number,
   provider: any,
   model: string,
   customPrompt?: string
-): Promise<EngineeringLog> {
-  const defaultPrompt = `Based on the following screen data, generate a concise engineering log entry:
+): Promise<WorkLog> {
+  const defaultPrompt = `Based on the following screen data, generate a concise work activity log entry:
 
     ${JSON.stringify(screenData)}
 
-    Focus only on engineering work. Ignore non-work related activities.
     Return a JSON object with the following structure:
     {
-        "title": "Brief title of the engineering task",
-        "description": "Concise description of the engineering work done",
-        "tags": ["tag1", "tag2", "tag3"],
-        "timeSpent": ${interval / 1000 / 60} // interval in minutes
+        "title": "Brief title of the activity",
+        "description": "Concise description of what was done",
+        "tags": ["#tag1", "#tag2", "#tag3"],
+        "timeSpent": "5" // actual time spent in minutes
     }
-    Provide 1-3 relevant tags related to the engineering work.
-    Estimate time spent in minutes based on the activity.`;
+    Provide 1-3 relevant tags related to the work. Each tag MUST start with #.
+    Estimate time spent in minutes based on the activities timestamps.`;
 
   const prompt = customPrompt || defaultPrompt;
 
   const response = await generateObject({
     model: provider(model),
     messages: [{ role: "user", content: prompt }],
-    schema: engineeringLog,
+    schema: workLog,
   });
 
   console.log("ai answer:", response);
@@ -60,51 +58,58 @@ async function generateEngineeringLog(
 }
 
 async function syncLogToObsidian(
-  logEntry: EngineeringLog,
+  logEntry: WorkLog,
   obsidianPath: string
 ): Promise<void> {
   try {
     console.log("syncLogToObsidian", logEntry);
-    
+
     // Create the daily note filename in format YYYY-MM-DD.md
     const today = new Date();
-    const filename = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}.md`;
+    const filename = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}.md`;
     const filePath = path.join(obsidianPath, filename);
 
     // Create markdown table row for the entry
-    const tableRow = `| ${logEntry.title} | ${logEntry.description} | ${logEntry.tags.join(", ")} | ${logEntry.timeSpent} min |\n`;
+    const tableRow = `| ${logEntry.title} | ${
+      logEntry.description
+    } | ${logEntry.tags.join(", ")} | ${logEntry.timeSpent} min |\n`;
 
     try {
       // Try to read existing file
       await fs.access(filePath);
       // File exists, append to it
-      await fs.appendFile(filePath, tableRow, 'utf8');
+      await fs.appendFile(filePath, tableRow, "utf8");
     } catch {
       // File doesn't exist, create it with header and first row
       const content = `| Title | Description | Tags | Time Spent |\n|-------|-------------|------|------------|\n${tableRow}`;
-      await fs.writeFile(filePath, content, 'utf8');
+      await fs.writeFile(filePath, content, "utf8");
     }
 
-    console.log("engineering log synced to obsidian successfully");
+    console.log("work log synced to obsidian successfully");
 
     await pipe.inbox.send({
-      title: "engineering log synced",
-      body: `new engineering log entry synced to Obsidian: ${filename}`,
+      title: "work log synced",
+      body: `new work log entry synced to Obsidian: ${filename}`,
     });
   } catch (error) {
-    console.error("error syncing engineering log to obsidian:", error);
+    console.error("error syncing work log to obsidian:", error);
     await pipe.inbox.send({
-      title: "engineering log error",
-      body: `error syncing engineering log to obsidian: ${error}`,
+      title: "work log error",
+      body: `error syncing work log to obsidian: ${error}`,
     });
   }
 }
 
-function streamEngineeringLogs(): void {
-  console.log("starting engineering logs stream");
+function streamWorkLogs(): void {
+  console.log("starting work logs stream");
 
   const config = pipe.loadPipeConfig();
   console.log("loaded config:", JSON.stringify(config, null, 2));
+
+  let successfulLogsCount = 0;
+  const NOTIFICATION_THRESHOLD = 5; // Send notification every 5 successful logs
 
   const interval = config.interval * 1000;
   const obsidianPath = config.obsidianPath;
@@ -113,14 +118,12 @@ function streamEngineeringLogs(): void {
   const model = config.gptModel || config.ollamaModel;
 
   const provider = getAIProvider(config);
-
   pipe.inbox.send({
-    title: "engineering log stream started",
-    body: `monitoring engineering work every ${config.interval/1000} seconds`,
+    title: "obsidian time logs stream started",
+    body: `monitoring work activity every ${config.interval / 1000} seconds`,
   });
-
   pipe.scheduler
-    .task("generateEngineeringLog")
+    .task("generateWorkLog")
     .every(interval)
     .do(async () => {
       try {
@@ -135,30 +138,45 @@ function streamEngineeringLogs(): void {
         });
 
         if (screenData && screenData.data.length > 0) {
-          const logEntry = await generateEngineeringLog(
+          const logEntry = await generateWorkLog(
             screenData.data,
-            interval,
             provider,
             model,
             customPrompt
           );
           await syncLogToObsidian(logEntry, obsidianPath);
+
+          successfulLogsCount++;
+          if (successfulLogsCount >= NOTIFICATION_THRESHOLD) {
+            await pipe.inbox.send({
+              title: "work logs batch synced",
+              body: `synced ${NOTIFICATION_THRESHOLD} work log entries to obsidian`,
+            });
+            successfulLogsCount = 0; // Reset counter
+          }
         } else {
-          console.log("no relevant engineering work detected in the last interval");
+          console.log("no relevant activity detected in the last interval");
         }
       } catch (error) {
-        console.error("error in engineering log pipeline:", error);
+        console.error("error in work log pipeline:", error);
         await pipe.inbox.send({
-          title: "engineering log error",
-          body: `error in engineering log pipeline: ${error}`,
+          title: "work log error",
+          body: `error in work log pipeline: ${error}`,
         });
       }
     });
 
+  pipe.inbox.send({
+    title: "work log stream started",
+    body: `monitoring work activity every ${
+      config.interval / 1000
+    } seconds. notifications will be batched every ${NOTIFICATION_THRESHOLD} successful logs.`,
+  });
+
   pipe.scheduler.start();
 }
 
-streamEngineeringLogs();
+streamWorkLogs();
 
 /*
 
@@ -197,7 +215,7 @@ Instructions to run this pipe:
 
 The pipe will:
 - Monitor your screen activity at the configured interval
-- Generate engineering log entries using OpenAI or Ollama
+- Generate work activity log entries using OpenAI or Ollama
 - Save entries to daily markdown files in your obsidian vault
 - Each day's entries will be saved in YYYY-MM-DD.md format
 - Entries are formatted as markdown tables with Title, Description, Tags, and Time Spent
