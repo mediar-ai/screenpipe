@@ -267,8 +267,32 @@ pub async fn get_app_icon(
     app_name: &str,
     app_path: Option<String>,
 ) -> Result<Option<AppIcon>, String> {
-    // Linux: Check XDG icon themes
-    // Convert to base64
-    // Return AppIcon struct
-    Ok(None)
+    use std::fs;
+    use gtk::prelude::IconThemeExt;
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    if gtk::init().is_err() {
+        return Err("failed to initialize GTK".to_string());
+    }
+
+    fn find_icon_path(app_name: &str) -> Option<String> {
+        let icon_theme = gtk::IconTheme::default().unwrap();
+        let icon_info = icon_theme.lookup_icon(app_name, 64, gtk::IconLookupFlags::empty())?;
+        icon_info.filename().map(|s| s.to_string_lossy().into_owned())
+    }
+
+    let path = match app_path {
+        Some(p) => p,
+        None => find_icon_path(app_name).ok_or_else(|| "could not find icon path".to_string())?,
+    };
+
+    // base64 will be in svg!
+    let icon_data = fs::read(&path).map_err(|e| e.to_string())?;
+    let base64 = STANDARD.encode(&icon_data);
+
+    Ok(Some(AppIcon {
+        base64,
+        path: Some(path),
+    }))
 }
+
