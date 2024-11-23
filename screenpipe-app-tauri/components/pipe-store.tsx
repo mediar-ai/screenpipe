@@ -67,16 +67,16 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "pipe-obsidian-time-logs",
+    description:
+      "continuously write logs of your days in an obsidian table using ollama+llama3.2",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-obsidian-time-logs",
+  },
+  {
     id: "pipe-post-questions-on-reddit",
     description:
       "get more followers, promote your content/product while being useful, without doing any work",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit",
-  },
-  {
-    id: "pipe-meeting-summary-by-email",
-    description:
-      "send you regular emails summarizing your meetings using ollama+llama3.2",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-meeting-summary-by-email",
   },
   {
     id: "pipe-phi3.5-engineering-team-logs",
@@ -84,12 +84,7 @@ const corePipes: CorePipe[] = [
       "continuously write logs of your days in a notion table using ollama+llama3.2",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs",
   },
-  {
-    id: "pipe-email-daily-log",
-    description:
-      "send a daily log of your screen time to your email using ollama+llama3.2",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log",
-  },
+
 ];
 const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
