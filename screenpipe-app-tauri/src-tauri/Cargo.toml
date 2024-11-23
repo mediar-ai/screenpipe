@@ -97,6 +97,10 @@ base64 = "0.22.1"
 winreg = "0.52.0"
 windows-icons = { git = "https://github.com/tribhuwan-kumar/windows-icons.git" }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18.1"
+base64 = "0.22.1"
+
 [features]
 cudart = []
 metal = []
