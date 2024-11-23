@@ -384,32 +384,37 @@ pub async fn stt(
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
     <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
-    let transcription: Result<String> = if audio_transcription_engine
-        == AudioTranscriptionEngine::Deepgram.into()
-    {
-        // Deepgram implementation
-        let api_key = deepgram_api_key.unwrap();
-        info!(
-            "device: {}, using deepgram api key: {}...",
-            device,
-            &api_key[..8]
-        );
-        match transcribe_with_deepgram(&api_key, audio, device, sample_rate, languages.clone())
-            .await
-        {
-            Ok(transcription) => Ok(transcription),
-            Err(e) => {
-                error!(
-                    "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
-                    device, e
-                );
-                // Fallback to Whisper
-                process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages.clone())
+    let transcription: Result<String> = match &*audio_transcription_engine {
+        AudioTranscriptionEngine::Deepgram => {
+            // Existing Deepgram implementation
+            let api_key = deepgram_api_key.unwrap();
+            info!(
+                "device: {}, using deepgram api key: {}...",
+                device,
+                &api_key[..8]
+            );
+            match transcribe_with_deepgram(&api_key, audio, device, sample_rate, languages.clone())
+                .await
+            {
+                Ok(transcription) => Ok(transcription),
+                Err(e) => {
+                    error!(
+                        "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
+                        device, e
+                    );
+                    // Fallback to Whisper
+                    process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages.clone())
+                }
             }
+        },
+        AudioTranscriptionEngine::Custom(url) => {
+            // New implementation needed here for custom API endpoint
+            transcribe_with_custom_api(url, audio, sample_rate, device, languages).await
+        },
+        _ => {
+            // Existing Whisper implementation
+            process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
         }
-    } else {
-        // Existing Whisper implementation
-        process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
     };
 
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
@@ -431,6 +436,96 @@ pub async fn stt(
     }
 
     Ok((transcription?, file_path_clone))
+}
+
+async fn transcribe_with_custom_api(
+    url: &str,
+    audio: &[f32],
+    sample_rate: u32,
+    device: &str,
+    languages: Vec<Language>,
+) -> Result<String> {
+    debug!("starting custom api transcription at {}", url);
+    let client = Client::new();
+
+    // Create a WAV file in memory
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let spec = WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut writer = WavWriter::new(&mut cursor, spec)?;
+        for &sample in audio {
+            writer.write_sample(sample)?;
+        }
+        writer.finalize()?;
+    }
+
+    // Get the WAV data from the cursor
+    let wav_data = cursor.into_inner();
+
+    // Build query params for languages if any
+    let mut query_params = String::new();
+    if !languages.is_empty() {
+        query_params = languages
+            .iter()
+            .map(|lang| format!("language={}", lang.as_lang_code()))
+            .collect::<Vec<String>>()
+            .join("&");
+    }
+
+    let url = if !query_params.is_empty() {
+        format!("{}?{}", url, query_params)
+    } else {
+        url.to_string()
+    };
+
+    let response = client
+        .post(&url)
+        .header("Content-Type", "audio/wav")
+        .body(wav_data)
+        .send();
+
+    match response.await {
+        Ok(resp) => {
+            debug!("received response from custom api");
+            match resp.json::<Value>().await {
+                Ok(result) => {
+                    debug!("successfully parsed json response");
+                    // Expect response in format: { "text": "transcription here" }
+                    let transcription = result["text"]
+                        .as_str()
+                        .ok_or_else(|| anyhow!("Invalid response format from custom API"))?;
+
+                    if transcription.is_empty() {
+                        info!(
+                            "device: {}, transcription is empty. full response: {:?}",
+                            device, result
+                        );
+                    } else {
+                        info!(
+                            "device: {}, transcription successful. length: {} characters",
+                            device,
+                            transcription.len()
+                        );
+                    }
+
+                    Ok(transcription.to_string())
+                }
+                Err(e) => {
+                    error!("Failed to parse JSON response: {:?}", e);
+                    Err(anyhow!("Failed to parse JSON response: {:?}", e))
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to send request to custom API: {:?}", e);
+            Err(anyhow!("Failed to send request to custom API: {:?}", e))
+        }
+    }
 }
 
 pub fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {

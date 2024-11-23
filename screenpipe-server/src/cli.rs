@@ -15,6 +15,8 @@ pub enum CliAudioTranscriptionEngine {
     WhisperDistilLargeV3,
     #[clap(name = "whisper-large-v3-turbo")]
     WhisperLargeV3Turbo,
+    #[clap(name = "custom")]
+    Custom,
 }
 
 impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
@@ -28,6 +30,24 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
             CliAudioTranscriptionEngine::WhisperLargeV3Turbo => {
                 CoreAudioTranscriptionEngine::WhisperLargeV3Turbo
             }
+            CliAudioTranscriptionEngine::Custom => {
+                panic!("Custom engine must be used with a custom API URL")
+            }
+        }
+    }
+}
+
+impl From<(CliAudioTranscriptionEngine, Option<String>)> for CoreAudioTranscriptionEngine {
+    fn from((engine, api_url): (CliAudioTranscriptionEngine, Option<String>)) -> Self {
+        match (engine, api_url) {
+            (CliAudioTranscriptionEngine::Custom, Some(url)) => CoreAudioTranscriptionEngine::Custom(url),
+            (CliAudioTranscriptionEngine::Custom, None) => {
+                panic!("STT_API environment variable must be set when using custom engine")
+            }
+            (CliAudioTranscriptionEngine::WhisperTiny, _) => CoreAudioTranscriptionEngine::WhisperTiny,
+            (CliAudioTranscriptionEngine::Deepgram, _) => CoreAudioTranscriptionEngine::Deepgram,
+            (CliAudioTranscriptionEngine::WhisperDistilLargeV3, _) => CoreAudioTranscriptionEngine::WhisperDistilLargeV3,
+            (CliAudioTranscriptionEngine::WhisperLargeV3Turbo, _) => CoreAudioTranscriptionEngine::WhisperLargeV3Turbo,
         }
     }
 }
@@ -242,6 +262,9 @@ pub struct Cli {
     /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
     #[arg(long, default_value_t = false)]
     pub enable_frame_cache: bool,
+
+    #[arg(long, env = "STT_API", help = "Custom STT API endpoint URL")]
+    pub stt_api_url: Option<String>,
 
     #[command(subcommand)]
     pub command: Option<Command>,

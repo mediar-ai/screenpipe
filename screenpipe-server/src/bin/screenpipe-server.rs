@@ -180,7 +180,8 @@ async fn main() -> anyhow::Result<()> {
                 // this command just download models and stuff (useful to have specific step to display in UI)
 
                 // ! should prob skip if deepgram?
-                WhisperModel::new(&cli.audio_transcription_engine.into()).unwrap();
+                let engine = AudioTranscriptionEngine::from((cli.audio_transcription_engine, cli.stt_api_url));
+                WhisperModel::new(&engine).unwrap();
                 // ! assuming silero is used
                 SileroVad::new().await.unwrap();
 

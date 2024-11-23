@@ -19,6 +19,7 @@ pub enum AudioTranscriptionEngine {
     WhisperDistilLargeV3,
     WhisperLargeV3Turbo,
     WhisperLargeV3,
+    Custom(String),
 }
 
 impl fmt::Display for AudioTranscriptionEngine {
@@ -29,6 +30,7 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::WhisperDistilLargeV3 => write!(f, "WhisperLarge"),
             AudioTranscriptionEngine::WhisperLargeV3Turbo => write!(f, "WhisperLargeV3Turbo"),
             AudioTranscriptionEngine::WhisperLargeV3 => write!(f, "WhisperLargeV3"),
+            AudioTranscriptionEngine::Custom(url) => write!(f, "Custom({})", url),
         }
     }
 }
