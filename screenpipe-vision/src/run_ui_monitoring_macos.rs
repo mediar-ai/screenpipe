@@ -1,11 +1,11 @@
 use anyhow::Result;
 use log::{debug, error, info, warn};
-use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
+use which::which;
 
 pub async fn run_ui() -> Result<()> {
     info!("starting ui monitoring service...");
@@ -17,9 +17,27 @@ pub async fn run_ui() -> Result<()> {
         .join("bin")
         .join(binary_name);
 
+    // If not found, try current directory
+    let current_dir_path = std::env::current_dir()?.join(binary_name);
+
+    // Try the directory of the current executable
+    let exe_dir_path = std::env::current_exe()?
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(binary_name);
+
+    // Try using which
+    let which_path = which(binary_name).ok();
+
     // If not found, try tauri location
-    let mut ui_monitor_path = if bin_path.exists() {
+    let ui_monitor_path = if bin_path.exists() {
         bin_path
+    } else if current_dir_path.exists() {
+        current_dir_path
+    } else if exe_dir_path.exists() {
+        exe_dir_path
+    } else if let Some(path) = which_path {
+        path
     } else {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -28,14 +46,6 @@ pub async fn run_ui() -> Result<()> {
             .join("src-tauri")
             .join(binary_name)
     };
-
-    if !ui_monitor_path.exists() {
-        let exe_dir = env::var("SCREENPIPE_EXE_DIR").unwrap();
-        let bin_path = PathBuf::from(exe_dir).join("bin").join(binary_name);
-        if bin_path.exists() {
-            ui_monitor_path = bin_path;
-        }
-    }
 
     info!("ui_monitor path: {}", ui_monitor_path.display());
 

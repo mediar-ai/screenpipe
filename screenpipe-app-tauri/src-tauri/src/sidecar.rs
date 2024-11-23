@@ -285,12 +285,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if enable_ui_monitoring {
         args.push("--enable-ui-monitoring");
     }
+
+    // Add exe directory path before the Windows-specific block
     let exe_dir = env::current_exe()
         .expect("Failed to get current executable path")
         .parent()
         .expect("Failed to get parent directory of executable")
         .to_path_buf();
+
     if cfg!(windows) {
+
         let tessdata_path = exe_dir.join("tessdata");
         let mut c = app
             .shell()
@@ -302,9 +306,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
-        let mut c = c.args(&args);
 
-        c = c.env("SCREENPIPE_EXE_DIR", exe_dir.display().to_string());
+
+        let c = c.args(&args);
 
         let (_, child) = c.spawn().map_err(|e| {
             error!("Failed to spawn sidecar: {}", e);
@@ -322,9 +326,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
     }
 
-    let mut command = command.args(&args);
-
-    command = command.env("SCREENPIPE_EXE_DIR", exe_dir.display().to_string());
+    let command = command.args(&args);
 
     let result = command.spawn();
     if let Err(e) = result {
