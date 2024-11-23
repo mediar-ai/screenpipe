@@ -1,4 +1,6 @@
 use futures::future::join_all;
+use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
+use screenpipe_audio::pyannote::identify::EmbeddingManager;
 use screenpipe_audio::stt::{prepare_segments, stt};
 use screenpipe_audio::vad_engine::{SileroVad, VadEngine};
 use screenpipe_audio::whisper::WhisperModel;
@@ -53,10 +55,28 @@ async fn test_transcription_accuracy() {
 
     let mut tasks = Vec::new();
 
+    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let segmentation_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("segmentation-3.0.onnx");
+
+    let embedding_model_path = project_dir
+        .join("models")
+        .join("pyannote")
+        .join("wespeaker_en_voxceleb_CAM++.onnx");
+
+    let embedding_extractor = Arc::new(std::sync::Mutex::new(
+        EmbeddingExtractor::new(embedding_model_path.to_str().unwrap()).unwrap(),
+    ));
+
     for (audio_file, expected_transcription) in test_cases {
         let whisper_model = Arc::clone(&whisper_model);
         let vad_engine = Arc::clone(&vad_engine);
         let output_path = Arc::clone(&output_path);
+        let embedding_extractor = Arc::clone(&embedding_extractor);
+        let embedding_manager = EmbeddingManager::new(usize::MAX);
+        let segmentation_model_path = segmentation_model_path.clone();
 
         let task = tokio::spawn(async move {
             let audio_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(audio_file);
@@ -70,9 +90,15 @@ async fn test_transcription_accuracy() {
                 device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
             };
 
-            let mut segments = prepare_segments(&audio_input, vad_engine.clone())
-                .await
-                .unwrap();
+            let mut segments = prepare_segments(
+                &audio_input,
+                vad_engine.clone(),
+                &segmentation_model_path,
+                embedding_manager,
+                embedding_extractor,
+            )
+            .await
+            .unwrap();
             let mut whisper_model_guard = whisper_model.lock().await;
 
             let mut transcription = String::new();
