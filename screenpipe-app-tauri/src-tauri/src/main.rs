@@ -68,18 +68,14 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     let store = StoreBuilder::new(app, path).build();
 
     let default_path = app.path().home_dir().unwrap().join(".screenpipe");
-    match store.get("dataDir") {
-        Some(value) => {
-            if let Some(dir) = value.as_str() {
-                // create .screenpipe_dir file within default_path and write new dir to it
-                let path = default_path.join(".screenpipe_dir");
-                fs::write(path, dir).unwrap();
-                get_base_dir(app, Some(dir.to_string()))
-            } else {
-                Ok(default_path)
-            }
-        }
-        None => Ok(default_path)
+    let data_dir = store
+        .get("dataDir")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
+    if data_dir == "default" {
+        Ok(default_path)
+    } else {
+        get_base_dir(app, Some(data_dir))
     }
 }
 
@@ -140,7 +136,6 @@ async fn main() {
             commands::show_timeline,
             commands::open_accessibility_preferences,
             commands::check_accessibility_permissions,
-            commands::update_screenpipe_dir,
             icons::get_app_icon
         ])
         .setup(|app| {

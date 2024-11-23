@@ -232,11 +232,3 @@ pub fn check_accessibility_permissions() -> bool {
         return true;
     }
 }
-
-#[tauri::command]
-pub fn update_screenpipe_dir(app_handle: tauri::AppHandle<tauri::Wry>, dir: &str) -> Result<(), String> {
-    let default_path = dirs::home_dir().unwrap().join(".screenpipe");
-    let path = default_path.join(".screenpipe_dir");
-    fs::write(path, dir).unwrap();
-    Ok(())
-}

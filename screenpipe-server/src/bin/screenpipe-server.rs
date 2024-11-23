@@ -48,20 +48,9 @@ const DISPLAY: &str = r"
 ";
 
 fn get_base_dir(custom_path: &Option<String>) -> anyhow::Result<PathBuf> {
-    let mut default_path = home_dir()
+    let default_path = home_dir()
         .ok_or_else(|| anyhow::anyhow!("failed to get home directory"))?
         .join(".screenpipe");
-
-    // check .screenpipe_dir file whether it exists in default_path, if so, replace default_path
-    let screenpipe_dir_path = default_path.join(".screenpipe_dir");
-    if screenpipe_dir_path.exists() {
-        if let Ok(screenpipe_dir) = fs::read_to_string(&screenpipe_dir_path) {
-            let screenpipe_dir = screenpipe_dir.trim();
-            if !screenpipe_dir.is_empty() {
-                default_path = PathBuf::from(screenpipe_dir);
-            }
-        }
-    }
 
     let base_dir = custom_path.as_ref().map(PathBuf::from).unwrap_or(default_path);
     let data_dir = base_dir.join("data");

@@ -265,7 +265,6 @@ export function RecordingSettings({
       await invoke("spawn_screenpipe");
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      await invoke("update_screenpipe_dir", { dir: localSettings.dataDir });
       toast({
         title: "settings updated successfully",
         description: "screenpipe has been restarted with new settings.",
