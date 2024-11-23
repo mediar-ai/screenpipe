@@ -104,24 +104,10 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT }}
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.PAT }}
         run: |
-          # Install Homebrew
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          
-          # Setup Homebrew environment
-          eval "$(/opt/homebrew/bin/brew shellenv)"
-          
-          # Prepare URL and SHA
-          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${{ env.VERSION }}/screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz"
-          SHA=$(echo "$MAC_SHA256_${{ matrix.target }}")
-          
-          # Create PR using brew bump-formula-pr
           brew bump-formula-pr screenpipe \
-            --version=${{ env.VERSION }} \
-            --url="${URL}" \
-            --sha256="${SHA}" \
-            --message="Automated update to version ${{ env.VERSION }} for ${{ matrix.target }}" \
-            --no-browse \
-            --no-audit
+                   --version="${VERSION}" \
+                   --message="Automated update to version ${VERSION}" \
+                   --no-browse
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
