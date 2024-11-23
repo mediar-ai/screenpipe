@@ -1,5 +1,5 @@
-// _meta.tsx
-export default {
+// _meta.js
+const docsPages = {
   index: {
     title: "overview",
     display: "hidden",
@@ -41,3 +41,5 @@ export default {
     type: "page",
   },
 };
+
+export default docsPages;
