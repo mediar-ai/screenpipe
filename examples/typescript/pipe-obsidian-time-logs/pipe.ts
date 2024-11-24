@@ -10,7 +10,7 @@ const workLog = z.object({
   title: z.string(),
   description: z.string(),
   tags: z.array(z.string()),
-  timeSpent: z.number(), // in seconds
+  timeSpent: z.string(), // in seconds
 });
 
 type WorkLog = z.infer<typeof workLog>;
