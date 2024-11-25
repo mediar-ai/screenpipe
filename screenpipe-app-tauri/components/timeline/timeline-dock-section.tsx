@@ -34,6 +34,7 @@ export function TimelineIconsSection({
 }: {
   blocks: StreamTimeSeriesResponse[];
 }) {
+  const os = platform();
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
   const [selectedApp, setSelectedApp] = useState<ProcessedBlock | null>(null);
   const { setSelectionRange } = useTimelineSelection();
@@ -242,7 +243,11 @@ export function TimelineIconsSection({
                   }}
                 >
                   <img
-                    src={`data:image/png;base64,${block.iconSrc}`}
+                    src={
+                      os === "linux" 
+                      ? `data:image/svg+xml;base64,${block.iconSrc}`
+                      : `data:image/png;base64,${block.iconSrc}`
+                    }
                     className="w-full h-full opacity-70"
                     alt={block.appName}
                     loading="lazy"
@@ -302,7 +307,11 @@ export function TimelineIconsSection({
               <div className="flex items-center gap-2">
                 {selectedApp?.iconSrc && (
                   <img
-                    src={`data:image/png;base64,${selectedApp.iconSrc}`}
+                    src={
+                      os === "linux"
+                      ? `data:image/svg+xml;base64,${selectedApp.iconSrc}`
+                      : `data:image/png;base64,${selectedApp.iconSrc}`
+                    }
                     className="w-6 h-6"
                     alt={selectedApp.appName}
                   />

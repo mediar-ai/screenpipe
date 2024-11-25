@@ -1,6 +1,6 @@
 {
     "name": "@screenpipe/js",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "module": "main.ts",
     "type": "module",
     "files": [
@@ -24,8 +24,10 @@
         "@types/node": "^22.8.4"
     },
     "dependencies": {
+        "@types/express": "^5.0.0",
         "@types/node-cron": "^3.0.11",
         "cron-parser": "^4.9.0",
+        "express": "^4.21.1",
         "node-cron": "^3.0.3"
     },
     "peerDependencies": {

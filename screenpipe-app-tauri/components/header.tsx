@@ -16,7 +16,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MessageSquare, Heart, Menu, Bell, Play, Folder } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
-import { InboxMessages, Message } from "@/components/inbox-messages";
+import {
+  InboxMessageAction,
+  InboxMessages,
+  Message,
+} from "@/components/inbox-messages";
 import { useState, useRef, useEffect } from "react";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
@@ -55,24 +59,26 @@ export default function Header() {
 
     loadMessages();
 
-    const unlisten = listen<Message>(
-      "inbox-message-received",
-      async (event) => {
-        console.log("inbox-message-received", event);
-        const newMessage: Message = {
-          id: Date.now().toString(),
-          title: event.payload.title,
-          body: event.payload.body,
-          date: new Date().toISOString(),
-          read: false,
-        };
-        setMessages((prevMessages) => {
-          const updatedMessages = [newMessage, ...prevMessages];
-          localforage.setItem("inboxMessages", updatedMessages);
-          return updatedMessages;
-        });
-      }
-    );
+    const unlisten = listen<{
+      title: string;
+      body: string;
+      actions?: InboxMessageAction[];
+    }>("inbox-message-received", async (event) => {
+      console.log("inbox-message-received", event);
+      const newMessage: Message = {
+        id: Date.now().toString(),
+        title: event.payload.title,
+        body: event.payload.body,
+        date: new Date().toISOString(),
+        read: false,
+        actions: event.payload.actions,
+      };
+      setMessages((prevMessages) => {
+        const updatedMessages = [newMessage, ...prevMessages];
+        localforage.setItem("inboxMessages", updatedMessages);
+        return updatedMessages;
+      });
+    });
 
     return () => {
       unlisten.then((unlistenFn) => unlistenFn());

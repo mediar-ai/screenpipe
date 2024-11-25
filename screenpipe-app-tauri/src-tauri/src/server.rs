@@ -46,12 +46,14 @@ struct InboxMessagePayload {
     #[serde(rename = "type")]
     message_type: String,
     actions: Option<Vec<InboxMessageAction>>,
+    action_server_port: Option<u16>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct InboxMessageAction {
     label: String,
     action: String,
+    port: u16,
 }
 
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
