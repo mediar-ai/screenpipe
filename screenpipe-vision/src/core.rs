@@ -19,6 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Sender;
+use tokio::time::sleep;
 use xcap::Monitor;
 
 pub struct CaptureResult {
@@ -56,28 +57,25 @@ pub async fn continuous_capture(
     include_list: &[String],
     languages: Vec<Language>,
 ) {
-    debug!(
-        "continuous_capture: Starting using monitor: {:?}",
-        monitor_id
-    );
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<DynamicImage> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
-    let monitor = match get_monitor_by_id(monitor_id).await {
-        Some(m) => m,
-        None => {
-            error!(
-                "Failed to get monitor with id: {}. Exiting continuous_capture.",
-                monitor_id
-            );
-            return;
-        }
-    };
+    debug!(
+        "continuous_capture: Starting using monitor: {:?}",
+        monitor_id
+    );
 
     loop {
-        let capture_result = match capture_screenshot(&monitor, &ignore_list, &include_list).await {
+        let monitor = match get_monitor_by_id(monitor_id).await {
+            Some(m) => m,
+            None => {
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+        let capture_result = match capture_screenshot(&monitor, ignore_list, include_list).await {
             Ok((image, window_images, image_hash, _capture_duration)) => {
                 debug!(
                     "Captured screenshot on monitor {} with hash: {}",

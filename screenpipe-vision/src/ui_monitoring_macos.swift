@@ -536,18 +536,18 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
             elementAttributes.children = childrenElements
 
             if hasRelevantValue || !childrenElements.isEmpty {
+                // Update character count before storing
+                if hasRelevantValue {
+                    for value in elementAttributes.attributes.values {
+                        totalCharacterCount += value.count
+                    }
+                }
+                
                 // Store the element with its attributes using identifier as key
                 globalElementValues[appName]?[windowName]?.elements[elementAttributes.identifier] = elementAttributes
                 return elementAttributes
             } else {
                 return nil
-            }
-
-            // Update character count when storing values
-            if hasRelevantValue {
-                for value in elementAttributes.attributes.values {
-                    totalCharacterCount += value.count
-                }
             }
         }
 

@@ -27,4 +27,10 @@ rustflags = ["-C", "link-arg=-Wl,--allow-multiple-definition"]
 #     "-C", "link-arg=-Wl,-rpath,${CARGO_MANIFEST_DIR}/screenpipe-vision/lib"
 # ]
 
+[target.aarch64-apple-darwin]
+rustflags = ["-L", "screenpipe-vision/lib"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-L", "screenpipe-vision/lib"]
+
 

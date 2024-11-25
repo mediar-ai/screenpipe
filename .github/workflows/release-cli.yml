@@ -45,7 +45,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          brew unlink pkg-config@0.29.2 || true
           brew install ffmpeg pkg-config
+          brew link --overwrite pkg-config
 
       - uses: actions/cache@v4
         with:
@@ -98,30 +100,28 @@ jobs:
           echo "MAC_SHA256_${{ matrix.target }}=$(shasum -a 256 screenpipe-*.tar.gz | cut -d ' ' -f 1)" >> $GITHUB_ENV
 
       - name: Update Homebrew Formula
-        run: |
-          export VERSION=${{ env.VERSION }}
-          git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
-          git fetch origin main
-          git checkout -b update-formula-${{ matrix.target }}-${{ github.sha }}
-          git merge origin/main --no-edit
-          sed -i '' 's/version ".*"/version "'$VERSION'"/' Formula/screenpipe.rb
-          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
-            sed -i '' 's/sha256 ".*" # x86_64/sha256 "'${{ env.MAC_SHA256_x86_64-apple-darwin }}'" # x86_64/' Formula/screenpipe.rb
-          else
-            sed -i '' 's/sha256 ".*" # arm64/sha256 "'${{ env.MAC_SHA256_aarch64-apple-darwin }}'" # arm64/' Formula/screenpipe.rb
-          fi
-          sed -i '' 's|v[0-9.]*\/screenpipe-[0-9.]*-${{ matrix.target }}|v'$VERSION'\/screenpipe-'$VERSION'-${{ matrix.target }}|' Formula/screenpipe.rb
-          git add Formula/screenpipe.rb
-          git commit -m "chore: update brew to version ${{ env.VERSION }} for ${{ matrix.target }}"
-          git push -u origin update-formula-${{ matrix.target }}-${{ github.sha }}
-
-      - name: Create Pull Request
         env:
           GH_TOKEN: ${{ secrets.PAT }}
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.PAT }}
         run: |
-          gh pr create --base main --head update-formula-${{ matrix.target }}-${{ github.sha }} --title "Update Homebrew formula for ${{ matrix.target }}" --body "Automated PR to update Homebrew formula for ${{ matrix.target }}"
+          # Install Homebrew
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          
+          # Setup Homebrew environment
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          
+          # Prepare URL and SHA
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${{ env.VERSION }}/screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz"
+          SHA=$(echo "$MAC_SHA256_${{ matrix.target }}")
+          
+          # Create PR using brew bump-formula-pr
+          brew bump-formula-pr screenpipe \
+            --version=${{ env.VERSION }} \
+            --url="${URL}" \
+            --sha256="${SHA}" \
+            --message="Automated update to version ${{ env.VERSION }} for ${{ matrix.target }}" \
+            --no-browse \
+            --no-audit
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

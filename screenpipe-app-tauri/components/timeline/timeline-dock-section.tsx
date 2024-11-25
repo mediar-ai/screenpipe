@@ -34,6 +34,7 @@ export function TimelineIconsSection({
 }: {
   blocks: StreamTimeSeriesResponse[];
 }) {
+  const os = platform();
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
   const [selectedApp, setSelectedApp] = useState<ProcessedBlock | null>(null);
   const { setSelectionRange } = useTimelineSelection();
@@ -172,10 +173,6 @@ export function TimelineIconsSection({
   const loadAppIcon = useCallback(
     async (appName: string, appPath?: string) => {
       try {
-        // Check platform first to avoid unnecessary invokes
-        const p = platform();
-        if (p !== "macos") return; // Early return for unsupported platforms
-
         if (iconCache[appName]) return;
 
         const icon = await invoke<{ base64: string; path: string } | null>(
@@ -200,8 +197,6 @@ export function TimelineIconsSection({
 
   useEffect(() => {
     const loadIcons = async () => {
-      const p = platform();
-      if (p !== "macos") return;
 
       // Load icons for unique app names only
       processedBlocks.forEach((block) => {
@@ -248,7 +243,11 @@ export function TimelineIconsSection({
                   }}
                 >
                   <img
-                    src={`data:image/png;base64,${block.iconSrc}`}
+                    src={
+                      os === "linux" 
+                      ? `data:image/svg+xml;base64,${block.iconSrc}`
+                      : `data:image/png;base64,${block.iconSrc}`
+                    }
                     className="w-full h-full opacity-70"
                     alt={block.appName}
                     loading="lazy"
@@ -308,7 +307,11 @@ export function TimelineIconsSection({
               <div className="flex items-center gap-2">
                 {selectedApp?.iconSrc && (
                   <img
-                    src={`data:image/png;base64,${selectedApp.iconSrc}`}
+                    src={
+                      os === "linux"
+                      ? `data:image/svg+xml;base64,${selectedApp.iconSrc}`
+                      : `data:image/png;base64,${selectedApp.iconSrc}`
+                    }
                     className="w-6 h-6"
                     alt={selectedApp.appName}
                   />

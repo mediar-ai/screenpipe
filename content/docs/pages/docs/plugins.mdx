@@ -3,179 +3,111 @@ import MotionDiv from '@/components/motion-div';
 # plugins (pipes)
 
 <MotionDiv>
-  an essential part of screenpipe is that it is extensible, providing powerful extensibility through custom workflows that interact with captured screen and audio data. whether you need to tag activities, generate summaries, or send data to third-party services, plugins allow you to tailor screenpipe to your specific needs.
+  screenpipe is built for extensibility through plugins that interact with captured screen and audio data. whether you need to tag activities, generate summaries, or send data to third-party services, plugins let you build powerful workflows.
 
-  plugins in screenpipe are categorized into 2 types:
-
-  - **pipes**: these are plugins with native integration with screenpipe. they can run within the cli/lib/app without the need for manual execution. they run in a sandboxed environment, and can be written in Typescript or Javascript.
-  - **standalone scripts**: these are independent scripts that need to be run separately and may require additional setup.
+  plugins come in two flavors:
+  - **pipes**: native plugins that run within screenpipe's sandboxed environment. written in typescript/javascript.
+  - **standalone scripts or apps**: independent scripts or apps that run separately and use screenpipe APIs.
 </MotionDiv>
 
----
-
-# 1. pipes
-## overview of pipes
+### why build pipes? 🚀
 
 <MotionDiv delay={0.3}>
-  pipes in screenpipe are plugins designed to process data captured from your screen and audio feeds. they automate workflows such as tagging, summarizing, and integrating data with external platforms like notion, salesforce, or slack.
+think of pipes like a local Zapier which costs 10x & 10x less friction - no auth needed, with full context of your screen and audio data.
 
-  **pipe workflow examples**:
-  - **pipe example**: screenpipe | ai tag | notion update
-  - **pipe example**: screenpipe | ai tag | slack report
-  - **pipe example**: screenpipe | log daily activities
+#### for developers
+- **zero infrastructure**: run locally, no servers or complex setups
+- **typescript + bun**: blazing fast development
+- **full context**: rich OCR & audio transcription APIs
+- **monetization ready**: early access to pipe store with Stripe integration
+- **bounty program**: earn $100+ for building pipes or promoting screenpipe
+- **open source**: contribute to augmenting collective human intelligence
 
-  **key features of pipes**:
-  - **custom workflows**: automate repetitive tasks such as tagging screen activity or summarizing audio transcriptions.
-  - **real-time processing**: pipes can process captured data in real-time.
-  - **integration capabilities**: extend the functionality by sending processed data to third-party apps.
-
-  **example use cases**:
-  - **ai activity tagging**: automatically tag screen or audio activities based on ai models.
-  - **meeting summaries**: generate summaries of meeting discussions using combined screen and audio data.
-  - **crm integration**: automatically log interactions or captured data into a crm like salesforce.
+#### killer features
+- **ai flexibility**: OpenAI, local LLMs (ollama), or any provider
+- **rich APIs**: 
+  - `pipe.inbox` for AI/human-in-the-loop messaging
+  - `pipe.scheduler` for cron jobs
+  - `pipe.input` for keyboard/mouse control
+  - `pipe.queryScreenpipe` for context
+- **sandboxed & cross-platform**: safe execution on all OS
+- **real-time**: process screen & audio as it happens
 
 </MotionDiv>
 
----
-
-## available pipes
+### quick start
 
 <MotionDiv delay={0.5}>
-  screenpipe provides a variety of pipes and standalone scripts that allow users to extend the platform's functionality with minimal effort. below is a table summarizing the available examples:
 
-| **example**                          | **description**                                  | **link**                          |
+```bash
+# clone & setup
+git clone https://github.com/mediar-ai/screenpipe
+cp -r screenpipe/examples/typescript/pipe-phi3.5-engineering-team-logs my-pipe
+cd my-pipe
+bun install
+
+# test locally
+bun run pipe.ts
+
+# ship it
+screenpipe pipe enable my-pipe
+```
+
+### available pipes
+
+| **pipe**                          | **description**                                  | **link**                          |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------- |
-| **pipe phi3.5 engineering team logs**| generate engineering team work logs              | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
-| **pipe post questions on reddit**    | post questions on reddit based on screen activity           | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit)                         |
-| **pipe email daily log**             | send daily activity logs via email               | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log)                         |
-| **pipe llama32 comment linear while you work** | comment on linear tasks while you work using llama32 | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-llama32-comment-linear-while-you-work)                         |
-| **pipe meeting summary by email**    | send meeting summaries via email                 | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-meeting-summary-by-email)                         |
+| **phi3.5 engineering logs**| generate team work logs              | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
+| **reddit questions**    | post questions based on screen activity           | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit)                         |
+| **llama32 linear comments** | comment on tasks while you work | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-llama32-comment-linear-while-you-work)                         |
+| **meeting summary email**    | send meeting summaries via email                 | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-meeting-summary-by-email)                         |
+| **obsidian time logs**         | log work activities to obsidian    | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-obsidian-time-logs)                         |
 
 </MotionDiv>
 
----
+### pipe configuration
 
-## quick tour - developing pipes in screenpipe
 <MotionDiv delay={0.7}>
 
-screenpipe's plugin system, referred to as **pipes**, allows you to create customized pipes that automate workflows. these pipes can process, annotate, analyze, summarize, or integrate your screen and audio data with other tools.
+we use `pipe.json` to configure your pipe through UI/CLI:
 
-users can begin by cloning an existing pipe, such as [pipe-phi3.5-engineering-team-logs](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
-
-```bash copy
-git clone https://github.com/mediar-ai/screenpipe.git
-cp -r screenpipe/examples/typescript/pipe-phi3.5-engineering-team-logs screenpipe/examples/typescript/my-pipe
-```
-
-we use Bun to run the pipe within the Rust codebase.
-
-check official [bun docs](https://bun.sh/docs) for more details on installing and running Bun.
-
-
-> **note**: you can also use nextjs to build your pipe, we will render the page in the pipe store. check [pipe-simple-nextjs](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-simple-nextjs) for an example.
-
-### configuring pipes
-
-we use `pipe.json` to let others pass configuration options to your pipe through the UI or CLI.
-
-we parse your `pipe.json` file to render in the UI the input fields for your pipe so you need to follow the format. 
-
-here's a snippet of a `pipe.json` for the pipe-post-questions-on-reddit:
-
-```json copy
+```json
 {
   "fields": [
     {
       "default": 60,
-      "description": "Interval in seconds to read your screen data and extract structured logs (will be used to summarize and send an email). Increase this value if using audio.",
+      "description": "Interval in seconds to process screen data",
       "name": "interval",
       "type": "number"
     },
     {
       "default": "daily",
-      "description": "Frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)",
+      "description": "Summary frequency: 'daily' or 'hourly:X'",
       "name": "summaryFrequency",
-      "type": "string",
-      "value": "hourly:1"
-    },
+      "type": "string"
+    }
   ]
 }
 ```
 
+this will render in the screenpipe UI.
 
-### running pipes
+### screenpipe-js SDK
 
-you can run your pipe manually with bun, for example:
+key features:
+- `pipe.inbox.send`: AI messages with user confirmation
+- `pipe.sendDesktopNotification`: system notifications
+- `pipe.queryScreenpipe`: query screen/audio data
+- `pipe.scheduler`: cron-like scheduling
+- `pipe.input`: programmatic UI control
 
-```bash copy
-# these are mandatory env variables
-export SCREENPIPE_DIR="$HOME/.screenpipe"
-export PIPE_ID="pipe-phi3.5-engineering-team-logs"
-export PIPE_FILE="pipe.ts"
-export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-phi3.5-engineering-team-logs"
+[full API reference](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/main.ts)
 
-bun run examples/typescript/pipe-phi3.5-engineering-team-logs/pipe.ts
-```
+### bounties & monetization
 
-make sure to configure your pipe.json first
-
-once the pipe is ready, follow these steps to make it work with `screenpipe`:
-
-- **download the pipe** (from local or github url):
-  ```bash copy
-  screenpipe pipe download path/to/pipe-name
-  ```
-
-- **enable the pipe** (enabling will activate the pipe, similar to installing it in screenpipe):
-  ```bash copy
-  screenpipe pipe enable pipe-name
-  ```
-
-- **run the pipe** (restart screenpipe):
-  ```bash copy
-  screenpipe
-  ```
-
-you can also use the UI to download and enable your pipe (add the path or URL, click the button, enable, config, restart screenpipe).
-
-### screenpipe-js SDK 
-
-cool stuff:
-- `pipe.inbox.send` to send AI messages to the user and ask for confirmation before any dangerous actions.
-- `pipe.sendDesktopNotification` to send a desktop notification to the user.
-- `pipe.queryScreenpipe` to query the screenpipe data.
-
-etc.
-
-[checkout the special api for interacting with screenpipe.](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/main.ts)
-
-
-### closing thoughts
-
-think of pipes like a local Zapier which costs 10x less, 10x less friction because you don't need to authenticate etc. 
-and with the full context of your screen and audio data.
-
-please send a PR with your pipe to the repo, we will review and merge it!
-
-we also do bounties for new pipes, or if you talk about screenpipe on social media, we give $100+!
-
-we're working on integration with Stripe, to allow you to monetize your pipes, feel free to reach out for early access.
-
-[louis@screenpi.pe](mailto:louis@screenpi.pe)
-
-### outro 
-
-- we use bun to run the pipe within the Rust codebase.
-- you can use `pipe.json` to let others pass configuration options to your pipe through the UI or CLI.
-- pipes have access to a special API that allows you to interact with your computer or special features like sending notifications, sending emails, etc.
-- check this [file](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/pipes.rs) for more details on impl.
-- in general we recommend using local LLMs like ollama as the data can be large and sensitive and JSON outputs.
-- we recommend using [vercel ai sdk](https://github.com/vercel/ai) for faster dev.
-
-### known limitations
-
-- you can only use JS/TS to build your pipes.
-- you usually need to run the pipe in an infinite loop for example if it's something that process your data continuously, of course if this is for example an agent that summarize your day one shot it does not have to be infinite loop.
-
+- send PRs with your pipes, we'll review and merge!
+- earn $100+ for new pipes or social media promotion
+- early access to pipe store with Stripe integration
+- [louis@screenpi.pe](mailto:louis@screenpi.pe)
 
 </MotionDiv>

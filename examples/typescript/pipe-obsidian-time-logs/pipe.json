@@ -1,0 +1,52 @@
+{
+    "fields": [
+      {
+        "name": "interval",
+        "type": "number",
+        "default": 60,
+        "description": "Interval in seconds to stream data"
+      },
+      {
+        "name": "obsidianPath",
+        "type": "path",
+        "default": "",
+        "description": "Path to the Obsidian vault where time entries will be saved"
+      },
+      {
+        "name": "customPrompt",
+        "type": "string",
+        "default": "",
+        "description": "Custom prompt to use for the AI model"
+      },
+      {
+        "name": "gptModel",
+        "type": "string",
+        "default": "",
+        "description": "OpenAI GPT model to use (e.g. gpt-4). If provided with openaiApiKey, OpenAI will be used instead of Ollama"
+      },
+      {
+        "name": "openaiApiKey",
+        "type": "string",
+        "default": "",
+        "description": "OpenAI API key. If provided with gptModel, OpenAI will be used instead of Ollama"
+      },
+      {
+        "name": "ollamaApiUrl",
+        "type": "string",
+        "default": "http://localhost:11434/api",
+        "description": "Ollama API URL. Used if openaiApiKey is not provided"
+      },
+      {
+        "name": "ollamaModel",
+        "type": "string",
+        "default": "llama3.2:3b-instruct-q4_K_M",
+        "description": "Ollama Model. Used if openaiApiKey is not provided"
+      },
+      {
+        "name": "pageSize",
+        "type": "number",
+        "default": 100,
+        "description": "Number of records to retrieve from Screenpipe per page"
+      }
+    ]
+  }

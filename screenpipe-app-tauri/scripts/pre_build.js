@@ -41,8 +41,7 @@ const config = {
 			'libavfilter-dev',
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
-			'libxdo-dev',
-			'intel-openmp'
+			'libxdo-dev'
 		],
 	},
 	macos: {
@@ -315,28 +314,6 @@ if (platform == 'windows') {
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 	}
 
-	// Setup ONNX Runtime
-	const onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
-	const onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
-	const onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`
-	if (!(await fs.exists(onnxRuntimeName))) {
-		console.log('Setting up ONNX Runtime libraries for Windows...')
-		try {
-			await $`${wgetPath} --no-config -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
-			await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
-			await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
-			console.log('ONNX Runtime libraries for Windows set up successfully.')
-		} catch (error) {
-			console.error('Error downloading or extracting ONNX Runtime:', error);
-			console.log('Attempting alternative download method...');
-			// Add alternative download method here
-		}
-	} else {
-		console.log('ONNX Runtime libraries for Windows already exists.')
-	}
-
-
-
 	// Setup vcpkg packages with environment variables set inline
 	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
@@ -440,15 +417,15 @@ if (platform == 'macos') {
 	}
 
 
-	// // Setup FFMPEG
-	// if (!(await fs.exists(config.ffmpegRealname))) {
-	// 	await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
-	// 	await $`tar xf ${config.macos.ffmpegName}.tar.xz`
-	// 	await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-	// 	await $`rm ${config.macos.ffmpegName}.tar.xz`
-	// } else {
-	// 	console.log('FFMPEG already exists');
-	// }
+	// Setup FFMPEG
+	if (!(await fs.exists(config.ffmpegRealname))) {
+		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
+		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
+		await $`rm ${config.macos.ffmpegName}.tar.xz`
+	} else {
+		console.log('FFMPEG already exists');
+	}
 
 	// // Move and rename ffmpeg and ffprobe binaries
 	// const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
@@ -459,8 +436,32 @@ if (platform == 'macos') {
 	// // For arm64
 	// await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
 
-	// console.log('Moved and renamed ffmpeg binary for externalBin');
+	console.log('Moved and renamed ffmpeg binary for externalBin');
 
+	// Setup Swift UI monitoring
+	console.log('Setting up Swift UI monitoring...');
+	try {
+		const swiftSrc = path.join(cwd, '../../screenpipe-vision/src/ui_monitoring_macos.swift');
+		const architectures = ['arm64', 'x86_64'];
+
+		for (const arch of architectures) {
+			console.log(`Compiling Swift UI monitor for ${arch}...`);
+
+			const binaryName = `ui_monitor-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
+			const outputPath = path.join(cwd, binaryName);
+
+			// Compile directly to the final destination
+			await $`swiftc -O -whole-module-optimization -enforce-exclusivity=unchecked -num-threads 8 -target ${arch}-apple-macos11.0 -o ${outputPath} ${swiftSrc} -framework Cocoa -framework ApplicationServices -framework Foundation`;
+
+			console.log(`Swift UI monitor for ${arch} compiled successfully`);
+			await fs.chmod(outputPath, 0o755);
+		}
+	} catch (error) {
+		console.error('Error setting up Swift UI monitoring:', error);
+		console.log('Current working directory:', cwd);
+		console.log('Expected Swift source path:', path.join(cwd, '../../screenpipe-vision/src/ui_monitoring_macos.swift'));
+		throw error; // Rethrow to fail the build if Swift compilation fails
+	}
 }
 
 
@@ -524,6 +525,7 @@ async function installOllamaSidecar() {
 	}
 
 
+
 	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
 		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
@@ -571,6 +573,8 @@ async function installOllamaSidecar() {
 		console.log('Downloading Ollama...');
 		if (platform === 'windows') {
 			await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
+		} else if (platform === 'linux') {
+			await $`wget --no-config -q ${ollamaUrl} -O ${downloadPath}`;
 		} else {
 			await $`wget --no-config -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
 		}

@@ -126,8 +126,8 @@ pub struct DecodingResult {
 
 #[derive(Debug, Clone)]
 pub struct Segment {
-    start: f64,
-    duration: f64,
+    pub start: f64,
+    pub duration: f64,
     pub dr: DecodingResult,
 }
 
@@ -345,11 +345,11 @@ impl<'a> Decoder<'a> {
                 dr,
             };
             if self.timestamps {
-                info!(
-                    "{:.1}s -- {:.1}s",
-                    segment.start,
-                    segment.start + segment.duration,
-                );
+                // info!(
+                //     "{:.1}s -- {:.1}s",
+                //     segment.start,
+                //     segment.start + segment.duration,
+                // );
                 let mut tokens_to_decode = vec![];
                 let mut prev_timestamp_s = 0f32;
                 for &token in segment.dr.tokens.iter() {
@@ -377,17 +377,17 @@ impl<'a> Decoder<'a> {
                         .decode(&tokens_to_decode, true)
                         .map_err(E::msg)?;
                     if !text.is_empty() {
-                        info!("  {:.1}s-...: {}", prev_timestamp_s, text);
+                        // info!("  {:.1}s-...: {}", prev_timestamp_s, text);
                     }
                     tokens_to_decode.clear()
                 }
             } else {
-                info!(
-                    "{:.1}s -- {:.1}s: {}",
-                    segment.start,
-                    segment.start + segment.duration,
-                    segment.dr.text,
-                )
+                // info!(
+                //     "{:.1}s -- {:.1}s: {}",
+                //     segment.start,
+                //     segment.start + segment.duration,
+                //     segment.dr.text,
+                // )
             }
             if self.verbose {
                 info!("{seek}: {segment:?}, in {:?}", start.elapsed());

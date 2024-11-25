@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
-import * as path from "node:path";
-import cronParser from "cron-parser";
 import cron, { type ScheduledTask } from "node-cron";
+import express, { Request, Response, NextFunction } from "express";
 
 // Type definitions
 export interface PipeConfig {
@@ -11,6 +10,9 @@ export interface PipeConfig {
 export interface NotificationOptions {
   title: string;
   body: string;
+  actions?: NotificationAction[];
+  timeout?: number; // in milliseconds
+  persistent?: boolean;
 }
 
 /**
@@ -250,6 +252,7 @@ export interface InboxMessage {
 export interface InboxMessageAction {
   label: string;
   action: string;
+  callback: () => Promise<void>;
 }
 
 class Task {
@@ -350,10 +353,115 @@ interface InputControlResponse {
   success: boolean;
 }
 
-/**
- * The pipe object is used to interact with the screenpipe higher level functions.
- *
- */
+// Add this type for action responses
+interface ActionResponse {
+  action: string;
+}
+
+// Keep track of action callbacks
+const actionCallbacks = new Map<string, () => Promise<void>>();
+
+// Add this function to find an available port
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = require("net").createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+export class InboxManager {
+  private actionServerPort?: number;
+  private actionServer?: express.Express;
+
+  async send(message: InboxMessage): Promise<boolean> {
+    // Ensure action server is running and we have a port
+    if (!this.actionServerPort) {
+      this.actionServerPort = await getAvailablePort();
+      this.actionServer = await this.startActionServer();
+    }
+
+    // Generate unique IDs for actions and store their callbacks
+    if (message.actions) {
+      message.actions = message.actions.map((action) => {
+        const actionId = crypto.randomUUID();
+        actionCallbacks.set(actionId, action.callback);
+        return {
+          label: action.label,
+          action: actionId,
+          port: this.actionServerPort,
+          callback: action.callback,
+        };
+      });
+    }
+
+    try {
+      const response = await fetch("http://localhost:11435/inbox", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...message,
+          type: "inbox",
+          actionServerPort: this.actionServerPort,
+        }),
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error("failed to send inbox message:", error);
+      return false;
+    }
+  }
+
+  private async startActionServer(): Promise<express.Express> {
+    const app = express();
+    app.use(express.json());
+
+    // Add CORS middleware
+    app.use((req: Request, res: Response, next: NextFunction): void => {
+      res.header("Access-Control-Allow-Origin", "*");
+      res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.header("Access-Control-Allow-Headers", "Content-Type");
+
+      if (req.method === "OPTIONS") {
+        res.sendStatus(200);
+        return;
+      }
+      next();
+    });
+
+    app.post("/action", (req, res) => {
+      const { action } = req.body as ActionResponse;
+      const callback = actionCallbacks.get(action);
+      if (callback) {
+        callback()
+          .then(() => {
+            res.json({ success: true });
+            actionCallbacks.delete(action);
+          })
+          .catch((error) => {
+            console.error("action callback failed:", error);
+            res.status(500).json({ success: false, error: error.message });
+          });
+      } else {
+        res.status(404).json({ success: false, error: "action not found" });
+      }
+    });
+
+    return new Promise((resolve) => {
+      app.listen(this.actionServerPort, () => {
+        console.log(`action server listening on port ${this.actionServerPort}`);
+        resolve(app);
+      });
+    });
+  }
+}
+
+// Remove the startActionServer from pipe object since it's now handled by InboxManager
 export const pipe = {
   /**
    * Send a desktop notification to the user.
@@ -389,24 +497,13 @@ export const pipe = {
    * ```typescript
    * pipe.inbox.send({ title: "Task Completed", body: "Your task has been completed." });
    * ```
+   *
+   * or with actions:
+   * ```typescript
+   * pipe.inbox.send({ title: "Task Completed", body: "Your task has been completed.", actions: [{ id: "view", label: "view details", callback: async () => { console.log("viewing details"); } }] });
+   * ```
    */
-  inbox: {
-    send: async (message: InboxMessage): Promise<boolean> => {
-      const notificationApiUrl =
-        process.env.SCREENPIPE_SERVER_URL || "http://localhost:11435";
-      try {
-        const response = await fetch(`${notificationApiUrl}/inbox`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...message, type: "inbox" }),
-        });
-        return response.ok;
-      } catch (error) {
-        console.error("failed to send inbox message:", error);
-        return false;
-      }
-    },
-  },
+  inbox: new InboxManager(),
   /**
    * Scheduler for running tasks at specific times or intervals.
    *
@@ -489,4 +586,10 @@ async function sendInputControl(action: InputAction): Promise<boolean> {
     console.error("failed to control input:", error);
     return false;
   }
+}
+
+export interface NotificationAction {
+  id: string;
+  label: string;
+  callback?: () => Promise<void>;
 }

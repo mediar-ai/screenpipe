@@ -41,7 +41,7 @@ pub async fn kill_all_sreenpipes(
         }
         #[cfg(target_os = "windows")]
         {
-use std::os::windows::process::CommandExt;
+            use std::os::windows::process::CommandExt;
 
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::process::Command::new("taskkill")
@@ -291,17 +291,22 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-ui-monitoring");
     }
 
+
     if data_dir != "default" {
         args.push("--data-dir");
         args.push(data_dir.as_str());
     }
 
+    // Add exe directory path before the Windows-specific block
+    let exe_dir = env::current_exe()
+        .expect("Failed to get current executable path")
+        .parent()
+        .expect("Failed to get parent directory of executable")
+        .to_path_buf();
+
+
     if cfg!(windows) {
-        let exe_dir = env::current_exe()
-            .expect("Failed to get current executable path")
-            .parent()
-            .expect("Failed to get parent directory of executable")
-            .to_path_buf();
+
         let tessdata_path = exe_dir.join("tessdata");
         let mut c = app
             .shell()

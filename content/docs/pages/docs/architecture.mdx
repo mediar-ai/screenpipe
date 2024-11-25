@@ -21,6 +21,28 @@ screenpipe's architecture handles continuous screen and audio capture, local dat
 
 this modular architecture makes screenpipe adaptable to various use cases, from personal productivity tracking to advanced business intelligence.
 
+<MotionDiv delay={0.2}>
+
+### data abstraction layers
+
+![screenpipe data abstractions](https://raw.githubusercontent.com/user-attachments/assets/93136194-0945-4eec-a9f1-f58eb9e440a4)
+
+screenpipe organizes data in concentric layers of abstraction, from raw data to high-level intelligence:
+
+1. **core (mp4 files)**: the innermost layer contains the raw screen recordings and audio captures in mp4 format
+2. **processing layer**: contains the direct processing outputs
+   - OCR embeddings: vectorized text extracted from screen
+   - human id: anonymized user identification 
+   - accessibility: metadata for improved data access
+   - transcripts: processed audio-to-text
+3. **AI memories**: the outermost layer represents the highest level of abstraction where AI processes and synthesizes all lower-level data into meaningful insights
+4. **pipes enrich**: custom processing modules that can interact with and enhance data at any layer
+
+this layered approach enables both granular access to raw data and sophisticated AI-powered insights while maintaining data privacy and efficiency.
+
+</MotionDiv>
+
+
 ## status 
 
 Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop, 24/7.
@@ -76,6 +98,4 @@ Uses 600 MB, 10% CPU.
 - [ ] webhooks/events (for automations)
 - [ ] abstractions for multiplayer usage (e.g. aggregate sales team data, company team data, partner, etc.)
 
-
 </MotionDiv>
-

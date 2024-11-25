@@ -17,7 +17,8 @@
         "externalBin": [
             "screenpipe",
             "bun",
-            "ollama"
+            "ollama",
+            "ui_monitor"
         ]
     }
 }

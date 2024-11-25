@@ -1,4 +1,3 @@
-// _meta.tsx
 export default {
   "getting-started": "getting started",
   "plugins": "plugins (pipes)",
@@ -6,6 +5,7 @@ export default {
   "architecture": "architecture overview",
   "api-reference": "api reference",
   "contributing": "contributing",
-  "faq": "faq",
-  "integrations": "integrations"
+  "integrations": "integrations",
+  "server": "use screenpipe on a server",
+  "faq": "faq"
 };
