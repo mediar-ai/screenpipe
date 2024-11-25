@@ -64,25 +64,18 @@ async function syncLogToObsidian(
   try {
     console.log("syncLogToObsidian", logEntry);
 
-    // Create the daily note filename in format YYYY-MM-DD.md
     const today = new Date();
-    const filename = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}.md`;
+    const filename = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}.md`;
     const filePath = path.join(obsidianPath, filename);
 
-    // Create markdown table row for the entry
     const tableRow = `| ${logEntry.title} | ${
       logEntry.description
     } | ${logEntry.tags.join(", ")} | ${logEntry.timeSpent} min |\n`;
 
     try {
-      // Try to read existing file
       await fs.access(filePath);
-      // File exists, append to it
       await fs.appendFile(filePath, tableRow, "utf8");
     } catch {
-      // File doesn't exist, create it with header and first row
       const content = `| Title | Description | Tags | Time Spent |\n|-------|-------------|------|------------|\n${tableRow}`;
       await fs.writeFile(filePath, content, "utf8");
     }
@@ -91,13 +84,13 @@ async function syncLogToObsidian(
 
     await pipe.inbox.send({
       title: "work log synced",
-      body: `new work log entry synced to Obsidian: ${filename}`,
+      body: `new work log entry synced to: ${filePath}`,
     });
   } catch (error) {
     console.error("error syncing work log to obsidian:", error);
     await pipe.inbox.send({
       title: "work log error",
-      body: `error syncing work log to obsidian: ${error}`,
+      body: `error syncing work log to: ${obsidianPath}\nerror: ${error}`,
     });
   }
 }
@@ -109,7 +102,7 @@ function streamWorkLogs(): void {
   console.log("loaded config:", JSON.stringify(config, null, 2));
 
   let successfulLogsCount = 0;
-  const NOTIFICATION_THRESHOLD = 5; // Send notification every 5 successful logs
+  const NOTIFICATION_THRESHOLD = 5;
 
   const interval = config.interval * 1000;
   const obsidianPath = config.obsidianPath;
@@ -148,11 +141,12 @@ function streamWorkLogs(): void {
 
           successfulLogsCount++;
           if (successfulLogsCount >= NOTIFICATION_THRESHOLD) {
+            const filePath = path.join(obsidianPath, `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}.md`);
             await pipe.inbox.send({
               title: "work logs batch synced",
-              body: `synced ${NOTIFICATION_THRESHOLD} work log entries to obsidian`,
+              body: `synced ${NOTIFICATION_THRESHOLD} work log entries to: ${filePath}`,
             });
-            successfulLogsCount = 0; // Reset counter
+            successfulLogsCount = 0;
           }
         } else {
           console.log("no relevant activity detected in the last interval");

@@ -21,7 +21,7 @@
       {
         "name": "gptModel",
         "type": "string",
-        "default": "",
+        "default": "gpt-4o",
         "description": "OpenAI GPT model to use (e.g. gpt-4). If provided with openaiApiKey, OpenAI will be used instead of Ollama"
       },
       {
