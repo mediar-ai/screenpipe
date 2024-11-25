@@ -181,6 +181,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let data_dir = store
+        .get("dataDir")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
+
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -286,12 +291,19 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-ui-monitoring");
     }
 
+
+    if data_dir != "default" {
+        args.push("--data-dir");
+        args.push(data_dir.as_str());
+    }
+
     // Add exe directory path before the Windows-specific block
     let exe_dir = env::current_exe()
         .expect("Failed to get current executable path")
         .parent()
         .expect("Failed to get parent directory of executable")
         .to_path_buf();
+
 
     if cfg!(windows) {
 

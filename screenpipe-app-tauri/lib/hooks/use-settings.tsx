@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { createStore } from "@tauri-apps/plugin-store";
-import { localDataDir, join } from "@tauri-apps/api/path";
+import { localDataDir, join, homeDir } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
@@ -148,8 +148,8 @@ export function useSettings() {
           currentPlatform === "macos"
             ? "apple-native"
             : currentPlatform === "windows"
-            ? "windows-native"
-            : "tesseract";
+              ? "windows-native"
+              : "tesseract";
 
         console.log("loading settings", store);
         // no need to call load() as it's done automatically
@@ -244,29 +244,29 @@ export function useSettings() {
         const defaultIgnoredWindows =
           currentPlatform === "macos"
             ? [
-                ...ignoredWindowsInAllOS,
-                ".env",
-                "Item-0",
-                "App Icon Window",
-                "Battery",
-                "Shortcuts",
-                "WiFi",
-                "BentoBox",
-                "Clock",
-                "Dock",
-                "DeepL",
-                "Control Center",
-              ]
+              ...ignoredWindowsInAllOS,
+              ".env",
+              "Item-0",
+              "App Icon Window",
+              "Battery",
+              "Shortcuts",
+              "WiFi",
+              "BentoBox",
+              "Clock",
+              "Dock",
+              "DeepL",
+              "Control Center",
+            ]
             : currentPlatform === "windows"
-            ? [
+              ? [
                 ...ignoredWindowsInAllOS,
                 "Nvidia",
                 "Control Panel",
                 "System Properties",
               ]
-            : currentPlatform === "linux"
-            ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
-            : [];
+              : currentPlatform === "linux"
+                ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
+                : [];
 
         const savedIgnoredWindows = await store!.get<string[]>(
           "ignoredWindows"
@@ -372,7 +372,17 @@ export function useSettings() {
     }
   };
 
-  return { settings, updateSettings, resetSetting };
+  const getDataDir = async () => {
+    const homeDirPath = await homeDir();
+
+    if (settings.dataDir) return settings.dataDir;
+
+    return platform() === "macos" || platform() === "linux"
+      ? `${homeDirPath}/.screenpipe`
+      : `${homeDirPath}\\.screenpipe`;
+  }
+
+  return { settings, updateSettings, resetSetting, getDataDir };
 }
 
 async function initStore() {

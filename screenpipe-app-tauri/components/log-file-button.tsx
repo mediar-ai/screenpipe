@@ -13,6 +13,7 @@ import { open } from "@tauri-apps/plugin-shell";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 export const LogFileButton = ({
   className,
@@ -23,17 +24,12 @@ export const LogFileButton = ({
 }) => {
   const { toast } = useToast();
   const { copyToClipboard } = useCopyToClipboard({ timeout: 3000 });
+  const { getDataDir } = useSettings();
 
   const getLogFilePath = async () => {
-    const homeDirPath = await homeDir();
+    const dataDir = await getDataDir();
     const logFileName = isAppLog ? "screenpipe-app" : "screenpipe";
-    return platform() === "windows"
-      ? `${homeDirPath}\\.screenpipe\\${logFileName}.${
-          new Date().toISOString().split("T")[0]
-        }.log`
-      : `${homeDirPath}/.screenpipe/${logFileName}.${
-          new Date().toISOString().split("T")[0]
-        }.log`;
+    return `${dataDir}\\${logFileName}.${new Date().toISOString().split("T")[0]}.log`
   };
 
   const handleOpenLogFile = async () => {
