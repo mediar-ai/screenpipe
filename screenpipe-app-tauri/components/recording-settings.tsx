@@ -97,6 +97,7 @@ export function RecordingSettings({
   const [openLanguages, setOpenLanguages] = React.useState(false);
   const [windowsForIgnore, setWindowsForIgnore] = useState("");
   const [windowsForInclude, setWindowsForInclude] = useState("");
+  const [isTimelineEnabled, setIsTimelineEnabled] = useState(localSettings.enableFrameCache);
 
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
@@ -222,6 +223,7 @@ export function RecordingSettings({
         includedWindows: localSettings.includedWindows,
         deepgramApiKey: localSettings.deepgramApiKey,
         fps: localSettings.fps,
+        timelineFps: localSettings.timelineFps,
         vadSensitivity: localSettings.vadSensitivity,
         audioChunkDuration: localSettings.audioChunkDuration,
         analyticsEnabled: localSettings.analyticsEnabled,
@@ -374,6 +376,10 @@ export function RecordingSettings({
 
   const handleFpsChange = (value: number[]) => {
     setLocalSettings({ ...localSettings, fps: value[0] });
+  };
+
+  const handleTimelineFpsChange = (value: number[]) => {
+    setLocalSettings({ ...localSettings, timelineFps: value[0] });
   };
 
   const handleVadSensitivityChange = (value: number[]) => {
@@ -550,6 +556,7 @@ export function RecordingSettings({
   };
 
   const handleFrameCacheToggle = (checked: boolean) => {
+    setIsTimelineEnabled(checked);
     setLocalSettings({
       ...localSettings,
       enableFrameCache: checked,
@@ -1392,7 +1399,7 @@ export function RecordingSettings({
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="frame-cache-toggle"
-                    checked={localSettings.enableFrameCache}
+                    checked={isTimelineEnabled}
                     onCheckedChange={handleFrameCacheToggle}
                   />
                   <Label
@@ -1419,6 +1426,41 @@ export function RecordingSettings({
                 </div>
               </div>
             </div>
+            {isTimelineEnabled && (
+              <div className="flex !w-full items-center space-x-4">
+                <Slider
+                  id="timeline-fps"
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                  value={[localSettings.timelineFps]}
+                  onValueChange={handleTimelineFpsChange}
+                  className="flex-grow"
+                />
+                <span className="w-12 text-right">
+                  {localSettings.timelineFps.toFixed(1)}
+                </span>
+                  <Label
+                    htmlFor="timeline-fps"
+                    className="flex items-center space-x-2"
+                  >
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>
+                            timeline fps tuner, which will let you set fps for timeline stream
+                            <br />
+                            may increase CPU usage and memory consumption.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+              </div>
+            )}
             {isMacOS && (
               <div className="flex items-center space-x-2">
                 <Switch

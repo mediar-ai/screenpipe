@@ -45,6 +45,7 @@ export interface Settings {
   aiUrl: string;
   aiMaxContextChars: number;
   fps: number;
+  timelineFps: number;
   vadSensitivity: VadSensitivity;
   analyticsEnabled: boolean;
   audioChunkDuration: number; // new field
@@ -89,6 +90,7 @@ const defaultSettings: Settings = {
   aiUrl: "https://api.openai.com/v1",
   aiMaxContextChars: 30000,
   fps: 0.5,
+  timelineFps: 0.1,
   vadSensitivity: "high",
   analyticsEnabled: true,
   audioChunkDuration: 30, // default to 10 seconds
@@ -200,6 +202,8 @@ export function useSettings() {
         const savedFps =
           (await store!.get<number>("fps")) ||
           (currentPlatform === "macos" ? 0.2 : 1);
+        const savedTimelineFps =
+          (await store!.get<number>("timelineFps")) || 0.1;
         const savedVadSensitivity =
           (await store!.get<VadSensitivity>("vadSensitivity")) || "high";
         let savedAnalyticsEnabled = await store!.get<boolean>(
@@ -322,6 +326,7 @@ export function useSettings() {
           aiUrl: savedAiUrl,
           aiMaxContextChars: savedAiMaxContextChars,
           fps: savedFps,
+          timelineFps: savedTimelineFps,
           vadSensitivity: savedVadSensitivity,
           analyticsEnabled: savedAnalyticsEnabled,
           audioChunkDuration: savedAudioChunkDuration,

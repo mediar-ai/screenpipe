@@ -75,16 +75,18 @@ export default function Timeline() {
   }, []);
 
   const setupEventSource = () => {
+    console.log("timeline fps:", settings.timelineFps);
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
 
+    const target_fps = settings.timelineFps;
     const endTime = new Date();
     endTime.setMinutes(endTime.getMinutes() - 2);
     const startTime = new Date();
     startTime.setHours(0, 1, 0, 0);
 
-    const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
+    const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending&target_fps=${target_fps}`;
 
     setLoadedTimeRange({
       start: startTime,
@@ -181,7 +183,7 @@ export default function Timeline() {
       setIsLoading(false);
       setError(null);
     };
-  }, []);
+  }, [settings.timelineFps]);
 
   const handleScroll = useMemo(
     () =>

@@ -934,9 +934,8 @@ fn persist_path_windows(new_path: PathBuf) -> anyhow::Result<()> {
 
     // Ensure 'setx' command can handle the new PATH length
     if current_path.len() + new_path.to_str().unwrap_or("").len() + 1 > 1024 {
-        return Err(anyhow::anyhow!(
-            "the PATH is too long to persist using 'setx'. please shorten the PATH."
-        ));
+        debug!("the PATH is too long to persist using 'setx'. please shorten the PATH.");
+        return Ok(());
     }
 
     // Construct the new PATH string

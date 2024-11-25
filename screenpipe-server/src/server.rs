@@ -1218,6 +1218,7 @@ enum Order {
 pub struct StreamFramesRequest {
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
+    target_fps: Option<f64>,
     // #[serde(rename = "order")]
     // #[serde(default = "descending")]
     // order: Order,
@@ -1361,9 +1362,10 @@ async fn stream_frames_handler(
         // Spawn frame extraction task using get_frames
         tokio::spawn({
             let frame_tx = frame_tx.clone();
+            let target_fps = request.target_fps.unwrap_or(0.1);
             async move {
                 tokio::select! {
-                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true) => {
+                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true, target_fps) => {
                         if let Err(e) = result {
                             error!("frame extraction failed: {}", e);
                             // Send error to client
