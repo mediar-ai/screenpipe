@@ -18,7 +18,7 @@ const config = withMDX({
 const withNextra = nextra({
   theme: 'nextra-theme-docs',
   themeConfig: './theme.config.tsx',
-  standalone: true,
+  // standalone: true,
 });
 
 /** @type {import('next').NextConfig} */

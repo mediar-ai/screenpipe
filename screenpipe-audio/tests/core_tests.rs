@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use anyhow::anyhow;
     use chrono::Utc;
     use log::{debug, LevelFilter};
+    use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
+    use screenpipe_audio::pyannote::identify::EmbeddingManager;
     use screenpipe_audio::stt::{prepare_segments, stt};
     use screenpipe_audio::vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
     use screenpipe_audio::whisper::WhisperModel;
@@ -307,9 +310,39 @@ mod tests {
             device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
         };
 
-        let mut segments = prepare_segments(&audio_input, vad_engine.clone())
-            .await
-            .unwrap();
+        let start_time = Instant::now();
+
+        // Create the missing parameters
+        let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let segmentation_model_path = project_dir
+            .join("models")
+            .join("pyannote")
+            .join("segmentation-3.0.onnx");
+        let embedding_model_path = project_dir
+            .join("models")
+            .join("pyannote")
+            .join("wespeaker_en_voxceleb_CAM++.onnx");
+
+        let embedding_extractor = Arc::new(std::sync::Mutex::new(
+            EmbeddingExtractor::new(
+                embedding_model_path
+                    .to_str()
+                    .ok_or_else(|| anyhow!("Invalid embedding model path"))
+                    .unwrap(),
+            )
+            .unwrap(),
+        ));
+        let embedding_manager = EmbeddingManager::new(usize::MAX);
+
+        let mut segments = prepare_segments(
+            &audio_input,
+            vad_engine.clone(),
+            &segmentation_model_path,
+            embedding_manager,
+            embedding_extractor,
+        )
+        .await
+        .unwrap();
         let mut whisper_model_guard = whisper_model.lock().await;
 
         let mut transcription_result = String::new();
@@ -370,6 +403,28 @@ mod tests {
             device: Arc::new(default_output_device().unwrap()),
         };
 
+        let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let segmentation_model_path = project_dir
+            .join("models")
+            .join("pyannote")
+            .join("segmentation-3.0.onnx");
+        let embedding_model_path = project_dir
+            .join("models")
+            .join("pyannote")
+            .join("wespeaker_en_voxceleb_CAM++.onnx");
+
+        let embedding_extractor = Arc::new(std::sync::Mutex::new(
+            EmbeddingExtractor::new(
+                embedding_model_path
+                    .to_str()
+                    .ok_or_else(|| anyhow!("Invalid embedding model path"))
+                    .unwrap(),
+            )
+            .unwrap(),
+        ));
+
+        let embedding_manager = EmbeddingManager::new(usize::MAX);
+
         // Initialize the WhisperModel
         let mut whisper_model = WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo)
             .expect("Failed to initialize WhisperModel");
@@ -381,9 +436,15 @@ mod tests {
         // Measure transcription time
         let start_time = Instant::now();
 
-        let mut segments = prepare_segments(&audio_input, vad_engine.clone())
-            .await
-            .unwrap();
+        let mut segments = prepare_segments(
+            &audio_input,
+            vad_engine.clone(),
+            &segmentation_model_path,
+            embedding_manager,
+            embedding_extractor,
+        )
+        .await
+        .unwrap();
 
         let mut transcription = String::new();
         while let Some(segment) = segments.recv().await {

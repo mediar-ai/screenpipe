@@ -2,6 +2,7 @@ mod tests {
     use log::LevelFilter;
     use screenpipe_audio::pyannote::segment::get_segments;
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
 
     fn setup() {
         // Initialize the logger with an info level filter
@@ -29,13 +30,15 @@ mod tests {
             .join("pyannote")
             .join("segmentation-3.0.onnx");
 
-        let embedding_extractor = screenpipe_audio::pyannote::embedding::EmbeddingExtractor::new(
-            embedding_model_path
-                .to_str()
-                .ok_or_else(|| anyhow::anyhow!("Invalid embedding model path"))
-                .unwrap(),
-        )
-        .unwrap();
+        let embedding_extractor = Arc::new(Mutex::new(
+            screenpipe_audio::pyannote::embedding::EmbeddingExtractor::new(
+                embedding_model_path
+                    .to_str()
+                    .ok_or_else(|| anyhow::anyhow!("Invalid embedding model path"))
+                    .unwrap(),
+            )
+            .unwrap()
+        ));
         let embedding_manager =
             screenpipe_audio::pyannote::identify::EmbeddingManager::new(usize::MAX);
 
