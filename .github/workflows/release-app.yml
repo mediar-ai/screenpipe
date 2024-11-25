@@ -215,6 +215,7 @@ jobs:
           CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
           CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
           CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
+          CARGO_BUILD_JOBS: "12"
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -247,6 +248,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
+          CARGO_BUILD_JOBS: "12"
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
@@ -284,13 +286,13 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: signpath/github-action-submit-signing-request@v1
         with:
-          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
-          organization-id: '9cd36272-53da-46a4-9d5c-a0870243ba97'
-          project-slug: 'screenpipe'
-          signing-policy-slug: 'test-signing'
-          github-artifact-id: '${{ steps.upload-unsigned-artifact.outputs.artifact-id }}'
+          api-token: "${{ secrets.SIGNPATH_API_TOKEN }}"
+          organization-id: "9cd36272-53da-46a4-9d5c-a0870243ba97"
+          project-slug: "screenpipe"
+          signing-policy-slug: "test-signing"
+          github-artifact-id: "${{ steps.upload-unsigned-artifact.outputs.artifact-id }}"
           wait-for-completion: true
-          output-artifact-directory: './screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe'
+          output-artifact-directory: "./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe"
 
       - name: Upload Assets to CrabNebula Cloud
         uses: crabnebula-dev/cloud-release@v0.2.6
