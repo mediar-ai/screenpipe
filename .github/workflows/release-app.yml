@@ -93,7 +93,7 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: [self-hosted, Windows, X64] # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
+            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
@@ -121,7 +121,7 @@ jobs:
           node-version: 20
 
       - name: Install Rust
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         run: |
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
@@ -181,21 +181,21 @@ jobs:
         shell: bash
         working-directory: ./screenpipe-app-tauri
         run: |
-          ls . 
+          ls .
           bun install
 
       - name: Install vcpkg
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
@@ -212,9 +212,9 @@ jobs:
         shell: bash
         env:
           # Windows specific optimizations (only applied when building for Windows)
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
-          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
-          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -248,18 +248,18 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
           # Optimize for build speed on Windows
-          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
           # Enable incremental compilation for Windows
-          CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
+          CARGO_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
           # Windows specific optimizations (only applied when building for Windows)
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
-          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
-          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
-          RUSTFLAGS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
+          RUSTFLAGS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
           VCPKG_STATIC_LINKAGE: "true"
-          KNF_STATIC_CRT: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '1' || '' }}
+          KNF_STATIC_CRT: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
