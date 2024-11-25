@@ -102,7 +102,7 @@ const defaultSettings: Settings = {
   enableBeta: false,
   showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
-  enableFrameCache: false, // Add this line
+  enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
 };
@@ -293,7 +293,7 @@ export function useSettings() {
           (await store!.get<AIProviderType>("aiProviderType")) || "openai";
 
         const savedEnableFrameCache =
-          (await store!.get<boolean>("enableFrameCache")) || false;
+          (await store!.get<boolean>("enableFrameCache")) || true;
 
         const savedEnableUiMonitoring =
           (await store!.get<boolean>("enableUiMonitoring")) || false;

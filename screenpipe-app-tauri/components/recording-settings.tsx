@@ -1009,7 +1009,7 @@ export function RecordingSettings({
               <div className="flex items-center space-x-4">
                 <Slider
                   id="restartInterval"
-                  min={30}
+                  min={0}
                   max={1440} // 24 hours
                   step={30}
                   value={[localSettings.restartInterval]}
