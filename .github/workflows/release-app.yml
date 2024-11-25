@@ -265,6 +265,33 @@ jobs:
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
+      - name: Get version from Cargo.toml
+        shell: bash
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: |
+          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Upload screenpipe binary for signing
+        id: upload-unsigned-artifact
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-screenpipe
+          path: ./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe
+
+      - name: Sign artifact
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+          organization-id: '9cd36272-53da-46a4-9d5c-a0870243ba97'
+          project-slug: 'screenpipe'
+          signing-policy-slug: 'test-signing'
+          github-artifact-id: '${{ steps.upload-unsigned-artifact.outputs.artifact-id }}'
+          wait-for-completion: true
+          output-artifact-directory: './screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe'
+
       - name: Upload Assets to CrabNebula Cloud
         uses: crabnebula-dev/cloud-release@v0.2.6
         with:
