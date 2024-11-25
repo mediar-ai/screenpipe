@@ -13,7 +13,10 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
     let mut rng = rand::thread_rng();
 
     for _ in 0..size {
-        let _video_id = db.insert_video_chunk("test_video.mp4", "test_device").await.unwrap();
+        let _video_id = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
         let frame_id = db.insert_frame("test_device", None).await.unwrap();
         let ocr_text = format!("OCR text {}", rng.gen::<u32>());
         let text_json = format!(r#"{{"text": "{}"}}"#, ocr_text);
@@ -40,6 +43,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
                 "test_device".to_string(),
                 screenpipe_audio::DeviceType::Input,
             ),
+            None,
         )
         .await
         .unwrap();
@@ -60,7 +64,7 @@ fn bench_search(c: &mut Criterion) {
     group.measurement_time(std::time::Duration::from_secs(60)); // Increase measurement time to 60 seconds
 
     for &size in &db_sizes {
-        for &content_type in &content_types {
+        for content_type in &content_types {
             for &query in &search_queries {
                 group.bench_function(
                     format!("{:?}_db_size_{}_query_{}", content_type, size, query),
@@ -69,7 +73,7 @@ fn bench_search(c: &mut Criterion) {
                             let db = setup_large_db(size).await;
                             db.search(
                                 query,
-                                content_type,
+                                content_type.clone(),
                                 100,
                                 0,
                                 None,
