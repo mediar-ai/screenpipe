@@ -1,0 +1,12 @@
+-- Add speaker_id to audio_transcriptions table if it doesn't exist
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM pragma_table_info('audio_transcriptions')
+        WHERE name = 'speaker_id'
+    ) THEN
+        ALTER TABLE audio_transcriptions 
+        ADD COLUMN speaker_id INTEGER REFERENCES speakers(id);
+    END IF;
+END $$;
