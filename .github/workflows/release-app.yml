@@ -92,7 +92,7 @@ jobs:
             args: "--target x86_64-apple-darwin --features metal,beta"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
-          - platform: [self-hosted, Windows, X64] # Windows x86_64
+          - platform: windows-latest # Windows x86_64
             args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
@@ -281,6 +281,11 @@ jobs:
         with:
           name: unsigned-screenpipe
           path: ./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe
+
+      - name: Find libiomp
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: |
+          Get-ChildItem -Path . -Filter libiomp5md.dll -Recurse -ErrorAction SilentlyContinue -Force
 
       - name: Sign artifact
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
