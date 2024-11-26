@@ -93,7 +93,7 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: [self-hosted, Windows, X64] # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features "openblas"
+            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
@@ -111,6 +111,13 @@ jobs:
           else
             sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
           fi
+
+      - name: Set up MKL libs
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: |
+          mkdir omp
+          pip install intel-openmp --target omp
+          tree /f omp
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -173,7 +180,7 @@ jobs:
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
         run: |
-          brew install ffmpeg 
+          brew install ffmpeg
 
       - name: Install frontend dependencies
         shell: bash
