@@ -45,7 +45,8 @@ export default function Header() {
   const { health } = useHealthCheck();
   const { settings } = useSettings();
 
-  const isLoading = !health;
+  // const isLoading = !health;
+  const isLoading = false; // ! testing - had issue with this before 
 
   useEffect(() => {
     const loadMessages = async () => {
