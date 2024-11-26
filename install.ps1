@@ -1,7 +1,6 @@
 # Check if running as administrator
 if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Warning "please run as administrator!"
-    exit
 }
 
 Write-Host "installing screenpipe..."
@@ -39,6 +38,4 @@ try {
 } catch {
     $errorMessage = $_.Exception.Message
     Write-Host "installation failed: $errorMessage" -ForegroundColor Red
-    # Clean exit without using Environment or exit commands
-    return 1
 }
