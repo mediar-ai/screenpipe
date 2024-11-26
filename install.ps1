@@ -37,7 +37,8 @@ try {
 
     Write-Host "screenpipe installed successfully! restart your terminal and run 'screenpipe'"
 } catch {
-    Write-Host "installation failed: $($_.Exception.Message)" -ForegroundColor Red
-    # Exit with error code but don't propagate exception
-    [Environment]::Exit(1)
+    $errorMessage = $_.Exception.Message
+    Write-Host "installation failed: $errorMessage" -ForegroundColor Red
+    # Clean exit without using Environment or exit commands
+    return 1
 }
