@@ -34,8 +34,8 @@ try {
     # Cleanup
     Remove-Item $tempZip -Force
 
-    Write-Host "screenpipe installed successfully! restart your terminal and run 'screenpipe'"
+    # Write-Host "screenpipe installed successfully! restart your terminal and run 'screenpipe'"
 } catch {
     $errorMessage = $_.Exception.Message
-    Write-Host "installation failed: $errorMessage" -ForegroundColor Red
+    # Write-Host "installation failed: $errorMessage" -ForegroundColor Red
 }
