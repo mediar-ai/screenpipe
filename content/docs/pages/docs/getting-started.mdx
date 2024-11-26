@@ -1,4 +1,5 @@
 import MotionDiv from '../../components/motion-div'
+import { Tabs, Tab } from 'nextra/components'
 
 # getting started
 
@@ -8,14 +9,44 @@ screenpipe offers multiple installation methods depending on user needs and tech
 
 for non technical users or those who want to get started quickly, we recommend getting the [desktop app here](https://screenpi.pe/onboarding).
 
-quickly start the CLI on MacOS with:
-```bash copy
-brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
-brew install screenpipe
-screenpipe
-```
+<Tabs items={['macos', 'linux', 'windows']}>
+  <Tab>
+    ```bash copy
+    brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
+    brew install screenpipe
+    screenpipe
+    ```
+  </Tab>
+  <Tab>
+   ```bash
+    brew install screenpipe
+    screenpipe
+   ```
 
-then 
+   or
+
+    ```bash copy
+    # using nix
+    nix-shell -p screen-pipe
+
+    # or build from source
+    sudo apt-get install -y g++ ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    git clone https://github.com/mediar-ai/screenpipe
+    cd screenpipe
+    cargo build --release
+    ./target/release/screenpipe
+    ```
+  </Tab>
+  <Tab>
+    ```powershell copy
+    # run as administrator
+    irm https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+then open the simple timeline UI:
 
 ```bash copy
 git clone https://github.com/mediar-ai/screenpipe
@@ -23,7 +54,6 @@ open screenpipe-server/examples/timeline_ui_simple/index.html # or open manually
 ```
 
 this will open a rewind.ai alike timeline powered by a single html file :) that you can tweak around!
-
 
 </MotionDiv>
 
