@@ -93,7 +93,7 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: [self-hosted, Windows, X64] # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
+            args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
@@ -229,12 +229,12 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
-      - name: Copy library for MKL
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        run: |
-          $iomp_path = Get-ChildItem -Path . -Filter libiomp5md.dll -Recurse -ErrorAction SilentlyContinue -Force | % { $_.fullname }
-          mkdir screenpipe-app-tauri/src-tauri/mkl/
-          cp $iomp_path screenpipe-app-tauri/src-tauri/mkl/
+      # - name: Copy library for MKL
+      #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      #   run: |
+      #     $iomp_path = Get-ChildItem -Path . -Filter libiomp5md.dll -Recurse -ErrorAction SilentlyContinue -Force | % { $_.fullname }
+      #     mkdir screenpipe-app-tauri/src-tauri/mkl/
+      #     cp $iomp_path screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
         uses: tauri-apps/tauri-action@v0

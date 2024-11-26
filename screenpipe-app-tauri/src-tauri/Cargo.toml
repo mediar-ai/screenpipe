@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.13.0"
+version = "0.13.1"
 description = ""
 authors = ["you"]
 license = ""
@@ -114,3 +114,7 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [package.metadata.cargo-machete]
 ignored = ["tauri-utils"]
+
+[patch.crates-io]
+sysinfo = "=0.29.0"
+
