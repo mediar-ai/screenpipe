@@ -172,9 +172,11 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
             )
         };
 
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let output = tokio::process::Command::new("powershell")
             .arg("-Command")
             .arg(command)
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .await
             .ok()?;
@@ -198,12 +200,14 @@ async fn get_exe_by_appx(
     let app_name = app_name.strip_suffix(".exe").unwrap_or(&app_name);
     let app_name_withoutspace = app_name.replace(" ", ""); 
 
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let output = tokio::process::Command::new("powershell")
         .arg("-Command")
         .arg(format!(
             r#"Get-AppxPackage | Where-Object {{ $_.Name -like "*{}*" }}"#,
             app_name_withoutspace
         ))
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .await
         .expect("failed to execute powershell command");
@@ -228,6 +232,7 @@ async fn get_exe_by_appx(
             package_name,
             app_name_withoutspace
         ))
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .await
         .ok()?;
@@ -248,6 +253,7 @@ async fn get_exe_by_appx(
             package_name,
             app_name
         ))
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .await
         .ok()?;
