@@ -4,9 +4,9 @@
 name: Release App
 
 on:
-  push:
-    tags:
-      - "v*"
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
     inputs:
       commit_hash:
