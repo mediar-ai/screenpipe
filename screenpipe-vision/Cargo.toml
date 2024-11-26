@@ -90,10 +90,10 @@ windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Stor
 xcap = "0.0.12"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-libc = "0.2"
+libc = "=0.2.164"
 xcap = "0.0.13" 
 
 [target.'cfg(target_os = "linux")'.dependencies]
-libc = "0.2"
+libc = "=0.2.164"
 xcap = "0.0.14"
 
