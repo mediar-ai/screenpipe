@@ -239,8 +239,18 @@ impl DatabaseManager {
     }
 
     async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-        sqlx::migrate!("./src/migrations").run(pool).await?;
-        Ok(())
+        match sqlx::migrate!("./src/migrations").run(pool).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                // Check if it's a version mismatch for our specific migration
+                if e.to_string().contains("20241110041538") {
+                    debug!("ignoring known migration mismatch for 20241110041538");
+                    Ok(())
+                } else {
+                    Err(e.into())
+                }
+            }
+        }
     }
 
     pub async fn insert_audio_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
