@@ -667,6 +667,14 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    // Add changelog link
+    println!(
+        "\n{}",
+        "check latest changes here: https://github.com/mediar-ai/screenpipe/releases"
+            .bright_blue()
+            .italic()
+    );
+
     // Start pipes
     debug!("starting pipes");
     let pipes = pipe_manager.list_pipes().await;
