@@ -13,7 +13,8 @@
             "onnxruntime*\\lib\\onnxruntime.dll": "./",
             "onnxruntime*\\lib\\onnxruntime_providers_cuda.dll": "./",
             "onnxruntime*\\lib\\onnxruntime_providers_shared.dll": "./",
-            "lib\\ollama\\*": "./"
+            "lib\\ollama\\*": "./",
+            "mkl\\*.dll": "./"
         }
     }
 }
