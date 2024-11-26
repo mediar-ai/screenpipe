@@ -1,14 +1,17 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::process::Stdio;
 use std::time::Duration;
 use tauri::async_runtime::Receiver;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
+use tokio::process::Command;
 use tokio::time::sleep;
 use tracing::{error, info};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddedLLMSettings {
     pub enabled: bool,
@@ -26,6 +29,8 @@ pub enum OllamaStatus {
 pub struct LLMSidecar {
     settings: EmbeddedLLMSettings,
     status: OllamaStatus,
+    serve_process_id: Option<u32>,
+    model_process_id: Option<u32>,
 }
 
 impl LLMSidecar {
@@ -33,12 +38,14 @@ impl LLMSidecar {
         Self {
             settings,
             status: OllamaStatus::Idle,
+            serve_process_id: None,
+            model_process_id: None,
         }
     }
 
     pub async fn start(&mut self, app: tauri::AppHandle) -> Result<String> {
         self.status = OllamaStatus::Running;
-        app.emit("ollama_status", &self.status)?;
+        app.emit_all("ollama_status", &self.status)?;
 
         // Get the resource directory path
         let resource_path = app.path().resource_dir().unwrap();
@@ -48,7 +55,7 @@ impl LLMSidecar {
         let new_cuda_path = format!("{}:{}", cuda_path, resource_path.display());
 
         info!("Starting Ollama serve command...");
-        let mut serve_command = app.shell().sidecar("ollama").unwrap();
+        let mut serve_command = app.shell().sidecar("ollama")?;
         serve_command = serve_command
             .args(&["serve"])
             .env(
@@ -62,17 +69,18 @@ impl LLMSidecar {
             serve_command = serve_command.env("OLLAMA_ORIGINS", "*");
         }
 
-        let (mut receiver, _) = serve_command.spawn()?;
+        let (mut serve_receiver, serve_child) = serve_command.spawn()?;
+        self.serve_process_id = Some(serve_child.pid());
 
         // Stream logs for serve command
-        self.stream_logs("ollama-serve", &mut receiver).await?;
+        self.stream_logs("ollama-serve", &mut serve_receiver).await?;
 
         info!("Waiting for Ollama server to start...");
         self.wait_for_server().await?;
 
         // Now run the model
         info!("Starting Ollama model...");
-        let mut model_command = app.shell().sidecar("ollama").unwrap();
+        let mut model_command = app.shell().sidecar("ollama")?;
         model_command = model_command
             .args(&["run", &self.settings.model])
             .env("CUDA_PATH", &new_cuda_path);
@@ -82,10 +90,11 @@ impl LLMSidecar {
             model_command = model_command.env("OLLAMA_ORIGINS", "*");
         }
 
-        let (mut receiver, _) = model_command.spawn()?;
+        let (mut model_receiver, model_child) = model_command.spawn()?;
+        self.model_process_id = Some(model_child.pid());
 
         // Stream logs for model command
-        self.stream_logs("ollama-model", &mut receiver).await?;
+        self.stream_logs("ollama-model", &mut model_receiver).await?;
 
         info!("Testing Ollama model...");
         let test_result = self.test_model().await?;
@@ -149,18 +158,18 @@ impl LLMSidecar {
         for attempt in 1..=MAX_RETRIES {
             match self.attempt_model_test().await {
                 Ok(result) => {
-                    info!("model test successful on attempt {}: {}", attempt, result);
+                    info!("Model test successful on attempt {}: {}", attempt, result);
                     return Ok(result);
                 }
                 Err(e) => {
                     if attempt == MAX_RETRIES {
                         return Err(anyhow!(
-                            "failed to test model after {} attempts: {}",
+                            "Failed to test model after {} attempts: {}",
                             MAX_RETRIES,
                             e
                         ));
                     }
-                    error!("model test failed on attempt {}: {}", attempt, e);
+                    error!("Model test failed on attempt {}: {}", attempt, e);
                     sleep(RETRY_DELAY).await;
                 }
             }
@@ -191,13 +200,13 @@ impl LLMSidecar {
             .await?;
 
         if !response.status().is_success() {
-            return Err(anyhow!("failed to get response from model"));
+            return Err(anyhow!("Failed to get response from model"));
         }
 
         let data: serde_json::Value = response.json().await?;
         let result = data["choices"][0]["message"]["content"]
             .as_str()
-            .ok_or_else(|| anyhow!("unexpected response format"))?
+            .ok_or_else(|| anyhow!("Unexpected response format"))?
             .trim()
             .to_string();
 
@@ -206,30 +215,79 @@ impl LLMSidecar {
 
     pub async fn stop(&mut self, app: tauri::AppHandle) -> Result<()> {
         self.status = OllamaStatus::Idle;
-        app.emit("ollama_status", &self.status)?;
+        app.emit_all("ollama_status", &self.status)?;
 
-        #[cfg(target_os = "windows")]
-        {
-            app.shell()
-                .command("taskkill")
-                .args(&["/F", "/IM", "ollama.exe"])
-                .spawn()
-                .unwrap();
+        // Attempt to gracefully terminate the serve process
+        if let Some(pid) = self.serve_process_id {
+            info!("Terminating ollama-serve process with PID {}", pid);
+            #[cfg(target_os = "windows")]
+            {
+                Command::new("taskkill")
+                    .args(&["/PID", &pid.to_string(), "/T", "/F"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("Failed to execute taskkill");
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Command::new("kill")
+                    .arg(pid.to_string())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("Failed to execute kill command");
+            }
         }
 
-        #[cfg(not(target_os = "windows"))]
-        {
-            let output = app
-                .shell()
-                .command("pkill")
-                .arg("ollama")
-                .output()
-                .await
-                .unwrap();
-            info!("Ollama stopped: {:?}", output);
+        // Attempt to gracefully terminate the model process
+        if let Some(pid) = self.model_process_id {
+            info!("Terminating ollama-model process with PID {}", pid);
+            #[cfg(target_os = "windows")]
+            {
+                Command::new("taskkill")
+                    .args(&["/PID", &pid.to_string(), "/T", "/F"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("Failed to execute taskkill");
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Command::new("kill")
+                    .arg(pid.to_string())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("Failed to execute kill command");
+            }
         }
+
+        // Verify that no 'ollama' processes are running
+        self.verify_ollama_termination().await?;
 
         Ok(())
+    }
+
+    async fn verify_ollama_termination(&self) -> Result<()> {
+        use sysinfo::{ProcessExt, SystemExt};
+
+        let mut system = sysinfo::System::new_all();
+        system.refresh_processes();
+
+        let processes = system
+            .processes_by_name("ollama")
+            .collect::<Vec<_>>();
+
+        if processes.is_empty() {
+            info!("All ollama processes have been terminated.");
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "Some ollama processes are still running: {:?}",
+                processes.iter().map(|p| p.pid()).collect::<Vec<_>>()
+            ))
+        }
     }
 }
 

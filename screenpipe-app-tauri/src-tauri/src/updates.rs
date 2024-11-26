@@ -1,7 +1,9 @@
 use crate::kill_all_sreenpipes;
+use crate::llm_sidecar::stop_ollama_sidecar;
 use crate::SidecarState;
 use anyhow::Error;
 use log::{error, info};
+use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};
@@ -28,7 +30,7 @@ impl UpdatesManager {
             update_available: Arc::new(Mutex::new(false)),
             update_installed: Arc::new(Mutex::new(false)),
             app: app.clone(),
-            update_menu_item: MenuItemBuilder::with_id("update_now", "screenpipe is up to date")
+            update_menu_item: MenuItemBuilder::with_id("update_now", "Screenpipe is up to date")
                 .enabled(false)
                 .build(app)?,
         })
@@ -41,18 +43,8 @@ impl UpdatesManager {
         if let Some(update) = self.app.updater()?.check().await? {
             *self.update_available.lock().await = true;
 
-            #[cfg(target_os = "windows")]
-            {
-                self.update_menu_item.set_enabled(true)?;
-                self.update_menu_item.set_text("update now")?;
-            }
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                self.update_menu_item.set_enabled(false)?;
-                self.update_menu_item
-                    .set_text("downloading latest version of screenpipe")?;
-            }
+            self.update_menu_item.set_enabled(true)?;
+            self.update_menu_item.set_text("Update now")?;
 
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
                 let path = self.app.path().resolve(
@@ -60,18 +52,10 @@ impl UpdatesManager {
                     tauri::path::BaseDirectory::Resource,
                 )?;
 
-                if let Ok(image) = tauri::image::Image::from_path(path) {
+                if let Ok(image) = tauri::Image::from_path(path) {
                     tray.set_icon(Some(image))?;
                     tray.set_icon_as_template(true)?;
                 }
-            }
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                update.download_and_install(|_, _| {}, || {}).await?;
-                *self.update_installed.lock().await = true;
-                self.update_menu_item.set_enabled(true)?;
-                self.update_menu_item.set_text("update now")?;
             }
 
             if show_dialog {
@@ -79,73 +63,84 @@ impl UpdatesManager {
                 let update_dialog = self
                     .app
                     .dialog()
-                    .message("update available")
-                    .title("screenpipe update")
+                    .message("An update is available")
+                    .title("Screenpipe Update")
                     .buttons(MessageDialogButtons::OkCancelCustom(
-                        "update now".to_string(),
-                        "later".to_string(),
+                        "Update now".to_string(),
+                        "Later".to_string(),
                     ))
-                    .parent(&self.app.get_webview_window("main").unwrap());
+                    .parent(&self.app.get_window("main").unwrap());
 
                 update_dialog.show(move |answer| {
                     let _ = tx.send(answer);
                 });
 
                 if rx.await? {
-                    #[cfg(target_os = "windows")]
-                    {
-                        use crate::llm_sidecar::stop_ollama_sidecar;
-
-                        self.update_menu_item.set_enabled(false)?;
-                        self.update_menu_item
-                            .set_text("downloading latest version of screenpipe")?;
-
-                        if let Err(err) =
-                            kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone())
-                                .await
-                        {
-                            error!("Failed to kill sidecar: {}", err);
-                        }
-                        // llm sidecar only need to kill in windows
-                        if let Err(err) = stop_ollama_sidecar(self.app.clone()).await {
-                            error!("Failed to stop ollama: {}", err);
-                        }
-
-                        update.download_and_install(|_, _| {}, || {}).await?;
-                        *self.update_installed.lock().await = true;
-
-                        self.update_menu_item.set_enabled(true)?;
-                        self.update_menu_item.set_text("update now")?;
-                    }
-                    // Proceed with the update
-
-                    // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
-                    // bad UX: i use CLI and it kills my CLI because i updated app
-
-                    #[cfg(not(target_os = "windows"))]
-                    {
-                        if let Err(err) =
-                            kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone())
-                                .await
-                        {
-                            error!("Failed to kill sidecar: {}", err);
-                        }
-                    }
-                    self.update_screenpipe();
+                    self.perform_update().await?;
+                } else {
+                    info!("User chose to update later.");
                 }
+            } else {
+                // Emit a non-intrusive notification to the frontend
+                self.app.emit_all(
+                    "update-available",
+                    json!({ "version": update.version()? }),
+                )?;
             }
 
-            return Result::Ok(true);
+            return Ok(true);
         }
 
-        Result::Ok(false)
+        Ok(false)
+    }
+
+    async fn perform_update(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.update_menu_item.set_enabled(false)?;
+        self.update_menu_item
+            .set_text("Downloading the latest version of Screenpipe")?;
+
+        let is_dev_mode = cfg!(debug_assertions);
+
+        if !is_dev_mode || cfg!(target_os = "windows") {
+            // Stop the embedded AI
+            if let Err(err) = stop_ollama_sidecar(self.app.clone()).await {
+                error!("Failed to stop llm_sidecar: {}", err);
+            } else {
+                info!("Successfully stopped llm_sidecar.");
+            }
+
+            // Stop the Screenpipe backend
+            if let Err(err) =
+                kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone()).await
+            {
+                error!("Failed to terminate Screenpipe backend: {}", err);
+            } else {
+                info!("Successfully terminated Screenpipe backend.");
+            }
+        }
+
+        // Proceed with the update
+        if let Some(update) = self.app.updater()?.check().await? {
+            update.download_and_install(|_, _| {}, || {}).await?;
+            *self.update_installed.lock().await = true;
+            self.update_menu_item.set_enabled(true)?;
+            self.update_menu_item.set_text("Update now")?;
+            info!("Update downloaded and ready to install.");
+        } else {
+            error!("Update was not found during perform_update.");
+        }
+
+        // Restart the app to apply the update
+        self.update_screenpipe();
+
+        Ok(())
     }
 
     pub fn update_now_menu_item_ref(&self) -> &MenuItem<Wry> {
         &self.update_menu_item
     }
 
-    pub fn update_screenpipe(&self) -> Option<Error> {
+    pub fn update_screenpipe(&self) {
         self.app.restart();
     }
 
@@ -155,7 +150,7 @@ impl UpdatesManager {
         loop {
             interval.tick().await;
             if !*self.update_available.lock().await {
-                if let Err(e) = self.check_for_updates(true).await {
+                if let Err(e) = self.check_for_updates(false).await {
                     error!("Failed to check for updates: {}", e);
                 }
             }
@@ -169,18 +164,19 @@ pub fn start_update_check(
 ) -> Result<Arc<UpdatesManager>, Box<dyn std::error::Error>> {
     let updates_manager = Arc::new(UpdatesManager::new(app, interval_minutes)?);
 
-    // Check for updates at boot
+    // Check for updates at startup
     tokio::spawn({
         let updates_manager = updates_manager.clone();
         async move {
             if let Err(e) = updates_manager.check_for_updates(false).await {
                 error!("Failed to check for updates: {}", e);
+            } else {
+                info!("Initial update check completed.");
             }
-            info!("Update check started");
         }
     });
 
-    // Start periodic events
+    // Start periodic update checks
     tokio::spawn({
         let updates_manager = updates_manager.clone();
         async move {
