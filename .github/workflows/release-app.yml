@@ -231,6 +231,10 @@ jobs:
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         run: |
+          # Install pip first
+          Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
+          python get-pip.py
+          # Continue with existing steps
           mkdir omp
           pip install intel-openmp --target omp
           mkdir screenpipe-app-tauri/src-tauri/mkl/
