@@ -63,29 +63,45 @@ impl UpdatesManager {
                 let update_dialog = self
                     .app
                     .dialog()
-                    .message("An update is available")
-                    .title("Screenpipe Update")
+                    .message("update available")
+                    .title("screenpipe update")
                     .buttons(MessageDialogButtons::OkCancelCustom(
-                        "Update now".to_string(),
-                        "Later".to_string(),
+                        "update now".to_string(),
+                        "later".to_string(),
                     ))
-                    .parent(&self.app.get_window("main").unwrap());
-
+                    .parent(&self.app.get_webview_window("main").unwrap());
+            
                 update_dialog.show(move |answer| {
                     let _ = tx.send(answer);
                 });
-
+            
                 if rx.await? {
-                    self.perform_update().await?;
-                } else {
-                    info!("User chose to update later.");
+                    #[cfg(target_os = "windows")]
+                    {
+                        self.update_menu_item.set_enabled(false)?;
+                        self.update_menu_item
+                            .set_text("downloading latest version of screenpipe")?;
+            
+                        // Stop all processes
+                        if let Err(err) =
+                            kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone()).await
+                        {
+                            error!("Failed to kill Screenpipe backend: {}", err);
+                        }
+            
+                        if let Err(err) = stop_ollama_sidecar(self.app.clone()).await {
+                            error!("Failed to stop llm_sidecar: {}", err);
+                        }
+            
+                        // Proceed with the update
+                        update.download_and_install(|_, _| {}, || {}).await?;
+                        *self.update_installed.lock().await = true;
+            
+                        self.update_menu_item.set_enabled(true)?;
+                        self.update_menu_item.set_text("update now")?;
+                    }
+                    self.update_screenpipe();
                 }
-            } else {
-                // Emit a non-intrusive notification to the frontend
-                self.app.emit_all(
-                    "update-available",
-                    json!({ "version": update.version()? }),
-                )?;
             }
 
             return Ok(true);

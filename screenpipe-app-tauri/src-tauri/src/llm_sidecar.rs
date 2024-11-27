@@ -215,57 +215,42 @@ impl LLMSidecar {
 
     pub async fn stop(&mut self, app: tauri::AppHandle) -> Result<()> {
         self.status = OllamaStatus::Idle;
-        app.emit_all("ollama_status", &self.status)?;
-
-        // Attempt to gracefully terminate the serve process
-        if let Some(pid) = self.serve_process_id {
-            info!("Terminating ollama-serve process with PID {}", pid);
-            #[cfg(target_os = "windows")]
-            {
-                Command::new("taskkill")
-                    .args(&["/PID", &pid.to_string(), "/T", "/F"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .expect("Failed to execute taskkill");
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                Command::new("kill")
-                    .arg(pid.to_string())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .expect("Failed to execute kill command");
+        app.emit("ollama_status", &self.status)?;
+    
+        #[cfg(target_os = "windows")]
+        {
+            let output = app
+                .shell()
+                .command("taskkill")
+                .args(&["/F", "/IM", "ollama.exe"])
+                .output()
+                .await
+                .unwrap();
+    
+            if !output.status.success() {
+                error!("Failed to terminate ollama.exe: {:?}", output);
+            } else {
+                info!("Successfully terminated ollama.exe");
             }
         }
-
-        // Attempt to gracefully terminate the model process
-        if let Some(pid) = self.model_process_id {
-            info!("Terminating ollama-model process with PID {}", pid);
-            #[cfg(target_os = "windows")]
-            {
-                Command::new("taskkill")
-                    .args(&["/PID", &pid.to_string(), "/T", "/F"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .expect("Failed to execute taskkill");
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                Command::new("kill")
-                    .arg(pid.to_string())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .expect("Failed to execute kill command");
+    
+        #[cfg(not(target_os = "windows"))]
+        {
+            let output = app
+                .shell()
+                .command("pkill")
+                .arg("ollama")
+                .output()
+                .await
+                .unwrap();
+    
+            if !output.status.success() {
+                error!("Failed to terminate ollama process: {:?}", output);
+            } else {
+                info!("Successfully terminated ollama process");
             }
         }
-
-        // Verify that no 'ollama' processes are running
-        self.verify_ollama_termination().await?;
-
+    
         Ok(())
     }
 
