@@ -1552,4 +1552,11 @@ impl DatabaseManager {
 
         self.get_speaker_by_id(speaker_to_keep_id).await
     }
+
+    pub async fn search_speakers(&self, name_prefix: &str) -> Result<Vec<Speaker>, sqlx::Error> {
+        sqlx::query_as::<_, Speaker>("SELECT * FROM speakers WHERE name LIKE ? || '%'")
+            .bind(name_prefix)
+            .fetch_all(&self.pool)
+            .await
+    }
 }

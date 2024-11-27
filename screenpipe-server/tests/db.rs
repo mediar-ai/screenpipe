@@ -692,4 +692,18 @@ mod tests {
             .unwrap();
         assert_eq!(speaker_1.unwrap().id, 1);
     }
+
+    #[tokio::test]
+    async fn test_search_speakers() {
+        let db = setup_test_db().await;
+
+        let speaker = db.insert_speaker(&vec![0.1; 512]).await.unwrap();
+        db.update_speaker_name(speaker.id, "test name")
+            .await
+            .unwrap();
+
+        let speakers = db.search_speakers("test").await.unwrap();
+        assert_eq!(speakers.len(), 1);
+        assert_eq!(speakers[0].name, "test name");
+    }
 }
