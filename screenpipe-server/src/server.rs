@@ -514,7 +514,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     };
 
     let now = Utc::now();
-    let threshold = Duration::from_secs(60);
+    let threshold = Duration::from_secs(3600);  // 1 hour
     let app_start_threshold = Duration::from_secs(120); // 2 minutes - ideally should be audio duration chunk
 
     let frame_status = if state.vision_disabled {
@@ -1449,20 +1449,19 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_fra
 # 30 min to 25 min ago
 curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
-
 curl "http://localhost:3030/search?limit=1&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
 
 # Search for content from the last 30 minutes
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for content up to 1 hour ago
 curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for content between 2 hours ago and 1 hour ago
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for OCR content from yesterday
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for audio content with a keyword from the beginning of the current month
 curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
@@ -1470,7 +1469,7 @@ curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&
 curl "http://localhost:3030/search?app_name=cursor"
 curl "http://localhost:3030/search?content_type=audio&min_length=20"
 
-curl 'http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z' | jq .
+curl "http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq .
 
 
 curl "http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
