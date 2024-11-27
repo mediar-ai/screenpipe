@@ -676,4 +676,20 @@ mod tests {
 
         assert_eq!(audio_paths.len(), 3);
     }
+
+    #[tokio::test]
+    async fn test_merge_speakers() {
+        let db = setup_test_db().await;
+
+        let speaker_1 = db.insert_speaker(&vec![0.1; 512]).await.unwrap();
+        let speaker_2 = db.insert_speaker(&vec![0.2; 512]).await.unwrap();
+
+        db.merge_speakers(speaker_1.id, speaker_2.id).await.unwrap();
+
+        let speaker_1 = db
+            .get_speaker_from_embedding(&vec![0.2; 512])
+            .await
+            .unwrap();
+        assert_eq!(speaker_1.unwrap().id, 1);
+    }
 }
