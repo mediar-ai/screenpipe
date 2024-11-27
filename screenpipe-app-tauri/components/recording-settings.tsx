@@ -20,6 +20,7 @@ import {
   Languages,
   Mic,
   Monitor,
+  Folder,
   AppWindowMac,
   X,
 } from "lucide-react";
@@ -67,6 +68,7 @@ import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
+import { open } from '@tauri-apps/plugin-dialog';
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
@@ -91,7 +93,7 @@ export function RecordingSettings({
   localSettings: Settings;
   setLocalSettings: (settings: Settings) => void;
 }) {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, getDataDir } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openMonitors, setOpenMonitors] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
@@ -232,6 +234,7 @@ export function RecordingSettings({
         enableBeta: localSettings.enableBeta,
         enableFrameCache: localSettings.enableFrameCache,
         enableUiMonitoring: localSettings.enableUiMonitoring,
+        dataDir: localSettings.dataDir,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -442,6 +445,33 @@ export function RecordingSettings({
       await runSetup();
     }
   };
+
+  const handleDataDirChange = async () => {
+    try {
+      const dataDir = await getDataDir()
+
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: dataDir
+      });
+      // TODO: check permission of selected dir for server to write into
+
+      if (selected) {
+        setLocalSettings({ ...localSettings, dataDir: selected })
+      } else {
+        console.log('canceled');
+      }
+    } catch (error) {
+      console.error("failed to change data directory:", error);
+      toast({
+        title: "error",
+        description: "failed to change data directory.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  }
 
   const runSetup = async () => {
     setIsSetupRunning(true);
@@ -897,6 +927,32 @@ export function RecordingSettings({
             </div>
 
             <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="monitorIds"
+                className="flex items-center space-x-2"
+              >
+                <Folder className="h-4 w-4" />
+                <span>data directory</span>
+              </Label>
+
+              <Button
+                variant="outline"
+                role="combobox"
+                className="w-full justify-between"
+                onClick={handleDataDirChange}
+              >
+                <div className="inline-block flex gap-4">
+                  {!!settings.dataDir ? "change directory" : "select directory"}
+                  {localSettings.dataDir === settings.dataDir ?
+                    <span className="text-muted-foreground text-sm"> current at: {settings.dataDir || "default directory"}</span> :
+                    <span className="text-muted-foreground text-sm"> change to: {localSettings.dataDir || "default directory"}</span>
+                  }
+                </div>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </div>
+
+            <div className="flex flex-col space-y-2">
               <div className="flex items-center space-x-2">
                 <Switch
                   id="piiRemoval"
@@ -960,7 +1016,7 @@ export function RecordingSettings({
               <div className="flex items-center space-x-4">
                 <Slider
                   id="restartInterval"
-                  min={30}
+                  min={0}
                   max={1440} // 24 hours
                   step={30}
                   value={[localSettings.restartInterval]}

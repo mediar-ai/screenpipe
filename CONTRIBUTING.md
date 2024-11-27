@@ -299,3 +299,96 @@ now you can either dev screenpipe on linux or run screenpipe in the cloud that r
 say 👋 in our [public discord channel](https://discord.gg/du9ebuw7uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
 thank you for contributing to screen pipe! 🎉
+
+## windows development setup
+
+1. **core build tools**
+```powershell
+# install visual studio build tools
+winget install -e --id Microsoft.VisualStudio.2022.BuildTools
+
+# install rust
+winget install -e --id Rustlang.Rustup
+
+# install llvm
+winget install -e --id LLVM.LLVM
+
+# install unzip utility
+winget install -e --id GnuWin32.UnZip
+
+# install git
+winget install -e --id Git.Git
+
+# install bun (using npm)
+irm https://bun.sh/install.ps1 | iex
+
+# install pkg-config (download from https://sourceforge.net/projects/pkgconfiglite/files/)
+# download and extract to a folder in your PATH
+```
+
+2. **vcpkg package manager**
+```powershell
+# clone and setup vcpkg
+cd C:\dev # or your preferred location
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+./bootstrap-vcpkg.bat -disableMetrics
+./vcpkg.exe integrate install --disable-metrics
+
+# install required libraries
+./vcpkg.exe install ffmpeg:x64-windows
+```
+
+3. **environment variables**
+
+add these to your system environment variables (windows settings -> system -> about -> advanced system settings -> environment variables):
+```powershell
+PKG_CONFIG_PATH=C:\dev\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
+VCPKG_ROOT=C:\dev\vcpkg
+LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
+```
+
+4. **vscode settings**
+
+create or update `.vscode/settings.json`:
+```json
+{
+   "rust-analyzer.cargo.features": [
+      "pipes"
+   ],
+   "rust-analyzer.server.extraEnv": {
+      "SCREENPIPE_APP_DEV": "true"
+   },
+   "rust-analyzer.cargo.extraEnv": {
+      "SCREENPIPE_APP_DEV": "true"
+   },
+   "terminal.integrated.env.windows": {
+      "SCREENPIPE_APP_DEV": "true"
+   }
+}
+```
+
+5. **building the project**
+```powershell
+# clone the repo
+git clone https://github.com/mediar-ai/screenpipe
+cd screenpipe
+
+# build the cli
+cargo build --release 
+# optional: add --features cuda for gpu support
+# optional: add --features mkl for intel accelerated cpu support
+
+# build the desktop app
+cd screenpipe-app-tauri
+bun install
+bun tauri build
+```
+
+### notes for windows development
+- run powershell as administrator when installing tools
+- restart your computer after installing components
+- install visual studio code with the rust extension
+- if you encounter signing issues, you can remove the updater config in your fork
+- make sure all environment variables are properly set before building
+- if you encounter any path-related issues, ensure all tools are correctly added to your system's PATH

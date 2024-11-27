@@ -4,9 +4,9 @@
 name: Release App
 
 on:
-  push:
-    tags:
-      - "v*"
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
     inputs:
       commit_hash:
@@ -93,7 +93,7 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
           - platform: [self-hosted, Windows, X64] # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA --features mkl --features "openblas"
+            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
@@ -121,7 +121,7 @@ jobs:
           node-version: 20
 
       - name: Install Rust
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         run: |
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
@@ -173,29 +173,27 @@ jobs:
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
         run: |
-          brew unlink pkg-config@0.29.2 || true
-          brew install ffmpeg pkg-config
-          brew link --overwrite pkg-config
+          brew install ffmpeg
 
       - name: Install frontend dependencies
         shell: bash
         working-directory: ./screenpipe-app-tauri
         run: |
-          ls . 
+          ls .
           bun install
 
       - name: Install vcpkg
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
-        if: matrix.args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
@@ -212,9 +210,9 @@ jobs:
         shell: bash
         env:
           # Windows specific optimizations (only applied when building for Windows)
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
-          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
-          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -229,6 +227,24 @@ jobs:
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
+
+      - name: Install pip
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Copy library for MKL
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: |
+          # Install pip first
+          Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
+          python get-pip.py
+          # Continue with existing steps
+          mkdir omp
+          pip install intel-openmp --target omp
+          mkdir screenpipe-app-tauri/src-tauri/mkl/
+          ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
@@ -248,22 +264,49 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
           # Optimize for build speed on Windows
-          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
           # Enable incremental compilation for Windows
-          CARGO_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
+          CARGO_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
           # Windows specific optimizations (only applied when building for Windows)
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
-          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
-          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
-          RUSTFLAGS: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
+          RUSTFLAGS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
           VCPKG_STATIC_LINKAGE: "true"
-          KNF_STATIC_CRT: ${{ matrix.args == '--target x86_64-pc-windows-msvc' && '1' || '' }}
+          KNF_STATIC_CRT: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
+
+      - name: Get version from Cargo.toml
+        shell: bash
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: |
+          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      # - name: Upload screenpipe binary for signing
+      #   id: upload-unsigned-artifact
+      #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: unsigned-screenpipe
+      #     path: ./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe
+
+      # - name: Sign artifact
+      #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      #   uses: signpath/github-action-submit-signing-request@v1
+      #   with:
+      #     api-token: "${{ secrets.SIGNPATH_API_TOKEN }}"
+      #     organization-id: "9cd36272-53da-46a4-9d5c-a0870243ba97"
+      #     project-slug: "screenpipe"
+      #     signing-policy-slug: "test-signing"
+      #     github-artifact-id: "${{ steps.upload-unsigned-artifact.outputs.artifact-id }}"
+      #     wait-for-completion: true
+      #     output-artifact-directory: "./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe"
 
       - name: Upload Assets to CrabNebula Cloud
         uses: crabnebula-dev/cloud-release@v0.2.6

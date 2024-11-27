@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.12.2"
+version = "0.14.2"
 description = ""
 authors = ["you"]
 license = ""
@@ -66,7 +66,7 @@ tauri-plugin-store = "2"
 anyhow = "1.0.71"
 
 # System information
-sysinfo = "0.29.0"
+sysinfo = "=0.29.0"
 
 # hakc 
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
@@ -114,3 +114,4 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [package.metadata.cargo-machete]
 ignored = ["tauri-utils"]
+

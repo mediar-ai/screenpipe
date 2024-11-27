@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { createStore } from "@tauri-apps/plugin-store";
-import { localDataDir, join } from "@tauri-apps/api/path";
+import { localDataDir, join, homeDir } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
@@ -104,7 +104,7 @@ const defaultSettings: Settings = {
   enableBeta: false,
   showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
-  enableFrameCache: false, // Add this line
+  enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
 };
@@ -150,8 +150,8 @@ export function useSettings() {
           currentPlatform === "macos"
             ? "apple-native"
             : currentPlatform === "windows"
-            ? "windows-native"
-            : "tesseract";
+              ? "windows-native"
+              : "tesseract";
 
         console.log("loading settings", store);
         // no need to call load() as it's done automatically
@@ -187,7 +187,7 @@ export function useSettings() {
         const savedRestartInterval =
           (await store!.get<number>("restartInterval")) || 0;
         const savedPort = (await store!.get<number>("port")) || 3030;
-        const savedDataDir = (await store!.get<string>("dataDir")) || "";
+        const savedDataDir = (await store!.get<string>("dataDir")) || "default";
         let savedDisableAudio = await store!.get<boolean>("disableAudio");
         if (savedDisableAudio === null) {
           savedDisableAudio = false;
@@ -248,29 +248,29 @@ export function useSettings() {
         const defaultIgnoredWindows =
           currentPlatform === "macos"
             ? [
-                ...ignoredWindowsInAllOS,
-                ".env",
-                "Item-0",
-                "App Icon Window",
-                "Battery",
-                "Shortcuts",
-                "WiFi",
-                "BentoBox",
-                "Clock",
-                "Dock",
-                "DeepL",
-                "Control Center",
-              ]
+              ...ignoredWindowsInAllOS,
+              ".env",
+              "Item-0",
+              "App Icon Window",
+              "Battery",
+              "Shortcuts",
+              "WiFi",
+              "BentoBox",
+              "Clock",
+              "Dock",
+              "DeepL",
+              "Control Center",
+            ]
             : currentPlatform === "windows"
-            ? [
+              ? [
                 ...ignoredWindowsInAllOS,
                 "Nvidia",
                 "Control Panel",
                 "System Properties",
               ]
-            : currentPlatform === "linux"
-            ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
-            : [];
+              : currentPlatform === "linux"
+                ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
+                : [];
 
         const savedIgnoredWindows = await store!.get<string[]>(
           "ignoredWindows"
@@ -297,7 +297,7 @@ export function useSettings() {
           (await store!.get<AIProviderType>("aiProviderType")) || "openai";
 
         const savedEnableFrameCache =
-          (await store!.get<boolean>("enableFrameCache")) || false;
+          (await store!.get<boolean>("enableFrameCache")) || true;
 
         const savedEnableUiMonitoring =
           (await store!.get<boolean>("enableUiMonitoring")) || false;
@@ -377,7 +377,17 @@ export function useSettings() {
     }
   };
 
-  return { settings, updateSettings, resetSetting };
+  const getDataDir = async () => {
+    const homeDirPath = await homeDir();
+
+    if (settings.dataDir !== "default" && settings.dataDir && settings.dataDir !== "") return settings.dataDir;
+
+    return platform() === "macos" || platform() === "linux"
+      ? `${homeDirPath}/.screenpipe`
+      : `${homeDirPath}\\.screenpipe`;
+  }
+
+  return { settings, updateSettings, resetSetting, getDataDir };
 }
 
 async function initStore() {

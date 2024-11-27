@@ -62,6 +62,23 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     Ok(local_data_dir)
 }
 
+fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    let base_dir = get_base_dir(app, None)?;
+    let path = base_dir.join("store.bin");
+    let store = StoreBuilder::new(app, path).build();
+
+    let default_path = app.path().home_dir().unwrap().join(".screenpipe");
+    let data_dir = store
+        .get("dataDir")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("default"));
+    if data_dir == "default" {
+        Ok(default_path)
+    } else {
+        get_base_dir(app, Some(data_dir))
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
@@ -133,7 +150,7 @@ async fn main() {
                 .filename_prefix("screenpipe-app")
                 .filename_suffix("log")
                 .max_log_files(5)
-                .build(&app.path().home_dir().unwrap().join(".screenpipe"))?;
+                .build(&get_data_dir(&app.handle()).unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")))?;
 
             // Create a custom layer for file logging
             let file_layer = tracing_subscriber::fmt::layer()

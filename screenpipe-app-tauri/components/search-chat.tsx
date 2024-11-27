@@ -1395,8 +1395,8 @@ export function SearchChat({
                   value={[limit]}
                   onValueChange={(value: number[]) => setLimit(value[0])}
                   min={10}
-                  max={150}
-                  step={5}
+                  max={15000}
+                  step={10}
                   className="flex-grow"
                 />
                 <TooltipProvider>

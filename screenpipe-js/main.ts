@@ -199,7 +199,21 @@ export async function queryScreenpipe(
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      let errorJson;
+      try {
+        errorJson = JSON.parse(errorText);
+        console.error("screenpipe api error:", {
+          status: response.status,
+          error: errorJson,
+        });
+      } catch {
+        console.error("screenpipe api error:", {
+          status: response.status,
+          error: errorText,
+        });
+      }
+      throw new Error(`http error! status: ${response.status}`);
     }
     const data = await response.json();
     return convertToCamelCase(data) as ScreenpipeResponse;

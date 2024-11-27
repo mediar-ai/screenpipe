@@ -47,11 +47,7 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 </p>
 
 <p align="center">
-  <a href ="https://cal.com/louis030195/screenpipe">
-    <img alt="Let's chat" src="https://cal.com/book-with-cal-dark.svg" />
-  </a>
-    
-
+   
 
 <p align="center">
    <a href ="https://screenpi.pe">
