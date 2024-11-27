@@ -33,9 +33,15 @@ try {
 
     # Add to PATH if not already there
     $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($currentPath -notlike "*$installDir*") {
-        [Environment]::SetEnvironmentVariable("Path", "$currentPath;$installDir", "User")
+    if ($currentPath -notlike "*$installDir\bin*") {
+        [Environment]::SetEnvironmentVariable("Path", "$currentPath;$installDir\bin", "User")
         $env:Path = [Environment]::GetEnvironmentVariable("Path", "User")
+    }
+
+    # Verify installation
+    $binPath = Join-Path $installDir "bin\screenpipe.exe"
+    if (!(Test-Path $binPath)) {
+        throw "screenpipe.exe not found in $binPath after installation"
     }
 
     # Cleanup
