@@ -1315,6 +1315,21 @@ async fn get_unnamed_speakers(
             )
         })?;
 
+    // convert metadata to json
+    let speakers = speakers
+        .into_iter()
+        .map(|speaker| {
+            let mut metadata: Value = serde_json::from_str(&speaker.metadata).unwrap();
+            if let Some(audio_paths) = metadata.get("audio_paths").and_then(|v| v.as_array()) {
+                metadata["audio_paths"] = serde_json::to_value(audio_paths).unwrap();
+            }
+            Speaker {
+                metadata: metadata.to_string(),
+                ..speaker
+            }
+        })
+        .collect();
+
     Ok(JsonResponse(speakers))
 }
 
