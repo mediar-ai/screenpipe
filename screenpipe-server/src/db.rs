@@ -1566,10 +1566,12 @@ impl DatabaseManager {
     }
 
     pub async fn search_speakers(&self, name_prefix: &str) -> Result<Vec<Speaker>, sqlx::Error> {
-        sqlx::query_as::<_, Speaker>("SELECT * FROM speakers WHERE name LIKE ? || '%'")
-            .bind(name_prefix)
-            .fetch_all(&self.pool)
-            .await
+        sqlx::query_as::<_, Speaker>(
+            "SELECT * FROM speakers WHERE name LIKE ? || '%' AND hallucination != 1",
+        )
+        .bind(name_prefix)
+        .fetch_all(&self.pool)
+        .await
     }
 
     pub async fn delete_speaker(&self, id: i64) -> Result<(), sqlx::Error> {
@@ -1611,6 +1613,15 @@ impl DatabaseManager {
         })?;
 
         debug!("Successfully committed speaker deletion transaction");
+        Ok(())
+    }
+
+    pub async fn mark_speaker_as_hallucination(&self, id: i64) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE speakers SET hallucination = TRUE WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
         Ok(())
     }
 }
