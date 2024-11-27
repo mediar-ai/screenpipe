@@ -4,9 +4,9 @@
 name: Release App
 
 on:
-  push:
-    tags:
-      - "v*"
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
     inputs:
       commit_hash:
@@ -173,9 +173,7 @@ jobs:
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
         run: |
-          brew unlink pkg-config@0.29.2 || true
-          brew install ffmpeg pkg-config
-          brew link --overwrite pkg-config
+          brew install ffmpeg
 
       - name: Install frontend dependencies
         shell: bash
@@ -230,6 +228,24 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
+      - name: Install pip
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Copy library for MKL
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: |
+          # Install pip first
+          Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
+          python get-pip.py
+          # Continue with existing steps
+          mkdir omp
+          pip install intel-openmp --target omp
+          mkdir screenpipe-app-tauri/src-tauri/mkl/
+          ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
+
       - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
@@ -272,25 +288,25 @@ jobs:
           VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Upload screenpipe binary for signing
-        id: upload-unsigned-artifact
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        uses: actions/upload-artifact@v4
-        with:
-          name: unsigned-screenpipe
-          path: ./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe
+      # - name: Upload screenpipe binary for signing
+      #   id: upload-unsigned-artifact
+      #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: unsigned-screenpipe
+      #     path: ./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe
 
-      - name: Sign artifact
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        uses: signpath/github-action-submit-signing-request@v1
-        with:
-          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
-          organization-id: '9cd36272-53da-46a4-9d5c-a0870243ba97'
-          project-slug: 'screenpipe'
-          signing-policy-slug: 'test-signing'
-          github-artifact-id: '${{ steps.upload-unsigned-artifact.outputs.artifact-id }}'
-          wait-for-completion: true
-          output-artifact-directory: './screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe'
+      # - name: Sign artifact
+      #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      #   uses: signpath/github-action-submit-signing-request@v1
+      #   with:
+      #     api-token: "${{ secrets.SIGNPATH_API_TOKEN }}"
+      #     organization-id: "9cd36272-53da-46a4-9d5c-a0870243ba97"
+      #     project-slug: "screenpipe"
+      #     signing-policy-slug: "test-signing"
+      #     github-artifact-id: "${{ steps.upload-unsigned-artifact.outputs.artifact-id }}"
+      #     wait-for-completion: true
+      #     output-artifact-directory: "./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe"
 
       - name: Upload Assets to CrabNebula Cloud
         uses: crabnebula-dev/cloud-release@v0.2.6

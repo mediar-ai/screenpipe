@@ -185,7 +185,7 @@ export function useSettings() {
         const savedRestartInterval =
           (await store!.get<number>("restartInterval")) || 0;
         const savedPort = (await store!.get<number>("port")) || 3030;
-        const savedDataDir = (await store!.get<string>("dataDir")) || "";
+        const savedDataDir = (await store!.get<string>("dataDir")) || "default";
         let savedDisableAudio = await store!.get<boolean>("disableAudio");
         if (savedDisableAudio === null) {
           savedDisableAudio = false;
@@ -375,7 +375,7 @@ export function useSettings() {
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
 
-    if (settings.dataDir) return settings.dataDir;
+    if (settings.dataDir !== "default" && settings.dataDir && settings.dataDir !== "") return settings.dataDir;
 
     return platform() === "macos" || platform() === "linux"
       ? `${homeDirPath}/.screenpipe`

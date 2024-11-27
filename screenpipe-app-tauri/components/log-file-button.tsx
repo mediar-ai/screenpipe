@@ -29,6 +29,10 @@ export const LogFileButton = ({
   const getLogFilePath = async () => {
     const dataDir = await getDataDir();
     const logFileName = isAppLog ? "screenpipe-app" : "screenpipe";
+    const os = platform();
+    if (os === "macos" || os === "linux") {
+      return `${dataDir}/${logFileName}.${new Date().toISOString().split("T")[0]}.log`
+    }
     return `${dataDir}\\${logFileName}.${new Date().toISOString().split("T")[0]}.log`
   };
 

@@ -1,6 +1,8 @@
 ### obsidian time log
 
-![image](https://github.com/user-attachments/assets/8bf4e730-ec5e-4e6b-9660-09c982db574a)
+<img width="1512" alt="Screenshot 2024-11-26 at 11 05 53 AM" src="https://github.com/user-attachments/assets/7883b8fc-caac-4627-8400-3ccf18b6a602">
+
+
 
 automates logging of work to obsidian using screenpipe and openai/ollama
 

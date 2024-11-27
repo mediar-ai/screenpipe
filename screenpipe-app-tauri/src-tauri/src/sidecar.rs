@@ -292,7 +292,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
 
-    if data_dir != "default" {
+    if data_dir != "default" && data_dir != "" {
         args.push("--data-dir");
         args.push(data_dir.as_str());
     }
