@@ -50,9 +50,11 @@ import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const HealthStatus = ({ className }: { className?: string }) => {
-  const { health } = useHealthCheck();
+  const { health, isServerDown, isLoading: healthCheckLoading, debouncedFetchHealth } = useHealthCheck();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMac, setIsMac] = useState(false);
   const { settings, getDataDir } = useSettings();
@@ -61,10 +63,23 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [isFixingSetup, setIsFixingSetup] = useState(false);
   const [isTroubleshootOpen, setIsTroubleshootOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [isDialogLoading, setIsDialogLoading] = useState(false);
 
   useEffect(() => {
     setIsMac(platform() === "macos");
   }, []);
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      debouncedFetchHealth();
+    };
+
+    window.addEventListener('settings-updated', handleSettingsUpdate);
+    
+    return () => {
+      window.removeEventListener('settings-updated', handleSettingsUpdate);
+    };
+  }, [debouncedFetchHealth]);
 
   const openScreenPermissions = async () => {
     const toastId = toast({
@@ -380,22 +395,46 @@ const HealthStatus = ({ className }: { className?: string }) => {
   );
 
   const handleOpenStatusDialog = async () => {
-    setLocalDataDir(await getDataDir())
-    setIsDialogOpen(true)
-  }
+    if (isDialogLoading) return; // Prevent multiple clicks while loading
+    
+    try {
+      setIsDialogLoading(true);
+      const dir = await getDataDir();
+      setLocalDataDir(dir);
+      setIsDialogOpen(true);
+    } catch (error) {
+      console.error("Failed to open status dialog:", error);
+      toast({
+        title: "Error",
+        description: "Failed to open status dialog. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      setIsDialogLoading(false);
+    }
+  };
 
   return (
     <>
       <Badge
         variant="outline"
-        className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
+        className={cn(
+          "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
+          isDialogLoading && "opacity-50 pointer-events-none"
+        )}
         onClick={handleOpenStatusDialog}
       >
-        <Activity className="mr-2 h-4 w-4" />
+        {isDialogLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Activity className="mr-2 h-4 w-4" />
+        )}
         status{" "}
         <span
-          className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${statusColor === "bg-red-500" ? "animate-pulse" : ""
-            }`}
+          className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
+            statusColor === "bg-red-500" ? "animate-pulse" : ""
+          }`}
         />
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
