@@ -47,6 +47,10 @@ try {
     # Cleanup
     Remove-Item $tempZip -Force
 
+    # Install bun
+    Write-Host "installing bun..."
+    powershell -c "irm bun.sh/install.ps1|iex"
+
     Write-Host "screenpipe installed successfully! restart your terminal and run 'screenpipe'" -ForegroundColor Green
 } catch {
     Write-Host "installation failed: $($_.Exception.Message)" -ForegroundColor Red
