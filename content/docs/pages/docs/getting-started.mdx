@@ -18,10 +18,10 @@ for non technical users or those who want to get started quickly, we recommend g
     ```
   </Tab>
   <Tab>
-   ```bash
+    ```bash copy
     brew install screenpipe
     screenpipe
-   ```
+    ```
   </Tab>
   <Tab>
     ```powershell copy
@@ -35,10 +35,26 @@ for non technical users or those who want to get started quickly, we recommend g
 
 then open the simple timeline UI:
 
-```bash copy
-git clone https://github.com/mediar-ai/screenpipe
-open screenpipe-server/examples/timeline_ui_simple/index.html # or open manually in your browser
-```
+<Tabs items={['macos', 'linux', 'windows']}>
+  <Tab>
+    ```bash copy
+    git clone https://github.com/mediar-ai/screenpipe
+    open screenpipe-server/examples/timeline_ui_simple/index.html
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    git clone https://github.com/mediar-ai/screenpipe
+    xdg-open screenpipe-server/examples/timeline_ui_simple/index.html
+    ```
+  </Tab>
+  <Tab>
+    ```powershell copy
+    git clone https://github.com/mediar-ai/screenpipe
+    start screenpipe-server/examples/timeline_ui_simple/index.html
+    ```
+  </Tab>
+</Tabs>
 
 this will open a rewind.ai alike timeline powered by a single html file :) that you can tweak around!
 
