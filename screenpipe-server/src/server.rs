@@ -132,6 +132,11 @@ pub struct UpdateSpeakerRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct SearchSpeakersRequest {
+    pub name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "content")]
 pub enum ContentItem {
     OCR(OCRContent),
@@ -1373,6 +1378,16 @@ async fn update_speaker_handler(
     ))
 }
 
+async fn search_speakers_handler(
+    State(state): State<Arc<AppState>>,
+    Query(request): Query<SearchSpeakersRequest>,
+) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
+    let search_prefix = request.name.unwrap_or_default();
+    Ok(JsonResponse(
+        state.db.search_speakers(&search_prefix).await.unwrap(),
+    ))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1404,6 +1419,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/stream/frames", get(stream_frames_handler))
         .route("/speakers/unnamed", get(get_unnamed_speakers_handler))
         .route("/speakers/update", post(update_speaker_handler))
+        .route("/speakers/search", get(search_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .layer(cors);
 
