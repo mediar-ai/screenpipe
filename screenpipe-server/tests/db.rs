@@ -621,43 +621,59 @@ mod tests {
     async fn test_get_unnamed_speakers() {
         let db = setup_test_db().await;
 
-        // Insert a speaker with empty name
-        let sample_embedding = vec![0.1; 512];
-        let speaker = db.insert_speaker(&sample_embedding).await.unwrap();
+        // insert n audio chunks for each speaker
+        for n in 0..3 {
+            let speaker = db.insert_speaker(&vec![n as f32; 512]).await.unwrap();
+            for i in 0..=n {
+                let audio_chunk_id = db
+                    .insert_audio_chunk(&format!("audio{}{}", n, i))
+                    .await
+                    .unwrap();
+                db.insert_audio_transcription(
+                    audio_chunk_id,
+                    "test transcription",
+                    0,
+                    "",
+                    &AudioDevice::new("test".to_string(), DeviceType::Output),
+                    Some(speaker.id),
+                )
+                .await
+                .unwrap();
+            }
+        }
 
-        // Insert audio data
-        let audio_chunk_id = db.insert_audio_chunk("audio1.mp4").await.unwrap();
-        println!("Inserted audio chunk with id: {}", audio_chunk_id);
-
-        // Insert transcription
-        db.insert_audio_transcription(
-            audio_chunk_id,
-            "test transcription",
-            0,
-            "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
-            Some(speaker.id),
-        )
-        .await
-        .unwrap();
+        // insert a speaker with a name
+        let speaker = db.insert_speaker(&vec![0.1; 512]).await.unwrap();
+        db.update_speaker_name(speaker.id, "test name")
+            .await
+            .unwrap();
 
         // Get unnamed speakers
         let unnamed_speakers = db.get_unnamed_speakers(10, 0).await.unwrap();
 
-        assert_eq!(unnamed_speakers.len(), 1, "Should find one unnamed speaker");
+        assert_eq!(unnamed_speakers.len(), 3, "Should find 3 unnamed speakers");
 
-        let speaker = &unnamed_speakers[0];
-        assert_eq!(speaker.id, 1);
-        assert!(speaker.name.is_empty());
+        let speaker_3 = &unnamed_speakers[0];
+        assert_eq!(speaker_3.id, 3);
+        assert!(speaker_3.name.is_empty());
+
+        // speaker 2 should be next
+        let speaker_2 = &unnamed_speakers[1];
+        assert_eq!(speaker_2.id, 2);
+        assert!(speaker_2.name.is_empty());
+
+        // speaker 1 should be last
+        let speaker_1 = &unnamed_speakers[2];
+        assert_eq!(speaker_1.id, 1);
+        assert!(speaker_1.name.is_empty());
 
         let metadata: serde_json::Value =
-            serde_json::from_str(&speaker.metadata).expect("Metadata should be valid JSON");
+            serde_json::from_str(&speaker_3.metadata).expect("Metadata should be valid JSON");
 
         let audio_paths = metadata["audio_paths"]
             .as_array()
             .expect("Audio paths should be an array");
 
-        assert_eq!(audio_paths.len(), 1);
-        assert_eq!(audio_paths[0].as_str().unwrap(), "audio1.mp4");
+        assert_eq!(audio_paths.len(), 3);
     }
 }
