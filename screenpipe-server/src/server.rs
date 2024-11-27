@@ -141,6 +141,11 @@ pub struct DeleteSpeakerRequest {
     pub id: i64,
 }
 
+#[derive(Deserialize)]
+struct MarkAsHallucinationRequest {
+    speaker_id: i64,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "content")]
 pub enum ContentItem {
@@ -1419,6 +1424,21 @@ async fn delete_speaker_handler(
     Ok(JsonResponse(json!({"success": true})))
 }
 
+async fn mark_as_hallucination_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<MarkAsHallucinationRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    let speaker_id = payload.speaker_id;
+
+    state
+        .db
+        .mark_speaker_as_hallucination(speaker_id)
+        .await
+        .unwrap();
+
+    Ok(JsonResponse(json!({"success": true})))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1452,6 +1472,10 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/update", post(update_speaker_handler))
         .route("/speakers/search", get(search_speakers_handler))
         .route("/speakers/delete", post(delete_speaker_handler))
+        .route(
+            "/speakers/hallucination",
+            post(mark_as_hallucination_handler),
+        )
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .layer(cors);
 

@@ -734,4 +734,15 @@ mod tests {
         let audio_chunks = db.get_audio_chunks_for_speaker(speaker.id).await.unwrap();
         assert_eq!(audio_chunks.len(), 0);
     }
+
+    #[tokio::test]
+    async fn test_mark_speaker_as_hallucination() {
+        let db = setup_test_db().await;
+
+        let speaker = db.insert_speaker(&vec![0.1; 512]).await.unwrap();
+        db.mark_speaker_as_hallucination(speaker.id).await.unwrap();
+
+        let speakers = db.search_speakers("").await.unwrap();
+        assert_eq!(speakers.len(), 0);
+    }
 }
