@@ -2,7 +2,7 @@ use axum::{
     extract::{Json, Path, Query, State},
     http::StatusCode,
     response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
-    routing::{get, post},
+    routing::{get, patch, post},
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
@@ -122,6 +122,13 @@ pub struct PaginationInfo {
     pub limit: u32,
     pub offset: u32,
     pub total: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateSpeakerRequest {
+    pub id: i64,
+    pub name: Option<String>,
+    pub metadata: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1300,7 +1307,7 @@ pub struct GetUnnamedSpeakersRequest {
     offset: u32,
 }
 
-async fn get_unnamed_speakers(
+async fn get_unnamed_speakers_handler(
     State(state): State<Arc<AppState>>,
     Query(request): Query<GetUnnamedSpeakersRequest>,
 ) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
@@ -1333,6 +1340,39 @@ async fn get_unnamed_speakers(
     Ok(JsonResponse(speakers))
 }
 
+async fn update_speaker_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<UpdateSpeakerRequest>,
+) -> Result<JsonResponse<Speaker>, (StatusCode, JsonResponse<Value>)> {
+    let speaker_id = payload.id;
+
+    if let Some(name) = payload.name {
+        if let Err(e) = state.db.update_speaker_name(speaker_id, &name).await {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ));
+        }
+    }
+
+    if let Some(metadata) = payload.metadata {
+        if let Err(e) = state
+            .db
+            .update_speaker_metadata(speaker_id, &metadata)
+            .await
+        {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ));
+        }
+    }
+
+    Ok(JsonResponse(
+        state.db.get_speaker_by_id(speaker_id).await.unwrap(),
+    ))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1362,7 +1402,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))
-        .route("/speakers/unnamed", get(get_unnamed_speakers))
+        .route("/speakers/unnamed", get(get_unnamed_speakers_handler))
+        .route("/speakers/update", post(update_speaker_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .layer(cors);
 
