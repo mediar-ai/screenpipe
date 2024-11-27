@@ -228,6 +228,12 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
+      - name: Install pip
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         run: |
