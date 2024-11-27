@@ -1520,4 +1520,36 @@ impl DatabaseManager {
 
         Ok(res)
     }
+
+    pub async fn merge_speakers(
+        &self,
+        speaker_to_keep_id: i64,
+        speaker_to_merge_id: i64,
+    ) -> Result<Speaker, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // for each audio transcription of the speaker to merge, update the speaker_id to the speaker to keep
+        sqlx::query("UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?")
+            .bind(speaker_to_keep_id)
+            .bind(speaker_to_merge_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // update speaker_embeddings
+        sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE speaker_id = ?")
+            .bind(speaker_to_keep_id)
+            .bind(speaker_to_merge_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // delete the speaker to merge
+        sqlx::query("DELETE FROM speakers WHERE id = ?")
+            .bind(speaker_to_merge_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+
+        self.get_speaker_by_id(speaker_to_keep_id).await
+    }
 }
