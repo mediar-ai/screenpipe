@@ -375,7 +375,7 @@ export function useSettings() {
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
 
-    if (settings.dataDir) return settings.dataDir;
+    if (settings.dataDir !== "default" && settings.dataDir && settings.dataDir !== "") return settings.dataDir;
 
     return platform() === "macos" || platform() === "linux"
       ? `${homeDirPath}/.screenpipe`
