@@ -21,8 +21,8 @@ use tokio::time::{timeout, Duration as TokioDuration};
 use zerocopy::AsBytes;
 
 use crate::db_types::{
-    AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult, OCRResultRaw, Speaker,
-    TagContentType,
+    AudioChunk, AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult,
+    OCRResultRaw, Speaker, TagContentType,
 };
 use crate::db_types::{ContentType, UiContent};
 use crate::db_types::{SearchResult, TimeSeriesChunk};
@@ -1469,6 +1469,18 @@ impl DatabaseManager {
         Ok(tags.into_iter().map(|t| t.0).collect())
     }
 
+    pub async fn get_audio_chunks_for_speaker(
+        &self,
+        speaker_id: i64,
+    ) -> Result<Vec<AudioChunk>, sqlx::Error> {
+        sqlx::query_as::<_, AudioChunk>(
+            "SELECT * FROM audio_chunks WHERE id IN (SELECT audio_chunk_id FROM audio_transcriptions WHERE speaker_id = ?)",
+        )
+            .bind(speaker_id)
+            .fetch_all(&self.pool)
+            .await
+    }
+
     // get unnamed speakers
     pub async fn get_unnamed_speakers(
         &self,
@@ -1558,5 +1570,47 @@ impl DatabaseManager {
             .bind(name_prefix)
             .fetch_all(&self.pool)
             .await
+    }
+
+    pub async fn delete_speaker(&self, id: i64) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Array of (query, operation description) tuples
+        let operations = [
+            (
+                "DELETE FROM audio_transcriptions WHERE speaker_id = ?",
+                "audio transcriptions",
+            ),
+            (
+                "DELETE FROM audio_chunks WHERE id IN (SELECT audio_chunk_id FROM audio_transcriptions WHERE speaker_id = ?)",
+                "audio chunks",
+            ),
+            (
+                "DELETE FROM speaker_embeddings WHERE speaker_id = ?",
+                "speaker embeddings",
+            ),
+            (
+                "DELETE FROM speakers WHERE id = ?",
+                "speaker",
+            ),
+        ];
+
+        // Execute each deletion operation
+        for (query, operation) in operations {
+            if let Err(e) = sqlx::query(query).bind(id).execute(&mut *tx).await {
+                error!("Failed to delete {} for speaker {}: {}", operation, id, e);
+                tx.rollback().await?;
+                return Err(e);
+            }
+            debug!("Successfully deleted {} for speaker {}", operation, id);
+        }
+
+        tx.commit().await.map_err(|e| {
+            error!("Failed to commit speaker deletion transaction: {}", e);
+            e
+        })?;
+
+        debug!("Successfully committed speaker deletion transaction");
+        Ok(())
     }
 }

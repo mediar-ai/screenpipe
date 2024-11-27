@@ -2,7 +2,7 @@ use axum::{
     extract::{Json, Path, Query, State},
     http::StatusCode,
     response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
-    routing::{get, patch, post},
+    routing::{get, post},
     serve, Router,
 };
 use crossbeam::queue::SegQueue;
@@ -13,7 +13,7 @@ use futures::{
 use image::ImageFormat::{self};
 
 use crate::{
-    db_types::{ContentType, SearchResult, TagContentType},
+    db_types::{ContentType, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
@@ -134,6 +134,11 @@ pub struct UpdateSpeakerRequest {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SearchSpeakersRequest {
     pub name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteSpeakerRequest {
+    pub id: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1388,6 +1393,32 @@ async fn search_speakers_handler(
     ))
 }
 
+async fn delete_speaker_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<DeleteSpeakerRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    // get audio_chunks for this speaker
+    let audio_chunks = state
+        .db
+        .get_audio_chunks_for_speaker(payload.id)
+        .await
+        .unwrap();
+
+    state.db.delete_speaker(payload.id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": e.to_string()})),
+        )
+    })?;
+
+    // delete all audio chunks from the file system
+    for audio_chunk in audio_chunks {
+        let _ = std::fs::remove_file(audio_chunk.file_path);
+    }
+
+    Ok(JsonResponse(json!({"success": true})))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1420,6 +1451,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/unnamed", get(get_unnamed_speakers_handler))
         .route("/speakers/update", post(update_speaker_handler))
         .route("/speakers/search", get(search_speakers_handler))
+        .route("/speakers/delete", post(delete_speaker_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .layer(cors);
 

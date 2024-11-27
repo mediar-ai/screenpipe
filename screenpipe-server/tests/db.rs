@@ -706,4 +706,32 @@ mod tests {
         assert_eq!(speakers.len(), 1);
         assert_eq!(speakers[0].name, "test name");
     }
+
+    #[tokio::test]
+    async fn test_delete_speaker() {
+        let db = setup_test_db().await;
+
+        let speaker = db.insert_speaker(&vec![0.1; 512]).await.unwrap();
+
+        let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "test transcription",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            Some(speaker.id),
+        )
+        .await
+        .unwrap();
+
+        db.delete_speaker(speaker.id).await.unwrap();
+
+        let speakers = db.search_speakers("").await.unwrap();
+        assert_eq!(speakers.len(), 0);
+
+        // make sure audio_chunks are deleted
+        let audio_chunks = db.get_audio_chunks_for_speaker(speaker.id).await.unwrap();
+        assert_eq!(audio_chunks.len(), 0);
+    }
 }
