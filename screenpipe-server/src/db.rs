@@ -1477,25 +1477,20 @@ impl DatabaseManager {
     ) -> Result<Vec<Speaker>, sqlx::Error> {
         let res = sqlx::query_as::<sqlx::Sqlite, Speaker>(
             r#"
-            WITH LatestAudioPaths AS (
-                SELECT 
-                    s.id,
-                    json_group_array(ac.file_path) as audio_paths
+            WITH RecentAudioPaths AS (
+                SELECT DISTINCT
+                    s.id as speaker_id,
+                    ac.file_path
                 FROM speakers s
                 JOIN audio_transcriptions at ON s.id = at.speaker_id
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
                 WHERE (s.name = '' OR s.name IS NULL)
-                GROUP BY s.id
-                HAVING audio_paths = (
-                    SELECT json_group_array(file_path)
-                    FROM (
-                        SELECT DISTINCT ac2.file_path
-                        FROM audio_transcriptions at2
-                        JOIN audio_chunks ac2 ON at2.audio_chunk_id = ac2.id
-                        WHERE at2.speaker_id = s.id
-                        ORDER BY at2.timestamp DESC
-                        LIMIT 3
-                    )
+                AND at.timestamp IN (
+                    SELECT timestamp
+                    FROM audio_transcriptions at2
+                    WHERE at2.speaker_id = s.id
+                    ORDER BY timestamp DESC
+                    LIMIT 3
                 )
             )
             SELECT 
@@ -1503,18 +1498,18 @@ impl DatabaseManager {
                 s.name,
                 CASE 
                     WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
-                    THEN json_object('audio_paths', json(lap.audio_paths))
+                    THEN json_object('audio_paths', json_group_array(DISTINCT rap.file_path))
                     ELSE json_patch(
                         json(s.metadata), 
-                        json_object('audio_paths', json(lap.audio_paths))
+                        json_object('audio_paths', json_group_array(DISTINCT rap.file_path))
                     )
-                END as metadata
+                END as metadata,
+                COUNT(at.id) as transcription_count
             FROM speakers s
-            LEFT JOIN LatestAudioPaths lap ON s.id = lap.id
+            JOIN RecentAudioPaths rap ON s.id = rap.speaker_id
             JOIN audio_transcriptions at ON s.id = at.speaker_id
-            WHERE (s.name = '' OR s.name IS NULL)
-            GROUP BY at.speaker_id
-            ORDER BY COUNT(at.speaker_id) DESC
+            GROUP BY s.id
+            ORDER BY transcription_count DESC
             LIMIT ? OFFSET ?
             "#,
         )
