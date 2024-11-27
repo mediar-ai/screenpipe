@@ -171,4 +171,11 @@ impl ToString for ContentSource {
             ContentSource::Audio => "audio".to_string(),
         }
     }
-} 
+}
+
+#[derive(Debug, FromRow)]
+pub struct AudioChunk {
+    pub id: i64,
+    pub file_path: String,
+    pub timestamp: DateTime<Utc>,
+}
