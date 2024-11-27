@@ -34,6 +34,10 @@ try {
     # Cleanup
     Remove-Item $tempZip -Force
 
+    # Install bun via npm
+    Write-Host "installing bun..."
+    npm install -g bun
+
     # Write-Host "screenpipe installed successfully! restart your terminal and run 'screenpipe'"
 } catch {
     $errorMessage = $_.Exception.Message
