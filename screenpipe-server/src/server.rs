@@ -177,6 +177,7 @@ pub struct AudioContent {
     pub tags: Vec<String>,
     pub device_name: String,
     pub device_type: DeviceType,
+    pub speaker: Option<Speaker>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -326,6 +327,7 @@ pub(crate) async fn search(
                 tags: audio.tags.clone(),
                 device_name: audio.device_name.clone(),
                 device_type: audio.device_type.clone(),
+                speaker: audio.speaker.clone(),
             }),
             SearchResult::UI(ui) => ContentItem::UI(UiContent {
                 id: ui.id,

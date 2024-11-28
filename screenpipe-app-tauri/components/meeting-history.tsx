@@ -92,6 +92,7 @@ interface MeetingSegment {
   transcription: string;
   deviceName: string;
   deviceType: string;
+  speaker: Speaker;
 }
 
 interface Meeting {
@@ -108,6 +109,11 @@ interface Meeting {
   segments: MeetingSegment[];
 }
 
+interface Speaker {
+  id: number;
+  name: string;
+}
+
 interface AudioContent {
   chunkId: number;
   transcription: string;
@@ -117,6 +123,7 @@ interface AudioContent {
   tags: string[];
   deviceName: string;
   deviceType: string;
+  speaker: Speaker;
 }
 
 interface AudioTranscription {
@@ -462,6 +469,16 @@ export default function MeetingHistory({ className }: { className?: string }) {
           ? new Date(transcriptions[index - 1].content.timestamp)
           : null;
 
+      // Get speaker name based on speaker info or device type
+      const speakerName =
+        trans.content.speaker?.name && trans.content.speaker.name.length > 0
+          ? trans.content.speaker.name
+          : trans.content.deviceType?.toLowerCase() === "input"
+          ? "you"
+          : trans.content.deviceType?.toLowerCase() === "output"
+          ? "others"
+          : "unknown";
+
       if (
         !currentMeeting ||
         (prevTime &&
@@ -475,13 +492,9 @@ export default function MeetingHistory({ className }: { className?: string }) {
           meetingGroup: meetingGroup,
           meetingStart: trans.content.timestamp,
           meetingEnd: trans.content.timestamp,
-          fullTranscription: `${formatTimestamp(trans.content.timestamp)} [${
-            trans.content.deviceType?.toLowerCase() === "input"
-              ? "you"
-              : trans.content.deviceType?.toLowerCase() === "output"
-              ? "others"
-              : "unknown"
-          }] ${trans.content.transcription}\n`,
+          fullTranscription: `${formatTimestamp(
+            trans.content.timestamp
+          )} [${speakerName}] ${trans.content.transcription}\n`,
           name: null,
           participants: null,
           summary: null,
@@ -492,25 +505,29 @@ export default function MeetingHistory({ className }: { className?: string }) {
               transcription: trans.content.transcription,
               deviceName: trans.content.deviceName,
               deviceType: trans.content.deviceType,
+              speaker: trans.content.speaker || {
+                id: -1,
+                name: speakerName,
+              },
             },
           ],
           deviceNames: new Set([trans.content.deviceName]),
         };
       } else if (currentMeeting) {
         currentMeeting.meetingEnd = trans.content.timestamp;
-        currentMeeting.fullTranscription += `${trans.content.timestamp} [${
-          trans.content.deviceType?.toLowerCase() === "input"
-            ? "you"
-            : trans.content.deviceType?.toLowerCase() === "output"
-            ? "others"
-            : "unknown"
-        }] ${trans.content.transcription}\n`;
+        currentMeeting.fullTranscription += `${formatTimestamp(
+          trans.content.timestamp
+        )} [${speakerName}] ${trans.content.transcription}\n`;
         currentMeeting.selectedDevices.add(trans.content.deviceName);
         currentMeeting.segments.push({
           timestamp: trans.content.timestamp,
           transcription: trans.content.transcription,
           deviceName: trans.content.deviceName,
           deviceType: trans.content.deviceType,
+          speaker: trans.content.speaker || {
+            id: -1,
+            name: speakerName,
+          },
         });
         currentMeeting.deviceNames.add(trans.content.deviceName);
       }
@@ -915,7 +932,10 @@ export default function MeetingHistory({ className }: { className?: string }) {
                                   )
                                   .map((s) => {
                                     return `${formatTimestamp(s.timestamp)} [${
-                                      s.deviceType?.toLowerCase() === "input"
+                                      s.speaker
+                                        ? s.speaker.name
+                                        : s.deviceType?.toLowerCase() ===
+                                          "input"
                                         ? "you"
                                         : "others"
                                     }] ${s.transcription}`;
@@ -944,7 +964,10 @@ export default function MeetingHistory({ className }: { className?: string }) {
                                 <React.Fragment key={i}>
                                   <span className="font-bold">
                                     {`${formatTimestamp(s.timestamp)} [${
-                                      s.deviceType?.toLowerCase() === "input"
+                                      s.speaker
+                                        ? s.speaker.name
+                                        : s.deviceType?.toLowerCase() ===
+                                          "input"
                                         ? "you"
                                         : "others"
                                     }]`}
