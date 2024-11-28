@@ -1,5 +1,5 @@
 #[cfg(target_os = "windows")]
-use std::{env, fs, process::Command};
+use std::{env, fs};
 use std::{
     io::Result,
     process::{Command, Output},

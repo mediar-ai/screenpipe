@@ -270,7 +270,7 @@ jobs:
           path: screenpipe-*.tar.gz
 
   update-homebrew:
-    needs: build-macos
+    needs: [build-macos, build-linux]
     runs-on: macos-latest
     steps:
       - name: Set version
