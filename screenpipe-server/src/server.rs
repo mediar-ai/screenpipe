@@ -1439,6 +1439,28 @@ async fn mark_as_hallucination_handler(
     Ok(JsonResponse(json!({"success": true})))
 }
 
+async fn merge_speakers_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<MergeSpeakersRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    error!("merging speakers: {:?}", payload);
+    let speaker_to_keep_id = payload.speaker_to_keep_id;
+    let speaker_to_merge_id = payload.speaker_to_merge_id;
+
+    state
+        .db
+        .merge_speakers(speaker_to_keep_id, speaker_to_merge_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string(), "speaker_to_keep_id": speaker_to_keep_id, "speaker_to_merge_id": speaker_to_merge_id})),
+            )
+        })?;
+
+    Ok(JsonResponse(json!({"success": true})))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1476,6 +1498,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
             "/speakers/hallucination",
             post(mark_as_hallucination_handler),
         )
+        .route("/speakers/merge", post(merge_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .layer(cors);
 
@@ -1603,6 +1626,12 @@ pub async fn delete_pipe_handler(
 #[derive(Debug, Deserialize)]
 pub struct DeletePipeRequest {
     pipe_id: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct MergeSpeakersRequest {
+    speaker_to_keep_id: i64,
+    speaker_to_merge_id: i64,
 }
 
 /*
