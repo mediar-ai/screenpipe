@@ -52,26 +52,6 @@ export const LogFileButton = ({
     }
   };
 
-  const handleCopyLogs = async () => {
-    try {
-      const logPath = await getLogFilePath();
-      const logContent = await readTextFile(logPath);
-      copyToClipboard(logContent);
-      toast({
-        title: "success",
-        description: "logs copied to clipboard.",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error("failed to copy logs:", error);
-      toast({
-        title: "error",
-        description: "failed to copy logs.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
-  };
 
   return (
     <div className={cn("flex", className)}>
@@ -80,9 +60,7 @@ export const LogFileButton = ({
           <TooltipTrigger asChild>
             <Button
               variant="outline"
-              size="sm"
               onClick={handleOpenLogFile}
-              className="mr-2"
             >
               <FileText className="h-4 w-4" />
             </Button>
@@ -92,18 +70,7 @@ export const LogFileButton = ({
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      {/* <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="outline" size="sm" onClick={handleCopyLogs}>
-              <Copy className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>copy logs to clipboard</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider> */}
+
     </div>
   );
 };

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipeInfo {
@@ -130,10 +130,7 @@ impl PipeManager {
         let config = tokio::fs::read_to_string(&config_path)
             .await
             .and_then(|s| serde_json::from_str::<Value>(&s).map_err(Into::into))
-            .unwrap_or_else(|_| {
-                warn!("pipe {}: does not seem to have a config file", pipe_id);
-                Value::Null
-            });
+            .unwrap_or_else(|_| Value::Null);
 
         PipeInfo {
             id: pipe_id,
@@ -208,5 +205,31 @@ impl PipeManager {
         let pipe_dir = self.screenpipe_dir.join("pipes");
         tokio::fs::remove_dir_all(pipe_dir).await?;
         Ok(())
+    }
+
+    pub async fn delete_pipe(&self, id: &str) -> Result<()> {
+        debug!("deleting pipe: {}", id);
+        
+        // First disable the pipe to stop any running instances
+        self.update_config(
+            id,
+            serde_json::json!({
+                "enabled": false,
+            }),
+        )
+        .await?;
+
+        // Send control message to stop the pipe
+        let _ = self.control_tx.send(PipeControl::Disable(id.to_string())).await;
+
+        // Delete the pipe directory
+        let pipe_dir = self.screenpipe_dir.join("pipes").join(id);
+        if pipe_dir.exists() {
+            tokio::fs::remove_dir_all(pipe_dir).await?;
+            info!("pipe {} deleted", id);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("pipe '{}' does not exist", id))
+        }
     }
 }

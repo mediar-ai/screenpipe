@@ -13,9 +13,9 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand, OutputFormat}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
-use screenpipe_vision::{monitor::list_monitors};
+use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
@@ -124,16 +124,7 @@ async fn main() -> anyhow::Result<()> {
     let (pipe_manager, mut pipe_control_rx) = PipeManager::new(local_data_dir_clone.clone());
     let pipe_manager = Arc::new(pipe_manager);
 
-    // Check if Screenpipe is present in PATH
-    match ensure_screenpipe_in_path().await {
-        Ok(_) => info!("screenpipe is available and properly set in the PATH"),
-        Err(e) => {
-            error!("screenpipe PATH check failed: {}", e);
-            error!("please ensure screenpipe is installed correctly and is in your PATH");
-            h.capture_error("please ensure screenpipe is installed correctly and is in your PATH");
-            // do not crash
-        }
-    }
+
 
     if let Some(pipe_command) = cli.command {
         match pipe_command {
@@ -207,6 +198,19 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
+    
+    // Check if Screenpipe is present in PATH
+    // TODO: likely should not force user to install in PATH (eg brew, powershell, or button in UI)
+    match ensure_screenpipe_in_path().await {
+        Ok(_) => info!("screenpipe is available and properly set in the PATH"),
+        Err(e) => {
+            error!("screenpipe PATH check failed: {}", e);
+            error!("please ensure screenpipe is installed correctly and is in your PATH");
+            h.capture_error("please ensure screenpipe is installed correctly and is in your PATH");
+            // do not crash
+        }
+    }
+
 
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
@@ -819,24 +823,56 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> anyhow::Result<()> {
-    // Handle pipe subcommands
-    match pipe {
-        PipeCommand::List => {
+async fn handle_pipe_command(command: PipeCommand, pipe_manager: &Arc<PipeManager>) -> anyhow::Result<()> {
+    match command {
+        PipeCommand::List { output } => {
             let pipes = pipe_manager.list_pipes().await;
-            println!("available pipes:");
-            for pipe in pipes {
-                println!("  id: {}, enabled: {}", pipe.id, pipe.enabled);
+            match output {
+                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&json!({
+                    "data": pipes,
+                    "success": true
+                }))?),
+                OutputFormat::Text => {
+                    println!("available pipes:");
+                    for pipe in pipes {
+                        println!("  id: {}, enabled: {}", pipe.id, pipe.enabled);
+                    }
+                }
             }
         }
-        PipeCommand::Download { url } => match pipe_manager.download_pipe(&url).await {
-            Ok(pipe_id) => println!("pipe downloaded successfully. id: {}. now enable it with `screenpipe pipe enable {}`", pipe_id, pipe_id),
-            Err(e) => eprintln!("failed to download pipe: {}", e),
-        },
-        PipeCommand::Info { id } => match pipe_manager.get_pipe_info(&id).await {
-            Some(info) => println!("pipe info: {:?}", info),
-            None => eprintln!("pipe not found"),
-        },
+        PipeCommand::Download { url, output } => {
+            match pipe_manager.download_pipe(&url).await {
+                Ok(pipe_id) => match output {
+                    OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&json!({
+                        "data": {
+                            "pipe_id": pipe_id,
+                            "message": "pipe downloaded successfully"
+                        },
+                        "success": true
+                    }))?),
+                    OutputFormat::Text => println!("pipe downloaded successfully. id: {}. now enable it with `screenpipe pipe enable {}`", pipe_id, pipe_id),
+                },
+                Err(e) => {
+                    let error_msg = format!("failed to download pipe: {}", e);
+                    match output {
+                        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&json!({
+                            "error": error_msg,
+                            "success": false
+                        }))?),
+                        OutputFormat::Text => eprintln!("{}", error_msg),
+                    }
+                }
+            }
+        }
+        PipeCommand::Info { id, output } => {
+            match pipe_manager.get_pipe_info(&id).await {
+                Some(info) => match output {
+                    OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&info)?),
+                    OutputFormat::Text => println!("pipe info: {:?}", info),
+                },
+                None => eprintln!("pipe not found"),
+            }
+        }
         PipeCommand::Enable { id } => {
             match pipe_manager
                 .update_config(&id, json!({"enabled": true}))
@@ -886,6 +922,23 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
                 }
             }
         },
+        PipeCommand::Delete { id, yes } => {
+            if !yes {
+                print!("are you sure you want to delete pipe '{}'? [y/N] ", id);
+                std::io::stdout().flush()?;
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+                if !input.trim().eq_ignore_ascii_case("y") {
+                    println!("pipe deletion cancelled.");
+                    return Ok(());
+                }
+            }
+
+            match pipe_manager.delete_pipe(&id).await {
+                Ok(_) => println!("pipe '{}' deleted successfully", id),
+                Err(e) => println!("failed to delete pipe: {}", e),
+            }
+        }
     }
     Ok(())
 }

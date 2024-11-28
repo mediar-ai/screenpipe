@@ -1,7 +1,7 @@
 use axum::{
     extract::{Json, Path, Query, State},
     http::StatusCode,
-    response::{sse::Event, Json as JsonResponse, Sse},
+    response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
     routing::{get, post},
     serve, Router,
 };
@@ -14,7 +14,7 @@ use image::ImageFormat::{self};
 
 use crate::{
     db::TagContentType,
-    pipe_manager::{PipeInfo, PipeManager},
+    pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
@@ -639,14 +639,20 @@ async fn download_pipe_handler(
     debug!("Downloading pipe: {}", payload.url);
     match state.pipe_manager.download_pipe(&payload.url).await {
         Ok(pipe_dir) => Ok(JsonResponse(json!({
-            "message": format!("Pipe {} downloaded successfully", pipe_dir),
-            "pipe_id": pipe_dir
+            "data": {
+                "pipe_id": pipe_dir,
+                "message": "pipe downloaded successfully"
+            },
+            "success": true
         }))),
         Err(e) => {
             error!("Failed to download pipe: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": e.to_string()})),
+                JsonResponse(json!({
+                    "error": format!("failed to download pipe: {}", e),
+                    "success": false
+                })),
             ))
         }
     }
@@ -669,12 +675,18 @@ async fn run_pipe_handler(
         .await
     {
         Ok(_) => Ok(JsonResponse(json!({
-            "message": format!("Pipe {} started", payload.pipe_id),
-            "pipe_id": payload.pipe_id
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe started"
+            },
+            "success": true
         }))),
         Err(e) => Err((
             StatusCode::BAD_REQUEST,
-            JsonResponse(json!({"error": e.to_string()})),
+            JsonResponse(json!({
+                "error": format!("failed to start pipe: {}", e),
+                "success": false
+            })),
         )),
     }
 }
@@ -695,12 +707,18 @@ async fn stop_pipe_handler(
         .await
     {
         Ok(_) => Ok(JsonResponse(json!({
-            "message": format!("Pipe {} stopped", payload.pipe_id),
-            "pipe_id": payload.pipe_id
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe stopped"
+            },
+            "success": true
         }))),
         Err(e) => Err((
             StatusCode::BAD_REQUEST,
-            JsonResponse(json!({"error": e.to_string()})),
+            JsonResponse(json!({
+                "error": format!("failed to stop pipe: {}", e),
+                "success": false
+            })),
         )),
     }
 }
@@ -716,12 +734,18 @@ async fn update_pipe_config_handler(
         .await
     {
         Ok(_) => Ok(JsonResponse(json!({
-            "message": format!("Pipe {} config updated", payload.pipe_id),
-            "pipe_id": payload.pipe_id
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe config updated"
+            },
+            "success": true
         }))),
         Err(e) => Err((
             StatusCode::BAD_REQUEST,
-            JsonResponse(json!({"error": e.to_string()})),
+            JsonResponse(json!({
+                "error": format!("failed to update pipe config: {}", e),
+                "success": false
+            })),
         )),
     }
 }
@@ -729,20 +753,30 @@ async fn update_pipe_config_handler(
 async fn get_pipe_info_handler(
     State(state): State<Arc<AppState>>,
     Path(pipe_id): Path<String>,
-) -> Result<JsonResponse<PipeInfo>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Getting pipe info for: {}", pipe_id);
     match state.pipe_manager.get_pipe_info(&pipe_id).await {
-        Some(info) => Ok(JsonResponse(info)),
+        Some(info) => Ok(JsonResponse(json!({
+            "data": info,
+            "success": true
+        }))),
         None => Err((
             StatusCode::NOT_FOUND,
-            JsonResponse(json!({"error": "Pipe not found"})),
+            JsonResponse(json!({
+                "error": "pipe not found",
+                "success": false
+            })),
         )),
     }
 }
 
-async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Vec<PipeInfo>> {
+async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Value> {
     debug!("Listing pipes");
-    JsonResponse(state.pipe_manager.list_pipes().await)
+    let pipes = state.pipe_manager.list_pipes().await;
+    JsonResponse(json!({
+        "data": pipes,
+        "success": true
+    }))
 }
 
 pub struct Server {
@@ -1318,6 +1352,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
+        .route("/pipes/delete", post(delete_pipe_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
         .route("/raw_sql", post(execute_raw_sql))
@@ -1410,6 +1445,35 @@ async fn stream_frames_handler(
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
     )
+}
+
+// Add this new handler function
+pub async fn delete_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<DeletePipeRequest>,
+) -> impl IntoResponse {
+    match state.pipe_manager.delete_pipe(&request.pipe_id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": "pipe deleted successfully"
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("failed to delete pipe: {}", e)
+            })),
+        ),
+    }
+}
+
+// Add this struct for the request payload
+#[derive(Debug, Deserialize)]
+pub struct DeletePipeRequest {
+    pipe_id: String,
 }
 
 /*

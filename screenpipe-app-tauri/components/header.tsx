@@ -38,6 +38,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Calendar } from "lucide-react";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -46,7 +47,7 @@ export default function Header() {
   const { settings } = useSettings();
 
   // const isLoading = !health;
-  const isLoading = false; // ! testing - had issue with this before 
+  const isLoading = false; // ! testing - had issue with this before
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -124,36 +125,8 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="cursor-pointer"
-                      onClick={handleShowTimeline}
-                      disabled={
-                        !settings.enableFrameCache ||
-                        !health ||
-                        health.status === "error"
-                      }
-                    >
-                      <Clock className="mr-2 h-4 w-4" />
-                      timeline
-                    </Button>
-                  </div>
-                </TooltipTrigger>
-                {!settings.enableFrameCache && (
-                  <TooltipContent>
-                    <p>enable timeline in settings first</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-            <MeetingHistory />
+            <PipeDialog />
             <Settings />
-
             <Button
               variant="ghost"
               size="icon"
@@ -173,9 +146,18 @@ export default function Header() {
               <DropdownMenuContent className="mr-4" align="end">
                 <DropdownMenuItem
                   className="cursor-pointer"
-                  onClick={(e) => e.preventDefault()}
+                  onClick={handleShowTimeline}
+                  disabled={
+                    !settings.enableFrameCache ||
+                    !health ||
+                    health.status === "error"
+                  }
                 >
-                  <PipeDialog />
+                  <Clock className="mr-2 h-4 w-4" />
+                  <span>timeline</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer p-0">
+                  <MeetingHistory />
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"

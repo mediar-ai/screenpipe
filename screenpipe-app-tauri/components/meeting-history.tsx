@@ -667,7 +667,7 @@ export default function MeetingHistory() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" onClick={() => setIsOpen(true)}>
+        <Button variant="ghost" className="pl-2" onClick={() => setIsOpen(true)}>
           <Calendar className="mr-2 h-4 w-4" />
           meetings
         </Button>

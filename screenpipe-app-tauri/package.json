@@ -2,6 +2,7 @@
   "name": "screenpipe-app",
   "private": true,
   "scripts": {
+    "predev": "echo 'make sure to run cargo build --release and bun predev if you are using non dev mode in screenpipe UI'",
     "dev": "next dev",
     "build": "next build",
     "prebuild": "bun scripts/pre_build.js",

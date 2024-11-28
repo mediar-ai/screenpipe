@@ -52,8 +52,6 @@ async function generateWorkLog(
     schema: workLog,
   });
 
-  console.log("ai answer:", response);
-
   return response.object;
 }
 

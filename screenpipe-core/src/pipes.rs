@@ -171,12 +171,15 @@ mod pipes {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                if line.contains("Download") || line.starts_with("Task dev ") {
-                    // Log download messages and task start messages as info instead of error
-                    debug!("[pipe][info][{}] {}", pipe_clone, line);
+                if line.contains("Download")
+                    || line.starts_with("Task dev ")
+                    || line.starts_with("$ next dev")
+                    || line.contains("ready started server")
+                    || line.contains("Local:")
+                {
+                    println!("[pipe][info][{}] {}", pipe_clone, line);
                 } else {
-                    // Keep other messages as errors
-                    error!("[pipe][error][{}] {}", pipe_clone, line);
+                    println!("[pipe][error][{}] {}", pipe_clone, line);
                 }
             }
         });
@@ -404,37 +407,69 @@ mod pipes {
             || file_name.to_str().map_or(false, |s| s.starts_with('.'))
     }
 
-    async fn download_github_folder(url: &Url, dest_dir: &Path) -> anyhow::Result<()> {
-        let client = Client::new();
-        let api_url = get_raw_github_url(url.as_str())?;
+    fn download_github_folder(
+        url: &Url,
+        dest_dir: &Path,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
+        let url = url.clone();
+        let dest_dir = dest_dir.to_path_buf();
 
-        let response = client
-            .get(&api_url)
-            .header("Accept", "application/vnd.github.v3+json")
-            .header("User-Agent", "screenpipe")
-            .send()
-            .await?;
+        Box::pin(async move {
+            let client = Client::new();
+            let api_url = get_raw_github_url(url.as_str())?;
 
-        let contents: Value = response.json().await?;
+            let response = client
+                .get(&api_url)
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "screenpipe")
+                .send()
+                .await?;
 
-        if !contents.is_array() {
-            anyhow::bail!("invalid response from github api");
-        }
+            let contents: Value = response.json().await?;
 
-        for item in contents.as_array().unwrap() {
-            let file_name = item["name"].as_str().unwrap();
-            if !is_hidden_file(std::ffi::OsStr::new(file_name)) {
-                let download_url = item["download_url"].as_str().unwrap();
-                let file_content = client.get(download_url).send().await?.bytes().await?;
-                let file_path = dest_dir.join(file_name);
-                tokio::fs::write(&file_path, &file_content).await?;
-                info!("downloaded: {:?}", file_path);
-            } else {
-                info!("skipping hidden file: {}", file_name);
+            if !contents.is_array() {
+                anyhow::bail!("invalid response from github api");
             }
-        }
 
-        Ok(())
+            for item in contents.as_array().unwrap() {
+                let file_name = item["name"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("missing name in github response"))?;
+
+                if !is_hidden_file(std::ffi::OsStr::new(file_name)) {
+                    let file_type = item["type"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("missing type in github response"))?;
+
+                    match file_type {
+                        "file" => {
+                            let download_url = item["download_url"].as_str().ok_or_else(|| {
+                                anyhow::anyhow!("missing download_url in github response")
+                            })?;
+
+                            let file_content =
+                                client.get(download_url).send().await?.bytes().await?;
+                            let file_path = dest_dir.join(file_name);
+                            tokio::fs::write(&file_path, &file_content).await?;
+                            debug!("downloaded file: {:?}", file_path);
+                        }
+                        "dir" => {
+                            let new_dest_dir = dest_dir.join(file_name);
+                            tokio::fs::create_dir_all(&new_dest_dir).await?;
+
+                            let new_url = format!("{}/{}", url.as_str(), file_name);
+                            download_github_folder(&Url::parse(&new_url)?, &new_dest_dir).await?;
+                            debug!("downloaded directory: {:?}", new_dest_dir);
+                        }
+                        _ => debug!("skipping unknown type: {}", file_type),
+                    }
+                } else {
+                    debug!("skipping hidden file: {}", file_name);
+                }
+            }
+
+            Ok(())
+        })
     }
 
     fn get_raw_github_url(url: &str) -> anyhow::Result<String> {
