@@ -617,7 +617,7 @@ impl DatabaseManager {
                         max_length,
                     )
                     .await?;
-                if (appname.is_none() && window_name.is_none()) {
+                if app_name.is_none() && window_name.is_none() {
                     let audio_results = self
                         .search_audio(
                             query, limit, offset, start_time, end_time, min_length, max_length,
@@ -657,7 +657,7 @@ impl DatabaseManager {
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
             }
             ContentType::Audio => {
-                if (appname.is_none() && window_name.is_none()) {
+                if app_name.is_none() && window_name.is_none() {
                     let audio_results = self
                         .search_audio(
                             query, limit, offset, start_time, end_time, min_length, max_length,
