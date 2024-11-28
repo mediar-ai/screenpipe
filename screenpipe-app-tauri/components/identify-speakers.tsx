@@ -23,6 +23,8 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { Badge } from "./ui/badge";
@@ -48,6 +50,7 @@ import {
 import { ValueOf } from "next/dist/shared/lib/constants";
 import { Checkbox } from "./ui/checkbox";
 import { VideoComponent } from "./video";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -130,11 +133,16 @@ interface UnnamedSpeakerResponseItem {
 }
 
 interface UnnamedSpeaker {
-  id: string;
+  id: number;
   name: string;
   metadata: {
     audioPaths: string[];
   };
+}
+
+interface SpeakerSearchResult {
+  id: number;
+  name: string;
 }
 
 export default function IdentifySpeakers() {
@@ -150,7 +158,25 @@ export default function IdentifySpeakers() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [unnamedSpeakersPage, setUnnamedSpeakersPage] = useState(0);
-  const [unnamedSpeakersLimit, setUnnamedSpeakersLimit] = useState(10);
+  const [unnamedSpeakersLimit, setUnnamedSpeakersLimit] = useState(1);
+  const [currentSpeakerIndex, setCurrentSpeakerIndex] = useState(0);
+  const [showHallucinationConfirm, setShowHallucinationConfirm] =
+    useState(false);
+  const [showNameUpdateConfirm, setShowNameUpdateConfirm] = useState(false);
+  const [pendingNameUpdate, setPendingNameUpdate] = useState<string>("");
+  const [speakerSearchTerm, setSpeakerSearchTerm] = useState<string>("");
+  const [speakers, setSpeakers] = useState<UnnamedSpeaker[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
+  const [selectedExistingSpeaker, setSelectedExistingSpeaker] =
+    useState<SpeakerSearchResult | null>(null);
+  // const debouncedSpeakerSearchTerm = useDebounce(speakerSearchTerm, 100);
+
+  useEffect(() => {
+    if (speakerSearchTerm) {
+      fetchSpeakers(speakerSearchTerm);
+    }
+  }, [speakerSearchTerm]);
 
   useEffect(() => {
     if (posthog) {
@@ -181,6 +207,14 @@ export default function IdentifySpeakers() {
     setShowError(!!error);
   }, [error]);
 
+  useEffect(() => {
+    if (showError) {
+      setTimeout(() => {
+        setShowError(false);
+      }, 5000);
+    }
+  }, [showError]);
+
   async function loadUnnamedSpeakers() {
     setLoading(true);
     try {
@@ -189,6 +223,27 @@ export default function IdentifySpeakers() {
       setError("failed to load unnamed speakers");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchSpeakers(searchTerm: string) {
+    console.log("fetching speakers...");
+    setIsSearching(true);
+
+    try {
+      const response = await fetch(
+        `http://localhost:3030/speakers/search?name=${searchTerm}`
+      );
+      if (!response.ok) {
+        throw new Error("failed to fetch speakers");
+      }
+      const result = await response.json();
+      setSpeakers(result);
+    } catch (error) {
+      console.error("error fetching speakers:", error);
+      setError("failed to fetch speakers");
+    } finally {
+      setIsSearching(false);
     }
   }
 
@@ -244,6 +299,7 @@ export default function IdentifySpeakers() {
   }
 
   const handleRefresh = async () => {
+    setSpeakers([]);
     setIsRefreshing(true);
     try {
       await fetchUnnamedSpeakers(unnamedSpeakersPage);
@@ -325,6 +381,104 @@ export default function IdentifySpeakers() {
   //   []
   // );
 
+  const handleUpdateSpeakerName = async (newName: string) => {
+    // use the endpoint /speakers/update to update the name
+    try {
+      await fetch(`http://localhost:3030/speakers/update`, {
+        method: "POST",
+        body: JSON.stringify({
+          id: unnamedSpeakers[currentSpeakerIndex].id,
+          name: newName,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      setSpeakerSearchTerm("");
+      handleRefresh();
+    } catch (error) {
+      console.error("Error updating speaker name:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update speaker name. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleMergeSpeakers = async () => {
+    if (selectedExistingSpeaker) {
+      try {
+        // Add API call to merge speakers
+        await fetch(`http://localhost:3030/speakers/merge`, {
+          method: "POST",
+          body: JSON.stringify({
+            speaker_to_merge_id: unnamedSpeakers[currentSpeakerIndex].id,
+            speaker_to_keep_id: selectedExistingSpeaker.id,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        toast({
+          title: "Speakers merged",
+          description: "The speakers have been successfully merged",
+        });
+
+        // Refresh the unnamed speakers list
+        await handleRefresh();
+      } catch (error) {
+        console.error("Error merging speakers:", error);
+        toast({
+          title: "Error",
+          description: "Failed to merge speakers. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+    setSpeakerSearchTerm("");
+    setShowMergeConfirm(false);
+  };
+
+  const handleMarkSpeakerAsHallucination = async () => {
+    // use the endpoint /speakers/hallucination to mark the speaker as hallucination
+    try {
+      await fetch(`http://localhost:3030/speakers/hallucination`, {
+        method: "POST",
+        body: JSON.stringify({
+          speaker_id: unnamedSpeakers[currentSpeakerIndex].id,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    } catch (error) {
+      console.error("Error marking speaker as hallucination:", error);
+      toast({
+        title: "Error",
+        description:
+          "Failed to mark speaker as hallucination. Please try again.",
+        variant: "destructive",
+      });
+    }
+
+    setSpeakerSearchTerm("");
+    handleRefresh();
+  };
+
+  const goToNextSpeaker = () => {
+    if (currentSpeakerIndex < unnamedSpeakers.length - 1) {
+      setCurrentSpeakerIndex((prev) => prev + 1);
+    }
+  };
+
+  const goToPreviousSpeaker = () => {
+    if (currentSpeakerIndex > 0) {
+      setCurrentSpeakerIndex((prev) => prev - 1);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -346,11 +500,10 @@ export default function IdentifySpeakers() {
         </DialogHeader>
         <DialogDescription className="mb-4 text-sm text-gray-600">
           this page helps you identify and manage speakers detected in your
-          audio clips. you can listen to 3 clips of each speaker, assign them
-          names, or mark them as hallucinations if they were incorrectly
-          detected. you can also remove speakers from the database if needed.
-          this helps improve the accuracy of speaker identification in your
-          recordings.
+          audio clips. you can listen to up to 3 clips of each speaker, assign
+          them names, or mark them as hallucinations if they were incorrectly
+          detected. this helps improve the accuracy of speaker identification in
+          your recordings.
         </DialogDescription>
         <div className="flex-grow overflow-auto">
           {loading ? (
@@ -388,83 +541,237 @@ export default function IdentifySpeakers() {
                 <p className="text-center">no unnamed speakers found.</p>
               )}
 
-              {unnamedSpeakers.map((speaker) => (
-                <div key={speaker.id} className="p-4 border rounded mb-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-2">
-                      {/* <User className="h-4 w-4 text-gray-500" /> */}
-                      <span className="font-medium">
-                        Speaker ID: {speaker.id}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          // Handle delete speaker
-                          posthog?.capture("speaker_deleted", {
-                            speakerId: speaker.id,
-                          });
-                          toast({
-                            title: "speaker deleted",
-                            description:
-                              "the speaker has been removed from the database",
-                          });
+              {unnamedSpeakers.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <Button
+                    variant="ghost"
+                    onClick={goToPreviousSpeaker}
+                    disabled={currentSpeakerIndex === 0}
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+
+                  <div className="flex-1 mx-4">
+                    <div className="p-4 border rounded">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium">
+                            Speaker {currentSpeakerIndex + 1} of{" "}
+                            {unnamedSpeakers.length}
+                          </span>
+                        </div>
+                      </div>
+                      <form
+                        className="space-y-4"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          const newName = formData.get("speakerName") as string;
+                          setPendingNameUpdate(newName);
+                          setShowNameUpdateConfirm(true);
+                          await fetchSpeakers(newName);
                         }}
                       >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
+                        <div className="flex items-center space-x-2">
+                          <div className="relative flex-1 max-w-xs">
+                            <Input
+                              value={speakerSearchTerm}
+                              name="speakerName"
+                              onChange={(e) => {
+                                setSpeakers(
+                                  speakers.filter((speaker) =>
+                                    speaker.name
+                                      .toLowerCase()
+                                      .includes(e.target.value.toLowerCase())
+                                  )
+                                );
+
+                                setSpeakerSearchTerm(e.target.value);
+                              }}
+                              placeholder="Enter speaker name"
+                              className="w-full"
+                            />
+                            {speakerSearchTerm && (
+                              <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg">
+                                {isSearching ? (
+                                  <div className="flex justify-center items-center p-4">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                                  </div>
+                                ) : (
+                                  speakers.length > 0 && (
+                                    <ul className="py-1">
+                                      {speakers.map((speaker) => (
+                                        <li
+                                          key={speaker.id}
+                                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                          onClick={() => {
+                                            setSpeakerSearchTerm(speaker.name);
+                                            setSelectedExistingSpeaker(speaker);
+                                            setShowMergeConfirm(true);
+                                          }}
+                                        >
+                                          {speaker.name}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <Button type="submit" size="sm">
+                            Update Name
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={async () => {
+                              setShowHallucinationConfirm(true);
+                            }}
+                          >
+                            Mark as Hallucination
+                          </Button>
+                        </div>
+                      </form>
+
+                      <div className="mt-4">
+                        <p className="text-sm text-gray-500 mb-2">
+                          Audio Samples:
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {unnamedSpeakers[
+                            currentSpeakerIndex
+                          ].metadata.audioPaths
+                            .slice(0, 3)
+                            .map((path, index) => (
+                              <VideoComponent key={index} filePath={path} />
+                            ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <form
-                    className="space-y-4"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const formData = new FormData(e.currentTarget);
-                      const name = formData.get("speakerName") as string;
-
-                      // Handle update speaker name
-                      posthog?.capture("speaker_renamed", {
-                        speakerId: speaker.id,
-                        newName: name,
-                      });
-                      toast({
-                        title: "speaker renamed",
-                        description: "the speaker name has been updated",
-                      });
-                    }}
+                  <Button
+                    variant="ghost"
+                    onClick={goToNextSpeaker}
+                    disabled={
+                      currentSpeakerIndex === unnamedSpeakers.length - 1
+                    }
                   >
-                    <div className="flex items-center space-x-2">
-                      <Input
-                        name="speakerName"
-                        placeholder="Enter speaker name"
-                        defaultValue={speaker.name}
-                        className="max-w-xs"
-                      />
-                      <Button type="submit" size="sm">
-                        Update Name
-                      </Button>
-                    </div>
-                  </form>
-
-                  <div className="mt-4">
-                    <p className="text-sm text-gray-500 mb-2">Audio Samples:</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {speaker.metadata.audioPaths
-                        .slice(0, 3)
-                        .map((path, index) => (
-                          <VideoComponent key={index} filePath={path} />
-                        ))}
-                    </div>
-                  </div>
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
                 </div>
-              ))}
+              )}
             </>
           )}
         </div>
       </DialogContent>
+      <Dialog
+        open={showHallucinationConfirm}
+        onOpenChange={setShowHallucinationConfirm}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Confirm Hallucination</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to mark this speaker as a hallucination?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowHallucinationConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                await handleMarkSpeakerAsHallucination();
+                setShowHallucinationConfirm(false);
+                toast({
+                  title: "Speaker marked as hallucination",
+                  description:
+                    "This speaker will be ignored in future processing",
+                });
+                if (currentSpeakerIndex < unnamedSpeakers.length - 1) {
+                  goToNextSpeaker();
+                } else {
+                  await loadUnnamedSpeakers();
+                }
+              }}
+            >
+              Confirm
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={showNameUpdateConfirm}
+        onOpenChange={setShowNameUpdateConfirm}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Confirm Name Update</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to update this speaker&apos;s name to &quot;
+              {pendingNameUpdate}
+              &quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowNameUpdateConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                await handleUpdateSpeakerName(pendingNameUpdate);
+                setShowNameUpdateConfirm(false);
+                toast({
+                  title: "speaker renamed",
+                  description: "the speaker name has been updated",
+                });
+              }}
+            >
+              Confirm
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showMergeConfirm} onOpenChange={setShowMergeConfirm}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Merge Speakers</DialogTitle>
+            <DialogDescription>
+              Do you want to merge this speaker with existing speaker &quot;
+              {selectedExistingSpeaker?.name}&quot;? This will combine their
+              audio samples and future recordings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowMergeConfirm(false);
+                // Still update the name without merging
+                handleUpdateSpeakerName(selectedExistingSpeaker?.name || "");
+                toast({
+                  title: "Speaker renamed",
+                  description:
+                    "The speaker name has been updated without merging",
+                });
+              }}
+            >
+              Just Update Name
+            </Button>
+            <Button onClick={handleMergeSpeakers}>Merge Speakers</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

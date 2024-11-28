@@ -682,15 +682,19 @@ mod tests {
         let db = setup_test_db().await;
 
         let speaker_1 = db.insert_speaker(&vec![0.1; 512]).await.unwrap();
+        db.update_speaker_name(speaker_1.id, "speaker 1")
+            .await
+            .unwrap();
         let speaker_2 = db.insert_speaker(&vec![0.2; 512]).await.unwrap();
+        db.update_speaker_name(speaker_2.id, "speaker 2")
+            .await
+            .unwrap();
 
         db.merge_speakers(speaker_1.id, speaker_2.id).await.unwrap();
 
-        let speaker_1 = db
-            .get_speaker_from_embedding(&vec![0.2; 512])
-            .await
-            .unwrap();
-        assert_eq!(speaker_1.unwrap().id, 1);
+        let speakers = db.search_speakers("").await.unwrap();
+        assert_eq!(speakers.len(), 1);
+        assert_eq!(speakers[0].name, "speaker 1");
     }
 
     #[tokio::test]

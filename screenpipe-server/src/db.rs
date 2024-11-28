@@ -1497,6 +1497,7 @@ impl DatabaseManager {
                 JOIN audio_transcriptions at ON s.id = at.speaker_id
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
                 WHERE (s.name = '' OR s.name IS NULL)
+                AND (s.hallucination IS NULL OR s.hallucination = 0)
                 AND at.timestamp IN (
                     SELECT timestamp
                     FROM audio_transcriptions at2
@@ -1567,7 +1568,7 @@ impl DatabaseManager {
 
     pub async fn search_speakers(&self, name_prefix: &str) -> Result<Vec<Speaker>, sqlx::Error> {
         sqlx::query_as::<_, Speaker>(
-            "SELECT * FROM speakers WHERE name LIKE ? || '%' AND hallucination != 1",
+            "SELECT * FROM speakers WHERE name LIKE ? || '%' AND (hallucination IS NULL OR hallucination != 1)",
         )
         .bind(name_prefix)
         .fetch_all(&self.pool)
