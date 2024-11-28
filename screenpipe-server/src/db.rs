@@ -786,6 +786,7 @@ impl DatabaseManager {
                 GROUP_CONCAT(tags.name, ',') as tags,
                 audio_transcriptions.device as device_name,
                 audio_transcriptions.is_input_device
+                audio_transcriptions.speaker_id
             FROM {}
             JOIN audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
             LEFT JOIN audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
@@ -815,7 +816,15 @@ impl DatabaseManager {
 
         Ok(raw_results
             .into_iter()
-            .map(|raw| AudioResult {
+            .map(|raw| {
+                let speaker = match raw.speaker_id {
+                    Some(id) => match self.get_speaker_by_id(id).await? {
+                        speaker => Some(speaker),
+                    },
+                    None => None,
+                };
+                
+                AudioResult {
                 audio_chunk_id: raw.audio_chunk_id,
                 transcription: raw.transcription,
                 timestamp: raw.timestamp,
@@ -832,8 +841,11 @@ impl DatabaseManager {
                 } else {
                     DeviceType::Output
                 },
-            })
-            .collect())
+                speaker,
+            }})
+            .collect();
+
+        Ok(audio_results)
     }
 
     pub async fn get_frame(&self, frame_id: i64) -> Result<Option<(String, i64)>, sqlx::Error> {
