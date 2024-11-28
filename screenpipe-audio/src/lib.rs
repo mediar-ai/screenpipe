@@ -12,7 +12,7 @@ pub mod whisper;
 pub use core::{
     default_input_device, default_output_device, get_device_and_config, list_audio_devices,
     parse_audio_device, record_and_transcribe, trigger_audio_permission, AudioDevice, AudioStream,
-    AudioTranscriptionEngine, DeviceControl, DeviceType,
+    AudioTranscriptionEngine, DeviceControl, DeviceType, LAST_AUDIO_CAPTURE,
 };
 pub use encode::encode_single_audio;
 pub use pcm_decode::pcm_decode;
