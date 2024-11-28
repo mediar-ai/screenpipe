@@ -25,6 +25,7 @@ mod pipes {
     use tokio::io::AsyncWriteExt;
 
     use crate::pick_unused_port;
+    use once_cell::sync::Lazy;
 
     // Update this function near the top of the file
     fn sanitize_pipe_name(name: &str) -> String {
@@ -40,6 +41,7 @@ mod pipes {
     }
 
     pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<Option<u16>> {
+        let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
         let pipe_json_path = pipe_dir.join("pipe.json");
 
@@ -79,7 +81,7 @@ mod pipes {
 
                 // Install dependencies using bun
                 info!("Installing dependencies for Next.js pipe");
-                let install_output = Command::new("bun")
+                let install_output = Command::new(&bun_path)
                     .arg("install")
                     .current_dir(&pipe_dir)
                     .output()
@@ -105,7 +107,7 @@ mod pipes {
                 env_vars.push(("PORT".to_string(), port.to_string()));
 
                 // Run the Next.js project with bun
-                let mut child = Command::new("bun")
+                let mut child = Command::new(&bun_path)
                     .arg("run")
                     .arg("dev")
                     .arg("--port")
@@ -134,7 +136,7 @@ mod pipes {
             main_module.to_str().unwrap().to_string(),
         ));
 
-        let mut child = Command::new("bun")
+        let mut child = Command::new(&bun_path)
             .arg("run")
             .arg(&main_module)
             .envs(env_vars)
@@ -305,8 +307,10 @@ mod pipes {
             if package_data["dependencies"].get("next").is_some() {
                 info!("Detected Next.js project, setting up for production");
 
-                // Run npm install
-                let mut install_child = Command::new("bun")
+                let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
+
+                // Run bun install
+                let mut install_child = Command::new(&bun_path)
                     .arg("i")
                     .current_dir(&dest_dir)
                     .stdout(std::process::Stdio::piped())
@@ -484,15 +488,23 @@ mod pipes {
     #[cfg(windows)]
     const BUN_EXECUTABLE_NAME: &str = "bun.exe";
 
-    pub fn find_bun() -> Option<PathBuf> {
+    static BUN_PATH: Lazy<Option<PathBuf>> = Lazy::new(find_bun_path_internal);
+
+    pub fn find_bun_path() -> Option<PathBuf> {
+        BUN_PATH.as_ref().map(|p| p.clone())
+    }
+
+    fn find_bun_path_internal() -> Option<PathBuf> {
         debug!("starting search for bun executable");
 
+        // Check if bun is in PATH
         if let Ok(path) = which(BUN_EXECUTABLE_NAME) {
             debug!("found bun in PATH: {:?}", path);
             return Some(path);
         }
         debug!("bun not found in PATH");
 
+        // Check in current working directory
         if let Ok(cwd) = std::env::current_dir() {
             debug!("current working directory: {:?}", cwd);
             let bun_in_cwd = cwd.join(BUN_EXECUTABLE_NAME);
@@ -503,6 +515,7 @@ mod pipes {
             debug!("bun not found in current working directory");
         }
 
+        // Check in executable directory
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_folder) = exe_path.parent() {
                 debug!("executable folder: {:?}", exe_folder);
@@ -513,6 +526,7 @@ mod pipes {
                 }
                 debug!("bun not found in executable folder");
 
+                // Platform-specific checks
                 #[cfg(target_os = "macos")]
                 {
                     let resources_folder = exe_folder.join("../Resources");
@@ -540,7 +554,7 @@ mod pipes {
         }
 
         error!("bun not found");
-        None // return None if bun is not found
+        None
     }
 }
 
