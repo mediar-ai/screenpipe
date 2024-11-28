@@ -7,7 +7,18 @@ fn main() {
     {
         #[cfg(target_arch = "x86_64")]
         {
-            fs::copy("../../target/x86_64-apple-darwin/release/screenpipe", "screenpipe-x86_64-apple-darwin").unwrap();
+            let primary_path = "../../target/x86_64-apple-darwin/release/screenpipe";
+            let fallback_path = "../../target/release/screenpipe";
+            
+            let source_path = if fs::metadata(primary_path).is_ok() {
+                primary_path
+            } else {
+                fallback_path
+            };
+
+            fs::copy(source_path, "screenpipe-x86_64-apple-darwin")
+                .expect("failed to copy screenpipe binary");
+            
             Command::new("install_name_tool")
                 .args(["-change", "../../screenpipe-vision/lib/libscreenpipe_x86_64.dylib",
                        "@executable_path/../Frameworks/libscreenpipe_x86_64.dylib", "./screenpipe-x86_64-apple-darwin"])
