@@ -75,6 +75,9 @@ we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis
 
 ![diagram](./content/diagram2.png)
 
+![image](https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91)
+
+
 # why?
 
 in 2025, context won't be an issue anymore.
