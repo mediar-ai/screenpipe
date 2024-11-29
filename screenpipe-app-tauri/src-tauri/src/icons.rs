@@ -16,11 +16,11 @@ pub async fn get_app_icon(
     use cocoa::base::{id, nil};
     use cocoa::foundation::{NSAutoreleasePool, NSData, NSString};
     use objc::{class, msg_send, sel, sel_impl};
-    
+
     unsafe {
         // Create autorelease pool
         let pool = NSAutoreleasePool::new(nil);
-        
+
         let result = (|| {
             let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
 
@@ -31,7 +31,7 @@ pub async fn get_app_icon(
                 let path: id = msg_send![workspace, fullPathForApplication: ns_app_name];
                 // Release the NSString we created
                 let _: () = msg_send![ns_app_name, release];
-                
+
                 if path == nil {
                     return Ok(None);
                 }
@@ -68,7 +68,7 @@ pub async fn get_app_icon(
 
         // Drain the autorelease pool
         let _: () = msg_send![pool, drain];
-        
+
         result
     }
 }
@@ -159,7 +159,7 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
                 r#"
                     Get-ChildItem -Path "{}" -Filter "*{}*.exe" -Recurse | ForEach-Object {{ $_.FullName }}
                     "#,
-                path, 
+                path,
                 app_name
             )
         } else {
@@ -167,12 +167,15 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
                 r#"
                     Get-ChildItem -Path "{}" -Filter "*{}*.exe" | ForEach-Object {{ $_.FullName }}
                     "#,
-                path, 
+                path,
                 app_name
             )
         };
 
         let output = tokio::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-WindowStyle")
+            .arg("hidden")
             .arg("-Command")
             .arg(command)
             .output()
@@ -196,9 +199,12 @@ async fn get_exe_by_appx(
     use std::str;
 
     let app_name = app_name.strip_suffix(".exe").unwrap_or(&app_name);
-    let app_name_withoutspace = app_name.replace(" ", ""); 
+    let app_name_withoutspace = app_name.replace(" ", "");
 
     let output = tokio::process::Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-WindowStyle")
+        .arg("hidden")
         .arg("-Command")
         .arg(format!(
             r#"Get-AppxPackage | Where-Object {{ $_.Name -like "*{}*" }}"#,
@@ -220,6 +226,9 @@ async fn get_exe_by_appx(
         .map(str::trim)?;
 
     let exe_output = tokio::process::Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-WindowStyle")
+        .arg("hidden")
         .arg("-Command")
         .arg(format!(
             r#"
@@ -240,6 +249,9 @@ async fn get_exe_by_appx(
     }
     // second attempt with space if the first attempt couldn't find exe
     let exe_output = tokio::process::Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-WindowStyle")
+        .arg("hidden")
         .arg("-Command")
         .arg(format!(
             r#"
@@ -295,4 +307,3 @@ pub async fn get_app_icon(
         path: Some(path),
     }))
 }
-
