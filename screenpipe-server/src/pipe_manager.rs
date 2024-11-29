@@ -2,11 +2,14 @@ use anyhow::Result;
 use screenpipe_core::download_pipe;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::mpsc::{self, Sender};
+use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -18,52 +21,21 @@ pub struct PipeInfo {
     pub port: Option<u16>,
 }
 
-#[derive(Debug)]
-pub enum PipeControl {
-    Enable(String),
-    Disable(String),
+struct PipeHandle {
+    pid: i32,
+    kill_tx: Sender<()>,
 }
 
 pub struct PipeManager {
     screenpipe_dir: PathBuf,
-    control_tx: Sender<PipeControl>,
+    running_pipes: Arc<RwLock<HashMap<String, PipeHandle>>>,
 }
 
 impl PipeManager {
-    pub fn new(screenpipe_dir: PathBuf) -> (Self, Receiver<PipeControl>) {
-        let (control_tx, control_rx) = mpsc::channel(32);
-        (
-            PipeManager {
-                screenpipe_dir,
-                control_tx,
-            },
-            control_rx,
-        )
-    }
-
-    pub async fn start_pipe(
-        &self,
-        id: &str,
-    ) -> Result<impl Future<Output = Result<Option<u16>, anyhow::Error>>> {
-        let pipes = self.list_pipes().await;
-
-        if let Some(_) = pipes.iter().find(|pipe| pipe.id == id) {
-            let pipe_id = id.to_string();
-            let screenpipe_dir = self.screenpipe_dir.clone();
-
-            let future = async move { screenpipe_core::run_pipe(&pipe_id, screenpipe_dir).await };
-
-            self.update_config(
-                id,
-                serde_json::json!({
-                    "enabled": true,
-                }),
-            )
-            .await?;
-
-            Ok(future)
-        } else {
-            Err(anyhow::anyhow!("pipe not found"))
+    pub fn new(screenpipe_dir: PathBuf) -> Self {
+        PipeManager {
+            screenpipe_dir,
+            running_pipes: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -88,8 +60,22 @@ impl PipeManager {
             })
         };
 
-        // Check enabled before moving new_config
-        let enabled = new_config.get("enabled").and_then(Value::as_bool);
+        debug!("config: {}", config);
+
+        let was_enabled = if config_path.exists() {
+            let old_config: Value =
+                serde_json::from_str(&tokio::fs::read_to_string(&config_path).await?)?;
+            old_config
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        } else {
+            false
+        };
+
+        let is_enabled = new_config.get("enabled").and_then(Value::as_bool);
+
+        debug!("is_enabled: {}", is_enabled.unwrap_or(false));
 
         if let Value::Object(existing_config) = &mut config {
             if let Value::Object(updates) = new_config {
@@ -103,20 +89,36 @@ impl PipeManager {
             return Err(anyhow::anyhow!("existing configuration is not an object"));
         }
 
-        // Use the previously extracted enabled value
-        if let Some(enabled) = enabled {
-            let control = if enabled {
-                PipeControl::Enable(id.to_string())
-            } else {
-                PipeControl::Disable(id.to_string())
-            };
-            let _ = self.control_tx.send(control).await;
-        }
-
         let updated_config_str = serde_json::to_string_pretty(&config)?;
 
         let mut file = File::create(&config_path).await?;
         file.write_all(updated_config_str.as_bytes()).await?;
+
+        // Handle pipe state changes
+        if let Some(enabled) = is_enabled {
+            match (was_enabled, enabled) {
+                (false, true) => {
+                    let future = self.start_pipe_task(id.to_string()).await?;
+                    tokio::spawn(future);
+
+                    info!("pipe {} enabled", id);
+                }
+                (true, false) => {
+                    self.stop_pipe(id).await?;
+
+                    info!("pipe {} disabled", id);
+                }
+                (true, true) => {
+                    self.stop_pipe(id).await?;
+
+                    let future = self.start_pipe_task(id.to_string()).await?;
+                    tokio::spawn(future);
+
+                    info!("pipe {} restarted", id);
+                }
+                (false, false) => {} // No state change needed
+            }
+        }
 
         Ok(())
     }
@@ -208,28 +210,83 @@ impl PipeManager {
     }
 
     pub async fn delete_pipe(&self, id: &str) -> Result<()> {
-        debug!("deleting pipe: {}", id);
-        
-        // First disable the pipe to stop any running instances
-        self.update_config(
-            id,
-            serde_json::json!({
-                "enabled": false,
-            }),
-        )
-        .await?;
+        // First stop the pipe if running
+        self.stop_pipe(id).await?;
 
-        // Send control message to stop the pipe
-        let _ = self.control_tx.send(PipeControl::Disable(id.to_string())).await;
-
-        // Delete the pipe directory
+        // Then delete the directory
         let pipe_dir = self.screenpipe_dir.join("pipes").join(id);
         if pipe_dir.exists() {
             tokio::fs::remove_dir_all(pipe_dir).await?;
-            info!("pipe {} deleted", id);
+            debug!("deleted pipe: {}", id);
             Ok(())
         } else {
             Err(anyhow::anyhow!("pipe '{}' does not exist", id))
         }
+    }
+
+    pub async fn stop_pipe(&self, id: &str) -> Result<()> {
+        let mut pipes = self.running_pipes.write().await;
+        if let Some(handle) = pipes.remove(id) {
+            info!("stopping pipe: {} with pid {}", id, handle.pid);
+
+            // Send kill signal through channel
+            let _ = handle.kill_tx.send(()).await;
+
+            info!("stopped pipe: {}", id);
+        }
+        Ok(())
+    }
+
+    pub async fn start_pipe_task(&self, id: String) -> Result<impl Future<Output = Result<()>>> {
+        let screenpipe_dir = self.screenpipe_dir.clone();
+        let running_pipes = self.running_pipes.clone();
+        let id_for_map = id.clone();
+
+        Ok(async move {
+            match screenpipe_core::run_pipe(&id, screenpipe_dir.clone()).await {
+                Ok(mut child) => {
+                    let pid = child.id().expect("Failed to get child pid") as i32;
+                    let (kill_tx, mut kill_rx) = mpsc::channel::<()>(1);
+
+                    running_pipes.write().await.insert(
+                        id_for_map.clone(),
+                        PipeHandle {
+                            pid,
+                            kill_tx: kill_tx.clone(),
+                        },
+                    );
+
+                    info!("started pipe: {} with pid {}", id, pid);
+
+                    tokio::select! {
+                        status = child.wait() => {
+                            match status {
+                                Ok(status) if !status.success() => {
+                                    println!("pipe {} exited with status: {}", id, status);
+                                    running_pipes.write().await.remove(&id_for_map);
+                                    anyhow::bail!("pipe exited with non-zero status: {}", status);
+                                }
+                                Err(e) => {
+                                    println!("error waiting for pipe {}: {}", id, e);
+                                    running_pipes.write().await.remove(&id_for_map);
+                                    anyhow::bail!("error waiting for pipe: {}", e);
+                                }
+                                Ok(_) => Ok(())
+                            }
+                        }
+                        _ = kill_rx.recv() => {
+                            // Kill received through channel
+                            let _ = child.kill().await;
+                            running_pipes.write().await.remove(&id_for_map);
+                            Ok(())
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("failed to start pipe {}: {}", id, e);
+                    Err(e)
+                }
+            }
+        })
     }
 }

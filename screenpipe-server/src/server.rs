@@ -662,7 +662,7 @@ async fn run_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RunPipeRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
-    debug!("Starting pipe: {}", payload.pipe_id);
+    debug!("starting pipe: {}", payload.pipe_id);
 
     match state
         .pipe_manager

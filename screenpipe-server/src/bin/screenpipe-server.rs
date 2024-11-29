@@ -7,13 +7,13 @@ use clap::Parser;
 use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
-use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
+use futures::pin_mut;
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand, OutputFormat}, start_continuous_recording, watch_pid, DatabaseManager, PipeControl, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand, OutputFormat}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server, highlight::{Highlight,HighlightConfig}
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
@@ -121,9 +121,7 @@ async fn main() -> anyhow::Result<()> {
     })
     .expect("Failed to initialize Highlight.io");
 
-    let (pipe_manager, mut pipe_control_rx) = PipeManager::new(local_data_dir_clone.clone());
-    let pipe_manager = Arc::new(pipe_manager);
-
+    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
 
     if let Some(pipe_command) = cli.command {
@@ -446,8 +444,6 @@ async fn main() -> anyhow::Result<()> {
         cli.enable_ui_monitoring,
     );
 
-    let pipe_futures = Arc::new(tokio::sync::Mutex::new(FuturesUnordered::new()));
-    let pipe_futures_clone = pipe_futures.clone();
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -680,7 +676,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Start pipes
-    debug!("starting pipes");
+    info!("starting pipes");
     let pipes = pipe_manager.list_pipes().await;
     for pipe in pipes {
         debug!("pipe: {:?}", pipe.id);
@@ -688,25 +684,18 @@ async fn main() -> anyhow::Result<()> {
             debug!("pipe {} is disabled, skipping", pipe.id);
             continue;
         }
-        match pipe_manager.start_pipe(&pipe.id).await {
-            Ok(future) => pipe_futures.lock().await.push(future),
-            Err(e) => eprintln!("failed to start pipe {}: {}", pipe.id, e),
+        match pipe_manager.start_pipe_task(pipe.id.clone()).await {
+            Ok(future) => {
+                tokio::spawn(future);
+            }
+            Err(e) => {
+                error!("failed to start pipe {}: {}", pipe.id, e);
+            }
         }
     }
 
     let server_future = server.start(devices_status, api_plugin, cli.enable_frame_cache);
     pin_mut!(server_future);
-
-    let pipes_future = async {
-        loop {
-            if let Some(result) = pipe_futures_clone.lock().await.next().await {
-                info!("pipe completed: {:?}", result);
-            } else {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            }
-        }
-    };
-    pin_mut!(pipes_future);
 
     // Add auto-destruct watcher
     if let Some(pid) = cli.auto_destruct_pid {
@@ -779,24 +768,7 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    let pipe_control_future = async {
-        while let Some(control) = pipe_control_rx.recv().await {
-            match control {
-                PipeControl::Enable(pipe_id) => {
-                    debug!("enabling pipe: {}", pipe_id);
-                    match pipe_manager.start_pipe(&pipe_id).await {
-                        Ok(future) => pipe_futures_clone.lock().await.push(future),
-                        Err(e) => error!("failed to start pipe {}: {}", pipe_id, e),
-                    }
-                }
-                PipeControl::Disable(pipe_id) => {
-                    debug!("disabling pipe: {}", pipe_id);
-                }
-            }
-        }
-    };
-    pin_mut!(pipe_control_future);
-
+    
     tokio::select! {
         _ = handle => info!("recording completed"),
         result = &mut server_future => {
@@ -804,12 +776,6 @@ async fn main() -> anyhow::Result<()> {
                 Ok(_) => info!("server stopped normally"),
                 Err(e) => error!("server stopped with error: {:?}", e),
             }
-        }
-        _ = &mut pipes_future => {
-            info!("all pipes completed, but server is still running");
-        }
-        _ = &mut pipe_control_future => {
-            info!("pipe control channel closed");
         }
         _ = ctrl_c_future => {
             info!("received ctrl+c, initiating shutdown");

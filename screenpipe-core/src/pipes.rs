@@ -40,7 +40,7 @@ mod pipes {
             .to_string()
     }
 
-    pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<Option<u16>> {
+    pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<tokio::process::Child> {
         let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
         let pipe_json_path = pipe_dir.join("pipe.json");
@@ -56,7 +56,7 @@ mod pipes {
                 .unwrap_or(false)
             {
                 debug!("pipe {} is disabled, stopping", pipe);
-                return Ok(None);
+                anyhow::bail!("pipe is disabled");
             }
         }
 
@@ -77,10 +77,10 @@ mod pipes {
             let pipe_config: Value = serde_json::from_str(&pipe_json)?;
 
             if pipe_config["is_nextjs"] == json!(true) {
-                info!("Running Next.js pipe: {}", pipe);
+                info!("running next.js pipe: {}", pipe);
 
                 // Install dependencies using bun
-                info!("Installing dependencies for Next.js pipe");
+                info!("installing dependencies for next.js pipe");
                 let install_output = Command::new(&bun_path)
                     .arg("install")
                     .current_dir(&pipe_dir)
@@ -89,10 +89,10 @@ mod pipes {
 
                 if !install_output.status.success() {
                     error!(
-                        "Failed to install dependencies: {}",
+                        "failed to install dependencies: {}",
                         String::from_utf8_lossy(&install_output.stderr)
                     );
-                    anyhow::bail!("Failed to install dependencies for Next.js pipe");
+                    anyhow::bail!("failed to install dependencies for next.js pipe");
                 }
 
                 let port = pick_unused_port().expect("No ports free");
@@ -121,13 +121,12 @@ mod pipes {
                 // Stream logs
                 stream_logs(pipe, &mut child).await?;
 
-                return Ok(Some(port));
+                return Ok(child);
             }
         }
 
         // If it's not a Next.js project, run the pipe as before
         let main_module = find_pipe_file(&pipe_dir)?;
-
         info!("executing pipe: {:?}", main_module);
 
         // Add PIPE_FILE to environment variables for non-Next.js pipes
@@ -144,10 +143,10 @@ mod pipes {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
-        // Stream logs
+        // Stream logs - don't block the main thread
         stream_logs(pipe, &mut child).await?;
 
-        Ok(None)
+        Ok(child)
     }
 
     async fn stream_logs(pipe: &str, child: &mut tokio::process::Child) -> Result<()> {
@@ -157,17 +156,17 @@ mod pipes {
         let pipe_clone = pipe.to_string();
 
         // Spawn tasks to handle stdout and stderr
-        let stdout_handle = tokio::spawn(async move {
+        let _stdout_handle = tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                info!("[pipe][info][{}] {}", pipe_clone, line);
+                info!("[{}] {}", pipe_clone, line);
             }
         });
 
         let pipe_clone = pipe.to_string();
 
-        let stderr_handle = tokio::spawn(async move {
+        let _stderr_handle = tokio::spawn(async move {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
@@ -177,23 +176,14 @@ mod pipes {
                     || line.contains("ready started server")
                     || line.contains("Local:")
                 {
-                    println!("[pipe][info][{}] {}", pipe_clone, line);
+                    info!("[{}] {}", pipe_clone, line);
                 } else {
-                    println!("[pipe][error][{}] {}", pipe_clone, line);
+                    error!("[{}] {}", pipe_clone, line);
                 }
             }
         });
 
-        // Wait for the child process to finish
-        let status = child.wait().await?;
-
-        // Wait for the output handling tasks to finish
-        stdout_handle.await?;
-        stderr_handle.await?;
-
-        if !status.success() {
-            anyhow::bail!("pipe execution failed with status: {}", status);
-        }
+        // dont' wait for the child process to finish
 
         info!("pipe execution completed successfully");
         Ok(())
@@ -321,7 +311,7 @@ mod pipes {
                     .spawn()?;
 
                 // Stream logs for npm install
-                stream_logs("npm install", &mut install_child).await?;
+                stream_logs("bun install", &mut install_child).await?;
 
                 // Update pipe.json to indicate it's a Next.js project
                 let mut pipe_config = if let Some(existing_json) = &existing_config {
