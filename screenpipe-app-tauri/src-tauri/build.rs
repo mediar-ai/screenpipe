@@ -3,7 +3,7 @@ use std::{fs, process::Command, env};
 
 fn main() {
     // Copies executables and hardcodes the dylibs
-    #[cfg(target_os = "macos")]
+    /* #[cfg(target_os = "macos")]
     {
         #[cfg(target_arch = "x86_64")]
         {
@@ -55,6 +55,6 @@ fn main() {
                 .status()
                 .expect("failed to execute process");
         }
-    }
+    } */
     tauri_build::build()
 }
