@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tracing::{debug, info};
+use tracing::{debug, info, error};
 use uuid::Uuid;
 
 pub async fn extract_frame(file_path: &str, offset_index: i64) -> Result<String> {
@@ -71,11 +71,39 @@ pub struct MergeVideosResponse {
     video_path: String,
 }
 
+pub async fn validate_video(file_path: &str) -> Result<()> {
+    // command: ffmpeg -v error -i <file> -f null -
+    let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
+    let status = Command::new(ffmpeg_path)
+        .args(&[
+            "-v",
+            "error",
+            "-i",
+            file_path,
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+    .await?;
+
+    if status.status.success() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("invalid video file: {}", file_path))
+    }
+}
+
 pub async fn merge_videos(
     request: MergeVideosRequest,
     output_dir: PathBuf,
 ) -> Result<MergeVideosResponse> {
     info!("merging videos: {:?}", request.video_paths);
+
+    if let Err(e) = tokio::fs::create_dir_all(&output_dir).await {
+        error!("failed to create output directory: {:?}", e);
+        return Err(anyhow::anyhow!("failed to create output directory: {:?}", e));
+    }
 
     let output_filename = format!("output_{}.mp4", Uuid::new_v4());
     let output_path = output_dir.join(&output_filename);
@@ -84,6 +112,11 @@ pub async fn merge_videos(
     let temp_file = output_dir.join("input_list.txt");
     let mut file = tokio::fs::File::create(&temp_file).await?;
     for video_path in &request.video_paths {
+        // video validation before writing in txt
+        if let Err(e) = validate_video(video_path).await{
+            error!("invalid file in merging, skipping: {:?}", e);
+            continue;
+        }
         // Escape single quotes in the file path
         let escaped_path = video_path.replace("'", "'\\''");
         tokio::io::AsyncWriteExt::write_all(
