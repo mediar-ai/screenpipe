@@ -76,7 +76,7 @@ we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis
 
 # why?
 
-every seconds you are not recording is a missing context for AGI
+every second you are not recording is a missing context for AGI
 
 ## get started
 
