@@ -154,22 +154,21 @@ export default function MeetingHistory() {
   }, [posthog, settings.userId]);
 
   useEffect(() => {
-    console.log("useEffect running, isOpen:", isOpen);
     if (isOpen) {
       loadMeetings();
       posthog?.capture("meeting_history_opened", {
         userId: settings.userId,
       });
-    } else {
-      posthog?.capture("meeting_history_closed", {
-        userId: settings.userId,
-      });
     }
-  }, [isOpen, settings.userId, posthog]);
+  }, [isOpen]);
 
   useEffect(() => {
     setShowError(!!error);
   }, [error]);
+
+  useEffect(() => {
+    console.log("Dialog state changed:", isOpen);
+  }, [isOpen]);
 
   async function loadMeetings() {
     setLoading(true);
@@ -541,7 +540,6 @@ export default function MeetingHistory() {
     );
   }
 
-
   // Memoize expensive computations
   const sortedMeetings = useMemo(() => {
     return [...meetings].sort(
@@ -667,12 +665,24 @@ export default function MeetingHistory() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" className="pl-2" onClick={() => setIsOpen(true)}>
+        <Button
+          variant="ghost"
+          className="pl-2"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(true);
+          }}
+        >
           <Calendar className="mr-2 h-4 w-4" />
           meetings
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
+      <DialogContent
+        className="max-w-[90vw] w-full max-h-[90vh] h-full"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
         <DialogHeader className="py-4">
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center">
@@ -909,7 +919,7 @@ export default function MeetingHistory() {
                                       s.deviceType?.toLowerCase() === "input"
                                         ? "you"
                                         : "others"
-                                    }] ${s.transcription}`
+                                    }] ${s.transcription}`;
                                   })
                                   .join("\n"),
                                 "transcription"
@@ -926,7 +936,11 @@ export default function MeetingHistory() {
                               .filter((s) =>
                                 meeting.selectedDevices.has(s.deviceName)
                               )
-                              .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                              .sort(
+                                (a, b) =>
+                                  new Date(a.timestamp).getTime() -
+                                  new Date(b.timestamp).getTime()
+                              )
                               .map((s, i) => (
                                 <React.Fragment key={i}>
                                   <span className="font-bold">
