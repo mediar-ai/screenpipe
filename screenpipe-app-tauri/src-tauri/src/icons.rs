@@ -184,6 +184,8 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
             )
         };
 
+        let _permit = SEMAPHORE.acquire().await.unwrap();
+
         let output = tokio::process::Command::new("powershell")
             .arg("-NoProfile")
             .arg("-WindowStyle")
