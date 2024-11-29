@@ -11,8 +11,8 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">rewind.ai x cursor.com = your AI assistant that has all the context. </p>
-   <p align="center">24/7 screen & voice recording for the age of super intelligence. get your data ready or be left behind</p>
+   <p align="center">nextjs for desktop agents </p>
+   <p align="center">24/7 screen & voice recording context. sandboxed agents. keyboard and mouse control in js</p>
 </p>
 
 <!-- Slogan -->
@@ -49,11 +49,7 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 <p align="center">
    
 
-<p align="center">
-   <a href ="https://screenpi.pe">
-      <img alt="demo" src="https://github.com/user-attachments/assets/6f4e80d9-89b6-4ed3-a82c-121abc849852" width="800" />
-   </a>
-</p>
+
 
 ---
 
