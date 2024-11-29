@@ -192,40 +192,84 @@ if you require additional configurations such as running in debug mode or switch
 
 ### **steps to install on windows**
 
-If this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
+if this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
 
-Install 7zip: https://www.7-zip.org/download.html
+1. install required tools:
+```powershell copy
+# install visual studio build tools
+winget install -e --id Microsoft.VisualStudio.2022.BuildTools
 
-Install visual studio with cpp https://visualstudio.microsoft.com/
-
-
-```batch copy
-choco install pkgconfiglite bun llvm
-winget install -e --id GnuWin32.UnZip
+# install rust
 winget install -e --id Rustlang.Rustup
-cd V:\projects
-git clone https://github.com/mediar-ai/screenpipe
-cd V:\packages
+
+# install llvm
+winget install -e --id LLVM.LLVM
+
+# install cmake
+winget install -e --id Kitware.CMake
+
+# install unzip utility
+winget install -e --id GnuWin32.UnZip
+
+# install git
+winget install -e --id Git.Git
+
+# install bun (using npm)
+irm https://bun.sh/install.ps1 | iex
+
+# install pkg-config (download from https://sourceforge.net/projects/pkgconfiglite/files/)
+# download and extract to a folder in your PATH
+
+# clone and setup vcpkg
+cd C:\dev # or your preferred location
+$env:DEV_DIR = $(pwd)
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
 ./bootstrap-vcpkg.bat -disableMetrics
 ./vcpkg.exe integrate install --disable-metrics
-./vcpkg.exe install ffmpeg
 
-SET PKG_CONFIG_PATH=V:\packages\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
-SET VCPKG_ROOT=V:\packages\vcpkg
-SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
-cd V:\projects\screenpipe
+# install required libraries
+./vcpkg.exe install ffmpeg:x64-windows
+```
 
-rustup default stable
-cargo build --release 
-# add --features cuda for gpu support (experimental)
-# add --features mkl for intel accelerated cpu support (experimental)
+2. environment variables
 
+add these to your system environment variables (windows settings -> system -> about -> advanced system settings -> environment variables):
+```powershell copy
+[System.Environment]::SetEnvironmentVariable('PKG_CONFIG_PATH', "$env:DEV_DIR\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig", 'User')
+[System.Environment]::SetEnvironmentVariable('VCPKG_ROOT', "$env:DEV_DIR\vcpkg", 'User')
+[System.Environment]::SetEnvironmentVariable('LIBCLANG_PATH', 'C:\Program Files\LLVM\bin', 'User')
+[System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
+```
+
+3. clone and build:
+```powershell copy
+# clone the repo
+git clone https://github.com/mediar-ai/screenpipe
+cd screenpipe
+
+# build the cli
+cargo build --release
+
+# build the desktop app
 cd screenpipe-app-tauri
 bun install
-bun scripts\pre_build.js # (you might wget not retriving error, if so use '-O' flag) <- this is important to copy the CLI into the app
+bun scripts/pre_build.js
 bun tauri build
+```
+
+### **gpu acceleration options**
+
+#### cuda support (nvidia gpus)
+to enable cuda support, add the `--features cuda` flag when building:
+```bash copy
+cargo build --release --features cuda
+```
+
+#### intel mkl support
+for intel cpu optimization, add the `--features mkl` flag:
+```bash copy
+cargo build --release --features mkl
 ```
 
 </MotionDiv>

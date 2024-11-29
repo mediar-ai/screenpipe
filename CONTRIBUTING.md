@@ -313,6 +313,9 @@ winget install -e --id Rustlang.Rustup
 # install llvm
 winget install -e --id LLVM.LLVM
 
+# install cmake
+winget install -e --id Kitware.CMake
+
 # install unzip utility
 winget install -e --id GnuWin32.UnZip
 
@@ -328,8 +331,8 @@ irm https://bun.sh/install.ps1 | iex
 
 2. **vcpkg package manager**
 ```powershell
-# clone and setup vcpkg
-cd C:\dev # or your preferred location
+cd "C:\dev" # or your preferred location
+$env:DEV_DIR = $(pwd)
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
 ./bootstrap-vcpkg.bat -disableMetrics
@@ -343,9 +346,10 @@ cd vcpkg
 
 add these to your system environment variables (windows settings -> system -> about -> advanced system settings -> environment variables):
 ```powershell
-PKG_CONFIG_PATH=C:\dev\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
-VCPKG_ROOT=C:\dev\vcpkg
-LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
+[System.Environment]::SetEnvironmentVariable('PKG_CONFIG_PATH', "$env:DEV_DIR\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig", 'User')
+[System.Environment]::SetEnvironmentVariable('VCPKG_ROOT', "$env:DEV_DIR\vcpkg", 'User')
+[System.Environment]::SetEnvironmentVariable('LIBCLANG_PATH', 'C:\Program Files\LLVM\bin', 'User')
+[System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
 ```
 
 4. **vscode settings**
