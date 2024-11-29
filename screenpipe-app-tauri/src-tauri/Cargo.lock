@@ -4181,6 +4181,7 @@ dependencies = [
  "fix-path-env",
  "gtk",
  "http 0.2.12",
+ "lazy_static",
  "libc",
  "log",
  "objc",
