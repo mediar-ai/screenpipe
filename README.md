@@ -76,9 +76,7 @@ we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis
 
 # why?
 
-in 2025, context won't be an issue anymore.
-
-will you have the data ready?
+every seconds you are not recording is a missing context for AGI
 
 ## get started
 
