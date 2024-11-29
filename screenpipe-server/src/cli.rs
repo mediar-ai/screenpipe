@@ -282,16 +282,26 @@ pub enum Command {
 #[derive(Subcommand)]
 pub enum PipeCommand {
     /// List all pipes
-    List,
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+    },
     /// Download a new pipe
     Download {
         /// URL of the pipe to download
         url: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
     },
     /// Get info for a specific pipe
     Info {
         /// ID of the pipe
         id: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
     },
     /// Enable a pipe
     Enable {
@@ -316,4 +326,18 @@ pub enum PipeCommand {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    /// Delete a pipe
+    Delete {
+        /// ID of the pipe to delete
+        id: String,
+        /// Automatically confirm deletion without prompting
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+}
+
+#[derive(Clone, Debug, ValueEnum, PartialEq)]
+pub enum OutputFormat {
+    Text,
+    Json,
 }

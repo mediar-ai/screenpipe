@@ -270,7 +270,7 @@ jobs:
           path: screenpipe-*.tar.gz
 
   update-homebrew:
-    needs: build-macos
+    needs: [build-macos, build-linux]
     runs-on: macos-latest
     steps:
       - name: Set version
@@ -291,10 +291,12 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT }}
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.PAT }}
         run: |
+          brew update
           brew bump-formula-pr screenpipe \
-                   --version="${VERSION}" \
-                   --message="Automated update to version ${VERSION}" \
-                   --no-browse
+            --version="${VERSION}" \
+            --message="Automated update to version ${VERSION}" \
+            --no-browse \
+            --force || true
 
   release:
     runs-on: ubuntu-latest

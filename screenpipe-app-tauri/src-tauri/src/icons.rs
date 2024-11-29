@@ -73,6 +73,17 @@ pub async fn get_app_icon(
     }
 }
 
+#[cfg(target_os = "windows")] 
+use tokio::sync::Semaphore;
+#[cfg(target_os = "windows")] 
+use std::sync::Arc;
+#[cfg(target_os = "windows")] 
+use lazy_static::lazy_static;
+#[cfg(target_os = "windows")] 
+lazy_static! {
+    static ref SEMAPHORE: Arc<Semaphore> = Arc::new(Semaphore::new(5));
+}
+
 #[tauri::command]
 #[cfg(target_os = "windows")]
 pub async fn get_app_icon(
@@ -148,6 +159,7 @@ fn get_exe_by_reg_key(
 
 #[cfg(target_os = "windows")]
 async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let app_name = app_name.strip_suffix(".exe").unwrap_or(&app_name);
     let potential_paths = [
         (r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs", true),
@@ -172,8 +184,10 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
             )
         };
 
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let output = tokio::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-WindowStyle")
+            .arg("hidden")
             .arg("-Command")
             .arg(command)
             .creation_flags(CREATE_NO_WINDOW)
@@ -197,11 +211,16 @@ async fn get_exe_by_appx(
 ) -> Option<String> {
     use std::str;
 
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let app_name = app_name.strip_suffix(".exe").unwrap_or(&app_name);
     let app_name_withoutspace = app_name.replace(" ", ""); 
 
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let _permit = SEMAPHORE.acquire().await.unwrap();
+
     let output = tokio::process::Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-WindowStyle")
+        .arg("hidden")
         .arg("-Command")
         .arg(format!(
             r#"Get-AppxPackage | Where-Object {{ $_.Name -like "*{}*" }}"#,
@@ -224,6 +243,9 @@ async fn get_exe_by_appx(
         .map(str::trim)?;
 
     let exe_output = tokio::process::Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-WindowStyle")
+        .arg("hidden")
         .arg("-Command")
         .arg(format!(
             r#"
@@ -245,6 +267,9 @@ async fn get_exe_by_appx(
     }
     // second attempt with space if the first attempt couldn't find exe
     let exe_output = tokio::process::Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-WindowStyle")
+        .arg("hidden")
         .arg("-Command")
         .arg(format!(
             r#"

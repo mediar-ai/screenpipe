@@ -1,3 +1,4 @@
+import localforage from "localforage";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { platform } from "@tauri-apps/plugin-os";
 import { invoke } from "@tauri-apps/api/core";
@@ -37,6 +38,7 @@ export function TimelineIconsSection({
   const os = platform();
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
   const [selectedApp, setSelectedApp] = useState<ProcessedBlock | null>(null);
+  const [iconInvocationCount, setIconInvocationCount] = useState<{ [key: string]: number }>({});
   const { setSelectionRange } = useTimelineSelection();
 
   // Get the visible time range
@@ -175,6 +177,17 @@ export function TimelineIconsSection({
       try {
         if (iconCache[appName]) return;
 
+        const cachedIcon = await localforage.getItem<string>(`icon-${appName}`);
+        if (cachedIcon) {
+          setIconCache((prev) => ({
+            ...prev,
+            [appName]: cachedIcon,
+          }));
+          return;
+        }
+
+        if (iconInvocationCount[appName] >= 100) return;
+
         const icon = await invoke<{ base64: string; path: string } | null>(
           "get_app_icon",
           { appName, appPath }
@@ -186,13 +199,20 @@ export function TimelineIconsSection({
             ...prev,
             [appName]: icon.base64,
           }));
+
+          await localforage.setItem(`icon-${appName}`, icon.base64);
+
+          setIconInvocationCount((prev) => ({
+            ...prev,
+            [appName]: (prev[appName] || 0) + 1,
+          }));
         }
       } catch (error) {
         console.error(`failed to load icon for ${appName}:`, error);
         // Fail silently - the UI will just not show an icon
       }
     },
-    [iconCache]
+    [iconCache, iconInvocationCount]
   );
 
   useEffect(() => {

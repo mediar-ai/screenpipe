@@ -25,6 +25,7 @@ mod pipes {
     use tokio::io::AsyncWriteExt;
 
     use crate::pick_unused_port;
+    use once_cell::sync::Lazy;
 
     // Update this function near the top of the file
     fn sanitize_pipe_name(name: &str) -> String {
@@ -39,7 +40,8 @@ mod pipes {
             .to_string()
     }
 
-    pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<Option<u16>> {
+    pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<tokio::process::Child> {
+        let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
         let pipe_json_path = pipe_dir.join("pipe.json");
 
@@ -54,7 +56,7 @@ mod pipes {
                 .unwrap_or(false)
             {
                 debug!("pipe {} is disabled, stopping", pipe);
-                return Ok(None);
+                anyhow::bail!("pipe is disabled");
             }
         }
 
@@ -75,11 +77,11 @@ mod pipes {
             let pipe_config: Value = serde_json::from_str(&pipe_json)?;
 
             if pipe_config["is_nextjs"] == json!(true) {
-                info!("Running Next.js pipe: {}", pipe);
+                info!("running next.js pipe: {}", pipe);
 
                 // Install dependencies using bun
-                info!("Installing dependencies for Next.js pipe");
-                let install_output = Command::new("bun")
+                info!("installing dependencies for next.js pipe");
+                let install_output = Command::new(&bun_path)
                     .arg("install")
                     .current_dir(&pipe_dir)
                     .output()
@@ -87,10 +89,10 @@ mod pipes {
 
                 if !install_output.status.success() {
                     error!(
-                        "Failed to install dependencies: {}",
+                        "failed to install dependencies: {}",
                         String::from_utf8_lossy(&install_output.stderr)
                     );
-                    anyhow::bail!("Failed to install dependencies for Next.js pipe");
+                    anyhow::bail!("failed to install dependencies for next.js pipe");
                 }
 
                 let port = pick_unused_port().expect("No ports free");
@@ -105,7 +107,7 @@ mod pipes {
                 env_vars.push(("PORT".to_string(), port.to_string()));
 
                 // Run the Next.js project with bun
-                let mut child = Command::new("bun")
+                let mut child = Command::new(&bun_path)
                     .arg("run")
                     .arg("dev")
                     .arg("--port")
@@ -119,13 +121,12 @@ mod pipes {
                 // Stream logs
                 stream_logs(pipe, &mut child).await?;
 
-                return Ok(Some(port));
+                return Ok(child);
             }
         }
 
         // If it's not a Next.js project, run the pipe as before
         let main_module = find_pipe_file(&pipe_dir)?;
-
         info!("executing pipe: {:?}", main_module);
 
         // Add PIPE_FILE to environment variables for non-Next.js pipes
@@ -134,7 +135,7 @@ mod pipes {
             main_module.to_str().unwrap().to_string(),
         ));
 
-        let mut child = Command::new("bun")
+        let mut child = Command::new(&bun_path)
             .arg("run")
             .arg(&main_module)
             .envs(env_vars)
@@ -142,10 +143,10 @@ mod pipes {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
-        // Stream logs
+        // Stream logs - don't block the main thread
         stream_logs(pipe, &mut child).await?;
 
-        Ok(None)
+        Ok(child)
     }
 
     async fn stream_logs(pipe: &str, child: &mut tokio::process::Child) -> Result<()> {
@@ -155,40 +156,34 @@ mod pipes {
         let pipe_clone = pipe.to_string();
 
         // Spawn tasks to handle stdout and stderr
-        let stdout_handle = tokio::spawn(async move {
+        let _stdout_handle = tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                info!("[pipe][info][{}] {}", pipe_clone, line);
+                info!("[{}] {}", pipe_clone, line);
             }
         });
 
         let pipe_clone = pipe.to_string();
 
-        let stderr_handle = tokio::spawn(async move {
+        let _stderr_handle = tokio::spawn(async move {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                if line.contains("Download") || line.starts_with("Task dev ") {
-                    // Log download messages and task start messages as info instead of error
-                    debug!("[pipe][info][{}] {}", pipe_clone, line);
+                if line.contains("Download")
+                    || line.starts_with("Task dev ")
+                    || line.starts_with("$ next dev")
+                    || line.contains("ready started server")
+                    || line.contains("Local:")
+                {
+                    info!("[{}] {}", pipe_clone, line);
                 } else {
-                    // Keep other messages as errors
-                    error!("[pipe][error][{}] {}", pipe_clone, line);
+                    error!("[{}] {}", pipe_clone, line);
                 }
             }
         });
 
-        // Wait for the child process to finish
-        let status = child.wait().await?;
-
-        // Wait for the output handling tasks to finish
-        stdout_handle.await?;
-        stderr_handle.await?;
-
-        if !status.success() {
-            anyhow::bail!("pipe execution failed with status: {}", status);
-        }
+        // dont' wait for the child process to finish
 
         info!("pipe execution completed successfully");
         Ok(())
@@ -305,8 +300,10 @@ mod pipes {
             if package_data["dependencies"].get("next").is_some() {
                 info!("Detected Next.js project, setting up for production");
 
-                // Run npm install
-                let mut install_child = Command::new("bun")
+                let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
+
+                // Run bun install
+                let mut install_child = Command::new(&bun_path)
                     .arg("i")
                     .current_dir(&dest_dir)
                     .stdout(std::process::Stdio::piped())
@@ -314,7 +311,7 @@ mod pipes {
                     .spawn()?;
 
                 // Stream logs for npm install
-                stream_logs("npm install", &mut install_child).await?;
+                stream_logs("bun install", &mut install_child).await?;
 
                 // Update pipe.json to indicate it's a Next.js project
                 let mut pipe_config = if let Some(existing_json) = &existing_config {
@@ -400,37 +397,69 @@ mod pipes {
             || file_name.to_str().map_or(false, |s| s.starts_with('.'))
     }
 
-    async fn download_github_folder(url: &Url, dest_dir: &Path) -> anyhow::Result<()> {
-        let client = Client::new();
-        let api_url = get_raw_github_url(url.as_str())?;
+    fn download_github_folder(
+        url: &Url,
+        dest_dir: &Path,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
+        let url = url.clone();
+        let dest_dir = dest_dir.to_path_buf();
 
-        let response = client
-            .get(&api_url)
-            .header("Accept", "application/vnd.github.v3+json")
-            .header("User-Agent", "screenpipe")
-            .send()
-            .await?;
+        Box::pin(async move {
+            let client = Client::new();
+            let api_url = get_raw_github_url(url.as_str())?;
 
-        let contents: Value = response.json().await?;
+            let response = client
+                .get(&api_url)
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "screenpipe")
+                .send()
+                .await?;
 
-        if !contents.is_array() {
-            anyhow::bail!("invalid response from github api");
-        }
+            let contents: Value = response.json().await?;
 
-        for item in contents.as_array().unwrap() {
-            let file_name = item["name"].as_str().unwrap();
-            if !is_hidden_file(std::ffi::OsStr::new(file_name)) {
-                let download_url = item["download_url"].as_str().unwrap();
-                let file_content = client.get(download_url).send().await?.bytes().await?;
-                let file_path = dest_dir.join(file_name);
-                tokio::fs::write(&file_path, &file_content).await?;
-                info!("downloaded: {:?}", file_path);
-            } else {
-                info!("skipping hidden file: {}", file_name);
+            if !contents.is_array() {
+                anyhow::bail!("invalid response from github api");
             }
-        }
 
-        Ok(())
+            for item in contents.as_array().unwrap() {
+                let file_name = item["name"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("missing name in github response"))?;
+
+                if !is_hidden_file(std::ffi::OsStr::new(file_name)) {
+                    let file_type = item["type"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("missing type in github response"))?;
+
+                    match file_type {
+                        "file" => {
+                            let download_url = item["download_url"].as_str().ok_or_else(|| {
+                                anyhow::anyhow!("missing download_url in github response")
+                            })?;
+
+                            let file_content =
+                                client.get(download_url).send().await?.bytes().await?;
+                            let file_path = dest_dir.join(file_name);
+                            tokio::fs::write(&file_path, &file_content).await?;
+                            debug!("downloaded file: {:?}", file_path);
+                        }
+                        "dir" => {
+                            let new_dest_dir = dest_dir.join(file_name);
+                            tokio::fs::create_dir_all(&new_dest_dir).await?;
+
+                            let new_url = format!("{}/{}", url.as_str(), file_name);
+                            download_github_folder(&Url::parse(&new_url)?, &new_dest_dir).await?;
+                            debug!("downloaded directory: {:?}", new_dest_dir);
+                        }
+                        _ => debug!("skipping unknown type: {}", file_type),
+                    }
+                } else {
+                    debug!("skipping hidden file: {}", file_name);
+                }
+            }
+
+            Ok(())
+        })
     }
 
     fn get_raw_github_url(url: &str) -> anyhow::Result<String> {
@@ -484,15 +513,23 @@ mod pipes {
     #[cfg(windows)]
     const BUN_EXECUTABLE_NAME: &str = "bun.exe";
 
-    pub fn find_bun() -> Option<PathBuf> {
+    static BUN_PATH: Lazy<Option<PathBuf>> = Lazy::new(find_bun_path_internal);
+
+    pub fn find_bun_path() -> Option<PathBuf> {
+        BUN_PATH.as_ref().map(|p| p.clone())
+    }
+
+    fn find_bun_path_internal() -> Option<PathBuf> {
         debug!("starting search for bun executable");
 
+        // Check if bun is in PATH
         if let Ok(path) = which(BUN_EXECUTABLE_NAME) {
             debug!("found bun in PATH: {:?}", path);
             return Some(path);
         }
         debug!("bun not found in PATH");
 
+        // Check in current working directory
         if let Ok(cwd) = std::env::current_dir() {
             debug!("current working directory: {:?}", cwd);
             let bun_in_cwd = cwd.join(BUN_EXECUTABLE_NAME);
@@ -503,6 +540,7 @@ mod pipes {
             debug!("bun not found in current working directory");
         }
 
+        // Check in executable directory
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_folder) = exe_path.parent() {
                 debug!("executable folder: {:?}", exe_folder);
@@ -513,6 +551,7 @@ mod pipes {
                 }
                 debug!("bun not found in executable folder");
 
+                // Platform-specific checks
                 #[cfg(target_os = "macos")]
                 {
                     let resources_folder = exe_folder.join("../Resources");
@@ -540,7 +579,7 @@ mod pipes {
         }
 
         error!("bun not found");
-        None // return None if bun is not found
+        None
     }
 }
 

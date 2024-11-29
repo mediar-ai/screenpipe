@@ -490,7 +490,10 @@ export function Settings({ className }: { className?: string }) {
       </DialogTrigger>
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>settings</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>settings</DialogTitle>
+            <Badge className="mr-4">$200 cloud credits</Badge>
+          </div>
           <DialogDescription>
             choose your AI provider, enter necessary credentials, and more.
           </DialogDescription>

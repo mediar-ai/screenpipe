@@ -79,7 +79,7 @@ fn install_onnxruntime() {
 
     let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-win-x64-gpu-1.19.2.zip";
     let client = Client::builder()
-        .timeout(Duration::from_secs(300))
+        .timeout(Duration::from_secs(3000))
         .build()
         .expect("failed to build client");
     let resp = client.get(url).send().expect("request failed");

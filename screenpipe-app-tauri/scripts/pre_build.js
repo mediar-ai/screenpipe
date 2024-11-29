@@ -80,42 +80,6 @@ const exports = {
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
 
-// Add this function to check if Bun is installed
-async function isBunInstalled() {
-	try {
-		await $`bun --version`.quiet();
-		return true;
-	} catch (error) {
-		return false;
-	}
-}
-
-// Add this function to install Bun
-async function installBun() {
-	if (await isBunInstalled()) {
-		console.log('bun is already installed.');
-		return;
-	}
-
-	console.log('installing bun...');
-
-	if (platform === 'windows') {
-		console.log('attempting to install bun using npm...');
-		try {
-			await $`npm install -g bun`;
-			console.log('bun installed successfully using npm.');
-		} catch (error) {
-			console.error('failed to install bun:', error);
-			console.error('please install bun manually.');
-		}
-	} else {
-		// for macos and linux
-		await $`curl -fsSL https://bun.sh/install | bash`;
-	}
-
-	console.log('bun installation attempt completed.');
-}
-
 // Add this function to copy the Bun binary
 async function copyBunBinary() {
 	console.log('checking bun binary for tauri...');
@@ -416,7 +380,6 @@ if (platform == 'macos') {
 		console.log(`screenpipe for ${arch} set up successfully.`);
 	}
 
-
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
@@ -642,7 +605,6 @@ async function installOllamaSidecar() {
 }
 
 // Near the end of the script, call these functions
-await installBun();
 await copyBunBinary();
 await installOllamaSidecar().catch(console.error);
 

@@ -19,7 +19,6 @@ pub use cli::Cli;
 pub use core::start_continuous_recording;
 pub use db::{ContentSource, ContentType, DatabaseManager, SearchResult};
 pub use highlight::Highlight;
-pub use pipe_manager::PipeControl;
 pub use pipe_manager::PipeManager;
 pub use resource_monitor::{ResourceMonitor, RestartSignal};
 pub use screenpipe_core::Language;

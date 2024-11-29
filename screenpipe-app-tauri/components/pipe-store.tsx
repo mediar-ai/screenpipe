@@ -85,7 +85,11 @@ const corePipes: CorePipe[] = [
       "continuously write logs of your days in a notion table using ollama+llama3.2",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs",
   },
-
+  {
+    id: "pipe-simple-nextjs",
+    description: "show most used keywords",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-simple-nextjs",
+  },
 ];
 const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
@@ -137,15 +141,10 @@ const PipeDialog: React.FC = () => {
       if (!response.ok) {
         throw new Error("failed to fetch installed pipes");
       }
-      const data = await response.json();
+      const data = (await response.json()).data;
       for (const pipe of data) {
         // read the README.md file from disk and set the fullDescription
-        const pathToReadme = await join(
-          dataDir,
-          "pipes",
-          pipe.id,
-          "README.md"
-        );
+        const pathToReadme = await join(dataDir, "pipes", pipe.id, "README.md");
         try {
           const readme = await readFile(pathToReadme);
           const readmeString = new TextDecoder().decode(readme);
@@ -351,6 +350,41 @@ const PipeDialog: React.FC = () => {
     }
   };
 
+  const handleDeletePipe = async (pipe: Pipe) => {
+    try {
+      posthog.capture("delete_pipe", {
+        pipe_id: pipe.id,
+      });
+      toast({
+        title: "deleting pipe",
+        description: "please wait...",
+      });
+      const response = await fetch(`http://localhost:3030/pipes/delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pipe_id: pipe.id }),
+      });
+      if (!response.ok) {
+        throw new Error("failed to delete pipe");
+      }
+      await fetchInstalledPipes();
+      setSelectedPipe(null);
+      toast({
+        title: "pipe deleted",
+        description: "the pipe has been successfully removed.",
+      });
+    } catch (error) {
+      console.error("failed to delete pipe:", error);
+      toast({
+        title: "error deleting pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const renderPipeContent = () => {
     if (!selectedPipe) {
       return (
@@ -423,12 +457,30 @@ const PipeDialog: React.FC = () => {
             support us
           </Button>
           <LogFileButton />
+          <Button
+            onClick={() => handleDeletePipe(selectedPipe)}
+            variant="outline"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            delete
+          </Button>
         </div>
         <Separator className="my-4" />
 
         {selectedPipe && selectedPipe.enabled && selectedPipe?.config?.port && (
           <div className="mt-4 h-[400px]">
-            <h3 className="text-xl font-semibold mb-2">pipe ui</h3>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-xl font-semibold">pipe ui</h3>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  openUrl(`http://localhost:${selectedPipe.config!.port}`)
+                }
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                open in browser
+              </Button>
+            </div>
             <iframe
               src={`http://localhost:${selectedPipe.config.port}`}
               className="w-full h-full border-0"
@@ -704,9 +756,9 @@ const PipeDialog: React.FC = () => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" className="h-[20px] px-0 py-0">
-          <Puzzle className="mr-2 h-4 w-4" />
-          pipe store
+        <Button variant="ghost" size="icon" className="cursor-pointer">
+          <Puzzle className="h-[1.2rem] w-[1.2rem]" />
+          <span className="sr-only">pipe store</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full ">
