@@ -11,8 +11,8 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">nextjs for desktop agents </p>
-   <p align="center">agents powered by 24/7 screen, voice, keyboard, mouse, camera recording. sandboxed. keyboard and mouse control in js</p>
+   <p align="center">one API to get all user desktop data  (local, cross platform, 24/7, screen, voice, keyboard, mouse, camera recording)</p>
+   <p align="center">sandboxed js plugin system. keyboard and mouse control</p>
 </p>
 
 <!-- Slogan -->
