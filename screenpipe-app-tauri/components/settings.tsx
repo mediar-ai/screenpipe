@@ -24,7 +24,6 @@ import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { parseKeyboardShortcut } from "@/lib/utils";
-import { ExternalAuthButton } from "./external-auth-button";
 
 import {
   Eye,
