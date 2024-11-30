@@ -16,10 +16,4 @@ rustflags = [
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-Wl,--allow-multiple-definition"]
 
-[target.aarch64-apple-darwin]
-rustflags = ["-L", "screenpipe-vision/lib"]
-
-[target.x86_64-apple-darwin]
-rustflags = ["-L", "screenpipe-vision/lib"]
-
 

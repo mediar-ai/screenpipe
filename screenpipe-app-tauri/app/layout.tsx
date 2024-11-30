@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "@/components/ui/toaster";
+import { ClerkProvider } from "@clerk/nextjs";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,14 +19,23 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <Providers>
-        {/* https://posthog.com/docs/libraries/next-js for more info */}
-        <body className={inter.className}>
-          {children}
-
-          <Toaster />
-        </body>
-      </Providers>
+      <ClerkProvider
+        publishableKey="pk_live_Y2xlcmsudGF1cmkubG9jYWxob3N0JA"
+        appearance={{
+          baseTheme: undefined,
+          layout: {
+            socialButtonsPlacement: "bottom",
+            socialButtonsVariant: "blockButton",
+          },
+        }}
+      >
+        <Providers>
+          <body className={inter.className}>
+            {children}
+            <Toaster />
+          </body>
+        </Providers>
+      </ClerkProvider>
     </html>
   );
 }

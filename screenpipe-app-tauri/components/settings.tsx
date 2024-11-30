@@ -21,9 +21,10 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
-import { Slider } from "@/components/ui/slider"; // Add this import
-import { Badge } from "@/components/ui/badge"; // Add this import
-import { parseKeyboardShortcut } from "@/lib/utils"; // Add this import
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { parseKeyboardShortcut } from "@/lib/utils";
+import { ExternalAuthButton } from "./external-auth-button";
 
 import {
   Eye,
@@ -55,6 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
+import { AuthButton } from "./auth";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
@@ -490,19 +492,20 @@ export function Settings({ className }: { className?: string }) {
       </DialogTrigger>
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle>settings</DialogTitle>
-            <Badge className="mr-4">$200 cloud credits</Badge>
+          <div className="flex flex-col items-end space-y-2">
+            <div className="w-full flex justify-between items-center">
+              <DialogTitle>settings</DialogTitle>
+              <Badge className="mr-4">$200 cloud credits</Badge>
+            </div>
+            <div className="flex items-center space-x-2">
+              <AuthButton />
+            </div>
           </div>
-          <DialogDescription>
-            choose your AI provider, enter necessary credentials, and more.
-          </DialogDescription>
         </DialogHeader>
         <div className="mt-8 space-y-6">
           <RecordingSettings
             localSettings={localSettings}
-            setLocalSettings={setLocalSettings}
-          />
+            setLocalSettings={setLocalSettings} />
 
           <Separator />
 

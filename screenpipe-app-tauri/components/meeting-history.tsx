@@ -146,10 +146,6 @@ export default function MeetingHistory() {
   useEffect(() => {
     if (posthog) {
       posthog.identify(settings.userId);
-      posthog.people.set({
-        userId: settings.userId,
-        // Add any other relevant user properties
-      });
     }
   }, [posthog, settings.userId]);
 

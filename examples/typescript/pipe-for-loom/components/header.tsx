@@ -8,7 +8,7 @@ export default function Header() {
         src="/128x128.png"
         alt="screenpipe-logo"
       />
-      <h1 className="font-bold text-center text-2xl">Screenpipe</h1>
+      <h1 className="font-bold text-center text-2xl">screenpipe</h1>
     </div>
   );
 }
