@@ -6,22 +6,22 @@ create a new screenpipe pipe with nextjs
 
 with npm:
 ```bash
-npx @screenpipe/create-pipe@0.0.5
+npx @screenpipe/create-pipe@latest
 ```
 
 with bun:
 ```bash
-bunx @screenpipe/create-pipe@0.0.5
+bunx @screenpipe/create-pipe@latest
 ```
 
 with pnpm:
 ```bash
-pnpx @screenpipe/create-pipe@0.0.5
+pnpx @screenpipe/create-pipe@latest
 ```
 
 with yarn:
 ```bash
-yarn add @screenpipe/create-pipe@0.0.5
+yarn add @screenpipe/create-pipe@latest
 ```
 
 ## features
