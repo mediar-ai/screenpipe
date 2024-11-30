@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/collapsible";
 import { LogFileButton } from "./log-file-button";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@clerk/clerk-react";
 import { StripeSubscriptionButton } from "./stripe-subscription-button";
 
 export interface Pipe {

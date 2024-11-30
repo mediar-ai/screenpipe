@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.39",
-    "@clerk/nextjs": "^6.5.1",
+    "@clerk/clerk-react": "^5.17.1",
     "@dnd-kit/core": "^6.1.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-zone": "^1.22.0",

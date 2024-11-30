@@ -1,4 +1,5 @@
-import { SignInButton, SignOutButton, useUser } from "@clerk/nextjs";
+"use client";
+import { SignInButton, SignOutButton, useUser } from "@clerk/clerk-react";
 import { Button } from "./ui/button";
 import { useEffect } from "react";
 import posthog from "posthog-js";

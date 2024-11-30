@@ -1,5 +1,7 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@clerk/clerk-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { toast } from "./ui/use-toast";
 import posthog from "posthog-js";
