@@ -1,4 +1,4 @@
-import {createRequire} from "node:module";
+import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
@@ -16,7 +16,7 @@ var __toESM = (mod, isNodeMode, target) => {
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __require = createRequire(import.meta.url);
+var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // node_modules/node-cron/src/task.js
 var require_task = __commonJS((exports, module) => {
@@ -254,6 +254,8 @@ var require_convert_expression = __commonJS((exports, module) => {
 
 // node_modules/node-cron/src/pattern-validation.js
 var require_pattern_validation = __commonJS((exports, module) => {
+  var convertExpression = require_convert_expression();
+  var validationRegex = /^(?:\d+|\*|\*\/\d+)$/;
   function isValidExpression(expression, min, max) {
     const options = expression.split(",");
     for (const option of options) {
@@ -304,13 +306,13 @@ var require_pattern_validation = __commonJS((exports, module) => {
       patterns.unshift("0");
     validateFields(patterns, executablePatterns);
   }
-  var convertExpression = require_convert_expression();
-  var validationRegex = /^(?:\d+|\*|\*\/\d+)$/;
   module.exports = validate;
 });
 
 // node_modules/node-cron/src/time-matcher.js
 var require_time_matcher = __commonJS((exports, module) => {
+  var validatePattern = require_pattern_validation();
+  var convertExpression = require_convert_expression();
   function matchPattern(pattern, value) {
     if (pattern.indexOf(",") !== -1) {
       const patterns = pattern.split(",");
@@ -318,8 +320,6 @@ var require_time_matcher = __commonJS((exports, module) => {
     }
     return pattern === value.toString();
   }
-  var validatePattern = require_pattern_validation();
-  var convertExpression = require_convert_expression();
 
   class TimeMatcher {
     constructor(pattern, timezone) {
@@ -405,9 +405,16 @@ var require_scheduler = __commonJS((exports, module) => {
 
 // node_modules/uuid/dist/rng.js
 var require_rng = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = rng;
+  var _crypto = _interopRequireDefault(__require("crypto"));
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
+  var rnds8Pool = new Uint8Array(256);
+  var poolPtr = rnds8Pool.length;
   function rng() {
     if (poolPtr > rnds8Pool.length - 16) {
       _crypto.default.randomFillSync(rnds8Pool);
@@ -415,13 +422,6 @@ var require_rng = __commonJS((exports) => {
     }
     return rnds8Pool.slice(poolPtr, poolPtr += 16);
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = rng;
-  var _crypto = _interopRequireDefault(__require("crypto"));
-  var rnds8Pool = new Uint8Array(256);
-  var poolPtr = rnds8Pool.length;
 });
 
 // node_modules/uuid/dist/regex.js
@@ -436,25 +436,34 @@ var require_regex = __commonJS((exports) => {
 
 // node_modules/uuid/dist/validate.js
 var require_validate = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = undefined;
+  var _regex = _interopRequireDefault(require_regex());
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
   function validate(uuid) {
     return typeof uuid === "string" && _regex.default.test(uuid);
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = undefined;
-  var _regex = _interopRequireDefault(require_regex());
   var _default = validate;
   exports.default = _default;
 });
 
 // node_modules/uuid/dist/stringify.js
 var require_stringify = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = undefined;
+  var _validate = _interopRequireDefault(require_validate());
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
+  }
+  var byteToHex = [];
+  for (let i = 0;i < 256; ++i) {
+    byteToHex.push((i + 256).toString(16).substr(1));
   }
   function stringify(arr, offset = 0) {
     const uuid = (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase();
@@ -463,24 +472,25 @@ var require_stringify = __commonJS((exports) => {
     }
     return uuid;
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = undefined;
-  var _validate = _interopRequireDefault(require_validate());
-  var byteToHex = [];
-  for (let i = 0;i < 256; ++i) {
-    byteToHex.push((i + 256).toString(16).substr(1));
-  }
   var _default = stringify;
   exports.default = _default;
 });
 
 // node_modules/uuid/dist/v1.js
 var require_v1 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = undefined;
+  var _rng = _interopRequireDefault(require_rng());
+  var _stringify = _interopRequireDefault(require_stringify());
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
+  var _nodeId;
+  var _clockseq;
+  var _lastMSecs = 0;
+  var _lastNSecs = 0;
   function v1(options, buf, offset) {
     let i = buf && offset || 0;
     const b = buf || new Array(16);
@@ -529,22 +539,17 @@ var require_v1 = __commonJS((exports) => {
     }
     return buf || (0, _stringify.default)(b);
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = undefined;
-  var _rng = _interopRequireDefault(require_rng());
-  var _stringify = _interopRequireDefault(require_stringify());
-  var _nodeId;
-  var _clockseq;
-  var _lastMSecs = 0;
-  var _lastNSecs = 0;
   var _default = v1;
   exports.default = _default;
 });
 
 // node_modules/uuid/dist/parse.js
 var require_parse = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = undefined;
+  var _validate = _interopRequireDefault(require_validate());
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
@@ -572,17 +577,19 @@ var require_parse = __commonJS((exports) => {
     arr[15] = v & 255;
     return arr;
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = undefined;
-  var _validate = _interopRequireDefault(require_validate());
   var _default = parse;
   exports.default = _default;
 });
 
 // node_modules/uuid/dist/v35.js
 var require_v35 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = _default;
+  exports.URL = exports.DNS = undefined;
+  var _stringify = _interopRequireDefault(require_stringify());
+  var _parse = _interopRequireDefault(require_parse());
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
@@ -594,6 +601,10 @@ var require_v35 = __commonJS((exports) => {
     }
     return bytes;
   }
+  var DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+  exports.DNS = DNS;
+  var URL = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
+  exports.URL = URL;
   function _default(name, version, hashfunc) {
     function generateUUID(value, namespace, buf, offset) {
       if (typeof value === "string") {
@@ -628,21 +639,15 @@ var require_v35 = __commonJS((exports) => {
     generateUUID.URL = URL;
     return generateUUID;
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = _default;
-  exports.URL = exports.DNS = undefined;
-  var _stringify = _interopRequireDefault(require_stringify());
-  var _parse = _interopRequireDefault(require_parse());
-  var DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
-  exports.DNS = DNS;
-  var URL = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
-  exports.URL = URL;
 });
 
 // node_modules/uuid/dist/md5.js
 var require_md5 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = undefined;
+  var _crypto = _interopRequireDefault(__require("crypto"));
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
@@ -654,26 +659,21 @@ var require_md5 = __commonJS((exports) => {
     }
     return _crypto.default.createHash("md5").update(bytes).digest();
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = undefined;
-  var _crypto = _interopRequireDefault(__require("crypto"));
   var _default = md5;
   exports.default = _default;
 });
 
 // node_modules/uuid/dist/v3.js
 var require_v3 = __commonJS((exports) => {
-  function _interopRequireDefault(obj) {
-    return obj && obj.__esModule ? obj : { default: obj };
-  }
   Object.defineProperty(exports, "__esModule", {
     value: true
   });
   exports.default = undefined;
   var _v = _interopRequireDefault(require_v35());
   var _md = _interopRequireDefault(require_md5());
+  function _interopRequireDefault(obj) {
+    return obj && obj.__esModule ? obj : { default: obj };
+  }
   var v3 = (0, _v.default)("v3", 48, _md.default);
   var _default = v3;
   exports.default = _default;
@@ -681,6 +681,12 @@ var require_v3 = __commonJS((exports) => {
 
 // node_modules/uuid/dist/v4.js
 var require_v4 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = undefined;
+  var _rng = _interopRequireDefault(require_rng());
+  var _stringify = _interopRequireDefault(require_stringify());
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
@@ -698,18 +704,17 @@ var require_v4 = __commonJS((exports) => {
     }
     return (0, _stringify.default)(rnds);
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = undefined;
-  var _rng = _interopRequireDefault(require_rng());
-  var _stringify = _interopRequireDefault(require_stringify());
   var _default = v4;
   exports.default = _default;
 });
 
 // node_modules/uuid/dist/sha1.js
 var require_sha1 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = undefined;
+  var _crypto = _interopRequireDefault(__require("crypto"));
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
@@ -721,26 +726,21 @@ var require_sha1 = __commonJS((exports) => {
     }
     return _crypto.default.createHash("sha1").update(bytes).digest();
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = undefined;
-  var _crypto = _interopRequireDefault(__require("crypto"));
   var _default = sha1;
   exports.default = _default;
 });
 
 // node_modules/uuid/dist/v5.js
 var require_v5 = __commonJS((exports) => {
-  function _interopRequireDefault(obj) {
-    return obj && obj.__esModule ? obj : { default: obj };
-  }
   Object.defineProperty(exports, "__esModule", {
     value: true
   });
   exports.default = undefined;
   var _v = _interopRequireDefault(require_v35());
   var _sha = _interopRequireDefault(require_sha1());
+  function _interopRequireDefault(obj) {
+    return obj && obj.__esModule ? obj : { default: obj };
+  }
   var v5 = (0, _v.default)("v5", 80, _sha.default);
   var _default = v5;
   exports.default = _default;
@@ -758,6 +758,11 @@ var require_nil = __commonJS((exports) => {
 
 // node_modules/uuid/dist/version.js
 var require_version = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", {
+    value: true
+  });
+  exports.default = undefined;
+  var _validate = _interopRequireDefault(require_validate());
   function _interopRequireDefault(obj) {
     return obj && obj.__esModule ? obj : { default: obj };
   }
@@ -767,20 +772,12 @@ var require_version = __commonJS((exports) => {
     }
     return parseInt(uuid.substr(14, 1), 16);
   }
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-  exports.default = undefined;
-  var _validate = _interopRequireDefault(require_validate());
   var _default = version;
   exports.default = _default;
 });
 
 // node_modules/uuid/dist/index.js
 var require_dist = __commonJS((exports) => {
-  function _interopRequireDefault(obj) {
-    return obj && obj.__esModule ? obj : { default: obj };
-  }
   Object.defineProperty(exports, "__esModule", {
     value: true
   });
@@ -847,6 +844,9 @@ var require_dist = __commonJS((exports) => {
   var _validate = _interopRequireDefault(require_validate());
   var _stringify = _interopRequireDefault(require_stringify());
   var _parse = _interopRequireDefault(require_parse());
+  function _interopRequireDefault(obj) {
+    return obj && obj.__esModule ? obj : { default: obj };
+  }
 });
 
 // node_modules/node-cron/src/scheduled-task.js
@@ -895,7 +895,7 @@ var require_scheduled_task = __commonJS((exports, module) => {
 
 // node_modules/node-cron/src/background-scheduled-task/index.js
 var require_background_scheduled_task = __commonJS((exports, module) => {
-  var __dirname = "/Users/louisbeaumont/Documents/screen-pipe/screenpipe-js/node_modules/node-cron/src/background-scheduled-task";
+  var __dirname = "/Users/louisbeaumont/Documents/screenpipe/screenpipe-js/node_modules/node-cron/src/background-scheduled-task";
   var EventEmitter = __require("events");
   var path = __require("path");
   var { fork } = __require("child_process");
@@ -979,6 +979,10 @@ var require_storage = __commonJS((exports, module) => {
 
 // node_modules/node-cron/src/node-cron.js
 var require_node_cron = __commonJS((exports, module) => {
+  var ScheduledTask = require_scheduled_task();
+  var BackgroundScheduledTask = require_background_scheduled_task();
+  var validation = require_pattern_validation();
+  var storage = require_storage();
   function schedule(expression, func, options) {
     const task = createTask(expression, func, options);
     storage.save(task);
@@ -1000,213 +1004,19 @@ var require_node_cron = __commonJS((exports, module) => {
   function getTasks() {
     return storage.getTasks();
   }
-  var ScheduledTask = require_scheduled_task();
-  var BackgroundScheduledTask = require_background_scheduled_task();
-  var validation = require_pattern_validation();
-  var storage = require_storage();
   module.exports = { schedule, validate, getTasks };
-});
-
-// node_modules/bytes/index.js
-var require_bytes = __commonJS((exports, module) => {
-  function bytes(value, options) {
-    if (typeof value === "string") {
-      return parse(value);
-    }
-    if (typeof value === "number") {
-      return format(value, options);
-    }
-    return null;
-  }
-  function format(value, options) {
-    if (!Number.isFinite(value)) {
-      return null;
-    }
-    var mag = Math.abs(value);
-    var thousandsSeparator = options && options.thousandsSeparator || "";
-    var unitSeparator = options && options.unitSeparator || "";
-    var decimalPlaces = options && options.decimalPlaces !== undefined ? options.decimalPlaces : 2;
-    var fixedDecimals = Boolean(options && options.fixedDecimals);
-    var unit = options && options.unit || "";
-    if (!unit || !map[unit.toLowerCase()]) {
-      if (mag >= map.pb) {
-        unit = "PB";
-      } else if (mag >= map.tb) {
-        unit = "TB";
-      } else if (mag >= map.gb) {
-        unit = "GB";
-      } else if (mag >= map.mb) {
-        unit = "MB";
-      } else if (mag >= map.kb) {
-        unit = "KB";
-      } else {
-        unit = "B";
-      }
-    }
-    var val = value / map[unit.toLowerCase()];
-    var str = val.toFixed(decimalPlaces);
-    if (!fixedDecimals) {
-      str = str.replace(formatDecimalsRegExp, "$1");
-    }
-    if (thousandsSeparator) {
-      str = str.split(".").map(function(s, i) {
-        return i === 0 ? s.replace(formatThousandsRegExp, thousandsSeparator) : s;
-      }).join(".");
-    }
-    return str + unitSeparator + unit;
-  }
-  function parse(val) {
-    if (typeof val === "number" && !isNaN(val)) {
-      return val;
-    }
-    if (typeof val !== "string") {
-      return null;
-    }
-    var results = parseRegExp.exec(val);
-    var floatValue;
-    var unit = "b";
-    if (!results) {
-      floatValue = parseInt(val, 10);
-      unit = "b";
-    } else {
-      floatValue = parseFloat(results[1]);
-      unit = results[4].toLowerCase();
-    }
-    if (isNaN(floatValue)) {
-      return null;
-    }
-    return Math.floor(map[unit] * floatValue);
-  }
-  /*!
-   * bytes
-   * Copyright(c) 2012-2014 TJ Holowaychuk
-   * Copyright(c) 2015 Jed Watson
-   * MIT Licensed
-   */
-  module.exports = bytes;
-  module.exports.format = format;
-  module.exports.parse = parse;
-  var formatThousandsRegExp = /\B(?=(\d{3})+(?!\d))/g;
-  var formatDecimalsRegExp = /(?:\.0*|(\.[^0]+)0+)$/;
-  var map = {
-    b: 1,
-    kb: 1 << 10,
-    mb: 1 << 20,
-    gb: 1 << 30,
-    tb: Math.pow(1024, 4),
-    pb: Math.pow(1024, 5)
-  };
-  var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
-});
-
-// node_modules/content-type/index.js
-var require_content_type = __commonJS((exports) => {
-  function format(obj) {
-    if (!obj || typeof obj !== "object") {
-      throw new TypeError("argument obj is required");
-    }
-    var parameters = obj.parameters;
-    var type = obj.type;
-    if (!type || !TYPE_REGEXP.test(type)) {
-      throw new TypeError("invalid type");
-    }
-    var string = type;
-    if (parameters && typeof parameters === "object") {
-      var param;
-      var params = Object.keys(parameters).sort();
-      for (var i = 0;i < params.length; i++) {
-        param = params[i];
-        if (!TOKEN_REGEXP.test(param)) {
-          throw new TypeError("invalid parameter name");
-        }
-        string += "; " + param + "=" + qstring(parameters[param]);
-      }
-    }
-    return string;
-  }
-  function parse(string) {
-    if (!string) {
-      throw new TypeError("argument string is required");
-    }
-    var header = typeof string === "object" ? getcontenttype(string) : string;
-    if (typeof header !== "string") {
-      throw new TypeError("argument string is required to be a string");
-    }
-    var index = header.indexOf(";");
-    var type = index !== -1 ? header.slice(0, index).trim() : header.trim();
-    if (!TYPE_REGEXP.test(type)) {
-      throw new TypeError("invalid media type");
-    }
-    var obj = new ContentType(type.toLowerCase());
-    if (index !== -1) {
-      var key;
-      var match;
-      var value;
-      PARAM_REGEXP.lastIndex = index;
-      while (match = PARAM_REGEXP.exec(header)) {
-        if (match.index !== index) {
-          throw new TypeError("invalid parameter format");
-        }
-        index += match[0].length;
-        key = match[1].toLowerCase();
-        value = match[2];
-        if (value.charCodeAt(0) === 34) {
-          value = value.slice(1, -1);
-          if (value.indexOf("\\") !== -1) {
-            value = value.replace(QESC_REGEXP, "$1");
-          }
-        }
-        obj.parameters[key] = value;
-      }
-      if (index !== header.length) {
-        throw new TypeError("invalid parameter format");
-      }
-    }
-    return obj;
-  }
-  function getcontenttype(obj) {
-    var header;
-    if (typeof obj.getHeader === "function") {
-      header = obj.getHeader("content-type");
-    } else if (typeof obj.headers === "object") {
-      header = obj.headers && obj.headers["content-type"];
-    }
-    if (typeof header !== "string") {
-      throw new TypeError("content-type header is missing from object");
-    }
-    return header;
-  }
-  function qstring(val) {
-    var str = String(val);
-    if (TOKEN_REGEXP.test(str)) {
-      return str;
-    }
-    if (str.length > 0 && !TEXT_REGEXP.test(str)) {
-      throw new TypeError("invalid parameter value");
-    }
-    return '"' + str.replace(QUOTE_REGEXP, "\\$1") + '"';
-  }
-  function ContentType(type) {
-    this.parameters = Object.create(null);
-    this.type = type;
-  }
-  /*!
-   * content-type
-   * Copyright(c) 2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var PARAM_REGEXP = /; *([!#$%&'*+.^_`|~0-9A-Za-z-]+) *= *("(?:[\u000b\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u000b\u0020-\u00ff])*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+) */g;
-  var TEXT_REGEXP = /^[\u000b\u0020-\u007e\u0080-\u00ff]+$/;
-  var TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-  var QESC_REGEXP = /\\([\u000b\u0020-\u00ff])/g;
-  var QUOTE_REGEXP = /([\\"])/g;
-  var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-  exports.format = format;
-  exports.parse = parse;
 });
 
 // node_modules/depd/index.js
 var require_depd = __commonJS((exports, module) => {
+  /*!
+   * depd
+   * Copyright(c) 2014-2018 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var relative = __require("path").relative;
+  module.exports = depd;
+  var basePath = process.cwd();
   function containsNamespace(str, namespace) {
     var vals = str.split(/[ ,]+/);
     var ns = String(namespace).toLowerCase();
@@ -1247,7 +1057,8 @@ var require_depd = __commonJS((exports, module) => {
       str += " deprecated " + this.message;
     }
     for (var i = 0;i < stack.length; i++) {
-      str += "\n    at " + stack[i].toString();
+      str += `
+    at ` + stack[i].toString();
     }
     return str;
   }
@@ -1338,7 +1149,8 @@ var require_depd = __commonJS((exports, module) => {
     }
     var format = process.stderr.isTTY ? formatColor : formatPlain;
     var output = format.call(this, msg, caller, stack.slice(i));
-    process.stderr.write(output + "\n", "utf8");
+    process.stderr.write(output + `
+`, "utf8");
   }
   function callSiteLocation(callSite) {
     var file = callSite.getFileName() || "<anonymous>";
@@ -1373,7 +1185,8 @@ var require_depd = __commonJS((exports, module) => {
     var formatted = timestamp + " " + this._namespace + " deprecated " + msg;
     if (this._traced) {
       for (var i = 0;i < stack.length; i++) {
-        formatted += "\n    at " + stack[i].toString();
+        formatted += `
+    at ` + stack[i].toString();
       }
       return formatted;
     }
@@ -1422,7 +1235,10 @@ var require_depd = __commonJS((exports, module) => {
     var stack = getStack();
     var site = callSiteLocation(stack[1]);
     site.name = fn.name;
-    var deprecatedfn = new Function("fn", "log", "deprecate", "message", "site", '"use strict"\n' + "return function (" + args + ") {" + "log.call(deprecate, message, site)\n" + "return fn.apply(this, arguments)\n" + "}")(fn, log, this, message, site);
+    var deprecatedfn = new Function("fn", "log", "deprecate", "message", "site", `"use strict"
+` + "return function (" + args + ") {" + `log.call(deprecate, message, site)
+` + `return fn.apply(this, arguments)
+` + "}")(fn, log, this, message, site);
     return deprecatedfn;
   }
   function wrapproperty(obj, prop, message) {
@@ -1498,18 +1314,209 @@ var require_depd = __commonJS((exports, module) => {
     });
     return error;
   }
+});
+
+// node_modules/bytes/index.js
+var require_bytes = __commonJS((exports, module) => {
   /*!
-   * depd
-   * Copyright(c) 2014-2018 Douglas Christopher Wilson
+   * bytes
+   * Copyright(c) 2012-2014 TJ Holowaychuk
+   * Copyright(c) 2015 Jed Watson
    * MIT Licensed
    */
-  var relative = __require("path").relative;
-  module.exports = depd;
-  var basePath = process.cwd();
+  module.exports = bytes;
+  module.exports.format = format;
+  module.exports.parse = parse;
+  var formatThousandsRegExp = /\B(?=(\d{3})+(?!\d))/g;
+  var formatDecimalsRegExp = /(?:\.0*|(\.[^0]+)0+)$/;
+  var map = {
+    b: 1,
+    kb: 1 << 10,
+    mb: 1 << 20,
+    gb: 1 << 30,
+    tb: Math.pow(1024, 4),
+    pb: Math.pow(1024, 5)
+  };
+  var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+  function bytes(value, options) {
+    if (typeof value === "string") {
+      return parse(value);
+    }
+    if (typeof value === "number") {
+      return format(value, options);
+    }
+    return null;
+  }
+  function format(value, options) {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    var mag = Math.abs(value);
+    var thousandsSeparator = options && options.thousandsSeparator || "";
+    var unitSeparator = options && options.unitSeparator || "";
+    var decimalPlaces = options && options.decimalPlaces !== undefined ? options.decimalPlaces : 2;
+    var fixedDecimals = Boolean(options && options.fixedDecimals);
+    var unit = options && options.unit || "";
+    if (!unit || !map[unit.toLowerCase()]) {
+      if (mag >= map.pb) {
+        unit = "PB";
+      } else if (mag >= map.tb) {
+        unit = "TB";
+      } else if (mag >= map.gb) {
+        unit = "GB";
+      } else if (mag >= map.mb) {
+        unit = "MB";
+      } else if (mag >= map.kb) {
+        unit = "KB";
+      } else {
+        unit = "B";
+      }
+    }
+    var val = value / map[unit.toLowerCase()];
+    var str = val.toFixed(decimalPlaces);
+    if (!fixedDecimals) {
+      str = str.replace(formatDecimalsRegExp, "$1");
+    }
+    if (thousandsSeparator) {
+      str = str.split(".").map(function(s, i) {
+        return i === 0 ? s.replace(formatThousandsRegExp, thousandsSeparator) : s;
+      }).join(".");
+    }
+    return str + unitSeparator + unit;
+  }
+  function parse(val) {
+    if (typeof val === "number" && !isNaN(val)) {
+      return val;
+    }
+    if (typeof val !== "string") {
+      return null;
+    }
+    var results = parseRegExp.exec(val);
+    var floatValue;
+    var unit = "b";
+    if (!results) {
+      floatValue = parseInt(val, 10);
+      unit = "b";
+    } else {
+      floatValue = parseFloat(results[1]);
+      unit = results[4].toLowerCase();
+    }
+    if (isNaN(floatValue)) {
+      return null;
+    }
+    return Math.floor(map[unit] * floatValue);
+  }
+});
+
+// node_modules/content-type/index.js
+var require_content_type = __commonJS((exports) => {
+  /*!
+   * content-type
+   * Copyright(c) 2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var PARAM_REGEXP = /; *([!#$%&'*+.^_`|~0-9A-Za-z-]+) *= *("(?:[\u000b\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u000b\u0020-\u00ff])*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+) */g;
+  var TEXT_REGEXP = /^[\u000b\u0020-\u007e\u0080-\u00ff]+$/;
+  var TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+  var QESC_REGEXP = /\\([\u000b\u0020-\u00ff])/g;
+  var QUOTE_REGEXP = /([\\"])/g;
+  var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+  exports.format = format;
+  exports.parse = parse;
+  function format(obj) {
+    if (!obj || typeof obj !== "object") {
+      throw new TypeError("argument obj is required");
+    }
+    var parameters = obj.parameters;
+    var type = obj.type;
+    if (!type || !TYPE_REGEXP.test(type)) {
+      throw new TypeError("invalid type");
+    }
+    var string = type;
+    if (parameters && typeof parameters === "object") {
+      var param;
+      var params = Object.keys(parameters).sort();
+      for (var i = 0;i < params.length; i++) {
+        param = params[i];
+        if (!TOKEN_REGEXP.test(param)) {
+          throw new TypeError("invalid parameter name");
+        }
+        string += "; " + param + "=" + qstring(parameters[param]);
+      }
+    }
+    return string;
+  }
+  function parse(string) {
+    if (!string) {
+      throw new TypeError("argument string is required");
+    }
+    var header = typeof string === "object" ? getcontenttype(string) : string;
+    if (typeof header !== "string") {
+      throw new TypeError("argument string is required to be a string");
+    }
+    var index = header.indexOf(";");
+    var type = index !== -1 ? header.slice(0, index).trim() : header.trim();
+    if (!TYPE_REGEXP.test(type)) {
+      throw new TypeError("invalid media type");
+    }
+    var obj = new ContentType(type.toLowerCase());
+    if (index !== -1) {
+      var key;
+      var match;
+      var value;
+      PARAM_REGEXP.lastIndex = index;
+      while (match = PARAM_REGEXP.exec(header)) {
+        if (match.index !== index) {
+          throw new TypeError("invalid parameter format");
+        }
+        index += match[0].length;
+        key = match[1].toLowerCase();
+        value = match[2];
+        if (value.charCodeAt(0) === 34) {
+          value = value.slice(1, -1);
+          if (value.indexOf("\\") !== -1) {
+            value = value.replace(QESC_REGEXP, "$1");
+          }
+        }
+        obj.parameters[key] = value;
+      }
+      if (index !== header.length) {
+        throw new TypeError("invalid parameter format");
+      }
+    }
+    return obj;
+  }
+  function getcontenttype(obj) {
+    var header;
+    if (typeof obj.getHeader === "function") {
+      header = obj.getHeader("content-type");
+    } else if (typeof obj.headers === "object") {
+      header = obj.headers && obj.headers["content-type"];
+    }
+    if (typeof header !== "string") {
+      throw new TypeError("content-type header is missing from object");
+    }
+    return header;
+  }
+  function qstring(val) {
+    var str = String(val);
+    if (TOKEN_REGEXP.test(str)) {
+      return str;
+    }
+    if (str.length > 0 && !TEXT_REGEXP.test(str)) {
+      throw new TypeError("invalid parameter value");
+    }
+    return '"' + str.replace(QUOTE_REGEXP, "\\$1") + '"';
+  }
+  function ContentType(type) {
+    this.parameters = Object.create(null);
+    this.type = type;
+  }
 });
 
 // node_modules/setprototypeof/index.js
 var require_setprototypeof = __commonJS((exports, module) => {
+  module.exports = Object.setPrototypeOf || ({ __proto__: [] } instanceof Array ? setProtoOf : mixinProperties);
   function setProtoOf(obj, proto) {
     obj.__proto__ = proto;
     return obj;
@@ -1522,7 +1529,6 @@ var require_setprototypeof = __commonJS((exports, module) => {
     }
     return obj;
   }
-  module.exports = Object.setPrototypeOf || ({ __proto__: [] } instanceof Array ? setProtoOf : mixinProperties);
 });
 
 // node_modules/statuses/codes.json
@@ -1596,6 +1602,36 @@ var require_codes = __commonJS((exports, module) => {
 
 // node_modules/statuses/index.js
 var require_statuses = __commonJS((exports, module) => {
+  /*!
+   * statuses
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2016 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var codes = require_codes();
+  module.exports = status;
+  status.message = codes;
+  status.code = createMessageToStatusCodeMap(codes);
+  status.codes = createStatusCodeList(codes);
+  status.redirect = {
+    300: true,
+    301: true,
+    302: true,
+    303: true,
+    305: true,
+    307: true,
+    308: true
+  };
+  status.empty = {
+    204: true,
+    205: true,
+    304: true
+  };
+  status.retry = {
+    502: true,
+    503: true,
+    504: true
+  };
   function createMessageToStatusCodeMap(codes2) {
     var map = {};
     Object.keys(codes2).forEach(function forEachCode(code) {
@@ -1636,36 +1672,6 @@ var require_statuses = __commonJS((exports, module) => {
     }
     return getStatusCode(code);
   }
-  /*!
-   * statuses
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2016 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var codes = require_codes();
-  module.exports = status;
-  status.message = codes;
-  status.code = createMessageToStatusCodeMap(codes);
-  status.codes = createStatusCodeList(codes);
-  status.redirect = {
-    300: true,
-    301: true,
-    302: true,
-    303: true,
-    305: true,
-    307: true,
-    308: true
-  };
-  status.empty = {
-    204: true,
-    205: true,
-    304: true
-  };
-  status.retry = {
-    502: true,
-    503: true,
-    504: true
-  };
 });
 
 // node_modules/inherits/inherits_browser.js
@@ -1713,21 +1719,36 @@ var require_inherits = __commonJS((exports, module) => {
 
 // node_modules/toidentifier/index.js
 var require_toidentifier = __commonJS((exports, module) => {
-  function toIdentifier(str) {
-    return str.split(" ").map(function(token) {
-      return token.slice(0, 1).toUpperCase() + token.slice(1);
-    }).join("").replace(/[^ _0-9a-z]/gi, "");
-  }
   /*!
    * toidentifier
    * Copyright(c) 2016 Douglas Christopher Wilson
    * MIT Licensed
    */
   module.exports = toIdentifier;
+  function toIdentifier(str) {
+    return str.split(" ").map(function(token) {
+      return token.slice(0, 1).toUpperCase() + token.slice(1);
+    }).join("").replace(/[^ _0-9a-z]/gi, "");
+  }
 });
 
 // node_modules/http-errors/index.js
 var require_http_errors = __commonJS((exports, module) => {
+  /*!
+   * http-errors
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2016 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var deprecate = require_depd()("http-errors");
+  var setPrototypeOf = require_setprototypeof();
+  var statuses = require_statuses();
+  var inherits = require_inherits();
+  var toIdentifier = require_toidentifier();
+  module.exports = createError;
+  module.exports.HttpError = createHttpErrorConstructor();
+  module.exports.isHttpError = createIsHttpErrorFunction(module.exports.HttpError);
+  populateConstructorExports(module.exports, statuses.codes, module.exports.HttpError);
   function codeClass(status) {
     return Number(String(status).charAt(0) + "00");
   }
@@ -1876,25 +1897,25 @@ var require_http_errors = __commonJS((exports, module) => {
   function toClassName(name) {
     return name.substr(-5) !== "Error" ? name + "Error" : name;
   }
-  /*!
-   * http-errors
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2016 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var deprecate = require_depd()("http-errors");
-  var setPrototypeOf = require_setprototypeof();
-  var statuses = require_statuses();
-  var inherits = require_inherits();
-  var toIdentifier = require_toidentifier();
-  module.exports = createError;
-  module.exports.HttpError = createHttpErrorConstructor();
-  module.exports.isHttpError = createIsHttpErrorFunction(module.exports.HttpError);
-  populateConstructorExports(module.exports, statuses.codes, module.exports.HttpError);
 });
 
 // node_modules/debug/node_modules/ms/index.js
 var require_ms = __commonJS((exports, module) => {
+  var s = 1000;
+  var m = s * 60;
+  var h = m * 60;
+  var d = h * 24;
+  var y = d * 365.25;
+  module.exports = function(val, options) {
+    options = options || {};
+    var type = typeof val;
+    if (type === "string" && val.length > 0) {
+      return parse(val);
+    } else if (type === "number" && isNaN(val) === false) {
+      return options.long ? fmtLong(val) : fmtShort(val);
+    }
+    throw new Error("val is not a non-empty string or a valid number. val=" + JSON.stringify(val));
+  };
   function parse(str) {
     str = String(str);
     if (str.length > 100) {
@@ -1972,25 +1993,20 @@ var require_ms = __commonJS((exports, module) => {
     }
     return Math.ceil(ms / n) + " " + name + "s";
   }
-  var s = 1000;
-  var m = s * 60;
-  var h = m * 60;
-  var d = h * 24;
-  var y = d * 365.25;
-  module.exports = function(val, options) {
-    options = options || {};
-    var type = typeof val;
-    if (type === "string" && val.length > 0) {
-      return parse(val);
-    } else if (type === "number" && isNaN(val) === false) {
-      return options.long ? fmtLong(val) : fmtShort(val);
-    }
-    throw new Error("val is not a non-empty string or a valid number. val=" + JSON.stringify(val));
-  };
 });
 
 // node_modules/debug/src/debug.js
 var require_debug = __commonJS((exports, module) => {
+  exports = module.exports = createDebug.debug = createDebug["default"] = createDebug;
+  exports.coerce = coerce;
+  exports.disable = disable;
+  exports.enable = enable;
+  exports.enabled = enabled;
+  exports.humanize = require_ms();
+  exports.names = [];
+  exports.skips = [];
+  exports.formatters = {};
+  var prevTime;
   function selectColor(namespace) {
     var hash = 0, i;
     for (i in namespace) {
@@ -2084,26 +2100,38 @@ var require_debug = __commonJS((exports, module) => {
       return val.stack || val.message;
     return val;
   }
-  exports = module.exports = createDebug.debug = createDebug["default"] = createDebug;
-  exports.coerce = coerce;
-  exports.disable = disable;
-  exports.enable = enable;
-  exports.enabled = enabled;
-  exports.humanize = require_ms();
-  exports.names = [];
-  exports.skips = [];
-  exports.formatters = {};
-  var prevTime;
 });
 
 // node_modules/debug/src/browser.js
 var require_browser = __commonJS((exports, module) => {
+  exports = module.exports = require_debug();
+  exports.log = log;
+  exports.formatArgs = formatArgs;
+  exports.save = save;
+  exports.load = load;
+  exports.useColors = useColors;
+  exports.storage = typeof chrome != "undefined" && typeof chrome.storage != "undefined" ? chrome.storage.local : localstorage();
+  exports.colors = [
+    "lightseagreen",
+    "forestgreen",
+    "goldenrod",
+    "dodgerblue",
+    "darkorchid",
+    "crimson"
+  ];
   function useColors() {
     if (typeof window !== "undefined" && window.process && window.process.type === "renderer") {
       return true;
     }
     return typeof document !== "undefined" && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance || typeof window !== "undefined" && window.console && (window.console.firebug || window.console.exception && window.console.table) || typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31 || typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/);
   }
+  exports.formatters.j = function(v) {
+    try {
+      return JSON.stringify(v);
+    } catch (err) {
+      return "[UnexpectedJSONParseError]: " + err.message;
+    }
+  };
   function formatArgs(args) {
     var useColors2 = this.useColors;
     args[0] = (useColors2 ? "%c" : "") + this.namespace + (useColors2 ? " %c" : " ") + args[0] + (useColors2 ? "%c " : " ") + "+" + exports.humanize(this.diff);
@@ -2147,56 +2175,82 @@ var require_browser = __commonJS((exports, module) => {
     }
     return r;
   }
+  exports.enable(load());
   function localstorage() {
     try {
       return window.localStorage;
     } catch (e) {
     }
   }
+});
+
+// node_modules/debug/src/node.js
+var require_node = __commonJS((exports, module) => {
+  var tty = __require("tty");
+  var util = __require("util");
   exports = module.exports = require_debug();
+  exports.init = init;
   exports.log = log;
   exports.formatArgs = formatArgs;
   exports.save = save;
   exports.load = load;
   exports.useColors = useColors;
-  exports.storage = typeof chrome != "undefined" && typeof chrome.storage != "undefined" ? chrome.storage.local : localstorage();
-  exports.colors = [
-    "lightseagreen",
-    "forestgreen",
-    "goldenrod",
-    "dodgerblue",
-    "darkorchid",
-    "crimson"
-  ];
-  exports.formatters.j = function(v) {
-    try {
-      return JSON.stringify(v);
-    } catch (err) {
-      return "[UnexpectedJSONParseError]: " + err.message;
-    }
-  };
-  exports.enable(load());
-});
-
-// node_modules/debug/src/node.js
-var require_node = __commonJS((exports, module) => {
+  exports.colors = [6, 2, 3, 4, 5, 1];
+  exports.inspectOpts = Object.keys(process.env).filter(function(key) {
+    return /^debug_/i.test(key);
+  }).reduce(function(obj, key) {
+    var prop = key.substring(6).toLowerCase().replace(/_([a-z])/g, function(_, k) {
+      return k.toUpperCase();
+    });
+    var val = process.env[key];
+    if (/^(yes|on|true|enabled)$/i.test(val))
+      val = true;
+    else if (/^(no|off|false|disabled)$/i.test(val))
+      val = false;
+    else if (val === "null")
+      val = null;
+    else
+      val = Number(val);
+    obj[prop] = val;
+    return obj;
+  }, {});
+  var fd = parseInt(process.env.DEBUG_FD, 10) || 2;
+  if (fd !== 1 && fd !== 2) {
+    util.deprecate(function() {
+    }, "except for stderr(2) and stdout(1), any other usage of DEBUG_FD is deprecated. Override debug.log if you want to use a different log function (https://git.io/debug_fd)")();
+  }
+  var stream = fd === 1 ? process.stdout : fd === 2 ? process.stderr : createWritableStdioStream(fd);
   function useColors() {
     return "colors" in exports.inspectOpts ? Boolean(exports.inspectOpts.colors) : tty.isatty(fd);
   }
+  exports.formatters.o = function(v) {
+    this.inspectOpts.colors = this.useColors;
+    return util.inspect(v, this.inspectOpts).split(`
+`).map(function(str) {
+      return str.trim();
+    }).join(" ");
+  };
+  exports.formatters.O = function(v) {
+    this.inspectOpts.colors = this.useColors;
+    return util.inspect(v, this.inspectOpts);
+  };
   function formatArgs(args) {
     var name = this.namespace;
     var useColors2 = this.useColors;
     if (useColors2) {
       var c = this.color;
       var prefix = "  \x1B[3" + c + ";1m" + name + " " + "\x1B[0m";
-      args[0] = prefix + args[0].split("\n").join("\n" + prefix);
+      args[0] = prefix + args[0].split(`
+`).join(`
+` + prefix);
       args.push("\x1B[3" + c + "m+" + exports.humanize(this.diff) + "\x1B[0m");
     } else {
       args[0] = new Date().toUTCString() + " " + name + " " + args[0];
     }
   }
   function log() {
-    return stream.write(util.format.apply(util, arguments) + "\n");
+    return stream.write(util.format.apply(util, arguments) + `
+`);
   }
   function save(namespaces) {
     if (namespaces == null) {
@@ -2253,50 +2307,6 @@ var require_node = __commonJS((exports, module) => {
       debug.inspectOpts[keys[i]] = exports.inspectOpts[keys[i]];
     }
   }
-  var tty = __require("tty");
-  var util = __require("util");
-  exports = module.exports = require_debug();
-  exports.init = init;
-  exports.log = log;
-  exports.formatArgs = formatArgs;
-  exports.save = save;
-  exports.load = load;
-  exports.useColors = useColors;
-  exports.colors = [6, 2, 3, 4, 5, 1];
-  exports.inspectOpts = Object.keys(process.env).filter(function(key) {
-    return /^debug_/i.test(key);
-  }).reduce(function(obj, key) {
-    var prop = key.substring(6).toLowerCase().replace(/_([a-z])/g, function(_, k) {
-      return k.toUpperCase();
-    });
-    var val = process.env[key];
-    if (/^(yes|on|true|enabled)$/i.test(val))
-      val = true;
-    else if (/^(no|off|false|disabled)$/i.test(val))
-      val = false;
-    else if (val === "null")
-      val = null;
-    else
-      val = Number(val);
-    obj[prop] = val;
-    return obj;
-  }, {});
-  var fd = parseInt(process.env.DEBUG_FD, 10) || 2;
-  if (fd !== 1 && fd !== 2) {
-    util.deprecate(function() {
-    }, "except for stderr(2) and stdout(1), any other usage of DEBUG_FD is deprecated. Override debug.log if you want to use a different log function (https://git.io/debug_fd)")();
-  }
-  var stream = fd === 1 ? process.stdout : fd === 2 ? process.stderr : createWritableStdioStream(fd);
-  exports.formatters.o = function(v) {
-    this.inspectOpts.colors = this.useColors;
-    return util.inspect(v, this.inspectOpts).split("\n").map(function(str) {
-      return str.trim();
-    }).join(" ");
-  };
-  exports.formatters.O = function(v) {
-    this.inspectOpts.colors = this.useColors;
-    return util.inspect(v, this.inspectOpts);
-  };
   exports.enable(load());
 });
 
@@ -2311,6 +2321,17 @@ var require_src = __commonJS((exports, module) => {
 
 // node_modules/destroy/index.js
 var require_destroy = __commonJS((exports, module) => {
+  /*!
+   * destroy
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2015-2022 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var EventEmitter = __require("events").EventEmitter;
+  var ReadStream = __require("fs").ReadStream;
+  var Stream = __require("stream");
+  var Zlib = __require("zlib");
+  module.exports = destroy;
   function destroy(stream, suppress) {
     if (isFsReadStream(stream)) {
       destroyReadStream(stream);
@@ -2386,17 +2407,6 @@ var require_destroy = __commonJS((exports, module) => {
       this.close();
     }
   }
-  /*!
-   * destroy
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2015-2022 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var EventEmitter = __require("events").EventEmitter;
-  var ReadStream = __require("fs").ReadStream;
-  var Stream = __require("stream");
-  var Zlib = __require("zlib");
-  module.exports = destroy;
 });
 
 // node_modules/safer-buffer/safer.js
@@ -2470,17 +2480,12 @@ var require_safer = __commonJS((exports, module) => {
 
 // node_modules/iconv-lite/lib/bom-handling.js
 var require_bom_handling = __commonJS((exports) => {
+  var BOMChar = "\uFEFF";
+  exports.PrependBOM = PrependBOMWrapper;
   function PrependBOMWrapper(encoder, options) {
     this.encoder = encoder;
     this.addBOM = true;
   }
-  function StripBOMWrapper(decoder, options) {
-    this.decoder = decoder;
-    this.pass = false;
-    this.options = options || {};
-  }
-  var BOMChar = "\uFEFF";
-  exports.PrependBOM = PrependBOMWrapper;
   PrependBOMWrapper.prototype.write = function(str) {
     if (this.addBOM) {
       str = BOMChar + str;
@@ -2492,6 +2497,11 @@ var require_bom_handling = __commonJS((exports) => {
     return this.encoder.end();
   };
   exports.StripBOM = StripBOMWrapper;
+  function StripBOMWrapper(decoder, options) {
+    this.decoder = decoder;
+    this.pass = false;
+    this.options = options || {};
+  }
   StripBOMWrapper.prototype.write = function(buf) {
     var res = this.decoder.write(buf);
     if (this.pass || !res)
@@ -2511,6 +2521,18 @@ var require_bom_handling = __commonJS((exports) => {
 
 // node_modules/iconv-lite/encodings/internal.js
 var require_internal = __commonJS((exports, module) => {
+  var Buffer2 = require_safer().Buffer;
+  module.exports = {
+    utf8: { type: "_internal", bomAware: true },
+    cesu8: { type: "_internal", bomAware: true },
+    unicode11utf8: "utf8",
+    ucs2: { type: "_internal", bomAware: true },
+    utf16le: "ucs2",
+    binary: { type: "_internal" },
+    base64: { type: "_internal" },
+    hex: { type: "_internal" },
+    _internal: InternalCodec
+  };
   function InternalCodec(codecOptions, iconv) {
     this.enc = codecOptions.encodingName;
     this.bomAware = codecOptions.bomAware;
@@ -2525,47 +2547,27 @@ var require_internal = __commonJS((exports, module) => {
       }
     }
   }
-  function InternalDecoder(options, codec) {
-    StringDecoder.call(this, codec.enc);
-  }
-  function InternalEncoder(options, codec) {
-    this.enc = codec.enc;
-  }
-  function InternalEncoderBase64(options, codec) {
-    this.prevStr = "";
-  }
-  function InternalEncoderCesu8(options, codec) {
-  }
-  function InternalDecoderCesu8(options, codec) {
-    this.acc = 0;
-    this.contBytes = 0;
-    this.accBytes = 0;
-    this.defaultCharUnicode = codec.defaultCharUnicode;
-  }
-  var Buffer2 = require_safer().Buffer;
-  module.exports = {
-    utf8: { type: "_internal", bomAware: true },
-    cesu8: { type: "_internal", bomAware: true },
-    unicode11utf8: "utf8",
-    ucs2: { type: "_internal", bomAware: true },
-    utf16le: "ucs2",
-    binary: { type: "_internal" },
-    base64: { type: "_internal" },
-    hex: { type: "_internal" },
-    _internal: InternalCodec
-  };
   InternalCodec.prototype.encoder = InternalEncoder;
   InternalCodec.prototype.decoder = InternalDecoder;
   var StringDecoder = __require("string_decoder").StringDecoder;
   if (!StringDecoder.prototype.end)
     StringDecoder.prototype.end = function() {
     };
+  function InternalDecoder(options, codec) {
+    StringDecoder.call(this, codec.enc);
+  }
   InternalDecoder.prototype = StringDecoder.prototype;
+  function InternalEncoder(options, codec) {
+    this.enc = codec.enc;
+  }
   InternalEncoder.prototype.write = function(str) {
     return Buffer2.from(str, this.enc);
   };
   InternalEncoder.prototype.end = function() {
   };
+  function InternalEncoderBase64(options, codec) {
+    this.prevStr = "";
+  }
   InternalEncoderBase64.prototype.write = function(str) {
     str = this.prevStr + str;
     var completeQuads = str.length - str.length % 4;
@@ -2576,6 +2578,8 @@ var require_internal = __commonJS((exports, module) => {
   InternalEncoderBase64.prototype.end = function() {
     return Buffer2.from(this.prevStr, "base64");
   };
+  function InternalEncoderCesu8(options, codec) {
+  }
   InternalEncoderCesu8.prototype.write = function(str) {
     var buf = Buffer2.alloc(str.length * 3), bufIdx = 0;
     for (var i = 0;i < str.length; i++) {
@@ -2595,6 +2599,12 @@ var require_internal = __commonJS((exports, module) => {
   };
   InternalEncoderCesu8.prototype.end = function() {
   };
+  function InternalDecoderCesu8(options, codec) {
+    this.acc = 0;
+    this.contBytes = 0;
+    this.accBytes = 0;
+    this.defaultCharUnicode = codec.defaultCharUnicode;
+  }
   InternalDecoderCesu8.prototype.write = function(buf) {
     var acc = this.acc, contBytes = this.contBytes, accBytes = this.accBytes, res = "";
     for (var i = 0;i < buf.length; i++) {
@@ -2650,22 +2660,66 @@ var require_internal = __commonJS((exports, module) => {
 
 // node_modules/iconv-lite/encodings/utf16.js
 var require_utf16 = __commonJS((exports) => {
+  var Buffer2 = require_safer().Buffer;
+  exports.utf16be = Utf16BECodec;
   function Utf16BECodec() {
   }
+  Utf16BECodec.prototype.encoder = Utf16BEEncoder;
+  Utf16BECodec.prototype.decoder = Utf16BEDecoder;
+  Utf16BECodec.prototype.bomAware = true;
   function Utf16BEEncoder() {
   }
+  Utf16BEEncoder.prototype.write = function(str) {
+    var buf = Buffer2.from(str, "ucs2");
+    for (var i = 0;i < buf.length; i += 2) {
+      var tmp = buf[i];
+      buf[i] = buf[i + 1];
+      buf[i + 1] = tmp;
+    }
+    return buf;
+  };
+  Utf16BEEncoder.prototype.end = function() {
+  };
   function Utf16BEDecoder() {
     this.overflowByte = -1;
   }
+  Utf16BEDecoder.prototype.write = function(buf) {
+    if (buf.length == 0)
+      return "";
+    var buf2 = Buffer2.alloc(buf.length + 1), i = 0, j = 0;
+    if (this.overflowByte !== -1) {
+      buf2[0] = buf[0];
+      buf2[1] = this.overflowByte;
+      i = 1;
+      j = 2;
+    }
+    for (;i < buf.length - 1; i += 2, j += 2) {
+      buf2[j] = buf[i + 1];
+      buf2[j + 1] = buf[i];
+    }
+    this.overflowByte = i == buf.length - 1 ? buf[buf.length - 1] : -1;
+    return buf2.slice(0, j).toString("ucs2");
+  };
+  Utf16BEDecoder.prototype.end = function() {
+  };
+  exports.utf16 = Utf16Codec;
   function Utf16Codec(codecOptions, iconv) {
     this.iconv = iconv;
   }
+  Utf16Codec.prototype.encoder = Utf16Encoder;
+  Utf16Codec.prototype.decoder = Utf16Decoder;
   function Utf16Encoder(options, codec) {
     options = options || {};
     if (options.addBOM === undefined)
       options.addBOM = true;
     this.encoder = codec.iconv.getEncoder("utf-16le", options);
   }
+  Utf16Encoder.prototype.write = function(str) {
+    return this.encoder.write(str);
+  };
+  Utf16Encoder.prototype.end = function() {
+    return this.encoder.end();
+  };
   function Utf16Decoder(options, codec) {
     this.decoder = null;
     this.initialBytes = [];
@@ -2673,6 +2727,27 @@ var require_utf16 = __commonJS((exports) => {
     this.options = options || {};
     this.iconv = codec.iconv;
   }
+  Utf16Decoder.prototype.write = function(buf) {
+    if (!this.decoder) {
+      this.initialBytes.push(buf);
+      this.initialBytesLen += buf.length;
+      if (this.initialBytesLen < 16)
+        return "";
+      var buf = Buffer2.concat(this.initialBytes), encoding = detectEncoding(buf, this.options.defaultEncoding);
+      this.decoder = this.iconv.getDecoder(encoding, this.options);
+      this.initialBytes.length = this.initialBytesLen = 0;
+    }
+    return this.decoder.write(buf);
+  };
+  Utf16Decoder.prototype.end = function() {
+    if (!this.decoder) {
+      var buf = Buffer2.concat(this.initialBytes), encoding = detectEncoding(buf, this.options.defaultEncoding);
+      this.decoder = this.iconv.getDecoder(encoding, this.options);
+      var res = this.decoder.write(buf), trail = this.decoder.end();
+      return trail ? res + trail : res;
+    }
+    return this.decoder.end();
+  };
   function detectEncoding(buf, defaultEncoding) {
     var enc = defaultEncoding || "utf-16le";
     if (buf.length >= 2) {
@@ -2696,107 +2771,23 @@ var require_utf16 = __commonJS((exports) => {
     }
     return enc;
   }
-  var Buffer2 = require_safer().Buffer;
-  exports.utf16be = Utf16BECodec;
-  Utf16BECodec.prototype.encoder = Utf16BEEncoder;
-  Utf16BECodec.prototype.decoder = Utf16BEDecoder;
-  Utf16BECodec.prototype.bomAware = true;
-  Utf16BEEncoder.prototype.write = function(str) {
-    var buf = Buffer2.from(str, "ucs2");
-    for (var i = 0;i < buf.length; i += 2) {
-      var tmp = buf[i];
-      buf[i] = buf[i + 1];
-      buf[i + 1] = tmp;
-    }
-    return buf;
-  };
-  Utf16BEEncoder.prototype.end = function() {
-  };
-  Utf16BEDecoder.prototype.write = function(buf) {
-    if (buf.length == 0)
-      return "";
-    var buf2 = Buffer2.alloc(buf.length + 1), i = 0, j = 0;
-    if (this.overflowByte !== -1) {
-      buf2[0] = buf[0];
-      buf2[1] = this.overflowByte;
-      i = 1;
-      j = 2;
-    }
-    for (;i < buf.length - 1; i += 2, j += 2) {
-      buf2[j] = buf[i + 1];
-      buf2[j + 1] = buf[i];
-    }
-    this.overflowByte = i == buf.length - 1 ? buf[buf.length - 1] : -1;
-    return buf2.slice(0, j).toString("ucs2");
-  };
-  Utf16BEDecoder.prototype.end = function() {
-  };
-  exports.utf16 = Utf16Codec;
-  Utf16Codec.prototype.encoder = Utf16Encoder;
-  Utf16Codec.prototype.decoder = Utf16Decoder;
-  Utf16Encoder.prototype.write = function(str) {
-    return this.encoder.write(str);
-  };
-  Utf16Encoder.prototype.end = function() {
-    return this.encoder.end();
-  };
-  Utf16Decoder.prototype.write = function(buf) {
-    if (!this.decoder) {
-      this.initialBytes.push(buf);
-      this.initialBytesLen += buf.length;
-      if (this.initialBytesLen < 16)
-        return "";
-      var buf = Buffer2.concat(this.initialBytes), encoding = detectEncoding(buf, this.options.defaultEncoding);
-      this.decoder = this.iconv.getDecoder(encoding, this.options);
-      this.initialBytes.length = this.initialBytesLen = 0;
-    }
-    return this.decoder.write(buf);
-  };
-  Utf16Decoder.prototype.end = function() {
-    if (!this.decoder) {
-      var buf = Buffer2.concat(this.initialBytes), encoding = detectEncoding(buf, this.options.defaultEncoding);
-      this.decoder = this.iconv.getDecoder(encoding, this.options);
-      var res = this.decoder.write(buf), trail = this.decoder.end();
-      return trail ? res + trail : res;
-    }
-    return this.decoder.end();
-  };
 });
 
 // node_modules/iconv-lite/encodings/utf7.js
 var require_utf7 = __commonJS((exports) => {
-  function Utf7Codec(codecOptions, iconv) {
-    this.iconv = iconv;
-  }
-  function Utf7Encoder(options, codec) {
-    this.iconv = codec.iconv;
-  }
-  function Utf7Decoder(options, codec) {
-    this.iconv = codec.iconv;
-    this.inBase64 = false;
-    this.base64Accum = "";
-  }
-  function Utf7IMAPCodec(codecOptions, iconv) {
-    this.iconv = iconv;
-  }
-  function Utf7IMAPEncoder(options, codec) {
-    this.iconv = codec.iconv;
-    this.inBase64 = false;
-    this.base64Accum = Buffer2.alloc(6);
-    this.base64AccumIdx = 0;
-  }
-  function Utf7IMAPDecoder(options, codec) {
-    this.iconv = codec.iconv;
-    this.inBase64 = false;
-    this.base64Accum = "";
-  }
   var Buffer2 = require_safer().Buffer;
   exports.utf7 = Utf7Codec;
   exports.unicode11utf7 = "utf7";
+  function Utf7Codec(codecOptions, iconv) {
+    this.iconv = iconv;
+  }
   Utf7Codec.prototype.encoder = Utf7Encoder;
   Utf7Codec.prototype.decoder = Utf7Decoder;
   Utf7Codec.prototype.bomAware = true;
   var nonDirectChars = /[^A-Za-z0-9'\(\),-\.\/:\? \n\r\t]+/g;
+  function Utf7Encoder(options, codec) {
+    this.iconv = codec.iconv;
+  }
   Utf7Encoder.prototype.write = function(str) {
     return Buffer2.from(str.replace(nonDirectChars, function(chunk) {
       return "+" + (chunk === "+" ? "" : this.iconv.encode(chunk, "utf16-be").toString("base64").replace(/=+$/, "")) + "-";
@@ -2804,14 +2795,19 @@ var require_utf7 = __commonJS((exports) => {
   };
   Utf7Encoder.prototype.end = function() {
   };
+  function Utf7Decoder(options, codec) {
+    this.iconv = codec.iconv;
+    this.inBase64 = false;
+    this.base64Accum = "";
+  }
   var base64Regex = /[A-Za-z0-9\/+]/;
   var base64Chars = [];
   for (i = 0;i < 256; i++)
     base64Chars[i] = base64Regex.test(String.fromCharCode(i));
   var i;
-  var plusChar = "+".charCodeAt(0);
-  var minusChar = "-".charCodeAt(0);
-  var andChar = "&".charCodeAt(0);
+  var plusChar = 43;
+  var minusChar = 45;
+  var andChar = 38;
   Utf7Decoder.prototype.write = function(buf) {
     var res = "", lastI = 0, inBase64 = this.inBase64, base64Accum = this.base64Accum;
     for (var i2 = 0;i2 < buf.length; i2++) {
@@ -2859,9 +2855,18 @@ var require_utf7 = __commonJS((exports) => {
     return res;
   };
   exports.utf7imap = Utf7IMAPCodec;
+  function Utf7IMAPCodec(codecOptions, iconv) {
+    this.iconv = iconv;
+  }
   Utf7IMAPCodec.prototype.encoder = Utf7IMAPEncoder;
   Utf7IMAPCodec.prototype.decoder = Utf7IMAPDecoder;
   Utf7IMAPCodec.prototype.bomAware = true;
+  function Utf7IMAPEncoder(options, codec) {
+    this.iconv = codec.iconv;
+    this.inBase64 = false;
+    this.base64Accum = Buffer2.alloc(6);
+    this.base64AccumIdx = 0;
+  }
   Utf7IMAPEncoder.prototype.write = function(str) {
     var inBase64 = this.inBase64, base64Accum = this.base64Accum, base64AccumIdx = this.base64AccumIdx, buf = Buffer2.alloc(str.length * 5 + 10), bufIdx = 0;
     for (var i2 = 0;i2 < str.length; i2++) {
@@ -2911,8 +2916,13 @@ var require_utf7 = __commonJS((exports) => {
     }
     return buf.slice(0, bufIdx);
   };
+  function Utf7IMAPDecoder(options, codec) {
+    this.iconv = codec.iconv;
+    this.inBase64 = false;
+    this.base64Accum = "";
+  }
   var base64IMAPChars = base64Chars.slice();
-  base64IMAPChars[",".charCodeAt(0)] = true;
+  base64IMAPChars[44] = true;
   Utf7IMAPDecoder.prototype.write = function(buf) {
     var res = "", lastI = 0, inBase64 = this.inBase64, base64Accum = this.base64Accum;
     for (var i2 = 0;i2 < buf.length; i2++) {
@@ -2963,6 +2973,8 @@ var require_utf7 = __commonJS((exports) => {
 
 // node_modules/iconv-lite/encodings/sbcs-codec.js
 var require_sbcs_codec = __commonJS((exports) => {
+  var Buffer2 = require_safer().Buffer;
+  exports._sbcs = SBCSCodec;
   function SBCSCodec(codecOptions, iconv) {
     if (!codecOptions)
       throw new Error("SBCS codec is called without the data.");
@@ -2980,16 +2992,11 @@ var require_sbcs_codec = __commonJS((exports) => {
       encodeBuf[codecOptions.chars.charCodeAt(i)] = i;
     this.encodeBuf = encodeBuf;
   }
+  SBCSCodec.prototype.encoder = SBCSEncoder;
+  SBCSCodec.prototype.decoder = SBCSDecoder;
   function SBCSEncoder(options, codec) {
     this.encodeBuf = codec.encodeBuf;
   }
-  function SBCSDecoder(options, codec) {
-    this.decodeBuf = codec.decodeBuf;
-  }
-  var Buffer2 = require_safer().Buffer;
-  exports._sbcs = SBCSCodec;
-  SBCSCodec.prototype.encoder = SBCSEncoder;
-  SBCSCodec.prototype.decoder = SBCSDecoder;
   SBCSEncoder.prototype.write = function(str) {
     var buf = Buffer2.alloc(str.length);
     for (var i = 0;i < str.length; i++)
@@ -2998,6 +3005,9 @@ var require_sbcs_codec = __commonJS((exports) => {
   };
   SBCSEncoder.prototype.end = function() {
   };
+  function SBCSDecoder(options, codec) {
+    this.decodeBuf = codec.decodeBuf;
+  }
   SBCSDecoder.prototype.write = function(buf) {
     var decodeBuf = this.decodeBuf;
     var newBuf = Buffer2.alloc(buf.length * 2);
@@ -3020,17 +3030,17 @@ var require_sbcs_data = __commonJS((exports, module) => {
     "10029": "maccenteuro",
     maccenteuro: {
       type: "_sbcs",
-      chars: "\xC4\u0100\u0101\xC9\u0104\xD6\xDC\xE1\u0105\u010C\xE4\u010D\u0106\u0107\xE9\u0179\u017A\u010E\xED\u010F\u0112\u0113\u0116\xF3\u0117\xF4\xF6\xF5\xFA\u011A\u011B\xFC\u2020\xB0\u0118\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\u0119\xA8\u2260\u0123\u012E\u012F\u012A\u2264\u2265\u012B\u0136\u2202\u2211\u0142\u013B\u013C\u013D\u013E\u0139\u013A\u0145\u0146\u0143\xAC\u221A\u0144\u0147\u2206\xAB\xBB\u2026\xA0\u0148\u0150\xD5\u0151\u014C\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\u014D\u0154\u0155\u0158\u2039\u203A\u0159\u0156\u0157\u0160\u201A\u201E\u0161\u015A\u015B\xC1\u0164\u0165\xCD\u017D\u017E\u016A\xD3\xD4\u016B\u016E\xDA\u016F\u0170\u0171\u0172\u0173\xDD\xFD\u0137\u017B\u0141\u017C\u0122\u02C7"
+      chars: "ÄĀāÉĄÖÜáąČäčĆćéŹźĎíďĒēĖóėôöõúĚěü†°Ę£§•¶ß®©™ę¨≠ģĮįĪ≤≥īĶ∂∑łĻļĽľĹĺŅņŃ¬√ńŇ∆«»… ňŐÕőŌ–—“”‘’÷◊ōŔŕŘ‹›řŖŗŠ‚„šŚśÁŤťÍŽžŪÓÔūŮÚůŰűŲųÝýķŻŁżĢˇ"
     },
     "808": "cp808",
     ibm808: "cp808",
     cp808: {
       type: "_sbcs",
-      chars: "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F\u0401\u0451\u0404\u0454\u0407\u0457\u040E\u045E\xB0\u2219\xB7\u221A\u2116\u20AC\u25A0\xA0"
+      chars: "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмноп░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀рстуфхцчшщъыьэюяЁёЄєЇїЎў°∙·√№€■ "
     },
     mik: {
       type: "_sbcs",
-      chars: "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F\u2514\u2534\u252C\u251C\u2500\u253C\u2563\u2551\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2510\u2591\u2592\u2593\u2502\u2524\u2116\xA7\u2557\u255D\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0"
+      chars: "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя└┴┬├─┼╣║╚╔╩╦╠═╬┐░▒▓│┤№§╗╝┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
     },
     ascii8bit: "ascii",
     usascii: "ascii",
@@ -3214,409 +3224,420 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     "28606": "iso885916",
     windows874: {
       type: "_sbcs",
-      chars: "\u20AC\uFFFD\uFFFD\uFFFD\uFFFD\u2026\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\xA0\u0E01\u0E02\u0E03\u0E04\u0E05\u0E06\u0E07\u0E08\u0E09\u0E0A\u0E0B\u0E0C\u0E0D\u0E0E\u0E0F\u0E10\u0E11\u0E12\u0E13\u0E14\u0E15\u0E16\u0E17\u0E18\u0E19\u0E1A\u0E1B\u0E1C\u0E1D\u0E1E\u0E1F\u0E20\u0E21\u0E22\u0E23\u0E24\u0E25\u0E26\u0E27\u0E28\u0E29\u0E2A\u0E2B\u0E2C\u0E2D\u0E2E\u0E2F\u0E30\u0E31\u0E32\u0E33\u0E34\u0E35\u0E36\u0E37\u0E38\u0E39\u0E3A\uFFFD\uFFFD\uFFFD\uFFFD\u0E3F\u0E40\u0E41\u0E42\u0E43\u0E44\u0E45\u0E46\u0E47\u0E48\u0E49\u0E4A\u0E4B\u0E4C\u0E4D\u0E4E\u0E4F\u0E50\u0E51\u0E52\u0E53\u0E54\u0E55\u0E56\u0E57\u0E58\u0E59\u0E5A\u0E5B\uFFFD\uFFFD\uFFFD\uFFFD"
+      chars: "€����…�����������‘’“”•–—�������� กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรฤลฦวศษสหฬอฮฯะัาำิีึืฺุู����฿เแโใไๅๆ็่้๊๋์ํ๎๏๐๑๒๓๔๕๖๗๘๙๚๛����"
     },
     win874: "windows874",
     cp874: "windows874",
     windows1250: {
       type: "_sbcs",
-      chars: "\u20AC\uFFFD\u201A\uFFFD\u201E\u2026\u2020\u2021\uFFFD\u2030\u0160\u2039\u015A\u0164\u017D\u0179\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\u2122\u0161\u203A\u015B\u0165\u017E\u017A\xA0\u02C7\u02D8\u0141\xA4\u0104\xA6\xA7\xA8\xA9\u015E\xAB\xAC\xAD\xAE\u017B\xB0\xB1\u02DB\u0142\xB4\xB5\xB6\xB7\xB8\u0105\u015F\xBB\u013D\u02DD\u013E\u017C\u0154\xC1\xC2\u0102\xC4\u0139\u0106\xC7\u010C\xC9\u0118\xCB\u011A\xCD\xCE\u010E\u0110\u0143\u0147\xD3\xD4\u0150\xD6\xD7\u0158\u016E\xDA\u0170\xDC\xDD\u0162\xDF\u0155\xE1\xE2\u0103\xE4\u013A\u0107\xE7\u010D\xE9\u0119\xEB\u011B\xED\xEE\u010F\u0111\u0144\u0148\xF3\xF4\u0151\xF6\xF7\u0159\u016F\xFA\u0171\xFC\xFD\u0163\u02D9"
+      chars: "€�‚�„…†‡�‰Š‹ŚŤŽŹ�‘’“”•–—�™š›śťžź ˇ˘Ł¤Ą¦§¨©Ş«¬­®Ż°±˛ł´µ¶·¸ąş»Ľ˝ľżŔÁÂĂÄĹĆÇČÉĘËĚÍÎĎĐŃŇÓÔŐÖ×ŘŮÚŰÜÝŢßŕáâăäĺćçčéęëěíîďđńňóôőö÷řůúűüýţ˙"
     },
     win1250: "windows1250",
     cp1250: "windows1250",
     windows1251: {
       type: "_sbcs",
-      chars: "\u0402\u0403\u201A\u0453\u201E\u2026\u2020\u2021\u20AC\u2030\u0409\u2039\u040A\u040C\u040B\u040F\u0452\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\u2122\u0459\u203A\u045A\u045C\u045B\u045F\xA0\u040E\u045E\u0408\xA4\u0490\xA6\xA7\u0401\xA9\u0404\xAB\xAC\xAD\xAE\u0407\xB0\xB1\u0406\u0456\u0491\xB5\xB6\xB7\u0451\u2116\u0454\xBB\u0458\u0405\u0455\u0457\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F"
+      chars: "ЂЃ‚ѓ„…†‡€‰Љ‹ЊЌЋЏђ‘’“”•–—�™љ›њќћџ ЎўЈ¤Ґ¦§Ё©Є«¬­®Ї°±Ііґµ¶·ё№є»јЅѕїАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя"
     },
     win1251: "windows1251",
     cp1251: "windows1251",
     windows1252: {
       type: "_sbcs",
-      chars: "\u20AC\uFFFD\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\uFFFD\u017D\uFFFD\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\uFFFD\u017E\u0178\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF"
+      chars: "€�‚ƒ„…†‡ˆ‰Š‹Œ�Ž��‘’“”•–—˜™š›œ�žŸ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ"
     },
     win1252: "windows1252",
     cp1252: "windows1252",
     windows1253: {
       type: "_sbcs",
-      chars: "\u20AC\uFFFD\u201A\u0192\u201E\u2026\u2020\u2021\uFFFD\u2030\uFFFD\u2039\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\u2122\uFFFD\u203A\uFFFD\uFFFD\uFFFD\uFFFD\xA0\u0385\u0386\xA3\xA4\xA5\xA6\xA7\xA8\xA9\uFFFD\xAB\xAC\xAD\xAE\u2015\xB0\xB1\xB2\xB3\u0384\xB5\xB6\xB7\u0388\u0389\u038A\xBB\u038C\xBD\u038E\u038F\u0390\u0391\u0392\u0393\u0394\u0395\u0396\u0397\u0398\u0399\u039A\u039B\u039C\u039D\u039E\u039F\u03A0\u03A1\uFFFD\u03A3\u03A4\u03A5\u03A6\u03A7\u03A8\u03A9\u03AA\u03AB\u03AC\u03AD\u03AE\u03AF\u03B0\u03B1\u03B2\u03B3\u03B4\u03B5\u03B6\u03B7\u03B8\u03B9\u03BA\u03BB\u03BC\u03BD\u03BE\u03BF\u03C0\u03C1\u03C2\u03C3\u03C4\u03C5\u03C6\u03C7\u03C8\u03C9\u03CA\u03CB\u03CC\u03CD\u03CE\uFFFD"
+      chars: "€�‚ƒ„…†‡�‰�‹�����‘’“”•–—�™�›���� ΅Ά£¤¥¦§¨©�«¬­®―°±²³΄µ¶·ΈΉΊ»Ό½ΎΏΐΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡ�ΣΤΥΦΧΨΩΪΫάέήίΰαβγδεζηθικλμνξοπρςστυφχψωϊϋόύώ�"
     },
     win1253: "windows1253",
     cp1253: "windows1253",
     windows1254: {
       type: "_sbcs",
-      chars: "\u20AC\uFFFD\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\uFFFD\uFFFD\uFFFD\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\uFFFD\uFFFD\u0178\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\u011E\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\u0130\u015E\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\u011F\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\u0131\u015F\xFF"
+      chars: "€�‚ƒ„…†‡ˆ‰Š‹Œ����‘’“”•–—˜™š›œ��Ÿ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏĞÑÒÓÔÕÖ×ØÙÚÛÜİŞßàáâãäåæçèéêëìíîïğñòóôõö÷øùúûüışÿ"
     },
     win1254: "windows1254",
     cp1254: "windows1254",
     windows1255: {
       type: "_sbcs",
-      chars: "\u20AC\uFFFD\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\uFFFD\u2039\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\uFFFD\u203A\uFFFD\uFFFD\uFFFD\uFFFD\xA0\xA1\xA2\xA3\u20AA\xA5\xA6\xA7\xA8\xA9\xD7\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xF7\xBB\xBC\xBD\xBE\xBF\u05B0\u05B1\u05B2\u05B3\u05B4\u05B5\u05B6\u05B7\u05B8\u05B9\u05BA\u05BB\u05BC\u05BD\u05BE\u05BF\u05C0\u05C1\u05C2\u05C3\u05F0\u05F1\u05F2\u05F3\u05F4\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u05D0\u05D1\u05D2\u05D3\u05D4\u05D5\u05D6\u05D7\u05D8\u05D9\u05DA\u05DB\u05DC\u05DD\u05DE\u05DF\u05E0\u05E1\u05E2\u05E3\u05E4\u05E5\u05E6\u05E7\u05E8\u05E9\u05EA\uFFFD\uFFFD\u200E\u200F\uFFFD"
+      chars: "€�‚ƒ„…†‡ˆ‰�‹�����‘’“”•–—˜™�›���� ¡¢£₪¥¦§¨©×«¬­®¯°±²³´µ¶·¸¹÷»¼½¾¿ְֱֲֳִֵֶַָֹֺֻּֽ־ֿ׀ׁׂ׃װױײ׳״�������אבגדהוזחטיךכלםמןנסעףפץצקרשת��‎‏�"
     },
     win1255: "windows1255",
     cp1255: "windows1255",
     windows1256: {
       type: "_sbcs",
-      chars: "\u20AC\u067E\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0679\u2039\u0152\u0686\u0698\u0688\u06AF\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u06A9\u2122\u0691\u203A\u0153\u200C\u200D\u06BA\xA0\u060C\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\u06BE\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\u061B\xBB\xBC\xBD\xBE\u061F\u06C1\u0621\u0622\u0623\u0624\u0625\u0626\u0627\u0628\u0629\u062A\u062B\u062C\u062D\u062E\u062F\u0630\u0631\u0632\u0633\u0634\u0635\u0636\xD7\u0637\u0638\u0639\u063A\u0640\u0641\u0642\u0643\xE0\u0644\xE2\u0645\u0646\u0647\u0648\xE7\xE8\xE9\xEA\xEB\u0649\u064A\xEE\xEF\u064B\u064C\u064D\u064E\xF4\u064F\u0650\xF7\u0651\xF9\u0652\xFB\xFC\u200E\u200F\u06D2"
+      chars: "€پ‚ƒ„…†‡ˆ‰ٹ‹Œچژڈگ‘’“”•–—ک™ڑ›œ‌‍ں ،¢£¤¥¦§¨©ھ«¬­®¯°±²³´µ¶·¸¹؛»¼½¾؟ہءآأؤإئابةتثجحخدذرزسشصض×طظعغـفقكàلâمنهوçèéêëىيîïًٌٍَôُِ÷ّùْûü‎‏ے"
     },
     win1256: "windows1256",
     cp1256: "windows1256",
     windows1257: {
       type: "_sbcs",
-      chars: "\u20AC\uFFFD\u201A\uFFFD\u201E\u2026\u2020\u2021\uFFFD\u2030\uFFFD\u2039\uFFFD\xA8\u02C7\xB8\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\u2122\uFFFD\u203A\uFFFD\xAF\u02DB\uFFFD\xA0\uFFFD\xA2\xA3\xA4\uFFFD\xA6\xA7\xD8\xA9\u0156\xAB\xAC\xAD\xAE\xC6\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xF8\xB9\u0157\xBB\xBC\xBD\xBE\xE6\u0104\u012E\u0100\u0106\xC4\xC5\u0118\u0112\u010C\xC9\u0179\u0116\u0122\u0136\u012A\u013B\u0160\u0143\u0145\xD3\u014C\xD5\xD6\xD7\u0172\u0141\u015A\u016A\xDC\u017B\u017D\xDF\u0105\u012F\u0101\u0107\xE4\xE5\u0119\u0113\u010D\xE9\u017A\u0117\u0123\u0137\u012B\u013C\u0161\u0144\u0146\xF3\u014D\xF5\xF6\xF7\u0173\u0142\u015B\u016B\xFC\u017C\u017E\u02D9"
+      chars: "€�‚�„…†‡�‰�‹�¨ˇ¸�‘’“”•–—�™�›�¯˛� �¢£¤�¦§Ø©Ŗ«¬­®Æ°±²³´µ¶·ø¹ŗ»¼½¾æĄĮĀĆÄÅĘĒČÉŹĖĢĶĪĻŠŃŅÓŌÕÖ×ŲŁŚŪÜŻŽßąįāćäåęēčéźėģķīļšńņóōõö÷ųłśūüżž˙"
     },
     win1257: "windows1257",
     cp1257: "windows1257",
     windows1258: {
       type: "_sbcs",
-      chars: "\u20AC\uFFFD\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\uFFFD\u2039\u0152\uFFFD\uFFFD\uFFFD\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\uFFFD\u203A\u0153\uFFFD\uFFFD\u0178\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\u0102\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\u0300\xCD\xCE\xCF\u0110\xD1\u0309\xD3\xD4\u01A0\xD6\xD7\xD8\xD9\xDA\xDB\xDC\u01AF\u0303\xDF\xE0\xE1\xE2\u0103\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\u0301\xED\xEE\xEF\u0111\xF1\u0323\xF3\xF4\u01A1\xF6\xF7\xF8\xF9\xFA\xFB\xFC\u01B0\u20AB\xFF"
+      chars: "€�‚ƒ„…†‡ˆ‰�‹Œ����‘’“”•–—˜™�›œ��Ÿ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂĂÄÅÆÇÈÉÊË̀ÍÎÏĐÑ̉ÓÔƠÖ×ØÙÚÛÜỮßàáâăäåæçèéêë́íîïđṇ̃óôơö÷øùúûüư₫ÿ"
     },
     win1258: "windows1258",
     cp1258: "windows1258",
     iso88591: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF"
+      chars: " ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ"
     },
     cp28591: "iso88591",
     iso88592: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0104\u02D8\u0141\xA4\u013D\u015A\xA7\xA8\u0160\u015E\u0164\u0179\xAD\u017D\u017B\xB0\u0105\u02DB\u0142\xB4\u013E\u015B\u02C7\xB8\u0161\u015F\u0165\u017A\u02DD\u017E\u017C\u0154\xC1\xC2\u0102\xC4\u0139\u0106\xC7\u010C\xC9\u0118\xCB\u011A\xCD\xCE\u010E\u0110\u0143\u0147\xD3\xD4\u0150\xD6\xD7\u0158\u016E\xDA\u0170\xDC\xDD\u0162\xDF\u0155\xE1\xE2\u0103\xE4\u013A\u0107\xE7\u010D\xE9\u0119\xEB\u011B\xED\xEE\u010F\u0111\u0144\u0148\xF3\xF4\u0151\xF6\xF7\u0159\u016F\xFA\u0171\xFC\xFD\u0163\u02D9"
+      chars: " Ą˘Ł¤ĽŚ§¨ŠŞŤŹ­ŽŻ°ą˛ł´ľśˇ¸šşťź˝žżŔÁÂĂÄĹĆÇČÉĘËĚÍÎĎĐŃŇÓÔŐÖ×ŘŮÚŰÜÝŢßŕáâăäĺćçčéęëěíîďđńňóôőö÷řůúűüýţ˙"
     },
     cp28592: "iso88592",
     iso88593: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0126\u02D8\xA3\xA4\uFFFD\u0124\xA7\xA8\u0130\u015E\u011E\u0134\xAD\uFFFD\u017B\xB0\u0127\xB2\xB3\xB4\xB5\u0125\xB7\xB8\u0131\u015F\u011F\u0135\xBD\uFFFD\u017C\xC0\xC1\xC2\uFFFD\xC4\u010A\u0108\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\uFFFD\xD1\xD2\xD3\xD4\u0120\xD6\xD7\u011C\xD9\xDA\xDB\xDC\u016C\u015C\xDF\xE0\xE1\xE2\uFFFD\xE4\u010B\u0109\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\uFFFD\xF1\xF2\xF3\xF4\u0121\xF6\xF7\u011D\xF9\xFA\xFB\xFC\u016D\u015D\u02D9"
+      chars: " Ħ˘£¤�Ĥ§¨İŞĞĴ­�Ż°ħ²³´µĥ·¸ışğĵ½�żÀÁÂ�ÄĊĈÇÈÉÊËÌÍÎÏ�ÑÒÓÔĠÖ×ĜÙÚÛÜŬŜßàáâ�äċĉçèéêëìíîï�ñòóôġö÷ĝùúûüŭŝ˙"
     },
     cp28593: "iso88593",
     iso88594: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0104\u0138\u0156\xA4\u0128\u013B\xA7\xA8\u0160\u0112\u0122\u0166\xAD\u017D\xAF\xB0\u0105\u02DB\u0157\xB4\u0129\u013C\u02C7\xB8\u0161\u0113\u0123\u0167\u014A\u017E\u014B\u0100\xC1\xC2\xC3\xC4\xC5\xC6\u012E\u010C\xC9\u0118\xCB\u0116\xCD\xCE\u012A\u0110\u0145\u014C\u0136\xD4\xD5\xD6\xD7\xD8\u0172\xDA\xDB\xDC\u0168\u016A\xDF\u0101\xE1\xE2\xE3\xE4\xE5\xE6\u012F\u010D\xE9\u0119\xEB\u0117\xED\xEE\u012B\u0111\u0146\u014D\u0137\xF4\xF5\xF6\xF7\xF8\u0173\xFA\xFB\xFC\u0169\u016B\u02D9"
+      chars: " ĄĸŖ¤ĨĻ§¨ŠĒĢŦ­Ž¯°ą˛ŗ´ĩļˇ¸šēģŧŊžŋĀÁÂÃÄÅÆĮČÉĘËĖÍÎĪĐŅŌĶÔÕÖ×ØŲÚÛÜŨŪßāáâãäåæįčéęëėíîīđņōķôõö÷øųúûüũū˙"
     },
     cp28594: "iso88594",
     iso88595: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0401\u0402\u0403\u0404\u0405\u0406\u0407\u0408\u0409\u040A\u040B\u040C\xAD\u040E\u040F\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F\u2116\u0451\u0452\u0453\u0454\u0455\u0456\u0457\u0458\u0459\u045A\u045B\u045C\xA7\u045E\u045F"
+      chars: " ЁЂЃЄЅІЇЈЉЊЋЌ­ЎЏАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя№ёђѓєѕіїјљњћќ§ўџ"
     },
     cp28595: "iso88595",
     iso88596: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\uFFFD\uFFFD\uFFFD\xA4\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u060C\xAD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u061B\uFFFD\uFFFD\uFFFD\u061F\uFFFD\u0621\u0622\u0623\u0624\u0625\u0626\u0627\u0628\u0629\u062A\u062B\u062C\u062D\u062E\u062F\u0630\u0631\u0632\u0633\u0634\u0635\u0636\u0637\u0638\u0639\u063A\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u0640\u0641\u0642\u0643\u0644\u0645\u0646\u0647\u0648\u0649\u064A\u064B\u064C\u064D\u064E\u064F\u0650\u0651\u0652\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD"
+      chars: " ���¤�������،­�������������؛���؟�ءآأؤإئابةتثجحخدذرزسشصضطظعغ�����ـفقكلمنهوىيًٌٍَُِّْ�������������"
     },
     cp28596: "iso88596",
     iso88597: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u2018\u2019\xA3\u20AC\u20AF\xA6\xA7\xA8\xA9\u037A\xAB\xAC\xAD\uFFFD\u2015\xB0\xB1\xB2\xB3\u0384\u0385\u0386\xB7\u0388\u0389\u038A\xBB\u038C\xBD\u038E\u038F\u0390\u0391\u0392\u0393\u0394\u0395\u0396\u0397\u0398\u0399\u039A\u039B\u039C\u039D\u039E\u039F\u03A0\u03A1\uFFFD\u03A3\u03A4\u03A5\u03A6\u03A7\u03A8\u03A9\u03AA\u03AB\u03AC\u03AD\u03AE\u03AF\u03B0\u03B1\u03B2\u03B3\u03B4\u03B5\u03B6\u03B7\u03B8\u03B9\u03BA\u03BB\u03BC\u03BD\u03BE\u03BF\u03C0\u03C1\u03C2\u03C3\u03C4\u03C5\u03C6\u03C7\u03C8\u03C9\u03CA\u03CB\u03CC\u03CD\u03CE\uFFFD"
+      chars: " ‘’£€₯¦§¨©ͺ«¬­�―°±²³΄΅Ά·ΈΉΊ»Ό½ΎΏΐΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡ�ΣΤΥΦΧΨΩΪΫάέήίΰαβγδεζηθικλμνξοπρςστυφχψωϊϋόύώ�"
     },
     cp28597: "iso88597",
     iso88598: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\uFFFD\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xD7\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xF7\xBB\xBC\xBD\xBE\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u2017\u05D0\u05D1\u05D2\u05D3\u05D4\u05D5\u05D6\u05D7\u05D8\u05D9\u05DA\u05DB\u05DC\u05DD\u05DE\u05DF\u05E0\u05E1\u05E2\u05E3\u05E4\u05E5\u05E6\u05E7\u05E8\u05E9\u05EA\uFFFD\uFFFD\u200E\u200F\uFFFD"
+      chars: " �¢£¤¥¦§¨©×«¬­®¯°±²³´µ¶·¸¹÷»¼½¾��������������������������������‗אבגדהוזחטיךכלםמןנסעףפץצקרשת��‎‏�"
     },
     cp28598: "iso88598",
     iso88599: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\u011E\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\u0130\u015E\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\u011F\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\u0131\u015F\xFF"
+      chars: " ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏĞÑÒÓÔÕÖ×ØÙÚÛÜİŞßàáâãäåæçèéêëìíîïğñòóôõö÷øùúûüışÿ"
     },
     cp28599: "iso88599",
     iso885910: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0104\u0112\u0122\u012A\u0128\u0136\xA7\u013B\u0110\u0160\u0166\u017D\xAD\u016A\u014A\xB0\u0105\u0113\u0123\u012B\u0129\u0137\xB7\u013C\u0111\u0161\u0167\u017E\u2015\u016B\u014B\u0100\xC1\xC2\xC3\xC4\xC5\xC6\u012E\u010C\xC9\u0118\xCB\u0116\xCD\xCE\xCF\xD0\u0145\u014C\xD3\xD4\xD5\xD6\u0168\xD8\u0172\xDA\xDB\xDC\xDD\xDE\xDF\u0101\xE1\xE2\xE3\xE4\xE5\xE6\u012F\u010D\xE9\u0119\xEB\u0117\xED\xEE\xEF\xF0\u0146\u014D\xF3\xF4\xF5\xF6\u0169\xF8\u0173\xFA\xFB\xFC\xFD\xFE\u0138"
+      chars: " ĄĒĢĪĨĶ§ĻĐŠŦŽ­ŪŊ°ąēģīĩķ·ļđšŧž―ūŋĀÁÂÃÄÅÆĮČÉĘËĖÍÎÏÐŅŌÓÔÕÖŨØŲÚÛÜÝÞßāáâãäåæįčéęëėíîïðņōóôõöũøųúûüýþĸ"
     },
     cp28600: "iso885910",
     iso885911: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0E01\u0E02\u0E03\u0E04\u0E05\u0E06\u0E07\u0E08\u0E09\u0E0A\u0E0B\u0E0C\u0E0D\u0E0E\u0E0F\u0E10\u0E11\u0E12\u0E13\u0E14\u0E15\u0E16\u0E17\u0E18\u0E19\u0E1A\u0E1B\u0E1C\u0E1D\u0E1E\u0E1F\u0E20\u0E21\u0E22\u0E23\u0E24\u0E25\u0E26\u0E27\u0E28\u0E29\u0E2A\u0E2B\u0E2C\u0E2D\u0E2E\u0E2F\u0E30\u0E31\u0E32\u0E33\u0E34\u0E35\u0E36\u0E37\u0E38\u0E39\u0E3A\uFFFD\uFFFD\uFFFD\uFFFD\u0E3F\u0E40\u0E41\u0E42\u0E43\u0E44\u0E45\u0E46\u0E47\u0E48\u0E49\u0E4A\u0E4B\u0E4C\u0E4D\u0E4E\u0E4F\u0E50\u0E51\u0E52\u0E53\u0E54\u0E55\u0E56\u0E57\u0E58\u0E59\u0E5A\u0E5B\uFFFD\uFFFD\uFFFD\uFFFD"
+      chars: " กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรฤลฦวศษสหฬอฮฯะัาำิีึืฺุู����฿เแโใไๅๆ็่้๊๋์ํ๎๏๐๑๒๓๔๕๖๗๘๙๚๛����"
     },
     cp28601: "iso885911",
     iso885913: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u201D\xA2\xA3\xA4\u201E\xA6\xA7\xD8\xA9\u0156\xAB\xAC\xAD\xAE\xC6\xB0\xB1\xB2\xB3\u201C\xB5\xB6\xB7\xF8\xB9\u0157\xBB\xBC\xBD\xBE\xE6\u0104\u012E\u0100\u0106\xC4\xC5\u0118\u0112\u010C\xC9\u0179\u0116\u0122\u0136\u012A\u013B\u0160\u0143\u0145\xD3\u014C\xD5\xD6\xD7\u0172\u0141\u015A\u016A\xDC\u017B\u017D\xDF\u0105\u012F\u0101\u0107\xE4\xE5\u0119\u0113\u010D\xE9\u017A\u0117\u0123\u0137\u012B\u013C\u0161\u0144\u0146\xF3\u014D\xF5\xF6\xF7\u0173\u0142\u015B\u016B\xFC\u017C\u017E\u2019"
+      chars: " ”¢£¤„¦§Ø©Ŗ«¬­®Æ°±²³“µ¶·ø¹ŗ»¼½¾æĄĮĀĆÄÅĘĒČÉŹĖĢĶĪĻŠŃŅÓŌÕÖ×ŲŁŚŪÜŻŽßąįāćäåęēčéźėģķīļšńņóōõö÷ųłśūüżž’"
     },
     cp28603: "iso885913",
     iso885914: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u1E02\u1E03\xA3\u010A\u010B\u1E0A\xA7\u1E80\xA9\u1E82\u1E0B\u1EF2\xAD\xAE\u0178\u1E1E\u1E1F\u0120\u0121\u1E40\u1E41\xB6\u1E56\u1E81\u1E57\u1E83\u1E60\u1EF3\u1E84\u1E85\u1E61\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\u0174\xD1\xD2\xD3\xD4\xD5\xD6\u1E6A\xD8\xD9\xDA\xDB\xDC\xDD\u0176\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\u0175\xF1\xF2\xF3\xF4\xF5\xF6\u1E6B\xF8\xF9\xFA\xFB\xFC\xFD\u0177\xFF"
+      chars: " Ḃḃ£ĊċḊ§Ẁ©ẂḋỲ­®ŸḞḟĠġṀṁ¶ṖẁṗẃṠỳẄẅṡÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏŴÑÒÓÔÕÖṪØÙÚÛÜÝŶßàáâãäåæçèéêëìíîïŵñòóôõöṫøùúûüýŷÿ"
     },
     cp28604: "iso885914",
     iso885915: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\u20AC\xA5\u0160\xA7\u0161\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\u017D\xB5\xB6\xB7\u017E\xB9\xBA\xBB\u0152\u0153\u0178\xBF\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF"
+      chars: " ¡¢£€¥Š§š©ª«¬­®¯°±²³Žµ¶·ž¹º»ŒœŸ¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ"
     },
     cp28605: "iso885915",
     iso885916: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0104\u0105\u0141\u20AC\u201E\u0160\xA7\u0161\xA9\u0218\xAB\u0179\xAD\u017A\u017B\xB0\xB1\u010C\u0142\u017D\u201D\xB6\xB7\u017E\u010D\u0219\xBB\u0152\u0153\u0178\u017C\xC0\xC1\xC2\u0102\xC4\u0106\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\u0110\u0143\xD2\xD3\xD4\u0150\xD6\u015A\u0170\xD9\xDA\xDB\xDC\u0118\u021A\xDF\xE0\xE1\xE2\u0103\xE4\u0107\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\u0111\u0144\xF2\xF3\xF4\u0151\xF6\u015B\u0171\xF9\xFA\xFB\xFC\u0119\u021B\xFF"
+      chars: " ĄąŁ€„Š§š©Ș«Ź­źŻ°±ČłŽ”¶·žčș»ŒœŸżÀÁÂĂÄĆÆÇÈÉÊËÌÍÎÏĐŃÒÓÔŐÖŚŰÙÚÛÜĘȚßàáâăäćæçèéêëìíîïđńòóôőöśűùúûüęțÿ"
     },
     cp28606: "iso885916",
     cp437: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\xEC\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\xFF\xD6\xDC\xA2\xA3\xA5\u20A7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\u2310\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0"
+      chars: "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
     },
     ibm437: "cp437",
     csibm437: "cp437",
     cp737: {
       type: "_sbcs",
-      chars: "\u0391\u0392\u0393\u0394\u0395\u0396\u0397\u0398\u0399\u039A\u039B\u039C\u039D\u039E\u039F\u03A0\u03A1\u03A3\u03A4\u03A5\u03A6\u03A7\u03A8\u03A9\u03B1\u03B2\u03B3\u03B4\u03B5\u03B6\u03B7\u03B8\u03B9\u03BA\u03BB\u03BC\u03BD\u03BE\u03BF\u03C0\u03C1\u03C3\u03C2\u03C4\u03C5\u03C6\u03C7\u03C8\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03C9\u03AC\u03AD\u03AE\u03CA\u03AF\u03CC\u03CD\u03CB\u03CE\u0386\u0388\u0389\u038A\u038C\u038E\u038F\xB1\u2265\u2264\u03AA\u03AB\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0"
+      chars: "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρσςτυφχψ░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀ωάέήϊίόύϋώΆΈΉΊΌΎΏ±≥≤ΪΫ÷≈°∙·√ⁿ²■ "
     },
     ibm737: "cp737",
     csibm737: "cp737",
     cp775: {
       type: "_sbcs",
-      chars: "\u0106\xFC\xE9\u0101\xE4\u0123\xE5\u0107\u0142\u0113\u0156\u0157\u012B\u0179\xC4\xC5\xC9\xE6\xC6\u014D\xF6\u0122\xA2\u015A\u015B\xD6\xDC\xF8\xA3\xD8\xD7\xA4\u0100\u012A\xF3\u017B\u017C\u017A\u201D\xA6\xA9\xAE\xAC\xBD\xBC\u0141\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u0104\u010C\u0118\u0116\u2563\u2551\u2557\u255D\u012E\u0160\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u0172\u016A\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u017D\u0105\u010D\u0119\u0117\u012F\u0161\u0173\u016B\u017E\u2518\u250C\u2588\u2584\u258C\u2590\u2580\xD3\xDF\u014C\u0143\xF5\xD5\xB5\u0144\u0136\u0137\u013B\u013C\u0146\u0112\u0145\u2019\xAD\xB1\u201C\xBE\xB6\xA7\xF7\u201E\xB0\u2219\xB7\xB9\xB3\xB2\u25A0\xA0"
+      chars: "ĆüéāäģåćłēŖŗīŹÄÅÉæÆōöĢ¢ŚśÖÜø£Ø×¤ĀĪóŻżź”¦©®¬½¼Ł«»░▒▓│┤ĄČĘĖ╣║╗╝ĮŠ┐└┴┬├─┼ŲŪ╚╔╩╦╠═╬Žąčęėįšųūž┘┌█▄▌▐▀ÓßŌŃõÕµńĶķĻļņĒŅ’­±“¾¶§÷„°∙·¹³²■ "
     },
     ibm775: "cp775",
     csibm775: "cp775",
     cp850: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\xEC\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\xFF\xD6\xDC\xF8\xA3\xD8\xD7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\xAE\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\xC1\xC2\xC0\xA9\u2563\u2551\u2557\u255D\xA2\xA5\u2510\u2514\u2534\u252C\u251C\u2500\u253C\xE3\xC3\u255A\u2554\u2569\u2566\u2560\u2550\u256C\xA4\xF0\xD0\xCA\xCB\xC8\u0131\xCD\xCE\xCF\u2518\u250C\u2588\u2584\xA6\xCC\u2580\xD3\xDF\xD4\xD2\xF5\xD5\xB5\xFE\xDE\xDA\xDB\xD9\xFD\xDD\xAF\xB4\xAD\xB1\u2017\xBE\xB6\xA7\xF7\xB8\xB0\xA8\xB7\xB9\xB3\xB2\u25A0\xA0"
+      chars: "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜø£Ø×ƒáíóúñÑªº¿®¬½¼¡«»░▒▓│┤ÁÂÀ©╣║╗╝¢¥┐└┴┬├─┼ãÃ╚╔╩╦╠═╬¤ðÐÊËÈıÍÎÏ┘┌█▄¦Ì▀ÓßÔÒõÕµþÞÚÛÙýÝ¯´­±‗¾¶§÷¸°¨·¹³²■ "
     },
     ibm850: "cp850",
     csibm850: "cp850",
     cp852: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xE4\u016F\u0107\xE7\u0142\xEB\u0150\u0151\xEE\u0179\xC4\u0106\xC9\u0139\u013A\xF4\xF6\u013D\u013E\u015A\u015B\xD6\xDC\u0164\u0165\u0141\xD7\u010D\xE1\xED\xF3\xFA\u0104\u0105\u017D\u017E\u0118\u0119\xAC\u017A\u010C\u015F\xAB\xBB\u2591\u2592\u2593\u2502\u2524\xC1\xC2\u011A\u015E\u2563\u2551\u2557\u255D\u017B\u017C\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u0102\u0103\u255A\u2554\u2569\u2566\u2560\u2550\u256C\xA4\u0111\u0110\u010E\xCB\u010F\u0147\xCD\xCE\u011B\u2518\u250C\u2588\u2584\u0162\u016E\u2580\xD3\xDF\xD4\u0143\u0144\u0148\u0160\u0161\u0154\xDA\u0155\u0170\xFD\xDD\u0163\xB4\xAD\u02DD\u02DB\u02C7\u02D8\xA7\xF7\xB8\xB0\xA8\u02D9\u0171\u0158\u0159\u25A0\xA0"
+      chars: "ÇüéâäůćçłëŐőîŹÄĆÉĹĺôöĽľŚśÖÜŤťŁ×čáíóúĄąŽžĘę¬źČş«»░▒▓│┤ÁÂĚŞ╣║╗╝Żż┐└┴┬├─┼Ăă╚╔╩╦╠═╬¤đĐĎËďŇÍÎě┘┌█▄ŢŮ▀ÓßÔŃńňŠšŔÚŕŰýÝţ´­˝˛ˇ˘§÷¸°¨˙űŘř■ "
     },
     ibm852: "cp852",
     csibm852: "cp852",
     cp855: {
       type: "_sbcs",
-      chars: "\u0452\u0402\u0453\u0403\u0451\u0401\u0454\u0404\u0455\u0405\u0456\u0406\u0457\u0407\u0458\u0408\u0459\u0409\u045A\u040A\u045B\u040B\u045C\u040C\u045E\u040E\u045F\u040F\u044E\u042E\u044A\u042A\u0430\u0410\u0431\u0411\u0446\u0426\u0434\u0414\u0435\u0415\u0444\u0424\u0433\u0413\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u0445\u0425\u0438\u0418\u2563\u2551\u2557\u255D\u0439\u0419\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u043A\u041A\u255A\u2554\u2569\u2566\u2560\u2550\u256C\xA4\u043B\u041B\u043C\u041C\u043D\u041D\u043E\u041E\u043F\u2518\u250C\u2588\u2584\u041F\u044F\u2580\u042F\u0440\u0420\u0441\u0421\u0442\u0422\u0443\u0423\u0436\u0416\u0432\u0412\u044C\u042C\u2116\xAD\u044B\u042B\u0437\u0417\u0448\u0428\u044D\u042D\u0449\u0429\u0447\u0427\xA7\u25A0\xA0"
+      chars: "ђЂѓЃёЁєЄѕЅіІїЇјЈљЉњЊћЋќЌўЎџЏюЮъЪаАбБцЦдДеЕфФгГ«»░▒▓│┤хХиИ╣║╗╝йЙ┐└┴┬├─┼кК╚╔╩╦╠═╬¤лЛмМнНоОп┘┌█▄Пя▀ЯрРсСтТуУжЖвВьЬ№­ыЫзЗшШэЭщЩчЧ§■ "
     },
     ibm855: "cp855",
     csibm855: "cp855",
     cp856: {
       type: "_sbcs",
-      chars: "\u05D0\u05D1\u05D2\u05D3\u05D4\u05D5\u05D6\u05D7\u05D8\u05D9\u05DA\u05DB\u05DC\u05DD\u05DE\u05DF\u05E0\u05E1\u05E2\u05E3\u05E4\u05E5\u05E6\u05E7\u05E8\u05E9\u05EA\uFFFD\xA3\uFFFD\xD7\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\xAE\xAC\xBD\xBC\uFFFD\xAB\xBB\u2591\u2592\u2593\u2502\u2524\uFFFD\uFFFD\uFFFD\xA9\u2563\u2551\u2557\u255D\xA2\xA5\u2510\u2514\u2534\u252C\u251C\u2500\u253C\uFFFD\uFFFD\u255A\u2554\u2569\u2566\u2560\u2550\u256C\xA4\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u2518\u250C\u2588\u2584\xA6\uFFFD\u2580\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\xB5\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\xAF\xB4\xAD\xB1\u2017\xBE\xB6\xA7\xF7\xB8\xB0\xA8\xB7\xB9\xB3\xB2\u25A0\xA0"
+      chars: "אבגדהוזחטיךכלםמןנסעףפץצקרשת�£�×����������®¬½¼�«»░▒▓│┤���©╣║╗╝¢¥┐└┴┬├─┼��╚╔╩╦╠═╬¤���������┘┌█▄¦�▀������µ�������¯´­±‗¾¶§÷¸°¨·¹³²■ "
     },
     ibm856: "cp856",
     csibm856: "cp856",
     cp857: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\u0131\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\u0130\xD6\xDC\xF8\xA3\xD8\u015E\u015F\xE1\xED\xF3\xFA\xF1\xD1\u011E\u011F\xBF\xAE\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\xC1\xC2\xC0\xA9\u2563\u2551\u2557\u255D\xA2\xA5\u2510\u2514\u2534\u252C\u251C\u2500\u253C\xE3\xC3\u255A\u2554\u2569\u2566\u2560\u2550\u256C\xA4\xBA\xAA\xCA\xCB\xC8\uFFFD\xCD\xCE\xCF\u2518\u250C\u2588\u2584\xA6\xCC\u2580\xD3\xDF\xD4\xD2\xF5\xD5\xB5\uFFFD\xD7\xDA\xDB\xD9\xEC\xFF\xAF\xB4\xAD\xB1\uFFFD\xBE\xB6\xA7\xF7\xB8\xB0\xA8\xB7\xB9\xB3\xB2\u25A0\xA0"
+      chars: "ÇüéâäàåçêëèïîıÄÅÉæÆôöòûùİÖÜø£ØŞşáíóúñÑĞğ¿®¬½¼¡«»░▒▓│┤ÁÂÀ©╣║╗╝¢¥┐└┴┬├─┼ãÃ╚╔╩╦╠═╬¤ºªÊËÈ�ÍÎÏ┘┌█▄¦Ì▀ÓßÔÒõÕµ�×ÚÛÙìÿ¯´­±�¾¶§÷¸°¨·¹³²■ "
     },
     ibm857: "cp857",
     csibm857: "cp857",
     cp858: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\xEC\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\xFF\xD6\xDC\xF8\xA3\xD8\xD7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\xAE\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\xC1\xC2\xC0\xA9\u2563\u2551\u2557\u255D\xA2\xA5\u2510\u2514\u2534\u252C\u251C\u2500\u253C\xE3\xC3\u255A\u2554\u2569\u2566\u2560\u2550\u256C\xA4\xF0\xD0\xCA\xCB\xC8\u20AC\xCD\xCE\xCF\u2518\u250C\u2588\u2584\xA6\xCC\u2580\xD3\xDF\xD4\xD2\xF5\xD5\xB5\xFE\xDE\xDA\xDB\xD9\xFD\xDD\xAF\xB4\xAD\xB1\u2017\xBE\xB6\xA7\xF7\xB8\xB0\xA8\xB7\xB9\xB3\xB2\u25A0\xA0"
+      chars: "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜø£Ø×ƒáíóúñÑªº¿®¬½¼¡«»░▒▓│┤ÁÂÀ©╣║╗╝¢¥┐└┴┬├─┼ãÃ╚╔╩╦╠═╬¤ðÐÊËÈ€ÍÎÏ┘┌█▄¦Ì▀ÓßÔÒõÕµþÞÚÛÙýÝ¯´­±‗¾¶§÷¸°¨·¹³²■ "
     },
     ibm858: "cp858",
     csibm858: "cp858",
     cp860: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xE3\xE0\xC1\xE7\xEA\xCA\xE8\xCD\xD4\xEC\xC3\xC2\xC9\xC0\xC8\xF4\xF5\xF2\xDA\xF9\xCC\xD5\xDC\xA2\xA3\xD9\u20A7\xD3\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\xD2\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0"
+      chars: "ÇüéâãàÁçêÊèÍÔìÃÂÉÀÈôõòÚùÌÕÜ¢£Ù₧ÓáíóúñÑªº¿Ò¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
     },
     ibm860: "cp860",
     csibm860: "cp860",
     cp861: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xD0\xF0\xDE\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xFE\xFB\xDD\xFD\xD6\xDC\xF8\xA3\xD8\u20A7\u0192\xE1\xED\xF3\xFA\xC1\xCD\xD3\xDA\xBF\u2310\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0"
+      chars: "ÇüéâäàåçêëèÐðÞÄÅÉæÆôöþûÝýÖÜø£Ø₧ƒáíóúÁÍÓÚ¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
     },
     ibm861: "cp861",
     csibm861: "cp861",
     cp862: {
       type: "_sbcs",
-      chars: "\u05D0\u05D1\u05D2\u05D3\u05D4\u05D5\u05D6\u05D7\u05D8\u05D9\u05DA\u05DB\u05DC\u05DD\u05DE\u05DF\u05E0\u05E1\u05E2\u05E3\u05E4\u05E5\u05E6\u05E7\u05E8\u05E9\u05EA\xA2\xA3\xA5\u20A7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\u2310\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0"
+      chars: "אבגדהוזחטיךכלםמןנסעףפץצקרשת¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
     },
     ibm862: "cp862",
     csibm862: "cp862",
     cp863: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xC2\xE0\xB6\xE7\xEA\xEB\xE8\xEF\xEE\u2017\xC0\xA7\xC9\xC8\xCA\xF4\xCB\xCF\xFB\xF9\xA4\xD4\xDC\xA2\xA3\xD9\xDB\u0192\xA6\xB4\xF3\xFA\xA8\xB8\xB3\xAF\xCE\u2310\xAC\xBD\xBC\xBE\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0"
+      chars: "ÇüéâÂà¶çêëèïî‗À§ÉÈÊôËÏûù¤ÔÜ¢£ÙÛƒ¦´óú¨¸³¯Î⌐¬½¼¾«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
     },
     ibm863: "cp863",
     csibm863: "cp863",
     cp864: {
       type: "_sbcs",
-      chars: `\0\x01\x02\x03\x04\x05\x06\x07	
-\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$\u066A&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~\x7F\xB0\xB7\u2219\u221A\u2592\u2500\u2502\u253C\u2524\u252C\u251C\u2534\u2510\u250C\u2514\u2518\u03B2\u221E\u03C6\xB1\xBD\xBC\u2248\xAB\xBB\uFEF7\uFEF8\uFFFD\uFFFD\uFEFB\uFEFC\uFFFD\xA0\xAD\uFE82\xA3\xA4\uFE84\uFFFD\uFFFD\uFE8E\uFE8F\uFE95\uFE99\u060C\uFE9D\uFEA1\uFEA5\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669\uFED1\u061B\uFEB1\uFEB5\uFEB9\u061F\xA2\uFE80\uFE81\uFE83\uFE85\uFECA\uFE8B\uFE8D\uFE91\uFE93\uFE97\uFE9B\uFE9F\uFEA3\uFEA7\uFEA9\uFEAB\uFEAD\uFEAF\uFEB3\uFEB7\uFEBB\uFEBF\uFEC1\uFEC5\uFECB\uFECF\xA6\xAC\xF7\xD7\uFEC9\u0640\uFED3\uFED7\uFEDB\uFEDF\uFEE3\uFEE7\uFEEB\uFEED\uFEEF\uFEF3\uFEBD\uFECC\uFECE\uFECD\uFEE1\uFE7D\u0651\uFEE5\uFEE9\uFEEC\uFEF0\uFEF2\uFED0\uFED5\uFEF5\uFEF6\uFEDD\uFED9\uFEF1\u25A0\uFFFD`
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+\v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$٪&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~°·∙√▒─│┼┤┬├┴┐┌└┘β∞φ±½¼≈«»ﻷﻸ��ﻻﻼ� ­ﺂ£¤ﺄ��ﺎﺏﺕﺙ،ﺝﺡﺥ٠١٢٣٤٥٦٧٨٩ﻑ؛ﺱﺵﺹ؟¢ﺀﺁﺃﺅﻊﺋﺍﺑﺓﺗﺛﺟﺣﺧﺩﺫﺭﺯﺳﺷﺻﺿﻁﻅﻋﻏ¦¬÷×ﻉـﻓﻗﻛﻟﻣﻧﻫﻭﻯﻳﺽﻌﻎﻍﻡﹽّﻥﻩﻬﻰﻲﻐﻕﻵﻶﻝﻙﻱ■�`
     },
     ibm864: "cp864",
     csibm864: "cp864",
     cp865: {
       type: "_sbcs",
-      chars: "\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\xEC\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\xFF\xD6\xDC\xF8\xA3\xD8\u20A7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\u2310\xAC\xBD\xBC\xA1\xAB\xA4\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0"
+      chars: "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜø£Ø₧ƒáíóúñÑªº¿⌐¬½¼¡«¤░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ "
     },
     ibm865: "cp865",
     csibm865: "cp865",
     cp866: {
       type: "_sbcs",
-      chars: "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F\u0401\u0451\u0404\u0454\u0407\u0457\u040E\u045E\xB0\u2219\xB7\u221A\u2116\xA4\u25A0\xA0"
+      chars: "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмноп░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀рстуфхцчшщъыьэюяЁёЄєЇїЎў°∙·√№¤■ "
     },
     ibm866: "cp866",
     csibm866: "cp866",
     cp869: {
       type: "_sbcs",
-      chars: "\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u0386\uFFFD\xB7\xAC\xA6\u2018\u2019\u0388\u2015\u0389\u038A\u03AA\u038C\uFFFD\uFFFD\u038E\u03AB\xA9\u038F\xB2\xB3\u03AC\xA3\u03AD\u03AE\u03AF\u03CA\u0390\u03CC\u03CD\u0391\u0392\u0393\u0394\u0395\u0396\u0397\xBD\u0398\u0399\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u039A\u039B\u039C\u039D\u2563\u2551\u2557\u255D\u039E\u039F\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u03A0\u03A1\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u03A3\u03A4\u03A5\u03A6\u03A7\u03A8\u03A9\u03B1\u03B2\u03B3\u2518\u250C\u2588\u2584\u03B4\u03B5\u2580\u03B6\u03B7\u03B8\u03B9\u03BA\u03BB\u03BC\u03BD\u03BE\u03BF\u03C0\u03C1\u03C3\u03C2\u03C4\u0384\xAD\xB1\u03C5\u03C6\u03C7\xA7\u03C8\u0385\xB0\xA8\u03C9\u03CB\u03B0\u03CE\u25A0\xA0"
+      chars: "������Ά�·¬¦‘’Έ―ΉΊΪΌ��ΎΫ©Ώ²³ά£έήίϊΐόύΑΒΓΔΕΖΗ½ΘΙ«»░▒▓│┤ΚΛΜΝ╣║╗╝ΞΟ┐└┴┬├─┼ΠΡ╚╔╩╦╠═╬ΣΤΥΦΧΨΩαβγ┘┌█▄δε▀ζηθικλμνξοπρσςτ΄­±υφχ§ψ΅°¨ωϋΰώ■ "
     },
     ibm869: "cp869",
     csibm869: "cp869",
     cp922: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\u203E\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\u0160\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\u017D\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\u0161\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\u017E\xFF"
+      chars: " ¡¢£¤¥¦§¨©ª«¬­®‾°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏŠÑÒÓÔÕÖ×ØÙÚÛÜÝŽßàáâãäåæçèéêëìíîïšñòóôõö÷øùúûüýžÿ"
     },
     ibm922: "cp922",
     csibm922: "cp922",
     cp1046: {
       type: "_sbcs",
-      chars: "\uFE88\xD7\xF7\uF8F6\uF8F5\uF8F4\uF8F7\uFE71\x88\u25A0\u2502\u2500\u2510\u250C\u2514\u2518\uFE79\uFE7B\uFE7D\uFE7F\uFE77\uFE8A\uFEF0\uFEF3\uFEF2\uFECE\uFECF\uFED0\uFEF6\uFEF8\uFEFA\uFEFC\xA0\uF8FA\uF8F9\uF8F8\xA4\uF8FB\uFE8B\uFE91\uFE97\uFE9B\uFE9F\uFEA3\u060C\xAD\uFEA7\uFEB3\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669\uFEB7\u061B\uFEBB\uFEBF\uFECA\u061F\uFECB\u0621\u0622\u0623\u0624\u0625\u0626\u0627\u0628\u0629\u062A\u062B\u062C\u062D\u062E\u062F\u0630\u0631\u0632\u0633\u0634\u0635\u0636\u0637\uFEC7\u0639\u063A\uFECC\uFE82\uFE84\uFE8E\uFED3\u0640\u0641\u0642\u0643\u0644\u0645\u0646\u0647\u0648\u0649\u064A\u064B\u064C\u064D\u064E\u064F\u0650\u0651\u0652\uFED7\uFEDB\uFEDF\uF8FC\uFEF5\uFEF7\uFEF9\uFEFB\uFEE3\uFEE7\uFEEC\uFEE9\uFFFD"
+      chars: "ﺈ×÷ﹱ■│─┐┌└┘ﹹﹻﹽﹿﹷﺊﻰﻳﻲﻎﻏﻐﻶﻸﻺﻼ ¤ﺋﺑﺗﺛﺟﺣ،­ﺧﺳ٠١٢٣٤٥٦٧٨٩ﺷ؛ﺻﺿﻊ؟ﻋءآأؤإئابةتثجحخدذرزسشصضطﻇعغﻌﺂﺄﺎﻓـفقكلمنهوىيًٌٍَُِّْﻗﻛﻟﻵﻷﻹﻻﻣﻧﻬﻩ�"
     },
     ibm1046: "cp1046",
     csibm1046: "cp1046",
     cp1124: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0401\u0402\u0490\u0404\u0405\u0406\u0407\u0408\u0409\u040A\u040B\u040C\xAD\u040E\u040F\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F\u2116\u0451\u0452\u0491\u0454\u0455\u0456\u0457\u0458\u0459\u045A\u045B\u045C\xA7\u045E\u045F"
+      chars: " ЁЂҐЄЅІЇЈЉЊЋЌ­ЎЏАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя№ёђґєѕіїјљњћќ§ўџ"
     },
     ibm1124: "cp1124",
     csibm1124: "cp1124",
     cp1125: {
       type: "_sbcs",
-      chars: "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F\u0401\u0451\u0490\u0491\u0404\u0454\u0406\u0456\u0407\u0457\xB7\u221A\u2116\xA4\u25A0\xA0"
+      chars: "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмноп░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀рстуфхцчшщъыьэюяЁёҐґЄєІіЇї·√№¤■ "
     },
     ibm1125: "cp1125",
     csibm1125: "cp1125",
     cp1129: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\u0153\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\u0178\xB5\xB6\xB7\u0152\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\u0102\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\u0300\xCD\xCE\xCF\u0110\xD1\u0309\xD3\xD4\u01A0\xD6\xD7\xD8\xD9\xDA\xDB\xDC\u01AF\u0303\xDF\xE0\xE1\xE2\u0103\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\u0301\xED\xEE\xEF\u0111\xF1\u0323\xF3\xF4\u01A1\xF6\xF7\xF8\xF9\xFA\xFB\xFC\u01B0\u20AB\xFF"
+      chars: " ¡¢£¤¥¦§œ©ª«¬­®¯°±²³Ÿµ¶·Œ¹º»¼½¾¿ÀÁÂĂÄÅÆÇÈÉÊË̀ÍÎÏĐÑ̉ÓÔƠÖ×ØÙÚÛÜỮßàáâăäåæçèéêë́íîïđṇ̃óôơö÷øùúûüư₫ÿ"
     },
     ibm1129: "cp1129",
     csibm1129: "cp1129",
     cp1133: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0E81\u0E82\u0E84\u0E87\u0E88\u0EAA\u0E8A\u0E8D\u0E94\u0E95\u0E96\u0E97\u0E99\u0E9A\u0E9B\u0E9C\u0E9D\u0E9E\u0E9F\u0EA1\u0EA2\u0EA3\u0EA5\u0EA7\u0EAB\u0EAD\u0EAE\uFFFD\uFFFD\uFFFD\u0EAF\u0EB0\u0EB2\u0EB3\u0EB4\u0EB5\u0EB6\u0EB7\u0EB8\u0EB9\u0EBC\u0EB1\u0EBB\u0EBD\uFFFD\uFFFD\uFFFD\u0EC0\u0EC1\u0EC2\u0EC3\u0EC4\u0EC8\u0EC9\u0ECA\u0ECB\u0ECC\u0ECD\u0EC6\uFFFD\u0EDC\u0EDD\u20AD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u0ED0\u0ED1\u0ED2\u0ED3\u0ED4\u0ED5\u0ED6\u0ED7\u0ED8\u0ED9\uFFFD\uFFFD\xA2\xAC\xA6\uFFFD"
+      chars: " ກຂຄງຈສຊຍດຕຖທນບປຜຝພຟມຢຣລວຫອຮ���ຯະາຳິີຶືຸູຼັົຽ���ເແໂໃໄ່້໊໋໌ໍໆ�ໜໝ₭����������������໐໑໒໓໔໕໖໗໘໙��¢¬¦�"
     },
     ibm1133: "cp1133",
     csibm1133: "cp1133",
     cp1161: {
       type: "_sbcs",
-      chars: "\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u0E48\u0E01\u0E02\u0E03\u0E04\u0E05\u0E06\u0E07\u0E08\u0E09\u0E0A\u0E0B\u0E0C\u0E0D\u0E0E\u0E0F\u0E10\u0E11\u0E12\u0E13\u0E14\u0E15\u0E16\u0E17\u0E18\u0E19\u0E1A\u0E1B\u0E1C\u0E1D\u0E1E\u0E1F\u0E20\u0E21\u0E22\u0E23\u0E24\u0E25\u0E26\u0E27\u0E28\u0E29\u0E2A\u0E2B\u0E2C\u0E2D\u0E2E\u0E2F\u0E30\u0E31\u0E32\u0E33\u0E34\u0E35\u0E36\u0E37\u0E38\u0E39\u0E3A\u0E49\u0E4A\u0E4B\u20AC\u0E3F\u0E40\u0E41\u0E42\u0E43\u0E44\u0E45\u0E46\u0E47\u0E48\u0E49\u0E4A\u0E4B\u0E4C\u0E4D\u0E4E\u0E4F\u0E50\u0E51\u0E52\u0E53\u0E54\u0E55\u0E56\u0E57\u0E58\u0E59\u0E5A\u0E5B\xA2\xAC\xA6\xA0"
+      chars: "��������������������������������่กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรฤลฦวศษสหฬอฮฯะัาำิีึืฺุู้๊๋€฿เแโใไๅๆ็่้๊๋์ํ๎๏๐๑๒๓๔๕๖๗๘๙๚๛¢¬¦ "
     },
     ibm1161: "cp1161",
     csibm1161: "cp1161",
     cp1162: {
       type: "_sbcs",
-      chars: "\u20AC\x81\x82\x83\x84\u2026\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\u2018\u2019\u201C\u201D\u2022\u2013\u2014\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\u0E01\u0E02\u0E03\u0E04\u0E05\u0E06\u0E07\u0E08\u0E09\u0E0A\u0E0B\u0E0C\u0E0D\u0E0E\u0E0F\u0E10\u0E11\u0E12\u0E13\u0E14\u0E15\u0E16\u0E17\u0E18\u0E19\u0E1A\u0E1B\u0E1C\u0E1D\u0E1E\u0E1F\u0E20\u0E21\u0E22\u0E23\u0E24\u0E25\u0E26\u0E27\u0E28\u0E29\u0E2A\u0E2B\u0E2C\u0E2D\u0E2E\u0E2F\u0E30\u0E31\u0E32\u0E33\u0E34\u0E35\u0E36\u0E37\u0E38\u0E39\u0E3A\uFFFD\uFFFD\uFFFD\uFFFD\u0E3F\u0E40\u0E41\u0E42\u0E43\u0E44\u0E45\u0E46\u0E47\u0E48\u0E49\u0E4A\u0E4B\u0E4C\u0E4D\u0E4E\u0E4F\u0E50\u0E51\u0E52\u0E53\u0E54\u0E55\u0E56\u0E57\u0E58\u0E59\u0E5A\u0E5B\uFFFD\uFFFD\uFFFD\uFFFD"
+      chars: "€…‘’“”•–— กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรฤลฦวศษสหฬอฮฯะัาำิีึืฺุู����฿เแโใไๅๆ็่้๊๋์ํ๎๏๐๑๒๓๔๕๖๗๘๙๚๛����"
     },
     ibm1162: "cp1162",
     csibm1162: "cp1162",
     cp1163: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\u20AC\xA5\xA6\xA7\u0153\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\u0178\xB5\xB6\xB7\u0152\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\u0102\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\u0300\xCD\xCE\xCF\u0110\xD1\u0309\xD3\xD4\u01A0\xD6\xD7\xD8\xD9\xDA\xDB\xDC\u01AF\u0303\xDF\xE0\xE1\xE2\u0103\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\u0301\xED\xEE\xEF\u0111\xF1\u0323\xF3\xF4\u01A1\xF6\xF7\xF8\xF9\xFA\xFB\xFC\u01B0\u20AB\xFF"
+      chars: " ¡¢£€¥¦§œ©ª«¬­®¯°±²³Ÿµ¶·Œ¹º»¼½¾¿ÀÁÂĂÄÅÆÇÈÉÊË̀ÍÎÏĐÑ̉ÓÔƠÖ×ØÙÚÛÜỮßàáâăäåæçèéêë́íîïđṇ̃óôơö÷øùúûüư₫ÿ"
     },
     ibm1163: "cp1163",
     csibm1163: "cp1163",
     maccroatian: {
       type: "_sbcs",
-      chars: "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\u0160\u2122\xB4\xA8\u2260\u017D\xD8\u221E\xB1\u2264\u2265\u2206\xB5\u2202\u2211\u220F\u0161\u222B\xAA\xBA\u2126\u017E\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u0106\xAB\u010C\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u0110\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\uFFFD\xA9\u2044\xA4\u2039\u203A\xC6\xBB\u2013\xB7\u201A\u201E\u2030\xC2\u0107\xC1\u010D\xC8\xCD\xCE\xCF\xCC\xD3\xD4\u0111\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u03C0\xCB\u02DA\xB8\xCA\xE6\u02C7"
+      chars: "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®Š™´¨≠ŽØ∞±≤≥∆µ∂∑∏š∫ªºΩžø¿¡¬√ƒ≈Ć«Č… ÀÃÕŒœĐ—“”‘’÷◊�©⁄¤‹›Æ»–·‚„‰ÂćÁčÈÍÎÏÌÓÔđÒÚÛÙıˆ˜¯πË˚¸Êæˇ"
     },
     maccyrillic: {
       type: "_sbcs",
-      chars: "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u2020\xB0\xA2\xA3\xA7\u2022\xB6\u0406\xAE\xA9\u2122\u0402\u0452\u2260\u0403\u0453\u221E\xB1\u2264\u2265\u0456\xB5\u2202\u0408\u0404\u0454\u0407\u0457\u0409\u0459\u040A\u045A\u0458\u0405\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\u040B\u045B\u040C\u045C\u0455\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u201E\u040E\u045E\u040F\u045F\u2116\u0401\u0451\u044F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\xA4"
+      chars: "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ†°¢£§•¶І®©™Ђђ≠Ѓѓ∞±≤≥іµ∂ЈЄєЇїЉљЊњјЅ¬√ƒ≈∆«»… ЋћЌќѕ–—“”‘’÷„ЎўЏџ№Ёёяабвгдежзийклмнопрстуфхцчшщъыьэю¤"
     },
     macgreek: {
       type: "_sbcs",
-      chars: "\xC4\xB9\xB2\xC9\xB3\xD6\xDC\u0385\xE0\xE2\xE4\u0384\xA8\xE7\xE9\xE8\xEA\xEB\xA3\u2122\xEE\xEF\u2022\xBD\u2030\xF4\xF6\xA6\xAD\xF9\xFB\xFC\u2020\u0393\u0394\u0398\u039B\u039E\u03A0\xDF\xAE\xA9\u03A3\u03AA\xA7\u2260\xB0\u0387\u0391\xB1\u2264\u2265\xA5\u0392\u0395\u0396\u0397\u0399\u039A\u039C\u03A6\u03AB\u03A8\u03A9\u03AC\u039D\xAC\u039F\u03A1\u2248\u03A4\xAB\xBB\u2026\xA0\u03A5\u03A7\u0386\u0388\u0153\u2013\u2015\u201C\u201D\u2018\u2019\xF7\u0389\u038A\u038C\u038E\u03AD\u03AE\u03AF\u03CC\u038F\u03CD\u03B1\u03B2\u03C8\u03B4\u03B5\u03C6\u03B3\u03B7\u03B9\u03BE\u03BA\u03BB\u03BC\u03BD\u03BF\u03C0\u03CE\u03C1\u03C3\u03C4\u03B8\u03C9\u03C2\u03C7\u03C5\u03B6\u03CA\u03CB\u0390\u03B0\uFFFD"
+      chars: "Ä¹²É³ÖÜ΅àâä΄¨çéèêë£™îï•½‰ôö¦­ùûü†ΓΔΘΛΞΠß®©ΣΪ§≠°·Α±≤≥¥ΒΕΖΗΙΚΜΦΫΨΩάΝ¬ΟΡ≈Τ«»… ΥΧΆΈœ–―“”‘’÷ΉΊΌΎέήίόΏύαβψδεφγηιξκλμνοπώρστθωςχυζϊϋΐΰ�"
     },
     maciceland: {
       type: "_sbcs",
-      chars: "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\xDD\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\xC6\xD8\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u2126\xE6\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u2044\xA4\xD0\xF0\xDE\xFE\xFD\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uFFFD\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+      chars: "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûüÝ°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»… ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄¤ÐðÞþý·‚„‰ÂÊÁËÈÍÎÏÌÓÔ�ÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ"
     },
     macroman: {
       type: "_sbcs",
-      chars: "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\xC6\xD8\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u2126\xE6\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u2044\xA4\u2039\u203A\uFB01\uFB02\u2021\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uFFFD\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+      chars: "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»… ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄¤‹›ﬁﬂ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔ�ÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ"
     },
     macromania: {
       type: "_sbcs",
-      chars: "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\u0102\u015E\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u2126\u0103\u015F\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u2044\xA4\u2039\u203A\u0162\u0163\u2021\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uFFFD\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+      chars: "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®©™´¨≠ĂŞ∞±≤≥¥µ∂∑∏π∫ªºΩăş¿¡¬√ƒ≈∆«»… ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄¤‹›Ţţ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔ�ÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ"
     },
     macthai: {
       type: "_sbcs",
-      chars: "\xAB\xBB\u2026\uF88C\uF88F\uF892\uF895\uF898\uF88B\uF88E\uF891\uF894\uF897\u201C\u201D\uF899\uFFFD\u2022\uF884\uF889\uF885\uF886\uF887\uF888\uF88A\uF88D\uF890\uF893\uF896\u2018\u2019\uFFFD\xA0\u0E01\u0E02\u0E03\u0E04\u0E05\u0E06\u0E07\u0E08\u0E09\u0E0A\u0E0B\u0E0C\u0E0D\u0E0E\u0E0F\u0E10\u0E11\u0E12\u0E13\u0E14\u0E15\u0E16\u0E17\u0E18\u0E19\u0E1A\u0E1B\u0E1C\u0E1D\u0E1E\u0E1F\u0E20\u0E21\u0E22\u0E23\u0E24\u0E25\u0E26\u0E27\u0E28\u0E29\u0E2A\u0E2B\u0E2C\u0E2D\u0E2E\u0E2F\u0E30\u0E31\u0E32\u0E33\u0E34\u0E35\u0E36\u0E37\u0E38\u0E39\u0E3A\uFEFF\u200B\u2013\u2014\u0E3F\u0E40\u0E41\u0E42\u0E43\u0E44\u0E45\u0E46\u0E47\u0E48\u0E49\u0E4A\u0E4B\u0E4C\u0E4D\u2122\u0E4F\u0E50\u0E51\u0E52\u0E53\u0E54\u0E55\u0E56\u0E57\u0E58\u0E59\xAE\xA9\uFFFD\uFFFD\uFFFD\uFFFD"
+      chars: "«»…“”�•‘’� กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรฤลฦวศษสหฬอฮฯะัาำิีึืฺุู\uFEFF​–—฿เแโใไๅๆ็่้๊๋์ํ™๏๐๑๒๓๔๕๖๗๘๙®©����"
     },
     macturkish: {
       type: "_sbcs",
-      chars: "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\xC6\xD8\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u2126\xE6\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u011E\u011F\u0130\u0131\u015E\u015F\u2021\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uFFFD\xD2\xDA\xDB\xD9\uFFFD\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+      chars: "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»… ÀÃÕŒœ–—“”‘’÷◊ÿŸĞğİıŞş‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔ�ÒÚÛÙ�ˆ˜¯˘˙˚¸˝˛ˇ"
     },
     macukraine: {
       type: "_sbcs",
-      chars: "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u2020\xB0\u0490\xA3\xA7\u2022\xB6\u0406\xAE\xA9\u2122\u0402\u0452\u2260\u0403\u0453\u221E\xB1\u2264\u2265\u0456\xB5\u0491\u0408\u0404\u0454\u0407\u0457\u0409\u0459\u040A\u045A\u0458\u0405\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\u040B\u045B\u040C\u045C\u0455\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u201E\u040E\u045E\u040F\u045F\u2116\u0401\u0451\u044F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\xA4"
+      chars: "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ†°Ґ£§•¶І®©™Ђђ≠Ѓѓ∞±≤≥іµґЈЄєЇїЉљЊњјЅ¬√ƒ≈∆«»… ЋћЌќѕ–—“”‘’÷„ЎўЏџ№Ёёяабвгдежзийклмнопрстуфхцчшщъыьэю¤"
     },
     koi8r: {
       type: "_sbcs",
-      chars: "\u2500\u2502\u250C\u2510\u2514\u2518\u251C\u2524\u252C\u2534\u253C\u2580\u2584\u2588\u258C\u2590\u2591\u2592\u2593\u2320\u25A0\u2219\u221A\u2248\u2264\u2265\xA0\u2321\xB0\xB2\xB7\xF7\u2550\u2551\u2552\u0451\u2553\u2554\u2555\u2556\u2557\u2558\u2559\u255A\u255B\u255C\u255D\u255E\u255F\u2560\u2561\u0401\u2562\u2563\u2564\u2565\u2566\u2567\u2568\u2569\u256A\u256B\u256C\xA9\u044E\u0430\u0431\u0446\u0434\u0435\u0444\u0433\u0445\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u044F\u0440\u0441\u0442\u0443\u0436\u0432\u044C\u044B\u0437\u0448\u044D\u0449\u0447\u044A\u042E\u0410\u0411\u0426\u0414\u0415\u0424\u0413\u0425\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u042F\u0420\u0421\u0422\u0423\u0416\u0412\u042C\u042B\u0417\u0428\u042D\u0429\u0427\u042A"
+      chars: "─│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓⌠■∙√≈≤≥ ⌡°²·÷═║╒ё╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡Ё╢╣╤╥╦╧╨╩╪╫╬©юабцдефгхийклмнопярстужвьызшэщчъЮАБЦДЕФГХИЙКЛМНОПЯРСТУЖВЬЫЗШЭЩЧЪ"
     },
     koi8u: {
       type: "_sbcs",
-      chars: "\u2500\u2502\u250C\u2510\u2514\u2518\u251C\u2524\u252C\u2534\u253C\u2580\u2584\u2588\u258C\u2590\u2591\u2592\u2593\u2320\u25A0\u2219\u221A\u2248\u2264\u2265\xA0\u2321\xB0\xB2\xB7\xF7\u2550\u2551\u2552\u0451\u0454\u2554\u0456\u0457\u2557\u2558\u2559\u255A\u255B\u0491\u255D\u255E\u255F\u2560\u2561\u0401\u0404\u2563\u0406\u0407\u2566\u2567\u2568\u2569\u256A\u0490\u256C\xA9\u044E\u0430\u0431\u0446\u0434\u0435\u0444\u0433\u0445\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u044F\u0440\u0441\u0442\u0443\u0436\u0432\u044C\u044B\u0437\u0448\u044D\u0449\u0447\u044A\u042E\u0410\u0411\u0426\u0414\u0415\u0424\u0413\u0425\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u042F\u0420\u0421\u0422\u0423\u0416\u0412\u042C\u042B\u0417\u0428\u042D\u0429\u0427\u042A"
+      chars: "─│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓⌠■∙√≈≤≥ ⌡°²·÷═║╒ёє╔ії╗╘╙╚╛ґ╝╞╟╠╡ЁЄ╣ІЇ╦╧╨╩╪Ґ╬©юабцдефгхийклмнопярстужвьызшэщчъЮАБЦДЕФГХИЙКЛМНОПЯРСТУЖВЬЫЗШЭЩЧЪ"
     },
     koi8ru: {
       type: "_sbcs",
-      chars: "\u2500\u2502\u250C\u2510\u2514\u2518\u251C\u2524\u252C\u2534\u253C\u2580\u2584\u2588\u258C\u2590\u2591\u2592\u2593\u2320\u25A0\u2219\u221A\u2248\u2264\u2265\xA0\u2321\xB0\xB2\xB7\xF7\u2550\u2551\u2552\u0451\u0454\u2554\u0456\u0457\u2557\u2558\u2559\u255A\u255B\u0491\u045E\u255E\u255F\u2560\u2561\u0401\u0404\u2563\u0406\u0407\u2566\u2567\u2568\u2569\u256A\u0490\u040E\xA9\u044E\u0430\u0431\u0446\u0434\u0435\u0444\u0433\u0445\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u044F\u0440\u0441\u0442\u0443\u0436\u0432\u044C\u044B\u0437\u0448\u044D\u0449\u0447\u044A\u042E\u0410\u0411\u0426\u0414\u0415\u0424\u0413\u0425\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u042F\u0420\u0421\u0422\u0423\u0416\u0412\u042C\u042B\u0417\u0428\u042D\u0429\u0427\u042A"
+      chars: "─│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓⌠■∙√≈≤≥ ⌡°²·÷═║╒ёє╔ії╗╘╙╚╛ґў╞╟╠╡ЁЄ╣ІЇ╦╧╨╩╪ҐЎ©юабцдефгхийклмнопярстужвьызшэщчъЮАБЦДЕФГХИЙКЛМНОПЯРСТУЖВЬЫЗШЭЩЧЪ"
     },
     koi8t: {
       type: "_sbcs",
-      chars: "\u049B\u0493\u201A\u0492\u201E\u2026\u2020\u2021\uFFFD\u2030\u04B3\u2039\u04B2\u04B7\u04B6\uFFFD\u049A\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\u2122\uFFFD\u203A\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u04EF\u04EE\u0451\xA4\u04E3\xA6\xA7\uFFFD\uFFFD\uFFFD\xAB\xAC\xAD\xAE\uFFFD\xB0\xB1\xB2\u0401\uFFFD\u04E2\xB6\xB7\uFFFD\u2116\uFFFD\xBB\uFFFD\uFFFD\uFFFD\xA9\u044E\u0430\u0431\u0446\u0434\u0435\u0444\u0433\u0445\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u044F\u0440\u0441\u0442\u0443\u0436\u0432\u044C\u044B\u0437\u0448\u044D\u0449\u0447\u044A\u042E\u0410\u0411\u0426\u0414\u0415\u0424\u0413\u0425\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u042F\u0420\u0421\u0422\u0423\u0416\u0412\u042C\u042B\u0417\u0428\u042D\u0429\u0427\u042A"
+      chars: "қғ‚Ғ„…†‡�‰ҳ‹ҲҷҶ�Қ‘’“”•–—�™�›�����ӯӮё¤ӣ¦§���«¬­®�°±²Ё�Ӣ¶·�№�»���©юабцдефгхийклмнопярстужвьызшэщчъЮАБЦДЕФГХИЙКЛМНОПЯРСТУЖВЬЫЗШЭЩЧЪ"
     },
     armscii8: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\uFFFD\u0587\u0589)(\xBB\xAB\u2014.\u055D,-\u058A\u2026\u055C\u055B\u055E\u0531\u0561\u0532\u0562\u0533\u0563\u0534\u0564\u0535\u0565\u0536\u0566\u0537\u0567\u0538\u0568\u0539\u0569\u053A\u056A\u053B\u056B\u053C\u056C\u053D\u056D\u053E\u056E\u053F\u056F\u0540\u0570\u0541\u0571\u0542\u0572\u0543\u0573\u0544\u0574\u0545\u0575\u0546\u0576\u0547\u0577\u0548\u0578\u0549\u0579\u054A\u057A\u054B\u057B\u054C\u057C\u054D\u057D\u054E\u057E\u054F\u057F\u0550\u0580\u0551\u0581\u0552\u0582\u0553\u0583\u0554\u0584\u0555\u0585\u0556\u0586\u055A\uFFFD"
+      chars: " �և։)(»«—.՝,-֊…՜՛՞ԱաԲբԳգԴդԵեԶզԷէԸըԹթԺժԻիԼլԽխԾծԿկՀհՁձՂղՃճՄմՅյՆնՇշՈոՉչՊպՋջՌռՍսՎվՏտՐրՑցՒւՓփՔքՕօՖֆ՚�"
     },
     rk1048: {
       type: "_sbcs",
-      chars: "\u0402\u0403\u201A\u0453\u201E\u2026\u2020\u2021\u20AC\u2030\u0409\u2039\u040A\u049A\u04BA\u040F\u0452\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\u2122\u0459\u203A\u045A\u049B\u04BB\u045F\xA0\u04B0\u04B1\u04D8\xA4\u04E8\xA6\xA7\u0401\xA9\u0492\xAB\xAC\xAD\xAE\u04AE\xB0\xB1\u0406\u0456\u04E9\xB5\xB6\xB7\u0451\u2116\u0493\xBB\u04D9\u04A2\u04A3\u04AF\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F"
+      chars: "ЂЃ‚ѓ„…†‡€‰Љ‹ЊҚҺЏђ‘’“”•–—�™љ›њқһџ ҰұӘ¤Ө¦§Ё©Ғ«¬­®Ү°±Ііөµ¶·ё№ғ»әҢңүАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя"
     },
     tcvn: {
       type: "_sbcs",
-      chars: `\0\xDA\u1EE4\x03\u1EEA\u1EEC\u1EEE\x07	
-\r\x0E\x0F\x10\u1EE8\u1EF0\u1EF2\u1EF6\u1EF8\xDD\u1EF4\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~\x7F\xC0\u1EA2\xC3\xC1\u1EA0\u1EB6\u1EAC\xC8\u1EBA\u1EBC\xC9\u1EB8\u1EC6\xCC\u1EC8\u0128\xCD\u1ECA\xD2\u1ECE\xD5\xD3\u1ECC\u1ED8\u1EDC\u1EDE\u1EE0\u1EDA\u1EE2\xD9\u1EE6\u0168\xA0\u0102\xC2\xCA\xD4\u01A0\u01AF\u0110\u0103\xE2\xEA\xF4\u01A1\u01B0\u0111\u1EB0\u0300\u0309\u0303\u0301\u0323\xE0\u1EA3\xE3\xE1\u1EA1\u1EB2\u1EB1\u1EB3\u1EB5\u1EAF\u1EB4\u1EAE\u1EA6\u1EA8\u1EAA\u1EA4\u1EC0\u1EB7\u1EA7\u1EA9\u1EAB\u1EA5\u1EAD\xE8\u1EC2\u1EBB\u1EBD\xE9\u1EB9\u1EC1\u1EC3\u1EC5\u1EBF\u1EC7\xEC\u1EC9\u1EC4\u1EBE\u1ED2\u0129\xED\u1ECB\xF2\u1ED4\u1ECF\xF5\xF3\u1ECD\u1ED3\u1ED5\u1ED7\u1ED1\u1ED9\u1EDD\u1EDF\u1EE1\u1EDB\u1EE3\xF9\u1ED6\u1EE7\u0169\xFA\u1EE5\u1EEB\u1EED\u1EEF\u1EE9\u1EF1\u1EF3\u1EF7\u1EF9\xFD\u1EF5\u1ED0`
+      chars: `\x00ÚỤ\x03ỪỬỮ\x07\b\t
+\v\f\r\x0E\x0F\x10ỨỰỲỶỸÝỴ\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~ÀẢÃÁẠẶẬÈẺẼÉẸỆÌỈĨÍỊÒỎÕÓỌỘỜỞỠỚỢÙỦŨ ĂÂÊÔƠƯĐăâêôơưđẶ̀̀̉̃́àảãáạẲằẳẵắẴẮẦẨẪẤỀặầẩẫấậèỂẻẽéẹềểễếệìỉỄẾỒĩíịòỔỏõóọồổỗốộờởỡớợùỖủũúụừửữứựỳỷỹýỵỐ`
     },
     georgianacademy: {
       type: "_sbcs",
-      chars: "\x80\x81\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\x8D\x8E\x8F\x90\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\x9D\x9E\u0178\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\u10D0\u10D1\u10D2\u10D3\u10D4\u10D5\u10D6\u10D7\u10D8\u10D9\u10DA\u10DB\u10DC\u10DD\u10DE\u10DF\u10E0\u10E1\u10E2\u10E3\u10E4\u10E5\u10E6\u10E7\u10E8\u10E9\u10EA\u10EB\u10EC\u10ED\u10EE\u10EF\u10F0\u10F1\u10F2\u10F3\u10F4\u10F5\u10F6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF"
+      chars: "‚ƒ„…†‡ˆ‰Š‹Œ‘’“”•–—˜™š›œŸ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿აბგდევზთიკლმნოპჟრსტუფქღყშჩცძწჭხჯჰჱჲჳჴჵჶçèéêëìíîïðñòóôõö÷øùúûüýþÿ"
     },
     georgianps: {
       type: "_sbcs",
-      chars: "\x80\x81\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\x8D\x8E\x8F\x90\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\x9D\x9E\u0178\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\u10D0\u10D1\u10D2\u10D3\u10D4\u10D5\u10D6\u10F1\u10D7\u10D8\u10D9\u10DA\u10DB\u10DC\u10F2\u10DD\u10DE\u10DF\u10E0\u10E1\u10E2\u10F3\u10E3\u10E4\u10E5\u10E6\u10E7\u10E8\u10E9\u10EA\u10EB\u10EC\u10ED\u10EE\u10F4\u10EF\u10F0\u10F5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF"
+      chars: "‚ƒ„…†‡ˆ‰Š‹Œ‘’“”•–—˜™š›œŸ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿აბგდევზჱთიკლმნჲოპჟრსტჳუფქღყშჩცძწჭხჴჯჰჵæçèéêëìíîïðñòóôõö÷øùúûüýþÿ"
     },
     pt154: {
       type: "_sbcs",
-      chars: "\u0496\u0492\u04EE\u0493\u201E\u2026\u04B6\u04AE\u04B2\u04AF\u04A0\u04E2\u04A2\u049A\u04BA\u04B8\u0497\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u04B3\u04B7\u04A1\u04E3\u04A3\u049B\u04BB\u04B9\xA0\u040E\u045E\u0408\u04E8\u0498\u04B0\xA7\u0401\xA9\u04D8\xAB\xAC\u04EF\xAE\u049C\xB0\u04B1\u0406\u0456\u0499\u04E9\xB6\xB7\u0451\u2116\u04D9\xBB\u0458\u04AA\u04AB\u049D\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F"
+      chars: "ҖҒӮғ„…ҶҮҲүҠӢҢҚҺҸҗ‘’“”•–—ҳҷҡӣңқһҹ ЎўЈӨҘҰ§Ё©Ә«¬ӯ®Ҝ°ұІіҙө¶·ё№ә»јҪҫҝАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя"
     },
     viscii: {
       type: "_sbcs",
-      chars: `\0\x01\u1EB2\x03\x04\u1EB4\u1EAA\x07	
-\r\x0E\x0F\x10\x11\x12\x13\u1EF6\x15\x16\x17\x18\u1EF8\x1A\x1B\x1C\x1D\u1EF4\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~\x7F\u1EA0\u1EAE\u1EB0\u1EB6\u1EA4\u1EA6\u1EA8\u1EAC\u1EBC\u1EB8\u1EBE\u1EC0\u1EC2\u1EC4\u1EC6\u1ED0\u1ED2\u1ED4\u1ED6\u1ED8\u1EE2\u1EDA\u1EDC\u1EDE\u1ECA\u1ECE\u1ECC\u1EC8\u1EE6\u0168\u1EE4\u1EF2\xD5\u1EAF\u1EB1\u1EB7\u1EA5\u1EA7\u1EA9\u1EAD\u1EBD\u1EB9\u1EBF\u1EC1\u1EC3\u1EC5\u1EC7\u1ED1\u1ED3\u1ED5\u1ED7\u1EE0\u01A0\u1ED9\u1EDD\u1EDF\u1ECB\u1EF0\u1EE8\u1EEA\u1EEC\u01A1\u1EDB\u01AF\xC0\xC1\xC2\xC3\u1EA2\u0102\u1EB3\u1EB5\xC8\xC9\xCA\u1EBA\xCC\xCD\u0128\u1EF3\u0110\u1EE9\xD2\xD3\xD4\u1EA1\u1EF7\u1EEB\u1EED\xD9\xDA\u1EF9\u1EF5\xDD\u1EE1\u01B0\xE0\xE1\xE2\xE3\u1EA3\u0103\u1EEF\u1EAB\xE8\xE9\xEA\u1EBB\xEC\xED\u0129\u1EC9\u0111\u1EF1\xF2\xF3\xF4\xF5\u1ECF\u1ECD\u1EE5\xF9\xFA\u0169\u1EE7\xFD\u1EE3\u1EEE`
+      chars: `\x00\x01Ẳ\x03\x04ẴẪ\x07\b\t
+\v\f\r\x0E\x0F\x10\x11\x12\x13Ỷ\x15\x16\x17\x18Ỹ\x1A\x1B\x1C\x1DỴ\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~ẠẮẰẶẤẦẨẬẼẸẾỀỂỄỆỐỒỔỖỘỢỚỜỞỊỎỌỈỦŨỤỲÕắằặấầẩậẽẹếềểễệốồổỗỠƠộờởịỰỨỪỬơớƯÀÁÂÃẢĂẳẵÈÉÊẺÌÍĨỳĐứÒÓÔạỷừửÙÚỹỵÝỡưàáâãảăữẫèéêẻìíĩỉđựòóôõỏọụùúũủýợỮ`
     },
     iso646cn: {
       type: "_sbcs",
-      chars: `\0\x01\x02\x03\x04\x05\x06\x07	
-\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#\xA5%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}\u203E\x7F\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD`
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+\v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#¥%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}‾��������������������������������������������������������������������������������������������������������������������������������`
     },
     iso646jp: {
       type: "_sbcs",
-      chars: `\0\x01\x02\x03\x04\x05\x06\x07	
-\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\xA5]^_\`abcdefghijklmnopqrstuvwxyz{|}\u203E\x7F\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD`
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+\v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_\`abcdefghijklmnopqrstuvwxyz{|}‾��������������������������������������������������������������������������������������������������������������������������������`
     },
     hproman8: {
       type: "_sbcs",
-      chars: "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xC0\xC2\xC8\xCA\xCB\xCE\xCF\xB4\u02CB\u02C6\xA8\u02DC\xD9\xDB\u20A4\xAF\xDD\xFD\xB0\xC7\xE7\xD1\xF1\xA1\xBF\xA4\xA3\xA5\xA7\u0192\xA2\xE2\xEA\xF4\xFB\xE1\xE9\xF3\xFA\xE0\xE8\xF2\xF9\xE4\xEB\xF6\xFC\xC5\xEE\xD8\xC6\xE5\xED\xF8\xE6\xC4\xEC\xD6\xDC\xC9\xEF\xDF\xD4\xC1\xC3\xE3\xD0\xF0\xCD\xCC\xD3\xD2\xD5\xF5\u0160\u0161\xDA\u0178\xFF\xDE\xFE\xB7\xB5\xB6\xBE\u2014\xBC\xBD\xAA\xBA\xAB\u25A0\xBB\xB1\uFFFD"
+      chars: " ÀÂÈÊËÎÏ´ˋˆ¨˜ÙÛ₤¯Ýý°ÇçÑñ¡¿¤£¥§ƒ¢âêôûáéóúàèòùäëöüÅîØÆåíøæÄìÖÜÉïßÔÁÃãÐðÍÌÓÒÕõŠšÚŸÿÞþ·µ¶¾—¼½ªº«■»±�"
     },
     macintosh: {
       type: "_sbcs",
-      chars: "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\xC6\xD8\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u2126\xE6\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u2044\xA4\u2039\u203A\uFB01\uFB02\u2021\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uFFFD\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+      chars: "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»… ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄¤‹›ﬁﬂ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔ�ÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ"
     },
     ascii: {
       type: "_sbcs",
-      chars: "\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD"
+      chars: "��������������������������������������������������������������������������������������������������������������������������������"
     },
     tis620: {
       type: "_sbcs",
-      chars: "\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u0E01\u0E02\u0E03\u0E04\u0E05\u0E06\u0E07\u0E08\u0E09\u0E0A\u0E0B\u0E0C\u0E0D\u0E0E\u0E0F\u0E10\u0E11\u0E12\u0E13\u0E14\u0E15\u0E16\u0E17\u0E18\u0E19\u0E1A\u0E1B\u0E1C\u0E1D\u0E1E\u0E1F\u0E20\u0E21\u0E22\u0E23\u0E24\u0E25\u0E26\u0E27\u0E28\u0E29\u0E2A\u0E2B\u0E2C\u0E2D\u0E2E\u0E2F\u0E30\u0E31\u0E32\u0E33\u0E34\u0E35\u0E36\u0E37\u0E38\u0E39\u0E3A\uFFFD\uFFFD\uFFFD\uFFFD\u0E3F\u0E40\u0E41\u0E42\u0E43\u0E44\u0E45\u0E46\u0E47\u0E48\u0E49\u0E4A\u0E4B\u0E4C\u0E4D\u0E4E\u0E4F\u0E50\u0E51\u0E52\u0E53\u0E54\u0E55\u0E56\u0E57\u0E58\u0E59\u0E5A\u0E5B\uFFFD\uFFFD\uFFFD\uFFFD"
+      chars: "���������������������������������กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรฤลฦวศษสหฬอฮฯะัาำิีึืฺุู����฿เแโใไๅๆ็่้๊๋์ํ๎๏๐๑๒๓๔๕๖๗๘๙๚๛����"
     }
   };
 });
 
 // node_modules/iconv-lite/encodings/dbcs-codec.js
 var require_dbcs_codec = __commonJS((exports) => {
+  var Buffer2 = require_safer().Buffer;
+  exports._dbcs = DBCSCodec;
+  var UNASSIGNED = -1;
+  var GB18030_CODE = -2;
+  var SEQ_START = -10;
+  var NODE_START = -1000;
+  var UNASSIGNED_NODE = new Array(256);
+  var DEF_CHAR = -1;
+  for (i = 0;i < 256; i++)
+    UNASSIGNED_NODE[i] = UNASSIGNED;
+  var i;
   function DBCSCodec(codecOptions, iconv) {
     this.encodingName = codecOptions.encodingName;
     if (!codecOptions)
@@ -3652,7 +3673,7 @@ var require_dbcs_codec = __commonJS((exports) => {
     if (this.defCharSB === UNASSIGNED)
       this.defCharSB = this.encodeTable[0]["?"];
     if (this.defCharSB === UNASSIGNED)
-      this.defCharSB = "?".charCodeAt(0);
+      this.defCharSB = 63;
     if (typeof codecOptions.gb18030 === "function") {
       this.gb18030 = codecOptions.gb18030();
       var thirdByteNodeIdx = this.decodeTables.length;
@@ -3671,46 +3692,6 @@ var require_dbcs_codec = __commonJS((exports) => {
         fourthByteNode[i2] = GB18030_CODE;
     }
   }
-  function DBCSEncoder(options, codec) {
-    this.leadSurrogate = -1;
-    this.seqObj = undefined;
-    this.encodeTable = codec.encodeTable;
-    this.encodeTableSeq = codec.encodeTableSeq;
-    this.defaultCharSingleByte = codec.defCharSB;
-    this.gb18030 = codec.gb18030;
-  }
-  function DBCSDecoder(options, codec) {
-    this.nodeIdx = 0;
-    this.prevBuf = Buffer2.alloc(0);
-    this.decodeTables = codec.decodeTables;
-    this.decodeTableSeq = codec.decodeTableSeq;
-    this.defaultCharUnicode = codec.defaultCharUnicode;
-    this.gb18030 = codec.gb18030;
-  }
-  function findIdx(table, val) {
-    if (table[0] > val)
-      return -1;
-    var l = 0, r = table.length;
-    while (l < r - 1) {
-      var mid = l + Math.floor((r - l + 1) / 2);
-      if (table[mid] <= val)
-        l = mid;
-      else
-        r = mid;
-    }
-    return l;
-  }
-  var Buffer2 = require_safer().Buffer;
-  exports._dbcs = DBCSCodec;
-  var UNASSIGNED = -1;
-  var GB18030_CODE = -2;
-  var SEQ_START = -10;
-  var NODE_START = -1000;
-  var UNASSIGNED_NODE = new Array(256);
-  var DEF_CHAR = -1;
-  for (i = 0;i < 256; i++)
-    UNASSIGNED_NODE[i] = UNASSIGNED;
-  var i;
   DBCSCodec.prototype.encoder = DBCSEncoder;
   DBCSCodec.prototype.decoder = DBCSDecoder;
   DBCSCodec.prototype._getDecodeTrieNode = function(addr) {
@@ -3823,6 +3804,14 @@ var require_dbcs_codec = __commonJS((exports) => {
         this._setEncodeSequence(this.decodeTableSeq[SEQ_START - uCode], mbCode);
     }
   };
+  function DBCSEncoder(options, codec) {
+    this.leadSurrogate = -1;
+    this.seqObj = undefined;
+    this.encodeTable = codec.encodeTable;
+    this.encodeTableSeq = codec.encodeTableSeq;
+    this.defaultCharSingleByte = codec.defCharSB;
+    this.gb18030 = codec.gb18030;
+  }
   DBCSEncoder.prototype.write = function(str) {
     var newBuf = Buffer2.alloc(str.length * (this.gb18030 ? 4 : 3)), leadSurrogate = this.leadSurrogate, seqObj = this.seqObj, nextChar = -1, i2 = 0, j = 0;
     while (true) {
@@ -3937,6 +3926,14 @@ var require_dbcs_codec = __commonJS((exports) => {
     return newBuf.slice(0, j);
   };
   DBCSEncoder.prototype.findIdx = findIdx;
+  function DBCSDecoder(options, codec) {
+    this.nodeIdx = 0;
+    this.prevBuf = Buffer2.alloc(0);
+    this.decodeTables = codec.decodeTables;
+    this.decodeTableSeq = codec.decodeTableSeq;
+    this.defaultCharUnicode = codec.defaultCharUnicode;
+    this.gb18030 = codec.gb18030;
+  }
   DBCSDecoder.prototype.write = function(buf) {
     var newBuf = Buffer2.alloc(buf.length * 2), nodeIdx = this.nodeIdx, prevBuf = this.prevBuf, prevBufOffset = this.prevBuf.length, seqStart = -this.prevBuf.length, uCode;
     if (prevBufOffset > 0)
@@ -3995,12 +3992,25 @@ var require_dbcs_codec = __commonJS((exports) => {
     this.nodeIdx = 0;
     return ret;
   };
+  function findIdx(table, val) {
+    if (table[0] > val)
+      return -1;
+    var l = 0, r = table.length;
+    while (l < r - 1) {
+      var mid = l + Math.floor((r - l + 1) / 2);
+      if (table[mid] <= val)
+        l = mid;
+      else
+        r = mid;
+    }
+    return l;
+  }
 });
 
 // node_modules/iconv-lite/encodings/tables/shiftjis.json
 var require_shiftjis = __commonJS((exports, module) => {
   module.exports = [
-    ["0", " ", 128],
+    ["0", "\x00", 128],
     ["a1", "｡", 62],
     ["8140", "　、。，．・：；？！゛゜´｀¨＾￣＿ヽヾゝゞ〃仝々〆〇ー―‐／＼～∥｜…‥‘’“”（）〔〕［］｛｝〈", 9, "＋－±×"],
     ["8180", "÷＝≠＜＞≦≧∞∴♂♀°′″℃￥＄￠￡％＃＆＊＠§☆★○●◎◇◆□■△▲▽▼※〒→←↑↓〓"],
@@ -4129,7 +4139,7 @@ var require_shiftjis = __commonJS((exports, module) => {
 // node_modules/iconv-lite/encodings/tables/eucjp.json
 var require_eucjp = __commonJS((exports, module) => {
   module.exports = [
-    ["0", " ", 127],
+    ["0", "\x00", 127],
     ["8ea1", "｡", 62],
     ["a1a1", "　、。，．・：；？！゛゜´｀¨＾￣＿ヽヾゝゞ〃仝々〆〇ー―‐／＼～∥｜…‥‘’“”（）〔〕［］｛｝〈", 9, "＋－±×÷＝≠＜＞≦≧∞∴♂♀°′″℃￥＄￠￡％＃＆＊＠§☆★○●◎◇"],
     ["a2a1", "◆□■△▲▽▼※〒→←↑↓〓"],
@@ -4315,7 +4325,7 @@ var require_eucjp = __commonJS((exports, module) => {
 // node_modules/iconv-lite/encodings/tables/cp936.json
 var require_cp936 = __commonJS((exports, module) => {
   module.exports = [
-    ["0", " ", 127, "€"],
+    ["0", "\x00", 127, "€"],
     ["8140", "丂丄丅丆丏丒丗丟丠両丣並丩丮丯丱丳丵丷丼乀乁乂乄乆乊乑乕乗乚乛乢乣乤乥乧乨乪", 5, "乲乴", 9, "乿", 6, "亇亊"],
     ["8180", "亐亖亗亙亜亝亞亣亪亯亰亱亴亶亷亸亹亼亽亾仈仌仏仐仒仚仛仜仠仢仦仧仩仭仮仯仱仴仸仹仺仼仾伀伂", 6, "伋伌伒", 4, "伜伝伡伣伨伩伬伭伮伱伳伵伷伹伻伾", 4, "佄佅佇", 5, "佒佔佖佡佢佦佨佪佫佭佮佱佲併佷佸佹佺佽侀侁侂侅來侇侊侌侎侐侒侓侕侖侘侙侚侜侞侟価侢"],
     ["8240", "侤侫侭侰", 4, "侶", 8, "俀俁係俆俇俈俉俋俌俍俒", 4, "俙俛俠俢俤俥俧俫俬俰俲俴俵俶俷俹俻俼俽俿", 11],
@@ -4647,7 +4657,7 @@ var require_gb18030_ranges = __commonJS((exports, module) => {
 // node_modules/iconv-lite/encodings/tables/cp949.json
 var require_cp949 = __commonJS((exports, module) => {
   module.exports = [
-    ["0", " ", 127],
+    ["0", "\x00", 127],
     ["8141", "갂갃갅갆갋", 4, "갘갞갟갡갢갣갥", 6, "갮갲갳갴"],
     ["8161", "갵갶갷갺갻갽갾갿걁", 9, "걌걎", 5, "걕"],
     ["8181", "걖걗걙걚걛걝", 18, "걲걳걵걶걹걻", 4, "겂겇겈겍겎겏겑겒겓겕", 6, "겞겢", 5, "겫겭겮겱", 6, "겺겾겿곀곂곃곅곆곇곉곊곋곍", 7, "곖곘", 7, "곢곣곥곦곩곫곭곮곲곴곷", 4, "곾곿괁괂괃괅괇", 4, "괎괐괒괓"],
@@ -4924,7 +4934,7 @@ var require_cp949 = __commonJS((exports, module) => {
 // node_modules/iconv-lite/encodings/tables/cp950.json
 var require_cp950 = __commonJS((exports, module) => {
   module.exports = [
-    ["0", " ", 127],
+    ["0", "\x00", 127],
     ["a140", "　，、。．‧；：？！︰…‥﹐﹑﹒·﹔﹕﹖﹗｜–︱—︳╴︴﹏（）︵︶｛｝︷︸〔〕︹︺【】︻︼《》︽︾〈〉︿﹀「」﹁﹂『』﹃﹄﹙﹚"],
     ["a1a1", "﹛﹜﹝﹞‘’“”〝〞‵′＃＆＊※§〃○●△▲◎☆★◇◆□■▽▼㊣℅¯￣＿ˍ﹉﹊﹍﹎﹋﹌﹟﹠﹡＋－×÷±√＜＞＝≦≧≠∞≒≡﹢", 4, "～∩∪⊥∠∟⊿㏒㏑∫∮∵∴♀♂⊕⊙↑↓←→↖↗↙↘∥∣／"],
     ["a240", "＼∕﹨＄￥〒￠￡％＠℃℉﹩﹪﹫㏕㎜㎝㎞㏎㎡㎎㎏㏄°兙兛兞兝兡兣嗧瓩糎▁", 7, "▏▎▍▌▋▊▉┼┴┬┤├▔─│▕┌┐└┘╭"],
@@ -5105,126 +5115,126 @@ var require_cp950 = __commonJS((exports, module) => {
 // node_modules/iconv-lite/encodings/tables/big5-added.json
 var require_big5_added = __commonJS((exports, module) => {
   module.exports = [
-    ["8740", "䏰䰲䘃䖦䕸𧉧䵷䖳𧲱䳢𧳅㮕䜶䝄䱇䱀𤊿𣘗𧍒𦺋𧃒䱗𪍑䝏䗚䲅𧱬䴇䪤䚡𦬣爥𥩔𡩣𣸆𣽡晍囻"],
-    ["8767", "綕夝𨮹㷴霴𧯯寛𡵞媤㘥𩺰嫑宷峼杮薓𩥅瑡璝㡵𡵓𣚞𦀡㻬"],
-    ["87a1", "𥣞㫵竼龗𤅡𨤍𣇪𠪊𣉞䌊蒄龖鐯䤰蘓墖靊鈘秐稲晠権袝瑌篅枂稬剏遆㓦珄𥶹瓆鿇垳䤯呌䄱𣚎堘穲𧭥讏䚮𦺈䆁𥶙箮𢒼鿈𢓁𢓉𢓌鿉蔄𣖻䂴鿊䓡𪷿拁灮鿋"],
-    ["8840", "㇀", 4, "𠄌㇅𠃑𠃍㇆㇇𠃋𡿨㇈𠃊㇉㇊㇋㇌𠄎㇍㇎ĀÁǍÀĒÉĚÈŌÓǑÒ࿿Ê̄Ế࿿Ê̌ỀÊāáǎàɑēéěèīíǐìōóǒòūúǔùǖǘǚ"],
+    ["8740", "䏰䰲䘃䖦䕸\uD85C\uDE67䵷䖳\uD85F\uDCB1䳢\uD85F\uDCC5㮕䜶䝄䱇䱀\uD850\uDEBF\uD84D\uDE17\uD85C\uDF52\uD85B\uDE8B\uD85C\uDCD2䱗\uD868\uDF51䝏䗚䲅\uD85F\uDC6C䴇䪤䚡\uD85A\uDF23爥\uD856\uDE54\uD846\uDE63\uD84F\uDE06\uD84F\uDF61晍囻"],
+    ["8767", "綕夝\uD862\uDFB9㷴霴\uD85E\uDFEF寛\uD847\uDD5E媤㘥\uD867\uDEB0嫑宷峼杮薓\uD866\uDD45瑡璝㡵\uD847\uDD53\uD84D\uDE9E\uD858\uDC21㻬"],
+    ["87a1", "\uD856\uDCDE㫵竼龗\uD850\uDD61\uD862\uDD0D\uD84C\uDDEA\uD842\uDE8A\uD84C\uDE5E䌊蒄龖鐯䤰蘓墖靊鈘秐稲晠権袝瑌篅枂稬剏遆㓦珄\uD857\uDDB9瓆鿇垳䤯呌䄱\uD84D\uDE8E堘穲\uD85E\uDF65讏䚮\uD85B\uDE88䆁\uD857\uDD99箮\uD849\uDCBC鿈\uD849\uDCC1\uD849\uDCC9\uD849\uDCCC鿉蔄\uD84D\uDDBB䂴鿊䓡\uD86B\uDDFF拁灮鿋"],
+    ["8840", "㇀", 4, "\uD840\uDD0C㇅\uD840\uDCD1\uD840\uDCCD㇆㇇\uD840\uDCCB\uD847\uDFE8㇈\uD840\uDCCA㇉㇊㇋㇌\uD840\uDD0E㇍㇎ĀÁǍÀĒÉĚÈŌÓǑÒ࿿Ê̄Ế࿿Ê̌ỀÊāáǎàɑēéěèīíǐìōóǒòūúǔùǖǘǚ"],
     ["88a1", "ǜü࿿ê̄ế࿿ê̌ềêɡ⏚⏛"],
-    ["8940", "𪎩𡅅"],
+    ["8940", "\uD868\uDFA9\uD844\uDD45"],
     ["8943", "攊"],
     ["8946", "丽滝鵎釟"],
-    ["894c", "𧜵撑会伨侨兖兴农凤务动医华发变团声处备夲头学实実岚庆总斉柾栄桥济炼电纤纬纺织经统缆缷艺苏药视设询车轧轮"],
+    ["894c", "\uD85D\uDF35撑会伨侨兖兴农凤务动医华发变团声处备夲头学实実岚庆总斉柾栄桥济炼电纤纬纺织经统缆缷艺苏药视设询车轧轮"],
     ["89a1", "琑糼緍楆竉刧"],
     ["89ab", "醌碸酞肼"],
-    ["89b0", "贋胶𠧧"],
-    ["89b5", "肟黇䳍鷉鸌䰾𩷶𧀎鸊𪄳㗁"],
+    ["89b0", "贋胶\uD842\uDDE7"],
+    ["89b5", "肟黇䳍鷉鸌䰾\uD867\uDDF6\uD85C\uDC0E鸊\uD868\uDD33㗁"],
     ["89c1", "溚舾甙"],
-    ["89c5", "䤑马骏龙禇𨑬𡷊𠗐𢫦两亁亀亇亿仫伷㑌侽㹈倃傈㑽㒓㒥円夅凛凼刅争剹劐匧㗇厩㕑厰㕓参吣㕭㕲㚁咓咣咴咹哐哯唘唣唨㖘唿㖥㖿嗗㗅"],
-    ["8a40", "𧶄唥"],
-    ["8a43", "𠱂𠴕𥄫喐𢳆㧬𠍁蹆𤶸𩓥䁓𨂾睺𢰸㨴䟕𨅝𦧲𤷪擝𠵼𠾴𠳕𡃴撍蹾𠺖𠰋𠽤𢲩𨉖𤓓"],
-    ["8a64", "𠵆𩩍𨃩䟴𤺧𢳂骲㩧𩗴㿭㔆𥋇𩟔𧣈𢵄鵮頕"],
-    ["8a76", "䏙𦂥撴哣𢵌𢯊𡁷㧻𡁯"],
-    ["8aa1", "𦛚𦜖𧦠擪𥁒𠱃蹨𢆡𨭌𠜱"],
-    ["8aac", "䠋𠆩㿺塳𢶍"],
-    ["8ab2", "𤗈𠓼𦂗𠽌𠶖啹䂻䎺"],
-    ["8abb", "䪴𢩦𡂝膪飵𠶜捹㧾𢝵跀嚡摼㹃"],
-    ["8ac9", "𪘁𠸉𢫏𢳉"],
-    ["8ace", "𡃈𣧂㦒㨆𨊛㕸𥹉𢃇噒𠼱𢲲𩜠㒼氽𤸻"],
-    ["8adf", "𧕴𢺋𢈈𪙛𨳍𠹺𠰴𦠜羓𡃏𢠃𢤹㗻𥇣𠺌𠾍𠺪㾓𠼰𠵇𡅏𠹌"],
-    ["8af6", "𠺫𠮩𠵈𡃀𡄽㿹𢚖搲𠾭"],
-    ["8b40", "𣏴𧘹𢯎𠵾𠵿𢱑𢱕㨘𠺘𡃇𠼮𪘲𦭐𨳒𨶙𨳊閪哌苄喹"],
-    ["8b55", "𩻃鰦骶𧝞𢷮煀腭胬尜𦕲脴㞗卟𨂽醶𠻺𠸏𠹷𠻻㗝𤷫㘉𠳖嚯𢞵𡃉𠸐𠹸𡁸𡅈𨈇𡑕𠹹𤹐𢶤婔𡀝𡀞𡃵𡃶垜𠸑"],
-    ["8ba1", "𧚔𨋍𠾵𠹻𥅾㜃𠾶𡆀𥋘𪊽𤧚𡠺𤅷𨉼墙剨㘚𥜽箲孨䠀䬬鼧䧧鰟鮍𥭴𣄽嗻㗲嚉丨夂𡯁屮靑𠂆乛亻㔾尣彑忄㣺扌攵歺氵氺灬爫丬犭𤣩罒礻糹罓𦉪㓁"],
-    ["8bde", "𦍋耂肀𦘒𦥑卝衤见𧢲讠贝钅镸长门𨸏韦页风飞饣𩠐鱼鸟黄歯龜丷𠂇阝户钢"],
-    ["8c40", "倻淾𩱳龦㷉袏𤅎灷峵䬠𥇍㕙𥴰愢𨨲辧釶熑朙玺𣊁𪄇㲋𡦀䬐磤琂冮𨜏䀉橣𪊺䈣蘏𠩯稪𩥇𨫪靕灍匤𢁾鏴盙𨧣龧矝亣俰傼丯众龨吴綋墒壐𡶶庒庙忂𢜒斋"],
-    ["8ca1", "𣏹椙橃𣱣泿"],
-    ["8ca7", "爀𤔅玌㻛𤨓嬕璹讃𥲤𥚕窓篬糃繬苸薗龩袐龪躹龫迏蕟駠鈡龬𨶹𡐿䁱䊢娚"],
+    ["89c5", "䤑马骏龙禇\uD861\uDC6C\uD847\uDDCA\uD841\uDDD0\uD84A\uDEE6两亁亀亇亿仫伷㑌侽㹈倃傈㑽㒓㒥円夅凛凼刅争剹劐匧㗇厩㕑厰㕓参吣㕭㕲㚁咓咣咴咹哐哯唘唣唨㖘唿㖥㖿嗗㗅"],
+    ["8a40", "\uD85F\uDD84唥"],
+    ["8a43", "\uD843\uDC42\uD843\uDD15\uD854\uDD2B喐\uD84B\uDCC6㧬\uD840\uDF41蹆\uD853\uDDB8\uD865\uDCE5䁓\uD860\uDCBE睺\uD84B\uDC38㨴䟕\uD860\uDD5D\uD85A\uDDF2\uD853\uDDEA擝\uD843\uDD7C\uD843\uDFB4\uD843\uDCD5\uD844\uDCF4撍蹾\uD843\uDE96\uD843\uDC0B\uD843\uDF64\uD84B\uDCA9\uD860\uDE56\uD851\uDCD3"],
+    ["8a64", "\uD843\uDD46\uD866\uDE4D\uD860\uDCE9䟴\uD853\uDEA7\uD84B\uDCC2骲㩧\uD865\uDDF4㿭㔆\uD854\uDEC7\uD865\uDFD4\uD85E\uDCC8\uD84B\uDD44鵮頕"],
+    ["8a76", "䏙\uD858\uDCA5撴哣\uD84B\uDD4C\uD84A\uDFCA\uD844\uDC77㧻\uD844\uDC6F"],
+    ["8aa1", "\uD859\uDEDA\uD859\uDF16\uD85E\uDDA0擪\uD854\uDC52\uD843\uDC43蹨\uD848\uDDA1\uD862\uDF4C\uD841\uDF31"],
+    ["8aac", "䠋\uD840\uDDA9㿺塳\uD84B\uDD8D"],
+    ["8ab2", "\uD851\uDDC8\uD841\uDCFC\uD858\uDC97\uD843\uDF4C\uD843\uDD96啹䂻䎺"],
+    ["8abb", "䪴\uD84A\uDE66\uD844\uDC9D膪飵\uD843\uDD9C捹㧾\uD849\uDF75跀嚡摼㹃"],
+    ["8ac9", "\uD869\uDE01\uD843\uDE09\uD84A\uDECF\uD84B\uDCC9"],
+    ["8ace", "\uD844\uDCC8\uD84E\uDDC2㦒㨆\uD860\uDE9B㕸\uD857\uDE49\uD848\uDCC7噒\uD843\uDF31\uD84B\uDCB2\uD865\uDF20㒼氽\uD853\uDE3B"],
+    ["8adf", "\uD85D\uDD74\uD84B\uDE8B\uD848\uDE08\uD869\uDE5B\uD863\uDCCD\uD843\uDE7A\uD843\uDC34\uD85A\uDC1C羓\uD844\uDCCF\uD84A\uDC03\uD84A\uDD39㗻\uD854\uDDE3\uD843\uDE8C\uD843\uDF8D\uD843\uDEAA㾓\uD843\uDF30\uD843\uDD47\uD844\uDD4F\uD843\uDE4C"],
+    ["8af6", "\uD843\uDEAB\uD842\uDFA9\uD843\uDD48\uD844\uDCC0\uD844\uDD3D㿹\uD849\uDE96搲\uD843\uDFAD"],
+    ["8b40", "\uD84C\uDFF4\uD85D\uDE39\uD84A\uDFCE\uD843\uDD7E\uD843\uDD7F\uD84B\uDC51\uD84B\uDC55㨘\uD843\uDE98\uD844\uDCC7\uD843\uDF2E\uD869\uDE32\uD85A\uDF50\uD863\uDCD2\uD863\uDD99\uD863\uDCCA閪哌苄喹"],
+    ["8b55", "\uD867\uDEC3鰦骶\uD85D\uDF5E\uD84B\uDDEE煀腭胬尜\uD859\uDD72脴㞗卟\uD860\uDCBD醶\uD843\uDEFA\uD843\uDE0F\uD843\uDE77\uD843\uDEFB㗝\uD853\uDDEB㘉\uD843\uDCD6嚯\uD849\uDFB5\uD844\uDCC9\uD843\uDE10\uD843\uDE78\uD844\uDC78\uD844\uDD48\uD860\uDE07\uD845\uDC55\uD843\uDE79\uD853\uDE50\uD84B\uDDA4婔\uD844\uDC1D\uD844\uDC1E\uD844\uDCF5\uD844\uDCF6垜\uD843\uDE11"],
+    ["8ba1", "\uD85D\uDE94\uD860\uDECD\uD843\uDFB5\uD843\uDE7B\uD854\uDD7E㜃\uD843\uDFB6\uD844\uDD80\uD854\uDED8\uD868\uDEBD\uD852\uDDDA\uD846\uDC3A\uD850\uDD77\uD860\uDE7C墙剨㘚\uD855\uDF3D箲孨䠀䬬鼧䧧鰟鮍\uD856\uDF74\uD84C\uDD3D嗻㗲嚉丨夂\uD846\uDFC1\uD87E\uDC78靑\uD840\uDC86乛亻㔾尣彑忄㣺扌攵歺氵氺灬爫丬犭\uD852\uDCE9罒礻糹罓\uD858\uDE6A㓁"],
+    ["8bde", "\uD858\uDF4B耂肀\uD859\uDE12\uD85A\uDD51卝衤见\uD85E\uDCB2讠贝钅镸长门\uD863\uDE0F韦页风飞饣\uD866\uDC10鱼鸟黄歯龜丷\uD840\uDC87阝户钢"],
+    ["8c40", "倻淾\uD867\uDC73龦㷉袏\uD850\uDD4E灷峵䬠\uD854\uDDCD㕙\uD857\uDD30愢\uD862\uDE32辧釶熑朙玺\uD84C\uDE81\uD868\uDD07㲋\uD846\uDD80䬐磤琂冮\uD861\uDF0F䀉橣\uD868\uDEBA䈣蘏\uD842\uDE6F稪\uD866\uDD47\uD862\uDEEA靕灍匤\uD848\uDC7E鏴盙\uD862\uDDE3龧矝亣俰傼丯众龨吴綋墒壐\uD847\uDDB6庒庙忂\uD849\uDF12斋"],
+    ["8ca1", "\uD84C\uDFF9椙橃\uD84F\uDC63泿"],
+    ["8ca7", "爀\uD851\uDD05玌㻛\uD852\uDE13嬕璹讃\uD857\uDCA4\uD855\uDE95窓篬糃繬苸薗龩袐龪躹龫迏蕟駠鈡龬\uD863\uDDB9\uD845\uDC3F䁱䊢娚"],
     ["8cc9", "顨杫䉶圽"],
-    ["8cce", "藖𤥻芿𧄍䲁𦵴嵻𦬕𦾾龭龮宖龯曧繛湗秊㶈䓃𣉖𢞖䎚䔶"],
-    ["8ce6", "峕𣬚諹屸㴒𣕑嵸龲煗䕘𤃬𡸣䱷㥸㑊𠆤𦱁諌侴𠈹妿腬顖𩣺弻"],
-    ["8d40", "𠮟"],
-    ["8d42", "𢇁𨥭䄂䚻𩁹㼇龳𪆵䃸㟖䛷𦱆䅼𨚲𧏿䕭㣔𥒚䕡䔛䶉䱻䵶䗪㿈𤬏㙡䓞䒽䇭崾嵈嵖㷼㠏嶤嶹㠠㠸幂庽弥徃㤈㤔㤿㥍惗愽峥㦉憷憹懏㦸戬抐拥挘㧸嚱"],
-    ["8da1", "㨃揢揻搇摚㩋擀崕嘡龟㪗斆㪽旿晓㫲暒㬢朖㭂枤栀㭘桊梄㭲㭱㭻椉楃牜楤榟榅㮼槖㯝橥橴橱檂㯬檙㯲檫檵櫔櫶殁毁毪汵沪㳋洂洆洦涁㳯涤涱渕渘温溆𨧀溻滢滚齿滨滩漤漴㵆𣽁澁澾㵪㵵熷岙㶊瀬㶑灐灔灯灿炉𠌥䏁㗱𠻘"],
-    ["8e40", "𣻗垾𦻓焾𥟠㙎榢𨯩孴穉𥣡𩓙穥穽𥦬窻窰竂竃燑𦒍䇊竚竝竪䇯咲𥰁笋筕笩𥌎𥳾箢筯莜𥮴𦱿篐萡箒箸𥴠㶭𥱥蒒篺簆簵𥳁籄粃𤢂粦晽𤕸糉糇糦籴糳糵糎"],
-    ["8ea1", "繧䔝𦹄絝𦻖璍綉綫焵綳緒𤁗𦀩緤㴓緵𡟹緥𨍭縝𦄡𦅚繮纒䌫鑬縧罀罁罇礶𦋐駡羗𦍑羣𡙡𠁨䕜𣝦䔃𨌺翺𦒉者耈耝耨耯𪂇𦳃耻耼聡𢜔䦉𦘦𣷣𦛨朥肧𨩈脇脚墰𢛶汿𦒘𤾸擧𡒊舘𡡞橓𤩥𤪕䑺舩𠬍𦩒𣵾俹𡓽蓢荢𦬊𤦧𣔰𡝳𣷸芪椛芳䇛"],
-    ["8f40", "蕋苐茚𠸖𡞴㛁𣅽𣕚艻苢茘𣺋𦶣𦬅𦮗𣗎㶿茝嗬莅䔋𦶥莬菁菓㑾𦻔橗蕚㒖𦹂𢻯葘𥯤葱㷓䓤檧葊𣲵祘蒨𦮖𦹷𦹃蓞萏莑䒠蒓蓤𥲑䉀𥳀䕃蔴嫲𦺙䔧蕳䔖枿蘖"],
-    ["8fa1", "𨘥𨘻藁𧂈蘂𡖂𧃍䕫䕪蘨㙈𡢢号𧎚虾蝱𪃸蟮𢰧螱蟚蠏噡虬桖䘏衅衆𧗠𣶹𧗤衞袜䙛袴袵揁装睷𧜏覇覊覦覩覧覼𨨥觧𧤤𧪽誜瞓釾誐𧩙竩𧬺𣾏䜓𧬸煼謌謟𥐰𥕥謿譌譍誩𤩺讐讛誯𡛟䘕衏貛𧵔𧶏貫㜥𧵓賖𧶘𧶽贒贃𡤐賛灜贑𤳉㻐起"],
-    ["9040", "趩𨀂𡀔𤦊㭼𨆼𧄌竧躭躶軃鋔輙輭𨍥𨐒辥錃𪊟𠩐辳䤪𨧞𨔽𣶻廸𣉢迹𪀔𨚼𨔁𢌥㦀𦻗逷𨔼𧪾遡𨕬𨘋邨𨜓郄𨛦邮都酧㫰醩釄粬𨤳𡺉鈎沟鉁鉢𥖹銹𨫆𣲛𨬌𥗛"],
-    ["90a1", "𠴱錬鍫𨫡𨯫炏嫃𨫢𨫥䥥鉄𨯬𨰹𨯿鍳鑛躼閅閦鐦閠濶䊹𢙺𨛘𡉼𣸮䧟氜陻隖䅬隣𦻕懚隶磵𨫠隽双䦡𦲸𠉴𦐐𩂯𩃥𤫑𡤕𣌊霱虂霶䨏䔽䖅𤫩灵孁霛靜𩇕靗孊𩇫靟鐥僐𣂷𣂼鞉鞟鞱鞾韀韒韠𥑬韮琜𩐳響韵𩐝𧥺䫑頴頳顋顦㬎𧅵㵑𠘰𤅜"],
-    ["9140", "𥜆飊颷飈飇䫿𦴧𡛓喰飡飦飬鍸餹𤨩䭲𩡗𩤅駵騌騻騐驘𥜥㛄𩂱𩯕髠髢𩬅髴䰎鬔鬭𨘀倴鬴𦦨㣃𣁽魐魀𩴾婅𡡣鮎𤉋鰂鯿鰌𩹨鷔𩾷𪆒𪆫𪃡𪄣𪇟鵾鶃𪄴鸎梈"],
-    ["91a1", "鷄𢅛𪆓𪈠𡤻𪈳鴹𪂹𪊴麐麕麞麢䴴麪麯𤍤黁㭠㧥㴝伲㞾𨰫鼂鼈䮖鐤𦶢鼗鼖鼹嚟嚊齅馸𩂋韲葿齢齩竜龎爖䮾𤥵𤦻煷𤧸𤍈𤩑玞𨯚𡣺禟𨥾𨸶鍩鏳𨩄鋬鎁鏋𨥬𤒹爗㻫睲穃烐𤑳𤏸煾𡟯炣𡢾𣖙㻇𡢅𥐯𡟸㜢𡛻𡠹㛡𡝴𡣑𥽋㜣𡛀坛𤨥𡏾𡊨"],
-    ["9240", "𡏆𡒶蔃𣚦蔃葕𤦔𧅥𣸱𥕜𣻻𧁒䓴𣛮𩦝𦼦柹㜳㰕㷧塬𡤢栐䁗𣜿𤃡𤂋𤄏𦰡哋嚞𦚱嚒𠿟𠮨𠸍鏆𨬓鎜仸儫㠙𤐶亼𠑥𠍿佋侊𥙑婨𠆫𠏋㦙𠌊𠐔㐵伩𠋀𨺳𠉵諚𠈌亘"],
-    ["92a1", "働儍侢伃𤨎𣺊佂倮偬傁俌俥偘僼兙兛兝兞湶𣖕𣸹𣺿浲𡢄𣺉冨凃𠗠䓝𠒣𠒒𠒑赺𨪜𠜎剙劤𠡳勡鍮䙺熌𤎌𠰠𤦬𡃤槑𠸝瑹㻞璙琔瑖玘䮎𤪼𤂍叐㖄爏𤃉喴𠍅响𠯆圝鉝雴鍦埝垍坿㘾壋媙𨩆𡛺𡝯𡜐娬妸銏婾嫏娒𥥆𡧳𡡡𤊕㛵洅瑃娡𥺃"],
-    ["9340", "媁𨯗𠐓鏠璌𡌃焅䥲鐈𨧻鎽㞠尞岞幞幈𡦖𡥼𣫮廍孏𡤃𡤄㜁𡢠㛝𡛾㛓脪𨩇𡶺𣑲𨦨弌弎𡤧𡞫婫𡜻孄蘔𧗽衠恾𢡠𢘫忛㺸𢖯𢖾𩂈𦽳懀𠀾𠁆𢘛憙憘恵𢲛𢴇𤛔𩅍"],
-    ["93a1", "摱𤙥𢭪㨩𢬢𣑐𩣪𢹸挷𪑛撶挱揑𤧣𢵧护𢲡搻敫楲㯴𣂎𣊭𤦉𣊫唍𣋠𡣙𩐿曎𣊉𣆳㫠䆐𥖄𨬢𥖏𡛼𥕛𥐥磮𣄃𡠪𣈴㑤𣈏𣆂𤋉暎𦴤晫䮓昰𧡰𡷫晣𣋒𣋡昞𥡲㣑𣠺𣞼㮙𣞢𣏾瓐㮖枏𤘪梶栞㯄檾㡣𣟕𤒇樳橒櫉欅𡤒攑梘橌㯗橺歗𣿀𣲚鎠鋲𨯪𨫋"],
-    ["9440", "銉𨀞𨧜鑧涥漋𤧬浧𣽿㶏渄𤀼娽渊塇洤硂焻𤌚𤉶烱牐犇犔𤞏𤜥兹𤪤𠗫瑺𣻸𣙟𤩊𤤗𥿡㼆㺱𤫟𨰣𣼵悧㻳瓌琼鎇琷䒟𦷪䕑疃㽣𤳙𤴆㽘畕癳𪗆㬙瑨𨫌𤦫𤦎㫻"],
-    ["94a1", "㷍𤩎㻿𤧅𤣳釺圲鍂𨫣𡡤僟𥈡𥇧睸𣈲眎眏睻𤚗𣞁㩞𤣰琸璛㺿𤪺𤫇䃈𤪖𦆮錇𥖁砞碍碈磒珐祙𧝁𥛣䄎禛蒖禥樭𣻺稺秴䅮𡛦䄲鈵秱𠵌𤦌𠊙𣶺𡝮㖗啫㕰㚪𠇔𠰍竢婙𢛵𥪯𥪜娍𠉛磰娪𥯆竾䇹籝籭䈑𥮳𥺼𥺦糍𤧹𡞰粎籼粮檲緜縇緓罎𦉡"],
-    ["9540", "𦅜𧭈綗𥺂䉪𦭵𠤖柖𠁎𣗏埄𦐒𦏸𤥢翝笧𠠬𥫩𥵃笌𥸎駦虅驣樜𣐿㧢𤧷𦖭騟𦖠蒀𧄧𦳑䓪脷䐂胆脉腂𦞴飃𦩂艢艥𦩑葓𦶧蘐𧈛媆䅿𡡀嬫𡢡嫤𡣘蚠蜨𣶏蠭𧐢娂"],
-    ["95a1", "衮佅袇袿裦襥襍𥚃襔𧞅𧞄𨯵𨯙𨮜𨧹㺭蒣䛵䛏㟲訽訜𩑈彍鈫𤊄旔焩烄𡡅鵭貟賩𧷜妚矃姰䍮㛔踪躧𤰉輰轊䋴汘澻𢌡䢛潹溋𡟚鯩㚵𤤯邻邗啱䤆醻鐄𨩋䁢𨫼鐧𨰝𨰻蓥訫閙閧閗閖𨴴瑅㻂𤣿𤩂𤏪㻧𣈥随𨻧𨹦𨹥㻌𤧭𤩸𣿮琒瑫㻼靁𩂰"],
-    ["9640", "桇䨝𩂓𥟟靝鍨𨦉𨰦𨬯𦎾銺嬑譩䤼珹𤈛鞛靱餸𠼦巁𨯅𤪲頟𩓚鋶𩗗釥䓀𨭐𤩧𨭤飜𨩅㼀鈪䤥萔餻饍𧬆㷽馛䭯馪驜𨭥𥣈檏騡嫾騯𩣱䮐𩥈馼䮽䮗鍽塲𡌂堢𤦸"],
-    ["96a1", "𡓨硄𢜟𣶸棅㵽鑘㤧慐𢞁𢥫愇鱏鱓鱻鰵鰐魿鯏𩸭鮟𪇵𪃾鴡䲮𤄄鸘䲰鴌𪆴𪃭𪃳𩤯鶥蒽𦸒𦿟𦮂藼䔳𦶤𦺄𦷰萠藮𦸀𣟗𦁤秢𣖜𣙀䤭𤧞㵢鏛銾鍈𠊿碹鉷鑍俤㑀遤𥕝砽硔碶硋𡝗𣇉𤥁㚚佲濚濙瀞瀞吔𤆵垻壳垊鴖埗焴㒯𤆬燫𦱀𤾗嬨𡞵𨩉"],
-    ["9740", "愌嫎娋䊼𤒈㜬䭻𨧼鎻鎸𡣖𠼝葲𦳀𡐓𤋺𢰦𤏁妔𣶷𦝁綨𦅛𦂤𤦹𤦋𨧺鋥珢㻩璴𨭣𡢟㻡𤪳櫘珳珻㻖𤨾𤪔𡟙𤩦𠎧𡐤𤧥瑈𤤖炥𤥶銄珦鍟𠓾錱𨫎𨨖鎆𨯧𥗕䤵𨪂煫"],
-    ["97a1", "𤥃𠳿嚤𠘚𠯫𠲸唂秄𡟺緾𡛂𤩐𡡒䔮鐁㜊𨫀𤦭妰𡢿𡢃𧒄媡㛢𣵛㚰鉟婹𨪁𡡢鍴㳍𠪴䪖㦊僴㵩㵌𡎜煵䋻𨈘渏𩃤䓫浗𧹏灧沯㳖𣿭𣸭渂漌㵯𠏵畑㚼㓈䚀㻚䡱姄鉮䤾轁𨰜𦯀堒埈㛖𡑒烾𤍢𤩱𢿣𡊰𢎽梹楧𡎘𣓥𧯴𣛟𨪃𣟖𣏺𤲟樚𣚭𦲷萾䓟䓎"],
-    ["9840", "𦴦𦵑𦲂𦿞漗𧄉茽𡜺菭𦲀𧁓𡟛妉媂𡞳婡婱𡤅𤇼㜭姯𡜼㛇熎鎐暚𤊥婮娫𤊓樫𣻹𧜶𤑛𤋊焝𤉙𨧡侰𦴨峂𤓎𧹍𤎽樌𤉖𡌄炦焳𤏩㶥泟勇𤩏繥姫崯㷳彜𤩝𡟟綤萦"],
-    ["98a1", "咅𣫺𣌀𠈔坾𠣕𠘙㿥𡾞𪊶瀃𩅛嵰玏糓𨩙𩐠俈翧狍猐𧫴猸猹𥛶獁獈㺩𧬘遬燵𤣲珡臶㻊県㻑沢国琙琞琟㻢㻰㻴㻺瓓㼎㽓畂畭畲疍㽼痈痜㿀癍㿗癴㿜発𤽜熈嘣覀塩䀝睃䀹条䁅㗛瞘䁪䁯属瞾矋売砘点砜䂨砹硇硑硦葈𥔵礳栃礲䄃"],
-    ["9940", "䄉禑禙辻稆込䅧窑䆲窼艹䇄竏竛䇏両筢筬筻簒簛䉠䉺类粜䊌粸䊔糭输烀𠳏総緔緐緽羮羴犟䎗耠耥笹耮耱联㷌垴炠肷胩䏭脌猪脎脒畠脔䐁㬹腖腙腚"],
-    ["99a1", "䐓堺腼膄䐥膓䐭膥埯臁臤艔䒏芦艶苊苘苿䒰荗险榊萅烵葤惣蒈䔄蒾蓡蓸蔐蔸蕒䔻蕯蕰藠䕷虲蚒蚲蛯际螋䘆䘗袮裿褤襇覑𧥧訩訸誔誴豑賔賲贜䞘塟跃䟭仮踺嗘坔蹱嗵躰䠷軎転軤軭軲辷迁迊迌逳駄䢭飠鈓䤞鈨鉘鉫銱銮銿"],
-    ["9a40", "鋣鋫鋳鋴鋽鍃鎄鎭䥅䥑麿鐗匁鐝鐭鐾䥪鑔鑹锭関䦧间阳䧥枠䨤靀䨵鞲韂噔䫤惨颹䬙飱塄餎餙冴餜餷饂饝饢䭰駅䮝騼鬏窃魩鮁鯝鯱鯴䱭鰠㝯𡯂鵉鰺"],
-    ["9aa1", "黾噐鶓鶽鷀鷼银辶鹻麬麱麽黆铜黢黱黸竈齄𠂔𠊷𠎠椚铃妬𠓗塀铁㞹𠗕𠘕𠙶𡚺块煳𠫂𠫍𠮿呪吆𠯋咞𠯻𠰻𠱓𠱥𠱼惧𠲍噺𠲵𠳝𠳭𠵯𠶲𠷈楕鰯螥𠸄𠸎𠻗𠾐𠼭𠹳尠𠾼帋𡁜𡁏𡁶朞𡁻𡂈𡂖㙇𡂿𡃓𡄯𡄻卤蒭𡋣𡍵𡌶讁𡕷𡘙𡟃𡟇乸炻𡠭𡥪"],
-    ["9b40", "𡨭𡩅𡰪𡱰𡲬𡻈拃𡻕𡼕熘桕𢁅槩㛈𢉼𢏗𢏺𢜪𢡱𢥏苽𢥧𢦓𢫕覥𢫨辠𢬎鞸𢬿顇骽𢱌"],
-    ["9b62", "𢲈𢲷𥯨𢴈𢴒𢶷𢶕𢹂𢽴𢿌𣀳𣁦𣌟𣏞徱晈暿𧩹𣕧𣗳爁𤦺矗𣘚𣜖纇𠍆墵朎"],
-    ["9ba1", "椘𣪧𧙗𥿢𣸑𣺹𧗾𢂚䣐䪸𤄙𨪚𤋮𤌍𤀻𤌴𤎖𤩅𠗊凒𠘑妟𡺨㮾𣳿𤐄𤓖垈𤙴㦛𤜯𨗨𩧉㝢𢇃譞𨭎駖𤠒𤣻𤨕爉𤫀𠱸奥𤺥𤾆𠝹軚𥀬劏圿煱𥊙𥐙𣽊𤪧喼𥑆𥑮𦭒釔㑳𥔿𧘲𥕞䜘𥕢𥕦𥟇𤤿𥡝偦㓻𣏌惞𥤃䝼𨥈𥪮𥮉𥰆𡶐垡煑澶𦄂𧰒遖𦆲𤾚譢𦐂𦑊"],
-    ["9c40", "嵛𦯷輶𦒄𡤜諪𤧶𦒈𣿯𦔒䯀𦖿𦚵𢜛鑥𥟡憕娧晉侻嚹𤔡𦛼乪𤤴陖涏𦲽㘘襷𦞙𦡮𦐑𦡞營𦣇筂𩃀𠨑𦤦鄄𦤹穅鷰𦧺騦𦨭㙟𦑩𠀡禃𦨴𦭛崬𣔙菏𦮝䛐𦲤画补𦶮墶"],
-    ["9ca1", "㜜𢖍𧁋𧇍㱔𧊀𧊅銁𢅺𧊋錰𧋦𤧐氹钟𧑐𠻸蠧裵𢤦𨑳𡞱溸𤨪𡠠㦤㚹尐秣䔿暶𩲭𩢤襃𧟌𧡘囖䃟𡘊㦡𣜯𨃨𡏅熭荦𧧝𩆨婧䲷𧂯𨦫𧧽𧨊𧬋𧵦𤅺筃祾𨀉澵𪋟樃𨌘厢𦸇鎿栶靝𨅯𨀣𦦵𡏭𣈯𨁈嶅𨰰𨂃圕頣𨥉嶫𤦈斾槕叒𤪥𣾁㰑朶𨂐𨃴𨄮𡾡𨅏"],
-    ["9d40", "𨆉𨆯𨈚𨌆𨌯𨎊㗊𨑨𨚪䣺揦𨥖砈鉕𨦸䏲𨧧䏟𨧨𨭆𨯔姸𨰉輋𨿅𩃬筑𩄐𩄼㷷𩅞𤫊运犏嚋𩓧𩗩𩖰𩖸𩜲𩣑𩥉𩥪𩧃𩨨𩬎𩵚𩶛纟𩻸𩼣䲤镇𪊓熢𪋿䶑递𪗋䶜𠲜达嗁"],
-    ["9da1", "辺𢒰边𤪓䔉繿潖檱仪㓤𨬬𧢝㜺躀𡟵𨀤𨭬𨮙𧨾𦚯㷫𧙕𣲷𥘵𥥖亚𥺁𦉘嚿𠹭踎孭𣺈𤲞揞拐𡟶𡡻攰嘭𥱊吚𥌑㷆𩶘䱽嘢嘞罉𥻘奵𣵀蝰东𠿪𠵉𣚺脗鵞贘瘻鱅癎瞹鍅吲腈苷嘥脲萘肽嗪祢噃吖𠺝㗎嘅嗱曱𨋢㘭甴嗰喺咗啲𠱁𠲖廐𥅈𠹶𢱢"],
-    ["9e40", "𠺢麫絚嗞𡁵抝靭咔賍燶酶揼掹揾啩𢭃鱲𢺳冚㓟𠶧冧呍唞唓癦踭𦢊疱肶蠄螆裇膶萜𡃁䓬猄𤜆宐茋𦢓噻𢛴𧴯𤆣𧵳𦻐𧊶酰𡇙鈈𣳼𪚩𠺬𠻹牦𡲢䝎𤿂𧿹𠿫䃺"],
-    ["9ea1", "鱝攟𢶠䣳𤟠𩵼𠿬𠸊恢𧖣𠿭"],
-    ["9ead", "𦁈𡆇熣纎鵐业丄㕷嬍沲卧㚬㧜卽㚥𤘘墚𤭮舭呋垪𥪕𠥹"],
-    ["9ec5", "㩒𢑥獴𩺬䴉鯭𣳾𩼰䱛𤾩𩖞𩿞葜𣶶𧊲𦞳𣜠挮紥𣻷𣸬㨪逈勌㹴㙺䗩𠒎癀嫰𠺶硺𧼮墧䂿噼鮋嵴癔𪐴麅䳡痹㟻愙𣃚𤏲"],
-    ["9ef5", "噝𡊩垧𤥣𩸆刴𧂮㖭汊鵼"],
-    ["9f40", "籖鬹埞𡝬屓擓𩓐𦌵𧅤蚭𠴨𦴢𤫢𠵱"],
-    ["9f4f", "凾𡼏嶎霃𡷑麁遌笟鬂峑箣扨挵髿篏鬪籾鬮籂粆鰕篼鬉鼗鰛𤤾齚啳寃俽麘俲剠㸆勑坧偖妷帒韈鶫轜呩鞴饀鞺匬愰"],
-    ["9fa1", "椬叚鰊鴂䰻陁榀傦畆𡝭駚剳"],
+    ["8cce", "藖\uD852\uDD7B芿\uD85C\uDD0D䲁\uD85B\uDD74嵻\uD85A\uDF15\uD85B\uDFBE龭龮宖龯曧繛湗秊㶈䓃\uD84C\uDE56\uD849\uDF96䎚䔶"],
+    ["8ce6", "峕\uD84E\uDF1A諹屸㴒\uD84D\uDD51嵸龲煗䕘\uD850\uDCEC\uD847\uDE23䱷㥸㑊\uD840\uDDA4\uD85B\uDC41諌侴\uD840\uDE39妿腬顖\uD866\uDCFA弻"],
+    ["8d40", "\uD842\uDF9F"],
+    ["8d42", "\uD848\uDDC1\uD862\uDD6D䄂䚻\uD864\uDC79㼇龳\uD868\uDDB5䃸㟖䛷\uD85B\uDC46䅼\uD861\uDEB2\uD85C\uDFFF䕭㣔\uD855\uDC9A䕡䔛䶉䱻䵶䗪㿈\uD852\uDF0F㙡䓞䒽䇭崾嵈嵖㷼㠏嶤嶹㠠㠸幂庽弥徃㤈㤔㤿㥍惗愽峥㦉憷憹懏㦸戬抐拥挘㧸嚱"],
+    ["8da1", "㨃揢揻搇摚㩋擀崕嘡龟㪗斆㪽旿晓㫲暒㬢朖㭂枤栀㭘桊梄㭲㭱㭻椉楃牜楤榟榅㮼槖㯝橥橴橱檂㯬檙㯲檫檵櫔櫶殁毁毪汵沪㳋洂洆洦涁㳯涤涱渕渘温溆\uD862\uDDC0溻滢滚齿滨滩漤漴㵆\uD84F\uDF41澁澾㵪㵵熷岙㶊瀬㶑灐灔灯灿炉\uD840\uDF25䏁㗱\uD843\uDED8"],
+    ["8e40", "\uD84F\uDED7垾\uD85B\uDED3焾\uD855\uDFE0㙎榢\uD862\uDFE9孴穉\uD856\uDCE1\uD865\uDCD9穥穽\uD856\uDDAC窻窰竂竃燑\uD859\uDC8D䇊竚竝竪䇯咲\uD857\uDC01笋筕笩\uD854\uDF0E\uD857\uDCFE箢筯莜\uD856\uDFB4\uD85B\uDC7F篐萡箒箸\uD857\uDD20㶭\uD857\uDC65蒒篺簆簵\uD857\uDCC1籄粃\uD852\uDC82粦晽\uD851\uDD78糉糇糦籴糳糵糎"],
+    ["8ea1", "繧䔝\uD85B\uDE44絝\uD85B\uDED6璍綉綫焵綳緒\uD850\uDC57\uD858\uDC29緤㴓緵\uD845\uDFF9緥\uD860\uDF6D縝\uD858\uDD21\uD858\uDD5A繮纒䌫鑬縧罀罁罇礶\uD858\uDED0駡羗\uD858\uDF51羣\uD845\uDE61\uD840\uDC68䕜\uD84D\uDF66䔃\uD860\uDF3A翺\uD859\uDC89者耈耝耨耯\uD868\uDC87\uD85B\uDCC3耻耼聡\uD849\uDF14䦉\uD859\uDE26\uD84F\uDDE3\uD859\uDEE8朥肧\uD862\uDE48脇脚墰\uD849\uDEF6汿\uD859\uDC98\uD853\uDFB8擧\uD845\uDC8A舘\uD846\uDC5E橓\uD852\uDE65\uD852\uDE95䑺舩\uD842\uDF0D\uD85A\uDE52\uD84F\uDD7E俹\uD845\uDCFD蓢荢\uD85A\uDF0A\uD852\uDDA7\uD84D\uDD30\uD845\uDF73\uD84F\uDDF8芪椛\uD87E\uDD94䇛"],
+    ["8f40", "蕋苐茚\uD843\uDE16\uD845\uDFB4㛁\uD84C\uDD7D\uD84D\uDD5A艻苢茘\uD84F\uDE8B\uD85B\uDDA3\uD85A\uDF05\uD85A\uDF97\uD84D\uDDCE㶿茝嗬莅䔋\uD85B\uDDA5莬菁菓㑾\uD85B\uDED4橗蕚㒖\uD85B\uDE42\uD84B\uDEEF葘\uD856\uDFE4葱㷓䓤檧葊\uD84F\uDCB5祘蒨\uD85A\uDF96\uD85B\uDE77\uD85B\uDE43蓞萏莑䒠蒓蓤\uD857\uDC91䉀\uD857\uDCC0䕃蔴嫲\uD85B\uDE99䔧蕳䔖枿蘖"],
+    ["8fa1", "\uD861\uDE25\uD861\uDE3B藁\uD85C\uDC88蘂\uD845\uDD82\uD85C\uDCCD\uD87E\uDDB2䕪蘨㙈\uD846\uDCA2号\uD85C\uDF9A虾蝱\uD868\uDCF8蟮\uD84B\uDC27螱蟚蠏噡虬桖䘏衅衆\uD85D\uDDE0\uD84F\uDDB9\uD85D\uDDE4衞袜䙛袴袵揁装睷\uD85D\uDF0F覇覊覦覩覧覼\uD862\uDE25觧\uD85E\uDD24\uD85E\uDEBD誜瞓釾誐\uD85E\uDE59竩\uD85E\uDF3A\uD84F\uDF8F䜓\uD85E\uDF38煼謌謟\uD855\uDC30\uD855\uDD65謿譌譍誩\uD852\uDE7A讐讛誯\uD845\uDEDF䘕衏貛\uD85F\uDD54\uD85F\uDD8F\uD87E\uDDD4㜥\uD85F\uDD53賖\uD85F\uDD98\uD85F\uDDBD贒贃\uD846\uDD10賛灜贑\uD853\uDCC9㻐起"],
+    ["9040", "趩\uD860\uDC02\uD844\uDC14\uD852\uDD8A㭼\uD860\uDDBC\uD85C\uDD0C竧躭躶軃鋔輙輭\uD860\uDF65\uD861\uDC12辥錃\uD868\uDE9F\uD842\uDE50辳䤪\uD862\uDDDE\uD861\uDD3D\uD84F\uDDBB廸\uD84C\uDE62迹\uD868\uDC14\uD861\uDEBC\uD861\uDD01\uD848\uDF25㦀\uD85B\uDED7逷\uD861\uDD3C\uD85E\uDEBE遡\uD861\uDD6C\uD861\uDE0B邨\uD861\uDF13郄\uD861\uDEE6邮都酧㫰醩釄粬\uD862\uDD33\uD847\uDE89鈎沟鉁鉢\uD855\uDDB9銹\uD862\uDEC6\uD84F\uDC9B\uD862\uDF0C\uD855\uDDDB"],
+    ["90a1", "\uD843\uDD31錬鍫\uD862\uDEE1\uD862\uDFEB炏嫃\uD862\uDEE2\uD862\uDEE5䥥鉄\uD862\uDFEC\uD863\uDC39\uD862\uDFFF鍳鑛躼閅閦鐦閠濶䊹\uD849\uDE7A\uD861\uDED8\uD844\uDE7C\uD84F\uDE2E䧟氜陻隖䅬隣\uD85B\uDED5懚隶磵\uD862\uDEE0隽双䦡\uD85B\uDCB8\uD840\uDE74\uD859\uDC10\uD864\uDCAF\uD864\uDCE5\uD852\uDED1\uD846\uDD15\uD84C\uDF0A霱虂霶䨏䔽䖅\uD852\uDEE9灵孁霛靜\uD864\uDDD5靗孊\uD864\uDDEB靟鐥僐\uD84C\uDCB7\uD84C\uDCBC鞉鞟鞱鞾韀韒韠\uD855\uDC6C韮琜\uD865\uDC33響韵\uD865\uDC1D\uD85E\uDD7A䫑頴頳顋顦㬎\uD85C\uDD75㵑\uD841\uDE30\uD850\uDD5C"],
+    ["9140", "\uD855\uDF06飊颷飈飇䫿\uD85B\uDD27\uD845\uDED3喰飡飦飬鍸餹\uD852\uDE29䭲\uD866\uDC57\uD866\uDD05駵騌騻騐驘\uD855\uDF25㛄\uD864\uDCB1\uD866\uDFD5髠髢\uD866\uDF05髴䰎鬔鬭\uD861\uDE00倴鬴\uD85A\uDDA8㣃\uD84C\uDC7D魐魀\uD867\uDD3E婅\uD846\uDC63鮎\uD850\uDE4B鰂鯿鰌\uD867\uDE68鷔\uD867\uDFB7\uD868\uDD92\uD868\uDDAB\uD868\uDCE1\uD868\uDD23\uD868\uDDDF鵾鶃\uD868\uDD34鸎梈"],
+    ["91a1", "鷄\uD848\uDD5B\uD868\uDD93\uD868\uDE20\uD846\uDD3B\uD868\uDE33鴹\uD868\uDCB9\uD868\uDEB4麐麕麞麢䴴麪麯\uD850\uDF64黁㭠㧥㴝伲㞾\uD863\uDC2B鼂鼈䮖鐤\uD85B\uDDA2鼗鼖鼹嚟嚊齅馸\uD864\uDC8B韲葿齢齩竜龎爖䮾\uD852\uDD75\uD852\uDDBB煷\uD852\uDDF8\uD850\uDF48\uD852\uDE51玞\uD862\uDFDA\uD846\uDCFA禟\uD862\uDD7E\uD863\uDE36鍩鏳\uD862\uDE44鋬鎁鏋\uD862\uDD6C\uD851\uDCB9爗㻫睲穃烐\uD851\uDC73\uD850\uDFF8煾\uD845\uDFEF炣\uD846\uDCBE\uD84D\uDD99㻇\uD846\uDC85\uD855\uDC2F\uD845\uDFF8㜢\uD845\uDEFB\uD846\uDC39㛡\uD845\uDF74\uD846\uDCD1\uD857\uDF4B㜣\uD845\uDEC0坛\uD852\uDE25\uD844\uDFFE\uD844\uDEA8"],
+    ["9240", "\uD844\uDFC6\uD845\uDCB6蔃\uD84D\uDEA6蔃葕\uD852\uDD94\uD85C\uDD65\uD84F\uDE31\uD855\uDD5C\uD84F\uDEFB\uD85C\uDC52䓴\uD84D\uDEEE\uD866\uDD9D\uD85B\uDF26柹㜳㰕㷧塬\uD846\uDD22栐䁗\uD84D\uDF3F\uD850\uDCE1\uD850\uDC8B\uD850\uDD0F\uD85B\uDC21哋嚞\uD859\uDEB1嚒\uD843\uDFDF\uD842\uDFA8\uD843\uDE0D鏆\uD862\uDF13鎜仸儫㠙\uD851\uDC36亼\uD841\uDC65\uD840\uDF7F佋侊\uD855\uDE51婨\uD840\uDDAB\uD840\uDFCB㦙\uD840\uDF0A\uD841\uDC14㐵伩\uD840\uDEC0\uD863\uDEB3\uD840\uDE75諚\uD840\uDE0C亘"],
+    ["92a1", "働儍侢伃\uD852\uDE0E\uD84F\uDE8A佂倮偬傁俌俥偘僼兙兛兝兞湶\uD84D\uDD95\uD84F\uDE39\uD84F\uDEBF浲\uD846\uDC84\uD84F\uDE89冨凃\uD841\uDDE0䓝\uD841\uDCA3\uD841\uDC92\uD841\uDC91赺\uD862\uDE9C\uD841\uDF0E剙劤\uD842\uDC73勡鍮䙺熌\uD850\uDF8C\uD843\uDC20\uD852\uDDAC\uD844\uDCE4槑\uD843\uDE1D瑹㻞璙琔瑖玘䮎\uD852\uDEBC\uD850\uDC8D叐㖄爏\uD850\uDCC9喴\uD840\uDF45响\uD842\uDFC6圝鉝雴鍦埝垍坿㘾壋媙\uD862\uDE46\uD845\uDEFA\uD845\uDF6F\uD845\uDF10娬妸銏婾嫏娒\uD856\uDD46\uD846\uDDF3\uD846\uDC61\uD850\uDE95㛵洅瑃娡\uD857\uDE83"],
+    ["9340", "媁\uD862\uDFD7\uD841\uDC13鏠璌\uD844\uDF03焅䥲鐈\uD862\uDDFB鎽㞠尞岞幞幈\uD846\uDD96\uD846\uDD7C\uD84E\uDEEE廍孏\uD846\uDD03\uD846\uDD04㜁\uD846\uDCA0㛝\uD845\uDEFE㛓脪\uD862\uDE47\uD847\uDDBA\uD84D\uDC72\uD862\uDDA8弌弎\uD846\uDD27\uD845\uDFAB婫\uD845\uDF3B孄蘔\uD85D\uDDFD衠恾\uD84A\uDC60\uD849\uDE2B忛㺸\uD849\uDDAF\uD849\uDDBE\uD864\uDC88\uD85B\uDF73懀\uD840\uDC3E\uD840\uDC46\uD849\uDE1B憙憘恵\uD84B\uDC9B\uD84B\uDD07\uD851\uDED4\uD864\uDD4D"],
+    ["93a1", "摱\uD851\uDE65\uD84A\uDF6A㨩\uD84A\uDF22\uD84D\uDC50\uD866\uDCEA\uD84B\uDE78挷\uD869\uDC5B撶挱揑\uD852\uDDE3\uD84B\uDD67护\uD84B\uDCA1搻敫楲㯴\uD84C\uDC8E\uD84C\uDEAD\uD852\uDD89\uD84C\uDEAB唍\uD84C\uDEE0\uD846\uDCD9\uD865\uDC3F曎\uD84C\uDE89\uD84C\uDDB3㫠䆐\uD855\uDD84\uD862\uDF22\uD855\uDD8F\uD845\uDEFC\uD855\uDD5B\uD855\uDC25磮\uD84C\uDD03\uD846\uDC2A\uD84C\uDE34㑤\uD84C\uDE0F\uD84C\uDD82\uD850\uDEC9暎\uD85B\uDD24晫䮓昰\uD85E\uDC70\uD847\uDDEB晣\uD84C\uDED2\uD84C\uDEE1昞\uD856\uDC72㣑\uD84E\uDC3A\uD84D\uDFBC㮙\uD84D\uDFA2\uD84C\uDFFE瓐㮖枏\uD851\uDE2A梶栞㯄檾㡣\uD84D\uDFD5\uD851\uDC87樳橒櫉欅\uD846\uDD12攑梘橌㯗橺歗\uD84F\uDFC0\uD84F\uDC9A鎠鋲\uD862\uDFEA\uD862\uDECB"],
+    ["9440", "銉\uD860\uDC1E\uD862\uDDDC鑧涥漋\uD852\uDDEC浧\uD84F\uDF7F㶏渄\uD850\uDC3C娽渊塇洤硂焻\uD850\uDF1A\uD850\uDE76烱牐犇犔\uD851\uDF8F\uD851\uDF25兹\uD852\uDEA4\uD841\uDDEB瑺\uD84F\uDEF8\uD84D\uDE5F\uD852\uDE4A\uD852\uDD17\uD857\uDFE1㼆㺱\uD852\uDEDF\uD863\uDC23\uD84F\uDF35悧㻳瓌琼鎇琷䒟\uD85B\uDDEA䕑疃㽣\uD853\uDCD9\uD853\uDD06㽘畕癳\uD869\uDDC6㬙瑨\uD862\uDECC\uD852\uDDAB\uD852\uDD8E㫻"],
+    ["94a1", "㷍\uD852\uDE4E㻿\uD852\uDDC5\uD852\uDCF3釺圲鍂\uD862\uDEE3\uD846\uDC64僟\uD854\uDE21\uD854\uDDE7睸\uD84C\uDE32眎眏睻\uD851\uDE97\uD84D\uDF81㩞\uD852\uDCF0琸璛㺿\uD852\uDEBA\uD852\uDEC7䃈\uD852\uDE96\uD858\uDDAE錇\uD855\uDD81砞碍碈磒珐祙\uD85D\uDF41\uD855\uDEE3䄎禛蒖禥樭\uD84F\uDEFA稺秴䅮\uD845\uDEE6䄲鈵秱\uD843\uDD4C\uD852\uDD8C\uD840\uDE99\uD84F\uDDBA\uD845\uDF6E㖗啫㕰㚪\uD840\uDDD4\uD843\uDC0D竢婙\uD849\uDEF5\uD856\uDEAF\uD856\uDE9C娍\uD840\uDE5B磰娪\uD856\uDFC6竾䇹籝籭䈑\uD856\uDFB3\uD857\uDEBC\uD857\uDEA6糍\uD852\uDDF9\uD845\uDFB0粎籼粮檲緜縇緓罎\uD858\uDE61"],
+    ["9540", "\uD858\uDD5C\uD85E\uDF48綗\uD857\uDE82䉪\uD85A\uDF75\uD842\uDD16柖\uD840\uDC4E\uD84D\uDDCF埄\uD859\uDC12\uD858\uDFF8\uD852\uDD62翝笧\uD842\uDC2C\uD856\uDEE9\uD857\uDD43笌\uD857\uDE0E駦虅驣樜\uD84D\uDC3F㧢\uD852\uDDF7\uD859\uDDAD騟\uD859\uDDA0蒀\uD85C\uDD27\uD85B\uDCD1䓪脷䐂胆脉腂\uD859\uDFB4飃\uD85A\uDE42艢艥\uD85A\uDE51葓\uD85B\uDDA7蘐\uD85C\uDE1B媆䅿\uD846\uDC40嬫\uD846\uDCA1嫤\uD846\uDCD8蚠\uD87E\uDDBC\uD84F\uDD8F蠭\uD85D\uDC22娂"],
+    ["95a1", "衮佅袇袿裦襥襍\uD855\uDE83襔\uD85D\uDF85\uD85D\uDF84\uD862\uDFF5\uD862\uDFD9\uD862\uDF9C\uD862\uDDF9㺭蒣䛵䛏㟲訽訜\uD865\uDC48彍鈫\uD850\uDE84旔焩烄\uD846\uDC45鵭貟賩\uD85F\uDDDC妚矃姰䍮㛔踪躧\uD853\uDC09輰轊䋴汘澻\uD848\uDF21䢛潹溋\uD845\uDFDA鯩㚵\uD852\uDD2F邻邗啱䤆醻鐄\uD862\uDE4B䁢\uD862\uDEFC鐧\uD863\uDC1D\uD863\uDC3B蓥訫閙閧閗閖\uD863\uDD34瑅㻂\uD852\uDCFF\uD852\uDE42\uD850\uDFEA㻧\uD84C\uDE25随\uD863\uDEE7\uD863\uDE66\uD863\uDE65㻌\uD852\uDDED\uD852\uDE78\uD84F\uDFEE琒瑫㻼靁\uD864\uDCB0"],
+    ["9640", "桇䨝\uD864\uDC93\uD855\uDFDF靝鍨\uD862\uDD89\uD863\uDC26\uD862\uDF2F\uD858\uDFBE銺嬑譩䤼珹\uD850\uDE1B鞛靱餸\uD843\uDF26巁\uD862\uDFC5\uD852\uDEB2頟\uD865\uDCDA鋶\uD865\uDDD7釥䓀\uD862\uDF50\uD852\uDE67\uD862\uDF64飜\uD862\uDE45㼀鈪䤥萔餻饍\uD85E\uDF06㷽馛䭯馪驜\uD862\uDF65\uD856\uDCC8檏騡嫾騯\uD866\uDCF1䮐\uD866\uDD48馼䮽䮗鍽塲\uD844\uDF02堢\uD852\uDDB8"],
+    ["96a1", "\uD845\uDCE8硄\uD849\uDF1F\uD84F\uDDB8棅㵽鑘㤧慐\uD849\uDF81\uD84A\uDD6B愇鱏鱓鱻鰵鰐魿鯏\uD867\uDE2D鮟\uD868\uDDF5\uD868\uDCFE鴡䲮\uD850\uDD04鸘䲰鴌\uD868\uDDB4\uD868\uDCED\uD868\uDCF3\uD866\uDD2F鶥蒽\uD85B\uDE12\uD85B\uDFDF\uD85A\uDF82藼䔳\uD85B\uDDA4\uD85B\uDE84\uD85B\uDDF0萠藮\uD85B\uDE00\uD84D\uDFD7\uD858\uDC64秢\uD84D\uDD9C\uD84D\uDE40䤭\uD852\uDDDE㵢鏛銾鍈\uD840\uDEBF碹鉷鑍俤㑀遤\uD855\uDD5D砽硔碶硋\uD845\uDF57\uD84C\uDDC9\uD852\uDD41㚚佲濚濙瀞瀞吔\uD850\uDDB5垻壳垊鴖埗焴㒯\uD850\uDDAC燫\uD85B\uDC40\uD853\uDF97嬨\uD845\uDFB5\uD862\uDE49"],
+    ["9740", "愌嫎娋䊼\uD851\uDC88㜬䭻\uD862\uDDFC鎻鎸\uD846\uDCD6\uD843\uDF1D葲\uD85B\uDCC0\uD845\uDC13\uD850\uDEFA\uD84B\uDC26\uD850\uDFC1妔\uD84F\uDDB7\uD859\uDF41綨\uD858\uDD5B\uD858\uDCA4\uD852\uDDB9\uD852\uDD8B\uD862\uDDFA鋥珢㻩璴\uD862\uDF63\uD846\uDC9F㻡\uD852\uDEB3櫘珳珻㻖\uD852\uDE3E\uD852\uDE94\uD845\uDFD9\uD852\uDE66\uD840\uDFA7\uD845\uDC24\uD852\uDDE5瑈\uD852\uDD16炥\uD852\uDD76銄珦鍟\uD841\uDCFE錱\uD862\uDECE\uD862\uDE16鎆\uD862\uDFE7\uD855\uDDD5䤵\uD862\uDE82煫"],
+    ["97a1", "\uD852\uDD43\uD843\uDCFF嚤\uD841\uDE1A\uD842\uDFEB\uD843\uDCB8唂秄\uD845\uDFFA緾\uD845\uDEC2\uD852\uDE50\uD846\uDC52䔮鐁㜊\uD862\uDEC0\uD852\uDDAD妰\uD846\uDCBF\uD846\uDC83\uD85D\uDC84媡㛢\uD84F\uDD5B㚰鉟婹\uD862\uDE81\uD846\uDC62鍴㳍\uD842\uDEB4䪖㦊僴㵩㵌\uD844\uDF9C煵䋻\uD860\uDE18渏\uD864\uDCE4䓫浗\uD85F\uDE4F灧沯㳖\uD84F\uDFED\uD84F\uDE2D渂漌㵯\uD840\uDFF5畑㚼㓈䚀㻚䡱姄鉮䤾轁\uD863\uDC1C\uD85A\uDFC0堒埈㛖\uD845\uDC52烾\uD850\uDF62\uD852\uDE71\uD84B\uDFE3\uD844\uDEB0\uD848\uDFBD梹楧\uD844\uDF98\uD84D\uDCE5\uD85E\uDFF4\uD84D\uDEDF\uD862\uDE83\uD84D\uDFD6\uD84C\uDFFA\uD853\uDC9F樚\uD84D\uDEAD\uD85B\uDCB7萾䓟䓎"],
+    ["9840", "\uD85B\uDD26\uD85B\uDD51\uD85B\uDC82\uD85B\uDFDE漗\uD85C\uDD09茽\uD845\uDF3A菭\uD85B\uDC80\uD85C\uDC53\uD845\uDFDB妉媂\uD845\uDFB3婡婱\uD846\uDD05\uD850\uDDFC㜭姯\uD845\uDF3C㛇熎鎐暚\uD850\uDEA5婮娫\uD850\uDE93樫\uD84F\uDEF9\uD85D\uDF36\uD851\uDC5B\uD850\uDECA焝\uD850\uDE59\uD862\uDDE1侰\uD85B\uDD28峂\uD851\uDCCE\uD85F\uDE4D\uD850\uDFBD樌\uD850\uDE56\uD844\uDF04炦焳\uD850\uDFE9㶥泟\uD87E\uDC25\uD852\uDE4F繥姫崯㷳彜\uD852\uDE5D\uD845\uDFDF綤萦"],
+    ["98a1", "咅\uD84E\uDEFA\uD84C\uDF00\uD840\uDE14坾\uD842\uDCD5\uD841\uDE19㿥\uD847\uDF9E\uD868\uDEB6瀃\uD864\uDD5B嵰玏糓\uD862\uDE59\uD865\uDC20俈翧狍猐\uD85E\uDEF4猸猹\uD855\uDEF6獁獈㺩\uD85E\uDF18遬燵\uD852\uDCF2珡臶㻊県㻑沢国琙琞琟㻢㻰㻴㻺瓓㼎㽓畂畭畲疍㽼痈痜㿀癍㿗癴㿜発\uD853\uDF5C熈嘣覀塩䀝睃䀹条䁅㗛瞘䁪䁯属瞾矋売砘点砜䂨砹硇硑硦葈\uD855\uDD35礳栃礲䄃"],
+    ["9940", "䄉禑禙辻稆込䅧窑䆲窼艹䇄竏竛䇏両筢筬筻簒簛䉠䉺类粜䊌粸䊔糭输烀\uD843\uDCCF総緔緐緽羮羴犟䎗耠耥笹耮耱联㷌垴炠肷胩䏭脌猪脎脒畠脔䐁㬹腖腙腚"],
+    ["99a1", "䐓堺腼膄䐥膓䐭膥埯臁臤艔䒏芦艶苊苘苿䒰荗险榊萅烵葤惣蒈䔄蒾蓡蓸蔐蔸蕒䔻蕯蕰藠䕷虲蚒蚲蛯际螋䘆䘗袮裿褤襇覑\uD85E\uDD67訩訸誔誴豑賔賲贜䞘塟跃䟭仮踺嗘坔蹱嗵躰䠷軎転軤軭軲辷迁迊迌逳駄䢭飠鈓䤞鈨鉘鉫銱銮銿"],
+    ["9a40", "鋣鋫鋳鋴鋽鍃鎄鎭䥅䥑麿鐗匁鐝鐭鐾䥪鑔鑹锭関䦧间阳䧥枠䨤靀䨵鞲韂噔䫤惨颹䬙飱塄餎餙冴餜餷饂饝饢䭰駅䮝騼鬏窃魩鮁鯝鯱鯴䱭鰠㝯\uD846\uDFC2鵉鰺"],
+    ["9aa1", "黾噐鶓鶽鷀鷼银辶鹻麬麱麽黆铜黢黱黸竈齄\uD840\uDC94\uD840\uDEB7\uD840\uDFA0椚铃妬\uD841\uDCD7塀铁㞹\uD841\uDDD5\uD841\uDE15\uD841\uDE76\uD845\uDEBA块煳\uD842\uDEC2\uD842\uDECD\uD842\uDFBF呪\uD87E\uDC3B\uD842\uDFCB咞\uD842\uDFFB\uD843\uDC3B\uD843\uDC53\uD843\uDC65\uD843\uDC7C惧\uD843\uDC8D噺\uD843\uDCB5\uD843\uDCDD\uD843\uDCED\uD843\uDD6F\uD843\uDDB2\uD843\uDDC8楕鰯螥\uD843\uDE04\uD843\uDE0E\uD843\uDED7\uD843\uDF90\uD843\uDF2D\uD843\uDE73尠\uD843\uDFBC帋\uD844\uDC5C\uD844\uDC4F\uD844\uDC76朞\uD844\uDC7B\uD844\uDC88\uD844\uDC96㙇\uD844\uDCBF\uD844\uDCD3\uD844\uDD2F\uD844\uDD3B卤蒭\uD844\uDEE3\uD844\uDF75\uD844\uDF36讁\uD845\uDD77\uD845\uDE19\uD845\uDFC3\uD845\uDFC7乸炻\uD846\uDC2D\uD846\uDD6A"],
+    ["9b40", "\uD846\uDE2D\uD846\uDE45\uD847\uDC2A\uD847\uDC70\uD847\uDCAC\uD847\uDEC8拃\uD847\uDED5\uD847\uDF15熘桕\uD848\uDC45槩㛈\uD848\uDE7C\uD848\uDFD7\uD848\uDFFA\uD849\uDF2A\uD84A\uDC71\uD84A\uDD4F苽\uD84A\uDD67\uD84A\uDD93\uD84A\uDED5覥\uD84A\uDEE8辠\uD84A\uDF0E鞸\uD84A\uDF3F顇骽\uD84B\uDC4C"],
+    ["9b62", "\uD84B\uDC88\uD84B\uDCB7\uD856\uDFE8\uD84B\uDD08\uD84B\uDD12\uD84B\uDDB7\uD84B\uDD95\uD84B\uDE42\uD84B\uDF74\uD84B\uDFCC\uD84C\uDC33\uD84C\uDC66\uD84C\uDF1F\uD84C\uDFDE徱晈暿\uD85E\uDE79\uD84D\uDD67\uD84D\uDDF3爁\uD852\uDDBA矗\uD84D\uDE1A\uD84D\uDF16纇\uD840\uDF46墵朎"],
+    ["9ba1", "椘\uD84E\uDEA7\uD85D\uDE57\uD857\uDFE2\uD84F\uDE11\uD84F\uDEB9\uD85D\uDDFE\uD848\uDC9A䣐䪸\uD850\uDD19\uD862\uDE9A\uD850\uDEEE\uD850\uDF0D\uD850\uDC3B\uD850\uDF34\uD850\uDF96\uD852\uDE45\uD841\uDDCA凒\uD841\uDE11妟\uD847\uDEA8㮾\uD84F\uDCFF\uD851\uDC04\uD851\uDCD6垈\uD851\uDE74㦛\uD851\uDF2F\uD861\uDDE8\uD866\uDDC9㝢\uD848\uDDC3譞\uD862\uDF4E駖\uD852\uDC12\uD852\uDCFB\uD852\uDE15爉\uD852\uDEC0\uD843\uDC78奥\uD853\uDEA5\uD853\uDF86\uD841\uDF79軚\uD854\uDC2C劏圿煱\uD854\uDE99\uD855\uDC19\uD84F\uDF4A\uD852\uDEA7喼\uD855\uDC46\uD855\uDC6E\uD85A\uDF52釔㑳\uD855\uDD3F\uD85D\uDE32\uD855\uDD5E䜘\uD855\uDD62\uD855\uDD66\uD855\uDFC7\uD852\uDD3F\uD856\uDC5D偦㓻\uD84C\uDFCC惞\uD856\uDD03䝼\uD862\uDD48\uD856\uDEAE\uD856\uDF89\uD857\uDC06\uD847\uDD90垡煑澶\uD858\uDD02\uD85F\uDC12遖\uD858\uDDB2\uD853\uDF9A譢\uD859\uDC02\uD859\uDC4A"],
+    ["9c40", "嵛\uD85A\uDFF7輶\uD859\uDC84\uD846\uDD1C諪\uD852\uDDF6\uD859\uDC88\uD84F\uDFEF\uD859\uDD12䯀\uD859\uDDBF\uD859\uDEB5\uD849\uDF1B鑥\uD855\uDFE1憕娧\uD87E\uDCCD侻嚹\uD851\uDD21\uD859\uDEFC乪\uD852\uDD34陖涏\uD85B\uDCBD㘘襷\uD859\uDF99\uD85A\uDC6E\uD859\uDC11\uD85A\uDC5E營\uD85A\uDCC7筂\uD864\uDCC0\uD842\uDE11\uD85A\uDD26鄄\uD85A\uDD39穅鷰\uD85A\uDDFA騦\uD85A\uDE2D㙟\uD859\uDC69\uD840\uDC21禃\uD85A\uDE34\uD85A\uDF5B崬\uD84D\uDD19菏\uD85A\uDF9D䛐\uD85B\uDCA4画补\uD85B\uDDAE墶"],
+    ["9ca1", "㜜\uD849\uDD8D\uD85C\uDC4B\uD85C\uDDCD㱔\uD85C\uDE80\uD85C\uDE85銁\uD848\uDD7A\uD85C\uDE8B錰\uD85C\uDEE6\uD852\uDDD0氹钟\uD85D\uDC50\uD843\uDEF8蠧裵\uD84A\uDD26\uD861\uDC73\uD845\uDFB1溸\uD852\uDE2A\uD846\uDC20㦤㚹尐秣䔿暶\uD867\uDCAD\uD866\uDCA4襃\uD85D\uDFCC\uD85E\uDC58囖䃟\uD845\uDE0A㦡\uD84D\uDF2F\uD860\uDCE8\uD844\uDFC5熭荦\uD85E\uDDDD\uD864\uDDA8婧䲷\uD85C\uDCAF\uD862\uDDAB\uD85E\uDDFD\uD85E\uDE0A\uD85E\uDF0B\uD85F\uDD66\uD850\uDD7A筃祾\uD860\uDC09澵\uD868\uDEDF樃\uD860\uDF18厢\uD85B\uDE07鎿栶靝\uD860\uDD6F\uD860\uDC23\uD85A\uDDB5\uD844\uDFED\uD84C\uDE2F\uD860\uDC48嶅\uD863\uDC30\uD860\uDC83圕頣\uD862\uDD49嶫\uD852\uDD88斾槕叒\uD852\uDEA5\uD84F\uDF81㰑朶\uD860\uDC90\uD860\uDCF4\uD860\uDD2E\uD847\uDFA1\uD860\uDD4F"],
+    ["9d40", "\uD860\uDD89\uD860\uDDAF\uD860\uDE1A\uD860\uDF06\uD860\uDF2F\uD860\uDF8A㗊\uD861\uDC68\uD861\uDEAA䣺揦\uD862\uDD56砈鉕\uD862\uDDB8䏲\uD862\uDDE7䏟\uD862\uDDE8\uD862\uDF46\uD862\uDFD4姸\uD863\uDC09輋\uD863\uDFC5\uD864\uDCEC筑\uD864\uDD10\uD864\uDD3C㷷\uD864\uDD5E\uD852\uDECA运犏嚋\uD865\uDCE7\uD865\uDDE9\uD865\uDDB0\uD865\uDDB8\uD865\uDF32\uD866\uDCD1\uD866\uDD49\uD866\uDD6A\uD866\uDDC3\uD866\uDE28\uD866\uDF0E\uD867\uDD5A\uD867\uDD9B纟\uD867\uDEF8\uD867\uDF23䲤镇\uD868\uDE93熢\uD868\uDEFF䶑递\uD869\uDDCB䶜\uD843\uDC9C达嗁"],
+    ["9da1", "辺\uD849\uDCB0边\uD852\uDE93䔉繿潖檱仪㓤\uD862\uDF2C\uD85E\uDC9D㜺躀\uD845\uDFF5\uD860\uDC24\uD862\uDF6C\uD862\uDF99\uD85E\uDE3E\uD859\uDEAF㷫\uD85D\uDE55\uD84F\uDCB7\uD855\uDE35\uD856\uDD56亚\uD857\uDE81\uD858\uDE58嚿\uD843\uDE6D踎孭\uD84F\uDE88\uD853\uDC9E揞拐\uD845\uDFF6\uD846\uDC7B攰嘭\uD857\uDC4A吚\uD854\uDF11㷆\uD867\uDD98䱽嘢嘞罉\uD857\uDED8奵\uD84F\uDD40蝰东\uD843\uDFEA\uD843\uDD49\uD84D\uDEBA脗鵞贘瘻鱅癎瞹鍅吲腈苷嘥脲萘肽嗪祢噃吖\uD843\uDE9D㗎嘅嗱曱\uD860\uDEE2㘭甴嗰喺咗啲\uD843\uDC41\uD843\uDC96廐\uD854\uDD48\uD843\uDE76\uD84B\uDC62"],
+    ["9e40", "\uD843\uDEA2麫絚嗞\uD844\uDC75抝靭咔賍燶酶揼掹揾啩\uD84A\uDF43鱲\uD84B\uDEB3冚㓟\uD843\uDDA7冧呍唞唓癦踭\uD85A\uDC8A疱肶蠄螆裇膶萜\uD844\uDCC1䓬猄\uD851\uDF06宐茋\uD85A\uDC93噻\uD849\uDEF4\uD85F\uDD2F\uD850\uDDA3\uD85F\uDD73\uD85B\uDED0\uD85C\uDEB6酰\uD844\uDDD9鈈\uD84F\uDCFC\uD869\uDEA9\uD843\uDEAC\uD843\uDEF9牦\uD847\uDCA2䝎\uD853\uDFC2\uD85F\uDFF9\uD843\uDFEB䃺"],
+    ["9ea1", "鱝攟\uD84B\uDDA0䣳\uD851\uDFE0\uD867\uDD7C\uD843\uDFEC\uD843\uDE0A恢\uD85D\uDDA3\uD843\uDFED"],
+    ["9ead", "\uD858\uDC48\uD844\uDD87熣纎鵐业丄㕷嬍沲卧㚬㧜卽㚥\uD851\uDE18墚\uD852\uDF6E舭呋垪\uD856\uDE95\uD842\uDD79"],
+    ["9ec5", "㩒\uD849\uDC65獴\uD867\uDEAC䴉鯭\uD84F\uDCFE\uD867\uDF30䱛\uD853\uDFA9\uD865\uDD9E\uD867\uDFDE葜\uD84F\uDDB6\uD85C\uDEB2\uD859\uDFB3\uD84D\uDF20挮紥\uD84F\uDEF7\uD84F\uDE2C㨪逈勌㹴㙺䗩\uD841\uDC8E癀嫰\uD843\uDEB6硺\uD85F\uDF2E墧䂿噼鮋嵴癔\uD869\uDC34麅䳡痹㟻愙\uD84C\uDCDA\uD850\uDFF2"],
+    ["9ef5", "噝\uD844\uDEA9垧\uD852\uDD63\uD867\uDE06刴\uD85C\uDCAE㖭汊鵼"],
+    ["9f40", "籖鬹埞\uD845\uDF6C屓擓\uD865\uDCD0\uD858\uDF35\uD85C\uDD64蚭\uD843\uDD28\uD85B\uDD22\uD852\uDEE2\uD843\uDD71"],
+    ["9f4f", "凾\uD847\uDF0F嶎霃\uD847\uDDD1麁遌笟鬂峑箣扨挵髿篏鬪籾鬮籂粆鰕篼鬉鼗鰛\uD852\uDD3E齚啳寃俽麘俲剠㸆勑坧偖妷帒韈鶫轜呩鞴饀鞺匬愰"],
+    ["9fa1", "椬叚鰊鴂䰻陁榀傦畆\uD845\uDF6D駚剳"],
     ["9fae", "酙隁酜"],
-    ["9fb2", "酑𨺗捿𦴣櫊嘑醎畺抅𠏼獏籰𥰡𣳽"],
-    ["9fc1", "𤤙盖鮝个𠳔莾衂"],
-    ["9fc9", "届槀僭坺刟巵从氱𠇲伹咜哚劚趂㗾弌㗳"],
+    ["9fb2", "酑\uD863\uDE97捿\uD85B\uDD23櫊嘑醎畺抅\uD840\uDFFC獏籰\uD857\uDC21\uD84F\uDCFD"],
+    ["9fc1", "\uD852\uDD19盖鮝个\uD843\uDCD4莾衂"],
+    ["9fc9", "届槀僭坺刟巵从氱\uD840\uDDF2伹咜哚劚趂㗾弌㗳"],
     ["9fdb", "歒酼龥鮗頮颴骺麨麄煺笔"],
     ["9fe7", "毺蠘罸"],
-    ["9feb", "嘠𪙊蹷齓"],
-    ["9ff0", "跔蹏鸜踁抂𨍽踨蹵竓𤩷稾磘泪詧瘇"],
-    ["a040", "𨩚鼦泎蟖痃𪊲硓咢贌狢獱謭猂瓱賫𤪻蘯徺袠䒷"],
-    ["a055", "𡠻𦸅"],
-    ["a058", "詾𢔛"],
+    ["9feb", "嘠\uD869\uDE4A蹷齓"],
+    ["9ff0", "跔蹏鸜踁抂\uD860\uDF7D踨蹵竓\uD852\uDE77稾磘泪詧瘇"],
+    ["a040", "\uD862\uDE5A鼦泎蟖痃\uD868\uDEB2硓\uD87E\uDC40贌狢獱謭猂瓱賫\uD852\uDEBB蘯徺袠䒷"],
+    ["a055", "\uD846\uDC3B\uD85B\uDE05"],
+    ["a058", "詾\uD849\uDD1B"],
     ["a05b", "惽癧髗鵄鍮鮏蟵"],
-    ["a063", "蠏賷猬霡鮰㗖犲䰇籑饊𦅙慙䰄麖慽"],
-    ["a073", "坟慯抦戹拎㩜懢厪𣏵捤栂㗒"],
-    ["a0a1", "嵗𨯂迚𨸹"],
-    ["a0a6", "僙𡵆礆匲阸𠼻䁥"],
+    ["a063", "蠏賷猬霡鮰㗖犲䰇籑饊\uD858\uDD59慙䰄麖慽"],
+    ["a073", "坟慯抦戹拎㩜懢厪\uD84C\uDFF5捤栂㗒"],
+    ["a0a1", "嵗\uD862\uDFC2迚\uD863\uDE39"],
+    ["a0a6", "僙\uD847\uDD46礆匲阸\uD843\uDF3B䁥"],
     ["a0ae", "矾"],
-    ["a0b0", "糂𥼚糚稭聦聣絍甅瓲覔舚朌聢𧒆聛瓰脃眤覉𦟌畓𦻑螩蟎臈螌詉貭譃眫瓸蓚㘵榲趦"],
-    ["a0d4", "覩瑨涹蟁𤀑瓧㷛煶悤憜㳑煢恷"],
-    ["a0e2", "罱𨬭牐惩䭾删㰘𣳇𥻗𧙖𥔱𡥄𡋾𩤃𦷜𧂭峁𦆭𨨏𣙷𠃮𦡆𤼎䕢嬟𦍌齐麦𦉫"],
+    ["a0b0", "糂\uD857\uDF1A糚稭聦聣絍甅瓲覔舚朌聢\uD85D\uDC86聛瓰脃眤覉\uD859\uDFCC畓\uD85B\uDED1螩蟎臈螌詉貭譃眫瓸蓚㘵榲趦"],
+    ["a0d4", "覩瑨涹蟁\uD850\uDC11瓧㷛煶悤憜㳑煢恷"],
+    ["a0e2", "罱\uD862\uDF2D牐惩䭾删㰘\uD84F\uDCC7\uD857\uDED7\uD85D\uDE56\uD855\uDD31\uD846\uDD44\uD844\uDEFE\uD866\uDD03\uD85B\uDDDC\uD85C\uDCAD峁\uD858\uDDAD\uD862\uDE0F\uD84D\uDE77\uD840\uDCEE\uD85A\uDC46\uD853\uDF0E䕢嬟\uD858\uDF4C齐麦\uD858\uDE6B"],
     ["a3c0", "␀", 31, "␡"],
     ["c6a1", "①", 9, "⑴", 9, "ⅰ", 9, "丶丿亅亠冂冖冫勹匸卩厶夊宀巛⼳广廴彐彡攴无疒癶辵隶¨ˆヽヾゝゞ〃仝々〆〇ー［］✽ぁ", 23],
     ["c740", "す", 58, "ァアィイ"],
     ["c7a1", "ゥ", 81, "А", 5, "ЁЖ", 4],
-    ["c840", "Л", 26, "ёж", 25, "⇧↸↹㇏𠃌乚𠂊刂䒑"],
-    ["c8a1", "龰冈龱𧘇"],
+    ["c840", "Л", 26, "ёж", 25, "⇧↸↹㇏\uD840\uDCCC乚\uD840\uDC8A刂䒑"],
+    ["c8a1", "龰冈龱\uD85D\uDE07"],
     ["c8cd", "￢￤＇＂㈱№℡゛゜⺀⺄⺆⺇⺈⺊⺌⺍⺕⺜⺝⺥⺧⺪⺬⺮⺶⺼⺾⻆⻊⻌⻍⻏⻖⻗⻞⻣"],
     ["c8f5", "ʃɐɛɔɵœøŋʊɪ"],
     ["f9fe", "￭"],
-    ["fa40", "𠕇鋛𠗟𣿅蕌䊵珯况㙉𤥂𨧤鍄𡧛苮𣳈砼杄拟𤤳𨦪𠊠𦮳𡌅侫𢓭倈𦴩𧪄𣘀𤪱𢔓倩𠍾徤𠎀𠍇滛𠐟偽儁㑺儎顬㝃萖𤦤𠒇兠𣎴兪𠯿𢃼𠋥𢔰𠖎𣈳𡦃宂蝽𠖳𣲙冲冸"],
-    ["faa1", "鴴凉减凑㳜凓𤪦决凢卂凭菍椾𣜭彻刋刦刼劵剗劔効勅簕蕂勠蘍𦬓包𨫞啉滙𣾀𠥔𣿬匳卄𠯢泋𡜦栛珕恊㺪㣌𡛨燝䒢卭却𨚫卾卿𡖖𡘓矦厓𨪛厠厫厮玧𥝲㽙玜叁叅汉义埾叙㪫𠮏叠𣿫𢶣叶𠱷吓灹唫晗浛呭𦭓𠵴啝咏咤䞦𡜍𠻝㶴𠵍"],
-    ["fb40", "𨦼𢚘啇䳭启琗喆喩嘅𡣗𤀺䕒𤐵暳𡂴嘷曍𣊊暤暭噍噏磱囱鞇叾圀囯园𨭦㘣𡉏坆𤆥汮炋坂㚱𦱾埦𡐖堃𡑔𤍣堦𤯵塜墪㕡壠壜𡈼壻寿坃𪅐𤉸鏓㖡够梦㛃湙"],
-    ["fba1", "𡘾娤啓𡚒蔅姉𠵎𦲁𦴪𡟜姙𡟻𡞲𦶦浱𡠨𡛕姹𦹅媫婣㛦𤦩婷㜈媖瑥嫓𦾡𢕔㶅𡤑㜲𡚸広勐孶斈孼𧨎䀄䡝𠈄寕慠𡨴𥧌𠖥寳宝䴐尅𡭄尓珎尔𡲥𦬨屉䣝岅峩峯嶋𡷹𡸷崐崘嵆𡺤岺巗苼㠭𤤁𢁉𢅳芇㠶㯂帮檊幵幺𤒼𠳓厦亷廐厨𡝱帉廴𨒂"],
-    ["fc40", "廹廻㢠廼栾鐛弍𠇁弢㫞䢮𡌺强𦢈𢏐彘𢑱彣鞽𦹮彲鍀𨨶徧嶶㵟𥉐𡽪𧃸𢙨釖𠊞𨨩怱暅𡡷㥣㷇㘹垐𢞴祱㹀悞悤悳𤦂𤦏𧩓璤僡媠慤萤慂慈𦻒憁凴𠙖憇宪𣾷"],
-    ["fca1", "𢡟懓𨮝𩥝懐㤲𢦀𢣁怣慜攞掋𠄘担𡝰拕𢸍捬𤧟㨗搸揸𡎎𡟼撐澊𢸶頔𤂌𥜝擡擥鑻㩦携㩗敍漖𤨨𤨣斅敭敟𣁾斵𤥀䬷旑䃘𡠩无旣忟𣐀昘𣇷𣇸晄𣆤𣆥晋𠹵晧𥇦晳晴𡸽𣈱𨗴𣇈𥌓矅𢣷馤朂𤎜𤨡㬫槺𣟂杞杧杢𤇍𩃭柗䓩栢湐鈼栁𣏦𦶠桝"],
-    ["fd40", "𣑯槡樋𨫟楳棃𣗍椁椀㴲㨁𣘼㮀枬楡𨩊䋼椶榘㮡𠏉荣傐槹𣙙𢄪橅𣜃檝㯳枱櫈𩆜㰍欝𠤣惞欵歴𢟍溵𣫛𠎵𡥘㝀吡𣭚毡𣻼毜氷𢒋𤣱𦭑汚舦汹𣶼䓅𣶽𤆤𤤌𤤀"],
-    ["fda1", "𣳉㛥㳫𠴲鮃𣇹𢒑羏样𦴥𦶡𦷫涖浜湼漄𤥿𤂅𦹲蔳𦽴凇沜渝萮𨬡港𣸯瑓𣾂秌湏媑𣁋濸㜍澝𣸰滺𡒗𤀽䕕鏰潄潜㵎潴𩅰㴻澟𤅄濓𤂑𤅕𤀹𣿰𣾴𤄿凟𤅖𤅗𤅀𦇝灋灾炧炁烌烕烖烟䄄㷨熴熖𤉷焫煅媈煊煮岜𤍥煏鍢𤋁焬𤑚𤨧𤨢熺𨯨炽爎"],
-    ["fe40", "鑂爕夑鑃爤鍁𥘅爮牀𤥴梽牕牗㹕𣁄栍漽犂猪猫𤠣𨠫䣭𨠄猨献珏玪𠰺𦨮珉瑉𤇢𡛧𤨤昣㛅𤦷𤦍𤧻珷琕椃𤨦琹𠗃㻗瑜𢢭瑠𨺲瑇珤瑶莹瑬㜰瑴鏱樬璂䥓𤪌"],
-    ["fea1", "𤅟𤩹𨮏孆𨰃𡢞瓈𡦈甎瓩甞𨻙𡩋寗𨺬鎅畍畊畧畮𤾂㼄𤴓疎瑝疞疴瘂瘬癑癏癯癶𦏵皐臯㟸𦤑𦤎皡皥皷盌𦾟葢𥂝𥅽𡸜眞眦着撯𥈠睘𣊬瞯𨥤𨥨𡛁矴砉𡍶𤨒棊碯磇磓隥礮𥗠磗礴碱𧘌辸袄𨬫𦂃𢘜禆褀椂禀𥡗禝𧬹礼禩渪𧄦㺨秆𩄍秔"]
+    ["fa40", "\uD841\uDD47鋛\uD841\uDDDF\uD84F\uDFC5蕌䊵珯况㙉\uD852\uDD42\uD862\uDDE4鍄\uD846\uDDDB苮\uD84F\uDCC8砼杄拟\uD852\uDD33\uD862\uDDAA\uD840\uDEA0\uD85A\uDFB3\uD844\uDF05侫\uD849\uDCED倈\uD85B\uDD29\uD85E\uDE84\uD84D\uDE00\uD852\uDEB1\uD849\uDD13倩\uD840\uDF7E徤\uD840\uDF80\uD840\uDF47滛\uD841\uDC1F偽儁㑺儎顬㝃萖\uD852\uDDA4\uD841\uDC87兠\uD84C\uDFB4兪\uD842\uDFFF\uD848\uDCFC\uD840\uDEE5\uD849\uDD30\uD841\uDD8E\uD84C\uDE33\uD846\uDD83宂蝽\uD841\uDDB3\uD84F\uDC99冲冸"],
+    ["faa1", "鴴凉减凑㳜凓\uD852\uDEA6决凢卂凭菍椾\uD84D\uDF2D彻刋刦刼劵剗劔効勅簕蕂勠蘍\uD85A\uDF13包\uD862\uDEDE啉滙\uD84F\uDF80\uD842\uDD54\uD84F\uDFEC匳卄\uD842\uDFE2泋\uD845\uDF26栛珕恊㺪㣌\uD845\uDEE8燝䒢卭却\uD861\uDEAB卾卿\uD845\uDD96\uD845\uDE13矦厓\uD862\uDE9B厠厫厮玧\uD855\uDF72㽙玜叁叅汉义埾叙㪫\uD842\uDF8F叠\uD84F\uDFEB\uD84B\uDDA3叶\uD843\uDC77吓灹唫晗浛呭\uD85A\uDF53\uD843\uDD74啝咏咤䞦\uD845\uDF0D\uD843\uDEDD㶴\uD843\uDD4D"],
+    ["fb40", "\uD862\uDDBC\uD849\uDE98啇䳭启琗喆喩嘅\uD846\uDCD7\uD850\uDC3A䕒\uD851\uDC35暳\uD844\uDCB4嘷曍\uD84C\uDE8A暤暭噍噏磱囱鞇叾圀囯园\uD862\uDF66㘣\uD844\uDE4F坆\uD850\uDDA5汮炋坂㚱\uD85B\uDC7E埦\uD845\uDC16堃\uD845\uDC54\uD850\uDF63堦\uD852\uDFF5塜墪㕡壠壜\uD844\uDE3C壻寿坃\uD868\uDD50\uD850\uDE78鏓㖡够梦㛃湙"],
+    ["fba1", "\uD845\uDE3E娤啓\uD845\uDE92蔅姉\uD843\uDD4E\uD85B\uDC81\uD85B\uDD2A\uD845\uDFDC姙\uD845\uDFFB\uD845\uDFB2\uD85B\uDDA6浱\uD846\uDC28\uD845\uDED5姹\uD85B\uDE45媫婣㛦\uD852\uDDA9婷㜈媖瑥嫓\uD85B\uDFA1\uD849\uDD54㶅\uD846\uDD11㜲\uD845\uDEB8広勐孶斈孼\uD85E\uDE0E䀄䡝\uD840\uDE04寕慠\uD846\uDE34\uD856\uDDCC\uD841\uDDA5寳宝䴐尅\uD846\uDF44尓珎尔\uD847\uDCA5\uD85A\uDF28屉䣝岅峩峯嶋\uD847\uDDF9\uD847\uDE37崐崘嵆\uD847\uDEA4岺巗苼㠭\uD852\uDD01\uD848\uDC49\uD848\uDD73芇㠶㯂帮檊幵幺\uD851\uDCBC\uD843\uDCD3厦亷廐厨\uD845\uDF71帉廴\uD861\uDC82"],
+    ["fc40", "廹廻㢠廼栾鐛弍\uD840\uDDC1\uD87E\uDC94㫞䢮\uD844\uDF3A强\uD85A\uDC88\uD848\uDFD0彘\uD849\uDC71彣鞽\uD85B\uDE6E彲鍀\uD862\uDE36徧嶶㵟\uD854\uDE50\uD847\uDF6A\uD85C\uDCF8\uD849\uDE68釖\uD840\uDE9E\uD862\uDE29怱暅\uD846\uDC77㥣㷇㘹垐\uD849\uDFB4祱㹀悞悤悳\uD852\uDD82\uD852\uDD8F\uD85E\uDE53璤僡媠慤萤慂\uD87E\uDCA6\uD85B\uDED2憁凴\uD841\uDE56憇宪\uD84F\uDFB7"],
+    ["fca1", "\uD84A\uDC5F懓\uD862\uDF9D\uD866\uDD5D懐㤲\uD84A\uDD80\uD84A\uDCC1怣慜攞掋\uD840\uDD18担\uD845\uDF70拕\uD84B\uDE0D捬\uD852\uDDDF㨗搸揸\uD844\uDF8E\uD845\uDFFC撐澊\uD84B\uDE36頔\uD850\uDC8C\uD855\uDF1D擡擥鑻㩦携㩗敍漖\uD852\uDE28\uD852\uDE23斅敭敟\uD84C\uDC7E斵\uD852\uDD40䬷旑䃘\uD846\uDC29无旣忟\uD84D\uDC00昘\uD84C\uDDF7\uD84C\uDDF8晄\uD84C\uDDA4\uD84C\uDDA5晋\uD843\uDE75晧\uD854\uDDE6晳晴\uD847\uDE3D\uD84C\uDE31\uD861\uDDF4\uD84C\uDDC8\uD854\uDF13矅\uD84A\uDCF7馤朂\uD850\uDF9C\uD852\uDE21㬫槺\uD84D\uDFC2杞杧杢\uD850\uDDCD\uD864\uDCED柗䓩栢湐鈼栁\uD84C\uDFE6\uD85B\uDDA0桝"],
+    ["fd40", "\uD84D\uDC6F槡樋\uD862\uDEDF楳棃\uD84D\uDDCD椁椀㴲㨁\uD84D\uDE3C㮀枬楡\uD862\uDE4A䋼椶榘㮡\uD840\uDFC9荣傐槹\uD84D\uDE59\uD848\uDD2A橅\uD84D\uDF03檝㯳枱櫈\uD864\uDD9C㰍欝\uD842\uDD23惞欵歴\uD849\uDFCD溵\uD84E\uDEDB\uD840\uDFB5\uD846\uDD58㝀吡\uD84E\uDF5A毡\uD84F\uDEFC毜氷\uD849\uDC8B\uD852\uDCF1\uD85A\uDF51汚舦汹\uD84F\uDDBC䓅\uD84F\uDDBD\uD850\uDDA4\uD852\uDD0C\uD852\uDD00"],
+    ["fda1", "\uD84F\uDCC9㛥㳫\uD843\uDD32鮃\uD84C\uDDF9\uD849\uDC91羏样\uD85B\uDD25\uD85B\uDDA1\uD85B\uDDEB涖浜湼漄\uD852\uDD7F\uD850\uDC85\uD85B\uDE72蔳\uD85B\uDF74凇沜渝萮\uD862\uDF21港\uD84F\uDE2F瑓\uD84F\uDF82秌湏媑\uD84C\uDC4B濸㜍澝\uD84F\uDE30滺\uD845\uDC97\uD850\uDC3D䕕鏰潄潜㵎潴\uD864\uDD70㴻澟\uD850\uDD44濓\uD850\uDC91\uD850\uDD55\uD850\uDC39\uD84F\uDFF0\uD84F\uDFB4\uD850\uDD3F凟\uD850\uDD56\uD850\uDD57\uD850\uDD40\uD858\uDDDD灋灾炧炁烌烕烖烟䄄㷨熴熖\uD850\uDE77焫煅媈煊煮岜\uD850\uDF65煏鍢\uD850\uDEC1焬\uD851\uDC5A\uD852\uDE27\uD852\uDE22熺\uD862\uDFE8炽爎"],
+    ["fe40", "鑂爕夑鑃爤鍁\uD855\uDE05爮牀\uD852\uDD74梽牕牗㹕\uD84C\uDC44栍漽犂猪猫\uD852\uDC23\uD862\uDC2B䣭\uD862\uDC04猨献珏玪\uD843\uDC3A\uD85A\uDE2E珉瑉\uD850\uDDE2\uD845\uDEE7\uD852\uDE24昣㛅\uD852\uDDB7\uD852\uDD8D\uD852\uDDFB珷琕椃\uD852\uDE26琹\uD841\uDDC3㻗瑜\uD84A\uDCAD瑠\uD863\uDEB2瑇珤瑶莹瑬㜰瑴鏱樬璂䥓\uD852\uDE8C"],
+    ["fea1", "\uD850\uDD5F\uD852\uDE79\uD862\uDF8F孆\uD863\uDC03\uD846\uDC9E瓈\uD846\uDD88甎瓩甞\uD863\uDED9\uD846\uDE4B寗\uD863\uDEAC鎅畍畊畧畮\uD853\uDF82㼄\uD853\uDD13疎瑝疞疴瘂瘬癑癏癯癶\uD858\uDFF5皐臯㟸\uD85A\uDD11\uD85A\uDD0E皡皥皷盌\uD85B\uDF9F葢\uD854\uDC9D\uD854\uDD7D\uD847\uDE1C眞眦着撯\uD854\uDE20睘\uD84C\uDEAC瞯\uD862\uDD64\uD862\uDD68\uD845\uDEC1矴砉\uD844\uDF76\uD852\uDE12棊碯磇磓隥礮\uD855\uDDE0磗礴碱\uD85D\uDE0C辸袄\uD862\uDF2B\uD858\uDC83\uD849\uDE1C禆褀椂禀\uD856\uDC57禝\uD85E\uDF39礼禩渪\uD85C\uDD26㺨秆\uD864\uDD0D秔"]
   ];
 });
 
@@ -5236,7 +5246,7 @@ var require_dbcs_data = __commonJS((exports, module) => {
       table: function() {
         return require_shiftjis();
       },
-      encodeAdd: { "\xA5": 92, "\u203E": 126 },
+      encodeAdd: { "¥": 92, "‾": 126 },
       encodeSkipVals: [{ from: 60736, to: 63808 }]
     },
     csshiftjis: "shiftjis",
@@ -5254,7 +5264,7 @@ var require_dbcs_data = __commonJS((exports, module) => {
       table: function() {
         return require_eucjp();
       },
-      encodeAdd: { "\xA5": 92, "\u203E": 126 }
+      encodeAdd: { "¥": 92, "‾": 126 }
     },
     gb2312: "cp936",
     gb231280: "cp936",
@@ -5288,7 +5298,7 @@ var require_dbcs_data = __commonJS((exports, module) => {
         return require_gb18030_ranges();
       },
       encodeSkipVals: [128],
-      encodeAdd: { "\u20AC": 41699 }
+      encodeAdd: { "€": 41699 }
     },
     chinese: "gb18030",
     windows949: "cp949",
@@ -5356,18 +5366,6 @@ var require_encodings = __commonJS((exports, module) => {
 
 // node_modules/iconv-lite/lib/streams.js
 var require_streams = __commonJS((exports, module) => {
-  function IconvLiteEncoderStream(conv, options) {
-    this.conv = conv;
-    options = options || {};
-    options.decodeStrings = false;
-    Transform.call(this, options);
-  }
-  function IconvLiteDecoderStream(conv, options) {
-    this.conv = conv;
-    options = options || {};
-    options.encoding = this.encoding = "utf8";
-    Transform.call(this, options);
-  }
   var Buffer2 = __require("buffer").Buffer;
   var Transform = __require("stream").Transform;
   module.exports = function(iconv) {
@@ -5382,6 +5380,12 @@ var require_streams = __commonJS((exports, module) => {
     iconv.IconvLiteDecoderStream = IconvLiteDecoderStream;
     iconv._collect = IconvLiteDecoderStream.prototype.collect;
   };
+  function IconvLiteEncoderStream(conv, options) {
+    this.conv = conv;
+    options = options || {};
+    options.decodeStrings = false;
+    Transform.call(this, options);
+  }
   IconvLiteEncoderStream.prototype = Object.create(Transform.prototype, {
     constructor: { value: IconvLiteEncoderStream }
   });
@@ -5418,6 +5422,12 @@ var require_streams = __commonJS((exports, module) => {
     });
     return this;
   };
+  function IconvLiteDecoderStream(conv, options) {
+    this.conv = conv;
+    options = options || {};
+    options.encoding = this.encoding = "utf8";
+    Transform.call(this, options);
+  }
   IconvLiteDecoderStream.prototype = Object.create(Transform.prototype, {
     constructor: { value: IconvLiteDecoderStream }
   });
@@ -5628,7 +5638,7 @@ var require_lib = __commonJS((exports, module) => {
   var bomHandling = require_bom_handling();
   var iconv = exports;
   iconv.encodings = null;
-  iconv.defaultCharUnicode = "\uFFFD";
+  iconv.defaultCharUnicode = "�";
   iconv.defaultCharSingleByte = "?";
   iconv.encode = function encode(str, encoding, options) {
     str = "" + (str || "");
@@ -5723,6 +5733,12 @@ var require_lib = __commonJS((exports, module) => {
 
 // node_modules/unpipe/index.js
 var require_unpipe = __commonJS((exports, module) => {
+  /*!
+   * unpipe
+   * Copyright(c) 2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = unpipe;
   function hasPipeDataListeners(stream) {
     var listeners = stream.listeners("data");
     for (var i = 0;i < listeners.length; i++) {
@@ -5753,16 +5769,23 @@ var require_unpipe = __commonJS((exports, module) => {
       listener.call(stream);
     }
   }
-  /*!
-   * unpipe
-   * Copyright(c) 2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = unpipe;
 });
 
 // node_modules/raw-body/index.js
 var require_raw_body = __commonJS((exports, module) => {
+  /*!
+   * raw-body
+   * Copyright(c) 2013-2014 Jonathan Ong
+   * Copyright(c) 2014-2022 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var asyncHooks = tryRequireAsyncHooks();
+  var bytes = require_bytes();
+  var createError = require_http_errors();
+  var iconv = require_lib();
+  var unpipe = require_unpipe();
+  module.exports = getRawBody;
+  var ICONV_ENCODING_MESSAGE_REGEXP = /^Encoding not recognized: /;
   function getDecoder(encoding) {
     if (!encoding)
       return null;
@@ -5945,23 +5968,16 @@ var require_raw_body = __commonJS((exports, module) => {
     }
     return res.runInAsyncScope.bind(res, fn, null);
   }
-  /*!
-   * raw-body
-   * Copyright(c) 2013-2014 Jonathan Ong
-   * Copyright(c) 2014-2022 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var asyncHooks = tryRequireAsyncHooks();
-  var bytes = require_bytes();
-  var createError = require_http_errors();
-  var iconv = require_lib();
-  var unpipe = require_unpipe();
-  module.exports = getRawBody;
-  var ICONV_ENCODING_MESSAGE_REGEXP = /^Encoding not recognized: /;
 });
 
 // node_modules/ee-first/index.js
 var require_ee_first = __commonJS((exports, module) => {
+  /*!
+   * ee-first
+   * Copyright(c) 2014 Jonathan Ong
+   * MIT Licensed
+   */
+  module.exports = first;
   function first(stuff, done) {
     if (!Array.isArray(stuff))
       throw new TypeError("arg must be an array of [ee, events...] arrays");
@@ -6010,16 +6026,23 @@ var require_ee_first = __commonJS((exports, module) => {
       done(err, ee, event, args);
     };
   }
-  /*!
-   * ee-first
-   * Copyright(c) 2014 Jonathan Ong
-   * MIT Licensed
-   */
-  module.exports = first;
 });
 
 // node_modules/on-finished/index.js
 var require_on_finished = __commonJS((exports, module) => {
+  /*!
+   * on-finished
+   * Copyright(c) 2013 Jonathan Ong
+   * Copyright(c) 2014 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = onFinished;
+  module.exports.isFinished = isFinished;
+  var asyncHooks = tryRequireAsyncHooks();
+  var first = require_ee_first();
+  var defer = typeof setImmediate === "function" ? setImmediate : function(fn) {
+    process.nextTick(fn.bind.apply(fn, arguments));
+  };
   function onFinished(msg, listener) {
     if (isFinished(msg) !== false) {
       defer(listener, null, msg);
@@ -6115,23 +6138,23 @@ var require_on_finished = __commonJS((exports, module) => {
     }
     return res.runInAsyncScope.bind(res, fn, null);
   }
-  /*!
-   * on-finished
-   * Copyright(c) 2013 Jonathan Ong
-   * Copyright(c) 2014 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = onFinished;
-  module.exports.isFinished = isFinished;
-  var asyncHooks = tryRequireAsyncHooks();
-  var first = require_ee_first();
-  var defer = typeof setImmediate === "function" ? setImmediate : function(fn) {
-    process.nextTick(fn.bind.apply(fn, arguments));
-  };
 });
 
 // node_modules/body-parser/lib/read.js
 var require_read = __commonJS((exports, module) => {
+  /*!
+   * body-parser
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var createError = require_http_errors();
+  var destroy = require_destroy();
+  var getBody = require_raw_body();
+  var iconv = require_lib();
+  var onFinished = require_on_finished();
+  var unpipe = require_unpipe();
+  var zlib = __require("zlib");
+  module.exports = read;
   function read(req, res, next, parse, debug, options) {
     var length;
     var opts = options;
@@ -6244,23 +6267,25 @@ var require_read = __commonJS((exports, module) => {
       req.resume();
     }
   }
-  /*!
-   * body-parser
-   * Copyright(c) 2014-2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var createError = require_http_errors();
-  var destroy = require_destroy();
-  var getBody = require_raw_body();
-  var iconv = require_lib();
-  var onFinished = require_on_finished();
-  var unpipe = require_unpipe();
-  var zlib = __require("zlib");
-  module.exports = read;
 });
 
 // node_modules/media-typer/index.js
 var require_media_typer = __commonJS((exports) => {
+  /*!
+   * media-typer
+   * Copyright(c) 2014 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var paramRegExp = /; *([!#$%&'\*\+\-\.0-9A-Z\^_`a-z\|~]+) *= *("(?:[ !\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u0020-\u007e])*"|[!#$%&'\*\+\-\.0-9A-Z\^_`a-z\|~]+) */g;
+  var textRegExp = /^[\u0020-\u007e\u0080-\u00ff]+$/;
+  var tokenRegExp = /^[!#$%&'\*\+\-\.0-9A-Z\^_`a-z\|~]+$/;
+  var qescRegExp = /\\([\u0000-\u007f])/g;
+  var quoteRegExp = /([\\"])/g;
+  var subtypeNameRegExp = /^[A-Za-z0-9][A-Za-z0-9!#$&^_.-]{0,126}$/;
+  var typeNameRegExp = /^[A-Za-z0-9][A-Za-z0-9!#$&^_-]{0,126}$/;
+  var typeRegExp = /^ *([A-Za-z0-9][A-Za-z0-9!#$&^_-]{0,126})\/([A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}) *$/;
+  exports.format = format;
+  exports.parse = parse;
   function format(obj) {
     if (!obj || typeof obj !== "object") {
       throw new TypeError("argument obj is required");
@@ -6369,21 +6394,6 @@ var require_media_typer = __commonJS((exports) => {
     };
     return obj;
   }
-  /*!
-   * media-typer
-   * Copyright(c) 2014 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var paramRegExp = /; *([!#$%&'\*\+\-\.0-9A-Z\^_`a-z\|~]+) *= *("(?:[ !\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u0020-\u007e])*"|[!#$%&'\*\+\-\.0-9A-Z\^_`a-z\|~]+) */g;
-  var textRegExp = /^[\u0020-\u007e\u0080-\u00ff]+$/;
-  var tokenRegExp = /^[!#$%&'\*\+\-\.0-9A-Z\^_`a-z\|~]+$/;
-  var qescRegExp = /\\([\u0000-\u007f])/g;
-  var quoteRegExp = /([\\"])/g;
-  var subtypeNameRegExp = /^[A-Za-z0-9][A-Za-z0-9!#$&^_.-]{0,126}$/;
-  var typeNameRegExp = /^[A-Za-z0-9][A-Za-z0-9!#$&^_-]{0,126}$/;
-  var typeRegExp = /^ *([A-Za-z0-9][A-Za-z0-9!#$&^_-]{0,126})\/([A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}) *$/;
-  exports.format = format;
-  exports.parse = parse;
 });
 
 // node_modules/mime-db/db.json
@@ -14922,6 +14932,24 @@ var require_mime_db = __commonJS((exports, module) => {
 
 // node_modules/mime-types/index.js
 var require_mime_types = __commonJS((exports) => {
+  /*!
+   * mime-types
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var db = require_mime_db();
+  var extname = __require("path").extname;
+  var EXTRACT_TYPE_REGEXP = /^\s*([^;\s]*)(?:;|\s|$)/;
+  var TEXT_TYPE_REGEXP = /^text\//i;
+  exports.charset = charset;
+  exports.charsets = { lookup: charset };
+  exports.contentType = contentType;
+  exports.extension = extension;
+  exports.extensions = Object.create(null);
+  exports.lookup = lookup;
+  exports.types = Object.create(null);
+  populateMaps(exports.extensions, exports.types);
   function charset(type) {
     if (!type || typeof type !== "string") {
       return false;
@@ -14994,28 +15022,23 @@ var require_mime_types = __commonJS((exports) => {
       }
     });
   }
-  /*!
-   * mime-types
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var db = require_mime_db();
-  var extname = __require("path").extname;
-  var EXTRACT_TYPE_REGEXP = /^\s*([^;\s]*)(?:;|\s|$)/;
-  var TEXT_TYPE_REGEXP = /^text\//i;
-  exports.charset = charset;
-  exports.charsets = { lookup: charset };
-  exports.contentType = contentType;
-  exports.extension = extension;
-  exports.extensions = Object.create(null);
-  exports.lookup = lookup;
-  exports.types = Object.create(null);
-  populateMaps(exports.extensions, exports.types);
 });
 
 // node_modules/type-is/index.js
 var require_type_is = __commonJS((exports, module) => {
+  /*!
+   * type-is
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var typer = require_media_typer();
+  var mime = require_mime_types();
+  module.exports = typeofrequest;
+  module.exports.is = typeis;
+  module.exports.hasBody = hasbody;
+  module.exports.normalize = normalize;
+  module.exports.match = mimeMatch;
   function typeis(value, types_) {
     var i;
     var types = types_;
@@ -15107,23 +15130,26 @@ var require_type_is = __commonJS((exports, module) => {
       return null;
     }
   }
-  /*!
-   * type-is
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2014-2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var typer = require_media_typer();
-  var mime = require_mime_types();
-  module.exports = typeofrequest;
-  module.exports.is = typeis;
-  module.exports.hasBody = hasbody;
-  module.exports.normalize = normalize;
-  module.exports.match = mimeMatch;
 });
 
 // node_modules/body-parser/lib/types/json.js
 var require_json = __commonJS((exports, module) => {
+  /*!
+   * body-parser
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var bytes = require_bytes();
+  var contentType = require_content_type();
+  var createError = require_http_errors();
+  var debug = require_src()("body-parser:json");
+  var read = require_read();
+  var typeis = require_type_is();
+  module.exports = json;
+  var FIRST_CHAR_REGEXP = /^[\x20\x09\x0a\x0d]*([^\x20\x09\x0a\x0d])/;
+  var JSON_SYNTAX_CHAR = "#";
+  var JSON_SYNTAX_REGEXP = /#+/g;
   function json(options) {
     var opts = options || {};
     var limit = typeof opts.limit !== "number" ? bytes.parse(opts.limit || "100kb") : opts.limit;
@@ -15241,26 +15267,20 @@ var require_json = __commonJS((exports, module) => {
       return Boolean(typeis(req, type));
     };
   }
-  /*!
-   * body-parser
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2014-2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var bytes = require_bytes();
-  var contentType = require_content_type();
-  var createError = require_http_errors();
-  var debug = require_src()("body-parser:json");
-  var read = require_read();
-  var typeis = require_type_is();
-  module.exports = json;
-  var FIRST_CHAR_REGEXP = /^[\x20\x09\x0a\x0d]*([^\x20\x09\x0a\x0d])/;
-  var JSON_SYNTAX_CHAR = "#";
-  var JSON_SYNTAX_REGEXP = /#+/g;
 });
 
 // node_modules/body-parser/lib/types/raw.js
 var require_raw = __commonJS((exports, module) => {
+  /*!
+   * body-parser
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var bytes = require_bytes();
+  var debug = require_src()("body-parser:raw");
+  var read = require_read();
+  var typeis = require_type_is();
+  module.exports = raw;
   function raw(options) {
     var opts = options || {};
     var inflate = opts.inflate !== false;
@@ -15305,20 +15325,21 @@ var require_raw = __commonJS((exports, module) => {
       return Boolean(typeis(req, type));
     };
   }
+});
+
+// node_modules/body-parser/lib/types/text.js
+var require_text = __commonJS((exports, module) => {
   /*!
    * body-parser
    * Copyright(c) 2014-2015 Douglas Christopher Wilson
    * MIT Licensed
    */
   var bytes = require_bytes();
-  var debug = require_src()("body-parser:raw");
+  var contentType = require_content_type();
+  var debug = require_src()("body-parser:text");
   var read = require_read();
   var typeis = require_type_is();
-  module.exports = raw;
-});
-
-// node_modules/body-parser/lib/types/text.js
-var require_text = __commonJS((exports, module) => {
+  module.exports = text;
   function text(options) {
     var opts = options || {};
     var defaultCharset = opts.defaultCharset || "utf-8";
@@ -15372,17 +15393,6 @@ var require_text = __commonJS((exports, module) => {
       return Boolean(typeis(req, type));
     };
   }
-  /*!
-   * body-parser
-   * Copyright(c) 2014-2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var bytes = require_bytes();
-  var contentType = require_content_type();
-  var debug = require_src()("body-parser:text");
-  var read = require_read();
-  var typeis = require_type_is();
-  module.exports = text;
 });
 
 // node_modules/es-errors/index.js
@@ -16072,294 +16082,6 @@ var require_util_inspect = __commonJS((exports, module) => {
 
 // node_modules/object-inspect/index.js
 var require_object_inspect = __commonJS((exports, module) => {
-  function addNumericSeparator(num, str) {
-    if (num === Infinity || num === -Infinity || num !== num || num && num > -1000 && num < 1000 || $test.call(/e/, str)) {
-      return str;
-    }
-    var sepRegex = /[0-9](?=(?:[0-9]{3})+(?![0-9]))/g;
-    if (typeof num === "number") {
-      var int = num < 0 ? -$floor(-num) : $floor(num);
-      if (int !== num) {
-        var intStr = String(int);
-        var dec = $slice.call(str, intStr.length + 1);
-        return $replace.call(intStr, sepRegex, "$&_") + "." + $replace.call($replace.call(dec, /([0-9]{3})/g, "$&_"), /_$/, "");
-      }
-    }
-    return $replace.call(str, sepRegex, "$&_");
-  }
-  function wrapQuotes(s, defaultStyle, opts) {
-    var style = opts.quoteStyle || defaultStyle;
-    var quoteChar = quotes[style];
-    return quoteChar + s + quoteChar;
-  }
-  function quote(s) {
-    return $replace.call(String(s), /"/g, "&quot;");
-  }
-  function isArray(obj) {
-    return toStr(obj) === "[object Array]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
-  }
-  function isDate(obj) {
-    return toStr(obj) === "[object Date]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
-  }
-  function isRegExp(obj) {
-    return toStr(obj) === "[object RegExp]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
-  }
-  function isError(obj) {
-    return toStr(obj) === "[object Error]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
-  }
-  function isString(obj) {
-    return toStr(obj) === "[object String]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
-  }
-  function isNumber(obj) {
-    return toStr(obj) === "[object Number]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
-  }
-  function isBoolean(obj) {
-    return toStr(obj) === "[object Boolean]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
-  }
-  function isSymbol(obj) {
-    if (hasShammedSymbols) {
-      return obj && typeof obj === "object" && obj instanceof Symbol;
-    }
-    if (typeof obj === "symbol") {
-      return true;
-    }
-    if (!obj || typeof obj !== "object" || !symToString) {
-      return false;
-    }
-    try {
-      symToString.call(obj);
-      return true;
-    } catch (e) {
-    }
-    return false;
-  }
-  function isBigInt(obj) {
-    if (!obj || typeof obj !== "object" || !bigIntValueOf) {
-      return false;
-    }
-    try {
-      bigIntValueOf.call(obj);
-      return true;
-    } catch (e) {
-    }
-    return false;
-  }
-  function has(obj, key) {
-    return hasOwn.call(obj, key);
-  }
-  function toStr(obj) {
-    return objectToString.call(obj);
-  }
-  function nameOf(f) {
-    if (f.name) {
-      return f.name;
-    }
-    var m = $match.call(functionToString.call(f), /^function\s*([\w$]+)/);
-    if (m) {
-      return m[1];
-    }
-    return null;
-  }
-  function indexOf(xs, x) {
-    if (xs.indexOf) {
-      return xs.indexOf(x);
-    }
-    for (var i = 0, l = xs.length;i < l; i++) {
-      if (xs[i] === x) {
-        return i;
-      }
-    }
-    return -1;
-  }
-  function isMap(x) {
-    if (!mapSize || !x || typeof x !== "object") {
-      return false;
-    }
-    try {
-      mapSize.call(x);
-      try {
-        setSize.call(x);
-      } catch (s) {
-        return true;
-      }
-      return x instanceof Map;
-    } catch (e) {
-    }
-    return false;
-  }
-  function isWeakMap(x) {
-    if (!weakMapHas || !x || typeof x !== "object") {
-      return false;
-    }
-    try {
-      weakMapHas.call(x, weakMapHas);
-      try {
-        weakSetHas.call(x, weakSetHas);
-      } catch (s) {
-        return true;
-      }
-      return x instanceof WeakMap;
-    } catch (e) {
-    }
-    return false;
-  }
-  function isWeakRef(x) {
-    if (!weakRefDeref || !x || typeof x !== "object") {
-      return false;
-    }
-    try {
-      weakRefDeref.call(x);
-      return true;
-    } catch (e) {
-    }
-    return false;
-  }
-  function isSet(x) {
-    if (!setSize || !x || typeof x !== "object") {
-      return false;
-    }
-    try {
-      setSize.call(x);
-      try {
-        mapSize.call(x);
-      } catch (m) {
-        return true;
-      }
-      return x instanceof Set;
-    } catch (e) {
-    }
-    return false;
-  }
-  function isWeakSet(x) {
-    if (!weakSetHas || !x || typeof x !== "object") {
-      return false;
-    }
-    try {
-      weakSetHas.call(x, weakSetHas);
-      try {
-        weakMapHas.call(x, weakMapHas);
-      } catch (s) {
-        return true;
-      }
-      return x instanceof WeakSet;
-    } catch (e) {
-    }
-    return false;
-  }
-  function isElement(x) {
-    if (!x || typeof x !== "object") {
-      return false;
-    }
-    if (typeof HTMLElement !== "undefined" && x instanceof HTMLElement) {
-      return true;
-    }
-    return typeof x.nodeName === "string" && typeof x.getAttribute === "function";
-  }
-  function inspectString(str, opts) {
-    if (str.length > opts.maxStringLength) {
-      var remaining = str.length - opts.maxStringLength;
-      var trailer = "... " + remaining + " more character" + (remaining > 1 ? "s" : "");
-      return inspectString($slice.call(str, 0, opts.maxStringLength), opts) + trailer;
-    }
-    var quoteRE = quoteREs[opts.quoteStyle || "single"];
-    quoteRE.lastIndex = 0;
-    var s = $replace.call($replace.call(str, quoteRE, "\\$1"), /[\x00-\x1f]/g, lowbyte);
-    return wrapQuotes(s, "single", opts);
-  }
-  function lowbyte(c) {
-    var n = c.charCodeAt(0);
-    var x = {
-      8: "b",
-      9: "t",
-      10: "n",
-      12: "f",
-      13: "r"
-    }[n];
-    if (x) {
-      return "\\" + x;
-    }
-    return "\\x" + (n < 16 ? "0" : "") + $toUpperCase.call(n.toString(16));
-  }
-  function markBoxed(str) {
-    return "Object(" + str + ")";
-  }
-  function weakCollectionOf(type) {
-    return type + " { ? }";
-  }
-  function collectionOf(type, size, entries, indent) {
-    var joinedEntries = indent ? indentedJoin(entries, indent) : $join.call(entries, ", ");
-    return type + " (" + size + ") {" + joinedEntries + "}";
-  }
-  function singleLineValues(xs) {
-    for (var i = 0;i < xs.length; i++) {
-      if (indexOf(xs[i], "\n") >= 0) {
-        return false;
-      }
-    }
-    return true;
-  }
-  function getIndent(opts, depth) {
-    var baseIndent;
-    if (opts.indent === "\t") {
-      baseIndent = "\t";
-    } else if (typeof opts.indent === "number" && opts.indent > 0) {
-      baseIndent = $join.call(Array(opts.indent + 1), " ");
-    } else {
-      return null;
-    }
-    return {
-      base: baseIndent,
-      prev: $join.call(Array(depth + 1), baseIndent)
-    };
-  }
-  function indentedJoin(xs, indent) {
-    if (xs.length === 0) {
-      return "";
-    }
-    var lineJoiner = "\n" + indent.prev + indent.base;
-    return lineJoiner + $join.call(xs, "," + lineJoiner) + "\n" + indent.prev;
-  }
-  function arrObjKeys(obj, inspect) {
-    var isArr = isArray(obj);
-    var xs = [];
-    if (isArr) {
-      xs.length = obj.length;
-      for (var i = 0;i < obj.length; i++) {
-        xs[i] = has(obj, i) ? inspect(obj[i], obj) : "";
-      }
-    }
-    var syms = typeof gOPS === "function" ? gOPS(obj) : [];
-    var symMap;
-    if (hasShammedSymbols) {
-      symMap = {};
-      for (var k = 0;k < syms.length; k++) {
-        symMap["$" + syms[k]] = syms[k];
-      }
-    }
-    for (var key in obj) {
-      if (!has(obj, key)) {
-        continue;
-      }
-      if (isArr && String(Number(key)) === key && key < obj.length) {
-        continue;
-      }
-      if (hasShammedSymbols && symMap["$" + key] instanceof Symbol) {
-        continue;
-      } else if ($test.call(/[^\w$]/, key)) {
-        xs.push(inspect(key, obj) + ": " + inspect(obj[key], obj));
-      } else {
-        xs.push(key + ": " + inspect(obj[key], obj));
-      }
-    }
-    if (typeof gOPS === "function") {
-      for (var j = 0;j < syms.length; j++) {
-        if (isEnumerable.call(obj, syms[j])) {
-          xs.push("[" + inspect(syms[j]) + "]: " + inspect(obj[syms[j]], obj));
-        }
-      }
-    }
-    return xs;
-  }
   var hasMap = typeof Map === "function" && Map.prototype;
   var mapSizeDescriptor = Object.getOwnPropertyDescriptor && hasMap ? Object.getOwnPropertyDescriptor(Map.prototype, "size") : null;
   var mapSize = hasMap && mapSizeDescriptor && typeof mapSizeDescriptor.get === "function" ? mapSizeDescriptor.get : null;
@@ -16396,6 +16118,21 @@ var require_object_inspect = __commonJS((exports, module) => {
   var gPO = (typeof Reflect === "function" ? Reflect.getPrototypeOf : Object.getPrototypeOf) || ([].__proto__ === Array.prototype ? function(O) {
     return O.__proto__;
   } : null);
+  function addNumericSeparator(num, str) {
+    if (num === Infinity || num === -Infinity || num !== num || num && num > -1000 && num < 1000 || $test.call(/e/, str)) {
+      return str;
+    }
+    var sepRegex = /[0-9](?=(?:[0-9]{3})+(?![0-9]))/g;
+    if (typeof num === "number") {
+      var int = num < 0 ? -$floor(-num) : $floor(num);
+      if (int !== num) {
+        var intStr = String(int);
+        var dec = $slice.call(str, intStr.length + 1);
+        return $replace.call(intStr, sepRegex, "$&_") + "." + $replace.call($replace.call(dec, /([0-9]{3})/g, "$&_"), /_$/, "");
+      }
+    }
+    return $replace.call(str, sepRegex, "$&_");
+  }
   var utilInspect = require_util_inspect();
   var inspectCustom = utilInspect.custom;
   var inspectSymbol = isSymbol(inspectCustom) ? inspectCustom : null;
@@ -16419,7 +16156,7 @@ var require_object_inspect = __commonJS((exports, module) => {
     }
     var customInspect = has(opts, "customInspect") ? opts.customInspect : true;
     if (typeof customInspect !== "boolean" && customInspect !== "symbol") {
-      throw new TypeError('option "customInspect", if provided, must be `true`, `false`, or `\'symbol\'`');
+      throw new TypeError("option \"customInspect\", if provided, must be `true`, `false`, or `'symbol'`");
     }
     if (has(opts, "indent") && opts.indent !== null && opts.indent !== "\t" && !(parseInt(opts.indent, 10) === opts.indent && opts.indent > 0)) {
       throw new TypeError('option "indent" must be "\\t", an integer > 0, or `null`');
@@ -16591,9 +16328,285 @@ var require_object_inspect = __commonJS((exports, module) => {
     }
     return String(obj);
   };
+  function wrapQuotes(s, defaultStyle, opts) {
+    var style = opts.quoteStyle || defaultStyle;
+    var quoteChar = quotes[style];
+    return quoteChar + s + quoteChar;
+  }
+  function quote(s) {
+    return $replace.call(String(s), /"/g, "&quot;");
+  }
+  function isArray(obj) {
+    return toStr(obj) === "[object Array]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
+  }
+  function isDate(obj) {
+    return toStr(obj) === "[object Date]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
+  }
+  function isRegExp(obj) {
+    return toStr(obj) === "[object RegExp]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
+  }
+  function isError(obj) {
+    return toStr(obj) === "[object Error]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
+  }
+  function isString(obj) {
+    return toStr(obj) === "[object String]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
+  }
+  function isNumber(obj) {
+    return toStr(obj) === "[object Number]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
+  }
+  function isBoolean(obj) {
+    return toStr(obj) === "[object Boolean]" && (!toStringTag || !(typeof obj === "object" && (toStringTag in obj)));
+  }
+  function isSymbol(obj) {
+    if (hasShammedSymbols) {
+      return obj && typeof obj === "object" && obj instanceof Symbol;
+    }
+    if (typeof obj === "symbol") {
+      return true;
+    }
+    if (!obj || typeof obj !== "object" || !symToString) {
+      return false;
+    }
+    try {
+      symToString.call(obj);
+      return true;
+    } catch (e) {
+    }
+    return false;
+  }
+  function isBigInt(obj) {
+    if (!obj || typeof obj !== "object" || !bigIntValueOf) {
+      return false;
+    }
+    try {
+      bigIntValueOf.call(obj);
+      return true;
+    } catch (e) {
+    }
+    return false;
+  }
   var hasOwn = Object.prototype.hasOwnProperty || function(key) {
     return key in this;
   };
+  function has(obj, key) {
+    return hasOwn.call(obj, key);
+  }
+  function toStr(obj) {
+    return objectToString.call(obj);
+  }
+  function nameOf(f) {
+    if (f.name) {
+      return f.name;
+    }
+    var m = $match.call(functionToString.call(f), /^function\s*([\w$]+)/);
+    if (m) {
+      return m[1];
+    }
+    return null;
+  }
+  function indexOf(xs, x) {
+    if (xs.indexOf) {
+      return xs.indexOf(x);
+    }
+    for (var i = 0, l = xs.length;i < l; i++) {
+      if (xs[i] === x) {
+        return i;
+      }
+    }
+    return -1;
+  }
+  function isMap(x) {
+    if (!mapSize || !x || typeof x !== "object") {
+      return false;
+    }
+    try {
+      mapSize.call(x);
+      try {
+        setSize.call(x);
+      } catch (s) {
+        return true;
+      }
+      return x instanceof Map;
+    } catch (e) {
+    }
+    return false;
+  }
+  function isWeakMap(x) {
+    if (!weakMapHas || !x || typeof x !== "object") {
+      return false;
+    }
+    try {
+      weakMapHas.call(x, weakMapHas);
+      try {
+        weakSetHas.call(x, weakSetHas);
+      } catch (s) {
+        return true;
+      }
+      return x instanceof WeakMap;
+    } catch (e) {
+    }
+    return false;
+  }
+  function isWeakRef(x) {
+    if (!weakRefDeref || !x || typeof x !== "object") {
+      return false;
+    }
+    try {
+      weakRefDeref.call(x);
+      return true;
+    } catch (e) {
+    }
+    return false;
+  }
+  function isSet(x) {
+    if (!setSize || !x || typeof x !== "object") {
+      return false;
+    }
+    try {
+      setSize.call(x);
+      try {
+        mapSize.call(x);
+      } catch (m) {
+        return true;
+      }
+      return x instanceof Set;
+    } catch (e) {
+    }
+    return false;
+  }
+  function isWeakSet(x) {
+    if (!weakSetHas || !x || typeof x !== "object") {
+      return false;
+    }
+    try {
+      weakSetHas.call(x, weakSetHas);
+      try {
+        weakMapHas.call(x, weakMapHas);
+      } catch (s) {
+        return true;
+      }
+      return x instanceof WeakSet;
+    } catch (e) {
+    }
+    return false;
+  }
+  function isElement(x) {
+    if (!x || typeof x !== "object") {
+      return false;
+    }
+    if (typeof HTMLElement !== "undefined" && x instanceof HTMLElement) {
+      return true;
+    }
+    return typeof x.nodeName === "string" && typeof x.getAttribute === "function";
+  }
+  function inspectString(str, opts) {
+    if (str.length > opts.maxStringLength) {
+      var remaining = str.length - opts.maxStringLength;
+      var trailer = "... " + remaining + " more character" + (remaining > 1 ? "s" : "");
+      return inspectString($slice.call(str, 0, opts.maxStringLength), opts) + trailer;
+    }
+    var quoteRE = quoteREs[opts.quoteStyle || "single"];
+    quoteRE.lastIndex = 0;
+    var s = $replace.call($replace.call(str, quoteRE, "\\$1"), /[\x00-\x1f]/g, lowbyte);
+    return wrapQuotes(s, "single", opts);
+  }
+  function lowbyte(c) {
+    var n = c.charCodeAt(0);
+    var x = {
+      8: "b",
+      9: "t",
+      10: "n",
+      12: "f",
+      13: "r"
+    }[n];
+    if (x) {
+      return "\\" + x;
+    }
+    return "\\x" + (n < 16 ? "0" : "") + $toUpperCase.call(n.toString(16));
+  }
+  function markBoxed(str) {
+    return "Object(" + str + ")";
+  }
+  function weakCollectionOf(type) {
+    return type + " { ? }";
+  }
+  function collectionOf(type, size, entries, indent) {
+    var joinedEntries = indent ? indentedJoin(entries, indent) : $join.call(entries, ", ");
+    return type + " (" + size + ") {" + joinedEntries + "}";
+  }
+  function singleLineValues(xs) {
+    for (var i = 0;i < xs.length; i++) {
+      if (indexOf(xs[i], `
+`) >= 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+  function getIndent(opts, depth) {
+    var baseIndent;
+    if (opts.indent === "\t") {
+      baseIndent = "\t";
+    } else if (typeof opts.indent === "number" && opts.indent > 0) {
+      baseIndent = $join.call(Array(opts.indent + 1), " ");
+    } else {
+      return null;
+    }
+    return {
+      base: baseIndent,
+      prev: $join.call(Array(depth + 1), baseIndent)
+    };
+  }
+  function indentedJoin(xs, indent) {
+    if (xs.length === 0) {
+      return "";
+    }
+    var lineJoiner = `
+` + indent.prev + indent.base;
+    return lineJoiner + $join.call(xs, "," + lineJoiner) + `
+` + indent.prev;
+  }
+  function arrObjKeys(obj, inspect) {
+    var isArr = isArray(obj);
+    var xs = [];
+    if (isArr) {
+      xs.length = obj.length;
+      for (var i = 0;i < obj.length; i++) {
+        xs[i] = has(obj, i) ? inspect(obj[i], obj) : "";
+      }
+    }
+    var syms = typeof gOPS === "function" ? gOPS(obj) : [];
+    var symMap;
+    if (hasShammedSymbols) {
+      symMap = {};
+      for (var k = 0;k < syms.length; k++) {
+        symMap["$" + syms[k]] = syms[k];
+      }
+    }
+    for (var key in obj) {
+      if (!has(obj, key)) {
+        continue;
+      }
+      if (isArr && String(Number(key)) === key && key < obj.length) {
+        continue;
+      }
+      if (hasShammedSymbols && symMap["$" + key] instanceof Symbol) {
+        continue;
+      } else if ($test.call(/[^\w$]/, key)) {
+        xs.push(inspect(key, obj) + ": " + inspect(obj[key], obj));
+      } else {
+        xs.push(key + ": " + inspect(obj[key], obj));
+      }
+    }
+    if (typeof gOPS === "function") {
+      for (var j = 0;j < syms.length; j++) {
+        if (isEnumerable.call(obj, syms[j])) {
+          xs.push("[" + inspect(syms[j]) + "]: " + inspect(obj[syms[j]], obj));
+        }
+      }
+    }
+    return xs;
+  }
 });
 
 // node_modules/side-channel/index.js
@@ -17402,6 +17415,21 @@ var require_lib2 = __commonJS((exports, module) => {
 
 // node_modules/body-parser/lib/types/urlencoded.js
 var require_urlencoded = __commonJS((exports, module) => {
+  /*!
+   * body-parser
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var bytes = require_bytes();
+  var contentType = require_content_type();
+  var createError = require_http_errors();
+  var debug = require_src()("body-parser:urlencoded");
+  var deprecate = require_depd()("body-parser");
+  var read = require_read();
+  var typeis = require_type_is();
+  module.exports = urlencoded;
+  var parsers = Object.create(null);
   function urlencoded(options) {
     var opts = options || {};
     if (opts.extended === undefined) {
@@ -17561,25 +17589,38 @@ var require_urlencoded = __commonJS((exports, module) => {
       return Boolean(typeis(req, type));
     };
   }
-  /*!
-   * body-parser
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2014-2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var bytes = require_bytes();
-  var contentType = require_content_type();
-  var createError = require_http_errors();
-  var debug = require_src()("body-parser:urlencoded");
-  var deprecate = require_depd()("body-parser");
-  var read = require_read();
-  var typeis = require_type_is();
-  module.exports = urlencoded;
-  var parsers = Object.create(null);
 });
 
 // node_modules/body-parser/index.js
 var require_body_parser = __commonJS((exports, module) => {
+  /*!
+   * body-parser
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var deprecate = require_depd()("body-parser");
+  var parsers = Object.create(null);
+  exports = module.exports = deprecate.function(bodyParser, "bodyParser: use individual json/urlencoded middlewares");
+  Object.defineProperty(exports, "json", {
+    configurable: true,
+    enumerable: true,
+    get: createParserGetter("json")
+  });
+  Object.defineProperty(exports, "raw", {
+    configurable: true,
+    enumerable: true,
+    get: createParserGetter("raw")
+  });
+  Object.defineProperty(exports, "text", {
+    configurable: true,
+    enumerable: true,
+    get: createParserGetter("text")
+  });
+  Object.defineProperty(exports, "urlencoded", {
+    configurable: true,
+    enumerable: true,
+    get: createParserGetter("urlencoded")
+  });
   function bodyParser(options) {
     var opts = Object.create(options || null, {
       type: {
@@ -17625,38 +17666,18 @@ var require_body_parser = __commonJS((exports, module) => {
     }
     return parsers[parserName] = parser;
   }
-  /*!
-   * body-parser
-   * Copyright(c) 2014-2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var deprecate = require_depd()("body-parser");
-  var parsers = Object.create(null);
-  exports = module.exports = deprecate.function(bodyParser, "bodyParser: use individual json/urlencoded middlewares");
-  Object.defineProperty(exports, "json", {
-    configurable: true,
-    enumerable: true,
-    get: createParserGetter("json")
-  });
-  Object.defineProperty(exports, "raw", {
-    configurable: true,
-    enumerable: true,
-    get: createParserGetter("raw")
-  });
-  Object.defineProperty(exports, "text", {
-    configurable: true,
-    enumerable: true,
-    get: createParserGetter("text")
-  });
-  Object.defineProperty(exports, "urlencoded", {
-    configurable: true,
-    enumerable: true,
-    get: createParserGetter("urlencoded")
-  });
 });
 
 // node_modules/merge-descriptors/index.js
 var require_merge_descriptors = __commonJS((exports, module) => {
+  /*!
+   * merge-descriptors
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = merge;
+  var hasOwnProperty = Object.prototype.hasOwnProperty;
   function merge(dest, src, redefine) {
     if (!dest) {
       throw new TypeError("argument dest is required");
@@ -17676,21 +17697,10 @@ var require_merge_descriptors = __commonJS((exports, module) => {
     });
     return dest;
   }
-  /*!
-   * merge-descriptors
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = merge;
-  var hasOwnProperty = Object.prototype.hasOwnProperty;
 });
 
 // node_modules/encodeurl/index.js
 var require_encodeurl = __commonJS((exports, module) => {
-  function encodeUrl(url) {
-    return String(url).replace(UNMATCHED_SURROGATE_PAIR_REGEXP, UNMATCHED_SURROGATE_PAIR_REPLACE).replace(ENCODE_CHARS_REGEXP, encodeURI);
-  }
   /*!
    * encodeurl
    * Copyright(c) 2016 Douglas Christopher Wilson
@@ -17699,11 +17709,23 @@ var require_encodeurl = __commonJS((exports, module) => {
   module.exports = encodeUrl;
   var ENCODE_CHARS_REGEXP = /(?:[^\x21\x23-\x3B\x3D\x3F-\x5F\x61-\x7A\x7C\x7E]|%(?:[^0-9A-Fa-f]|[0-9A-Fa-f][^0-9A-Fa-f]|$))+/g;
   var UNMATCHED_SURROGATE_PAIR_REGEXP = /(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF]([^\uDC00-\uDFFF]|$)/g;
-  var UNMATCHED_SURROGATE_PAIR_REPLACE = "$1\uFFFD$2";
+  var UNMATCHED_SURROGATE_PAIR_REPLACE = "$1�$2";
+  function encodeUrl(url) {
+    return String(url).replace(UNMATCHED_SURROGATE_PAIR_REGEXP, UNMATCHED_SURROGATE_PAIR_REPLACE).replace(ENCODE_CHARS_REGEXP, encodeURI);
+  }
 });
 
 // node_modules/escape-html/index.js
 var require_escape_html = __commonJS((exports, module) => {
+  /*!
+   * escape-html
+   * Copyright(c) 2012-2013 TJ Holowaychuk
+   * Copyright(c) 2015 Andreas Lubbe
+   * Copyright(c) 2015 Tiancheng "Timothy" Gu
+   * MIT Licensed
+   */
+  var matchHtmlRegExp = /["'&<>]/;
+  module.exports = escapeHtml;
   function escapeHtml(string) {
     var str = "" + string;
     var match = matchHtmlRegExp.exec(str);
@@ -17742,19 +17764,21 @@ var require_escape_html = __commonJS((exports, module) => {
     }
     return lastIndex !== index ? html + str.substring(lastIndex, index) : html;
   }
-  /*!
-   * escape-html
-   * Copyright(c) 2012-2013 TJ Holowaychuk
-   * Copyright(c) 2015 Andreas Lubbe
-   * Copyright(c) 2015 Tiancheng "Timothy" Gu
-   * MIT Licensed
-   */
-  var matchHtmlRegExp = /["'&<>]/;
-  module.exports = escapeHtml;
 });
 
 // node_modules/parseurl/index.js
 var require_parseurl = __commonJS((exports, module) => {
+  /*!
+   * parseurl
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2014-2017 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var url = __require("url");
+  var parse = url.parse;
+  var Url = url.Url;
+  module.exports = parseurl;
+  module.exports.original = originalurl;
   function parseurl(req) {
     var url2 = req.url;
     if (url2 === undefined) {
@@ -17821,25 +17845,43 @@ var require_parseurl = __commonJS((exports, module) => {
   function fresh(url2, parsedUrl) {
     return typeof parsedUrl === "object" && parsedUrl !== null && (Url === undefined || parsedUrl instanceof Url) && parsedUrl._raw === url2;
   }
-  /*!
-   * parseurl
-   * Copyright(c) 2014 Jonathan Ong
-   * Copyright(c) 2014-2017 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var url = __require("url");
-  var parse = url.parse;
-  var Url = url.Url;
-  module.exports = parseurl;
-  module.exports.original = originalurl;
 });
 
 // node_modules/finalhandler/index.js
 var require_finalhandler = __commonJS((exports, module) => {
+  /*!
+   * finalhandler
+   * Copyright(c) 2014-2022 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var debug = require_src()("finalhandler");
+  var encodeUrl = require_encodeurl();
+  var escapeHtml = require_escape_html();
+  var onFinished = require_on_finished();
+  var parseUrl = require_parseurl();
+  var statuses = require_statuses();
+  var unpipe = require_unpipe();
+  var DOUBLE_SPACE_REGEXP = /\x20{2}/g;
+  var NEWLINE_REGEXP = /\n/g;
+  var defer = typeof setImmediate === "function" ? setImmediate : function(fn) {
+    process.nextTick(fn.bind.apply(fn, arguments));
+  };
+  var isFinished = onFinished.isFinished;
   function createHtmlDocument(message) {
     var body = escapeHtml(message).replace(NEWLINE_REGEXP, "<br>").replace(DOUBLE_SPACE_REGEXP, " &nbsp;");
-    return "<!DOCTYPE html>\n" + '<html lang="en">\n' + "<head>\n" + '<meta charset="utf-8">\n' + "<title>Error</title>\n" + "</head>\n" + "<body>\n" + "<pre>" + body + "</pre>\n" + "</body>\n" + "</html>\n";
+    return `<!DOCTYPE html>
+` + `<html lang="en">
+` + `<head>
+` + `<meta charset="utf-8">
+` + `<title>Error</title>
+` + `</head>
+` + `<body>
+` + "<pre>" + body + `</pre>
+` + `</body>
+` + `</html>
+`;
   }
+  module.exports = finalhandler;
   function finalhandler(req, res, options) {
     var opts = options || {};
     var env = opts.env || "development";
@@ -17965,29 +18007,11 @@ var require_finalhandler = __commonJS((exports, module) => {
       res.setHeader(key, headers[key]);
     }
   }
-  /*!
-   * finalhandler
-   * Copyright(c) 2014-2022 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var debug = require_src()("finalhandler");
-  var encodeUrl = require_encodeurl();
-  var escapeHtml = require_escape_html();
-  var onFinished = require_on_finished();
-  var parseUrl = require_parseurl();
-  var statuses = require_statuses();
-  var unpipe = require_unpipe();
-  var DOUBLE_SPACE_REGEXP = /\x20{2}/g;
-  var NEWLINE_REGEXP = /\n/g;
-  var defer = typeof setImmediate === "function" ? setImmediate : function(fn) {
-    process.nextTick(fn.bind.apply(fn, arguments));
-  };
-  var isFinished = onFinished.isFinished;
-  module.exports = finalhandler;
 });
 
 // node_modules/array-flatten/array-flatten.js
 var require_array_flatten = __commonJS((exports, module) => {
+  module.exports = arrayFlatten;
   function flattenWithDepth(array, result, depth) {
     for (var i = 0;i < array.length; i++) {
       var value = array[i];
@@ -18016,11 +18040,12 @@ var require_array_flatten = __commonJS((exports, module) => {
     }
     return flattenWithDepth(array, [], depth);
   }
-  module.exports = arrayFlatten;
 });
 
 // node_modules/path-to-regexp/index.js
 var require_path_to_regexp = __commonJS((exports, module) => {
+  module.exports = pathToRegexp;
+  var MATCHING_GROUP_REGEXP = /\\.|\((?:\?<(.*?)>)?(?!\?)/g;
   function pathToRegexp(path, keys, options) {
     options = options || {};
     keys = keys || [];
@@ -18109,12 +18134,21 @@ var require_path_to_regexp = __commonJS((exports, module) => {
     }
     return new RegExp("^" + path, flags);
   }
-  module.exports = pathToRegexp;
-  var MATCHING_GROUP_REGEXP = /\\.|\((?:\?<(.*?)>)?(?!\?)/g;
 });
 
 // node_modules/express/lib/router/layer.js
 var require_layer = __commonJS((exports, module) => {
+  /*!
+   * express
+   * Copyright(c) 2009-2013 TJ Holowaychuk
+   * Copyright(c) 2013 Roman Shtylman
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var pathRegexp = require_path_to_regexp();
+  var debug = require_src()("express:router:layer");
+  var hasOwnProperty = Object.prototype.hasOwnProperty;
+  module.exports = Layer;
   function Layer(path, options, fn) {
     if (!(this instanceof Layer)) {
       return new Layer(path, options, fn);
@@ -18129,31 +18163,6 @@ var require_layer = __commonJS((exports, module) => {
     this.regexp.fast_star = path === "*";
     this.regexp.fast_slash = path === "/" && opts.end === false;
   }
-  function decode_param(val) {
-    if (typeof val !== "string" || val.length === 0) {
-      return val;
-    }
-    try {
-      return decodeURIComponent(val);
-    } catch (err) {
-      if (err instanceof URIError) {
-        err.message = "Failed to decode param \'" + val + "\'";
-        err.status = err.statusCode = 400;
-      }
-      throw err;
-    }
-  }
-  /*!
-   * express
-   * Copyright(c) 2009-2013 TJ Holowaychuk
-   * Copyright(c) 2013 Roman Shtylman
-   * Copyright(c) 2014-2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var pathRegexp = require_path_to_regexp();
-  var debug = require_src()("express:router:layer");
-  var hasOwnProperty = Object.prototype.hasOwnProperty;
-  module.exports = Layer;
   Layer.prototype.handle_error = function handle_error(error, req, res, next) {
     var fn = this.handle;
     if (fn.length !== 4) {
@@ -18210,10 +18219,32 @@ var require_layer = __commonJS((exports, module) => {
     }
     return true;
   };
+  function decode_param(val) {
+    if (typeof val !== "string" || val.length === 0) {
+      return val;
+    }
+    try {
+      return decodeURIComponent(val);
+    } catch (err) {
+      if (err instanceof URIError) {
+        err.message = "Failed to decode param '" + val + "'";
+        err.status = err.statusCode = 400;
+      }
+      throw err;
+    }
+  }
 });
 
 // node_modules/methods/index.js
 var require_methods = __commonJS((exports, module) => {
+  /*!
+   * methods
+   * Copyright(c) 2013-2014 TJ Holowaychuk
+   * Copyright(c) 2015-2016 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var http = __require("http");
+  module.exports = getCurrentNodeMethods() || getBasicNodeMethods();
   function getCurrentNodeMethods() {
     return http.METHODS && http.METHODS.map(function lowerCaseMethod(method) {
       return method.toLowerCase();
@@ -18249,24 +18280,10 @@ var require_methods = __commonJS((exports, module) => {
       "connect"
     ];
   }
-  /*!
-   * methods
-   * Copyright(c) 2013-2014 TJ Holowaychuk
-   * Copyright(c) 2015-2016 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var http = __require("http");
-  module.exports = getCurrentNodeMethods() || getBasicNodeMethods();
 });
 
 // node_modules/express/lib/router/route.js
 var require_route = __commonJS((exports, module) => {
-  function Route(path) {
-    this.path = path;
-    this.stack = [];
-    debug("new %o", path);
-    this.methods = {};
-  }
   /*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -18281,6 +18298,12 @@ var require_route = __commonJS((exports, module) => {
   var slice = Array.prototype.slice;
   var toString = Object.prototype.toString;
   module.exports = Route;
+  function Route(path) {
+    this.path = path;
+    this.stack = [];
+    debug("new %o", path);
+    this.methods = {};
+  }
   Route.prototype._handles_method = function _handles_method(method) {
     if (this.methods._all) {
       return true;
@@ -18389,101 +18412,6 @@ var require_utils_merge = __commonJS((exports, module) => {
 
 // node_modules/express/lib/router/index.js
 var require_router = __commonJS((exports, module) => {
-  function appendMethods(list, addition) {
-    for (var i = 0;i < addition.length; i++) {
-      var method = addition[i];
-      if (list.indexOf(method) === -1) {
-        list.push(method);
-      }
-    }
-  }
-  function getPathname(req) {
-    try {
-      return parseUrl(req).pathname;
-    } catch (err) {
-      return;
-    }
-  }
-  function getProtohost(url) {
-    if (typeof url !== "string" || url.length === 0 || url[0] === "/") {
-      return;
-    }
-    var searchIndex = url.indexOf("?");
-    var pathLength = searchIndex !== -1 ? searchIndex : url.length;
-    var fqdnIndex = url.slice(0, pathLength).indexOf("://");
-    return fqdnIndex !== -1 ? url.substring(0, url.indexOf("/", 3 + fqdnIndex)) : undefined;
-  }
-  function gettype(obj) {
-    var type = typeof obj;
-    if (type !== "object") {
-      return type;
-    }
-    return toString.call(obj).replace(objectRegExp, "$1");
-  }
-  function matchLayer(layer, path) {
-    try {
-      return layer.match(path);
-    } catch (err) {
-      return err;
-    }
-  }
-  function mergeParams(params, parent) {
-    if (typeof parent !== "object" || !parent) {
-      return params;
-    }
-    var obj = mixin({}, parent);
-    if (!(0 in params) || !(0 in parent)) {
-      return mixin(obj, params);
-    }
-    var i = 0;
-    var o = 0;
-    while (i in params) {
-      i++;
-    }
-    while (o in parent) {
-      o++;
-    }
-    for (i--;i >= 0; i--) {
-      params[i + o] = params[i];
-      if (i < o) {
-        delete params[i];
-      }
-    }
-    return mixin(obj, params);
-  }
-  function restore(fn, obj) {
-    var props = new Array(arguments.length - 2);
-    var vals = new Array(arguments.length - 2);
-    for (var i = 0;i < props.length; i++) {
-      props[i] = arguments[i + 2];
-      vals[i] = obj[props[i]];
-    }
-    return function() {
-      for (var i2 = 0;i2 < props.length; i2++) {
-        obj[props[i2]] = vals[i2];
-      }
-      return fn.apply(this, arguments);
-    };
-  }
-  function sendOptionsResponse(res, options, next) {
-    try {
-      var body = options.join(",");
-      res.set("Allow", body);
-      res.send(body);
-    } catch (err) {
-      next(err);
-    }
-  }
-  function wrap(old, fn) {
-    return function proxy() {
-      var args = new Array(arguments.length + 1);
-      args[0] = old;
-      for (var i = 0, len = arguments.length;i < len; i++) {
-        args[i + 1] = arguments[i];
-      }
-      fn.apply(this, args);
-    };
-  }
   /*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -18775,6 +18703,101 @@ var require_router = __commonJS((exports, module) => {
       return this;
     };
   });
+  function appendMethods(list, addition) {
+    for (var i = 0;i < addition.length; i++) {
+      var method = addition[i];
+      if (list.indexOf(method) === -1) {
+        list.push(method);
+      }
+    }
+  }
+  function getPathname(req) {
+    try {
+      return parseUrl(req).pathname;
+    } catch (err) {
+      return;
+    }
+  }
+  function getProtohost(url) {
+    if (typeof url !== "string" || url.length === 0 || url[0] === "/") {
+      return;
+    }
+    var searchIndex = url.indexOf("?");
+    var pathLength = searchIndex !== -1 ? searchIndex : url.length;
+    var fqdnIndex = url.slice(0, pathLength).indexOf("://");
+    return fqdnIndex !== -1 ? url.substring(0, url.indexOf("/", 3 + fqdnIndex)) : undefined;
+  }
+  function gettype(obj) {
+    var type = typeof obj;
+    if (type !== "object") {
+      return type;
+    }
+    return toString.call(obj).replace(objectRegExp, "$1");
+  }
+  function matchLayer(layer, path) {
+    try {
+      return layer.match(path);
+    } catch (err) {
+      return err;
+    }
+  }
+  function mergeParams(params, parent) {
+    if (typeof parent !== "object" || !parent) {
+      return params;
+    }
+    var obj = mixin({}, parent);
+    if (!(0 in params) || !(0 in parent)) {
+      return mixin(obj, params);
+    }
+    var i = 0;
+    var o = 0;
+    while (i in params) {
+      i++;
+    }
+    while (o in parent) {
+      o++;
+    }
+    for (i--;i >= 0; i--) {
+      params[i + o] = params[i];
+      if (i < o) {
+        delete params[i];
+      }
+    }
+    return mixin(obj, params);
+  }
+  function restore(fn, obj) {
+    var props = new Array(arguments.length - 2);
+    var vals = new Array(arguments.length - 2);
+    for (var i = 0;i < props.length; i++) {
+      props[i] = arguments[i + 2];
+      vals[i] = obj[props[i]];
+    }
+    return function() {
+      for (var i2 = 0;i2 < props.length; i2++) {
+        obj[props[i2]] = vals[i2];
+      }
+      return fn.apply(this, arguments);
+    };
+  }
+  function sendOptionsResponse(res, options, next) {
+    try {
+      var body = options.join(",");
+      res.set("Allow", body);
+      res.send(body);
+    } catch (err) {
+      next(err);
+    }
+  }
+  function wrap(old, fn) {
+    return function proxy() {
+      var args = new Array(arguments.length + 1);
+      args[0] = old;
+      for (var i = 0, len = arguments.length;i < len; i++) {
+        args[i + 1] = arguments[i];
+      }
+      fn.apply(this, args);
+    };
+  }
 });
 
 // node_modules/express/lib/middleware/init.js
@@ -18836,6 +18859,22 @@ var require_query = __commonJS((exports, module) => {
 
 // node_modules/express/lib/view.js
 var require_view = __commonJS((exports, module) => {
+  /*!
+   * express
+   * Copyright(c) 2009-2013 TJ Holowaychuk
+   * Copyright(c) 2013 Roman Shtylman
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var debug = require_src()("express:view");
+  var path = __require("path");
+  var fs = __require("fs");
+  var dirname = path.dirname;
+  var basename = path.basename;
+  var extname = path.extname;
+  var join = path.join;
+  var resolve = path.resolve;
+  module.exports = View;
   function View(name, options) {
     var opts = options || {};
     this.defaultEngine = opts.defaultEngine;
@@ -18862,30 +18901,6 @@ var require_view = __commonJS((exports, module) => {
     this.engine = opts.engines[this.ext];
     this.path = this.lookup(fileName);
   }
-  function tryStat(path2) {
-    debug('stat "%s"', path2);
-    try {
-      return fs.statSync(path2);
-    } catch (e) {
-      return;
-    }
-  }
-  /*!
-   * express
-   * Copyright(c) 2009-2013 TJ Holowaychuk
-   * Copyright(c) 2013 Roman Shtylman
-   * Copyright(c) 2014-2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var debug = require_src()("express:view");
-  var path = __require("path");
-  var fs = __require("fs");
-  var dirname = path.dirname;
-  var basename = path.basename;
-  var extname = path.extname;
-  var join = path.join;
-  var resolve = path.resolve;
-  module.exports = View;
   View.prototype.lookup = function lookup(name) {
     var path2;
     var roots = [].concat(this.root);
@@ -18916,26 +18931,34 @@ var require_view = __commonJS((exports, module) => {
       return path2;
     }
   };
+  function tryStat(path2) {
+    debug('stat "%s"', path2);
+    try {
+      return fs.statSync(path2);
+    } catch (e) {
+      return;
+    }
+  }
 });
 
 // node_modules/safe-buffer/index.js
 var require_safe_buffer = __commonJS((exports, module) => {
+  /*! safe-buffer. MIT License. Feross Aboukhadijeh <https://feross.org/opensource> */
+  var buffer = __require("buffer");
+  var Buffer2 = buffer.Buffer;
   function copyProps(src, dst) {
     for (var key in src) {
       dst[key] = src[key];
     }
   }
-  function SafeBuffer(arg, encodingOrOffset, length) {
-    return Buffer2(arg, encodingOrOffset, length);
-  }
-  /*! safe-buffer. MIT License. Feross Aboukhadijeh <https://feross.org/opensource> */
-  var buffer = __require("buffer");
-  var Buffer2 = buffer.Buffer;
   if (Buffer2.from && Buffer2.alloc && Buffer2.allocUnsafe && Buffer2.allocUnsafeSlow) {
     module.exports = buffer;
   } else {
     copyProps(buffer, exports);
     exports.Buffer = SafeBuffer;
+  }
+  function SafeBuffer(arg, encodingOrOffset, length) {
+    return Buffer2(arg, encodingOrOffset, length);
   }
   SafeBuffer.prototype = Object.create(Buffer2.prototype);
   copyProps(Buffer2, SafeBuffer);
@@ -18977,6 +19000,26 @@ var require_safe_buffer = __commonJS((exports, module) => {
 
 // node_modules/content-disposition/index.js
 var require_content_disposition = __commonJS((exports, module) => {
+  /*!
+   * content-disposition
+   * Copyright(c) 2014-2017 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = contentDisposition;
+  module.exports.parse = parse;
+  var basename = __require("path").basename;
+  var Buffer2 = require_safe_buffer().Buffer;
+  var ENCODE_URL_ATTR_CHAR_REGEXP = /[\x00-\x20"'()*,/:;<=>?@[\\\]{}\x7f]/g;
+  var HEX_ESCAPE_REGEXP = /%[0-9A-Fa-f]{2}/;
+  var HEX_ESCAPE_REPLACE_REGEXP = /%([0-9A-Fa-f]{2})/g;
+  var NON_LATIN1_REGEXP = /[^\x20-\x7e\xa0-\xff]/g;
+  var QESC_REGEXP = /\\([\u0000-\u007f])/g;
+  var QUOTE_REGEXP = /([\\"])/g;
+  var PARAM_REGEXP = /;[\x09\x20]*([!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*=[\x09\x20]*("(?:[\x20!\x23-\x5b\x5d-\x7e\x80-\xff]|\\[\x20-\x7e])*"|[!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*/g;
+  var TEXT_REGEXP = /^[\x20-\x7e\x80-\xff]+$/;
+  var TOKEN_REGEXP = /^[!#$%&'*+.0-9A-Z^_`a-z|~-]+$/;
+  var EXT_VALUE_REGEXP = /^([A-Za-z0-9!#$%&+\-^_`{}~]+)'(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4,8}|)'((?:%[0-9A-Fa-f]{2}|[A-Za-z0-9!#$&+.^_`|~-])+)$/;
+  var DISPOSITION_TYPE_REGEXP = /^([!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*(?:$|;)/;
   function contentDisposition(filename, options) {
     var opts = options || {};
     var type = opts.type || "attachment";
@@ -19112,39 +19155,16 @@ var require_content_disposition = __commonJS((exports, module) => {
   function ustring(val) {
     var str = String(val);
     var encoded = encodeURIComponent(str).replace(ENCODE_URL_ATTR_CHAR_REGEXP, pencode);
-    return "UTF-8\'\'" + encoded;
+    return "UTF-8''" + encoded;
   }
   function ContentDisposition(type, parameters) {
     this.type = type;
     this.parameters = parameters;
   }
-  /*!
-   * content-disposition
-   * Copyright(c) 2014-2017 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = contentDisposition;
-  module.exports.parse = parse;
-  var basename = __require("path").basename;
-  var Buffer2 = require_safe_buffer().Buffer;
-  var ENCODE_URL_ATTR_CHAR_REGEXP = /[\x00-\x20"'()*,/:;<=>?@[\\\]{}\x7f]/g;
-  var HEX_ESCAPE_REGEXP = /%[0-9A-Fa-f]{2}/;
-  var HEX_ESCAPE_REPLACE_REGEXP = /%([0-9A-Fa-f]{2})/g;
-  var NON_LATIN1_REGEXP = /[^\x20-\x7e\xa0-\xff]/g;
-  var QESC_REGEXP = /\\([\u0000-\u007f])/g;
-  var QUOTE_REGEXP = /([\\"])/g;
-  var PARAM_REGEXP = /;[\x09\x20]*([!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*=[\x09\x20]*("(?:[\x20!\x23-\x5b\x5d-\x7e\x80-\xff]|\\[\x20-\x7e])*"|[!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*/g;
-  var TEXT_REGEXP = /^[\x20-\x7e\x80-\xff]+$/;
-  var TOKEN_REGEXP = /^[!#$%&'*+.0-9A-Z^_`a-z|~-]+$/;
-  var EXT_VALUE_REGEXP = /^([A-Za-z0-9!#$%&+\-^_`{}~]+)'(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4,8}|)'((?:%[0-9A-Fa-f]{2}|[A-Za-z0-9!#$&+.^_`|~-])+)$/;
-  var DISPOSITION_TYPE_REGEXP = /^([!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*(?:$|;)/;
 });
 
 // node_modules/send/node_modules/encodeurl/index.js
 var require_encodeurl2 = __commonJS((exports, module) => {
-  function encodeUrl(url) {
-    return String(url).replace(UNMATCHED_SURROGATE_PAIR_REGEXP, UNMATCHED_SURROGATE_PAIR_REPLACE).replace(ENCODE_CHARS_REGEXP, encodeURI);
-  }
   /*!
    * encodeurl
    * Copyright(c) 2016 Douglas Christopher Wilson
@@ -19153,11 +19173,23 @@ var require_encodeurl2 = __commonJS((exports, module) => {
   module.exports = encodeUrl;
   var ENCODE_CHARS_REGEXP = /(?:[^\x21\x25\x26-\x3B\x3D\x3F-\x5B\x5D\x5F\x61-\x7A\x7E]|%(?:[^0-9A-Fa-f]|[0-9A-Fa-f][^0-9A-Fa-f]|$))+/g;
   var UNMATCHED_SURROGATE_PAIR_REGEXP = /(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF]([^\uDC00-\uDFFF]|$)/g;
-  var UNMATCHED_SURROGATE_PAIR_REPLACE = "$1\uFFFD$2";
+  var UNMATCHED_SURROGATE_PAIR_REPLACE = "$1�$2";
+  function encodeUrl(url) {
+    return String(url).replace(UNMATCHED_SURROGATE_PAIR_REGEXP, UNMATCHED_SURROGATE_PAIR_REPLACE).replace(ENCODE_CHARS_REGEXP, encodeURI);
+  }
 });
 
 // node_modules/etag/index.js
 var require_etag = __commonJS((exports, module) => {
+  /*!
+   * etag
+   * Copyright(c) 2014-2016 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = etag;
+  var crypto2 = __require("crypto");
+  var Stats = __require("fs").Stats;
+  var toString = Object.prototype.toString;
   function entitytag(entity) {
     if (entity.length === 0) {
       return '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
@@ -19189,19 +19221,18 @@ var require_etag = __commonJS((exports, module) => {
     var size = stat.size.toString(16);
     return '"' + size + "-" + mtime + '"';
   }
-  /*!
-   * etag
-   * Copyright(c) 2014-2016 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = etag;
-  var crypto2 = __require("crypto");
-  var Stats = __require("fs").Stats;
-  var toString = Object.prototype.toString;
 });
 
 // node_modules/fresh/index.js
 var require_fresh = __commonJS((exports, module) => {
+  /*!
+   * fresh
+   * Copyright(c) 2012 TJ Holowaychuk
+   * Copyright(c) 2016-2017 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var CACHE_CONTROL_NO_CACHE_REGEXP = /(?:^|,)\s*?no-cache\s*?(?:,|$)/;
+  module.exports = fresh;
   function fresh(reqHeaders, resHeaders) {
     var modifiedSince = reqHeaders["if-modified-since"];
     var noneMatch = reqHeaders["if-none-match"];
@@ -19266,14 +19297,6 @@ var require_fresh = __commonJS((exports, module) => {
     list.push(str.substring(start, end));
     return list;
   }
-  /*!
-   * fresh
-   * Copyright(c) 2012 TJ Holowaychuk
-   * Copyright(c) 2016-2017 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var CACHE_CONTROL_NO_CACHE_REGEXP = /(?:^|,)\s*?no-cache\s*?(?:,|$)/;
-  module.exports = fresh;
 });
 
 // node_modules/mime/types.json
@@ -19283,12 +19306,12 @@ var require_types = __commonJS((exports, module) => {
 
 // node_modules/mime/mime.js
 var require_mime = __commonJS((exports, module) => {
+  var path = __require("path");
+  var fs = __require("fs");
   function Mime() {
     this.types = Object.create(null);
     this.extensions = Object.create(null);
   }
-  var path = __require("path");
-  var fs = __require("fs");
   Mime.prototype.define = function(map) {
     for (var type in map) {
       var exts = map[type];
@@ -19335,6 +19358,22 @@ var require_mime = __commonJS((exports, module) => {
 
 // node_modules/ms/index.js
 var require_ms2 = __commonJS((exports, module) => {
+  var s = 1000;
+  var m = s * 60;
+  var h = m * 60;
+  var d = h * 24;
+  var w = d * 7;
+  var y = d * 365.25;
+  module.exports = function(val, options) {
+    options = options || {};
+    var type = typeof val;
+    if (type === "string" && val.length > 0) {
+      return parse(val);
+    } else if (type === "number" && isFinite(val)) {
+      return options.long ? fmtLong(val) : fmtShort(val);
+    }
+    throw new Error("val is not a non-empty string or a valid number. val=" + JSON.stringify(val));
+  };
   function parse(str) {
     str = String(str);
     if (str.length > 100) {
@@ -19425,26 +19464,17 @@ var require_ms2 = __commonJS((exports, module) => {
     var isPlural = msAbs >= n * 1.5;
     return Math.round(ms / n) + " " + name + (isPlural ? "s" : "");
   }
-  var s = 1000;
-  var m = s * 60;
-  var h = m * 60;
-  var d = h * 24;
-  var w = d * 7;
-  var y = d * 365.25;
-  module.exports = function(val, options) {
-    options = options || {};
-    var type = typeof val;
-    if (type === "string" && val.length > 0) {
-      return parse(val);
-    } else if (type === "number" && isFinite(val)) {
-      return options.long ? fmtLong(val) : fmtShort(val);
-    }
-    throw new Error("val is not a non-empty string or a valid number. val=" + JSON.stringify(val));
-  };
 });
 
 // node_modules/range-parser/index.js
 var require_range_parser = __commonJS((exports, module) => {
+  /*!
+   * range-parser
+   * Copyright(c) 2012-2014 TJ Holowaychuk
+   * Copyright(c) 2015-2016 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = rangeParser;
   function rangeParser(size, str, options) {
     if (typeof str !== "string") {
       throw new TypeError("argument str must be a string");
@@ -19518,151 +19548,10 @@ var require_range_parser = __commonJS((exports, module) => {
   function sortByRangeStart(a, b) {
     return a.start - b.start;
   }
-  /*!
-   * range-parser
-   * Copyright(c) 2012-2014 TJ Holowaychuk
-   * Copyright(c) 2015-2016 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = rangeParser;
 });
 
 // node_modules/send/index.js
 var require_send = __commonJS((exports, module) => {
-  function send(req, path2, options) {
-    return new SendStream(req, path2, options);
-  }
-  function SendStream(req, path2, options) {
-    Stream.call(this);
-    var opts = options || {};
-    this.options = opts;
-    this.path = path2;
-    this.req = req;
-    this._acceptRanges = opts.acceptRanges !== undefined ? Boolean(opts.acceptRanges) : true;
-    this._cacheControl = opts.cacheControl !== undefined ? Boolean(opts.cacheControl) : true;
-    this._etag = opts.etag !== undefined ? Boolean(opts.etag) : true;
-    this._dotfiles = opts.dotfiles !== undefined ? opts.dotfiles : "ignore";
-    if (this._dotfiles !== "ignore" && this._dotfiles !== "allow" && this._dotfiles !== "deny") {
-      throw new TypeError('dotfiles option must be "allow", "deny", or "ignore"');
-    }
-    this._hidden = Boolean(opts.hidden);
-    if (opts.hidden !== undefined) {
-      deprecate("hidden: use dotfiles: \'" + (this._hidden ? "allow" : "ignore") + "\' instead");
-    }
-    if (opts.dotfiles === undefined) {
-      this._dotfiles = undefined;
-    }
-    this._extensions = opts.extensions !== undefined ? normalizeList(opts.extensions, "extensions option") : [];
-    this._immutable = opts.immutable !== undefined ? Boolean(opts.immutable) : false;
-    this._index = opts.index !== undefined ? normalizeList(opts.index, "index option") : ["index.html"];
-    this._lastModified = opts.lastModified !== undefined ? Boolean(opts.lastModified) : true;
-    this._maxage = opts.maxAge || opts.maxage;
-    this._maxage = typeof this._maxage === "string" ? ms(this._maxage) : Number(this._maxage);
-    this._maxage = !isNaN(this._maxage) ? Math.min(Math.max(0, this._maxage), MAX_MAXAGE) : 0;
-    this._root = opts.root ? resolve(opts.root) : null;
-    if (!this._root && opts.from) {
-      this.from(opts.from);
-    }
-  }
-  function clearHeaders(res) {
-    var headers = getHeaderNames(res);
-    for (var i = 0;i < headers.length; i++) {
-      res.removeHeader(headers[i]);
-    }
-  }
-  function collapseLeadingSlashes(str) {
-    for (var i = 0;i < str.length; i++) {
-      if (str[i] !== "/") {
-        break;
-      }
-    }
-    return i > 1 ? "/" + str.substr(i) : str;
-  }
-  function containsDotFile(parts) {
-    for (var i = 0;i < parts.length; i++) {
-      var part = parts[i];
-      if (part.length > 1 && part[0] === ".") {
-        return true;
-      }
-    }
-    return false;
-  }
-  function contentRange(type, size, range) {
-    return type + " " + (range ? range.start + "-" + range.end : "*") + "/" + size;
-  }
-  function createHtmlDocument(title, body) {
-    return "<!DOCTYPE html>\n" + '<html lang="en">\n' + "<head>\n" + '<meta charset="utf-8">\n' + "<title>" + title + "</title>\n" + "</head>\n" + "<body>\n" + "<pre>" + body + "</pre>\n" + "</body>\n" + "</html>\n";
-  }
-  function createHttpError(status, err) {
-    if (!err) {
-      return createError(status);
-    }
-    return err instanceof Error ? createError(status, err, { expose: false }) : createError(status, err);
-  }
-  function decode(path2) {
-    try {
-      return decodeURIComponent(path2);
-    } catch (err) {
-      return -1;
-    }
-  }
-  function getHeaderNames(res) {
-    return typeof res.getHeaderNames !== "function" ? Object.keys(res._headers || {}) : res.getHeaderNames();
-  }
-  function hasListeners(emitter, type) {
-    var count = typeof emitter.listenerCount !== "function" ? emitter.listeners(type).length : emitter.listenerCount(type);
-    return count > 0;
-  }
-  function headersSent(res) {
-    return typeof res.headersSent !== "boolean" ? Boolean(res._header) : res.headersSent;
-  }
-  function normalizeList(val, name) {
-    var list = [].concat(val || []);
-    for (var i = 0;i < list.length; i++) {
-      if (typeof list[i] !== "string") {
-        throw new TypeError(name + " must be array of strings or false");
-      }
-    }
-    return list;
-  }
-  function parseHttpDate(date) {
-    var timestamp = date && Date.parse(date);
-    return typeof timestamp === "number" ? timestamp : NaN;
-  }
-  function parseTokenList(str) {
-    var end = 0;
-    var list = [];
-    var start = 0;
-    for (var i = 0, len = str.length;i < len; i++) {
-      switch (str.charCodeAt(i)) {
-        case 32:
-          if (start === end) {
-            start = end = i + 1;
-          }
-          break;
-        case 44:
-          if (start !== end) {
-            list.push(str.substring(start, end));
-          }
-          start = end = i + 1;
-          break;
-        default:
-          end = i + 1;
-          break;
-      }
-    }
-    if (start !== end) {
-      list.push(str.substring(start, end));
-    }
-    return list;
-  }
-  function setHeaders(res, headers) {
-    var keys = Object.keys(headers);
-    for (var i = 0;i < keys.length; i++) {
-      var key = keys[i];
-      res.setHeader(key, headers[key]);
-    }
-  }
   /*!
    * send
    * Copyright(c) 2012 TJ Holowaychuk
@@ -19696,6 +19585,41 @@ var require_send = __commonJS((exports, module) => {
   var UP_PATH_REGEXP = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
   module.exports = send;
   module.exports.mime = mime;
+  function send(req, path2, options) {
+    return new SendStream(req, path2, options);
+  }
+  function SendStream(req, path2, options) {
+    Stream.call(this);
+    var opts = options || {};
+    this.options = opts;
+    this.path = path2;
+    this.req = req;
+    this._acceptRanges = opts.acceptRanges !== undefined ? Boolean(opts.acceptRanges) : true;
+    this._cacheControl = opts.cacheControl !== undefined ? Boolean(opts.cacheControl) : true;
+    this._etag = opts.etag !== undefined ? Boolean(opts.etag) : true;
+    this._dotfiles = opts.dotfiles !== undefined ? opts.dotfiles : "ignore";
+    if (this._dotfiles !== "ignore" && this._dotfiles !== "allow" && this._dotfiles !== "deny") {
+      throw new TypeError('dotfiles option must be "allow", "deny", or "ignore"');
+    }
+    this._hidden = Boolean(opts.hidden);
+    if (opts.hidden !== undefined) {
+      deprecate("hidden: use dotfiles: '" + (this._hidden ? "allow" : "ignore") + "' instead");
+    }
+    if (opts.dotfiles === undefined) {
+      this._dotfiles = undefined;
+    }
+    this._extensions = opts.extensions !== undefined ? normalizeList(opts.extensions, "extensions option") : [];
+    this._immutable = opts.immutable !== undefined ? Boolean(opts.immutable) : false;
+    this._index = opts.index !== undefined ? normalizeList(opts.index, "index option") : ["index.html"];
+    this._lastModified = opts.lastModified !== undefined ? Boolean(opts.lastModified) : true;
+    this._maxage = opts.maxAge || opts.maxage;
+    this._maxage = typeof this._maxage === "string" ? ms(this._maxage) : Number(this._maxage);
+    this._maxage = !isNaN(this._maxage) ? Math.min(Math.max(0, this._maxage), MAX_MAXAGE) : 0;
+    this._root = opts.root ? resolve(opts.root) : null;
+    if (!this._root && opts.from) {
+      this.from(opts.from);
+    }
+  }
   util.inherits(SendStream, Stream);
   SendStream.prototype.etag = deprecate.function(function etag(val) {
     this._etag = Boolean(val);
@@ -19784,7 +19708,7 @@ var require_send = __commonJS((exports, module) => {
     res.end();
   };
   SendStream.prototype.headersAlreadySent = function headersAlreadySent() {
-    var err = new Error("Can\'t set headers after they are sent.");
+    var err = new Error("Can't set headers after they are sent.");
     debug("headers already sent");
     this.error(500, err);
   };
@@ -19850,7 +19774,7 @@ var require_send = __commonJS((exports, module) => {
       this.error(400);
       return res;
     }
-    if (~path2.indexOf("\0")) {
+    if (~path2.indexOf("\x00")) {
       this.error(400);
       return res;
     }
@@ -20076,10 +20000,125 @@ var require_send = __commonJS((exports, module) => {
       res.setHeader("ETag", val);
     }
   };
+  function clearHeaders(res) {
+    var headers = getHeaderNames(res);
+    for (var i = 0;i < headers.length; i++) {
+      res.removeHeader(headers[i]);
+    }
+  }
+  function collapseLeadingSlashes(str) {
+    for (var i = 0;i < str.length; i++) {
+      if (str[i] !== "/") {
+        break;
+      }
+    }
+    return i > 1 ? "/" + str.substr(i) : str;
+  }
+  function containsDotFile(parts) {
+    for (var i = 0;i < parts.length; i++) {
+      var part = parts[i];
+      if (part.length > 1 && part[0] === ".") {
+        return true;
+      }
+    }
+    return false;
+  }
+  function contentRange(type, size, range) {
+    return type + " " + (range ? range.start + "-" + range.end : "*") + "/" + size;
+  }
+  function createHtmlDocument(title, body) {
+    return `<!DOCTYPE html>
+` + `<html lang="en">
+` + `<head>
+` + `<meta charset="utf-8">
+` + "<title>" + title + `</title>
+` + `</head>
+` + `<body>
+` + "<pre>" + body + `</pre>
+` + `</body>
+` + `</html>
+`;
+  }
+  function createHttpError(status, err) {
+    if (!err) {
+      return createError(status);
+    }
+    return err instanceof Error ? createError(status, err, { expose: false }) : createError(status, err);
+  }
+  function decode(path2) {
+    try {
+      return decodeURIComponent(path2);
+    } catch (err) {
+      return -1;
+    }
+  }
+  function getHeaderNames(res) {
+    return typeof res.getHeaderNames !== "function" ? Object.keys(res._headers || {}) : res.getHeaderNames();
+  }
+  function hasListeners(emitter, type) {
+    var count = typeof emitter.listenerCount !== "function" ? emitter.listeners(type).length : emitter.listenerCount(type);
+    return count > 0;
+  }
+  function headersSent(res) {
+    return typeof res.headersSent !== "boolean" ? Boolean(res._header) : res.headersSent;
+  }
+  function normalizeList(val, name) {
+    var list = [].concat(val || []);
+    for (var i = 0;i < list.length; i++) {
+      if (typeof list[i] !== "string") {
+        throw new TypeError(name + " must be array of strings or false");
+      }
+    }
+    return list;
+  }
+  function parseHttpDate(date) {
+    var timestamp = date && Date.parse(date);
+    return typeof timestamp === "number" ? timestamp : NaN;
+  }
+  function parseTokenList(str) {
+    var end = 0;
+    var list = [];
+    var start = 0;
+    for (var i = 0, len = str.length;i < len; i++) {
+      switch (str.charCodeAt(i)) {
+        case 32:
+          if (start === end) {
+            start = end = i + 1;
+          }
+          break;
+        case 44:
+          if (start !== end) {
+            list.push(str.substring(start, end));
+          }
+          start = end = i + 1;
+          break;
+        default:
+          end = i + 1;
+          break;
+      }
+    }
+    if (start !== end) {
+      list.push(str.substring(start, end));
+    }
+    return list;
+  }
+  function setHeaders(res, headers) {
+    var keys = Object.keys(headers);
+    for (var i = 0;i < keys.length; i++) {
+      var key = keys[i];
+      res.setHeader(key, headers[key]);
+    }
+  }
 });
 
 // node_modules/forwarded/index.js
 var require_forwarded = __commonJS((exports, module) => {
+  /*!
+   * forwarded
+   * Copyright(c) 2014-2017 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = forwarded;
   function forwarded(req) {
     if (!req) {
       throw new TypeError("argument req is required");
@@ -20119,12 +20158,6 @@ var require_forwarded = __commonJS((exports, module) => {
     }
     return list;
   }
-  /*!
-   * forwarded
-   * Copyright(c) 2014-2017 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = forwarded;
 });
 
 // node_modules/ipaddr.js/lib/ipaddr.js
@@ -20133,7 +20166,7 @@ var require_ipaddr = __commonJS((exports, module) => {
     var expandIPv6, ipaddr, ipv4Part, ipv4Regexes, ipv6Part, ipv6Regexes, matchCIDR, root, zoneIndex;
     ipaddr = {};
     root = this;
-    if (typeof module !== "undefined" && module !== null && exports) {
+    if (typeof module !== "undefined" && module !== null && module.exports) {
       module.exports = ipaddr;
     } else {
       root["ipaddr"] = ipaddr;
@@ -20749,6 +20782,24 @@ var require_ipaddr = __commonJS((exports, module) => {
 
 // node_modules/proxy-addr/index.js
 var require_proxy_addr = __commonJS((exports, module) => {
+  /*!
+   * proxy-addr
+   * Copyright(c) 2014-2016 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = proxyaddr;
+  module.exports.all = alladdrs;
+  module.exports.compile = compile;
+  var forwarded = require_forwarded();
+  var ipaddr = require_ipaddr();
+  var DIGIT_REGEXP = /^[0-9]+$/;
+  var isip = ipaddr.isValid;
+  var parseip = ipaddr.parse;
+  var IP_RANGES = {
+    linklocal: ["169.254.0.0/16", "fe80::/10"],
+    loopback: ["127.0.0.1/8", "::1/128"],
+    uniquelocal: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"]
+  };
   function alladdrs(req, trust) {
     var addrs = forwarded(req);
     if (!trust) {
@@ -20891,55 +20942,10 @@ var require_proxy_addr = __commonJS((exports, module) => {
       return ip.match(subnetip, subnetrange);
     };
   }
-  /*!
-   * proxy-addr
-   * Copyright(c) 2014-2016 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = proxyaddr;
-  module.exports.all = alladdrs;
-  module.exports.compile = compile;
-  var forwarded = require_forwarded();
-  var ipaddr = require_ipaddr();
-  var DIGIT_REGEXP = /^[0-9]+$/;
-  var isip = ipaddr.isValid;
-  var parseip = ipaddr.parse;
-  var IP_RANGES = {
-    linklocal: ["169.254.0.0/16", "fe80::/10"],
-    loopback: ["127.0.0.1/8", "::1/128"],
-    uniquelocal: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"]
-  };
 });
 
 // node_modules/express/lib/utils.js
 var require_utils2 = __commonJS((exports) => {
-  function acceptParams(str) {
-    var parts = str.split(/ *; */);
-    var ret = { value: parts[0], quality: 1, params: {} };
-    for (var i = 1;i < parts.length; ++i) {
-      var pms = parts[i].split(/ *= */);
-      if (pms[0] === "q") {
-        ret.quality = parseFloat(pms[1]);
-      } else {
-        ret.params[pms[0]] = pms[1];
-      }
-    }
-    return ret;
-  }
-  function createETagGenerator(options) {
-    return function generateETag(body, encoding) {
-      var buf = !Buffer2.isBuffer(body) ? Buffer2.from(body, encoding) : body;
-      return etag(buf, options);
-    };
-  }
-  function parseExtendedQueryString(str) {
-    return qs.parse(str, {
-      allowPrototypes: true
-    });
-  }
-  function newObject() {
-    return {};
-  }
   /*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -20978,6 +20984,19 @@ var require_utils2 = __commonJS((exports) => {
     return ret;
   };
   exports.contentDisposition = deprecate.function(contentDisposition, "utils.contentDisposition: use content-disposition npm module instead");
+  function acceptParams(str) {
+    var parts = str.split(/ *; */);
+    var ret = { value: parts[0], quality: 1, params: {} };
+    for (var i = 1;i < parts.length; ++i) {
+      var pms = parts[i].split(/ *= */);
+      if (pms[0] === "q") {
+        ret.quality = parseFloat(pms[1]);
+      } else {
+        ret.params[pms[0]] = pms[1];
+      }
+    }
+    return ret;
+  }
   exports.compileETag = function(val) {
     var fn;
     if (typeof val === "function") {
@@ -21047,21 +21066,24 @@ var require_utils2 = __commonJS((exports) => {
     parsed.parameters.charset = charset;
     return contentType.format(parsed);
   };
+  function createETagGenerator(options) {
+    return function generateETag(body, encoding) {
+      var buf = !Buffer2.isBuffer(body) ? Buffer2.from(body, encoding) : body;
+      return etag(buf, options);
+    };
+  }
+  function parseExtendedQueryString(str) {
+    return qs.parse(str, {
+      allowPrototypes: true
+    });
+  }
+  function newObject() {
+    return {};
+  }
 });
 
 // node_modules/express/lib/application.js
 var require_application = __commonJS((exports, module) => {
-  function logerror(err) {
-    if (this.get("env") !== "test")
-      console.error(err.stack || err.toString());
-  }
-  function tryRender(view, options, callback) {
-    try {
-      view.render(options, callback);
-    } catch (err) {
-      callback(err);
-    }
-  }
   /*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -21129,7 +21151,8 @@ var require_application = __commonJS((exports, module) => {
     }
     Object.defineProperty(this, "router", {
       get: function() {
-        throw new Error("\'app.router\' is deprecated!\nPlease see the 3.x to 4.x migration guide for details on how to update your app.");
+        throw new Error(`'app.router' is deprecated!
+Please see the 3.x to 4.x migration guide for details on how to update your app.`);
       }
     });
   };
@@ -21328,10 +21351,24 @@ var require_application = __commonJS((exports, module) => {
     var server = http.createServer(this);
     return server.listen.apply(server, arguments);
   };
+  function logerror(err) {
+    if (this.get("env") !== "test")
+      console.error(err.stack || err.toString());
+  }
+  function tryRender(view, options, callback) {
+    try {
+      view.render(options, callback);
+    } catch (err) {
+      callback(err);
+    }
+  }
 });
 
 // node_modules/negotiator/lib/charset.js
 var require_charset = __commonJS((exports, module) => {
+  module.exports = preferredCharsets;
+  module.exports.preferredCharsets = preferredCharsets;
+  var simpleCharsetRegExp = /^\s*([^\s;]+)\s*(?:;(.*))?$/;
   function parseAcceptCharset(accept) {
     var accepts = accept.split(",");
     for (var i = 0, j = 0;i < accepts.length; i++) {
@@ -21410,13 +21447,13 @@ var require_charset = __commonJS((exports, module) => {
   function isQuality(spec) {
     return spec.q > 0;
   }
-  module.exports = preferredCharsets;
-  module.exports.preferredCharsets = preferredCharsets;
-  var simpleCharsetRegExp = /^\s*([^\s;]+)\s*(?:;(.*))?$/;
 });
 
 // node_modules/negotiator/lib/encoding.js
 var require_encoding = __commonJS((exports, module) => {
+  module.exports = preferredEncodings;
+  module.exports.preferredEncodings = preferredEncodings;
+  var simpleEncodingRegExp = /^\s*([^\s;]+)\s*(?:;(.*))?$/;
   function parseAcceptEncoding(accept) {
     var accepts = accept.split(",");
     var hasIdentity = false;
@@ -21506,13 +21543,13 @@ var require_encoding = __commonJS((exports, module) => {
   function isQuality(spec) {
     return spec.q > 0;
   }
-  module.exports = preferredEncodings;
-  module.exports.preferredEncodings = preferredEncodings;
-  var simpleEncodingRegExp = /^\s*([^\s;]+)\s*(?:;(.*))?$/;
 });
 
 // node_modules/negotiator/lib/language.js
 var require_language = __commonJS((exports, module) => {
+  module.exports = preferredLanguages;
+  module.exports.preferredLanguages = preferredLanguages;
+  var simpleLanguageRegExp = /^\s*([^\s\-;]+)(?:-([^\s;]+))?\s*(?:;(.*))?$/;
   function parseAcceptLanguage(accept) {
     var accepts = accept.split(",");
     for (var i = 0, j = 0;i < accepts.length; i++) {
@@ -21602,13 +21639,13 @@ var require_language = __commonJS((exports, module) => {
   function isQuality(spec) {
     return spec.q > 0;
   }
-  module.exports = preferredLanguages;
-  module.exports.preferredLanguages = preferredLanguages;
-  var simpleLanguageRegExp = /^\s*([^\s\-;]+)(?:-([^\s;]+))?\s*(?:;(.*))?$/;
 });
 
 // node_modules/negotiator/lib/mediaType.js
 var require_mediaType = __commonJS((exports, module) => {
+  module.exports = preferredMediaTypes;
+  module.exports.preferredMediaTypes = preferredMediaTypes;
+  var simpleMediaTypeRegExp = /^\s*([^\s\/;]+)\/([^;\s]+)\s*(?:;(.*))?$/;
   function parseAccept(accept) {
     var accepts = splitMediaTypes(accept);
     for (var i = 0, j = 0;i < accepts.length; i++) {
@@ -21762,19 +21799,10 @@ var require_mediaType = __commonJS((exports, module) => {
     }
     return parameters;
   }
-  module.exports = preferredMediaTypes;
-  module.exports.preferredMediaTypes = preferredMediaTypes;
-  var simpleMediaTypeRegExp = /^\s*([^\s\/;]+)\/([^;\s]+)\s*(?:;(.*))?$/;
 });
 
 // node_modules/negotiator/index.js
 var require_negotiator = __commonJS((exports, module) => {
-  function Negotiator(request) {
-    if (!(this instanceof Negotiator)) {
-      return new Negotiator(request);
-    }
-    this.request = request;
-  }
   /*!
    * negotiator
    * Copyright(c) 2012 Federico Romero
@@ -21788,6 +21816,12 @@ var require_negotiator = __commonJS((exports, module) => {
   var preferredMediaTypes = require_mediaType();
   module.exports = Negotiator;
   module.exports.Negotiator = Negotiator;
+  function Negotiator(request) {
+    if (!(this instanceof Negotiator)) {
+      return new Negotiator(request);
+    }
+    this.request = request;
+  }
   Negotiator.prototype.charset = function charset(available) {
     var set = this.charsets(available);
     return set && set[0];
@@ -21828,19 +21862,6 @@ var require_negotiator = __commonJS((exports, module) => {
 
 // node_modules/accepts/index.js
 var require_accepts = __commonJS((exports, module) => {
-  function Accepts(req) {
-    if (!(this instanceof Accepts)) {
-      return new Accepts(req);
-    }
-    this.headers = req.headers;
-    this.negotiator = new Negotiator(req);
-  }
-  function extToMime(type) {
-    return type.indexOf("/") === -1 ? mime.lookup(type) : type;
-  }
-  function validMime(type) {
-    return typeof type === "string";
-  }
   /*!
    * accepts
    * Copyright(c) 2014 Jonathan Ong
@@ -21850,6 +21871,13 @@ var require_accepts = __commonJS((exports, module) => {
   var Negotiator = require_negotiator();
   var mime = require_mime_types();
   module.exports = Accepts;
+  function Accepts(req) {
+    if (!(this instanceof Accepts)) {
+      return new Accepts(req);
+    }
+    this.headers = req.headers;
+    this.negotiator = new Negotiator(req);
+  }
   Accepts.prototype.type = Accepts.prototype.types = function(types_) {
     var types = types_;
     if (types && !Array.isArray(types)) {
@@ -21908,17 +21936,16 @@ var require_accepts = __commonJS((exports, module) => {
     }
     return this.negotiator.languages(languages)[0] || false;
   };
+  function extToMime(type) {
+    return type.indexOf("/") === -1 ? mime.lookup(type) : type;
+  }
+  function validMime(type) {
+    return typeof type === "string";
+  }
 });
 
 // node_modules/express/lib/request.js
 var require_request = __commonJS((exports, module) => {
-  function defineGetter(obj, name, getter) {
-    Object.defineProperty(obj, name, {
-      configurable: true,
-      enumerable: true,
-      get: getter
-    });
-  }
   /*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -22074,13 +22101,17 @@ var require_request = __commonJS((exports, module) => {
     var val = this.get("X-Requested-With") || "";
     return val.toLowerCase() === "xmlhttprequest";
   });
+  function defineGetter(obj, name, getter) {
+    Object.defineProperty(obj, name, {
+      configurable: true,
+      enumerable: true,
+      get: getter
+    });
+  }
 });
 
 // node_modules/cookie-signature/index.js
 var require_cookie_signature = __commonJS((exports) => {
-  function sha1(str) {
-    return crypto2.createHash("sha1").update(str).digest("hex");
-  }
   var crypto2 = __require("crypto");
   exports.sign = function(val, secret) {
     if (typeof val != "string")
@@ -22097,10 +22128,26 @@ var require_cookie_signature = __commonJS((exports) => {
     var str = val.slice(0, val.lastIndexOf(".")), mac = exports.sign(str, secret);
     return sha1(mac) == sha1(val) ? str : false;
   };
+  function sha1(str) {
+    return crypto2.createHash("sha1").update(str).digest("hex");
+  }
 });
 
 // node_modules/cookie/index.js
 var require_cookie = __commonJS((exports) => {
+  /*!
+   * cookie
+   * Copyright(c) 2012-2014 Roman Shtylman
+   * Copyright(c) 2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  exports.parse = parse;
+  exports.serialize = serialize;
+  var __toString = Object.prototype.toString;
+  var cookieNameRegExp = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+  var cookieValueRegExp = /^("?)[\u0021\u0023-\u002B\u002D-\u003A\u003C-\u005B\u005D-\u007E]*\1$/;
+  var domainValueRegExp = /^([.]?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+  var pathValueRegExp = /^[\u0020-\u003A\u003D-\u007E]*$/;
   function parse(str, opt) {
     if (typeof str !== "string") {
       throw new TypeError("argument str must be a string");
@@ -22257,23 +22304,18 @@ var require_cookie = __commonJS((exports) => {
       return str;
     }
   }
-  /*!
-   * cookie
-   * Copyright(c) 2012-2014 Roman Shtylman
-   * Copyright(c) 2015 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  exports.parse = parse;
-  exports.serialize = serialize;
-  var __toString = Object.prototype.toString;
-  var cookieNameRegExp = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-  var cookieValueRegExp = /^("?)[\u0021\u0023-\u002B\u002D-\u003A\u003C-\u005B\u005D-\u007E]*\1$/;
-  var domainValueRegExp = /^([.]?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
-  var pathValueRegExp = /^[\u0020-\u003A\u003D-\u007E]*$/;
 });
 
 // node_modules/vary/index.js
 var require_vary = __commonJS((exports, module) => {
+  /*!
+   * vary
+   * Copyright(c) 2014-2017 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  module.exports = vary;
+  module.exports.append = append;
+  var FIELD_NAME_REGEXP = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
   function append(header, field) {
     if (typeof header !== "string") {
       throw new TypeError("header argument is required");
@@ -22337,109 +22379,10 @@ var require_vary = __commonJS((exports, module) => {
       res.setHeader("Vary", val);
     }
   }
-  /*!
-   * vary
-   * Copyright(c) 2014-2017 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  module.exports = vary;
-  module.exports.append = append;
-  var FIELD_NAME_REGEXP = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 });
 
 // node_modules/express/lib/response.js
 var require_response = __commonJS((exports, module) => {
-  function sendfile(res2, file, options, callback) {
-    var done = false;
-    var streaming;
-    function onaborted() {
-      if (done)
-        return;
-      done = true;
-      var err = new Error("Request aborted");
-      err.code = "ECONNABORTED";
-      callback(err);
-    }
-    function ondirectory() {
-      if (done)
-        return;
-      done = true;
-      var err = new Error("EISDIR, read");
-      err.code = "EISDIR";
-      callback(err);
-    }
-    function onerror(err) {
-      if (done)
-        return;
-      done = true;
-      callback(err);
-    }
-    function onend() {
-      if (done)
-        return;
-      done = true;
-      callback();
-    }
-    function onfile() {
-      streaming = false;
-    }
-    function onfinish(err) {
-      if (err && err.code === "ECONNRESET")
-        return onaborted();
-      if (err)
-        return onerror(err);
-      if (done)
-        return;
-      setImmediate(function() {
-        if (streaming !== false && !done) {
-          onaborted();
-          return;
-        }
-        if (done)
-          return;
-        done = true;
-        callback();
-      });
-    }
-    function onstream() {
-      streaming = true;
-    }
-    file.on("directory", ondirectory);
-    file.on("end", onend);
-    file.on("error", onerror);
-    file.on("file", onfile);
-    file.on("stream", onstream);
-    onFinished(res2, onfinish);
-    if (options.headers) {
-      file.on("headers", function headers(res3) {
-        var obj = options.headers;
-        var keys = Object.keys(obj);
-        for (var i = 0;i < keys.length; i++) {
-          var k = keys[i];
-          res3.setHeader(k, obj[k]);
-        }
-      });
-    }
-    file.pipe(res2);
-  }
-  function stringify(value, replacer, spaces, escape2) {
-    var json = replacer || spaces ? JSON.stringify(value, replacer, spaces) : JSON.stringify(value);
-    if (escape2 && typeof json === "string") {
-      json = json.replace(/[<>&]/g, function(c) {
-        switch (c.charCodeAt(0)) {
-          case 60:
-            return "\\u003c";
-          case 62:
-            return "\\u003e";
-          case 38:
-            return "\\u0026";
-          default:
-            return c;
-        }
-      });
-    }
-    return json;
-  }
   /*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -22634,7 +22577,7 @@ var require_response = __commonJS((exports, module) => {
       } else if (typeof body === "string") {
         body = body.replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
       }
-      body = "/**/ typeof " + callback + " === \'function\' && " + callback + "(" + body + ");";
+      body = "/**/ typeof " + callback + " === 'function' && " + callback + "(" + body + ");";
     }
     return this.send(body);
   };
@@ -22901,10 +22844,116 @@ var require_response = __commonJS((exports, module) => {
     };
     app.render(view, opts, done);
   };
+  function sendfile(res2, file, options, callback) {
+    var done = false;
+    var streaming;
+    function onaborted() {
+      if (done)
+        return;
+      done = true;
+      var err = new Error("Request aborted");
+      err.code = "ECONNABORTED";
+      callback(err);
+    }
+    function ondirectory() {
+      if (done)
+        return;
+      done = true;
+      var err = new Error("EISDIR, read");
+      err.code = "EISDIR";
+      callback(err);
+    }
+    function onerror(err) {
+      if (done)
+        return;
+      done = true;
+      callback(err);
+    }
+    function onend() {
+      if (done)
+        return;
+      done = true;
+      callback();
+    }
+    function onfile() {
+      streaming = false;
+    }
+    function onfinish(err) {
+      if (err && err.code === "ECONNRESET")
+        return onaborted();
+      if (err)
+        return onerror(err);
+      if (done)
+        return;
+      setImmediate(function() {
+        if (streaming !== false && !done) {
+          onaborted();
+          return;
+        }
+        if (done)
+          return;
+        done = true;
+        callback();
+      });
+    }
+    function onstream() {
+      streaming = true;
+    }
+    file.on("directory", ondirectory);
+    file.on("end", onend);
+    file.on("error", onerror);
+    file.on("file", onfile);
+    file.on("stream", onstream);
+    onFinished(res2, onfinish);
+    if (options.headers) {
+      file.on("headers", function headers(res3) {
+        var obj = options.headers;
+        var keys = Object.keys(obj);
+        for (var i = 0;i < keys.length; i++) {
+          var k = keys[i];
+          res3.setHeader(k, obj[k]);
+        }
+      });
+    }
+    file.pipe(res2);
+  }
+  function stringify(value, replacer, spaces, escape2) {
+    var json = replacer || spaces ? JSON.stringify(value, replacer, spaces) : JSON.stringify(value);
+    if (escape2 && typeof json === "string") {
+      json = json.replace(/[<>&]/g, function(c) {
+        switch (c.charCodeAt(0)) {
+          case 60:
+            return "\\u003c";
+          case 62:
+            return "\\u003e";
+          case 38:
+            return "\\u0026";
+          default:
+            return c;
+        }
+      });
+    }
+    return json;
+  }
 });
 
 // node_modules/serve-static/index.js
 var require_serve_static = __commonJS((exports, module) => {
+  /*!
+   * serve-static
+   * Copyright(c) 2010 Sencha Inc.
+   * Copyright(c) 2011 TJ Holowaychuk
+   * Copyright(c) 2014-2016 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+  var encodeUrl = require_encodeurl();
+  var escapeHtml = require_escape_html();
+  var parseUrl = require_parseurl();
+  var resolve = __require("path").resolve;
+  var send = require_send();
+  var url = __require("url");
+  module.exports = serveStatic;
+  module.exports.mime = send.mime;
   function serveStatic(root, options) {
     if (!root) {
       throw new TypeError("root path required");
@@ -22968,7 +23017,17 @@ var require_serve_static = __commonJS((exports, module) => {
     return i > 1 ? "/" + str.substr(i) : str;
   }
   function createHtmlDocument(title, body) {
-    return "<!DOCTYPE html>\n" + '<html lang="en">\n' + "<head>\n" + '<meta charset="utf-8">\n' + "<title>" + title + "</title>\n" + "</head>\n" + "<body>\n" + "<pre>" + body + "</pre>\n" + "</body>\n" + "</html>\n";
+    return `<!DOCTYPE html>
+` + `<html lang="en">
+` + `<head>
+` + `<meta charset="utf-8">
+` + "<title>" + title + `</title>
+` + `</head>
+` + `<body>
+` + "<pre>" + body + `</pre>
+` + `</body>
+` + `</html>
+`;
   }
   function createNotFoundDirectoryListener() {
     return function notFound() {
@@ -22995,40 +23054,10 @@ var require_serve_static = __commonJS((exports, module) => {
       res.end(doc);
     };
   }
-  /*!
-   * serve-static
-   * Copyright(c) 2010 Sencha Inc.
-   * Copyright(c) 2011 TJ Holowaychuk
-   * Copyright(c) 2014-2016 Douglas Christopher Wilson
-   * MIT Licensed
-   */
-  var encodeUrl = require_encodeurl();
-  var escapeHtml = require_escape_html();
-  var parseUrl = require_parseurl();
-  var resolve = __require("path").resolve;
-  var send = require_send();
-  var url = __require("url");
-  module.exports = serveStatic;
-  module.exports.mime = send.mime;
 });
 
 // node_modules/express/lib/express.js
 var require_express = __commonJS((exports, module) => {
-  function createApplication() {
-    var app = function(req2, res2, next) {
-      app.handle(req2, res2, next);
-    };
-    mixin(app, EventEmitter.prototype, false);
-    mixin(app, proto, false);
-    app.request = Object.create(req, {
-      app: { configurable: true, enumerable: true, writable: true, value: app }
-    });
-    app.response = Object.create(res, {
-      app: { configurable: true, enumerable: true, writable: true, value: app }
-    });
-    app.init();
-    return app;
-  }
   /*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -23045,6 +23074,21 @@ var require_express = __commonJS((exports, module) => {
   var req = require_request();
   var res = require_response();
   exports = module.exports = createApplication;
+  function createApplication() {
+    var app = function(req2, res2, next) {
+      app.handle(req2, res2, next);
+    };
+    mixin(app, EventEmitter.prototype, false);
+    mixin(app, proto, false);
+    app.request = Object.create(req, {
+      app: { configurable: true, enumerable: true, writable: true, value: app }
+    });
+    app.response = Object.create(res, {
+      app: { configurable: true, enumerable: true, writable: true, value: app }
+    });
+    app.init();
+    return app;
+  }
   exports.application = proto;
   exports.request = req;
   exports.response = res;
@@ -23160,7 +23204,21 @@ async function queryScreenpipe(params) {
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      let errorJson;
+      try {
+        errorJson = JSON.parse(errorText);
+        console.error("screenpipe api error:", {
+          status: response.status,
+          error: errorJson
+        });
+      } catch {
+        console.error("screenpipe api error:", {
+          status: response.status,
+          error: errorText
+        });
+      }
+      throw new Error(`http error! status: ${response.status}`);
     }
     const data = await response.json();
     return convertToCamelCase(data);
@@ -23178,7 +23236,7 @@ function extractJsonFromLlmResponse(response) {
   cleaned = cleaned.replace(/^[^{]*/, "").replace(/[^}]*$/, "");
   cleaned = cleaned.replace(/\\n/g, "").replace(/\n/g, "");
   cleaned = cleaned.replace(/"(\\"|[^"])*"/g, (match) => {
-    return match.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return match.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
   });
   try {
     return JSON.parse(cleaned);
@@ -23191,35 +23249,6 @@ function extractJsonFromLlmResponse(response) {
       console.warn("failed to parse json after attempted fixes:", secondError);
       throw new Error("invalid json format in llm response");
     }
-  }
-}
-async function getAvailablePort() {
-  return new Promise((resolve, reject) => {
-    const server = __require("net").createServer();
-    server.unref();
-    server.on("error", reject);
-    server.listen(0, () => {
-      const port = server.address().port;
-      server.close(() => resolve(port));
-    });
-  });
-}
-async function sendInputControl(action) {
-  const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
-  try {
-    const response = await fetch(`${apiUrl}/experimental/input_control`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action })
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
-    return data.success;
-  } catch (error) {
-    console.error("failed to control input:", error);
-    return false;
   }
 }
 
@@ -23298,6 +23327,17 @@ class Scheduler {
   }
 }
 var actionCallbacks = new Map;
+async function getAvailablePort() {
+  return new Promise((resolve, reject) => {
+    const server = __require("net").createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+  });
+}
 
 class InboxManager {
   actionServerPort;
@@ -23392,6 +23432,24 @@ var pipe = {
     }
   }
 };
+async function sendInputControl(action) {
+  const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+  try {
+    const response = await fetch(`${apiUrl}/experimental/input_control`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action })
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.success;
+  } catch (error) {
+    console.error("failed to control input:", error);
+    return false;
+  }
+}
 export {
   sendDesktopNotification,
   queryScreenpipe,
