@@ -1,4 +1,5 @@
 import MotionDiv from '@/components/motion-div';
+import Tabs from '@/components/tabs';
 
 # plugins (pipes)
 
@@ -6,8 +7,9 @@ import MotionDiv from '@/components/motion-div';
   screenpipe is built for extensibility through plugins that interact with captured screen and audio data. whether you need to tag activities, generate summaries, or send data to third-party services, plugins let you build powerful workflows.
 
   plugins come in two flavors:
-  - **pipes**: native plugins that run within screenpipe's sandboxed environment. written in typescript/javascript.
-  - **standalone scripts or apps**: independent scripts or apps that run separately and use screenpipe APIs.
+  - **pipes**: native plugins that run within screenpipe's sandboxed environment. written in typescript/javascript. pipes can be either:
+    - UI-based: with NextJS for user interaction
+    - Headless: running in the background without a visual interface with cron, etc.
 </MotionDiv>
 
 ### why build pipes? 🚀
@@ -39,19 +41,40 @@ think of pipes like a local Zapier which costs 10x & 10x less friction - no auth
 
 <MotionDiv delay={0.5}>
 
-```bash
-# clone & setup
-git clone https://github.com/mediar-ai/screenpipe
-cp -r screenpipe/examples/typescript/pipe-phi3.5-engineering-team-logs my-pipe
-cd my-pipe
-bun install
+The fastest way to create a new pipe is using our CLI:
 
-# test locally
-bun run pipe.ts
+<Tabs items={['npm', 'bun', 'yarn', 'pnpm']}>
+  <Tab>
+    ```bash copy
+    npx @screenpipe/create-pipe@latest
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bunx @screenpipe/create-pipe@latest
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn @screenpipe/create-pipe
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpx @screenpipe/create-pipe
+    ```
+  </Tab>
+</Tabs>
 
-# ship it
+follow installation instructions & test your pipe locally
+
+then enable your pipe in screenpipe
+
+```bash copy
 screenpipe pipe enable my-pipe
 ```
+
+The CLI will guide you through setting up your pipe
 
 ### available pipes
 
