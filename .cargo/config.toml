@@ -16,17 +16,6 @@ rustflags = [
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-Wl,--allow-multiple-definition"]
 
-# make this work :'( - atm dirty hack: cp screenpipe-vision/lib* /usr/local/lib
-# [env]
-# DYLD_LIBRARY_PATH = { value = "${CARGO_MANIFEST_DIR}/screenpipe-vision/lib", relative = true }
-
-# [target.'cfg(target_os = "macos")']
-# rustflags = [
-#     "-C", "link-arg=-Wl,-rpath,@executable_path/screenpipe-vision/lib",
-#     "-C", "link-arg=-Wl,-rpath,@loader_path/screenpipe-vision/lib",
-#     "-C", "link-arg=-Wl,-rpath,${CARGO_MANIFEST_DIR}/screenpipe-vision/lib"
-# ]
-
 [target.aarch64-apple-darwin]
 rustflags = ["-L", "screenpipe-vision/lib"]
 

@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "typeRoots": [
+      "./node_modules/@types",
+      "./create-next-app.d.ts"
+    ],
+  },
+  "include": [
+    "index.ts",
+    "create-next-app.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

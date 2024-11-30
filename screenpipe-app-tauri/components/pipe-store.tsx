@@ -136,14 +136,11 @@ const PipeDialog: React.FC = () => {
     }
     const dataDir = await getDataDir();
     try {
-      const response = await fetch("http://localhost:3030/pipes/list");
+      const cmd = Command.sidecar("screenpipe", ["pipe", "list", "-o", "json"]);
+      const output = await cmd.execute();
+      const data = JSON.parse(output.stdout).data;
 
-      if (!response.ok) {
-        throw new Error("failed to fetch installed pipes");
-      }
-      const data = (await response.json()).data;
       for (const pipe of data) {
-        // read the README.md file from disk and set the fullDescription
         const pathToReadme = await join(dataDir, "pipes", pipe.id, "README.md");
         try {
           const readme = await readFile(pathToReadme);
@@ -155,7 +152,6 @@ const PipeDialog: React.FC = () => {
         }
       }
       setPipes(data);
-      // Update selectedPipe if it exists in the new data
       if (selectedPipe) {
         const updatedSelectedPipe = data.find(
           (pipe: Pipe) => pipe.id === selectedPipe.id
@@ -180,23 +176,19 @@ const PipeDialog: React.FC = () => {
         title: "downloading pipe",
         description: "please wait...",
       });
-      const response = await fetch(`http://localhost:3030/pipes/download`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url }),
-      });
-      if (!response.ok) {
-        throw new Error("failed to download pipe");
-      }
-      const data = await response.json();
+
+      const cmd = Command.sidecar("screenpipe", [
+        "pipe",
+        "download",
+        url,
+        "-o",
+        "json",
+      ]);
+      await cmd.execute();
+
       toast({
         title: "pipe downloaded",
-        // description: data.message,
       });
-      // Refresh the pipe list
-      // await addCustomPipe(url);
       await fetchInstalledPipes();
     } catch (error) {
       console.error("Failed to download pipe:", error);
@@ -214,35 +206,18 @@ const PipeDialog: React.FC = () => {
         pipe_id: pipe.id,
         enabled: !pipe.enabled,
       });
-      if (!pipe.enabled) {
-        // Enable the pipe through API
-        await fetch(`http://localhost:3030/pipes/enable`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ pipe_id: pipe.id }),
-        });
 
-        toast({
-          title: "enabling pipe",
-          description: "this may take a few moments...",
-        });
-      } else {
-        // Disable the pipe through API
-        await fetch(`http://localhost:3030/pipes/disable`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ pipe_id: pipe.id }),
-        });
+      toast({
+        title: pipe.enabled ? "disabling pipe" : "enabling pipe",
+        description: "this may take a few moments...",
+      });
 
-        toast({
-          title: "disabling pipe",
-          description: "this may take a few moments...",
-        });
-      }
+      const cmd = Command.sidecar("screenpipe", [
+        "pipe",
+        pipe.enabled ? "disable" : "enable",
+        pipe.id,
+      ]);
+      await cmd.execute();
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -252,7 +227,6 @@ const PipeDialog: React.FC = () => {
           "screenpipe has been updated with the new configuration. please restart screenpipe now in status badge",
       });
 
-      // Update selectedPipe if it's the one being toggled
       if (selectedPipe && selectedPipe.id === pipe.id) {
         setSelectedPipe((prevPipe) =>
           prevPipe ? { ...prevPipe, enabled: !prevPipe.enabled } : null
@@ -280,20 +254,19 @@ const PipeDialog: React.FC = () => {
           title: "Adding custom pipe",
           description: "Please wait...",
         });
-        // use /download endpoint to download the pipe
-        const response = await fetch(`http://localhost:3030/pipes/download`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ url: newRepoUrl }),
-        });
-        if (!response.ok) {
-          throw new Error("failed to download pipe");
-        }
-        const data = await response.json();
+
+        const cmd = Command.sidecar("screenpipe", [
+          "pipe",
+          "download",
+          newRepoUrl,
+          "-o",
+          "json",
+        ]);
+        await cmd.execute();
+
         // refresh the pipe list
         await fetchInstalledPipes();
+
         toast({
           title: "Custom pipe added",
           description:
@@ -336,17 +309,28 @@ const PipeDialog: React.FC = () => {
 
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
-      fetch(`http://localhost:3030/pipes/update`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ pipe_id: selectedPipe.id, config }),
-      });
-      toast({
-        title: "Configuration saved",
-        description: "The pipe configuration has been updated.",
-      });
+      try {
+        const cmd = Command.sidecar("screenpipe", [
+          "pipe",
+          "update",
+          selectedPipe.id,
+          JSON.stringify(config),
+        ]);
+        await cmd.execute();
+
+        toast({
+          title: "Configuration saved",
+          description: "The pipe configuration has been updated.",
+        });
+      } catch (error) {
+        console.error("Failed to save config:", error);
+        toast({
+          title: "error saving configuration",
+          description:
+            "please try again or check the logs for more information.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -359,16 +343,15 @@ const PipeDialog: React.FC = () => {
         title: "deleting pipe",
         description: "please wait...",
       });
-      const response = await fetch(`http://localhost:3030/pipes/delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ pipe_id: pipe.id }),
-      });
-      if (!response.ok) {
-        throw new Error("failed to delete pipe");
-      }
+
+      const cmd = Command.sidecar("screenpipe", [
+        "pipe",
+        "delete",
+        pipe.id,
+        "-y",
+      ]);
+      await cmd.execute();
+
       await fetchInstalledPipes();
       setSelectedPipe(null);
       toast({
@@ -635,21 +618,44 @@ const PipeDialog: React.FC = () => {
       posthog.capture("refresh_pipe_from_disk", {
         pipe_id: pipe.id,
       });
+
+      // First disable the pipe if it's enabled
+      if (pipe.enabled) {
+        const disableCmd = Command.sidecar("screenpipe", [
+          "pipe",
+          "disable",
+          pipe.id,
+        ]);
+        await disableCmd.execute();
+      }
+
       toast({
         title: "refreshing pipe",
         description: "please wait...",
       });
-      const response = await fetch(`http://localhost:3030/pipes/download`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url: pipe.source }),
-      });
-      if (!response.ok) {
-        throw new Error("failed to refresh pipe");
+
+      // Download/refresh the pipe
+      const downloadCmd = Command.sidecar("screenpipe", [
+        "pipe",
+        "download",
+        pipe.source,
+        "-o",
+        "json",
+      ]);
+      await downloadCmd.execute();
+
+      // Re-enable the pipe if it was enabled before
+      if (pipe.enabled) {
+        const enableCmd = Command.sidecar("screenpipe", [
+          "pipe",
+          "enable",
+          pipe.id,
+        ]);
+        await enableCmd.execute();
       }
+
       await fetchInstalledPipes();
+
       toast({
         title: "pipe refreshed",
         description: "the pipe has been successfully refreshed from disk.",
