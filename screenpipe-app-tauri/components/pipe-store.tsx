@@ -68,6 +68,11 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "pipe-for-loom",
+    description: "automatically summarize loom videos and add them to your notes",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-for-loom",
+  },
+  {
     id: "pipe-obsidian-time-logs",
     description:
       "continuously write logs of your days in an obsidian table using ollama+llama3.2",
@@ -428,17 +433,6 @@ const PipeDialog: React.FC = () => {
               view source
             </Button>
           )}
-          <Button
-            onClick={() =>
-              openUrl(
-                "https://twitter.com/intent/tweet?text=here's%20how%20i%20use%20@screen_pipe%20...%20%5Bscreenshot%5D%20an%20awesome%20tool%20for%20..."
-              )
-            }
-            variant="outline"
-          >
-            <Heart className="mr-2 h-4 w-4" />
-            support us
-          </Button>
           <LogFileButton />
           <Button
             onClick={() => handleDeletePipe(selectedPipe)}
