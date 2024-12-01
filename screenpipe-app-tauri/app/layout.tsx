@@ -7,8 +7,6 @@ import { ClerkProvider } from "@clerk/clerk-react";
 
 const inter = Inter({ subsets: ["latin"] });
 
-
-
 export default function RootLayout({
   children,
 }: {
@@ -16,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <ClerkProvider publishableKey="pk_live_Y2xlcmsuc2NyZWVucGkucGUk">
+      <ClerkProvider
+        publishableKey="pk_test_ZGVjZW50LXRyb3V0LTEuY2xlcmsuYWNjb3VudHMuZGV2JA"
+        allowedRedirectOrigins={["http://localhost:3000", "tauri://localhost"]}
+      >
         <Providers>
           <body className={inter.className}>
             {children}
