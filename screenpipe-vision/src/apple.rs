@@ -57,6 +57,8 @@ pub fn perform_ocr_apple(
     let requests = ns::Array::<vn::Request>::from_slice(&[&request]);
     let result = handler.perform(&requests);
 
+    std::fs::remove_file(temp_path).unwrap_or_default();
+
     if result.is_err() {
         return default_ocr_result;
     }
@@ -93,11 +95,11 @@ pub fn perform_ocr_apple(
                 });
 
                 overall_confidence += confidence;
-                ocr_text += &text.to_string();
+                ocr_text += &(text.to_string() + "\n");
             });
             let result_string = serde_json::to_string(&OcrResult {
                 overall_confidence,
-                ocr_result: ocr_text.to_string() + "\n",
+                ocr_result: ocr_text.to_string(),
                 text_elements: ocr_results_vec,
             })
             .unwrap();
