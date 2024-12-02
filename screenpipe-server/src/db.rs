@@ -216,7 +216,7 @@ impl DatabaseManager {
         &self,
         embedding: &[f32],
     ) -> Result<Option<Speaker>, SqlxError> {
-        let speaker_threshold = 0.6;
+        let speaker_threshold = 0.5;
         let bytes: &[u8] = embedding.as_bytes();
 
         // Using subquery with LIMIT 1 instead of JOIN

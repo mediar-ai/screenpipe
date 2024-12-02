@@ -26,6 +26,7 @@ import {
   Search,
   Book,
   User,
+  Fingerprint,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -179,7 +180,6 @@ export default function Header() {
               </Tooltip>
             </TooltipProvider>
             <MeetingHistory />
-            <IdentifySpeakers />
             <Settings />
             <Button
               variant="ghost"
