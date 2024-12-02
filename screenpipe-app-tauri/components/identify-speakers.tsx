@@ -20,7 +20,7 @@ import {
   Users,
   FileText,
   PlusCircle,
-  Calendar,
+  Fingerprint,
   ChevronDown,
   ChevronUp,
   ChevronLeft,
@@ -83,8 +83,6 @@ export default function IdentifySpeakers() {
   const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [unnamedSpeakersPage, setUnnamedSpeakersPage] = useState(0);
-  const [unnamedSpeakersLimit, setUnnamedSpeakersLimit] = useState(1);
   const [currentSpeakerIndex, setCurrentSpeakerIndex] = useState(0);
   const [showHallucinationConfirm, setShowHallucinationConfirm] =
     useState(false);
@@ -144,7 +142,7 @@ export default function IdentifySpeakers() {
   async function loadUnnamedSpeakers() {
     setLoading(true);
     try {
-      await fetchUnnamedSpeakers(unnamedSpeakersPage);
+      await fetchUnnamedSpeakers();
     } catch (err) {
       setError("failed to load unnamed speakers");
     } finally {
@@ -173,16 +171,13 @@ export default function IdentifySpeakers() {
     }
   }
 
-  async function fetchUnnamedSpeakers(page: number) {
-    console.log("fetching unnamed speakers...");
+  async function fetchUnnamedSpeakers() {
     setLoading(true);
     try {
       // Always fetch from the last 7x24 hours
 
       const response = await fetch(
-        `http://localhost:3030/speakers/unnamed?limit=${unnamedSpeakersLimit}&offset=${
-          unnamedSpeakersPage * unnamedSpeakersLimit
-        }`
+        `http://localhost:3030/speakers/unnamed?limit=1&offset=0`
       );
       if (!response.ok) {
         throw new Error("failed to fetch unnamed speakers");
@@ -197,7 +192,6 @@ export default function IdentifySpeakers() {
       const camelCaseResult = updatedUnnamedSpeakers.map(
         keysToCamelCase<UnnamedSpeaker>
       );
-      console.log("fetch result:", camelCaseResult);
 
       setUnnamedSpeakers(camelCaseResult);
     } catch (err) {
@@ -206,29 +200,15 @@ export default function IdentifySpeakers() {
       );
       console.error("fetch error:", err);
     } finally {
-      console.log("fetch completed");
       setLoading(false);
     }
-  }
-
-  function formatTimestamp(timestamp: string): string {
-    const date = new Date(timestamp);
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      timeZoneName: "short",
-    }).format(date);
   }
 
   const handleRefresh = async () => {
     setSpeakers([]);
     setIsRefreshing(true);
     try {
-      await fetchUnnamedSpeakers(unnamedSpeakersPage);
+      await fetchUnnamedSpeakers();
       toast({
         title: "meetings refreshed",
         description: "your meeting history has been updated.",
@@ -244,68 +224,6 @@ export default function IdentifySpeakers() {
       setIsRefreshing(false);
     }
   };
-
-  // const mergeMeetings = (index: number) => {
-  //   posthog?.capture("meeting_merged");
-  //   const updatedMeetings = [...meetings];
-  //   const currentMeeting = updatedMeetings[index];
-  //   const nextMeeting = updatedMeetings[index + 1];
-
-  //   const mergedMeeting: Meeting = {
-  //     ...currentMeeting,
-  //     meetingEnd: new Date(
-  //       Math.max(
-  //         new Date(currentMeeting.meetingEnd).getTime(),
-  //         new Date(nextMeeting.meetingEnd).getTime()
-  //       )
-  //     ).toISOString(),
-  //     meetingStart: new Date(
-  //       Math.min(
-  //         new Date(currentMeeting.meetingStart).getTime(),
-  //         new Date(nextMeeting.meetingStart).getTime()
-  //       )
-  //     ).toISOString(),
-  //     fullTranscription: `${currentMeeting.fullTranscription}\n${nextMeeting.fullTranscription}`,
-  //     mergedWith: [
-  //       ...(currentMeeting.mergedWith || []),
-  //       nextMeeting.meetingGroup,
-  //       ...(nextMeeting.mergedWith || []),
-  //     ],
-  //     segments: [...currentMeeting.segments, ...nextMeeting.segments],
-  //     selectedDevices: new Set([
-  //       ...Array.from(currentMeeting.selectedDevices),
-  //       ...Array.from(nextMeeting.selectedDevices),
-  //     ]),
-  //   };
-
-  //   updatedMeetings[index] = mergedMeeting;
-  //   updatedMeetings.splice(index + 1, 1); // remove the next meeting
-  //   setMeetings(updatedMeetings);
-  //   setItem("meetings", updatedMeetings);
-  // };
-
-  // const handleDeviceToggle = useCallback(
-  //   (meetingGroup: number, deviceName: string, isChecked: boolean) => {
-  //     setMeetings((prevMeetings) => {
-  //       return prevMeetings.map((meeting) => {
-  //         if (meeting.meetingGroup === meetingGroup) {
-  //           const updatedSelectedDevices = new Set(meeting.selectedDevices);
-  //           if (isChecked) {
-  //             updatedSelectedDevices.add(deviceName);
-  //           } else {
-  //             updatedSelectedDevices.delete(deviceName);
-  //           }
-  //           return {
-  //             ...meeting,
-  //             selectedDevices: updatedSelectedDevices,
-  //           };
-  //         }
-  //         return meeting;
-  //       });
-  //     });
-  //   },
-  //   []
-  // );
 
   const handleUpdateSpeakerName = async (newName: string) => {
     // use the endpoint /speakers/update to update the name
@@ -393,24 +311,16 @@ export default function IdentifySpeakers() {
     handleRefresh();
   };
 
-  const goToNextSpeaker = () => {
-    if (currentSpeakerIndex < unnamedSpeakers.length - 1) {
-      setCurrentSpeakerIndex((prev) => prev + 1);
-    }
-  };
-
-  const goToPreviousSpeaker = () => {
-    if (currentSpeakerIndex > 0) {
-      setCurrentSpeakerIndex((prev) => prev - 1);
-    }
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" onClick={() => setIsOpen(true)}>
-          <Calendar className="mr-2 h-4 w-4" />
-          identify speakers
+        <Button
+          variant="ghost"
+          className="h-[20px] px-0 py-0"
+          onClick={() => setIsOpen(true)}
+        >
+          <Fingerprint className="mr-2 h-4 w-4" />
+          <span>identify speakers</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
@@ -469,14 +379,6 @@ export default function IdentifySpeakers() {
 
               {unnamedSpeakers.length > 0 && (
                 <div className="flex items-center justify-between">
-                  <Button
-                    variant="ghost"
-                    onClick={goToPreviousSpeaker}
-                    disabled={currentSpeakerIndex === 0}
-                  >
-                    <ChevronLeft className="h-6 w-6" />
-                  </Button>
-
                   <div className="flex-1 mx-4">
                     <div className="p-4 border rounded">
                       <div className="flex items-center justify-between mb-4">
@@ -576,16 +478,6 @@ export default function IdentifySpeakers() {
                       </div>
                     </div>
                   </div>
-
-                  <Button
-                    variant="ghost"
-                    onClick={goToNextSpeaker}
-                    disabled={
-                      currentSpeakerIndex === unnamedSpeakers.length - 1
-                    }
-                  >
-                    <ChevronRight className="h-6 w-6" />
-                  </Button>
                 </div>
               )}
             </>
@@ -621,11 +513,6 @@ export default function IdentifySpeakers() {
                   description:
                     "This speaker will be ignored in future processing",
                 });
-                if (currentSpeakerIndex < unnamedSpeakers.length - 1) {
-                  goToNextSpeaker();
-                } else {
-                  await loadUnnamedSpeakers();
-                }
               }}
             >
               Confirm
