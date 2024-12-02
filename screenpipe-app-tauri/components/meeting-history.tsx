@@ -49,6 +49,7 @@ import { ValueOf } from "next/dist/shared/lib/constants";
 import { Checkbox } from "./ui/checkbox";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { DropdownMenuItem } from "./ui/dropdown-menu";
+import IdentifySpeakers from "./identify-speakers";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -369,70 +370,6 @@ export default function MeetingHistory({ className }: { className?: string }) {
       });
     } finally {
       setIsSummarizing(false);
-    }
-  }
-
-  async function identifyParticipants(meeting: Meeting) {
-    setIsIdentifying(true);
-    posthog?.capture("participant_identification_started", {
-      userId: settings.userId,
-      meetingId: meeting.meetingGroup,
-    });
-    try {
-      const openai = new OpenAI({
-        apiKey: settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-        dangerouslyAllowBrowser: true,
-      });
-
-      const model = settings.aiModel;
-
-      const messages = [
-        {
-          role: "system" as const,
-          content: `you are an assistant that identifies participants in meeting transcripts. your goal is to provide a list of one or two or more word names or roles or characteristics.
-            
-            for example your rsponse could be:
-            Bob Smith (marketing), John Doe (sales), Jane Smith (ceo)
-            `,
-        },
-        {
-          role: "user" as const,
-          content: `${customIdentifyPrompt}\n\ntranscript with device types:\n\n${meeting.fullTranscription}`,
-        },
-      ];
-
-      const response = await openai.chat.completions.create({
-        model: model,
-        messages: messages,
-      });
-
-      const participants =
-        response.choices[0]?.message?.content || "no participants identified.";
-
-      // Update the meeting with the identified participants
-      const updatedMeeting = { ...meeting, participants };
-      const updatedMeetings = meetings.map((m) =>
-        m.meetingGroup === meeting.meetingGroup ? updatedMeeting : m
-      );
-      setMeetings(updatedMeetings);
-      await setItem("meetings", updatedMeetings);
-
-      toast({
-        title: "participants identified",
-        description:
-          "the meeting participants have been identified successfully.",
-      });
-    } catch (error) {
-      console.error("error identifying participants:", error);
-      toast({
-        title: "error",
-        description:
-          "failed to identify meeting participants. please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsIdentifying(false);
     }
   }
 
@@ -905,19 +842,7 @@ export default function MeetingHistory({ className }: { className?: string }) {
                                 participants:{" "}
                                 {meeting.participants || "not identified"}
                               </p>
-                              <Button
-                                onClick={() => identifyParticipants(meeting)}
-                                disabled={isIdentifying}
-                                size="sm"
-                                className="text-xs bg-black text-white hover:bg-gray-800"
-                              >
-                                {isIdentifying ? (
-                                  <Users className="h-4 w-4 mr-2 animate-pulse" />
-                                ) : (
-                                  <Users className="h-4 w-4 mr-2" />
-                                )}
-                                {isIdentifying ? "identifying..." : "identify"}
-                              </Button>
+                              <IdentifySpeakers segments={meeting.segments} />
                             </div>
                           </div>
                         </div>
