@@ -1,14 +1,127 @@
 # contributing to screen pipe
 
-first off, thank you for considering contributing to screen pipe! it's people like you that make screen pipe such a great tool.
-
-i'd love to personally onboard you to the project. let's [schedule a call](https://cal.com/louis030195/screenpipe).
+first off, thank you for considering contributing to screen pipe! it's people like you that make screen pipe such a great tool. we're looking for developers who want to create paid pipes, with the potential to easily make $1000/m. let's [schedule a call](https://cal.com/louis030195/screenpipe) to get you onboarded.
 
 ## getting started
 
 before you begin:
-- make sure you have installed all the necessary dependencies as mentioned in the [docs](https://docs.screenpi.pe/).
+- try to run the [pre-built app](https://docs.screenpi.pe) to get familiar with the project
 - familiarize yourself with the project structure and architecture.
+
+## installation and build guide
+
+### macos
+
+1. **install dependencies**:
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   brew install pkg-config ffmpeg jq cmake wget
+   ```
+
+2. **install bun cli**:
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   ```
+
+3. **clone the repository**:
+   ```bash
+   git clone https://github.com/mediar-ai/screenpipe
+   cd screenpipe
+   ```
+
+4. **build the project**:
+   ```bash
+   cargo build --release --features metal
+   ```
+
+5. **run screenpipe**:
+   ```bash
+   ./target/release/screenpipe
+   ```
+
+6. **build the desktop app**:
+   ```bash
+   cd screenpipe-app-tauri
+   bun install
+   bun scripts/pre_build.js
+   bun tauri build
+   ```
+
+### windows
+
+1. **install required tools**:
+   ```powershell
+   winget install -e --id Microsoft.VisualStudio.2022.BuildTools
+   winget install -e --id Rustlang.Rustup
+   winget install -e --id LLVM.LLVM
+   winget install -e --id Kitware.CMake
+   winget install -e --id GnuWin32.UnZip
+   winget install -e --id Git.Git
+   irm https://bun.sh/install.ps1 | iex
+   ```
+
+2. **clone and setup vcpkg**:
+   ```powershell
+   cd C:\dev
+   $env:DEV_DIR = $(pwd)
+   git clone https://github.com/microsoft/vcpkg.git
+   cd vcpkg
+   ./bootstrap-vcpkg.bat -disableMetrics
+   ./vcpkg.exe integrate install --disable-metrics
+   ./vcpkg.exe install ffmpeg:x64-windows
+   ```
+
+3. **set environment variables**:
+   ```powershell
+   [System.Environment]::SetEnvironmentVariable('PKG_CONFIG_PATH', "$env:DEV_DIR\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig", 'User')
+   [System.Environment]::SetEnvironmentVariable('VCPKG_ROOT', "$env:DEV_DIR\vcpkg", 'User')
+   [System.Environment]::SetEnvironmentVariable('LIBCLANG_PATH', 'C:\Program Files\LLVM\bin', 'User')
+   [System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
+   ```
+
+4. **clone and build**:
+   ```powershell
+   git clone https://github.com/mediar-ai/screenpipe
+   cd screenpipe
+   cargo build --release
+   cd screenpipe-app-tauri
+   bun install
+   bun scripts/pre_build.js
+   bun tauri build
+   ```
+
+### linux
+
+1. **install dependencies**:
+   ```bash
+   sudo apt-get install -y g++ ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+
+2. **install bun cli**:
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   ```
+
+3. **clone and build**:
+   ```bash
+   git clone https://github.com/mediar-ai/screenpipe
+   cd screenpipe
+   cargo build --release
+   ```
+
+4. **run the application**:
+   ```bash
+   ./target/release/screenpipe
+   ```
+
+5. **build the desktop app**:
+   ```bash
+   cd screenpipe-app-tauri
+   bun install
+   bun scripts/pre_build.js
+   bun tauri build
+   ```
 
 ## how can i contribute?
 
@@ -74,7 +187,6 @@ Rules:
 - Coding: Make sure to escape html thing like quotes etc properly. Only when necessary
 - Coding: When writing react or html code make sure to use thing like &apos; instead of ". Only when necessary (e.g inside quote themselves)
 ```
-
 
 ### principles 
 
@@ -159,7 +271,6 @@ this is @louis030195 whole `.vscode/settings.json` file:
 }
 ```
 
-
 ## other hacks
 
 ### running dev + prod in the same time
@@ -188,7 +299,6 @@ ssh into the runner:
 
 run locally: https://github.com/nektos/act
 
-
 ### debugging memory errors
 
 ```bash
@@ -206,7 +316,6 @@ cargo instruments -t Leaks --bin screenpipe --features metal --time-limit 600000
 ```
 
 then open the file in `target/release/instruments` using xcode -> open developer tool -> instruments.
-
 
 ### benchmarks
 
@@ -293,106 +402,8 @@ az vm user update \
 
 now you can either dev screenpipe on linux or run screenpipe in the cloud that record your local macos. make sure to configure microsoft remote desktop to forward audio
 
-
 ## join the community
 
 say 👋 in our [public discord channel](https://discord.gg/du9ebuw7uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
 thank you for contributing to screen pipe! 🎉
-
-## windows development setup
-
-1. **core build tools**
-```powershell
-# install visual studio build tools
-winget install -e --id Microsoft.VisualStudio.2022.BuildTools
-
-# install rust
-winget install -e --id Rustlang.Rustup
-
-# install llvm
-winget install -e --id LLVM.LLVM
-
-# install cmake
-winget install -e --id Kitware.CMake
-
-# install unzip utility
-winget install -e --id GnuWin32.UnZip
-
-# install git
-winget install -e --id Git.Git
-
-# install bun (using npm)
-irm https://bun.sh/install.ps1 | iex
-
-# install pkg-config (download from https://sourceforge.net/projects/pkgconfiglite/files/)
-# download and extract to a folder in your PATH
-```
-
-2. **vcpkg package manager**
-```powershell
-cd "C:\dev" # or your preferred location
-$env:DEV_DIR = $(pwd)
-git clone https://github.com/microsoft/vcpkg.git
-cd vcpkg
-./bootstrap-vcpkg.bat -disableMetrics
-./vcpkg.exe integrate install --disable-metrics
-
-# install required libraries
-./vcpkg.exe install ffmpeg:x64-windows
-```
-
-3. **environment variables**
-
-add these to your system environment variables (windows settings -> system -> about -> advanced system settings -> environment variables):
-```powershell
-[System.Environment]::SetEnvironmentVariable('PKG_CONFIG_PATH', "$env:DEV_DIR\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig", 'User')
-[System.Environment]::SetEnvironmentVariable('VCPKG_ROOT', "$env:DEV_DIR\vcpkg", 'User')
-[System.Environment]::SetEnvironmentVariable('LIBCLANG_PATH', 'C:\Program Files\LLVM\bin', 'User')
-[System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
-```
-
-4. **vscode settings**
-
-create or update `.vscode/settings.json`:
-```json
-{
-   "rust-analyzer.cargo.features": [
-      "pipes"
-   ],
-   "rust-analyzer.server.extraEnv": {
-      "SCREENPIPE_APP_DEV": "true"
-   },
-   "rust-analyzer.cargo.extraEnv": {
-      "SCREENPIPE_APP_DEV": "true"
-   },
-   "terminal.integrated.env.windows": {
-      "SCREENPIPE_APP_DEV": "true"
-   }
-}
-```
-
-5. **building the project**
-```powershell
-# clone the repo
-git clone https://github.com/mediar-ai/screenpipe
-cd screenpipe
-
-# build the cli
-cargo build --release 
-# optional: add --features cuda for gpu support
-# optional: add --features mkl for intel accelerated cpu support
-
-# build the desktop app
-cd screenpipe-app-tauri
-bun install
-bun tauri build
-```
-
-### notes for windows development
-- run powershell as administrator when installing tools
-- restart your computer after installing components
-- install visual studio code with the rust extension
-- if you encounter signing issues, you can remove the updater config in your fork
-- make sure all environment variables are properly set before building
-- if you encounter any path-related issues, ensure all tools are correctly added to your system's PATH
