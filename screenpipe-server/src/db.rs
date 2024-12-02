@@ -1498,9 +1498,9 @@ impl DatabaseManager {
         &self,
         limit: u32,
         offset: u32,
+        speaker_ids: Option<Vec<i64>>,
     ) -> Result<Vec<Speaker>, sqlx::Error> {
-        let res = sqlx::query_as::<sqlx::Sqlite, Speaker>(
-            r#"
+        let base_query = r#"
             WITH RecentAudioPaths AS (
                 SELECT DISTINCT
                     s.id as speaker_id,
@@ -1510,6 +1510,19 @@ impl DatabaseManager {
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
                 WHERE (s.name = '' OR s.name IS NULL)
                 AND (s.hallucination IS NULL OR s.hallucination = 0)
+                "#;
+
+        let speaker_filter = match &speaker_ids {
+            Some(ids) if !ids.is_empty() => {
+                let placeholders = vec!["?"; ids.len()].join(",");
+                format!("AND s.id IN ({})", placeholders)
+            }
+            _ => String::new(),
+        };
+
+        let query = format!(
+            r#"{}
+                {}
                 AND at.timestamp IN (
                     SELECT timestamp
                     FROM audio_transcriptions at2
@@ -1537,12 +1550,22 @@ impl DatabaseManager {
             ORDER BY transcription_count DESC
             LIMIT ? OFFSET ?
             "#,
-        )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
+            base_query, speaker_filter
+        );
 
+        let mut db_query = sqlx::query_as::<sqlx::Sqlite, Speaker>(&query);
+
+        // Add speaker_id bindings if present
+        if let Some(ids) = speaker_ids {
+            for id in ids {
+                db_query = db_query.bind(id);
+            }
+        }
+
+        // Add limit and offset last
+        db_query = db_query.bind(limit).bind(offset);
+
+        let res = db_query.fetch_all(&self.pool).await?;
         Ok(res)
     }
 

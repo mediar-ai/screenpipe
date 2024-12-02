@@ -30,7 +30,7 @@ use screenpipe_audio::{
 };
 use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -53,6 +53,8 @@ use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 use enigo::{Enigo, Key, Settings};
 
 use screenpipe_audio::LAST_AUDIO_CAPTURE;
+
+use std::str::FromStr;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
@@ -1318,10 +1320,28 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct GetUnnamedSpeakersRequest {
     limit: u32,
     offset: u32,
+    // comma separated list of speaker ids to include
+    #[serde(deserialize_with = "from_comma_separated_array")]
+    speaker_ids: Option<Vec<i64>>,
+}
+
+fn from_comma_separated_array<'de, D>(deserializer: D) -> Result<Option<Vec<i64>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = <&str>::deserialize(deserializer)?;
+    if s.is_empty() {
+        Ok(None)
+    } else {
+        s.split(',')
+            .map(|i| i64::from_str(i).map_err(serde::de::Error::custom))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Some)
+    }
 }
 
 async fn get_unnamed_speakers_handler(
@@ -1330,7 +1350,7 @@ async fn get_unnamed_speakers_handler(
 ) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
     let speakers = state
         .db
-        .get_unnamed_speakers(request.limit, request.offset)
+        .get_unnamed_speakers(request.limit, request.offset, request.speaker_ids)
         .await
         .map_err(|e| {
             (
