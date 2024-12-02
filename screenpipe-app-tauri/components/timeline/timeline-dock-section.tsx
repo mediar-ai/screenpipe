@@ -174,6 +174,9 @@ export function TimelineIconsSection({
 
   const loadAppIcon = useCallback(
     async (appName: string, appPath?: string) => {
+      // Skip icon fetching on Windows
+      if (os === "windows") return;
+
       try {
         if (iconCache[appName]) return;
 
