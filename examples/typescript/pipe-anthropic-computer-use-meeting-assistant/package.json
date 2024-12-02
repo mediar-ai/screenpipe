@@ -1,0 +1,15 @@
+{
+  "name": "pipe-anthropic-computer-use-meeting-assistant",
+  "module": "pipe.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@screenpipe/js": "^0.1.2"
+  }
+}

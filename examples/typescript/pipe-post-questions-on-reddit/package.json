@@ -1,0 +1,15 @@
+{
+  "name": "pipe-post-questions-on-reddit",
+  "module": "pipe.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@screenpipe/js": "^0.1.2",
+    "nodemailer": "^6.9.16"
+  }
+}
