@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,93 +8,47 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { OpenAI } from "openai";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "./ui/use-toast";
-import ReactMarkdown from "react-markdown";
-import {
-  X,
-  Copy,
-  RefreshCw,
-  Trash2,
-  Users,
-  FileText,
-  PlusCircle,
-  Fingerprint,
-  ChevronDown,
-  ChevronUp,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { X, Fingerprint } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { Badge } from "./ui/badge";
-import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
-import localforage from "localforage";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
 import { keysToCamelCase } from "@/lib/utils";
-import { HelpCircle } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { ValueOf } from "next/dist/shared/lib/constants";
-import { Checkbox } from "./ui/checkbox";
 import { VideoComponent } from "./video";
-import { useDebounce } from "@/lib/hooks/use-debounce";
-
-interface UnnamedSpeakerResponseItem {
-  id: string;
-  name: string;
-  metadata: string;
-}
+import { MeetingSegment, Speaker } from "@/lib/types";
 
 interface UnnamedSpeaker {
   id: number;
   name: string;
-  metadata: {
-    audioPaths: string[];
-  };
+  metadata: string;
 }
 
-interface SpeakerSearchResult {
-  id: number;
-  name: string;
-}
-
-export default function IdentifySpeakers() {
+export default function IdentifySpeakers({
+  segments,
+}: {
+  segments?: MeetingSegment[];
+}) {
   const posthog = usePostHog();
   const { settings } = useSettings();
-  const [unnamedSpeakers, setUnnamedSpeakers] = useState<UnnamedSpeaker[]>([]);
+  const [unnamedSpeakers, setUnnamedSpeakers] = useState<Speaker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
   const [showError, setShowError] = useState(false);
-  const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
   const [currentSpeakerIndex, setCurrentSpeakerIndex] = useState(0);
   const [showHallucinationConfirm, setShowHallucinationConfirm] =
     useState(false);
   const [showNameUpdateConfirm, setShowNameUpdateConfirm] = useState(false);
   const [pendingNameUpdate, setPendingNameUpdate] = useState<string>("");
   const [speakerSearchTerm, setSpeakerSearchTerm] = useState<string>("");
-  const [speakers, setSpeakers] = useState<UnnamedSpeaker[]>([]);
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
   const [selectedExistingSpeaker, setSelectedExistingSpeaker] =
-    useState<SpeakerSearchResult | null>(null);
-  // const debouncedSpeakerSearchTerm = useDebounce(speakerSearchTerm, 100);
+    useState<Speaker | null>(null);
+  const [segmentSpeakerIds, setSegmentSpeakerIds] = useState<number[]>([]);
 
   useEffect(() => {
     if (speakerSearchTerm) {
@@ -107,21 +61,27 @@ export default function IdentifySpeakers() {
       posthog.identify(settings.userId);
       posthog.people.set({
         userId: settings.userId,
-        // Add any other relevant user properties
       });
     }
   }, [posthog, settings.userId]);
 
   useEffect(() => {
-    console.log("useEffect running, isOpen:", isOpen);
+    if (segments) {
+      setSegmentSpeakerIds(segments.map((segment) => segment.speaker.id));
+    }
+  }, [segments]);
+
+  useEffect(() => {
     if (isOpen) {
       loadUnnamedSpeakers();
       posthog?.capture("identify_speakers_opened", {
         userId: settings.userId,
+        source: segments ? "meeting_history" : "menu",
       });
     } else {
       posthog?.capture("identify_speakers_closed", {
         userId: settings.userId,
+        source: segments ? "meeting_history" : "menu",
       });
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
@@ -151,7 +111,6 @@ export default function IdentifySpeakers() {
   }
 
   async function fetchSpeakers(searchTerm: string) {
-    console.log("fetching speakers...");
     setIsSearching(true);
 
     try {
@@ -177,20 +136,22 @@ export default function IdentifySpeakers() {
       // Always fetch from the last 7x24 hours
 
       const response = await fetch(
-        `http://localhost:3030/speakers/unnamed?limit=1&offset=0`
+        `http://localhost:3030/speakers/unnamed?limit=1&offset=0${
+          segmentSpeakerIds.length > 0
+            ? `&speaker_ids=${segmentSpeakerIds.join(",")}`
+            : ""
+        }`
       );
       if (!response.ok) {
         throw new Error("failed to fetch unnamed speakers");
       }
       const result = await response.json();
-      const updatedUnnamedSpeakers = result.map(
-        (speaker: UnnamedSpeakerResponseItem) => ({
-          ...speaker,
-          metadata: JSON.parse(speaker.metadata),
-        })
-      );
+      const updatedUnnamedSpeakers = result.map((speaker: UnnamedSpeaker) => ({
+        ...speaker,
+        metadata: speaker.metadata ? JSON.parse(speaker.metadata) : undefined,
+      }));
       const camelCaseResult = updatedUnnamedSpeakers.map(
-        keysToCamelCase<UnnamedSpeaker>
+        keysToCamelCase<Speaker>
       );
 
       setUnnamedSpeakers(camelCaseResult);
@@ -206,7 +167,6 @@ export default function IdentifySpeakers() {
 
   const handleRefresh = async () => {
     setSpeakers([]);
-    setIsRefreshing(true);
     try {
       await fetchUnnamedSpeakers();
       toast({
@@ -221,7 +181,6 @@ export default function IdentifySpeakers() {
         variant: "destructive",
       });
     } finally {
-      setIsRefreshing(false);
     }
   };
 
@@ -469,7 +428,7 @@ export default function IdentifySpeakers() {
                         <div className="grid grid-cols-3 gap-2">
                           {unnamedSpeakers[
                             currentSpeakerIndex
-                          ].metadata.audioPaths
+                          ].metadata?.audioPaths
                             .slice(0, 3)
                             .map((path, index) => (
                               <VideoComponent key={index} filePath={path} />
