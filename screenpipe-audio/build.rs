@@ -84,9 +84,9 @@ fn install_onnxruntime() {
     if !status.success() {
         panic!("failed to install onnx binary");
     }
-    fs::copy("onnxruntime-win-x64-gpu-1.19.2/lib/onnxruntime.dll", env::var("OUT_DIR").unwrap()).expect("Failed to copy ONNX");
     fs::rename(
         "onnxruntime-win-x64-gpu-1.19.2",
         "../screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-gpu-1.19.2",
     );
+    println!("cargo:rustc-link-search=native=../screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-gpu-1.19.2/lib");
 }
