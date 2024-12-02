@@ -41,6 +41,9 @@ screenpipe-core = { path = "../screenpipe-core" }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 which = "6.0"
+cidre = { git = "https://github.com/yury/cidre.git", version = "0.5.0" }
+serde = "1.0.200"
+uuid = "1.11.0"
 
 [dev-dependencies]
 tempfile = "3.3.0"
