@@ -21,6 +21,10 @@ export type EmbeddedLLMConfig = {
   port: number;
 };
 
+export enum Shortcut {
+  SHOW_SCREENPIPE = "show_screenpipe",
+}
+
 export interface Settings {
   openaiApiKey: string;
   deepgramApiKey: string;
@@ -57,6 +61,7 @@ export interface Settings {
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
+  disabledShortcuts: Shortcut[];
 }
 
 const defaultSettings: Settings = {
@@ -105,6 +110,7 @@ const defaultSettings: Settings = {
   enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
+  disabledShortcuts: [],
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -148,8 +154,8 @@ export function useSettings() {
           currentPlatform === "macos"
             ? "apple-native"
             : currentPlatform === "windows"
-              ? "windows-native"
-              : "tesseract";
+            ? "windows-native"
+            : "tesseract";
 
         console.log("loading settings", store);
         // no need to call load() as it's done automatically
@@ -244,29 +250,29 @@ export function useSettings() {
         const defaultIgnoredWindows =
           currentPlatform === "macos"
             ? [
-              ...ignoredWindowsInAllOS,
-              ".env",
-              "Item-0",
-              "App Icon Window",
-              "Battery",
-              "Shortcuts",
-              "WiFi",
-              "BentoBox",
-              "Clock",
-              "Dock",
-              "DeepL",
-              "Control Center",
-            ]
+                ...ignoredWindowsInAllOS,
+                ".env",
+                "Item-0",
+                "App Icon Window",
+                "Battery",
+                "Shortcuts",
+                "WiFi",
+                "BentoBox",
+                "Clock",
+                "Dock",
+                "DeepL",
+                "Control Center",
+              ]
             : currentPlatform === "windows"
-              ? [
+            ? [
                 ...ignoredWindowsInAllOS,
                 "Nvidia",
                 "Control Panel",
                 "System Properties",
               ]
-              : currentPlatform === "linux"
-                ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
-                : [];
+            : currentPlatform === "linux"
+            ? [...ignoredWindowsInAllOS, "Info center", "Discover", "Parted"]
+            : [];
 
         const savedIgnoredWindows = await store!.get<string[]>(
           "ignoredWindows"
@@ -297,6 +303,9 @@ export function useSettings() {
 
         const savedEnableUiMonitoring =
           (await store!.get<boolean>("enableUiMonitoring")) || false;
+
+        const savedDisabledShortcuts =
+          (await store!.get<Shortcut[]>("disabledShortcuts")) || [];
 
         setSettings({
           openaiApiKey: savedKey,
@@ -334,6 +343,7 @@ export function useSettings() {
           enableFrameCache: savedEnableFrameCache,
           enableUiMonitoring: savedEnableUiMonitoring,
           platform: currentPlatform,
+          disabledShortcuts: savedDisabledShortcuts,
         });
       } catch (error) {
         console.error("failed to load settings:", error);
@@ -375,12 +385,17 @@ export function useSettings() {
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
 
-    if (settings.dataDir !== "default" && settings.dataDir && settings.dataDir !== "") return settings.dataDir;
+    if (
+      settings.dataDir !== "default" &&
+      settings.dataDir &&
+      settings.dataDir !== ""
+    )
+      return settings.dataDir;
 
     return platform() === "macos" || platform() === "linux"
       ? `${homeDirPath}/.screenpipe`
       : `${homeDirPath}\\.screenpipe`;
-  }
+  };
 
   return { settings, updateSettings, resetSetting, getDataDir };
 }
