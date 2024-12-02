@@ -40,7 +40,8 @@ pub fn perform_ocr_apple(
         ocr_result: String::new(),
         overall_confidence: 0.0,
         text_elements: Vec::new(),
-    }).unwrap();
+    })
+    .unwrap();
 
     let file_name = Uuid::new_v4().as_urn().to_string();
     let temp_path = PathBuf::from(std::env::temp_dir()).join(file_name + ".png");
@@ -96,7 +97,7 @@ pub fn perform_ocr_apple(
             });
             let result_string = serde_json::to_string(&OcrResult {
                 overall_confidence,
-                ocr_result: ocr_text.to_string(),
+                ocr_result: ocr_text.to_string() + "\n",
                 text_elements: ocr_results_vec,
             })
             .unwrap();
