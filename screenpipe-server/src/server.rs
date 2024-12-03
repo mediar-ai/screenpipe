@@ -11,6 +11,7 @@ use futures::{
     Stream,
 };
 use image::ImageFormat::{self};
+use port_check::is_local_ipv4_port_free;
 
 use crate::{
     db_types::{ContentType, SearchResult, TagContentType},
@@ -831,6 +832,17 @@ impl Server {
                     .make_span_with(DefaultMakeSpan::new().include_headers(true)),
             )
             .with_state(app_state);
+
+        if !is_local_ipv4_port_free(self.addr.port()) {
+            error!(
+                "Server already running on {}. Choose a different port",
+                self.addr
+            );
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AddrInUse,
+                "Address in use",
+            ));
+        }
 
         info!("Server starting on {}", self.addr);
 
