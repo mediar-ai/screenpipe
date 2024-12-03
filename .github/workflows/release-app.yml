@@ -180,11 +180,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            screenpipe-app-tauri/src-tauri/openblas
-            screenpipe-app-tauri/src-tauri/clblast
             screenpipe-app-tauri/src-tauri/ffmpeg
             screenpipe-app-tauri/src-tauri/tesseract-*
-          key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build
+            screenpipe-app-tauri/node_modules
+            screenpipe-app-tauri/src-tauri/target
+            screenpipe-app-tauri/.tauri
+            screenpipe-app-tauri/src-tauri/WixTools
+            screenpipe-app-tauri/src-tauri/mkl
+            # Ollama binaries and libs
+            screenpipe-app-tauri/src-tauri/ollama-*
+            screenpipe-app-tauri/src-tauri/lib/ollama
+            # Swift UI monitoring binaries
+            screenpipe-app-tauri/src-tauri/ui_monitor-*
+            # FFmpeg downloads
+            screenpipe-app-tauri/src-tauri/ffmpeg-*
+            # Platform specific bins
+            screenpipe-app-tauri/src-tauri/bun-*
+            screenpipe-app-tauri/src-tauri/screenpipe-*
+          key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build-${{ hashFiles('**/Cargo.lock', '**/bun.lockb') }}
+          restore-keys: |
+            ${{ matrix.platform }}-${{ matrix.target }}-pre-build-
 
       - name: Install dependencies
         if: matrix.platform == 'macos-latest'
