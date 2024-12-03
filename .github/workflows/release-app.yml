@@ -146,10 +146,17 @@ jobs:
           node-version: 20
 
       - name: Set up Rust
+        if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
+
+      - name: Install Rust
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: |
+          Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
+          .\rustup-init.exe -y
 
       - uses: actions/cache@v4
         with:
