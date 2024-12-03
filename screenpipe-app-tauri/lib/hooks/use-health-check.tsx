@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+
+import { invoke } from "@tauri-apps/api/core";
 import { debounce } from "lodash";
 
 interface HealthCheckResponse {
@@ -70,6 +72,18 @@ export function useHealthCheck() {
 
       const data: HealthCheckResponse = await response.json();
 
+      if (data.status == "unhealthy") {
+        try {
+          await invoke("set_tray_unhealth_icon");
+        } catch (error) {
+          console.error("set unhealthy icon:", error);
+        }
+      } else {
+        await invoke("set_tray_health_icon");
+        console.log("set healthy icon:");
+      }
+
+
       if (isHealthChanged(healthRef.current, data)) {
         setHealth(data);
         healthRef.current = data;
@@ -84,6 +98,7 @@ export function useHealthCheck() {
       console.error("Health check error:", error);
       if (!isServerDown) {
         setIsServerDown(true);
+        await invoke("set_tray_unhealth_icon");
         const errorHealth: HealthCheckResponse = {
           last_frame_timestamp: null,
           last_audio_timestamp: null,

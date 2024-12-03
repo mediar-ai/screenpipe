@@ -3,6 +3,24 @@ use tauri::Manager;
 use tracing::info;
 use crate::get_data_dir;
 
+#[tauri::command]
+pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
+        let _ = main_tray.set_icon(Some(
+            tauri::image::Image::from_path("icons/screenpipe-logo-tray-failed.png").unwrap(),
+        ));
+    }
+}
+
+#[tauri::command]
+pub fn set_tray_health_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
+        let _ = main_tray.set_icon(Some(
+            tauri::image::Image::from_path("icons/screenpipe-logo-tray-black.png").unwrap(),
+        ));
+    }
+}
+
 #[cfg(target_os = "macos")]
 use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
 

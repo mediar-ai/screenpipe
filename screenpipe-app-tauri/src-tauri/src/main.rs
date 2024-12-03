@@ -45,6 +45,9 @@ mod sidecar;
 mod updates;
 pub use commands::open_screen_capture_preferences;
 pub use commands::reset_all_pipes;
+pub use commands::set_tray_unhealth_icon;
+pub use commands::set_tray_health_icon;
+pub use commands::reset_screen_permissions;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
@@ -130,6 +133,8 @@ async fn main() {
             load_pipe_config,
             save_pipe_config,
             reset_all_pipes,
+            set_tray_unhealth_icon,
+            set_tray_health_icon,
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
@@ -278,7 +283,9 @@ async fn main() {
                     }
                     _ => {}
                 });
+            
             }
+
 
             // Store setup and analytics initialization
             let store = StoreBuilder::new(app.handle(), path.clone()).build();
@@ -428,7 +435,8 @@ async fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
-
+    
+    // set_tray_unhealth_icon(app.app_handle().clone());
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
