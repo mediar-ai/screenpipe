@@ -23,7 +23,7 @@ mod tests {
             frame_id,
             "Hello, world!",
             "",
-            "",
+            "test",
             "",
             Arc::new(OcrEngine::Tesseract),
             false,
@@ -39,7 +39,7 @@ mod tests {
                 0,
                 None,
                 None,
-                None,
+                Some("test"),
                 None,
                 None,
                 None,
@@ -69,6 +69,23 @@ mod tests {
         )
         .await
         .unwrap();
+
+        let em_results = db
+            .search(
+                "audio",
+                ContentType::Audio,
+                100,
+                0,
+                None,
+                None,
+                Some("test"),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(em_results.len(), 0);
 
         let results = db
             .search(
@@ -116,6 +133,23 @@ mod tests {
 
         assert_eq!(a, 1);
 
+        let em_results = db
+            .search(
+                "",
+                ContentType::Audio,
+                100,
+                0,
+                None,
+                None,
+                Some("app"),
+                Some("window"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(em_results.len(), 0);
+
         let results = db
             .search(
                 "",
@@ -154,7 +188,7 @@ mod tests {
             frame_id,
             "Hello from OCR",
             "",
-            "",
+            "app",
             "",
             Arc::new(OcrEngine::Tesseract),
             false,
@@ -174,6 +208,23 @@ mod tests {
         )
         .await
         .unwrap();
+
+        let one_result = db
+            .search(
+                "Hello",
+                ContentType::All,
+                100,
+                0,
+                None,
+                None,
+                Some("app"),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(one_result.len(), 1);
 
         let results = db
             .search(

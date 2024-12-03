@@ -11,8 +11,8 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">rewind.ai x cursor.com = your AI assistant that has all the context. </p>
-   <p align="center">24/7 screen & voice recording for the age of super intelligence. get your data ready or be left behind</p>
+   <p align="center">one API to get all user desktop data  (local, cross platform, 24/7, screen, voice, keyboard, mouse, camera recording)</p>
+   <p align="center">sandboxed js plugin system. keyboard and mouse control</p>
 </p>
 
 <!-- Slogan -->
@@ -49,11 +49,7 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 <p align="center">
    
 
-<p align="center">
-   <a href ="https://screenpi.pe">
-      <img alt="demo" src="https://github.com/user-attachments/assets/6f4e80d9-89b6-4ed3-a82c-121abc849852" width="800" />
-   </a>
-</p>
+
 
 ---
 
@@ -75,23 +71,17 @@ we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis
 
 ![diagram](./content/diagram2.png)
 
+![image](https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91)
+
+
 # why?
 
-in 2025, context won't be an issue anymore.
-
-will you have the data ready?
+every second you are not recording is a missing context for AGI
 
 ## get started
 
-there are multiple ways to install screenpipe:
-- as a CLI for technical users
-- as a [paid desktop app](https://screenpi.pe/onboarding) with 1 year updates, priority support, and priority features
-- as a free forever desktop app (but you need to build it yourself). We're 100% OSS.
-- get the desktop app 1 year license by sending a PR ([example](https://github.com/mediar-ai/screenpipe/issues/120#issuecomment-2275043418)) or [sharing about screenpipe online](https://screenpi.pe/onboarding/free-community)
-- as a Rust or WASM library - check this [websocket](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-vision/examples/websocket.rs) to stream frames + OCR to your app
-- [as a business](https://cal.com/louis030195/screenpipe-for-businesses) 
-
-[**👉 install screenpipe now**](https://docs.screenpi.pe/docs/getting-started)
+- [get the desktop app](https://screenpi.pe/)
+- [get the CLI or build from source](https://docs.screenpi.pe/docs/getting-started)
 
 ## create plugins
 

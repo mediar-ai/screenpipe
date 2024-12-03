@@ -15,9 +15,30 @@ on:
       version:
         description: "Version to set in Cargo.toml (required if commit_hash is provided)"
         required: false
+  push:
+    branches: [main]
 
 jobs:
+  check_commit:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: check
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -q "release-app"; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
   generate_changelog:
+    needs: check_commit
+    if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
     runs-on: ubuntu-latest
 
     permissions:
@@ -56,6 +77,8 @@ jobs:
           git push origin main
 
   draft:
+    needs: [check_commit, generate_changelog]
+    if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,6 +101,8 @@ jobs:
           api-key: ${{ secrets.CN_API_KEY }}
 
   publish-tauri:
+    needs: [check_commit, draft]
+    if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
     permissions:
       contents: write
     strategy:

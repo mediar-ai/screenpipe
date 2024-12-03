@@ -80,42 +80,6 @@ const exports = {
 	cmake: 'C:\\Program Files\\CMake\\bin',
 }
 
-// Add this function to check if Bun is installed
-async function isBunInstalled() {
-	try {
-		await $`bun --version`.quiet();
-		return true;
-	} catch (error) {
-		return false;
-	}
-}
-
-// Add this function to install Bun
-async function installBun() {
-	if (await isBunInstalled()) {
-		console.log('bun is already installed.');
-		return;
-	}
-
-	console.log('installing bun...');
-
-	if (platform === 'windows') {
-		console.log('attempting to install bun using npm...');
-		try {
-			await $`npm install -g bun`;
-			console.log('bun installed successfully using npm.');
-		} catch (error) {
-			console.error('failed to install bun:', error);
-			console.error('please install bun manually.');
-		}
-	} else {
-		// for macos and linux
-		await $`curl -fsSL https://bun.sh/install | bash`;
-	}
-
-	console.log('bun installation attempt completed.');
-}
-
 // Add this function to copy the Bun binary
 async function copyBunBinary() {
 	console.log('checking bun binary for tauri...');
@@ -344,21 +308,17 @@ async function getMostRecentBinaryPath(targetArch, paths) {
 }
 /* ########## macOS ########## */
 if (platform == 'macos') {
-
 	const architectures = ['arm64', 'x86_64'];
-
 	for (const arch of architectures) {
 		if (process.env['SKIP_SCREENPIPE_SETUP']) {
 			break;
 		}
 		console.log(`Setting up screenpipe bin for ${arch}...`);
-
 		if (arch === 'arm64') {
 			const paths = [
 				"../../target/aarch64-apple-darwin/release/screenpipe",
 				"../../target/release/screenpipe"
 			];
-
 			const mostRecentPath = await getMostRecentBinaryPath('arm64', paths);
 			if (mostRecentPath) {
 				await $`cp ${mostRecentPath} screenpipe-aarch64-apple-darwin`;
@@ -366,7 +326,6 @@ if (platform == 'macos') {
 			} else {
 				console.error("No suitable arm64 screenpipe binary found");
 			}
-
 			try {
 				// if the binary exists, hard code the fucking dylib
 				if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
@@ -382,24 +341,19 @@ if (platform == 'macos') {
 			} catch (error) {
 				console.error('Error updating dylib paths:', error);
 			}
-
-
 		} else if (arch === 'x86_64') {
 			// copy screenpipe binary (more recent one)
 			const paths = [
 				"../../target/x86_64-apple-darwin/release/screenpipe",
 				"../../target/release/screenpipe"
 			];
-
 			const mostRecentPath = await getMostRecentBinaryPath('x86_64', paths);
-
 			if (mostRecentPath) {
 				await $`cp ${mostRecentPath} screenpipe-x86_64-apple-darwin`;
 				console.log(`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`);
 			} else {
 				console.error("No suitable x86_64 screenpipe binary found");
 			}
-
 			try {
 				// hard code the dylib
 				if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
@@ -410,12 +364,9 @@ if (platform == 'macos') {
 			} catch (error) {
 				console.error('Error updating dylib paths:', error);
 			}
-
 		}
-
 		console.log(`screenpipe for ${arch} set up successfully.`);
 	}
-
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
@@ -642,7 +593,6 @@ async function installOllamaSidecar() {
 }
 
 // Near the end of the script, call these functions
-await installBun();
 await copyBunBinary();
 await installOllamaSidecar().catch(console.error);
 

@@ -27,88 +27,75 @@ export const KeywordCloud: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const queryScreenpipe = async (params: ScreenpipeQueryParams) => {
-    const url = new URL("http://localhost:3030/search");
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        url.searchParams.append(key, value.toString());
-      }
-    });
+  const processContentStreaming = async () => {
+    console.log("fetching keyword stats...");
+    const url = new URL("http://localhost:3030/raw_sql");
+    
+    const query = `
+      WITH RECURSIVE
+      split(word, str) AS (
+        SELECT '', content || ' '
+        FROM (
+          -- Get OCR text and audio from last 12h
+          SELECT text as content
+          FROM ocr_text ot
+          JOIN frames f ON ot.frame_id = f.id
+          WHERE datetime(timestamp) >= datetime('now', '-12 hours')
+          UNION ALL
+          SELECT transcription as content
+          FROM audio_transcriptions
+          WHERE datetime(timestamp) >= datetime('now', '-12 hours')
+        )
+        UNION ALL
+        SELECT
+          LOWER(SUBSTR(str, 0, INSTR(str, ' '))),
+          SUBSTR(str, INSTR(str, ' ')+1)
+        FROM split WHERE str!=''
+      )
+      SELECT 
+        word,
+        COUNT(*) as count
+      FROM split
+      WHERE length(word) > 3
+        AND word NOT IN ('this', 'that', 'with', 'from', 'have', 'what', 'your', 'which', 'their', 'about')
+      GROUP BY word
+      HAVING count > 5
+      ORDER BY count DESC
+      LIMIT 50;
+    `;
 
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      throw new Error(`http error! status: ${response.status}`);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`http error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("received keyword stats:", result);
+
+      setKeywords(result.map((row: any) => ({
+        word: row.word,
+        count: row.count
+      })));
+
+    } catch (err) {
+      console.error("failed to fetch keyword stats:", err);
+      setError("error fetching keyword stats");
+    } finally {
+      setIsLoading(false);
     }
-    return response.json();
   };
 
   useEffect(() => {
-    const fetchKeywords = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const now = new Date();
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-        const response = await queryScreenpipe({
-          content_type: "all",
-          start_time: yesterday.toISOString(),
-          end_time: now.toISOString(),
-          limit: 1_000_000,
-        });
-
-        if (response && response.data) {
-          processContentStreaming(response.data);
-        } else {
-          setError("no data returned from screenpipe");
-        }
-      } catch (err) {
-        setError("error fetching keywords");
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchKeywords();
+    processContentStreaming();
   }, []);
-
-  const processContentStreaming = (data: ContentItem[]) => {
-    const batchSize = 100;
-    const wordCounts: Record<string, number> = {};
-
-    const processBatch = (startIndex: number) => {
-      const endIndex = Math.min(startIndex + batchSize, data.length);
-      
-      for (let i = startIndex; i < endIndex; i++) {
-        const item = data[i];
-        const text = item.type === "OCR" ? item.content.text : item.content.transcription;
-        if (text) {
-          const words = text.toLowerCase().split(/\s+/);
-          words.forEach((word) => {
-            if (word.length > 3) {
-              wordCounts[word] = (wordCounts[word] || 0) + 1;
-            }
-          });
-        }
-      }
-
-      const sortedKeywords = sortKeywords(wordCounts).slice(0, 20);
-      setKeywords(sortedKeywords);
-
-      if (endIndex < data.length) {
-        setTimeout(() => processBatch(endIndex), 0);
-      }
-    };
-
-    processBatch(0);
-  };
-
-  const sortKeywords = (wordCounts: Record<string, number>): KeywordCount[] => {
-    return Object.entries(wordCounts)
-      .map(([word, count]) => ({ word, count }))
-      .sort((a, b) => b.count - a.count);
-  };
 
   if (isLoading) return <div>loading...</div>;
   if (error) return <div>error: {error}</div>;

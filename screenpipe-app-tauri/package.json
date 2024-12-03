@@ -2,6 +2,7 @@
   "name": "screenpipe-app",
   "private": true,
   "scripts": {
+    "predev": "echo 'make sure to run cargo build --release and bun predev if you are using non dev mode in screenpipe UI'",
     "dev": "next dev",
     "build": "next build",
     "prebuild": "bun scripts/pre_build.js",
@@ -10,6 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.39",
+    "@clerk/clerk-react": "^5.17.1",
     "@dnd-kit/core": "^6.1.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-zone": "^1.22.0",

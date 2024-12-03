@@ -59,9 +59,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
+  const { debouncedFetchHealth } = useHealthCheck();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<
@@ -482,6 +484,7 @@ export function Settings({ className }: { className?: string }) {
   // Use the useInterval hook to periodically check the status
   useInterval(checkEmbeddedAIStatus, 10000); // Check every 10 seconds
 
+
   const handleShortcutToggle = (checked: boolean) => {
     console.log("handleShortcutToggle", checked);
     let newDisabledShortcuts = [...localSettings.disabledShortcuts];
@@ -507,12 +510,31 @@ export function Settings({ className }: { className?: string }) {
     });
   };
 
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      debouncedFetchHealth();
+    };
+
+    window.addEventListener('settings-updated', handleSettingsUpdate);
+    
+    return () => {
+      window.removeEventListener('settings-updated', handleSettingsUpdate);
+    };
+  }, [debouncedFetchHealth]);
+
+
   return (
     <Dialog
       onOpenChange={(open) => {
         if (!open) {
-          // hack bcs something does not update settings for some reason
-          window.location.reload(); // TODO: event trigger
+          // Use a more reliable state update mechanism
+          const event = new CustomEvent('settings-updated');
+          window.dispatchEvent(event);
+          
+          // Add a small delay before refetching health
+          setTimeout(() => {
+            debouncedFetchHealth();
+          }, 500);
         }
       }}
     >

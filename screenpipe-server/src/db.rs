@@ -378,9 +378,9 @@ impl DatabaseManager {
         // Using subquery with LIMIT 1 instead of JOIN
         let speaker = sqlx::query_as(
             "SELECT id, name, metadata
-             FROM speakers 
+             FROM speakers
              WHERE id = (
-                 SELECT speaker_id 
+                 SELECT speaker_id
                  FROM speaker_embeddings
                  WHERE vec_distance_cosine(embedding, vec_f32(?1)) < ?2
                  ORDER BY vec_distance_cosine(embedding, vec_f32(?1))
@@ -617,11 +617,14 @@ impl DatabaseManager {
                         max_length,
                     )
                     .await?;
-                let audio_results = self
-                    .search_audio(
-                        query, limit, offset, start_time, end_time, min_length, max_length,
-                    )
-                    .await?;
+                if app_name.is_none() && window_name.is_none() {
+                    let audio_results = self
+                        .search_audio(
+                            query, limit, offset, start_time, end_time, min_length, max_length,
+                        )
+                        .await?;
+                    results.extend(audio_results.into_iter().map(SearchResult::Audio));
+                }
                 let ui_results = self
                     .search_ui_monitoring(
                         query,
@@ -635,7 +638,6 @@ impl DatabaseManager {
                     .await?;
 
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
-                results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
             }
             ContentType::OCR => {
@@ -655,12 +657,14 @@ impl DatabaseManager {
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
             }
             ContentType::Audio => {
-                let audio_results = self
-                    .search_audio(
-                        query, limit, offset, start_time, end_time, min_length, max_length,
-                    )
-                    .await?;
-                results.extend(audio_results.into_iter().map(SearchResult::Audio));
+                if app_name.is_none() && window_name.is_none() {
+                    let audio_results = self
+                        .search_audio(
+                            query, limit, offset, start_time, end_time, min_length, max_length,
+                        )
+                        .await?;
+                    results.extend(audio_results.into_iter().map(SearchResult::Audio));
+                }
             }
             ContentType::UI => {
                 let ui_results = self
@@ -804,7 +808,7 @@ impl DatabaseManager {
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let mut sql = format!(
             r#"
-            SELECT 
+            SELECT
                 ocr_text.frame_id,
                 ocr_text.text as ocr_text,
                 ocr_text.text_json,
@@ -815,17 +819,17 @@ impl DatabaseManager {
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
                 GROUP_CONCAT(tags.name, ',') as tags
-            FROM 
+            FROM
                 ocr_text
-            JOIN 
+            JOIN
                 frames ON ocr_text.frame_id = frames.id
-            JOIN 
+            JOIN
                 video_chunks ON frames.video_chunk_id = video_chunks.id
             LEFT JOIN
                 vision_tags ON frames.id = vision_tags.vision_id
             LEFT JOIN
                 tags ON vision_tags.tag_id = tags.id
-            WHERE 
+            WHERE
                 (?1 = '' OR ocr_text.text LIKE '%' || ?1 || '%' COLLATE NOCASE)
                 AND ocr_text.text != 'No text found'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
@@ -839,9 +843,9 @@ impl DatabaseManager {
 
         sql.push_str(
             r#"
-            GROUP BY 
+            GROUP BY
                 ocr_text.frame_id
-            ORDER BY 
+            ORDER BY
                 frames.timestamp DESC
             LIMIT ?8 OFFSET ?9
             "#,
@@ -894,7 +898,7 @@ impl DatabaseManager {
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
         let mut sql = format!(
             r#"
-        SELECT 
+        SELECT
             audio_transcriptions.audio_chunk_id,
             audio_transcriptions.transcription,
             audio_transcriptions.timestamp,
@@ -904,15 +908,15 @@ impl DatabaseManager {
             GROUP_CONCAT(tags.name, ',') as tags,
             audio_transcriptions.device as device_name,
             audio_transcriptions.is_input_device
-        FROM 
+        FROM
             audio_transcriptions
-        JOIN 
+        JOIN
             audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
         LEFT JOIN
             audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
         LEFT JOIN
             tags ON audio_tags.tag_id = tags.id
-        WHERE 
+        WHERE
             (?1 = '' OR audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE)
             AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
             AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
@@ -928,7 +932,7 @@ impl DatabaseManager {
             audio_transcriptions.transcription,
             audio_transcriptions.timestamp,
             audio_transcriptions.offset_index
-        ORDER BY 
+        ORDER BY
             audio_transcriptions.timestamp DESC
         LIMIT ?6 OFFSET ?7
         "#,
@@ -974,14 +978,14 @@ impl DatabaseManager {
     pub async fn get_frame(&self, frame_id: i64) -> Result<Option<(String, i64)>, sqlx::Error> {
         sqlx::query_as::<_, (String, i64)>(
             r#"
-            SELECT 
+            SELECT
                 video_chunks.file_path,
                 frames.offset_index
-            FROM 
+            FROM
                 frames
-            JOIN 
+            JOIN
                 video_chunks ON frames.video_chunk_id = video_chunks.id
-            WHERE 
+            WHERE
                 frames.id = ?1
             "#,
         )
@@ -1105,7 +1109,7 @@ impl DatabaseManager {
             SELECT COUNT(*)
             FROM ocr_text
             JOIN frames ON ocr_text.frame_id = frames.id
-            WHERE 
+            WHERE
                 (?1 = '' OR ocr_text.text LIKE '%' || ?1 || '%' COLLATE NOCASE)
                 AND ocr_text.text != 'No text found'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
@@ -1142,7 +1146,7 @@ impl DatabaseManager {
             SELECT COUNT(*)
             FROM audio_transcriptions
             JOIN audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
-            WHERE 
+            WHERE
                 (?1 = '' OR audio_transcriptions.transcription LIKE '%' || ?1 || '%' COLLATE NOCASE)
                 AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                 AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
@@ -1172,7 +1176,7 @@ impl DatabaseManager {
         let sql = r#"
             SELECT COUNT(DISTINCT ui_monitoring.id)
             FROM ui_monitoring
-            WHERE 
+            WHERE
                 (?1 = '' OR text_output LIKE '%' || ?1 || '%')
                 AND (?2 IS NULL OR app LIKE '%' || ?2 || '%')
                 AND (?3 IS NULL OR window LIKE '%' || ?3 || '%')
@@ -1273,7 +1277,7 @@ impl DatabaseManager {
             ));
 
         let query = r#"
-            SELECT 
+            SELECT
                 GROUP_CONCAT(cti.text, ' ') as texts,
                 MIN(COALESCE(cte.frame_id, cte.audio_chunk_id)) as min_chunk_id,
                 MAX(COALESCE(cte.frame_id, cte.audio_chunk_id)) as max_chunk_id,
@@ -1578,7 +1582,7 @@ impl DatabaseManager {
     ) -> Result<TimeSeriesChunk, SqlxError> {
         // First get all frames in time range with their OCR data
         let frames_query = r#"
-            SELECT 
+            SELECT
                 f.timestamp,
                 f.offset_index,
                 ot.text,
@@ -1595,7 +1599,7 @@ impl DatabaseManager {
 
         // Then get audio data that overlaps with these frames
         let audio_query = r#"
-            SELECT 
+            SELECT
                 at.timestamp,
                 at.transcription,
                 at.device as audio_device,
@@ -1684,7 +1688,7 @@ impl DatabaseManager {
     ) -> Result<Vec<UiContent>, sqlx::Error> {
         let sql = r#"
             WITH matching_frames AS (
-                SELECT 
+                SELECT
                     frames.id as frame_id,
                     frames.video_chunk_id,
                     frames.offset_index,
@@ -1697,9 +1701,9 @@ impl DatabaseManager {
                     ui_monitoring.initial_traversal_at,
                     ABS(STRFTIME('%s', frames.timestamp) - STRFTIME('%s', ui_monitoring.timestamp)) as diff_seconds
                 FROM ui_monitoring
-                JOIN frames ON 
+                JOIN frames ON
                     ABS(STRFTIME('%s', frames.timestamp) - STRFTIME('%s', ui_monitoring.timestamp)) <= 1
-                WHERE 
+                WHERE
                     (?1 = '' OR ui_monitoring.text_output LIKE '%' || ?1 || '%')
                     AND (?2 IS NULL OR ui_monitoring.app LIKE '%' || ?2 || '%')
                     AND (?3 IS NULL OR ui_monitoring.window LIKE '%' || ?3 || '%')
@@ -1708,7 +1712,7 @@ impl DatabaseManager {
                 ORDER BY ui_monitoring.timestamp DESC
                 LIMIT ?6 OFFSET ?7
             )
-            SELECT 
+            SELECT
                 ui_id as id,
                 text_output,
                 ui_timestamp as timestamp,
@@ -1759,8 +1763,8 @@ impl DatabaseManager {
         ui_monitoring_id: i64,
     ) -> Result<Vec<String>, anyhow::Error> {
         let tags = sqlx::query_as::<_, (String,)>(
-            "SELECT t.name FROM tags t 
-             JOIN ui_monitoring_tags ut ON t.id = ut.tag_id 
+            "SELECT t.name FROM tags t
+             JOIN ui_monitoring_tags ut ON t.id = ut.tag_id
              WHERE ut.ui_monitoring_id = ?",
         )
         .bind(ui_monitoring_id)

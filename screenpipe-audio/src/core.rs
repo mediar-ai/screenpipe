@@ -3,14 +3,23 @@ use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
+use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, thread};
 use tokio::sync::{broadcast, oneshot};
+lazy_static! {
+    pub static ref LAST_AUDIO_CAPTURE: AtomicU64 = AtomicU64::new(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    );
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
@@ -217,7 +226,16 @@ async fn run_record_and_transcribe(
 
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
-                Ok(Ok(chunk)) => collected_audio.extend(chunk),
+                Ok(Ok(chunk)) => {
+                    collected_audio.extend(chunk);
+                    LAST_AUDIO_CAPTURE.store(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        Ordering::Relaxed,
+                    );
+                }
                 Ok(Err(e)) => {
                     error!("error receiving audio data: {}", e);
                     return Err(anyhow!("Audio stream error: {}", e));
