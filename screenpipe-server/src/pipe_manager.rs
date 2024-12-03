@@ -231,7 +231,7 @@ impl PipeManager {
 
             // Send kill signal and wait for confirmation
             handle.kill_tx.send(()).await?;
-            
+
             // Wait a bit for the process to actually terminate
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -244,13 +244,12 @@ impl PipeManager {
             }
             #[cfg(windows)]
             {
-                use windows::Win32::System::Threading::{OpenProcess, PROCESS_ACCESS_RIGHTS};
-                use windows::Win32::Foundation::HANDLE;
+                use windows::Win32::System::Threading::{OpenProcess, PROCESS_ACCESS_RIGHTS, TerminateProcess};
                 unsafe {
                     if let Ok(h_process) = OpenProcess(
                         PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
                         false,
-                        handle.pid as u32
+                        handle.pid as u32,
                     ) {
                         let _ = TerminateProcess(h_process, 1);
                     }
