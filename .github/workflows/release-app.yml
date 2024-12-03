@@ -293,7 +293,8 @@ jobs:
           # Continue with existing steps
           mkdir omp
           pip install intel-openmp --target omp
-          mkdir screenpipe-app-tauri/src-tauri/mkl/
+          # Create mkl directory if it doesn't exist (ignore error if it does)
+          mkdir screenpipe-app-tauri/src-tauri/mkl/ -ErrorAction SilentlyContinue
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
