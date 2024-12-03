@@ -233,11 +233,7 @@ jobs:
         working-directory: ./screenpipe-app-tauri
 
       - name: Build CLI
-        env:
-          # Windows specific optimizations (only applied when building for Windows)
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
-          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
-          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
+        if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
         run: |
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -245,6 +241,14 @@ jobs:
             export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
+
+      - name: Build CLI on Windows
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: symbols
+          CARGO_PROFILE_RELEASE_PANIC: abort
+          CARGO_PROFILE_RELEASE_INCREMENTAL: false
+        run: cargo build --release -p screenpipe-server ${{ matrix.args }}
 
       # Run pre build again to copy the CLI into app
       - name: Run pre_build.js

@@ -47,7 +47,6 @@ pub use commands::open_screen_capture_preferences;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_unhealth_icon;
 pub use commands::set_tray_health_icon;
-pub use commands::reset_screen_permissions;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;

@@ -188,7 +188,7 @@ pub fn update_show_screenpipe_shortcut(
     };
 
     if !enabled {
-        app_handle.global_shortcut().unregister(show_window_shortcut);
+        let _ = app_handle.global_shortcut().unregister(show_window_shortcut);
 
         return Ok(());
     }
