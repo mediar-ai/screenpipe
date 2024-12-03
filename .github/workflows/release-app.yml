@@ -152,6 +152,7 @@ jobs:
           .\rustup-init.exe -y
 
       - name: Set up Rust
+        if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
