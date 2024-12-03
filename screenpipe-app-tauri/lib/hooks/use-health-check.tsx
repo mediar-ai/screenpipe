@@ -72,16 +72,16 @@ export function useHealthCheck() {
 
       const data: HealthCheckResponse = await response.json();
 
-      if (data.status == "unhealthy") {
-        try {
-          await invoke("set_tray_unhealth_icon");
-        } catch (error) {
-          console.error("set unhealthy icon:", error);
-        }
-      } else {
-        await invoke("set_tray_health_icon");
-        console.log("set healthy icon:");
-      }
+      // if (data.status == "unhealthy") {
+      //   try {
+      //     await invoke("set_tray_unhealth_icon");
+      //   } catch (error) {
+      //     console.error("set unhealthy icon:", error);
+      //   }
+      // } else {
+      //   await invoke("set_tray_health_icon");
+      //   console.log("set healthy icon:");
+      // }
 
 
       if (isHealthChanged(healthRef.current, data)) {
