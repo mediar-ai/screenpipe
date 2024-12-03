@@ -21,9 +21,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
-import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
-import { parseKeyboardShortcut } from "@/lib/utils";
+import { Slider } from "@/components/ui/slider"; // Add this import
+import { Badge } from "@/components/ui/badge"; // Add this import
+import { parseKeyboardShortcut } from "@/lib/utils"; // Add this import
 
 import {
   Eye,
@@ -55,10 +55,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
-import { AuthButton } from "./auth";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
+  const { debouncedFetchHealth } = useHealthCheck();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<
@@ -474,12 +475,30 @@ export function Settings({ className }: { className?: string }) {
   // Use the useInterval hook to periodically check the status
   useInterval(checkEmbeddedAIStatus, 10000); // Check every 10 seconds
 
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      debouncedFetchHealth();
+    };
+
+    window.addEventListener('settings-updated', handleSettingsUpdate);
+    
+    return () => {
+      window.removeEventListener('settings-updated', handleSettingsUpdate);
+    };
+  }, [debouncedFetchHealth]);
+
   return (
     <Dialog
       onOpenChange={(open) => {
         if (!open) {
-          // hack bcs something does not update settings for some reason
-          window.location.reload(); // TODO: event trigger
+          // Use a more reliable state update mechanism
+          const event = new CustomEvent('settings-updated');
+          window.dispatchEvent(event);
+          
+          // Add a small delay before refetching health
+          setTimeout(() => {
+            debouncedFetchHealth();
+          }, 500);
         }
       }}
     >
@@ -491,20 +510,16 @@ export function Settings({ className }: { className?: string }) {
       </DialogTrigger>
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
         <DialogHeader>
-          <div className="flex flex-col items-end space-y-2">
-            <div className="w-full flex justify-between items-center">
-              <DialogTitle>settings</DialogTitle>
-              <Badge className="mr-4">$200 cloud credits</Badge>
-            </div>
-            <div className="flex items-center space-x-2">
-              <AuthButton />
-            </div>
-          </div>
+          <DialogTitle>settings</DialogTitle>
+          <DialogDescription>
+            choose your AI provider, enter necessary credentials, and more.
+          </DialogDescription>
         </DialogHeader>
         <div className="mt-8 space-y-6">
           <RecordingSettings
             localSettings={localSettings}
-            setLocalSettings={setLocalSettings} />
+            setLocalSettings={setLocalSettings}
+          />
 
           <Separator />
 
