@@ -117,7 +117,7 @@ jobs:
             args: "--target x86_64-apple-darwin --features metal,beta"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
-          - platform: [self-hosted, Windows, X64] # Windows x86_64
+          - platform: windows-latest # [self-hosted, Windows, X64] # Windows x86_64
             args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
@@ -146,12 +146,20 @@ jobs:
           node-version: 20
 
       - name: Install Rust
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' 
         run: |
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
 
-      - name: Set up Rust
+      - name: Set up Rust (Windows)
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: |
+          Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile rustup-init.exe
+          .\rustup-init.exe -y --default-toolchain stable --target ${{ matrix.target }}
+        shell: pwsh
+
+      - name: Set up Rust (macOS)
+        if: matrix.platform == 'macos-latest'
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -205,17 +213,17 @@ jobs:
           bun install
 
       - name: Install vcpkg
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' 
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' 
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' || matrix.platform == 'big-windows'
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' 
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
@@ -254,7 +262,7 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
