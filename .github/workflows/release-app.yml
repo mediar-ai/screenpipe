@@ -227,17 +227,21 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Install 7Zip PowerShell Module
+      - name: Install 7zip
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         shell: powershell
         run: |
-          Install-Module -Name 7Zip4PowerShell -Force -Scope CurrentUser
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          choco install 7zip -y
 
       - name: Install LLVM and Clang
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
+          directory: "C:\\Program Files\\LLVM"
 
       - name: Run pre_build.js
         env:
