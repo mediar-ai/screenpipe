@@ -227,6 +227,12 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Install 7Zip PowerShell Module
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          Install-Module -Name 7Zip4PowerShell -Force -Scope CurrentUser
+
       - name: Install LLVM and Clang
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: KyleMayes/install-llvm-action@v2
