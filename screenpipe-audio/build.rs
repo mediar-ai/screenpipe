@@ -88,4 +88,5 @@ fn install_onnxruntime() {
         "onnxruntime-win-x64-gpu-1.19.2",
         "../screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-gpu-1.19.2",
     );
+    println!("cargo:rustc-link-search=native=../screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-gpu-1.19.2/lib");
 }
