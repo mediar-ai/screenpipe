@@ -117,7 +117,7 @@ jobs:
             args: "--target x86_64-apple-darwin --features metal,beta"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
-          - platform: windows-latest # [self-hosted, Windows, X64] # Windows x86_64
+          - platform: [self-hosted, Windows, X64] # Windows x86_64
             args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
