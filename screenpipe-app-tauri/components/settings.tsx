@@ -720,7 +720,6 @@ export function Settings({ className }: { className?: string }) {
                     <Textarea
                       id="customPrompt"
                       value={localSettings.customPrompt}
-                      defaultValue={localSettings.customPrompt}
                       onChange={handleCustomPromptChange}
                       className="min-h-[100px]"
                       placeholder="enter your custom prompt here"

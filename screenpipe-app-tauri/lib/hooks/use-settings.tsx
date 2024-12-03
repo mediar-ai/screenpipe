@@ -148,7 +148,6 @@ export function useSettings() {
 
       try {
         const currentPlatform = platform();
-        console.log("Current platform:", currentPlatform);
 
         const ocrModel =
           currentPlatform === "macos"
@@ -157,7 +156,6 @@ export function useSettings() {
             ? "windows-native"
             : "tesseract";
 
-        console.log("loading settings", store);
         // no need to call load() as it's done automatically
         const savedKey = (await store!.get<string>("openaiApiKey")) || "";
         const savedDeepgramKey =
@@ -172,7 +170,6 @@ export function useSettings() {
         if (savedDevMode === null) {
           savedDevMode = false;
         }
-        console.log("savedDevMode", savedDevMode);
 
         const savedAudioTranscriptionEngine =
           (await store!.get<string>("audioTranscriptionEngine")) || "deepgram";
@@ -214,7 +211,6 @@ export function useSettings() {
         if (savedAnalyticsEnabled === null) {
           savedAnalyticsEnabled = true;
         }
-        console.log("savedAnalyticsEnabled", savedAnalyticsEnabled);
         const savedAudioChunkDuration =
           (await store!.get<number>("audioChunkDuration")) || 30;
         let savedUseChineseMirror = await store!.get<boolean>(
