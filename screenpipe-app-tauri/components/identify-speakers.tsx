@@ -41,7 +41,6 @@ export default function IdentifySpeakers({
   const [showHallucinationConfirm, setShowHallucinationConfirm] =
     useState(false);
   const [showNameUpdateConfirm, setShowNameUpdateConfirm] = useState(false);
-  const [pendingNameUpdate, setPendingNameUpdate] = useState<string>("");
   const [speakerSearchTerm, setSpeakerSearchTerm] = useState<string>("");
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -288,6 +287,16 @@ export default function IdentifySpeakers({
             (s) => s.id !== unnamedSpeakers[currentSpeakerIndex].id
           )
         );
+
+        setUnnamedSpeakers(
+          unnamedSpeakers.map((s) => ({
+            ...s,
+            id:
+              s.id === unnamedSpeakers[currentSpeakerIndex].id
+                ? selectedExistingSpeaker.id
+                : s.id,
+          }))
+        );
       } catch (error) {
         console.error("Error merging speakers:", error);
         toast({
@@ -326,14 +335,24 @@ export default function IdentifySpeakers({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          className="h-[20px] px-0 py-0"
-          onClick={() => setIsOpen(true)}
-        >
-          <Fingerprint className="mr-2 h-4 w-4" />
-          <span>identify speakers</span>
-        </Button>
+        {!segments ? (
+          <Button
+            variant="ghost"
+            className="h-[20px] px-0 py-0"
+            onClick={() => setIsOpen(true)}
+          >
+            <Fingerprint className="mr-2 h-4 w-4" />
+            <span>identify speakers</span>
+          </Button>
+        ) : (
+          <Button
+            onClick={() => setIsOpen(true)}
+            size="sm"
+            className="text-xs bg-black text-white hover:bg-gray-800"
+          >
+            identify speakers
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full">
         <DialogHeader className="py-4">
@@ -406,11 +425,8 @@ export default function IdentifySpeakers({
                         className="space-y-4"
                         onSubmit={async (e) => {
                           e.preventDefault();
-                          const formData = new FormData(e.currentTarget);
-                          const newName = formData.get("speakerName") as string;
-                          setPendingNameUpdate(newName);
                           setShowNameUpdateConfirm(true);
-                          await fetchSpeakers(newName);
+                          await fetchSpeakers(speakerSearchTerm);
                         }}
                       >
                         <div className="flex items-center space-x-2">
@@ -419,15 +435,23 @@ export default function IdentifySpeakers({
                               value={speakerSearchTerm}
                               name="speakerName"
                               onChange={(e) => {
-                                setSpeakers(
-                                  speakers.filter((speaker) =>
-                                    speaker.name
-                                      .toLowerCase()
-                                      .includes(e.target.value.toLowerCase())
-                                  )
-                                );
-
-                                setSpeakerSearchTerm(e.target.value);
+                                const newValue = e.target.value;
+                                setSpeakerSearchTerm(newValue);
+                                // Only filter existing speakers if we have any
+                                if (speakers.length > 0) {
+                                  setSpeakers(
+                                    speakers.filter((speaker) =>
+                                      speaker.name
+                                        .toLowerCase()
+                                        .includes(newValue.toLowerCase())
+                                    )
+                                  );
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === " " && !segments) {
+                                  setSpeakerSearchTerm(speakerSearchTerm + " ");
+                                }
                               }}
                               placeholder="Enter speaker name"
                               className="w-full"
@@ -460,7 +484,14 @@ export default function IdentifySpeakers({
                               </div>
                             )}
                           </div>
-                          <Button type="submit" size="sm">
+                          <Button
+                            type="submit"
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setShowNameUpdateConfirm(true);
+                            }}
+                          >
                             Update Name
                           </Button>
                           <Button
@@ -508,9 +539,11 @@ export default function IdentifySpeakers({
                         </div>
                       )}
                       <div className="mt-8">
-                        <p className="text-sm text-gray-500 mb-4">
-                          Is this the same speaker?
-                        </p>
+                        {similarSpeakers.length > 0 && (
+                          <p className="text-sm text-gray-500 mb-4">
+                            Is this the same speaker?
+                          </p>
+                        )}
                         {isFetchingSimilarSpeakers ? (
                           <div className="flex justify-center items-center p-4">
                             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
@@ -543,7 +576,7 @@ export default function IdentifySpeakers({
                                       setShowMergeConfirm(true);
                                     }}
                                   >
-                                    Yes
+                                    Same Speaker
                                   </Button>
                                   <Button
                                     size="default"
@@ -556,7 +589,7 @@ export default function IdentifySpeakers({
                                       );
                                     }}
                                   >
-                                    No
+                                    Different Speaker
                                   </Button>
                                   <Button
                                     size="default"
@@ -633,7 +666,7 @@ export default function IdentifySpeakers({
             <DialogTitle>Confirm Name Update</DialogTitle>
             <DialogDescription>
               Are you sure you want to update this speaker&apos;s name to &quot;
-              {pendingNameUpdate}
+              {speakerSearchTerm}
               &quot;?
             </DialogDescription>
           </DialogHeader>
@@ -646,7 +679,7 @@ export default function IdentifySpeakers({
             </Button>
             <Button
               onClick={async () => {
-                await handleUpdateSpeakerName(pendingNameUpdate);
+                await handleUpdateSpeakerName(speakerSearchTerm);
                 setShowNameUpdateConfirm(false);
                 toast({
                   title: "speaker renamed",
@@ -670,21 +703,23 @@ export default function IdentifySpeakers({
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end space-x-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowMergeConfirm(false);
-                // Still update the name without merging
-                handleUpdateSpeakerName(selectedExistingSpeaker?.name || "");
-                toast({
-                  title: "Speaker renamed",
-                  description:
-                    "The speaker name has been updated without merging",
-                });
-              }}
-            >
-              Just Update Name
-            </Button>
+            {selectedExistingSpeaker?.name && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowMergeConfirm(false);
+                  // Still update the name without merging
+                  handleUpdateSpeakerName(selectedExistingSpeaker?.name || "");
+                  toast({
+                    title: "Speaker renamed",
+                    description:
+                      "The speaker name has been updated without merging",
+                  });
+                }}
+              >
+                Just Update Name
+              </Button>
+            )}
             <Button onClick={handleMergeSpeakers}>Merge Speakers</Button>
           </div>
         </DialogContent>
