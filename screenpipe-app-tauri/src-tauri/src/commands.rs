@@ -139,6 +139,7 @@ const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 pub fn update_show_screenpipe_shortcut(
     app_handle: tauri::AppHandle<tauri::Wry>,
     new_shortcut: String,
+    enabled: bool,
 ) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
@@ -167,6 +168,12 @@ pub fn update_show_screenpipe_shortcut(
             return Err(format!("failed to parse shortcut: {}", e));
         }
     };
+
+    if !enabled {
+        app_handle.global_shortcut().unregister(show_window_shortcut);
+
+        return Ok(());
+    }
 
     // Register the new shortcut
     if let Err(e) = app_handle.global_shortcut().on_shortcut(
