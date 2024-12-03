@@ -822,6 +822,16 @@ impl Server {
     where
         F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
     {
+        if !is_local_ipv4_port_free(self.addr.port()) {
+            error!(
+                "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart"
+            );
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AddrInUse,
+                "Address in use",
+            ));
+        }
+
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             vision_control: self.vision_control,
@@ -861,17 +871,6 @@ impl Server {
                     .make_span_with(DefaultMakeSpan::new().include_headers(true)),
             )
             .with_state(app_state);
-
-        if !is_local_ipv4_port_free(self.addr.port()) {
-            error!(
-                "Server already running on {}. Choose a different port",
-                self.addr
-            );
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::AddrInUse,
-                "Address in use",
-            ));
-        }
 
         info!("Server starting on {}", self.addr);
 
