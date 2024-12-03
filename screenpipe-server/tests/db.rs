@@ -793,4 +793,45 @@ mod tests {
         let speakers = db.search_speakers("").await.unwrap();
         assert_eq!(speakers.len(), 0);
     }
+
+    #[tokio::test]
+    async fn test_get_similar_speakers() {
+        let db = setup_test_db().await;
+
+        // Create first speaker with audio data
+        let speaker = db.insert_speaker(&vec![0.1; 512]).await.unwrap();
+        db.update_speaker_name(speaker.id, "test name")
+            .await
+            .unwrap();
+        let audio_chunk_id = db.insert_audio_chunk("test_audio1.mp4").await.unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "test transcription",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            Some(speaker.id),
+        )
+        .await
+        .unwrap();
+
+        // Create second speaker with audio data
+        let speaker2 = db.insert_speaker(&vec![0.2; 512]).await.unwrap();
+        db.update_speaker_name(speaker2.id, "name").await.unwrap();
+        let audio_chunk_id2 = db.insert_audio_chunk("test_audio2.mp4").await.unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id2,
+            "test transcription",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            Some(speaker2.id),
+        )
+        .await
+        .unwrap();
+
+        let similar_speakers = db.get_similar_speakers(speaker.id, 10).await.unwrap();
+        assert_eq!(similar_speakers.len(), 1);
+        assert_eq!(similar_speakers[0].id, speaker2.id);
+    }
 }

@@ -1652,6 +1652,61 @@ impl DatabaseManager {
         Ok(())
     }
 
+    pub async fn get_similar_speakers(
+        &self,
+        speaker_id: i64,
+        limit: u32,
+    ) -> Result<Vec<Speaker>, sqlx::Error> {
+        let threshold = 0.8;
+
+        sqlx::query_as::<sqlx::Sqlite, Speaker>(
+            r#"
+            WITH RecentAudioPaths AS (
+                SELECT DISTINCT
+                    s.id as speaker_id,
+                    ac.file_path
+                FROM speakers s
+                JOIN audio_transcriptions at ON s.id = at.speaker_id
+                JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+                AND (s.hallucination IS NULL OR s.hallucination = 0)
+                AND at.timestamp IN (
+                    SELECT timestamp
+                    FROM audio_transcriptions at2
+                    WHERE at2.speaker_id = s.id
+                    ORDER BY timestamp DESC
+                    LIMIT 3
+                )
+            ),
+            speaker_embedding AS (
+                SELECT embedding FROM speaker_embeddings WHERE speaker_id = ?1
+            )
+            SELECT 
+                s.id,
+                s.name,
+                CASE 
+                    WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
+                    THEN json_object('audio_paths', json_group_array(DISTINCT rap.file_path))
+                    ELSE json_patch(
+                        json(s.metadata), 
+                        json_object('audio_paths', json_group_array(DISTINCT rap.file_path))
+                    )
+                END as metadata
+            FROM speaker_embeddings se
+            JOIN speakers s ON se.speaker_id = s.id
+            JOIN RecentAudioPaths rap ON s.id = rap.speaker_id
+            WHERE vec_distance_cosine(se.embedding, (SELECT embedding FROM speaker_embedding)) < ?2
+            AND se.speaker_id != ?1
+            GROUP BY s.id
+            ORDER BY vec_distance_cosine(se.embedding, (SELECT embedding FROM speaker_embedding))
+            LIMIT ?3"#,
+        )
+        .bind(speaker_id)
+        .bind(threshold)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+    }
+
     pub async fn mark_speaker_as_hallucination(&self, id: i64) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE speakers SET hallucination = TRUE WHERE id = ?")
             .bind(id)

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "./ui/use-toast";
-import { X, Fingerprint } from "lucide-react";
+import { X, Fingerprint, Check } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -49,12 +49,23 @@ export default function IdentifySpeakers({
   const [selectedExistingSpeaker, setSelectedExistingSpeaker] =
     useState<Speaker | null>(null);
   const [segmentSpeakerIds, setSegmentSpeakerIds] = useState<number[]>([]);
+  const [similarSpeakers, setSimilarSpeakers] = useState<Speaker[]>([]);
+  const [isFetchingSimilarSpeakers, setIsFetchingSimilarSpeakers] =
+    useState(false);
+  const [speakerIdentified, setSpeakerIdentified] = useState(false);
+  const [similarSpeakerIndex, setSimilarSpeakerIndex] = useState(0);
 
   useEffect(() => {
     if (speakerSearchTerm) {
       fetchSpeakers(speakerSearchTerm);
     }
   }, [speakerSearchTerm]);
+
+  useEffect(() => {
+    if (unnamedSpeakers.length > 0) {
+      fetchSimilarSpeakers(unnamedSpeakers[currentSpeakerIndex].id);
+    }
+  }, [unnamedSpeakers, currentSpeakerIndex]);
 
   useEffect(() => {
     if (posthog) {
@@ -83,6 +94,12 @@ export default function IdentifySpeakers({
         userId: settings.userId,
         source: segments ? "meeting_history" : "menu",
       });
+      setSpeakerIdentified(false);
+      setSelectedExistingSpeaker(null);
+      setSpeakerSearchTerm("");
+      setSpeakers([]);
+      setSimilarSpeakers([]);
+      setCurrentSpeakerIndex(0);
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [isOpen, settings.userId, posthog]);
@@ -127,6 +144,36 @@ export default function IdentifySpeakers({
       setError("failed to fetch speakers");
     } finally {
       setIsSearching(false);
+    }
+  }
+
+  async function fetchSimilarSpeakers(speakerId: number) {
+    setIsFetchingSimilarSpeakers(true);
+
+    console.log("fetching similar speakers for", speakerId);
+    try {
+      const response = await fetch(
+        `http://localhost:3030/speakers/similar?speaker_id=${speakerId}&limit=5`
+      );
+      if (!response.ok) {
+        throw new Error("failed to fetch similar speakers");
+      }
+      const result = await response.json();
+
+      const updatedUnnamedSpeakers = result.map((speaker: UnnamedSpeaker) => ({
+        ...speaker,
+        metadata: speaker.metadata ? JSON.parse(speaker.metadata) : undefined,
+      }));
+      const camelCaseResult = updatedUnnamedSpeakers.map(
+        keysToCamelCase<Speaker>
+      );
+
+      setSimilarSpeakers(camelCaseResult);
+    } catch (error) {
+      console.error("error fetching similar speakers:", error);
+      setError("failed to fetch similar speakers");
+    } finally {
+      setIsFetchingSimilarSpeakers(false);
     }
   }
 
@@ -181,6 +228,9 @@ export default function IdentifySpeakers({
         variant: "destructive",
       });
     } finally {
+      setSpeakerSearchTerm("");
+      setSpeakerIdentified(false);
+      setSelectedExistingSpeaker(null);
     }
   };
 
@@ -197,8 +247,7 @@ export default function IdentifySpeakers({
           "Content-Type": "application/json",
         },
       });
-      setSpeakerSearchTerm("");
-      handleRefresh();
+      setSpeakerIdentified(true);
     } catch (error) {
       console.error("Error updating speaker name:", error);
       toast({
@@ -229,8 +278,16 @@ export default function IdentifySpeakers({
           description: "The speakers have been successfully merged",
         });
 
-        // Refresh the unnamed speakers list
-        await handleRefresh();
+        if (selectedExistingSpeaker.name) {
+          setSpeakerIdentified(true);
+          setSpeakerSearchTerm(selectedExistingSpeaker.name);
+        }
+
+        setSimilarSpeakers(
+          similarSpeakers.filter(
+            (s) => s.id !== unnamedSpeakers[currentSpeakerIndex].id
+          )
+        );
       } catch (error) {
         console.error("Error merging speakers:", error);
         toast({
@@ -240,7 +297,6 @@ export default function IdentifySpeakers({
         });
       }
     }
-    setSpeakerSearchTerm("");
     setShowMergeConfirm(false);
   };
 
@@ -265,9 +321,6 @@ export default function IdentifySpeakers({
         variant: "destructive",
       });
     }
-
-    setSpeakerSearchTerm("");
-    handleRefresh();
   };
 
   return (
@@ -297,12 +350,13 @@ export default function IdentifySpeakers({
           this page helps you identify and manage speakers detected in your
           audio clips. you can listen to up to 3 clips of each speaker, assign
           them names, or mark them as hallucinations if they were incorrectly
-          detected. this helps improve the accuracy of speaker identification in
-          your recordings.
+          detected. you can also tell us if another speaker is the same by
+          listening to the other recordings. this helps improve the accuracy of
+          speaker identification in your recordings.
         </DialogDescription>
-        <div className="flex-grow overflow-auto">
+        <div className="flex-grow overflow-auto min-h-[600px] flex flex-col">
           {loading ? (
-            <div className="space-y-6">
+            <div className="space-y-6 min-h-[600px]">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="p-4 border rounded animate-pulse">
                   <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
@@ -314,7 +368,7 @@ export default function IdentifySpeakers({
               ))}
             </div>
           ) : (
-            <>
+            <div className="min-h-[600px] flex flex-col">
               {showError && error && (
                 <div
                   className="bg-gray-100 border-l-4 border-black text-gray-700 p-4 mb-4 flex justify-between items-center"
@@ -337,9 +391,9 @@ export default function IdentifySpeakers({
               )}
 
               {unnamedSpeakers.length > 0 && (
-                <div className="flex items-center justify-between">
+                <div className="flex-1 flex items-start justify-between">
                   <div className="flex-1 mx-4">
-                    <div className="p-4 border rounded">
+                    <div className="p-4 border rounded h-full">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-2">
                           <span className="font-medium">
@@ -431,15 +485,106 @@ export default function IdentifySpeakers({
                           ].metadata?.audioPaths
                             .slice(0, 3)
                             .map((path, index) => (
-                              <VideoComponent key={index} filePath={path} />
+                              <VideoComponent
+                                key={index}
+                                filePath={path}
+                                customDescription={`${index + 1} of ${
+                                  unnamedSpeakers[currentSpeakerIndex].metadata
+                                    ?.audioPaths.length
+                                }`}
+                              />
                             ))}
                         </div>
+                      </div>
+                      {speakerIdentified && (
+                        <div className="mt-4 flex justify-end">
+                          <Button
+                            onClick={() => {
+                              handleRefresh();
+                            }}
+                          >
+                            Next Speaker
+                          </Button>
+                        </div>
+                      )}
+                      <div className="mt-8">
+                        <p className="text-sm text-gray-500 mb-4">
+                          Is this the same speaker?
+                        </p>
+                        {isFetchingSimilarSpeakers ? (
+                          <div className="flex justify-center items-center p-4">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                          </div>
+                        ) : (
+                          <div>
+                            {similarSpeakers.map((speaker, index) => {
+                              if (similarSpeakerIndex !== index) {
+                                return null;
+                              }
+                              return (
+                                <div
+                                  className="flex space-x-2 items-center"
+                                  key={speaker.id}
+                                >
+                                  <span>{speaker.name || ""}</span>
+                                  {speaker.metadata?.audioPaths.map((path) => (
+                                    <VideoComponent
+                                      key={path}
+                                      filePath={path}
+                                      customDescription={` `}
+                                      className="max-w-[300px]"
+                                    />
+                                  ))}
+                                  <Button
+                                    size="default"
+                                    variant="default"
+                                    onClick={() => {
+                                      setSelectedExistingSpeaker(speaker);
+                                      setShowMergeConfirm(true);
+                                    }}
+                                  >
+                                    Yes
+                                  </Button>
+                                  <Button
+                                    size="default"
+                                    variant="destructive"
+                                    onClick={() => {
+                                      setSimilarSpeakers(
+                                        similarSpeakers.filter(
+                                          (s) => s.id !== speaker.id
+                                        )
+                                      );
+                                    }}
+                                  >
+                                    No
+                                  </Button>
+                                  <Button
+                                    size="default"
+                                    className={
+                                      similarSpeakers.length === 1
+                                        ? "hidden"
+                                        : ""
+                                    }
+                                    variant="secondary"
+                                    onClick={() => {
+                                      setSimilarSpeakerIndex(
+                                        (index + 1) % similarSpeakers.length
+                                      );
+                                    }}
+                                  >
+                                    Skip
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </DialogContent>
