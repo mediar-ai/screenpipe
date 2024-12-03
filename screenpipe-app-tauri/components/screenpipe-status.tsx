@@ -50,20 +50,41 @@ import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const HealthStatus = ({ className }: { className?: string }) => {
-  const { health } = useHealthCheck();
+  const {
+    health,
+    isServerDown,
+    isLoading: healthCheckLoading,
+    debouncedFetchHealth,
+  } = useHealthCheck();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMac, setIsMac] = useState(false);
-  const { settings } = useSettings();
+  const { settings, getDataDir } = useSettings();
+  const [localDataDir, setLocalDataDir] = useState("");
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isFixingSetup, setIsFixingSetup] = useState(false);
   const [isTroubleshootOpen, setIsTroubleshootOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [isDialogLoading, setIsDialogLoading] = useState(false);
 
   useEffect(() => {
     setIsMac(platform() === "macos");
   }, []);
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      debouncedFetchHealth();
+    };
+
+    window.addEventListener("settings-updated", handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener("settings-updated", handleSettingsUpdate);
+    };
+  }, [debouncedFetchHealth]);
 
   const openScreenPermissions = async () => {
     const toastId = toast({
@@ -88,13 +109,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
   const handleOpenDataDir = async () => {
     try {
-      const homeDirPath = await homeDir();
-
-      const dataDir =
-        platform() === "macos" || platform() === "linux"
-          ? `${homeDirPath}/.screenpipe`
-          : `${homeDirPath}\\.screenpipe`;
-      await open(dataDir as string);
+      const dataDir = await getDataDir();
+      await open(dataDir);
     } catch (error) {
       console.error("failed to open data directory:", error);
       toast({
@@ -116,8 +132,10 @@ const HealthStatus = ({ className }: { className?: string }) => {
   ) => {
     if (status === "loading") return "bg-yellow-500";
     const isVisionOk = frameStatus === "ok" || frameStatus === "disabled";
-    const isAudioOk = audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
-    const isUiOk = uiStatus === "ok" || uiStatus === "disabled" || !uiMonitoringEnabled;
+    const isAudioOk =
+      audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
+    const isUiOk =
+      uiStatus === "ok" || uiStatus === "disabled" || !uiMonitoringEnabled;
     return isVisionOk && isAudioOk && isUiOk ? "bg-green-500" : "bg-red-500";
   };
 
@@ -383,14 +401,42 @@ const HealthStatus = ({ className }: { className?: string }) => {
     settings.enableUiMonitoring
   );
 
+  const handleOpenStatusDialog = async () => {
+    if (isDialogLoading) return; // Prevent multiple clicks while loading
+
+    try {
+      setIsDialogLoading(true);
+      const dir = await getDataDir();
+      setLocalDataDir(dir);
+      setIsDialogOpen(true);
+    } catch (error) {
+      console.error("Failed to open status dialog:", error);
+      toast({
+        title: "Error",
+        description: "Failed to open status dialog. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      setIsDialogLoading(false);
+    }
+  };
+
   return (
     <>
       <Badge
         variant="outline"
-        className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
-        onClick={() => setIsDialogOpen(true)}
+        className={cn(
+          "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
+          isDialogLoading && "opacity-50 pointer-events-none"
+        )}
+        onClick={handleOpenStatusDialog}
       >
-        <Activity className="mr-2 h-4 w-4" />
+        {isDialogLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Activity className="mr-2 h-4 w-4" />
+        )}
         status{" "}
         <span
           className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
@@ -428,33 +474,65 @@ const HealthStatus = ({ className }: { className?: string }) => {
             <div className="space-y-2 text-xs mb-4">
               {/* Screen Recording Status */}
               <div className="flex items-center">
-                <div className={`w-2 h-2 rounded-full ${health.frame_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    health.frame_status === "ok" ? "bg-green-500" : "bg-red-500"
+                  } mr-2`}
+                />
                 <span>screen recording</span>
-                <span className="text-muted-foreground ml-2">status: {health.frame_status},</span>
-                <span className="text-muted-foreground ml-2">last update: {formatTimestamp(health.last_frame_timestamp)}</span>
+                <span className="text-muted-foreground ml-2">
+                  status: {health.frame_status},
+                </span>
+                <span className="text-muted-foreground ml-2">
+                  last update: {formatTimestamp(health.last_frame_timestamp)}
+                </span>
               </div>
 
               {/* Audio Recording Status */}
               <div className="flex items-center">
-                <div className={`w-2 h-2 rounded-full ${settings.disableAudio ? "bg-gray-400" : health.audio_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    settings.disableAudio
+                      ? "bg-gray-400"
+                      : health.audio_status === "ok"
+                      ? "bg-green-500"
+                      : "bg-red-500"
+                  } mr-2`}
+                />
                 <span>audio recording</span>
-                <span className="text-muted-foreground ml-2">status: {settings.disableAudio ? "turned off" : health.audio_status},</span>
-                <span className="text-muted-foreground ml-2">last update: {settings.disableAudio ? "n/a" : formatTimestamp(health.last_audio_timestamp)}</span>
+                <span className="text-muted-foreground ml-2">
+                  status:{" "}
+                  {settings.disableAudio ? "turned off" : health.audio_status},
+                </span>
+                <span className="text-muted-foreground ml-2">
+                  last update:{" "}
+                  {settings.disableAudio
+                    ? "n/a"
+                    : formatTimestamp(health.last_audio_timestamp)}
+                </span>
               </div>
 
               {/* UI Monitoring Status - Only show if enabled */}
               {settings.enableUiMonitoring && (
                 <div className="flex items-center">
-                  <div className={`w-2 h-2 rounded-full ${health.ui_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      health.ui_status === "ok" ? "bg-green-500" : "bg-red-500"
+                    } mr-2`}
+                  />
                   <span>ui monitoring</span>
-                  <span className="text-muted-foreground ml-2">status: {health.ui_status},</span>
-                  <span className="text-muted-foreground ml-2">last update: {formatTimestamp(health.last_ui_timestamp)}</span>
+                  <span className="text-muted-foreground ml-2">
+                    status: {health.ui_status},
+                  </span>
+                  <span className="text-muted-foreground ml-2">
+                    last update: {formatTimestamp(health.last_ui_timestamp)}
+                  </span>
                 </div>
               )}
             </div>
 
             <Separator className="my-12" />
-            <DevModeSettings />
+            <DevModeSettings localDataDir={localDataDir} />
 
             <Collapsible
               open={isLogOpen}

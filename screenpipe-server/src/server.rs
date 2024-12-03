@@ -1,7 +1,7 @@
 use axum::{
     extract::{Json, Path, Query, State},
     http::StatusCode,
-    response::{sse::Event, Json as JsonResponse, Sse},
+    response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
     routing::{get, post},
     serve, Router,
 };
@@ -14,7 +14,7 @@ use image::ImageFormat::{self};
 
 use crate::{
     db::TagContentType,
-    pipe_manager::{PipeInfo, PipeManager},
+    pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
@@ -37,7 +37,10 @@ use std::{
     convert::Infallible,
     net::SocketAddr,
     path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -48,6 +51,8 @@ use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 // At the top of the file, add:
 #[cfg(feature = "experimental")]
 use enigo::{Enigo, Key, Settings};
+
+use screenpipe_audio::LAST_AUDIO_CAPTURE;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
@@ -255,12 +260,7 @@ pub(crate) async fn search(
 
     let query_str = query.q.as_deref().unwrap_or("");
 
-    // If app_name or window_name is specified, force content_type to OCR
-    let content_type = if query.app_name.is_some() || query.window_name.is_some() {
-        ContentType::OCR
-    } else {
-        query.content_type.clone()
-    };
+    let content_type = query.content_type.clone();
 
     let (results, total) = try_join(
         state.db.search(
@@ -505,7 +505,15 @@ pub(crate) async fn remove_tags(
 }
 
 pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<HealthCheckResponse> {
-    let (last_frame, last_audio, last_ui) = match state.db.get_latest_timestamps().await {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
+    let audio_active = now - last_capture < 5; // Consider active if captured in last 5 seconds
+
+    let (last_frame, _, last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
         Err(e) => {
             error!("failed to get latest timestamps: {}", e);
@@ -514,8 +522,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     };
 
     let now = Utc::now();
-    let threshold = Duration::from_secs(60);
-    let app_start_threshold = Duration::from_secs(120); // 2 minutes - ideally should be audio duration chunk
+    let threshold = Duration::from_secs(3600); // 1 hour
 
     let frame_status = if state.vision_disabled {
         "disabled"
@@ -534,12 +541,16 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     let audio_status = if state.audio_disabled {
         "disabled"
-    } else if now.signed_duration_since(state.app_start_time)
-        < chrono::Duration::from_std(app_start_threshold).unwrap()
-    {
-        "ok" // Consider audio healthy if app started recently
+    } else if audio_active {
+        "ok"
     } else {
-        match last_audio {
+        "stale"
+    };
+
+    let ui_status = if !state.ui_monitoring_enabled {
+        "disabled"
+    } else {
+        match last_ui {
             Some(timestamp)
                 if now.signed_duration_since(timestamp)
                     < chrono::Duration::from_std(threshold).unwrap() =>
@@ -551,17 +562,8 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         }
     };
 
-    let ui_status = if !state.ui_monitoring_enabled {
-        "disabled"
-    } else {
-        match last_ui {
-            Some(timestamp) if now.signed_duration_since(timestamp) < chrono::Duration::from_std(threshold).unwrap() => "ok",
-            Some(_) => "stale",
-            None => "no data"
-        }
-    };
-
-    let (overall_status, message, verbose_instructions) = if (frame_status == "ok" || frame_status == "disabled") 
+    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
+        || frame_status == "disabled")
         && (audio_status == "ok" || audio_status == "disabled")
         && (ui_status == "ok" || ui_status == "disabled")
     {
@@ -584,7 +586,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
         (
             "unhealthy",
-            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}", 
+            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
                     unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
             Some("if you're experiencing issues, please try the following steps:\n\
                   1. restart the application.\n\
@@ -597,7 +599,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
         last_frame_timestamp: last_frame,
-        last_audio_timestamp: last_audio,
+        last_audio_timestamp: None,
         last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status: audio_status.to_string(),
@@ -632,14 +634,20 @@ async fn download_pipe_handler(
     debug!("Downloading pipe: {}", payload.url);
     match state.pipe_manager.download_pipe(&payload.url).await {
         Ok(pipe_dir) => Ok(JsonResponse(json!({
-            "message": format!("Pipe {} downloaded successfully", pipe_dir),
-            "pipe_id": pipe_dir
+            "data": {
+                "pipe_id": pipe_dir,
+                "message": "pipe downloaded successfully"
+            },
+            "success": true
         }))),
         Err(e) => {
             error!("Failed to download pipe: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": e.to_string()})),
+                JsonResponse(json!({
+                    "error": format!("failed to download pipe: {}", e),
+                    "success": false
+                })),
             ))
         }
     }
@@ -649,7 +657,7 @@ async fn run_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RunPipeRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
-    debug!("Starting pipe: {}", payload.pipe_id);
+    debug!("starting pipe: {}", payload.pipe_id);
 
     match state
         .pipe_manager
@@ -662,12 +670,18 @@ async fn run_pipe_handler(
         .await
     {
         Ok(_) => Ok(JsonResponse(json!({
-            "message": format!("Pipe {} started", payload.pipe_id),
-            "pipe_id": payload.pipe_id
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe started"
+            },
+            "success": true
         }))),
         Err(e) => Err((
             StatusCode::BAD_REQUEST,
-            JsonResponse(json!({"error": e.to_string()})),
+            JsonResponse(json!({
+                "error": format!("failed to start pipe: {}", e),
+                "success": false
+            })),
         )),
     }
 }
@@ -688,12 +702,18 @@ async fn stop_pipe_handler(
         .await
     {
         Ok(_) => Ok(JsonResponse(json!({
-            "message": format!("Pipe {} stopped", payload.pipe_id),
-            "pipe_id": payload.pipe_id
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe stopped"
+            },
+            "success": true
         }))),
         Err(e) => Err((
             StatusCode::BAD_REQUEST,
-            JsonResponse(json!({"error": e.to_string()})),
+            JsonResponse(json!({
+                "error": format!("failed to stop pipe: {}", e),
+                "success": false
+            })),
         )),
     }
 }
@@ -709,12 +729,18 @@ async fn update_pipe_config_handler(
         .await
     {
         Ok(_) => Ok(JsonResponse(json!({
-            "message": format!("Pipe {} config updated", payload.pipe_id),
-            "pipe_id": payload.pipe_id
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe config updated"
+            },
+            "success": true
         }))),
         Err(e) => Err((
             StatusCode::BAD_REQUEST,
-            JsonResponse(json!({"error": e.to_string()})),
+            JsonResponse(json!({
+                "error": format!("failed to update pipe config: {}", e),
+                "success": false
+            })),
         )),
     }
 }
@@ -722,20 +748,30 @@ async fn update_pipe_config_handler(
 async fn get_pipe_info_handler(
     State(state): State<Arc<AppState>>,
     Path(pipe_id): Path<String>,
-) -> Result<JsonResponse<PipeInfo>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Getting pipe info for: {}", pipe_id);
     match state.pipe_manager.get_pipe_info(&pipe_id).await {
-        Some(info) => Ok(JsonResponse(info)),
+        Some(info) => Ok(JsonResponse(json!({
+            "data": info,
+            "success": true
+        }))),
         None => Err((
             StatusCode::NOT_FOUND,
-            JsonResponse(json!({"error": "Pipe not found"})),
+            JsonResponse(json!({
+                "error": "pipe not found",
+                "success": false
+            })),
         )),
     }
 }
 
-async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Vec<PipeInfo>> {
+async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Value> {
     debug!("Listing pipes");
-    JsonResponse(state.pipe_manager.list_pipes().await)
+    let pipes = state.pipe_manager.list_pipes().await;
+    JsonResponse(json!({
+        "data": pipes,
+        "success": true
+    }))
 }
 
 pub struct Server {
@@ -1012,6 +1048,7 @@ async fn add_transcription_to_db(
         -1,
         &transcription.transcription_engine,
         &device,
+        None,
     )
     .await?;
 
@@ -1310,6 +1347,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
+        .route("/pipes/delete", post(delete_pipe_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
         .route("/raw_sql", post(execute_raw_sql))
@@ -1336,7 +1374,7 @@ async fn stream_frames_handler(
         let cache = match state.frame_cache.as_ref() {
             Some(cache) => cache.clone(),
             None => {
-                error!("frame cache not initialized");
+                // error!("frame cache not initialized");
                 yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
                 return;
             }
@@ -1404,6 +1442,35 @@ async fn stream_frames_handler(
     )
 }
 
+// Add this new handler function
+pub async fn delete_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<DeletePipeRequest>,
+) -> impl IntoResponse {
+    match state.pipe_manager.delete_pipe(&request.pipe_id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": "pipe deleted successfully"
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("failed to delete pipe: {}", e)
+            })),
+        ),
+    }
+}
+
+// Add this struct for the request payload
+#[derive(Debug, Deserialize)]
+pub struct DeletePipeRequest {
+    pipe_id: String,
+}
+
 /*
 
 Curl commands for reference:
@@ -1442,20 +1509,19 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_fra
 # 30 min to 25 min ago
 curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
-
 curl "http://localhost:3030/search?limit=1&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
 
 # Search for content from the last 30 minutes
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for content up to 1 hour ago
 curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for content between 2 hours ago and 1 hour ago
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for OCR content from yesterday
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for audio content with a keyword from the beginning of the current month
 curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
@@ -1463,7 +1529,7 @@ curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&
 curl "http://localhost:3030/search?app_name=cursor"
 curl "http://localhost:3030/search?content_type=audio&min_length=20"
 
-curl 'http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z' | jq .
+curl "http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq .
 
 
 curl "http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq

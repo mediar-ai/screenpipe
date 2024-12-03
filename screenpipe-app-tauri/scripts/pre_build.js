@@ -41,13 +41,12 @@ const config = {
 			'libavfilter-dev',
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
-			'libxdo-dev',
-			'intel-openmp'
+			'libxdo-dev'
 		],
 	},
 	macos: {
-		ffmpegName: 'ffmpeg-7.1',
-		ffmpegUrl: 'https://evermeet.cx/ffmpeg/ffmpeg-7.1.7z',
+		ffmpegName: 'ffmpeg-7.0-macOS-default',
+		ffmpegUrl: 'https://master.dl.sourceforge.net/project/avbuild/macOS/ffmpeg-7.0-macOS-default.tar.xz?viasf=1',
 	},
 }
 
@@ -79,42 +78,6 @@ const exports = {
 	ffmpeg: path.join(cwd, config.ffmpegRealname),
 	libClang: 'C:\\Program Files\\LLVM\\bin',
 	cmake: 'C:\\Program Files\\CMake\\bin',
-}
-
-// Add this function to check if Bun is installed
-async function isBunInstalled() {
-	try {
-		await $`bun --version`.quiet();
-		return true;
-	} catch (error) {
-		return false;
-	}
-}
-
-// Add this function to install Bun
-async function installBun() {
-	if (await isBunInstalled()) {
-		console.log('bun is already installed.');
-		return;
-	}
-
-	console.log('installing bun...');
-
-	if (platform === 'windows') {
-		console.log('attempting to install bun using npm...');
-		try {
-			await $`npm install -g bun`;
-			console.log('bun installed successfully using npm.');
-		} catch (error) {
-			console.error('failed to install bun:', error);
-			console.error('please install bun manually.');
-		}
-	} else {
-		// for macos and linux
-		await $`curl -fsSL https://bun.sh/install | bash`;
-	}
-
-	console.log('bun installation attempt completed.');
 }
 
 // Add this function to copy the Bun binary
@@ -315,28 +278,6 @@ if (platform == 'windows') {
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 	}
 
-	// Setup ONNX Runtime
-	const onnxRuntimeName = "onnxruntime-win-x64-gpu-1.19.2";
-	const onnxRuntimeLibs = `${onnxRuntimeName}.zip`;
-	const onnxRuntimeUrl = `https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/${onnxRuntimeLibs}`
-	if (!(await fs.exists(onnxRuntimeName))) {
-		console.log('Setting up ONNX Runtime libraries for Windows...')
-		try {
-			await $`${wgetPath} --no-config -nc --no-check-certificate --show-progress ${onnxRuntimeUrl} -O ${onnxRuntimeLibs}`
-			await $`unzip ${onnxRuntimeLibs} || tar -xf ${onnxRuntimeLibs} || echo "Done extracting"`;
-			await $`rm -rf ${onnxRuntimeLibs} || rm ${onnxRuntimeLibs} -Recurse -Force || echo "Done cleaning up zip"`;
-			console.log('ONNX Runtime libraries for Windows set up successfully.')
-		} catch (error) {
-			console.error('Error downloading or extracting ONNX Runtime:', error);
-			console.log('Attempting alternative download method...');
-			// Add alternative download method here
-		}
-	} else {
-		console.log('ONNX Runtime libraries for Windows already exists.')
-	}
-
-
-
 	// Setup vcpkg packages with environment variables set inline
 	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
@@ -367,21 +308,17 @@ async function getMostRecentBinaryPath(targetArch, paths) {
 }
 /* ########## macOS ########## */
 if (platform == 'macos') {
-
 	const architectures = ['arm64', 'x86_64'];
-
 	for (const arch of architectures) {
 		if (process.env['SKIP_SCREENPIPE_SETUP']) {
 			break;
 		}
 		console.log(`Setting up screenpipe bin for ${arch}...`);
-
 		if (arch === 'arm64') {
 			const paths = [
 				"../../target/aarch64-apple-darwin/release/screenpipe",
 				"../../target/release/screenpipe"
 			];
-
 			const mostRecentPath = await getMostRecentBinaryPath('arm64', paths);
 			if (mostRecentPath) {
 				await $`cp ${mostRecentPath} screenpipe-aarch64-apple-darwin`;
@@ -389,7 +326,6 @@ if (platform == 'macos') {
 			} else {
 				console.error("No suitable arm64 screenpipe binary found");
 			}
-
 			try {
 				// if the binary exists, hard code the fucking dylib
 				if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
@@ -405,24 +341,19 @@ if (platform == 'macos') {
 			} catch (error) {
 				console.error('Error updating dylib paths:', error);
 			}
-
-
 		} else if (arch === 'x86_64') {
 			// copy screenpipe binary (more recent one)
 			const paths = [
 				"../../target/x86_64-apple-darwin/release/screenpipe",
 				"../../target/release/screenpipe"
 			];
-
 			const mostRecentPath = await getMostRecentBinaryPath('x86_64', paths);
-
 			if (mostRecentPath) {
 				await $`cp ${mostRecentPath} screenpipe-x86_64-apple-darwin`;
 				console.log(`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`);
 			} else {
 				console.error("No suitable x86_64 screenpipe binary found");
 			}
-
 			try {
 				// hard code the dylib
 				if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
@@ -433,34 +364,55 @@ if (platform == 'macos') {
 			} catch (error) {
 				console.error('Error updating dylib paths:', error);
 			}
-
 		}
-
 		console.log(`screenpipe for ${arch} set up successfully.`);
 	}
 
-
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.7z`
-		await $`7z e ${config.macos.ffmpegName}.7z -o ./${config.macos.ffmpegName}`
+		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
+		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-		await $`rm ${config.macos.ffmpegName}.7z`
+		await $`rm ${config.macos.ffmpegName}.tar.xz`
 	} else {
 		console.log('FFMPEG already exists');
 	}
 
-	// Move and rename ffmpeg and ffprobe binaries
-	const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
+	// // Move and rename ffmpeg and ffprobe binaries
+	// const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
 
-	// For x86_64
-	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
+	// // For x86_64
+	// await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
 
-	// For arm64
-	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
+	// // For arm64
+	// await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
 
 	console.log('Moved and renamed ffmpeg binary for externalBin');
 
+	// Setup Swift UI monitoring
+	console.log('Setting up Swift UI monitoring...');
+	try {
+		const swiftSrc = path.join(cwd, '../../screenpipe-vision/src/ui_monitoring_macos.swift');
+		const architectures = ['arm64', 'x86_64'];
+
+		for (const arch of architectures) {
+			console.log(`Compiling Swift UI monitor for ${arch}...`);
+
+			const binaryName = `ui_monitor-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
+			const outputPath = path.join(cwd, binaryName);
+
+			// Compile directly to the final destination
+			await $`swiftc -O -whole-module-optimization -enforce-exclusivity=unchecked -num-threads 8 -target ${arch}-apple-macos11.0 -o ${outputPath} ${swiftSrc} -framework Cocoa -framework ApplicationServices -framework Foundation`;
+
+			console.log(`Swift UI monitor for ${arch} compiled successfully`);
+			await fs.chmod(outputPath, 0o755);
+		}
+	} catch (error) {
+		console.error('Error setting up Swift UI monitoring:', error);
+		console.log('Current working directory:', cwd);
+		console.log('Expected Swift source path:', path.join(cwd, '../../screenpipe-vision/src/ui_monitoring_macos.swift'));
+		throw error; // Rethrow to fail the build if Swift compilation fails
+	}
 }
 
 
@@ -524,6 +476,7 @@ async function installOllamaSidecar() {
 	}
 
 
+
 	if ((platform === 'macos' && await fs.exists(path.join(ollamaDir, "ollama-aarch64-apple-darwin"))
 		&& await fs.exists(path.join(ollamaDir, "ollama-x86_64-apple-darwin"))) ||
 		(platform !== 'macos' && await fs.exists(path.join(ollamaDir, ollamaExe)))) {
@@ -571,6 +524,8 @@ async function installOllamaSidecar() {
 		console.log('Downloading Ollama...');
 		if (platform === 'windows') {
 			await $`powershell -command "Invoke-WebRequest -Uri '${ollamaUrl}' -OutFile '${downloadPath}'"`;
+		} else if (platform === 'linux') {
+			await $`wget --no-config -q ${ollamaUrl} -O ${downloadPath}`;
 		} else {
 			await $`wget --no-config -q --show-progress ${ollamaUrl} -O ${downloadPath}`;
 		}
@@ -638,7 +593,6 @@ async function installOllamaSidecar() {
 }
 
 // Near the end of the script, call these functions
-await installBun();
 await copyBunBinary();
 await installOllamaSidecar().catch(console.error);
 

@@ -11,7 +11,8 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">rewind.ai x cursor.com = your AI assistant that has all the context.</p>
+   <p align="center">one API to get all user desktop data  (local, cross platform, 24/7, screen, voice, keyboard, mouse, camera recording)</p>
+   <p align="center">sandboxed js plugin system. keyboard and mouse control</p>
 </p>
 
 <!-- Slogan -->
@@ -46,26 +47,16 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 </p>
 
 <p align="center">
-  <a href ="https://cal.com/louis030195/screenpipe">
-    <img alt="Let's chat" src="https://cal.com/book-with-cal-dark.svg" />
-  </a>
-    
+   
 
 
-<p align="center">
-   <a href ="https://screenpi.pe">
-         <img alt="demo" src="https://github.com/user-attachments/assets/bde07ed9-fb56-4f3c-86df-a58eb2bbc2b6" width="800" />
-   </a>
-</p>
 
 ---
 
 *news* 🔥
+- [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)
 - [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)
-- [2024/10] screenpipe can now be used in China without VPN, and supports Chinese OCR
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
-- [2024/09] 150 users run screenpipe 24/7!
-- [2024/09] released our [documentation](https://docs.screenpi.pe/)
 - [2024/08] anyone can now [create, share, install pipes](https://docs.screenpi.pe/docs/plugins) (plugins) from the app interface based on a github repo/dir
 - [2024/08] we're running bounties! contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
 - [2024/08] we released Apple & Windows Native OCR.
@@ -74,41 +65,35 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 
 ---
 
-# open source 24/7 screen & voice recording for the age of superintelligence
+# how it works?
 
 we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
 
 ![diagram](./content/diagram2.png)
 
+![image](https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91)
+
+
 # why?
 
-in 2025, context won't be an issue anymore.
-
-will you have the data ready?
+every second you are not recording is a missing context for AGI
 
 ## get started
 
-there are multiple ways to install screenpipe:
-- as a CLI for technical users
-- as a [paid desktop app](https://screenpi.pe/onboarding) with 1 year updates, priority support, and priority features
-- as a free forever desktop app (but you need to build it yourself). We're 100% OSS.
-- get the desktop app 1 year license by sending a PR ([example](https://github.com/mediar-ai/screenpipe/issues/120#issuecomment-2275043418)) or [sharing about screenpipe online](https://screenpi.pe/onboarding/free-community)
-- as a Rust or WASM library - check this [websocket](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-vision/examples/websocket.rs) to stream frames + OCR to your app
-- [as a business](https://cal.com/louis030195/screenpipe-for-businesses) 
+- [get the desktop app](https://screenpi.pe/)
+- [get the CLI or build from source](https://docs.screenpi.pe/docs/getting-started)
 
-[**👉 install screenpipe now**](https://docs.screenpi.pe/docs/getting-started)
-
-## usage
+## create plugins
 
 screenpipe has a plugin system called "pipe" which lets you run code in a sandboxed environment within the Rust code, [get started](https://docs.screenpi.pe/docs/plugins)
 
-## examples
+## other examples
 
 [check examples](https://docs.screenpi.pe/docs/examples)
 
 ## star history
 
-![GitHub Star History (10)](https://github.com/user-attachments/assets/5d5c9672-d2d3-4e4c-8734-a7e0c2fee246)
+![Star History Nov 24 2024](https://github.com/user-attachments/assets/c7e4de14-0771-4bbb-9a4c-7f2102a1a6cd)
 
 
 ## contributing

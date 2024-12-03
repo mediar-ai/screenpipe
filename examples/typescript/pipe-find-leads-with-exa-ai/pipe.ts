@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
-import nodemailer from "npm:nodemailer";
+import nodemailer from "nodemailer";
 import { ContentItem, pipe } from "https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-js/main.ts";
 import process from "node:process";
-import Exa from "npm:exa-js";
-import { generateObject, generateText } from "npm:ai";
-import { createOpenAI } from "npm:openai-ai-provider";
-import { z } from "npm:zod";
+import Exa from "exa-js";
+import { generateObject, generateText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { z } from "zod";
 import * as path from "node:path";
 
 const icpSchema = z.object({

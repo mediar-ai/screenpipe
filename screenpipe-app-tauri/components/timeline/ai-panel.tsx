@@ -10,20 +10,7 @@ import { StreamTimeSeriesResponse } from "@/app/timeline/page";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
-
-interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  analyze: (
-    frames: StreamTimeSeriesResponse[],
-    openai: OpenAI,
-    options: {
-      model: string;
-      onProgress: (chunk: string) => void;
-    }
-  ) => Promise<void>;
-}
+import { Agent } from "./agents";
 
 interface AIPanelProps {
   position: { x: number; y: number };
@@ -199,16 +186,21 @@ export function AIPanel({
         { id: generateId(), role: "assistant", content: "" },
       ]);
 
-      await selectedAgent.analyze(relevantFrames, openai, {
-        model: settings.aiModel,
-        onProgress: (chunk) => {
-          currentResponse = chunk;
-          setChatMessages((prev) => [
-            ...prev.slice(0, -1),
-            { id: generateId(), role: "assistant", content: currentResponse },
-          ]);
+      await selectedAgent.analyze(
+        relevantFrames,
+        openai,
+        {
+          model: settings.aiModel,
+          onProgress: (chunk) => {
+            currentResponse = chunk;
+            setChatMessages((prev) => [
+              ...prev.slice(0, -1),
+              { id: generateId(), role: "assistant", content: currentResponse },
+            ]);
+          },
         },
-      });
+        aiInput
+      );
     } catch (error) {
       console.error("Error generating AI response:", error);
       toast({

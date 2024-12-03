@@ -1,8 +1,11 @@
 #[cfg(test)]
 mod tests {
+    use anyhow::anyhow;
     use chrono::Utc;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::stt::stt;
+    use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
+    use screenpipe_audio::pyannote::identify::EmbeddingManager;
+    use screenpipe_audio::stt::{prepare_segments, stt};
     use screenpipe_audio::vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
     use screenpipe_audio::whisper::WhisperModel;
     use screenpipe_audio::{
@@ -15,8 +18,9 @@ mod tests {
     use std::process::Command;
     use std::str::FromStr;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
+    use tokio::sync::Mutex;
 
     fn setup() {
         // Initialize the logger with an info level filter
@@ -296,7 +300,7 @@ mod tests {
             tokio::sync::Mutex::new(Box::new(SileroVad::new().await.unwrap())),
         );
         let output_path = Arc::new(PathBuf::from("test_output"));
-        let audio_data = screenpipe_audio::pcm_decode(&"test_data/Arifi.wav")
+        let audio_data = screenpipe_audio::pcm_decode("test_data/Arifi.wav")
             .expect("Failed to decode audio file");
 
         let audio_input = AudioInput {
@@ -306,21 +310,59 @@ mod tests {
             device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
         };
 
-        let mut vad_engine_guard = vad_engine.lock().await;
-        let mut whisper_model_guard = whisper_model.lock().await;
-        let (transcription_result, _) = stt(
+        let start_time = Instant::now();
+
+        // Create the missing parameters
+        let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let segmentation_model_path = project_dir
+            .join("models")
+            .join("pyannote")
+            .join("segmentation-3.0.onnx");
+        let embedding_model_path = project_dir
+            .join("models")
+            .join("pyannote")
+            .join("wespeaker_en_voxceleb_CAM++.onnx");
+
+        let embedding_extractor = Arc::new(std::sync::Mutex::new(
+            EmbeddingExtractor::new(
+                embedding_model_path
+                    .to_str()
+                    .ok_or_else(|| anyhow!("Invalid embedding model path"))
+                    .unwrap(),
+            )
+            .unwrap(),
+        ));
+        let embedding_manager = EmbeddingManager::new(usize::MAX);
+
+        let mut segments = prepare_segments(
             &audio_input,
-            &mut *whisper_model_guard,
-            Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
-            &mut **vad_engine_guard,
-            None,
-            &output_path,
-            true,
-            vec![],
+            vad_engine.clone(),
+            &segmentation_model_path,
+            embedding_manager,
+            embedding_extractor,
         )
         .await
         .unwrap();
-        drop(vad_engine_guard);
+        let mut whisper_model_guard = whisper_model.lock().await;
+
+        let mut transcription_result = String::new();
+        while let Some(segment) = segments.recv().await {
+            let (transcript, _) = stt(
+                &segment.samples,
+                audio_input.sample_rate,
+                &audio_input.device.to_string(),
+                &mut whisper_model_guard,
+                Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
+                None,
+                &output_path,
+                true,
+                vec![Language::English],
+            )
+            .await
+            .unwrap();
+
+            transcription_result.push_str(&transcript);
+        }
         drop(whisper_model_guard);
 
         debug!("Received transcription: {:?}", transcription_result);
@@ -361,6 +403,28 @@ mod tests {
             device: Arc::new(default_output_device().unwrap()),
         };
 
+        let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let segmentation_model_path = project_dir
+            .join("models")
+            .join("pyannote")
+            .join("segmentation-3.0.onnx");
+        let embedding_model_path = project_dir
+            .join("models")
+            .join("pyannote")
+            .join("wespeaker_en_voxceleb_CAM++.onnx");
+
+        let embedding_extractor = Arc::new(std::sync::Mutex::new(
+            EmbeddingExtractor::new(
+                embedding_model_path
+                    .to_str()
+                    .ok_or_else(|| anyhow!("Invalid embedding model path"))
+                    .unwrap(),
+            )
+            .unwrap(),
+        ));
+
+        let embedding_manager = EmbeddingManager::new(usize::MAX);
+
         // Initialize the WhisperModel
         let mut whisper_model = WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo)
             .expect("Failed to initialize WhisperModel");
@@ -372,17 +436,34 @@ mod tests {
         // Measure transcription time
         let start_time = Instant::now();
 
-        let _ = stt(
+        let mut segments = prepare_segments(
             &audio_input,
-            &mut whisper_model,
-            Arc::new(AudioTranscriptionEngine::WhisperTiny),
-            &mut **vad_engine.lock().unwrap(),
-            None,
-            &output_path,
-            true,
-            vec![Language::Arabic],
+            vad_engine.clone(),
+            &segmentation_model_path,
+            embedding_manager,
+            embedding_extractor,
         )
-        .await;
+        .await
+        .unwrap();
+
+        let mut transcription = String::new();
+        while let Some(segment) = segments.recv().await {
+            let (transcript, _) = stt(
+                &segment.samples,
+                audio_input.sample_rate,
+                &audio_input.device.to_string(),
+                &mut whisper_model,
+                Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
+                None,
+                &output_path,
+                true,
+                vec![Language::English],
+            )
+            .await
+            .unwrap();
+
+            transcription.push_str(&transcript);
+        }
 
         let elapsed_time = start_time.elapsed();
 

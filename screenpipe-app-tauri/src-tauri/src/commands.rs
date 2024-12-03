@@ -1,6 +1,7 @@
 use serde_json::Value;
 use tauri::Manager;
 use tracing::info;
+use crate::get_data_dir;
 
 #[tauri::command]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -43,9 +44,12 @@ pub fn open_mic_preferences() {
 }
 
 #[tauri::command]
-pub async fn load_pipe_config(pipe_name: String) -> Result<Value, String> {
+pub async fn load_pipe_config(app_handle: tauri::AppHandle<tauri::Wry>, pipe_name: String) -> Result<Value, String> {
     info!("Loading pipe config for {}", pipe_name);
-    let default_path = dirs::home_dir().unwrap().join(".screenpipe").join("pipes");
+    let default_path = get_data_dir(&app_handle)
+        .map(|path| path.join("pipes"))
+        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe").join("pipes"));
+
 
     let config_path = default_path.join(pipe_name).join("pipe.json");
     info!("Config path: {}", config_path.to_string_lossy());
@@ -58,9 +62,11 @@ pub async fn load_pipe_config(pipe_name: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn save_pipe_config(pipe_name: String, config: Value) -> Result<(), String> {
+pub async fn save_pipe_config(app_handle: tauri::AppHandle<tauri::Wry>, pipe_name: String, config: Value) -> Result<(), String> {
     info!("Saving pipe config for {}", pipe_name);
-    let default_path = dirs::home_dir().unwrap().join(".screenpipe").join("pipes");
+    let default_path = get_data_dir(&app_handle)
+        .map(|path| path.join("pipes"))
+        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe").join("pipes"));
     let config_path = default_path.join(pipe_name).join("pipe.json");
     info!("Config path: {}", config_path.to_string_lossy());
     let config_content = serde_json::to_string_pretty(&config)
@@ -72,12 +78,11 @@ pub async fn save_pipe_config(pipe_name: String, config: Value) -> Result<(), St
 }
 
 #[tauri::command]
-pub async fn reset_all_pipes() -> Result<(), String> {
+pub async fn reset_all_pipes(app_handle: tauri::AppHandle<tauri::Wry>) -> Result<(), String> {
     info!("Resetting all pipes");
-    let pipes_path = dirs::home_dir()
-        .ok_or_else(|| "Failed to get home directory".to_string())?
-        .join(".screenpipe")
-        .join("pipes");
+    let pipes_path = get_data_dir(&app_handle)
+        .map(|path| path.join("pipes"))
+        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe").join("pipes"));
 
     if pipes_path.exists() {
         tokio::fs::remove_dir_all(&pipes_path)
@@ -152,6 +157,7 @@ const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 pub fn update_show_screenpipe_shortcut(
     app_handle: tauri::AppHandle<tauri::Wry>,
     new_shortcut: String,
+    enabled: bool,
 ) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
@@ -180,6 +186,12 @@ pub fn update_show_screenpipe_shortcut(
             return Err(format!("failed to parse shortcut: {}", e));
         }
     };
+
+    if !enabled {
+        app_handle.global_shortcut().unregister(show_window_shortcut);
+
+        return Ok(());
+    }
 
     // Register the new shortcut
     if let Err(e) = app_handle.global_shortcut().on_shortcut(

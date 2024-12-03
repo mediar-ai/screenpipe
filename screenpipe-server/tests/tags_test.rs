@@ -38,6 +38,7 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         frame_cache: Some(Arc::new(
             FrameCache::new(PathBuf::from(""), db).await.unwrap(),
         )),
+        ui_monitoring_enabled: false,
     });
 
     let app = create_router().with_state(app_state.clone());
@@ -152,6 +153,9 @@ async fn test_add_tags_and_search() {
             ContentItem::FTS(fts) => {
                 assert!(fts.tags.contains(&"test".to_string()));
                 assert!(fts.tags.contains(&"vision".to_string()));
+            }
+            ContentItem::UI(_) => {
+                assert!(false);
             }
         }
     }
@@ -354,6 +358,9 @@ async fn test_search_by_multiple_tags() {
                 assert!(fts.tags.contains(&"work".to_string()));
                 assert!(fts.tags.contains(&"meeting".to_string()));
             }
+            ContentItem::UI(_) => {
+                
+            }
         }
     }
 }
@@ -391,6 +398,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         0,
         "test_engine",
         &AudioDevice::new("test".to_string(), DeviceType::Output),
+        None,
     )
     .await
     .unwrap();

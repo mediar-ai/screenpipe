@@ -1,0 +1,18 @@
+{
+  "name": "pipe-screen-time-storyteller",
+  "module": "pipe.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.0.2",
+    "@ai-sdk/openai": "^1.0.5",
+    "@screenpipe/js": "^0.1.2",
+    "ai": "^4.0.10",
+    "zod": "^3.23.8"
+  }
+}

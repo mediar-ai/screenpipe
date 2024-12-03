@@ -3,14 +3,23 @@ use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
+use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, thread};
 use tokio::sync::{broadcast, oneshot};
+lazy_static! {
+    pub static ref LAST_AUDIO_CAPTURE: AtomicU64 = AtomicU64::new(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    );
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AudioTranscriptionEngine {
@@ -105,12 +114,10 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
     AudioDevice::from_name(name)
 }
 
-async fn get_device_and_config(
+pub async fn get_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = cpal::default_host();
-
-    info!("device: {:?}", audio_device.to_string());
 
     let is_output_device = audio_device.device_type == DeviceType::Output;
     let is_display = audio_device.to_string().contains("Display");
@@ -165,6 +172,40 @@ pub async fn record_and_transcribe(
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
     is_running: Arc<AtomicBool>,
 ) -> Result<()> {
+    while is_running.load(Ordering::Relaxed) {
+        match run_record_and_transcribe(
+            audio_stream.clone(),
+            duration,
+            whisper_sender.clone(),
+            is_running.clone(),
+        )
+        .await
+        {
+            Ok(_) => {
+                // Normal shutdown
+                break;
+            }
+            Err(e) => {
+                if !is_running.load(Ordering::Relaxed) {
+                    // Normal shutdown
+                    break;
+                }
+
+                error!("record_and_transcribe error, restarting: {}", e);
+                // Add a small delay before restarting to prevent rapid restart loops
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn run_record_and_transcribe(
+    audio_stream: Arc<AudioStream>,
+    duration: Duration,
+    whisper_sender: crossbeam::channel::Sender<AudioInput>,
+    is_running: Arc<AtomicBool>,
+) -> Result<()> {
     let mut receiver = audio_stream.subscribe().await;
 
     info!(
@@ -176,36 +217,57 @@ pub async fn record_and_transcribe(
     const OVERLAP_SECONDS: usize = 2;
     let mut collected_audio = Vec::new();
     let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
-    // let channels = audio_stream.device_config.channels() as usize;
-    let overlap_samples = OVERLAP_SECONDS * sample_rate; // audio is mono otherwise * by # of channels
+    let overlap_samples = OVERLAP_SECONDS * sample_rate;
 
-    while is_running.load(Ordering::Relaxed) {
+    while is_running.load(Ordering::Relaxed)
+        && !audio_stream.is_disconnected.load(Ordering::Relaxed)
+    {
         let start_time = tokio::time::Instant::now();
 
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
-                Ok(Ok(chunk)) => collected_audio.extend(chunk),
-                Ok(Err(e)) => error!("error receiving audio data: {}", e),
+                Ok(Ok(chunk)) => {
+                    collected_audio.extend(chunk);
+                    LAST_AUDIO_CAPTURE.store(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        Ordering::Relaxed,
+                    );
+                }
+                Ok(Err(e)) => {
+                    error!("error receiving audio data: {}", e);
+                    return Err(anyhow!("Audio stream error: {}", e));
+                }
                 Err(_) => {} // Timeout, continue loop
             }
         }
 
         if !collected_audio.is_empty() {
             debug!("sending audio segment to audio model");
-            if let Err(e) = whisper_sender.send(AudioInput {
+            match whisper_sender.try_send(AudioInput {
                 data: Arc::new(collected_audio.clone()),
                 device: audio_stream.device.clone(),
                 sample_rate: audio_stream.device_config.sample_rate().0,
                 channels: audio_stream.device_config.channels(),
             }) {
-                error!("failed to send audio to audio model: {}", e);
-            }
-            debug!("sent audio segment to audio model");
-
-            // Reset collected audio to the last two seconds of recorded audio
-            if collected_audio.len() > overlap_samples {
-                collected_audio =
-                    collected_audio.split_off(collected_audio.len() - overlap_samples);
+                Ok(_) => {
+                    debug!("sent audio segment to audio model");
+                    if collected_audio.len() > overlap_samples {
+                        collected_audio =
+                            collected_audio.split_off(collected_audio.len() - overlap_samples);
+                    }
+                }
+                Err(e) => {
+                    if e.is_disconnected() {
+                        error!("whisper channel disconnected, restarting recording process");
+                        return Err(anyhow!("Whisper channel disconnected"));
+                    } else if e.is_full() {
+                        warn!("whisper channel full, dropping audio segment");
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                }
             }
         }
     }
@@ -344,6 +406,7 @@ pub struct AudioStream {
     transmitter: Arc<tokio::sync::broadcast::Sender<Vec<f32>>>,
     stream_control: mpsc::Sender<StreamControl>,
     stream_thread: Option<Arc<tokio::sync::Mutex<Option<thread::JoinHandle<()>>>>>,
+    is_disconnected: Arc<AtomicBool>,
 }
 
 enum StreamControl {
@@ -361,19 +424,38 @@ impl AudioStream {
         let channels = config.channels();
 
         let is_running_weak_2 = Arc::downgrade(&is_running);
+        let is_disconnected = Arc::new(AtomicBool::new(false));
         let device_clone = device.clone();
         let config_clone = config.clone();
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
 
+        let is_disconnected_clone = is_disconnected.clone();
+        let stream_control_tx_clone = stream_control_tx.clone();
         let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn(move || {
             let device = device_clone;
+            let device_name = device.to_string();
             let config = config_clone;
             let error_callback = move |err: StreamError| {
-                error!("an error occurred on the audio stream: {}", err);
-                if err.to_string().contains("device is no longer valid") {
-                    warn!("audio device disconnected. stopping recording.");
-                    if let Some(arc) = is_running_weak_2.upgrade() {
-                        arc.store(false, Ordering::Relaxed);
+                if err
+                    .to_string()
+                    .contains("The requested device is no longer available")
+                {
+                    warn!(
+                        "audio device {} disconnected. stopping recording.",
+                        device_name
+                    );
+                    stream_control_tx_clone
+                        .send(StreamControl::Stop(oneshot::channel().0))
+                        .unwrap();
+
+                    is_disconnected_clone.store(true, Ordering::Relaxed);
+                } else {
+                    error!("an error occurred on the audio stream: {}", err);
+                    if err.to_string().contains("device is no longer valid") {
+                        warn!("audio device disconnected. stopping recording.");
+                        if let Some(arc) = is_running_weak_2.upgrade() {
+                            arc.store(false, Ordering::Relaxed);
+                        }
                     }
                 }
             };
@@ -447,6 +529,7 @@ impl AudioStream {
             transmitter: Arc::new(tx_clone),
             stream_control: stream_control_tx,
             stream_thread: Some(stream_thread),
+            is_disconnected,
         })
     }
 
@@ -455,6 +538,7 @@ impl AudioStream {
     }
 
     pub async fn stop(mut self) -> Result<()> {
+        self.is_disconnected.store(true, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         self.stream_control.send(StreamControl::Stop(tx))?;
         rx.await?;

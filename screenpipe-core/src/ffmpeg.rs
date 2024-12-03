@@ -1,6 +1,12 @@
 use log::{debug, error};
 use std::path::PathBuf;
 use which::which;
+use ffmpeg_sidecar::{
+    command::ffmpeg_is_installed,
+    download::{check_latest_version, download_ffmpeg_package, ffmpeg_download_url, unpack_ffmpeg},
+    paths::sidecar_dir,
+    version::ffmpeg_version,
+};
 use once_cell::sync::Lazy;
 
 #[cfg(not(windows))]
@@ -83,6 +89,54 @@ fn find_ffmpeg_path_internal() -> Option<PathBuf> {
         }
     }
 
-    error!("ffmpeg not found");
+    debug!("ffmpeg not found. installing...");
+
+    if let Err(error) = handle_ffmpeg_installation() {
+        error!("failed to install ffmpeg: {}", error);
+        return None;
+    }
+
+    if let Ok(path) = which(EXECUTABLE_NAME) {
+        debug!("found ffmpeg after installation: {:?}", path);
+        return Some(path);
+    }
+
+    let installation_dir = sidecar_dir().map_err(|e| e.to_string()).unwrap();
+    let ffmpeg_in_installation = installation_dir.join(EXECUTABLE_NAME);
+    if ffmpeg_in_installation.is_file() {
+        debug!("found ffmpeg in directory: {:?}", ffmpeg_in_installation);
+        return Some(ffmpeg_in_installation);
+    }
+
+    error!("ffmpeg not found even after installation");
     None // Return None if ffmpeg is not found
+}
+
+fn handle_ffmpeg_installation() -> Result<(), String> {
+    if ffmpeg_is_installed() {
+        debug!("ffmpeg is already installed");
+        return Ok(());
+    }
+
+    debug!("ffmpeg not found. installing...");
+    match check_latest_version() {
+        Ok(version) => debug!("latest version: {}", version),
+        Err(e) => debug!("skipping version check due to error: {e}"),
+    }
+
+    let download_url = ffmpeg_download_url().map_err(|e| e.to_string())?;
+    let destination = sidecar_dir().map_err(|e| e.to_string())?;
+
+    debug!("downloading from: {:?}", download_url);
+    let archive_path =
+        download_ffmpeg_package(download_url, &destination).map_err(|e| e.to_string())?;
+    debug!("downloaded package: {:?}", archive_path);
+
+    debug!("extracting...");
+    unpack_ffmpeg(&archive_path, &destination).map_err(|e| e.to_string())?;
+
+    let version = ffmpeg_version().map_err(|e| e.to_string())?;
+
+    debug!("done! installed ffmpeg version {}", version);
+    Ok(())
 }

@@ -1395,8 +1395,8 @@ export function SearchChat({
                   value={[limit]}
                   onValueChange={(value: number[]) => setLimit(value[0])}
                   min={10}
-                  max={150}
-                  step={5}
+                  max={15000}
+                  step={10}
                   className="flex-grow"
                 />
                 <TooltipProvider>
@@ -1570,7 +1570,7 @@ export function SearchChat({
               onSubmit={handleFloatingInputSubmit}
               className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
             >
-              <div className="relative flex-grow flex items-center space-x-1">
+              <div className="relative flex-grow flex items-center space-x-2">
                 <Input
                   ref={floatingInputRef}
                   type="text"

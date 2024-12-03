@@ -57,8 +57,9 @@ export default function Home() {
   useEffect(() => {
     registerShortcuts({
       showScreenpipeShortcut: settings.showScreenpipeShortcut,
+      disabledShortcuts: settings.disabledShortcuts,
     });
-  }, [settings.showScreenpipeShortcut]);
+  }, [settings.showScreenpipeShortcut, settings.disabledShortcuts]);
 
   useEffect(() => {
     if (settings.userId) {

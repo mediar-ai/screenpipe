@@ -28,12 +28,19 @@ import remarkMath from "remark-math";
 import { format } from "date-fns";
 import posthog from "posthog-js";
 
+export interface InboxMessageAction {
+  label: string;
+  action: string;
+  port: number;
+}
+
 export interface Message {
   id: string;
   title: string;
   body: string;
   date: string;
   read: boolean;
+  actions?: InboxMessageAction[];
 }
 
 interface InboxMessagesProps {
@@ -55,6 +62,8 @@ export function InboxMessages({
   const [dialogMessage, setDialogMessage] = useState<Message | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const inboxRef = useRef<HTMLDivElement>(null);
+
+  console.log("messages", messages);
 
   const handleMarkAllAsRead = () => {
     messages.forEach((msg) => {
@@ -103,6 +112,22 @@ export function InboxMessages({
     if (dialogMessage) {
       onMessageDelete(dialogMessage.id);
       closeDialog();
+    }
+  };
+
+  const handleAction = async (actionId: string, port: number) => {
+    try {
+      const response = await fetch(`http://localhost:${port}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: actionId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error("failed to send action callback:", error);
     }
   };
 
@@ -232,6 +257,19 @@ export function InboxMessages({
                       )}
                     </CardContent>
                     <CardFooter className="flex justify-end space-x-2 py-2">
+                      {message.actions?.map((action) => (
+                        <Button
+                          key={`${message.id}-${action.action}`}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            handleAction(action.action, action.port);
+                          }}
+                          className="text-xs"
+                        >
+                          {action.label}
+                        </Button>
+                      ))}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -297,6 +335,17 @@ export function InboxMessages({
               </MemoizedReactMarkdown>
             </div>
             <div className="flex justify-end space-x-2 mt-4">
+              {dialogMessage?.actions?.map((action) => (
+                <Button
+                  key={`dialog-${dialogMessage.id}-${action.action}`}
+                  variant="outline"
+                  onClick={() => {
+                    console.log(`Dialog action clicked: ${action.label}`);
+                  }}
+                >
+                  {action.label}
+                </Button>
+              ))}
               <DialogClose asChild>
                 <Button variant="outline" onClick={closeDialog}>
                   close

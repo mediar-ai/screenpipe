@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { createStore } from "@tauri-apps/plugin-store";
-import { localDataDir, join } from "@tauri-apps/api/path";
+import { localDataDir, join, homeDir } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
@@ -20,6 +20,10 @@ export type EmbeddedLLMConfig = {
   model: string;
   port: number;
 };
+
+export enum Shortcut {
+  SHOW_SCREENPIPE = "show_screenpipe",
+}
 
 export interface Settings {
   openaiApiKey: string;
@@ -57,6 +61,7 @@ export interface Settings {
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
+  disabledShortcuts: Shortcut[];
 }
 
 const defaultSettings: Settings = {
@@ -102,9 +107,10 @@ const defaultSettings: Settings = {
   enableBeta: false,
   showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
-  enableFrameCache: false, // Add this line
+  enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
+  disabledShortcuts: [],
 };
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
@@ -185,7 +191,7 @@ export function useSettings() {
         const savedRestartInterval =
           (await store!.get<number>("restartInterval")) || 0;
         const savedPort = (await store!.get<number>("port")) || 3030;
-        const savedDataDir = (await store!.get<string>("dataDir")) || "";
+        const savedDataDir = (await store!.get<string>("dataDir")) || "default";
         let savedDisableAudio = await store!.get<boolean>("disableAudio");
         if (savedDisableAudio === null) {
           savedDisableAudio = false;
@@ -276,7 +282,8 @@ export function useSettings() {
             ? savedIgnoredWindows
             : defaultIgnoredWindows;
 
-        let savedEnableBeta = await store!.get<boolean>("enableBeta");
+        // TODO: temporary
+        let savedEnableBeta = false; // await store!.get<boolean>("enableBeta");
         if (savedEnableBeta === null) {
           savedEnableBeta = false;
         }
@@ -292,9 +299,13 @@ export function useSettings() {
           (await store!.get<AIProviderType>("aiProviderType")) || "openai";
 
         const savedEnableFrameCache =
-          (await store!.get<boolean>("enableFrameCache")) || false;
+          (await store!.get<boolean>("enableFrameCache")) || true;
 
-        const savedEnableUiMonitoring = await store!.get<boolean>("enableUiMonitoring") || false;
+        const savedEnableUiMonitoring =
+          (await store!.get<boolean>("enableUiMonitoring")) || false;
+
+        const savedDisabledShortcuts =
+          (await store!.get<Shortcut[]>("disabledShortcuts")) || [];
 
         setSettings({
           openaiApiKey: savedKey,
@@ -332,6 +343,7 @@ export function useSettings() {
           enableFrameCache: savedEnableFrameCache,
           enableUiMonitoring: savedEnableUiMonitoring,
           platform: currentPlatform,
+          disabledShortcuts: savedDisabledShortcuts,
         });
       } catch (error) {
         console.error("failed to load settings:", error);
@@ -370,7 +382,22 @@ export function useSettings() {
     }
   };
 
-  return { settings, updateSettings, resetSetting };
+  const getDataDir = async () => {
+    const homeDirPath = await homeDir();
+
+    if (
+      settings.dataDir !== "default" &&
+      settings.dataDir &&
+      settings.dataDir !== ""
+    )
+      return settings.dataDir;
+
+    return platform() === "macos" || platform() === "linux"
+      ? `${homeDirPath}/.screenpipe`
+      : `${homeDirPath}\\.screenpipe`;
+  };
+
+  return { settings, updateSettings, resetSetting, getDataDir };
 }
 
 async function initStore() {

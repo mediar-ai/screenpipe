@@ -20,6 +20,7 @@ import {
   Languages,
   Mic,
   Monitor,
+  Folder,
   AppWindowMac,
   X,
 } from "lucide-react";
@@ -67,6 +68,7 @@ import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
+import { open } from '@tauri-apps/plugin-dialog';
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
@@ -91,7 +93,7 @@ export function RecordingSettings({
   localSettings: Settings;
   setLocalSettings: (settings: Settings) => void;
 }) {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, getDataDir } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openMonitors, setOpenMonitors] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
@@ -230,6 +232,7 @@ export function RecordingSettings({
         enableBeta: localSettings.enableBeta,
         enableFrameCache: localSettings.enableFrameCache,
         enableUiMonitoring: localSettings.enableUiMonitoring,
+        dataDir: localSettings.dataDir,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -437,6 +440,33 @@ export function RecordingSettings({
     }
   };
 
+  const handleDataDirChange = async () => {
+    try {
+      const dataDir = await getDataDir()
+
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: dataDir
+      });
+      // TODO: check permission of selected dir for server to write into
+
+      if (selected) {
+        setLocalSettings({ ...localSettings, dataDir: selected })
+      } else {
+        console.log('canceled');
+      }
+    } catch (error) {
+      console.error("failed to change data directory:", error);
+      toast({
+        title: "error",
+        description: "failed to change data directory.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  }
+
   const runSetup = async () => {
     setIsSetupRunning(true);
     try {
@@ -562,37 +592,40 @@ export function RecordingSettings({
 
   const handleUiMonitoringToggle = async (checked: boolean) => {
     try {
-        if (checked) {
-            // Check accessibility permissions first
-            const hasPermission = await invoke('check_accessibility_permissions');
-            if (!hasPermission) {
-                toast({
-                    title: "accessibility permission required",
-                    description: "please grant accessibility permission in system preferences",
-                    action: (
-                        <ToastAction altText="open preferences" onClick={() => invoke('open_accessibility_preferences')}>
-                            open preferences
-                        </ToastAction>
-                    ),
-                    variant: "destructive",
-                });
-                return;
-            }
-        }
-        
-        // Just update the local setting - the update button will handle the restart
-        setLocalSettings({
-            ...localSettings,
-            enableUiMonitoring: checked
-        });
-        
-    } catch (error) {
-        console.error("failed to toggle ui monitoring:", error);
-        toast({
-            title: "error checking accessibility permissions",
-            description: "please try again or check the logs",
+      if (checked) {
+        // Check accessibility permissions first
+        const hasPermission = await invoke("check_accessibility_permissions");
+        if (!hasPermission) {
+          toast({
+            title: "accessibility permission required",
+            description:
+              "please grant accessibility permission in system preferences",
+            action: (
+              <ToastAction
+                altText="open preferences"
+                onClick={() => invoke("open_accessibility_preferences")}
+              >
+                open preferences
+              </ToastAction>
+            ),
             variant: "destructive",
-        });
+          });
+          return;
+        }
+      }
+
+      // Just update the local setting - the update button will handle the restart
+      setLocalSettings({
+        ...localSettings,
+        enableUiMonitoring: checked,
+      });
+    } catch (error) {
+      console.error("failed to toggle ui monitoring:", error);
+      toast({
+        title: "error checking accessibility permissions",
+        description: "please try again or check the logs",
+        variant: "destructive",
+      });
     }
   };
 
@@ -887,6 +920,32 @@ export function RecordingSettings({
             </div>
 
             <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="monitorIds"
+                className="flex items-center space-x-2"
+              >
+                <Folder className="h-4 w-4" />
+                <span>data directory</span>
+              </Label>
+
+              <Button
+                variant="outline"
+                role="combobox"
+                className="w-full justify-between"
+                onClick={handleDataDirChange}
+              >
+                <div className="inline-block flex gap-4">
+                  {!!settings.dataDir ? "change directory" : "select directory"}
+                  {localSettings.dataDir === settings.dataDir ?
+                    <span className="text-muted-foreground text-sm"> current at: {settings.dataDir || "default directory"}</span> :
+                    <span className="text-muted-foreground text-sm"> change to: {localSettings.dataDir || "default directory"}</span>
+                  }
+                </div>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </div>
+
+            <div className="flex flex-col space-y-2">
               <div className="flex items-center space-x-2">
                 <Switch
                   id="piiRemoval"
@@ -950,7 +1009,7 @@ export function RecordingSettings({
               <div className="flex items-center space-x-4">
                 <Slider
                   id="restartInterval"
-                  min={30}
+                  min={0}
                   max={1440} // 24 hours
                   step={30}
                   value={[localSettings.restartInterval]}
@@ -1331,7 +1390,7 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
             </div>
-            {isMacOS && (
+            {/* {isMacOS && (
               <div className="flex items-center space-x-2">
                 <Switch
                   id="enable-beta-toggle"
@@ -1383,7 +1442,7 @@ export function RecordingSettings({
                   </TooltipProvider>
                 </Label>
               </div>
-            )}
+            )} */}
             <div className="flex flex-col space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -1414,16 +1473,6 @@ export function RecordingSettings({
                     </TooltipProvider>
                   </Label>
                 </div>
-                {localSettings.enableFrameCache && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleShowTimeline}
-                    className="ml-2"
-                  >
-                    show timeline
-                  </Button>
-                )}
               </div>
             </div>
             {isMacOS && (
@@ -1438,7 +1487,9 @@ export function RecordingSettings({
                   className="flex items-center space-x-2"
                 >
                   <span>enable UI monitoring</span>
-                  <Badge variant="outline" className="ml-2">accessibility permissions</Badge>
+                  <Badge variant="outline" className="ml-2">
+                    accessibility permissions
+                  </Badge>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
@@ -1446,11 +1497,11 @@ export function RecordingSettings({
                       </TooltipTrigger>
                       <TooltipContent side="right">
                         <p>
-                          enables monitoring of UI elements and their interactions.
+                          enables monitoring of UI elements and their
+                          interactions.
                           <br />
                           this allows for better context in search results
-                          <br />
-                          * requires accessibility permission
+                          <br />* requires accessibility permission
                         </p>
                       </TooltipContent>
                     </Tooltip>

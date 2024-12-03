@@ -38,7 +38,7 @@ import { Command } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { LogFileButton } from "./log-file-button";
 
-const getDebuggingCommands = (os: string | null) => {
+const getDebuggingCommands = (os: string | null, dataDir: string) => {
   let cliInstructions = "";
 
   if (os === "windows") {
@@ -62,28 +62,25 @@ const getDebuggingCommands = (os: string | null) => {
   #    (Replace [YOUR_ARGS] with your chosen arguments)
   #    Example: screenpipe --fps 1 `;
 
-  const dataDir =
-    os === "windows" ? "%USERPROFILE%\\.screenpipe" : "$HOME/.screenpipe";
-
   const logPath =
-    os === "windows"
-      ? `%USERPROFILE%\\.screenpipe\\screenpipe.${
+  os === "windows"
+      ? `${dataDir}\\screenpipe.${
           new Date().toISOString().split("T")[0]
-        }.log`
-      : `$HOME/.screenpipe/screenpipe.${
+    }.log`
+      : `${dataDir}/screenpipe.${
           new Date().toISOString().split("T")[0]
-        }.log`;
+    }.log`;
 
   const dbPath =
     os === "windows"
-      ? "%USERPROFILE%\\.screenpipe\\db.sqlite"
-      : "$HOME/.screenpipe/db.sqlite";
+      ? `${dataDir}\\db.sqlite`
+      : `${dataDir}/db.sqlite`;
 
   const baseCommand =
     baseInstructions +
     dataDir +
     (os === "windows"
-      ? "\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir %USERPROFILE%\\.screenpipe --ocr-engine windows-native\n"
+      ? `\n\n# We highly recommend adding --ocr-engine windows-native to your command.\n# This will use a very experimental but powerful engine to extract text from your screen instead of the default one.\n# Example: screenpipe --data-dir ${dataDir} --ocr-engine windows-native\n`
       : "") +
     "\n\n# 5. If you've already started Screenpipe, try these debugging commands:\n";
 
@@ -122,7 +119,7 @@ const getDebuggingCommands = (os: string | null) => {
   }
 };
 
-export const DevModeSettings = () => {
+export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
   const handleDevModeToggle = async (checked: boolean) => {
@@ -300,7 +297,7 @@ export const DevModeSettings = () => {
             did you run screenpipe backend? either click start on the right, or
             thru CLI 👇
           </p>
-          <CodeBlock language="bash" value={getDebuggingCommands(platform())} />
+          <CodeBlock language="bash" value={getDebuggingCommands(platform(), localDataDir)} />
 
           <div className="mt-4 text-sm text-gray-500">
             <p>or, for more advanced queries:</p>
@@ -319,7 +316,7 @@ export const DevModeSettings = () => {
               <li>Paste into ChatGPT (Cmd+V)</li>
               <li>
                 ask: &quot;give me 10 sqlite query CLI to look up my data. My db
-                is in $HOME/.screenpipe/db.sqlite&quot;
+                is in {localDataDir}/db.sqlite&quot;
               </li>
             </ol>
             <p className="mt-2">

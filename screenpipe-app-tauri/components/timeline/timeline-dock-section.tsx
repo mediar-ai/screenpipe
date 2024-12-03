@@ -1,3 +1,4 @@
+import localforage from "localforage";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { platform } from "@tauri-apps/plugin-os";
 import { invoke } from "@tauri-apps/api/core";
@@ -13,7 +14,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { Button } from "@/components/ui/button";
-import { MessageSquarePlus } from "lucide-react";
+import { MessageSquarePlus, Volume2 } from "lucide-react";
 
 // Add this near the top of the file, after imports
 const GAP_THRESHOLD = 3 * 60 * 1000; // 5 minutes in milliseconds
@@ -34,8 +35,10 @@ export function TimelineIconsSection({
 }: {
   blocks: StreamTimeSeriesResponse[];
 }) {
+  const os = platform();
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
   const [selectedApp, setSelectedApp] = useState<ProcessedBlock | null>(null);
+  const [iconInvocationCount, setIconInvocationCount] = useState<{ [key: string]: number }>({});
   const { setSelectionRange } = useTimelineSelection();
 
   // Get the visible time range
@@ -46,10 +49,36 @@ export function TimelineIconsSection({
     return { start: startTime, end: endTime };
   }, [blocks]);
 
-  // Memoize processed blocks with position calculations
-  const processedBlocks = useMemo<ProcessedBlock[]>(() => {
-    if (!timeRange) return [];
+  // Combine both computations into one useMemo
+  const { processedBlocks, processedAudioGroups } = useMemo(() => {
+    if (!timeRange) return { processedBlocks: [], processedAudioGroups: [] };
 
+    // Process audio groups first
+    const audioGroups = blocks
+      .flatMap(frame => 
+        frame.devices.flatMap(device => 
+          device.audio.map(audio => ({
+            deviceName: audio.device_name,
+            isInput: audio.is_input,
+            timestamp: new Date(frame.timestamp),
+            duration: audio.duration_secs,
+            percentThroughDay: 
+              ((new Date(frame.timestamp).getTime() - timeRange.start.getTime()) /
+              (timeRange.end.getTime() - timeRange.start.getTime())) * 100
+          }))
+        )
+      )
+      .filter(audio => {
+        const timestamp = audio.timestamp;
+        return timestamp >= timeRange.start && timestamp <= timeRange.end;
+      })
+      .filter((audio, index, array) => {
+        if (index === 0) return true;
+        const prevAudio = array[index - 1];
+        return Math.abs(audio.percentThroughDay - prevAudio.percentThroughDay) > 0.25;
+      });
+
+    // Process app blocks (existing logic)
     const appGroups: {
       [key: string]: Array<{
         timestamp: Date;
@@ -131,26 +160,36 @@ export function TimelineIconsSection({
       });
     });
 
-    // Changed from 0.1% to 0.25% for better spacing while still showing more icons
-    return b
-      .sort((a, b) => a.percentThroughDay - b.percentThroughDay)
-      .filter((block, index, array) => {
-        if (index === 0) return true;
-        const prevBlock = array[index - 1];
-        return (
-          Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) > 0.25
-        );
-      });
+    return {
+      processedBlocks: b
+        .sort((a, b) => a.percentThroughDay - b.percentThroughDay)
+        .filter((block, index, array) => {
+          if (index === 0) return true;
+          const prevBlock = array[index - 1];
+          return Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) > 0.25;
+        }),
+      processedAudioGroups: audioGroups
+    };
   }, [blocks, iconCache, timeRange]);
 
   const loadAppIcon = useCallback(
     async (appName: string, appPath?: string) => {
-      try {
-        // Check platform first to avoid unnecessary invokes
-        const p = platform();
-        if (p !== "macos") return; // Early return for unsupported platforms
+      // Skip icon fetching on Windows
+      if (os === "windows") return;
 
+      try {
         if (iconCache[appName]) return;
+
+        const cachedIcon = await localforage.getItem<string>(`icon-${appName}`);
+        if (cachedIcon) {
+          setIconCache((prev) => ({
+            ...prev,
+            [appName]: cachedIcon,
+          }));
+          return;
+        }
+
+        if (iconInvocationCount[appName] >= 100) return;
 
         const icon = await invoke<{ base64: string; path: string } | null>(
           "get_app_icon",
@@ -163,19 +202,24 @@ export function TimelineIconsSection({
             ...prev,
             [appName]: icon.base64,
           }));
+
+          await localforage.setItem(`icon-${appName}`, icon.base64);
+
+          setIconInvocationCount((prev) => ({
+            ...prev,
+            [appName]: (prev[appName] || 0) + 1,
+          }));
         }
       } catch (error) {
         console.error(`failed to load icon for ${appName}:`, error);
         // Fail silently - the UI will just not show an icon
       }
     },
-    [iconCache]
+    [iconCache, iconInvocationCount]
   );
 
   useEffect(() => {
     const loadIcons = async () => {
-      const p = platform();
-      if (p !== "macos") return;
 
       // Load icons for unique app names only
       processedBlocks.forEach((block) => {
@@ -222,7 +266,11 @@ export function TimelineIconsSection({
                   }}
                 >
                   <img
-                    src={`data:image/png;base64,${block.iconSrc}`}
+                    src={
+                      os === "linux" 
+                      ? `data:image/svg+xml;base64,${block.iconSrc}`
+                      : `data:image/png;base64,${block.iconSrc}`
+                    }
                     className="w-full h-full opacity-70"
                     alt={block.appName}
                     loading="lazy"
@@ -238,6 +286,38 @@ export function TimelineIconsSection({
             </motion.div>
           );
         })}
+
+        {/* Add this new section for audio markers */}
+        {processedAudioGroups.map((audio, i) => (
+          <div
+            key={`audio-${i}`}
+            className="absolute h-full pointer-events-auto "
+            style={{
+              left: `${audio.percentThroughDay}%`,
+              transform: "translateX(-50%)",
+              zIndex: 40,
+              top: "-16px", // Moved higher
+            }}
+          >
+            <div
+              className="w-4 h-4 flex items-center justify-center rounded-full bg-muted/50 backdrop-blur"
+              style={{
+                border: `1px solid ${
+                  audio.isInput ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.4)"
+                }`,
+              }}
+            >
+              <Volume2
+                className="w-2 h-2"
+                style={{
+                  color: audio.isInput
+                    ? "rgba(0, 0, 0, 0.7)"
+                    : "rgba(0, 0, 0, 0.4)",
+                }}
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
       <Dialog
@@ -250,7 +330,11 @@ export function TimelineIconsSection({
               <div className="flex items-center gap-2">
                 {selectedApp?.iconSrc && (
                   <img
-                    src={`data:image/png;base64,${selectedApp.iconSrc}`}
+                    src={
+                      os === "linux"
+                      ? `data:image/svg+xml;base64,${selectedApp.iconSrc}`
+                      : `data:image/png;base64,${selectedApp.iconSrc}`
+                    }
                     className="w-6 h-6"
                     alt={selectedApp.appName}
                   />

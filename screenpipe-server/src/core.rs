@@ -1,4 +1,5 @@
 use crate::cli::{CliVadEngine, CliVadSensitivity};
+use crate::db::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
@@ -200,7 +201,10 @@ async fn record_video(
             let db_chunk_callback = Arc::clone(&db_chunk_callback);
             let device_name = Arc::clone(&device_name);
             rt.spawn(async move {
-                if let Err(e) = db_chunk_callback.insert_video_chunk(&file_path, &device_name).await {
+                if let Err(e) = db_chunk_callback
+                    .insert_video_chunk(&file_path, &device_name)
+                    .await
+                {
                     error!("Failed to insert new video chunk: {}", e);
                 }
                 debug!("record_video: Inserted new video chunk: {}", file_path);
@@ -306,38 +310,54 @@ async fn record_audio(
                     &audio_device
                 );
 
-                let audio_stream = match AudioStream::from_device(
-                    audio_device_clone.clone(),
-                    Arc::new(AtomicBool::new(device_control.clone().is_running)),
-                )
-                .await
-                {
-                    Ok(stream) => stream,
-                    Err(e) => {
-                        error!("Failed to create audio stream: {}", e);
-                        return;
-                    }
-                };
+                let mut did_warn = false;
+                let is_running = Arc::new(AtomicBool::new(device_control.is_running));
 
-                let audio_stream = Arc::new(audio_stream);
-                let device_control_clone = Arc::clone(&device_control);
-                let whisper_sender_clone = whisper_sender_clone.clone();
-                let audio_device = Arc::clone(&audio_device_clone);
-                let record_handle = tokio::spawn(async move {
-                    let _ = record_and_transcribe(
-                        audio_stream,
-                        chunk_duration,
-                        whisper_sender_clone.clone(),
-                        Arc::new(AtomicBool::new(device_control_clone.is_running)),
+                while is_running.load(Ordering::Relaxed) {
+                    let is_running_loop = Arc::clone(&is_running); // Create separate reference for the loop
+                    let audio_stream = match AudioStream::from_device(
+                        audio_device_clone.clone(),
+                        Arc::clone(&is_running_loop), // Clone from original Arc
                     )
-                    .await;
-                });
+                    .await
+                    {
+                        Ok(stream) => stream,
+                        Err(e) => {
+                            if e.to_string().contains("Audio device not found") {
+                                if !did_warn {
+                                    warn!("Audio device not found: {}", audio_device.name);
+                                    did_warn = true;
+                                }
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                                continue;
+                            } else {
+                                error!("Failed to create audio stream: {}", e);
+                                return;
+                            }
+                        }
+                    };
 
-                // let live_transcription_handle = tokio::spawn(async move {
-                //     let _ = live_transcription(audio_stream, whisper_sender_clone.clone()).await;
-                // });
+                    let audio_stream = Arc::new(audio_stream);
+                    let whisper_sender_clone = whisper_sender_clone.clone();
+                    let record_handle = Some(tokio::spawn(async move {
+                        let _ = record_and_transcribe(
+                            audio_stream,
+                            chunk_duration,
+                            whisper_sender_clone.clone(),
+                            is_running_loop.clone(),
+                        )
+                        .await;
+                    }));
 
-                record_handle.await.unwrap();
+                    // let live_transcription_handle = tokio::spawn(async move {
+                    //     let _ = live_transcription(audio_stream, whisper_sender_clone.clone()).await;
+                    // });
+
+                    if let Some(handle) = record_handle {
+                        handle.await.unwrap();
+                    }
+                }
+
                 info!("exiting audio capture thread for device: {}", &audio_device);
             });
 
@@ -361,12 +381,20 @@ async fn record_audio(
 
             // Insert the new transcript after fetching
             let mut current_transcript: Option<String> = transcription.transcription.clone();
-            let mut processed_previous = "".to_string();
+            let mut processed_previous: Option<String> = None;
             if let Some((previous, current)) =
                 transcription.cleanup_overlap(previous_transcript.clone())
             {
-                current_transcript = Some(current);
-                processed_previous = previous;
+                if !previous.is_empty() && !current.is_empty() {
+                    if previous != previous_transcript {
+                        processed_previous = Some(previous);
+                    }
+                    if current_transcript.is_some()
+                        && current != current_transcript.clone().unwrap_or_default()
+                    {
+                        current_transcript = Some(current);
+                    }
+                }
             }
 
             transcription.transcription = current_transcript.clone();
@@ -396,7 +424,7 @@ async fn process_audio_result(
     result: TranscriptionResult,
     _friend_wearable_uid: Option<&str>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    previous_transcript: String,
+    previous_transcript: Option<String>,
     previous_transcript_id: Option<i64>,
 ) -> Result<Option<i64>, anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
@@ -407,6 +435,10 @@ async fn process_audio_result(
         return Ok(None);
     }
 
+    let speaker = get_or_create_speaker_from_embedding(db, &result.speaker_embedding).await?;
+
+    info!("Detected speaker: {:?}", speaker);
+
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
     let mut chunk_id: Option<i64> = None;
@@ -416,15 +448,17 @@ async fn process_audio_result(
         result.input.device, result.path
     );
     if let Some(id) = previous_transcript_id {
-        match db
-            .update_audio_transcription(id, previous_transcript.as_str())
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => error!(
-                "Failed to update transcription for {}: audio_chunk_id {}",
-                result.input.device, e
-            ),
+        if let Some(prev_transcript) = previous_transcript {
+            match db
+                .update_audio_transcription(id, prev_transcript.as_str())
+                .await
+            {
+                Ok(_) => {}
+                Err(e) => error!(
+                    "Failed to update transcription for {}: audio_chunk_id {}",
+                    result.input.device, e
+                ),
+            }
         }
     }
     match db.insert_audio_chunk(&result.path).await {
@@ -440,6 +474,7 @@ async fn process_audio_result(
                     0,
                     &transcription_engine,
                     &result.input.device,
+                    Some(speaker.id),
                 )
                 .await
             {
@@ -462,4 +497,17 @@ async fn process_audio_result(
         ),
     }
     Ok(chunk_id)
+}
+
+async fn get_or_create_speaker_from_embedding(
+    db: &DatabaseManager,
+    embedding: &[f32],
+) -> Result<Speaker, anyhow::Error> {
+    let speaker = db.get_speaker_from_embedding(embedding).await?;
+    if let Some(speaker) = speaker {
+        Ok(speaker)
+    } else {
+        let speaker = db.insert_speaker(embedding).await?;
+        Ok(speaker)
+    }
 }
