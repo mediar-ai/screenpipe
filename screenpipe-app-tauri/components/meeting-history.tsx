@@ -808,44 +808,29 @@ export default function MeetingHistory({ className }: { className?: string }) {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <div className="mb-4">
-                          <div className="flex flex-col space-y-2">
-                            <div className="flex items-center justify-end mb-1">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <HelpCircle className="h-5 w-5 cursor-help text-gray-500" />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" align="end">
-                                    <p className="max-w-xs">
-                                      best practice for identification is to say
-                                      &quot;person talking about x, y, z, is
-                                      john ...&quot; this helps the ai to link
-                                      topics to specific individuals, improving
-                                      accuracy in participant identification.
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                            <Textarea
-                              rows={2}
-                              value={customIdentifyPrompt}
-                              onChange={(e) =>
-                                setCustomIdentifyPrompt(e.target.value)
-                              }
-                              placeholder="custom identify prompt (optional)"
-                              className="resize-none border rounded text-sm w-full"
-                            />
-                            <div className="flex items-center justify-between">
-                              <p>
-                                participants:{" "}
-                                {meeting.participants || "not identified"}
-                              </p>
-                              <IdentifySpeakers segments={meeting.segments} />
+                        {!meeting.segments.every((s) => s.speaker.name) && (
+                          <div className="mb-4">
+                            <div className="flex flex-col space-y-2">
+                              <div className="flex items-center justify-end mb-1">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <HelpCircle className="h-5 w-5 cursor-help text-gray-500" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" align="end">
+                                      <p className="max-w-xs">
+                                        identify speakers in your meetings
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
+                              <div className="flex items-center justify-end">
+                                <IdentifySpeakers segments={meeting.segments} />
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                         <div className="mb-4 relative">
                           <h4 className="font-semibold mb-2">transcription:</h4>
                           <Button
