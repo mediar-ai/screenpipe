@@ -332,6 +332,25 @@ cargo install sqlx-cli
 sqlx migrate add <migration_name>
 ```
 
+### fixing database migration issues
+
+if you encounter errors with missing migrations (e.g., `migration XXXXXXXXXX was previously applied but is missing`), you can fix it by removing the problematic migration from the SQLite database:
+
+```bash
+# remove specific migration
+sqlite3 ~/.screenpipe/db.sqlite "DELETE FROM _sqlx_migrations WHERE version = XXXXXXXXXX;"
+
+# verify migrations
+sqlite3 ~/.screenpipe/db.sqlite "SELECT * FROM _sqlx_migrations;"
+
+# if issues persist, you can take the nuclear approach:
+# 1. backup your database
+cp ~/.screenpipe/db.sqlite ~/.screenpipe/db.sqlite.backup
+
+# 2. reset migrations table
+sqlite3 ~/.screenpipe/db.sqlite "DROP TABLE _sqlx_migrations;"
+```
+
 ### set up azure ubuntu vm with display & audio
 
 ```bash
