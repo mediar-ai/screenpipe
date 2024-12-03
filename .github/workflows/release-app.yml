@@ -151,19 +151,14 @@ jobs:
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
 
-      - name: Set up Rust (Windows)
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        run: |
-          Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile rustup-init.exe
-          .\rustup-init.exe -y --default-toolchain stable --target ${{ matrix.target }}
-        shell: pwsh
-
-      - name: Set up Rust (macOS)
-        if: matrix.platform == 'macos-latest'
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          targets: ${{ matrix.target }}
+          override: true
+          target: ${{ matrix.target }}
+          cache: true
+          rustflags: ""
 
       - uses: actions/cache@v4
         with:
@@ -213,17 +208,17 @@ jobs:
           bun install
 
       - name: Install vcpkg
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' 
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' 
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install LLVM and Clang
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' 
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
