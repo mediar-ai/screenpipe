@@ -1325,23 +1325,36 @@ pub struct GetUnnamedSpeakersRequest {
     limit: u32,
     offset: u32,
     // comma separated list of speaker ids to include
-    #[serde(deserialize_with = "from_comma_separated_array")]
+    #[serde(
+        deserialize_with = "from_comma_separated_array",
+        default = "default_speaker_ids"
+    )]
     speaker_ids: Option<Vec<i64>>,
+}
+
+fn default_speaker_ids() -> Option<Vec<i64>> {
+    None
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GetSimilarSpeakersRequest {
+    speaker_id: i64,
+    limit: u32,
 }
 
 fn from_comma_separated_array<'de, D>(deserializer: D) -> Result<Option<Vec<i64>>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s = <&str>::deserialize(deserializer)?;
-    if s.is_empty() {
-        Ok(None)
-    } else {
-        s.split(',')
-            .map(|i| i64::from_str(i).map_err(serde::de::Error::custom))
-            .collect::<Result<Vec<_>, _>>()
-            .map(Some)
-    }
+    let s = Option::<String>::deserialize(deserializer).unwrap_or(None);
+    let s = match s {
+        None => return Ok(None),
+        Some(s) => s,
+    };
+    s.split(',')
+        .map(|i| i64::from_str(i).map_err(serde::de::Error::custom))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
 }
 
 async fn get_unnamed_speakers_handler(
@@ -1483,6 +1496,27 @@ async fn merge_speakers_handler(
     Ok(JsonResponse(json!({"success": true})))
 }
 
+async fn get_similar_speakers_handler(
+    State(state): State<Arc<AppState>>,
+    Query(request): Query<GetSimilarSpeakersRequest>,
+) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
+    let speaker_id = request.speaker_id;
+    let limit = request.limit;
+
+    let similar_speakers = state
+        .db
+        .get_similar_speakers(speaker_id, limit)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    Ok(JsonResponse(similar_speakers))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1521,6 +1555,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
             post(mark_as_hallucination_handler),
         )
         .route("/speakers/merge", post(merge_speakers_handler))
+        .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .layer(cors);
 

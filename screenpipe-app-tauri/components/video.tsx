@@ -1,11 +1,16 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { readFile, open } from "@tauri-apps/plugin-fs";
 import { platform } from "@tauri-apps/plugin-os";
+import { cn } from "@/lib/utils";
 
 export const VideoComponent = memo(function VideoComponent({
   filePath,
+  customDescription,
+  className,
 }: {
   filePath: string;
+  customDescription?: string;
+  className?: string;
 }) {
   const [mediaSrc, setMediaSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +29,9 @@ export const VideoComponent = memo(function VideoComponent({
 
   const renderFileLink = () => (
     // TODO button open link
-    <p className="mt-2 text-center text-xs text-gray-500">{filePath}</p>
+    <p className={"mt-2 text-center text-xs text-gray-500"}>
+      {customDescription || filePath}
+    </p>
   );
 
   const getMimeType = (path: string): string => {
@@ -91,14 +98,19 @@ export const VideoComponent = memo(function VideoComponent({
 
   if (!mediaSrc) {
     return (
-      <div className="w-full h-48 bg-gray-200 animate-pulse rounded-md flex items-center justify-center">
+      <div
+        className={cn(
+          "w-full h-48 bg-gray-200 animate-pulse rounded-md flex items-center justify-center",
+          className
+        )}
+      >
         <span className="text-gray-500">Loading media...</span>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-2xl text-center">
+    <div className={cn("w-full max-w-2xl text-center", className)}>
       {isAudio ? (
         <div className="bg-gray-100 p-4 rounded-md">
           <audio controls className="w-full">
