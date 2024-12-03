@@ -207,7 +207,6 @@ jobs:
           brew install ffmpeg
 
       - name: Install frontend dependencies
-        shell: bash
         working-directory: ./screenpipe-app-tauri
         run: bun install
 
@@ -228,14 +227,12 @@ jobs:
           version: "10.0"
 
       - name: Run pre_build.js
-        shell: bash
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
       - name: Build CLI
-        shell: bash
         env:
           # Windows specific optimizations (only applied when building for Windows)
           CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
@@ -251,7 +248,6 @@ jobs:
 
       # Run pre build again to copy the CLI into app
       - name: Run pre_build.js
-        shell: bash
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
@@ -309,12 +305,12 @@ jobs:
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
-      - name: Get version from Cargo.toml
-        shell: bash
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        run: |
-          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+      # - name: Get version from Cargo.toml
+      #   shell: bash
+      #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      #   run: |
+      #     VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+      #     echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       # - name: Upload screenpipe binary for signing
       #   id: upload-unsigned-artifact
