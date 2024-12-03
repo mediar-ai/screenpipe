@@ -231,10 +231,13 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         shell: powershell
         run: |
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          choco install 7zip -y
+          $7zipUrl = "https://7-zip.org/a/7z2301-x64.exe"
+          $7zipInstaller = "7z-installer.exe"
+          Invoke-WebRequest -Uri $7zipUrl -OutFile $7zipInstaller
+          Start-Process -FilePath .\$7zipInstaller -Args "/S" -Wait
+          Remove-Item $7zipInstaller
+          # Add 7zip to PATH
+          $env:Path += ";C:\Program Files\7-Zip"
 
       - name: Install LLVM and Clang
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
