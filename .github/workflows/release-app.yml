@@ -87,12 +87,17 @@ jobs:
 
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version
+        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
         run: |
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
-          else
-            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
-          fi
+          if ($IsWindows) {
+            (Get-Content screenpipe-app-tauri/src-tauri/Cargo.toml) -replace '^version = ".*"', 'version = "${{ github.event.inputs.version }}"' | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml
+          } else {
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+              sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+            else
+              sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+            fi
+          }
 
       - name: create draft release
         uses: crabnebula-dev/cloud-release@v0.2.6
@@ -130,12 +135,17 @@ jobs:
 
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version
+        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
         run: |
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
-          else
-            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
-          fi
+          if ($IsWindows) {
+            (Get-Content screenpipe-app-tauri/src-tauri/Cargo.toml) -replace '^version = ".*"', 'version = "${{ github.event.inputs.version }}"' | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml
+          } else {
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+              sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+            else
+              sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+            fi
+          }
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
