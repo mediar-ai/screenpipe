@@ -30,7 +30,32 @@ yarn-error.log*
 
 # vercel
 .vercel
+.next
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# chrome profile
+.chrome-profile/
+*.db
+*.db-journal
+leveldb/
+Local State
+Last Version
+LOCK
+CURRENT
+LOG
+LOG.old
+MANIFEST*
+
+# chrome specific
+*.log
+*.journal
+Preferences
+Session Storage/
+Local Storage/
+IndexedDB/
+WebStorage/
+Cookies*
+History*
