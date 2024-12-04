@@ -98,7 +98,7 @@ export function useHealthCheck() {
       console.error("Health check error:", error);
       if (!isServerDown) {
         setIsServerDown(true);
-        await invoke("set_tray_unhealth_icon");
+        // await invoke("set_tray_unhealth_icon");
         const errorHealth: HealthCheckResponse = {
           last_frame_timestamp: null,
           last_audio_timestamp: null,

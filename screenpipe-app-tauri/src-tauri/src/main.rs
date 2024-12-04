@@ -43,15 +43,15 @@ mod llm_sidecar;
 mod server;
 mod sidecar;
 mod updates;
+pub use commands::check_accessibility_permissions;
+pub use commands::open_accessibility_preferences;
 pub use commands::open_screen_capture_preferences;
 pub use commands::reset_all_pipes;
-pub use commands::set_tray_unhealth_icon;
 pub use commands::set_tray_health_icon;
+pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
-pub use commands::open_accessibility_preferences;
-pub use commands::check_accessibility_permissions;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -140,7 +140,8 @@ async fn main() {
             commands::show_timeline,
             commands::open_accessibility_preferences,
             commands::check_accessibility_permissions,
-            icons::get_app_icon
+            icons::get_app_icon,
+            commands::open_auth_window,
         ])
         .setup(|app| {
             // Logging setup
@@ -154,18 +155,21 @@ async fn main() {
                 .filename_prefix("screenpipe-app")
                 .filename_suffix("log")
                 .max_log_files(5)
-                .build(&get_data_dir(&app.handle()).unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")))?;
+                .build(
+                    &get_data_dir(&app.handle())
+                        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
+                )?;
 
             // Create a custom layer for file logging
             let file_layer = tracing_subscriber::fmt::layer()
                 .with_writer(file_appender)
                 .with_ansi(false)
-                .with_filter(EnvFilter::new("info"));
+                .with_filter(EnvFilter::new("info,hyper=error,tower_http=error"));
 
             // Create a custom layer for console logging
             let console_layer = tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stdout)
-                .with_filter(EnvFilter::new("debug"));
+                .with_filter(EnvFilter::new("info,hyper=error,tower_http=error"));
 
             // Initialize the tracing subscriber with both layers
             tracing_subscriber::registry()
@@ -282,9 +286,7 @@ async fn main() {
                     }
                     _ => {}
                 });
-            
             }
-
 
             // Store setup and analytics initialization
             let store = StoreBuilder::new(app.handle(), path.clone()).build();
@@ -434,7 +436,7 @@ async fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
-    
+
     // set_tray_unhealth_icon(app.app_handle().clone());
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {

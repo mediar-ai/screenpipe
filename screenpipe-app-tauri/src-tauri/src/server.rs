@@ -7,13 +7,14 @@ use http::header::HeaderValue;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tauri::Emitter;
+use tauri::Manager;
 #[allow(unused_imports)]
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_store::StoreBuilder;
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
-
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
     pipe_id: String,
@@ -56,6 +57,20 @@ struct InboxMessageAction {
     port: u16,
 }
 
+#[derive(Deserialize, Debug)]
+struct AuthPayload {
+    token: Option<String>,
+    email: Option<String>,
+    user_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct AuthData {
+    token: String,
+    email: String,
+    user_id: String,
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let state = ServerState { app_handle };
 
@@ -69,9 +84,13 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/notify", axum::routing::post(send_notification))
         .route("/inbox", axum::routing::post(send_inbox_message))
         .route("/log", axum::routing::post(log_message))
+        .route("/auth", axum::routing::post(handle_auth))
         .layer(cors)
         .layer(
-            TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::new().include_headers(true)),
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
+                .on_request(())
+                .on_response(()),
         )
         .with_state(state);
 
@@ -150,6 +169,53 @@ async fn log_message(
             ))
         }
     }
+}
+
+async fn handle_auth(
+    State(state): State<ServerState>,
+    Json(payload): Json<AuthPayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received auth data: {:?}", payload);
+
+    let path = state
+        .app_handle
+        .path()
+        .local_data_dir()
+        .unwrap()
+        .join("screenpipe")
+        .join("store.bin");
+    info!("store path: {:?}", path);
+    let store = StoreBuilder::new(&state.app_handle, path).build();
+
+    if payload.token.is_some() {
+        let auth_data = AuthData {
+            token: payload.token.unwrap(),
+            email: payload.email.unwrap_or_default(),
+            user_id: payload.user_id.unwrap_or_default(),
+        };
+
+        info!("saving auth data: {:?}", auth_data);
+
+        store.set("auth_data", serde_json::to_value(Some(auth_data)).unwrap());
+    } else {
+        store.set(
+            "auth_data",
+            serde_json::to_value::<Option<AuthData>>(None).unwrap(),
+        );
+    }
+
+    if let Err(e) = store.save() {
+        error!("failed to save store: {}", e);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to save auth data".to_string(),
+        ));
+    }
+
+    Ok(Json(ApiResponse {
+        success: true,
+        message: "auth data stored successfully".to_string(),
+    }))
 }
 
 pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()> {

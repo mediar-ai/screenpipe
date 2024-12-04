@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { AuthButton } from "./auth";
 
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
@@ -484,7 +485,6 @@ export function Settings({ className }: { className?: string }) {
   // Use the useInterval hook to periodically check the status
   useInterval(checkEmbeddedAIStatus, 10000); // Check every 10 seconds
 
-
   const handleShortcutToggle = (checked: boolean) => {
     console.log("handleShortcutToggle", checked);
     let newDisabledShortcuts = [...localSettings.disabledShortcuts];
@@ -515,22 +515,21 @@ export function Settings({ className }: { className?: string }) {
       debouncedFetchHealth();
     };
 
-    window.addEventListener('settings-updated', handleSettingsUpdate);
-    
+    window.addEventListener("settings-updated", handleSettingsUpdate);
+
     return () => {
-      window.removeEventListener('settings-updated', handleSettingsUpdate);
+      window.removeEventListener("settings-updated", handleSettingsUpdate);
     };
   }, [debouncedFetchHealth]);
-
 
   return (
     <Dialog
       onOpenChange={(open) => {
         if (!open) {
           // Use a more reliable state update mechanism
-          const event = new CustomEvent('settings-updated');
+          const event = new CustomEvent("settings-updated");
           window.dispatchEvent(event);
-          
+
           // Add a small delay before refetching health
           setTimeout(() => {
             debouncedFetchHealth();
@@ -546,7 +545,12 @@ export function Settings({ className }: { className?: string }) {
       </DialogTrigger>
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>settings</DialogTitle>
+          <DialogTitle>
+            <div className="flex items-center gap-4">
+              settings
+              <AuthButton />
+            </div>
+          </DialogTitle>
           <DialogDescription>
             choose your AI provider, enter necessary credentials, and more.
           </DialogDescription>

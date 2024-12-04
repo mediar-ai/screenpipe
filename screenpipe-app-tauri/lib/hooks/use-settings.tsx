@@ -156,6 +156,7 @@ export function useSettings() {
             ? "windows-native"
             : "tesseract";
 
+
         // no need to call load() as it's done automatically
         const savedKey = (await store!.get<string>("openaiApiKey")) || "";
         const savedDeepgramKey =

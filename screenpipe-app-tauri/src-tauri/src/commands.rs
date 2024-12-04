@@ -1,7 +1,8 @@
+use crate::get_data_dir;
+use serde::{Serialize};
 use serde_json::Value;
 use tauri::Manager;
 use tracing::info;
-use crate::get_data_dir;
 
 #[tauri::command]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -44,12 +45,14 @@ pub fn open_mic_preferences() {
 }
 
 #[tauri::command]
-pub async fn load_pipe_config(app_handle: tauri::AppHandle<tauri::Wry>, pipe_name: String) -> Result<Value, String> {
+pub async fn load_pipe_config(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    pipe_name: String,
+) -> Result<Value, String> {
     info!("Loading pipe config for {}", pipe_name);
     let default_path = get_data_dir(&app_handle)
         .map(|path| path.join("pipes"))
         .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe").join("pipes"));
-
 
     let config_path = default_path.join(pipe_name).join("pipe.json");
     info!("Config path: {}", config_path.to_string_lossy());
@@ -62,7 +65,11 @@ pub async fn load_pipe_config(app_handle: tauri::AppHandle<tauri::Wry>, pipe_nam
 }
 
 #[tauri::command]
-pub async fn save_pipe_config(app_handle: tauri::AppHandle<tauri::Wry>, pipe_name: String, config: Value) -> Result<(), String> {
+pub async fn save_pipe_config(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    pipe_name: String,
+    config: Value,
+) -> Result<(), String> {
     info!("Saving pipe config for {}", pipe_name);
     let default_path = get_data_dir(&app_handle)
         .map(|path| path.join("pipes"))
@@ -188,7 +195,9 @@ pub fn update_show_screenpipe_shortcut(
     };
 
     if !enabled {
-        let _ = app_handle.global_shortcut().unregister(show_window_shortcut);
+        let _ = app_handle
+            .global_shortcut()
+            .unregister(show_window_shortcut);
 
         return Ok(());
     }
@@ -255,4 +264,49 @@ pub fn check_accessibility_permissions() -> bool {
     {
         return true;
     }
+}
+
+// Add these new structs
+#[derive(Debug, Serialize)]
+pub struct AuthStatus {
+    authenticated: bool,
+    message: Option<String>,
+}
+
+// Command to open the auth window
+#[tauri::command]
+pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    let auth_url = "http://localhost:3001/login";
+    #[cfg(not(debug_assertions))]
+    let auth_url = "https://screenpi.pe/login";
+
+    // If window exists, try to close it and wait a bit
+    if let Some(existing_window) = app_handle.get_webview_window("auth") {
+        let _ = existing_window.destroy();
+        // Give it a moment to properly close
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    let window = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        "auth",
+        tauri::WebviewUrl::External(auth_url.parse().unwrap()),
+    )
+    .title("screenpipe auth")
+    .center()
+    .build()
+    .map_err(|e| format!("failed to open auth window: {}", e))?;
+
+    // Add close event listener to cleanup the window
+    let window_handle = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Destroyed = event {
+            if let Some(w) = window_handle.get_webview_window("auth") {
+                let _ = w.close();
+            }
+        }
+    });
+
+    Ok(())
 }

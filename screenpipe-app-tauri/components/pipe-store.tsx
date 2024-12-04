@@ -51,8 +51,8 @@ import {
 } from "@/components/ui/collapsible";
 import { LogFileButton } from "./log-file-button";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useUser } from "@clerk/clerk-react";
 import { StripeSubscriptionButton } from "./stripe-subscription-button";
+import { useUser } from "@/lib/hooks/use-user";
 
 export interface Pipe {
   enabled: boolean;
@@ -105,7 +105,14 @@ const PipeDialog: React.FC = () => {
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const { health } = useHealthCheck();
   const { getDataDir } = useSettings();
-  const { isSignedIn } = useUser();
+  const { user, checkLoomSubscription } = useUser();
+  const [hasLoomSubscription, setHasLoomSubscription] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      checkLoomSubscription().then(setHasLoomSubscription);
+    }
+  }, []);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -217,12 +224,11 @@ const PipeDialog: React.FC = () => {
 
   const handleToggleEnabled = async (pipe: Pipe) => {
     if (pipe.id === "pipe-for-loom" && !pipe.enabled) {
-      const isSubscribed =
-        localStorage.getItem("loom_pipe_subscribed") === "true";
-      if (!isSubscribed) {
+      const hasLoomSubscription = await checkLoomSubscription();
+      if (!hasLoomSubscription) {
         toast({
-          title: "Subscription required",
-          description: "Please subscribe to use the Loom pipe",
+          title: "subscription required",
+          description: "please subscribe to use the loom pipe",
         });
         return;
       }
@@ -438,7 +444,7 @@ const PipeDialog: React.FC = () => {
         <div className="flex space-x-2 mb-4">
           {selectedPipe.id === "pipe-for-loom" &&
           !selectedPipe.enabled &&
-          !localStorage.getItem("loom_pipe_subscribed") ? (
+          !hasLoomSubscription ? (
             <StripeSubscriptionButton
               onSubscriptionComplete={() => handleToggleEnabled(selectedPipe)}
             />
