@@ -1,2 +1,0 @@
-screen2x_config.pbtxt
-screen2x_model.tflite
