@@ -51,8 +51,8 @@ import {
 } from "@/components/ui/collapsible";
 import { LogFileButton } from "./log-file-button";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useUser } from "@clerk/clerk-react";
 import { StripeSubscriptionButton } from "./stripe-subscription-button";
+import { useUser } from "@/lib/hooks/use-user";
 
 export interface Pipe {
   enabled: boolean;
@@ -71,8 +71,7 @@ interface CorePipe {
 const corePipes: CorePipe[] = [
   {
     id: "pipe-for-loom",
-    description:
-      "generate looms from your screenpipe data",
+    description: "generate looms from your screenpipe data",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-for-loom",
   },
   {
@@ -106,7 +105,14 @@ const PipeDialog: React.FC = () => {
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const { health } = useHealthCheck();
   const { getDataDir } = useSettings();
-  const { isSignedIn } = useUser();
+  const { user, checkLoomSubscription } = useUser();
+  const [hasLoomSubscription, setHasLoomSubscription] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      checkLoomSubscription().then(setHasLoomSubscription);
+    }
+  }, []);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -218,11 +224,11 @@ const PipeDialog: React.FC = () => {
 
   const handleToggleEnabled = async (pipe: Pipe) => {
     if (pipe.id === "pipe-for-loom" && !pipe.enabled) {
-      const isSubscribed = localStorage.getItem('loom_pipe_subscribed') === 'true';
-      if (!isSubscribed) {
+      const hasLoomSubscription = await checkLoomSubscription();
+      if (!hasLoomSubscription) {
         toast({
-          title: "Subscription required",
-          description: "Please subscribe to use the Loom pipe",
+          title: "subscription required",
+          description: "please subscribe to use the loom pipe",
         });
         return;
       }
@@ -288,32 +294,34 @@ const PipeDialog: React.FC = () => {
     if (newRepoUrl) {
       try {
         toast({
-          title: "Adding custom pipe",
-          description: "Please wait...",
+          title: "adding custom pipe",
+          description: "please wait...",
         });
 
-        const cmd = Command.sidecar("screenpipe", [
-          "pipe",
-          "download",
-          newRepoUrl,
-          "-o",
-          "json",
-        ]);
-        await cmd.execute();
+        const response = await fetch(`http://localhost:3030/pipes/download`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: newRepoUrl }),
+        });
+
+        if (!response.ok) {
+          throw new Error("failed to download pipe");
+        }
 
         // refresh the pipe list
         await fetchInstalledPipes();
 
         toast({
-          title: "Custom pipe added",
-          description:
-            "Your pipe has been successfully added. Screenpipe will restart with the new pipe.",
+          title: "custom pipe added",
+          description: "your pipe has been successfully added.",
         });
       } catch (error) {
-        console.error("Failed to add custom pipe:", error);
+        console.error("failed to add custom pipe:", error);
         toast({
-          title: "Error adding custom pipe",
-          description: "Please check the URL and try again.",
+          title: "error adding custom pipe",
+          description: "please check the url and try again.",
           variant: "destructive",
         });
       } finally {
@@ -404,7 +412,7 @@ const PipeDialog: React.FC = () => {
     } catch (error) {
       console.error("failed to delete pipe:", error);
       toast({
-        title: "error deleting pipe", 
+        title: "error deleting pipe",
         description: "please try again or check the logs for more information.",
         variant: "destructive",
       });
@@ -434,8 +442,10 @@ const PipeDialog: React.FC = () => {
         <h2 className="text-2xl font-bold mb-2">{selectedPipe.id}</h2>
 
         <div className="flex space-x-2 mb-4">
-          {selectedPipe.id === "pipe-for-loom" && !selectedPipe.enabled && !localStorage.getItem("loom_pipe_subscribed") ? (
-            <StripeSubscriptionButton 
+          {selectedPipe.id === "pipe-for-loom" &&
+          !selectedPipe.enabled &&
+          !hasLoomSubscription ? (
+            <StripeSubscriptionButton
               onSubscriptionComplete={() => handleToggleEnabled(selectedPipe)}
             />
           ) : (
@@ -825,7 +835,8 @@ const PipeDialog: React.FC = () => {
             or anything else you can imagine that help you get more out of your
             recordings.
             <br />
-            revenue from paid pipes goes directly to community contributors who maintain them.
+            revenue from paid pipes goes directly to community contributors who
+            maintain them.
             <br />
             <a
               href="https://docs.screenpi.pe/docs/plugins"

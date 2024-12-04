@@ -1,11 +1,11 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useUser } from "@clerk/clerk-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { toast } from "./ui/use-toast";
 import posthog from "posthog-js";
 import { useEffect, useState } from "react";
+import { useUser } from "@/lib/hooks/use-user";
 
 interface StripeSubscriptionButtonProps {
   onSubscriptionComplete?: () => void;
@@ -14,7 +14,7 @@ interface StripeSubscriptionButtonProps {
 export function StripeSubscriptionButton({
   onSubscriptionComplete,
 }: StripeSubscriptionButtonProps) {
-  const { user, isSignedIn } = useUser();
+  const { isSignedIn, user } = useUser();
   const [isSubscribed, setIsSubscribed] = useState(false);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export function StripeSubscriptionButton({
 
   const handleSubscribe = async () => {
     posthog.capture("subscribe_button_clicked", {
-      email: user?.primaryEmailAddress?.emailAddress,
+      email: user?.email,
     });
     if (!isSignedIn) {
       toast({
@@ -37,7 +37,7 @@ export function StripeSubscriptionButton({
 
     try {
       // Direct Stripe Checkout URL with price_id
-      const checkoutUrl = `https://buy.stripe.com/28o00JcCq2JsgAE9AX?prefilled_email=${user.primaryEmailAddress?.emailAddress}&client_reference_id=${user.id}`;
+      const checkoutUrl = `https://buy.stripe.com/28o00JcCq2JsgAE9AX?prefilled_email=${user?.email}&client_reference_id=${user?.user_id}`;
 
       // Open Stripe checkout in default browser
       await open(checkoutUrl);

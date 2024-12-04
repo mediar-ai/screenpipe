@@ -1,5 +1,5 @@
-#[cfg(target_os = "macos")]
-use std::{env, fs, process::Command};
+// #[cfg(target_os = "macos")]
+// use std::{env, fs, process::Command};
 
 fn main() {
     // #[cfg(target_arch = "x86_64")]

@@ -26,7 +26,9 @@
       "icons/512x512.png",
       "icons/1024x1024.png",
       "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/screenpipe-logo-tray-failed.png",
+      "icons/screenpipe-logo-tray-black.png"
     ],
     "longDescription": "",
     "resources": [

@@ -43,15 +43,15 @@ think of pipes like a local Zapier which costs 10x & 10x less friction - no auth
 
 The fastest way to create a new pipe is using our CLI:
 
-<Tabs items={['npm', 'bun', 'yarn', 'pnpm']}>
+<Tabs items={['bun', 'npm', , 'yarn', 'pnpm']}>
   <Tab>
     ```bash copy
-    npx @screenpipe/create-pipe@latest
+    bunx @screenpipe/create-pipe@latest
     ```
   </Tab>
   <Tab>
     ```bash copy
-    bunx @screenpipe/create-pipe@latest
+    npx @screenpipe/create-pipe@latest
     ```
   </Tab>
   <Tab>
@@ -74,7 +74,7 @@ then enable your pipe in screenpipe
 screenpipe pipe enable my-pipe
 ```
 
-The CLI will guide you through setting up your pipe
+the CLI will guide you through setting up your pipe
 
 ### available pipes
 
@@ -87,6 +87,15 @@ The CLI will guide you through setting up your pipe
 | **obsidian time logs**         | log work activities to obsidian    | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-obsidian-time-logs)                         |
 
 </MotionDiv>
+
+to install a pipe from the store, just add the url of the folder in the UI and click install.
+
+in CLI:
+
+```bash copy
+screenpipe pipe download https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-obsidian-time-logs
+screenpipe pipe enable pipe-obsidian-time-logs
+```
 
 ### pipe configuration
 
