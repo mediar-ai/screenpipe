@@ -1,0 +1,10 @@
+{
+  "manifest_version": 2,
+  "name": "Chrome Screen AI",
+  "version": "127.1",
+  "accept_arch": [
+    "arm64",
+    "arm64e",
+    "aarch64"
+  ]
+}

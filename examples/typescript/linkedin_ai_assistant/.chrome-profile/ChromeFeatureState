@@ -1,0 +1,6 @@
+{
+   "disable-features": "AutofillServerCommunication,CalculateNativeWinOcclusion,CertificateTransparencyComponentUpdater,DialMediaRouteProvider,InterestFeedContentSuggestions,MediaRouter,OptimizationHints,PrivacySandboxSettings4,Translate",
+   "enable-features": "UkmSamplingRate\u003CUkmSamplingRate",
+   "force-fieldtrial-params": "UkmSamplingRate.Sampled_NoSeed_Stable:_default_sampling/1000000",
+   "force-fieldtrials": "*BackgroundTracing/default/UkmSamplingRate/Sampled_NoSeed_Stable"
+}

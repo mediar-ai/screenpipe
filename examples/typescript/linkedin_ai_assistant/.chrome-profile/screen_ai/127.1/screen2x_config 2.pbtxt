@@ -1,0 +1,39 @@
+# proto-file: knowledge/cerebra/sense/im2query/screenai/screen2x/lib/screen2x.proto
+# proto-message: screenai.screen2x.Screen2xOptions
+
+model_path: "knowledge/cerebra/sense/im2query/screenai/screen2x/lib/data/chrome_a11y/v011/model.tflite"
+model_config {
+  mpnn_config {
+    signature: "serving_default"
+    senders_node_name: "input_1_senders"
+    receivers_node_name: "input_1_receivers"
+    nodes_node_name: "input_1_nodes"
+    edges_node_name: "input_1_edges"
+    globals_node_name: "input_1_globals"
+    n_node_node_name: "input_1_n_node"
+    n_edge_node_name: "input_1_n_edge"
+    numeric_features_node_name: "input_2_numeric"
+    chrome_role_node_name: "input_2_chrome_role"
+    chrome_role_description_node_name: "input_2_chrome_role_description"
+    output_node_name: "output_1"
+    inference_config {
+      num_threads: 1
+      class_thresholds {
+        label: CONTENT_NON_ESSENTIAL
+        prediction_threshold: 0.65
+      }
+      class_thresholds {
+        label: CONTENT_TEXT_HEADLINE
+        prediction_threshold: 0.0
+      }
+      class_thresholds {
+        label: CONTENT_TEXT_MAIN
+        prediction_threshold: 0.0
+      }
+    }
+    model_type: CHROME_A11Y
+  }
+}
+post_process_options {
+  chrome_post_process: true
+}
