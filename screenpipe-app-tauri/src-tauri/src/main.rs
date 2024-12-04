@@ -85,6 +85,23 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 async fn main() {
     let _ = fix_path_env::fix();
 
+    // Set permanent OLLAMA_ORIGINS env var on Windows if not present
+    #[cfg(target_os = "windows")]
+    {
+        if env::var("OLLAMA_ORIGINS").is_err() {
+            let output = std::process::Command::new("setx")
+                .args(&["OLLAMA_ORIGINS", "*"])
+                .output()
+                .expect("failed to execute process");
+
+            if !output.status.success() {
+                error!("failed to set OLLAMA_ORIGINS: {}", String::from_utf8_lossy(&output.stderr));
+            } else {
+                info!("permanently set OLLAMA_ORIGINS=* for user");
+            }
+        }
+    }
+
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
