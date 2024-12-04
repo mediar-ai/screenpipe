@@ -141,7 +141,6 @@ export function useSettings() {
   };
 
   const resetSettings = async () => {
-    await deleteStore()
     await updateSettings(defaultSettings)
   }
 
@@ -407,10 +406,4 @@ async function initStore() {
   const dataDir = await localDataDir();
   const storePath = await join(dataDir, "screenpipe", "store.bin");
   store = await createStore(storePath);
-}
-
-async function deleteStore() {
-  const dataDir = await localDataDir();
-  const storePath = await join(dataDir, "screenpipe", "store.bin");
-  await remove(`${storePath}`);
 }
