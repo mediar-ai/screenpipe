@@ -123,7 +123,6 @@ export function useSettings() {
     posthog.identify(settings.userId);
   }, [settings.userId]);
 
-  // console.log("settings", settings);
   const resetSetting = async (key: keyof Settings) => {
     if (!store) {
       await initStore();
@@ -143,7 +142,7 @@ export function useSettings() {
 
   const resetSettings = async () => {
     await deleteStore()
-    await loadSettings()
+    await updateSettings(defaultSettings)
   }
 
   const loadSettings = async () => {
@@ -354,7 +353,6 @@ export function useSettings() {
   };
 
   useEffect(() => {
-    
     loadSettings();
   }, []);
 
