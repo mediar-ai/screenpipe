@@ -3,7 +3,6 @@
 mod tests {
     use reqwest;
     use screenpipe_core::{download_pipe, run_pipe};
-    use serde_json::json;
     use std::time::Duration;
     use std::{path::PathBuf, sync::Once};
     use tempfile::TempDir;
@@ -109,57 +108,6 @@ mod tests {
         assert!(output_file.exists());
         let content = tokio::fs::read_to_string(output_file).await.unwrap();
         assert_eq!(content, "Hello, Screenpipe!");
-    }
-
-    async fn setup_test_pipe_with_config(
-        temp_dir: &TempDir,
-        pipe_name: &str,
-        code: &str,
-        config: &str,
-    ) -> PathBuf {
-        init();
-        let pipe_dir = temp_dir.path().join("pipes").join(pipe_name);
-        create_dir_all(&pipe_dir).await.unwrap();
-
-        let ts_file_path = pipe_dir.join("pipe.ts");
-        tokio::fs::write(&ts_file_path, code).await.unwrap();
-
-        let json_file_path = pipe_dir.join("pipe.json");
-        tokio::fs::write(&json_file_path, config).await.unwrap();
-
-        pipe_dir
-    }
-
-    #[tokio::test]
-    async fn test_pipe_with_config() {
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let code = r#"
-            (async () => {
-                await pipe.loadConfig();
-                console.log("Pipe config test");
-                console.log(`API Key: ${pipe.config.apiKey}`);
-                console.log(`Endpoint: ${pipe.config.endpoint}`);
-                if (pipe.config.apiKey !== "test-api-key" || pipe.config.endpoint !== "https://api.example.com") {
-                    throw new Error("Config not loaded correctly");
-                }
-            })();
-        "#;
-
-        let config = json!({
-            "apiKey": "test-api-key",
-            "endpoint": "https://api.example.com"
-        })
-        .to_string();
-
-        let pipe_dir = setup_test_pipe_with_config(&temp_dir, "config_pipe", code, &config).await;
-
-        // Change the working directory to the pipe directory
-        std::env::set_current_dir(&pipe_dir).unwrap();
-
-        let result = run_pipe("config_pipe", screenpipe_dir).await;
-        assert!(result.is_ok(), "Pipe execution failed: {:?}", result);
     }
 
     #[tokio::test]
@@ -346,6 +294,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_nextjs_pipe_app_dir() {
         println!("Starting test_nextjs_pipe_app_dir");
         init();

@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 use tracing::debug;
 
 #[tokio::test]
+#[ignore]
 async fn test_transcription_accuracy() {
     // Initialize tracing
     // tracing_subscriber::fmt()

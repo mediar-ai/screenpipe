@@ -167,10 +167,6 @@ pub struct Cli {
     )]
     pub ocr_engine: CliOcrEngine,
 
-    /// UID key for sending data to friend wearable (if not provided, data won't be sent)
-    #[arg(long)]
-    pub friend_wearable_uid: Option<String>,
-
     /// List available monitors, then you can use --monitor-id to select one (with the ID)
     #[arg(long)]
     pub list_monitors: bool,

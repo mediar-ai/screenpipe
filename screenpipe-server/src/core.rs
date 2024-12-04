@@ -1,5 +1,5 @@
 use crate::cli::{CliVadEngine, CliVadSensitivity};
-use crate::db::Speaker;
+use crate::db_types::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
@@ -13,7 +13,6 @@ use screenpipe_audio::{
 };
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
-use screenpipe_integrations::friend_wearable::initialize_friend_wearable_loop;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -35,7 +34,6 @@ pub async fn start_continuous_recording(
     save_text_files: bool,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
-    friend_wearable_uid: Option<String>,
     monitor_ids: Vec<u32>,
     use_pii_removal: bool,
     vision_disabled: bool,
@@ -48,14 +46,6 @@ pub async fn start_continuous_recording(
     vad_sensitivity: CliVadSensitivity,
     languages: Vec<Language>,
 ) -> Result<()> {
-    // Initialize friend wearable loop
-    if let Some(uid) = &friend_wearable_uid {
-        tokio::spawn(initialize_friend_wearable_loop(
-            uid.clone(),
-            Arc::clone(&db),
-        ));
-    }
-
     debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
         monitor_ids
@@ -65,7 +55,6 @@ pub async fn start_continuous_recording(
                 let output_path_video = Arc::clone(&output_path);
                 let is_running_video = Arc::clone(&vision_control);
                 let ocr_engine = Arc::clone(&ocr_engine);
-                let friend_wearable_uid_video = friend_wearable_uid.clone();
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
 
@@ -80,7 +69,6 @@ pub async fn start_continuous_recording(
                         is_running_video,
                         save_text_files,
                         ocr_engine,
-                        friend_wearable_uid_video,
                         monitor_id,
                         use_pii_removal,
                         &ignored_windows_video,
@@ -136,7 +124,6 @@ pub async fn start_continuous_recording(
                 whisper_sender,
                 whisper_receiver,
                 audio_devices_control,
-                friend_wearable_uid,
                 audio_transcription_engine,
             )
             .await
@@ -180,7 +167,6 @@ async fn record_video(
     is_running: Arc<AtomicBool>,
     save_text_files: bool,
     ocr_engine: Arc<OcrEngine>,
-    _friend_wearable_uid: Option<String>,
     monitor_id: u32,
     use_pii_removal: bool,
     ignored_windows: &[String],
@@ -277,7 +263,6 @@ async fn record_audio(
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
     whisper_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
-    friend_wearable_uid: Option<String>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
@@ -403,7 +388,6 @@ async fn record_audio(
             match process_audio_result(
                 &db,
                 transcription,
-                friend_wearable_uid.as_deref(),
                 audio_transcription_engine.clone(),
                 processed_previous,
                 previous_transcript_id,
@@ -422,7 +406,6 @@ async fn record_audio(
 async fn process_audio_result(
     db: &DatabaseManager,
     result: TranscriptionResult,
-    _friend_wearable_uid: Option<&str>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     previous_transcript: Option<String>,
     previous_transcript_id: Option<i64>,
