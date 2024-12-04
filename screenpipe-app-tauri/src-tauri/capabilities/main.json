@@ -44,11 +44,19 @@
       "identifier": "fs:allow-remove",
       "allow": [
         {
-          "path": "$HOME/Library/Application Support/**",
+          "path": "$HOME/Library/Application Support/.screenpipe/*",
           "requireLiteralLeadingDot": false
         },
         {
-          "path": "$HOME/Library/Application Support/.screenpipe/*",
+          "path": "$XDG_DATA_HOME/.screenpipe/*",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$XDG_DATA_HOME/.screenpipe/*",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "${FOLDERID_LocalAppData}/.screenpipe/*",
           "requireLiteralLeadingDot": false
         }
       ]
