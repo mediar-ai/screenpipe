@@ -41,6 +41,19 @@
     "global-shortcut:allow-unregister-all",
     "global-shortcut:default",
     {
+      "identifier": "fs:allow-remove",
+      "allow": [
+        {
+          "path": "$HOME/Library/Application Support/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$HOME/Library/Application Support/.screenpipe/*",
+          "requireLiteralLeadingDot": false
+        }
+      ]
+    },
+    {
       "identifier": "fs:scope",
       "allow": [
         {
