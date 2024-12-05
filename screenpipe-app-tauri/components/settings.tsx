@@ -671,6 +671,8 @@ export function Settings({ className }: { className?: string }) {
           setTimeout(() => {
             debouncedFetchHealth();
           }, 500);
+
+          window.location.reload();
         }
       }}
     >

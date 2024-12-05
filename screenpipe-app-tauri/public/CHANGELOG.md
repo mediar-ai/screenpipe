@@ -1,4 +1,7 @@
-Great! Please go ahead and provide me with the list of commits so we can create the changelog for the new screenpipe update.
+Thank you for providing the commit details. Based on the commit message ix settings update\, I will add the following entry to the changelog:
 
-#### **Full Changelog:** [14af8..e6677](https://github.com/mediar-ai/screenpipe/compare/14af8..e6677)
+### **Fixes:**
+- **Fixed settings update issue:** Resolved issue with settings update to ensure proper functionality.
+
+#### **Full Changelog:** [7d776..69bfd](https://github.com/mediar-ai/screenpipe/compare/7d776..69bfd)
 
