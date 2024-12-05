@@ -10,14 +10,14 @@ DROP TABLE IF EXISTS audio_transcriptions_fts;
 DROP TABLE IF EXISTS ui_monitoring_fts;
 
 -- Drop legacy tables and triggers
-DROP TABLE IF EXISTS chunked_text_index;
-DROP TABLE IF EXISTS chunked_text_entries;
-DROP TABLE IF EXISTS chunked_text_index_fts;
-DROP TABLE IF EXISTS chunked_text_index_fts_data;
-DROP TABLE IF EXISTS chunked_text_index_fts_idx;
-DROP TABLE IF EXISTS chunked_text_index_fts_content;
-DROP TABLE IF EXISTS chunked_text_index_fts_docsize;
-DROP TABLE IF EXISTS chunked_text_index_fts_config;
+-- DROP TABLE IF EXISTS chunked_text_index;
+-- DROP TABLE IF EXISTS chunked_text_entries;
+-- DROP TABLE IF EXISTS chunked_text_index_fts;
+-- DROP TABLE IF EXISTS chunked_text_index_fts_data;
+-- DROP TABLE IF EXISTS chunked_text_index_fts_idx;
+-- DROP TABLE IF EXISTS chunked_text_index_fts_content;
+-- DROP TABLE IF EXISTS chunked_text_index_fts_docsize;
+-- DROP TABLE IF EXISTS chunked_text_index_fts_config;
 DROP TRIGGER IF EXISTS chunked_text_index_ai;
 DROP TRIGGER IF EXISTS chunked_text_index_ad;
 DROP TRIGGER IF EXISTS chunked_text_index_au;
@@ -49,21 +49,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS ui_monitoring_fts USING fts5(
     tokenize='porter unicode61 remove_diacritics 2'
 );
 
--- Insert existing data in batches to avoid memory issues
+-- Insert existing data
 INSERT OR IGNORE INTO ocr_text_fts(frame_id, text, app_name, window_name)
 SELECT o.frame_id, o.text, COALESCE(o.app_name, ''), COALESCE(o.window_name, '')
 FROM ocr_text o
-WHERE o.text IS NOT NULL AND o.text != ''
-LIMIT 1000;
-
-WHILE (SELECT changes()) > 0 DO
-  INSERT OR IGNORE INTO ocr_text_fts(frame_id, text, app_name, window_name)
-  SELECT o.frame_id, o.text, COALESCE(o.app_name, ''), COALESCE(o.window_name, '')
-  FROM ocr_text o
-  WHERE o.text IS NOT NULL AND o.text != ''
-  AND NOT EXISTS (SELECT 1 FROM ocr_text_fts f WHERE f.frame_id = o.frame_id)
-  LIMIT 1000;
-END;
+WHERE o.text IS NOT NULL AND o.text != '';
 
 INSERT OR IGNORE INTO audio_transcriptions_fts(audio_chunk_id, transcription, device)
 SELECT audio_chunk_id, transcription, COALESCE(device, '')
