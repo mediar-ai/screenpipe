@@ -23,6 +23,7 @@ export type EmbeddedLLMConfig = {
 
 export enum Shortcut {
   SHOW_SCREENPIPE = "show_screenpipe",
+  START_RECORDING = "start_recording",
 }
 
 export interface Settings {
@@ -57,6 +58,7 @@ export interface Settings {
   languages: Language[];
   enableBeta: boolean;
   showScreenpipeShortcut: string;
+  startRecordingShortcut: string;
   isFirstTimeUser: boolean;
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
@@ -106,6 +108,7 @@ const defaultSettings: Settings = {
   },
   enableBeta: false,
   showScreenpipeShortcut: "Super+Alt+S",
+  startRecordingShortcut: "Super+Alt+R",
   isFirstTimeUser: true,
   enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
@@ -287,6 +290,8 @@ export function useSettings() {
 
         const savedShowScreenpipeShortcut =
           (await store!.get<string>("showScreenpipeShortcut")) || "Super+Alt+S";
+        const savedStartRecordingShortcut =
+          (await store!.get<string>("startRecordingShortcut")) || "Super+Alt+R";
 
         let savedIsFirstTimeUser = await store!.get<boolean>("isFirstTimeUser");
         if (savedIsFirstTimeUser === null) {
@@ -336,6 +341,7 @@ export function useSettings() {
           languages: savedLanguages,
           enableBeta: savedEnableBeta,
           showScreenpipeShortcut: savedShowScreenpipeShortcut,
+          startRecordingShortcut: savedStartRecordingShortcut,
           isFirstTimeUser: savedIsFirstTimeUser,
           enableFrameCache: savedEnableFrameCache,
           enableUiMonitoring: savedEnableUiMonitoring,

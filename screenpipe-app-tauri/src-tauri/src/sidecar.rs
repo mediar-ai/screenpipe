@@ -374,7 +374,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     Ok(child)
 }
 pub struct SidecarManager {
-    child: Option<CommandChild>,
+    pub child: Option<CommandChild>,
     last_restart: Instant,
     restart_interval: Arc<Mutex<Duration>>,
     restart_task: Option<JoinHandle<()>>,

@@ -62,46 +62,88 @@ import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { AuthButton } from "./auth";
 
+// Add type definitions
+type ListeningState = 'recording' | 'show' | null;
+type ModifierKey = 'ctrl' | 'alt' | 'shift' | 'super';
+
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
   const { debouncedFetchHealth } = useHealthCheck();
-  const [localSettings, setLocalSettings] = React.useState(settings);
-  const [showApiKey, setShowApiKey] = React.useState(false);
-  const [ollamaStatus, setOllamaStatus] = useState<
-    "idle" | "running" | "error"
-  >("idle");
-  const [currentPlatform, setCurrentPlatform] = useState("unknown");
+  const [localSettings, setLocalSettings] = useState(settings);
+  const [showApiKey, setShowApiKey] = useState(false);
 
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+  // Shortcut States
+  const [listeningFor, setListeningFor] = useState<ListeningState>(null);
+  const [selectedModifiers, setSelectedModifiers] = useState<ModifierKey[]>([]);
   const [nonModifierKey, setNonModifierKey] = useState<string>("");
-  const [currentShortcut, setCurrentShortcut] = useState<string>(
-    settings.showScreenpipeShortcut
-  );
-  const [embeddedAIStatus, setEmbeddedAIStatus] = useState<
-    "idle" | "running" | "error"
-  >("idle");
+  const [currentShortcut, setCurrentShortcut] = useState<string>(settings.showScreenpipeShortcut);
+  
+  const [recordingModifiers, setRecordingModifiers] = useState<ModifierKey[]>([]);
+  const [recordingKey, setRecordingKey] = useState<string>("");
+  const [currentRecordingShortcut, setCurrentRecordingShortcut] = useState<string>(settings.startRecordingShortcut);
 
-  const [disabledShortcuts, setDisabledShortcuts] = useState<Shortcut[]>(
-    settings.disabledShortcuts
-  );
+  // Embedded AI States
+  const [embeddedAIStatus, setEmbeddedAIStatus] = useState<'idle' | 'running' | 'error'>('idle');
+  const [ollamaStatus, setOllamaStatus] = useState<'idle' | 'running' | 'error'>('idle');
+
+  // Platform state
+  const [currentPlatform, setCurrentPlatform] = useState<string>("unknown");
+
+  // Sync with settings changes
+  useEffect(() => {
+    setLocalSettings(settings);
+    setCurrentShortcut(settings.showScreenpipeShortcut);
+    setCurrentRecordingShortcut(settings.startRecordingShortcut);
+  }, [settings]);
 
   useEffect(() => {
-    setCurrentShortcut(settings.showScreenpipeShortcut);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!listeningFor) return;
 
-    const parts = settings.showScreenpipeShortcut.split("+");
-    const modifiers = parts.slice(0, -1);
-    const key = parts.slice(-1)[0];
+      e.preventDefault();
+      
+      const modifiers: ModifierKey[] = [];
+      if (e.ctrlKey) modifiers.push('ctrl');
+      if (e.altKey) modifiers.push('alt');
+      if (e.shiftKey) modifiers.push('shift');
+      if (e.metaKey) modifiers.push('super');
 
-    setSelectedModifiers(modifiers);
-    setNonModifierKey(key);
-  }, [settings.showScreenpipeShortcut]);
+      const key = e.key.toUpperCase();
+      if (key.length === 1 || /^F\d{1,2}$/.test(key)) {
+        if (listeningFor === 'recording') {
+          setRecordingModifiers(modifiers);
+          setRecordingKey(key);
+        } else {
+          setSelectedModifiers(modifiers);
+          setNonModifierKey(key);
+        }
+      }
+    };
 
-  const toggleModifier = (modifier: string) => {
+    if (listeningFor) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [listeningFor]);
+
+  const toggleModifier = (modifier: ModifierKey) => {
     setSelectedModifiers((prev) =>
       prev.includes(modifier)
         ? prev.filter((m) => m !== modifier)
         : [...prev, modifier]
     );
+  };
+
+  const toggleRecordingModifier = (modifier: ModifierKey) => {
+    setRecordingModifiers((prev) => {
+      if (prev.includes(modifier)) {
+        return prev.filter((m) => m !== modifier);
+      }
+      return [modifier];
+    });
   };
 
   const handleNonModifierKeyChange = (
@@ -114,9 +156,18 @@ export function Settings({ className }: { className?: string }) {
     }
   };
 
+  const handleRecordingKeyChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const key = event.target.value.toUpperCase();
+    const validKeys = /^[A-Z0-9]$|^F([1-9]|1[0-2])$/; // Alphanumeric or F1-F12
+    if (validKeys.test(key) || key === "") {
+      setRecordingKey(key);
+    }
+  };
+
   const handleSetShortcut = () => {
     if (selectedModifiers.length === 0 || nonModifierKey === "") {
-      // Don't update if no modifiers and no key are selected
       toast({
         title: "invalid shortcut",
         description: "please select at least one modifier and a key",
@@ -125,17 +176,17 @@ export function Settings({ className }: { className?: string }) {
       return;
     }
 
-    const newShortcut = [...selectedModifiers, nonModifierKey]
-      .filter(Boolean)
-      .join("+");
+    const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
     setLocalSettings({ ...localSettings, showScreenpipeShortcut: newShortcut });
     updateSettings({ showScreenpipeShortcut: newShortcut });
     registerShortcuts({
       showScreenpipeShortcut: newShortcut,
-      disabledShortcuts,
+      disabledShortcuts: settings.disabledShortcuts,
+      startRecordingShortcut: settings.startRecordingShortcut,
     });
 
     setCurrentShortcut(newShortcut);
+    setListeningFor(null);
 
     toast({
       title: "shortcut updated",
@@ -143,8 +194,39 @@ export function Settings({ className }: { className?: string }) {
     });
   };
 
+  const handleSetRecordingShortcut = () => {
+    if (recordingModifiers.length === 0 || recordingKey === "") {
+      toast({
+        title: "invalid shortcut",
+        description: "please select at least one modifier and a key",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newShortcut = [...recordingModifiers, recordingKey].join("+");
+    setLocalSettings({ ...localSettings, startRecordingShortcut: newShortcut });
+    updateSettings({ startRecordingShortcut: newShortcut });
+    registerShortcuts({
+      showScreenpipeShortcut: settings.showScreenpipeShortcut,
+      startRecordingShortcut: newShortcut,
+      disabledShortcuts: settings.disabledShortcuts,
+    });
+
+    setCurrentRecordingShortcut(newShortcut);
+    setListeningFor(null);
+
+    toast({
+      title: "shortcut updated",
+      description: `new recording shortcut set to: ${parseKeyboardShortcut(newShortcut)}`,
+    });
+  };
+
   const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
   const isShortcutChanged = newShortcut !== currentShortcut;
+
+  const newRecordingShortcut = [...recordingModifiers, recordingKey].join("+");
+  const isRecordingShortcutChanged = newRecordingShortcut !== currentRecordingShortcut;
 
   useEffect(() => {
     setCurrentPlatform(platform());
@@ -485,30 +567,85 @@ export function Settings({ className }: { className?: string }) {
   // Use the useInterval hook to periodically check the status
   useInterval(checkEmbeddedAIStatus, 10000); // Check every 10 seconds
 
-  const handleShortcutToggle = (checked: boolean) => {
-    console.log("handleShortcutToggle", checked);
-    let newDisabledShortcuts = [...localSettings.disabledShortcuts];
-    if (!checked) {
-      newDisabledShortcuts.push(Shortcut.SHOW_SCREENPIPE);
-    } else {
-      newDisabledShortcuts = newDisabledShortcuts.filter(
-        (shortcut) => shortcut !== Shortcut.SHOW_SCREENPIPE
-      );
+  const handleShortcutToggle = useCallback((checked: boolean) => {
+    try {
+      let newDisabledShortcuts = [...settings.disabledShortcuts];
+      if (!checked) {
+        newDisabledShortcuts.push(Shortcut.SHOW_SCREENPIPE);
+      } else {
+        newDisabledShortcuts = newDisabledShortcuts.filter(
+          (shortcut) => shortcut !== Shortcut.SHOW_SCREENPIPE
+        );
+      }
+
+      // Update both local and global settings
+      setLocalSettings({
+        ...localSettings,
+        disabledShortcuts: newDisabledShortcuts,
+      });
+      updateSettings({
+        disabledShortcuts: newDisabledShortcuts,
+      });
+
+      // Re-register shortcuts with new disabled state
+      registerShortcuts({
+        showScreenpipeShortcut: settings.showScreenpipeShortcut,
+        startRecordingShortcut: settings.startRecordingShortcut,
+        disabledShortcuts: newDisabledShortcuts,
+      });
+
+      toast({
+        title: checked ? "shortcut enabled" : "shortcut disabled",
+        description: `Show screenpipe shortcut has been ${checked ? "enabled" : "disabled"}`,
+      });
+    } catch (error) {
+      console.error("Error toggling shortcut:", error);
+      toast({
+        title: "error updating shortcut",
+        description: "Failed to update shortcut state. Please try again.",
+        variant: "destructive",
+      });
     }
+  }, [settings, localSettings, updateSettings]);
 
-    setLocalSettings({
-      ...localSettings,
-      disabledShortcuts: newDisabledShortcuts,
-    });
-    updateSettings({
-      disabledShortcuts: newDisabledShortcuts,
-    });
+  const handleRecordingShortcutToggle = useCallback((checked: boolean) => {
+    try {
+      let newDisabledShortcuts = [...settings.disabledShortcuts];
+      if (!checked) {
+        newDisabledShortcuts.push(Shortcut.START_RECORDING);
+      } else {
+        newDisabledShortcuts = newDisabledShortcuts.filter(
+          (shortcut) => shortcut !== Shortcut.START_RECORDING
+        );
+      }
 
-    registerShortcuts({
-      showScreenpipeShortcut: settings.showScreenpipeShortcut,
-      disabledShortcuts: newDisabledShortcuts,
-    });
-  };
+      setLocalSettings({
+        ...localSettings,
+        disabledShortcuts: newDisabledShortcuts,
+      });
+      updateSettings({
+        disabledShortcuts: newDisabledShortcuts,
+      });
+
+      registerShortcuts({
+        showScreenpipeShortcut: settings.showScreenpipeShortcut,
+        startRecordingShortcut: settings.startRecordingShortcut,
+        disabledShortcuts: newDisabledShortcuts,
+      });
+
+      toast({
+        title: checked ? "shortcut enabled" : "shortcut disabled",
+        description: `Recording shortcut has been ${checked ? "enabled" : "disabled"}`,
+      });
+    } catch (error) {
+      console.error("Error toggling recording shortcut:", error);
+      toast({
+        title: "error updating shortcut",
+        description: "Failed to update shortcut state. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [settings, localSettings, updateSettings]);
 
   useEffect(() => {
     const handleSettingsUpdate = () => {
@@ -995,71 +1132,108 @@ export function Settings({ className }: { className?: string }) {
             <CardHeader>
               <CardTitle className="text-center">shortcuts</CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col items-center">
-              <div
-                className={
-                  settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)
-                    ? "opacity-50 pointer-events-none"
-                    : ""
-                }
-              >
-                <h2 className="text-lg font-semibold mb-4">
-                  set shortcut for screenpipe overlay
-                </h2>
-                <p className="text-sm text-muted-foreground mb-4">
-                  use the following options to set a keyboard shortcut for
-                  showing the screenpipe overlay.
-                </p>
-                <div className="flex items-center gap-2 mb-4">
-                  {["ctrl", "alt", "shift", "super"].map((modifier) => (
-                    <label key={modifier} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedModifiers.includes(modifier)}
-                        onChange={() => toggleModifier(modifier)}
-                      />
-                      <span className="ml-2">
-                        {parseKeyboardShortcut(modifier)}
-                      </span>
-                    </label>
-                  ))}
-                  <input
-                    type="text"
-                    value={nonModifierKey}
-                    onChange={handleNonModifierKeyChange}
-                    placeholder="enter key"
-                    className="border p-1"
+            <CardContent>
+              <ul className="space-y-4">
+                <li className="flex items-center justify-between">
+                  <span className="text-sm font-medium">start recording</span>
+                  <div className="relative w-[12rem]">
+                    {listeningFor === 'recording' ? (
+                      <div className="border border-blue-300 rounded-lg text-gray-500 w-full h-[2.5rem] bg-gray-100 flex items-center justify-between px-2 overflow-hidden">
+                        <span className="truncate text-sm">
+                          {recordingKey ? parseKeyboardShortcut([...recordingModifiers, recordingKey].join('+')) : 'listening...'}
+                        </span>
+                        <div className="flex items-center gap-1 ml-2">
+                          {recordingKey && (
+                            <button
+                              type="button"
+                              onClick={handleSetRecordingShortcut}
+                              className="text-blue-500 hover:text-blue-600"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setListeningFor(null)}
+                            className="text-gray-400 hover:text-gray-500"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={() => setListeningFor('recording')}
+                        className="w-full h-[2.5rem] justify-between overflow-hidden bg-black text-white hover:bg-black/90"
+                      >
+                        <span>{parseKeyboardShortcut(currentRecordingShortcut)}</span>
+                        <span className="ml-2 text-xs text-gray-400">edit</span>
+                      </Button>
+                    )}
+                  </div>
+                </li>
+
+                <li className="flex items-center justify-between">
+                  <span className="text-sm font-medium">show screenpipe</span>
+                  <div className="relative w-[12rem]">
+                    {listeningFor === 'show' ? (
+                      <div className="border border-blue-300 rounded-lg text-gray-500 w-full h-[2.5rem] bg-gray-100 flex items-center justify-between px-2 overflow-hidden">
+                        <span className="truncate text-sm">
+                          {nonModifierKey ? parseKeyboardShortcut([...selectedModifiers, nonModifierKey].join('+')) : 'listening...'}
+                        </span>
+                        <div className="flex items-center gap-1 ml-2">
+                          {nonModifierKey && (
+                            <button
+                              type="button"
+                              onClick={handleSetShortcut}
+                              className="text-blue-500 hover:text-blue-600"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setListeningFor(null)}
+                            className="text-gray-400 hover:text-gray-500"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={() => setListeningFor('show')}
+                        className="w-full h-[2.5rem] justify-between overflow-hidden bg-black text-white hover:bg-black/90"
+                      >
+                        <span>{parseKeyboardShortcut(currentShortcut)}</span>
+                        <span className="ml-2 text-xs text-gray-400">edit</span>
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              </ul>
+
+              <div className="mt-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="shortcutEnabled" className="text-sm">
+                    disable overlay shortcut
+                  </Label>
+                  <Switch
+                    id="shortcutEnabled"
+                    checked={!settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)}
+                    onCheckedChange={handleShortcutToggle}
                   />
-                  <button
-                    onClick={handleSetShortcut}
-                    className={`btn btn-primary ${
-                      !isShortcutChanged ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                    disabled={!isShortcutChanged}
-                  >
-                    set shortcut
-                  </button>
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground text-center">
-                  current shortcut: {parseKeyboardShortcut(currentShortcut)}
-                </p>
-              </div>
-              <div className="w-full flex justify-center gap-2 items-center">
-                <Label htmlFor="shortcutEnabled" className="mt-2 text-sm">
-                  {settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)
-                    ? "enable shortcut"
-                    : "disable shortcut"}
-                </Label>
-                <Switch
-                  id="shortcutEnabled"
-                  checked={
-                    !settings.disabledShortcuts.includes(
-                      Shortcut.SHOW_SCREENPIPE
-                    )
-                  }
-                  onCheckedChange={handleShortcutToggle}
-                  className="mt-2"
-                />
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="recordingShortcutEnabled" className="text-sm">
+                    disable recording shortcut
+                  </Label>
+                  <Switch
+                    id="recordingShortcutEnabled"
+                    checked={!settings.disabledShortcuts.includes(Shortcut.START_RECORDING)}
+                    onCheckedChange={handleRecordingShortcutToggle}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>

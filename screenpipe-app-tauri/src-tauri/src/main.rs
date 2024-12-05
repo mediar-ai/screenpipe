@@ -4,9 +4,13 @@
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
+use commands::start_recording;
+use commands::stop_recording;
 use llm_sidecar::EmbeddedLLMSettings;
 use serde_json::Value;
 use sidecar::SidecarManager;
+use tauri::Emitter;
+use tauri_plugin_notification::NotificationExt;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -137,9 +141,12 @@ async fn main() {
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
+            commands::update_start_recording_shortcut,
             commands::show_timeline,
             commands::open_accessibility_preferences,
             commands::check_accessibility_permissions,
+            commands::start_recording,
+            commands::stop_recording,
             icons::get_app_icon,
             commands::open_auth_window,
         ])
@@ -213,6 +220,8 @@ async fn main() {
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
+                let start = MenuItemBuilder::with_id("start", "start recording").build(app)?;
+                let stop = MenuItemBuilder::with_id("stop", "stop recording").build(app)?;
                 let version = MenuItemBuilder::with_id(
                     "version",
                     format!("version {}", app.package_info().version),
@@ -225,6 +234,8 @@ async fn main() {
                     .items(&[
                         &version,
                         &show,
+                        &start,
+                        &stop,
                         update_manager.update_now_menu_item_ref(),
                         &menu_divider,
                         &quit,
@@ -232,41 +243,82 @@ async fn main() {
                     .build()?;
                 let _ = main_tray.set_menu(Some(menu));
 
-                main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
-                    "show" => {
-                        show_main_window(app_handle, false);
-                    }
-                    "quit" => {
-                        println!("quit clicked");
-                        app_handle.exit(0);
-                    }
-                    "update_now" => {
-                        use tauri_plugin_notification::NotificationExt;
-                        app_handle
-                            .notification()
-                            .builder()
-                            .title("screenpipe")
-                            .body("installing latest version")
-                            .show()
-                            .unwrap();
-
-                        tokio::task::block_in_place(move || {
-                            Handle::current().block_on(async move {
-                                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
-                                // bad UX: i use CLI and it kills my CLI because i updated app
-                                if let Err(err) = sidecar::kill_all_sreenpipes(
-                                    app_handle.state::<SidecarState>(),
-                                    app_handle.clone(),
-                                )
-                                .await
-                                {
-                                    error!("Failed to kill sidecar: {}", err);
+                main_tray.on_menu_event(move |app_handle, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            show_main_window(app_handle, false);
+                        }
+                        "start" => {
+                            let handle = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let state = handle.state::<SidecarState>();
+                                if let Err(err) = start_recording(state, handle.clone()).await {
+                                    let _ = handle.notification().builder()
+                                        .title("screenpipe")
+                                        .body("failed to start recording")
+                                        .show();
+                                    let _ = handle.emit("recording_failed", "failed to start recording");
+                                } else {
+                                    let _ = handle.notification().builder()
+                                        .title("screenpipe")
+                                        .body("recording started")
+                                        .show();
+                                    let _ = handle.emit("recording_started", "recording started");
                                 }
                             });
-                        });
-                        update_manager.update_screenpipe();
+                        }
+                        "stop" => {
+                            let handle = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let state = handle.state::<SidecarState>();
+                                if let Err(err) = stop_recording(state, handle.clone()).await {
+                                    error!("failed to stop recording: {}", err);
+                                    let _ = handle.notification().builder()
+                                        .title("screenpipe")
+                                        .body("failed to stop recording")
+                                        .show();
+                                    let _ = handle.emit("recording_failed", "failed to stop recording");
+                                } else {
+                                    let _ = handle.notification().builder()
+                                        .title("screenpipe")
+                                        .body("recording stopped")
+                                        .show();
+                                    let _ = handle.emit("recording_stopped", "recording stopped");
+                                }
+                            });
+                        }
+                        "quit" => {
+                            println!("quit clicked");
+                            app_handle.exit(0);
+                        }
+                        "update_now" => {
+                            use tauri_plugin_notification::NotificationExt;
+                            app_handle
+                                .notification()
+                                .builder()
+                                .title("screenpipe")
+                                .body("installing latest version")
+                                .show()
+                                .unwrap();
+
+                            tokio::task::block_in_place(move || {
+                                Handle::current().block_on(async move {
+                                    // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
+                                    // bad UX: i use CLI and it kills my CLI because i updated app
+                                    if let Err(err) = sidecar::kill_all_sreenpipes(
+                                        app_handle.state::<SidecarState>(),
+                                        app_handle.clone(),
+                                    )
+                                    .await
+                                    {
+                                        error!("Failed to kill sidecar: {}", err);
+                                    }
+                                });
+                            });
+                            update_manager.update_screenpipe();
+                        }
+                        _ => (),
                     }
-                    _ => (),
                 });
                 main_tray.on_tray_icon_event(move |tray, event| match event {
                     tauri::tray::TrayIconEvent::Click {

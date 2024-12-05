@@ -1,8 +1,16 @@
-use crate::get_data_dir;
+use crate::{get_data_dir, kill_all_sreenpipes, spawn_screenpipe, SidecarState};
+use log::debug;
 use serde::{Serialize};
 use serde_json::Value;
-use tauri::Manager;
-use tracing::info;
+use tauri::{Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
+use tracing::{info, error};
+use tokio::time::{sleep, Duration};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+// Global flag to track if we're currently processing a shortcut
+static PROCESSING_SHORTCUT: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -307,6 +315,211 @@ pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Resul
             }
         }
     });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn start_recording(state: tauri::State<'_, SidecarState>, app: tauri::AppHandle) -> Result<(), String> {
+    spawn_screenpipe(state, app).await
+}
+
+#[tauri::command]
+pub async fn stop_recording(state: tauri::State<'_, SidecarState>, app: tauri::AppHandle) -> Result<(), String> {
+    kill_all_sreenpipes(state, app).await
+}
+
+/// Check if screenpipe process exists with timeout and error handling
+async fn check_screenpipe_process() -> Result<bool, String> {
+    use tokio::time::timeout;
+    use std::time::Duration;
+
+    let process_check = async {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let output = tokio::process::Command::new("pgrep")
+                .arg("-f")
+                .arg("screenpipe")
+                .output()
+                .await
+                .map_err(|e| format!("Failed to execute pgrep: {}", e))?;
+            
+            Ok::<bool, String>(output.status.success() && !output.stdout.is_empty())
+        }
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let output = tokio::process::Command::new("tasklist")
+                .args(&["/FI", "IMAGENAME eq screenpipe.exe", "/NH"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .await
+                .map_err(|e| format!("Failed to execute tasklist: {}", e))?;
+            
+            Ok::<bool, String>(output.status.success() && !output.stdout.is_empty())
+        }
+    };
+
+    // Add 2-second timeout for process check
+    match timeout(Duration::from_secs(2), process_check).await {
+        Ok(result) => result,
+        Err(_) => Err("Process check timed out".to_string())
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn update_start_recording_shortcut(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    new_shortcut: String,
+    enabled: bool,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    // Try to parse the new shortcut
+    let shortcut_str = match new_shortcut.parse::<Shortcut>() {
+        Ok(_s) => new_shortcut,
+        Err(e) => {
+            info!(
+                "invalid shortcut '{}': {}, falling back to default",
+                new_shortcut, e
+            );
+            "Super+Alt+R".to_string()
+        }
+    };
+
+    // Parse the shortcut string
+    let recording_shortcut = match shortcut_str.parse::<Shortcut>() {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!("failed to parse shortcut: {}", e));
+        }
+    };
+
+    if !enabled {
+        let _ = app_handle.global_shortcut().unregister(recording_shortcut);
+        return Ok(());
+    }
+
+    // Register the new shortcut
+    if let Err(e) = app_handle.global_shortcut().on_shortcut(recording_shortcut, move |app, _event, _shortcut| {
+        if PROCESSING_SHORTCUT.load(Ordering::SeqCst) {
+            debug!("Shortcut already being processed, ignoring");
+            return;
+        }
+
+        let app_handle = app.clone();
+        
+        // Set processing flag with automatic reset after timeout
+        PROCESSING_SHORTCUT.store(true, Ordering::SeqCst);
+        let processing_flag = &PROCESSING_SHORTCUT;
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            processing_flag.store(false, Ordering::SeqCst);
+        });
+        
+        // Use a separate task for async operations
+        tauri::async_runtime::spawn(async move {
+            let state = app_handle.state::<SidecarState>();
+            
+            // Check process state
+            let process_exists = match check_screenpipe_process().await {
+                Ok(exists) => exists,
+                Err(e) => {
+                    error!("Failed to check process state: {}", e);
+                    false // Assume not running on error
+                }
+            };
+
+            // Check internal state
+            let internal_state = {
+                let sidecar = state.0.lock().await;
+                match &*sidecar {
+                    Some(manager) => manager.child.is_some(),
+                    None => false
+                }
+            };
+
+            // Determine true running state - if either shows running, consider it running
+            let is_running = process_exists || internal_state;
+            
+            info!("Sidecar process exists: {}, internal state: {}, final running state: {}", 
+                  process_exists, internal_state, is_running);
+            
+            let result = if is_running {
+                info!("Stopping screenpipe via shortcut");
+                kill_all_sreenpipes(state.clone(), app_handle.clone()).await
+            } else {
+                info!("Starting screenpipe via shortcut");
+                start_recording(state.clone(), app_handle.clone()).await
+            };
+
+            // Give the state time to update
+            sleep(Duration::from_millis(100)).await;
+
+            // Verify final state
+            let final_process_exists = match check_screenpipe_process().await {
+                Ok(exists) => exists,
+                Err(e) => {
+                    error!("Failed to check final process state: {}", e);
+                    process_exists // Fall back to previous state on error
+                }
+            };
+
+            let final_internal_state = {
+                let sidecar = state.0.lock().await;
+                match &*sidecar {
+                    Some(manager) => manager.child.is_some(),
+                    None => false
+                }
+            };
+
+            let final_state = final_process_exists || final_internal_state;
+            info!("Final state - process: {}, internal: {}, combined: {}", 
+                  final_process_exists, final_internal_state, final_state);
+
+            match result {
+                Ok(_) => {
+                    let expected_state = !is_running;
+                    if final_state == expected_state {
+                        let (title, body, event) = if is_running {
+                            ("screenpipe", "recording stopped", "recording_stopped")
+                        } else {
+                            ("screenpipe", "recording started", "recording_started")
+                        };
+
+                        let _ = app_handle.notification().builder()
+                            .title(title)
+                            .body(body)
+                            .show();
+                        let _ = app_handle.emit(event, body);
+                    } else {
+                        error!("State verification failed - expected: {}, got: {}", expected_state, final_state);
+                        let _ = app_handle.notification().builder()
+                            .title("screenpipe")
+                            .body("recording operation failed - state mismatch")
+                            .show();
+                        let _ = app_handle.emit("recording_failed", "recording operation failed - state mismatch");
+                    }
+                },
+                Err(err) => {
+                    error!("Recording operation failed: {}", err);
+                    let _ = app_handle.notification().builder()
+                        .title("screenpipe")
+                        .body("recording operation failed")
+                        .show();
+                    let _ = app_handle.emit("recording_failed", "recording operation failed");
+                }
+            }
+
+            // Clear processing flag and add small delay to prevent rapid re-triggers
+            sleep(Duration::from_millis(500)).await;
+            PROCESSING_SHORTCUT.store(false, Ordering::SeqCst);
+        });
+    }) {
+        info!("failed to register shortcut: {}", e);
+        return Err("failed to set shortcut".to_string());
+    }
 
     Ok(())
 }
