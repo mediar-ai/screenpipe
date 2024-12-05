@@ -54,6 +54,7 @@ English | [简体中文](README-zh_CN.md) | [日本語](README-ja_JP.md)
 ---
 
 *news* 🔥
+- [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Loom pipe, LinkedIn agent ...)
 - [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)
 - [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
