@@ -5,12 +5,14 @@ use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
-use sqlx::Column;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+use sqlx::Connection;
 use sqlx::Error as SqlxError;
 use sqlx::Row;
 use sqlx::TypeInfo;
 use sqlx::ValueRef;
+use sqlx::{Column, SqliteConnection};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -46,58 +48,105 @@ impl DatabaseManager {
             ));
         }
 
-        // Create the database if it doesn't exist
+        // Create database if it doesn't exist
         if !sqlx::Sqlite::database_exists(&connection_string).await? {
             sqlx::Sqlite::create_database(&connection_string).await?;
         }
 
-        let pool = SqlitePoolOptions::new()
-            .max_connections(50)
-            .min_connections(3) // Minimum number of idle connections
-            .acquire_timeout(Duration::from_secs(10))
-            .connect(&connection_string)
+        // Create direct connection options
+        let conn_options = SqliteConnectOptions::from_str(&connection_string)?
+            .create_if_missing(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+            .busy_timeout(Duration::from_secs(30));
+
+        // Establish direct connection for migrations
+        let mut conn = sqlx::SqliteConnection::connect_with(&conn_options).await?;
+
+        // Set pragmas for better performance
+        let pragmas = [
+            "PRAGMA temp_store = MEMORY",
+            "PRAGMA cache_size = -2000",
+            "PRAGMA locking_mode = NORMAL",
+            "PRAGMA busy_timeout = 10000",
+        ];
+
+        for pragma in pragmas {
+            sqlx::query(pragma).execute(&mut conn).await?;
+        }
+
+        // Run integrity check
+        sqlx::query("PRAGMA integrity_check")
+            .execute(&mut conn)
             .await?;
 
-        // Enable WAL mode
-        sqlx::query("PRAGMA journal_mode = WAL;")
-            .execute(&pool)
-            .await?;
-
-        // Enable SQLite's query result caching
-        // PRAGMA cache_size = -2000; -- Set cache size to 2MB
-        // PRAGMA temp_store = MEMORY; -- Store temporary tables and indices in memory
-        sqlx::query("PRAGMA cache_size = -2000;")
-            .execute(&pool)
-            .await?;
-        sqlx::query("PRAGMA temp_store = MEMORY;")
-            .execute(&pool)
-            .await?;
-
-        let db_manager = DatabaseManager { pool };
-
-        // Run migrations after establishing the connection
-        if let Err(e) = Self::run_migrations(&db_manager.pool).await {
+        // Run migrations with direct connection
+        if let Err(e) = Self::run_migrations(&mut conn).await {
             error!("Failed to run migrations: {}", e);
             return Err(e);
         }
 
-        debug!("migrations executed successfully.");
-        Ok(db_manager)
+        // Close migration connection
+        conn.close().await?;
+
+        // Create normal connection pool for regular operations
+        let pool = SqlitePoolOptions::new()
+            .max_connections(50)
+            .min_connections(3)
+            .acquire_timeout(Duration::from_secs(30))
+            .connect_with(conn_options)
+            .await?;
+
+        debug!("Database initialization completed successfully");
+        Ok(DatabaseManager { pool })
     }
 
-    async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-        match sqlx::migrate!("./src/migrations").run(pool).await {
-            Ok(_) => Ok(()),
+    async fn run_migrations(conn: &mut SqliteConnection) -> Result<(), sqlx::Error> {
+        use indicatif::{ProgressBar, ProgressStyle};
+        use std::time::Instant;
+
+        println!("\n⚠️  DATABASE MIGRATION IN PROGRESS ⚠️");
+        println!("┌────────────────────────────────────────────┐");
+        println!("│ !!! DO NOT INTERRUPT THE PROCESS !!!       │");
+        println!("│ version. This may take a few minutes...    │");
+        println!("└────────────────────────────────────────────┘\n");
+
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
+                .template("{spinner:.green} [{elapsed_precise}] {msg}")
+                .unwrap(),
+        );
+
+        let start = Instant::now();
+        spinner.set_message("running migrations...");
+
+        // Run migrations with direct connection
+        let result = match sqlx::migrate!("./src/migrations").run(conn).await {
+            Ok(_) => {
+                let duration = start.elapsed();
+                spinner.finish_with_message(format!(
+                    "✓ migration completed successfully! (took {:.2}s)",
+                    duration.as_secs_f32()
+                ));
+                Ok(())
+            }
             Err(e) => {
-                // Check if it's a version mismatch for our specific migration
                 if e.to_string().contains("20241110041538") {
-                    debug!("ignoring known migration mismatch for 20241110041538");
+                    spinner.finish_with_message(
+                        "✓ migration completed (known version mismatch ignored)",
+                    );
                     Ok(())
                 } else {
-                    Err(e.into())
+                    spinner.finish_with_message(format!("❌ migration failed: {}", e));
+                    Err(e)
                 }
             }
-        }
+        };
+
+        println!("\n");
+        result.map_err(|e| sqlx::Error::Migrate(Box::new(e)))
     }
 
     pub async fn insert_audio_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {

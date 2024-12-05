@@ -124,8 +124,8 @@ async fn main() -> anyhow::Result<()> {
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
 
-    if let Some(pipe_command) = cli.command {
-        match pipe_command {
+    if let Some(command) = cli.command {
+        match command {
             Command::Pipe { subcommand } => {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
@@ -192,6 +192,17 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 info!("screenpipe setup complete");
+                return Ok(());
+            }
+            Command::Migrate => {
+                info!("running database migrations...");
+                DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))
+                    .await
+                    .map_err(|e| {
+                        error!("failed to initialize database: {:?}", e);
+                        e
+                    })?;
+                info!("database migrations completed successfully");
                 return Ok(());
             }
         }

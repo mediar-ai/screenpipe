@@ -268,10 +268,11 @@ pub enum Command {
     /// Setup screenpipe environment
     Setup {
         /// Enable beta features
-        // #[cfg(feature = "beta")] // ! TODO
         #[arg(long, default_value_t = false)]
         enable_beta: bool,
     },
+    /// Run database migrations
+    Migrate,
 }
 
 
