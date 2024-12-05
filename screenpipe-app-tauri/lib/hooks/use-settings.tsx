@@ -201,10 +201,10 @@ export function useSettings() {
         currentPlatform
       )
 
-      setSettings(userSettings);
+      setSettings({...userSettings, isLoading: false});
     } catch (error) {
       console.error("failed to load settings:", error);
-      setSettings((prevSettings) => ({ ...prevSettings }));
+      setSettings((prevSettings) => ({ ...prevSettings,  isLoading: false }));
     }
   };
 
