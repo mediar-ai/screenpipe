@@ -167,10 +167,12 @@ export function useSettings() {
       await initStore();
     }
 
+    const defaultSettings = createDefaultSettingsObject(platform())
+
     try {
-      const updatedSettings = { ...settings, [key]: DEFAULT_SETTINGS[key] };
+      const updatedSettings = { ...settings, [key]: defaultSettings[key] };
       setSettings(updatedSettings);
-      await store!.set(key, DEFAULT_SETTINGS[key]);
+      await store!.set(key, defaultSettings[key]);
       // No need to call save() as we're using autoSave: true
     } catch (error) {
       console.error(`failed to reset setting ${key}:`, error);
