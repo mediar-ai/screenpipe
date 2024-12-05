@@ -80,12 +80,34 @@ every second you are not recording is a missing context for AGI
 
 ## get started
 
+macos, linux:
+
+```bash
+brew install screenpipe
+```
+
+or on windows
+
+```bash
+irm https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.ps1 | iex
+```
+
+then
+
+```bash
+screenpipe
+```
+
 - [get the desktop app](https://screenpi.pe/)
-- [get the CLI or build from source](https://docs.screenpi.pe/docs/getting-started)
+- [docs & build from source](https://docs.screenpi.pe/docs/getting-started)
 
 ## create plugins
 
-screenpipe has a plugin system called "pipe" which lets you run code in a sandboxed environment within the Rust code, [get started](https://docs.screenpi.pe/docs/plugins)
+```bash
+bunx @screenpipe/create-pipe@latest
+```
+
+screenpipe has a plugin system called "pipe" which lets you run code in a sandboxed environment within the Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
 
 ## other examples
 
