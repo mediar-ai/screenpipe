@@ -173,10 +173,8 @@ export function useSettings() {
       const updatedSettings = { ...settings, [key]: defaultSettings[key] };
       setSettings(updatedSettings);
       await store!.set(key, defaultSettings[key]);
-      // No need to call save() as we're using autoSave: true
     } catch (error) {
       console.error(`failed to reset setting ${key}:`, error);
-      // revert local state if store update fails
       setSettings(settings);
     }
   };
