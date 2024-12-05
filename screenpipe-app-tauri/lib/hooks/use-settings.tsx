@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { createStore } from "@tauri-apps/plugin-store";
+import { createStore, Store } from "@tauri-apps/plugin-store";
 import { localDataDir, join, homeDir } from "@tauri-apps/api/path";
-import { platform } from "@tauri-apps/plugin-os";
+import { Platform, platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
 import { Language } from "@/lib/language";
@@ -25,7 +25,7 @@ export enum Shortcut {
   SHOW_SCREENPIPE = "show_screenpipe",
 }
 
-export interface Settings {
+export type Settings= {
   openaiApiKey: string;
   deepgramApiKey: string;
   isLoading: boolean;
@@ -64,7 +64,7 @@ export interface Settings {
   disabledShortcuts: Shortcut[];
 }
 
-const defaultSettings: Settings = {
+const DEFAULT_SETTINGS: Settings = {
   openaiApiKey: "",
   deepgramApiKey: "", // for now we hardcode our key (dw about using it, we have bunch of credits)
   isLoading: true,
@@ -113,10 +113,50 @@ const defaultSettings: Settings = {
   disabledShortcuts: [],
 };
 
+const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
+  "bit",
+  "VPN",
+  "Trash",
+  "Private",
+  "Incognito",
+  "Wallpaper",
+  "Settings",
+  "Keepass",
+  "Recorder",
+  "Vaults",
+  "OBS Studio",
+];
+
+const DEFAULT_IGNORED_WINDOWS_PER_OS: Record<string, string[]> = {
+  macos: [
+    ".env",
+    "Item-0",
+    "App Icon Window",
+    "Battery",
+    "Shortcuts",
+    "WiFi",
+    "BentoBox",
+    "Clock",
+    "Dock",
+    "DeepL",
+    "Control Center",
+  ],
+  windows: [
+    "Nvidia",
+    "Control Panel",
+    "System Properties",
+  ],
+  linux: [
+    "Info center", 
+    "Discover", 
+    "Parted"
+  ]
+}
+
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
 
 export function useSettings() {
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
     posthog.identify(settings.userId);
@@ -128,9 +168,9 @@ export function useSettings() {
     }
 
     try {
-      const updatedSettings = { ...settings, [key]: defaultSettings[key] };
+      const updatedSettings = { ...settings, [key]: DEFAULT_SETTINGS[key] };
       setSettings(updatedSettings);
-      await store!.set(key, defaultSettings[key]);
+      await store!.set(key, DEFAULT_SETTINGS[key]);
       // No need to call save() as we're using autoSave: true
     } catch (error) {
       console.error(`failed to reset setting ${key}:`, error);
@@ -140,7 +180,15 @@ export function useSettings() {
   };
 
   const resetSettings = async () => {
-    await updateSettings(defaultSettings)
+    if (!store) {
+      await initStore();
+    }
+
+    const userSettings = createDefaultSettingsObject(
+      platform()
+    )
+
+    updateSettings(userSettings)
   }
 
   const loadSettings = async () => {
@@ -360,13 +408,12 @@ export function useSettings() {
     }
 
     try {
-      console.log("Updating settings:", newSettings); // Add this line
       const updatedSettings = { ...settings, ...newSettings };
       setSettings(updatedSettings);
 
       // update the store for the fields that were changed
       for (const key in newSettings) {
-        if (Object.prototype.hasOwnProperty.call(newSettings, key)) {
+        if (newSettings[key as keyof Settings]) {
           console.log(
             `Setting ${key}:`,
             updatedSettings[key as keyof Settings]
@@ -405,4 +452,41 @@ async function initStore() {
   const dataDir = await localDataDir();
   const storePath = await join(dataDir, "screenpipe", "store.bin");
   store = await createStore(storePath);
+}
+
+function createDefaultSettingsObject(currentPlatform: string){
+  let defaultSettings = DEFAULT_SETTINGS
+
+  const ocrModel =
+    currentPlatform === "macos"
+      ? "apple-native"
+      : currentPlatform === "windows"
+      ? "windows-native"
+      : "tesseract";
+
+  defaultSettings.ocrEngine = ocrModel
+  defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1
+
+  defaultSettings.ignoredWindows = [
+    ...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
+    ...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []) 
+  ]
+
+  return defaultSettings
+}
+
+async function createUserSettings(
+  store: Store,
+  currentPlatform: string
+): Promise<Settings> {
+  let defaultSettingsObject = createDefaultSettingsObject(currentPlatform)
+
+  let userSettingsObject: Record<string,any> = {}
+
+  for (const key of Object.keys(defaultSettingsObject)) {
+    userSettingsObject[key as keyof Settings] = 
+      await store.get(key) || defaultSettingsObject[key as keyof Settings]
+  }
+
+  return userSettingsObject as Settings
 }
