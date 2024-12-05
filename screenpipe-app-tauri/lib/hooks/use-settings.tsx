@@ -5,7 +5,6 @@ import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
 import { Language } from "@/lib/language";
-import { remove } from "@tauri-apps/plugin-fs";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
