@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createStore, Store } from "@tauri-apps/plugin-store";
 import { localDataDir, join, homeDir } from "@tauri-apps/api/path";
-import { Platform, platform } from "@tauri-apps/plugin-os";
+import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import posthog from "posthog-js";
 import { Language } from "@/lib/language";
