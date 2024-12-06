@@ -72,30 +72,30 @@ const corePipes: CorePipe[] = [
   {
     id: "pipe-for-loom",
     description: "generate looms from your screenpipe data",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-for-loom",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom",
   },
   {
     id: "pipe-obsidian-time-logs",
     description:
       "continuously write logs of your days in an obsidian table using ollama+llama3.2",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-obsidian-time-logs",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs",
   },
   {
     id: "pipe-post-questions-on-reddit",
     description:
       "get more followers, promote your content/product while being useful, without doing any work",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit",
   },
   {
     id: "pipe-phi3.5-engineering-team-logs",
     description:
       "continuously write logs of your days in a notion table using ollama+llama3.2",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-phi3.5-engineering-team-logs",
   },
   {
     id: "pipe-simple-nextjs",
     description: "show most used keywords",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-simple-nextjs",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-simple-nextjs",
   },
 ];
 

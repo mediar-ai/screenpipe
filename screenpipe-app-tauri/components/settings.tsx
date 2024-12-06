@@ -23,7 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 import { Badge } from "@/components/ui/badge"; // Add this import
@@ -71,7 +71,7 @@ type ListeningState = 'recording' | 'show' | null;
 type ModifierKey = 'ctrl' | 'alt' | 'shift' | 'super';
 
 export function Settings({ className }: { className?: string }) {
-  const { settings, updateSettings, resetSetting } = useSettings();
+  const { settings, updateSettings, resetSetting, resetSettings } = useSettings();
   const { debouncedFetchHealth } = useHealthCheck();
   const [localSettings, setLocalSettings] = useState(settings);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -664,6 +664,21 @@ export function Settings({ className }: { className?: string }) {
       window.removeEventListener("settings-updated", handleSettingsUpdate);
     };
   }, [debouncedFetchHealth]);
+
+  const handleResetSettings = async () => {
+    try{
+      await resetSettings()
+      toast({
+        title: "settings were reset successfully",
+      });
+    }catch(e){
+      console.log(e)
+      toast({
+        title: "can't reset your settings",
+        variant: "destructive",
+      });
+    }
+  }
 
   return (
     <Dialog
@@ -1325,6 +1340,31 @@ export function Settings({ className }: { className?: string }) {
                 </p>
               </div>
             </CardContent>
+          </Card>
+          <Card
+            className="border border-[#fab1b6] overflow-hidden"
+          >
+              <CardHeader>
+                <CardTitle className="text-center">reset settings</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center">
+                <p className="text-sm text-muted-foreground mb-4">
+                  permanently reset settings to their default values.
+                </p>
+              </CardContent>
+              <CardFooter className="bg-[#fdedee] border-t border-[#fab1b6] flex justify-between items-center p-5">
+                <p className="text-sm text-muted-foreground">
+                  this action is not reversible — please continue with caution.
+                </p>
+                <Button
+                    variant={'destructive'}
+                    onClick={()=>handleResetSettings()}
+                    disabled={false}
+                  >
+                   reset settings
+                  </Button>
+              </CardFooter>
+
           </Card>
         </div>
       </DialogContent>
