@@ -24,7 +24,7 @@ import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { getFileSize, keysToCamelCase } from "@/lib/utils";
 import { VideoComponent } from "./video";
-import { MeetingSegment, Speaker } from "@/lib/types";
+import { AudioSample, MeetingSegment, Speaker } from "@/lib/types";
 import { isSea } from "node:sea";
 
 interface UnnamedSpeaker {
@@ -242,7 +242,31 @@ export default function IdentifySpeakers({
         keysToCamelCase<Speaker>
       );
 
-      setUnnamedSpeakers(camelCaseResult);
+      const results: Speaker[] = await camelCaseResult.map(
+        async (speaker: Speaker) => {
+          const durations: Map<string, number> = new Map();
+          for (const sample of speaker.metadata?.audioSamples || []) {
+            const size = await getFileSize(sample.path);
+            durations.set(sample.path, size);
+          }
+
+          return {
+            ...speaker,
+            metadata: {
+              ...speaker.metadata,
+              audioSamples: speaker.metadata?.audioSamples.sort(
+                (a: AudioSample, b: AudioSample) =>
+                  (durations.get(b.path) || 0) - (durations.get(a.path) || 0)
+              ),
+            },
+          };
+        }
+      );
+
+      let sortedResults = await Promise.all(results);
+      console.log("results", sortedResults);
+
+      setUnnamedSpeakers(sortedResults);
     } catch (err) {
       setError(
         "some trouble fetching new meetings. please check health status."
@@ -463,238 +487,233 @@ export default function IdentifySpeakers({
               )}
 
               {unnamedSpeakers.length > 0 && (
-                <div className="flex-1 flex items-start justify-between">
-                  <div className="flex-1 mx-4">
-                    <div className="p-4 border rounded h-full">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-medium">identify speaker</span>
-                        </div>
+                <div className="mx-4">
+                  <div className="p-4 border rounded h-full">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">identify speaker</span>
                       </div>
-                      <form
-                        className="space-y-4"
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          setShowNameUpdateConfirm(true);
-                          await fetchSpeakers(speakerSearchTerm);
-                        }}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <div className="relative flex-1 max-w-xs">
-                            <Input
-                              onFocus={() => {
-                                setShowSpeakerNames(true);
-                              }}
-                              onBlur={() => {
-                                setShowSpeakerNames(false);
-                              }}
-                              value={speakerSearchTerm}
-                              name="speakerName"
-                              onChange={(e) => {
-                                const newValue = e.target.value;
-                                setSpeakerSearchTerm(newValue);
-                                // Only filter existing speakers if we have any
-                                if (speakers.length > 0) {
-                                  setSpeakers(
-                                    speakers.filter((speaker) =>
-                                      speaker.name
-                                        .toLowerCase()
-                                        .includes(newValue.toLowerCase())
-                                    )
-                                  );
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === " " && !segments) {
-                                  setSpeakerSearchTerm(speakerSearchTerm + " ");
-                                }
-                              }}
-                              placeholder="Enter speaker name"
-                              className="w-full"
+                    </div>
+                    <form
+                      className="space-y-4"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        setShowNameUpdateConfirm(true);
+                        await fetchSpeakers(speakerSearchTerm);
+                      }}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <div className="relative flex-1 max-w-xs">
+                          <Input
+                            onFocus={() => {
+                              setShowSpeakerNames(true);
+                            }}
+                            onBlur={() => {
+                              setShowSpeakerNames(false);
+                            }}
+                            value={speakerSearchTerm}
+                            name="speakerName"
+                            onChange={(e) => {
+                              const newValue = e.target.value;
+                              setSpeakerSearchTerm(newValue);
+                              // Only filter existing speakers if we have any
+                              if (speakers.length > 0) {
+                                setSpeakers(
+                                  speakers.filter((speaker) =>
+                                    speaker.name
+                                      .toLowerCase()
+                                      .includes(newValue.toLowerCase())
+                                  )
+                                );
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === " " && !segments) {
+                                setSpeakerSearchTerm(speakerSearchTerm + " ");
+                              }
+                            }}
+                            placeholder="Enter speaker name"
+                            className="w-full"
+                          />
+                          {speakerSearchTerm && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                              {isSearching ? (
+                                <div className="flex justify-center items-center p-4">
+                                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                                </div>
+                              ) : (
+                                showSpeakerNames && (
+                                  <ul className="py-1">
+                                    {speakers.map((speaker) => (
+                                      <li
+                                        key={speaker.id}
+                                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer truncate"
+                                        onClick={() => {
+                                          setSpeakerSearchTerm(speaker.name);
+                                          setSelectedExistingSpeaker(speaker);
+                                          setShowMergeConfirm(true);
+                                          setShowSpeakerNames(false);
+                                        }}
+                                      >
+                                        {speaker.name}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          type="submit"
+                          disabled={!speakerSearchTerm}
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setShowNameUpdateConfirm(true);
+                          }}
+                        >
+                          <Save className="mr-2" />
+                          update name
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={async () => {
+                            setShowHallucinationConfirm(true);
+                          }}
+                        >
+                          <Ghost className="mr-2" />
+                          nobody is speaking
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={async () => {
+                            setShowRemoveSpeakerConfirm(true);
+                          }}
+                        >
+                          <Trash className="mr-2" />
+                          remove speaker
+                        </Button>
+                      </div>
+                    </form>
+
+                    <div className="mt-4">
+                      <p className="text-sm text-gray-500 mb-2">
+                        audio samples:
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {unnamedSpeakers[
+                          currentSpeakerIndex
+                        ].metadata?.audioSamples
+                          .slice(0, 3)
+                          .map((sample, index) => (
+                            <VideoComponent
+                              key={index}
+                              filePath={sample.path}
+                              customDescription={`transcript: ${sample.transcript}`}
                             />
-                            {speakerSearchTerm && (
-                              <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                                {isSearching ? (
-                                  <div className="flex justify-center items-center p-4">
-                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
-                                  </div>
-                                ) : (
-                                  showSpeakerNames && (
-                                    <ul className="py-1">
-                                      {speakers.map((speaker) => (
-                                        <li
-                                          key={speaker.id}
-                                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer truncate"
-                                          onClick={() => {
-                                            setSpeakerSearchTerm(speaker.name);
-                                            setSelectedExistingSpeaker(speaker);
-                                            setShowMergeConfirm(true);
-                                            setShowSpeakerNames(false);
-                                          }}
-                                        >
-                                          {speaker.name}
-                                        </li>
-                                      ))}
-                                    </ul>
+                          ))}
+                      </div>
+                    </div>
+                    {speakerIdentified && (
+                      <div className="mt-4 flex justify-end">
+                        <Button
+                          onClick={() => {
+                            handleRefresh();
+                          }}
+                        >
+                          next speaker
+                          <ChevronRight className="ml-2" />
+                        </Button>
+                      </div>
+                    )}
+                    <div className="mt-8">
+                      {similarSpeakers.length > 0 && (
+                        <p className="text-sm text-gray-500 mb-4">
+                          is this the same speaker?
+                        </p>
+                      )}
+                      {isFetchingSimilarSpeakers ? (
+                        <div className="flex justify-center items-center p-4">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                        </div>
+                      ) : (
+                        <div>
+                          {similarSpeakers.map((speaker, index) => {
+                            if (similarSpeakerIndex !== index) {
+                              return null;
+                            }
+                            return (
+                              <div
+                                className="flex space-x-2 items-center"
+                                key={speaker.id}
+                              >
+                                <span>{speaker.name || ""}</span>
+                                {speaker.metadata?.audioSamples.map(
+                                  (sample) => (
+                                    <VideoComponent
+                                      key={sample.path}
+                                      filePath={sample.path}
+                                      customDescription={`transcript: ${sample.transcript}`}
+                                      className="max-w-[300px]"
+                                    />
                                   )
                                 )}
+                                <Button
+                                  size="default"
+                                  variant="default"
+                                  onClick={() => {
+                                    setSelectedExistingSpeaker(speaker);
+                                    setShowMergeConfirm(true);
+                                  }}
+                                >
+                                  <Check className="mr-2" />
+                                  same speaker
+                                </Button>
+                                <Button
+                                  size="default"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const newSpeakers = similarSpeakers.filter(
+                                      (s) => s.id !== speaker.id
+                                    );
+                                    setSimilarSpeakers(newSpeakers);
+                                    setSimilarSpeakerIndex(
+                                      Math.max(
+                                        0,
+                                        Math.min(
+                                          similarSpeakerIndex,
+                                          newSpeakers.length - 1
+                                        )
+                                      )
+                                    );
+                                  }}
+                                >
+                                  <X className="mr-2" />
+                                  different speaker
+                                </Button>
+                                <Button
+                                  size="default"
+                                  className={
+                                    similarSpeakers.length === 1 ? "hidden" : ""
+                                  }
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setSimilarSpeakerIndex(
+                                      (index + 1) % similarSpeakers.length
+                                    );
+                                  }}
+                                >
+                                  skip
+                                  <ChevronRight className="ml-2" />
+                                </Button>
                               </div>
-                            )}
-                          </div>
-                          <Button
-                            type="submit"
-                            disabled={!speakerSearchTerm}
-                            size="sm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setShowNameUpdateConfirm(true);
-                            }}
-                          >
-                            <Save className="mr-2" />
-                            update name
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={async () => {
-                              setShowHallucinationConfirm(true);
-                            }}
-                          >
-                            <Ghost className="mr-2" />
-                            nobody is speaking
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={async () => {
-                              setShowRemoveSpeakerConfirm(true);
-                            }}
-                          >
-                            <Trash className="mr-2" />
-                            remove speaker
-                          </Button>
-                        </div>
-                      </form>
-
-                      <div className="mt-4">
-                        <p className="text-sm text-gray-500 mb-2">
-                          audio samples:
-                        </p>
-                        <div className="grid grid-cols-3 gap-2">
-                          {unnamedSpeakers[
-                            currentSpeakerIndex
-                          ].metadata?.audioSamples
-                            .slice(0, 3)
-                            .map((sample, index) => (
-                              <VideoComponent
-                                key={index}
-                                filePath={sample.path}
-                                customDescription={`transcript: ${sample.transcript}`}
-                              />
-                            ))}
-                        </div>
-                      </div>
-                      {speakerIdentified && (
-                        <div className="mt-4 flex justify-end">
-                          <Button
-                            onClick={() => {
-                              handleRefresh();
-                            }}
-                          >
-                            next speaker
-                            <ChevronRight className="ml-2" />
-                          </Button>
+                            );
+                          })}
                         </div>
                       )}
-                      <div className="mt-8">
-                        {similarSpeakers.length > 0 && (
-                          <p className="text-sm text-gray-500 mb-4">
-                            is this the same speaker?
-                          </p>
-                        )}
-                        {isFetchingSimilarSpeakers ? (
-                          <div className="flex justify-center items-center p-4">
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
-                          </div>
-                        ) : (
-                          <div>
-                            {similarSpeakers.map((speaker, index) => {
-                              if (similarSpeakerIndex !== index) {
-                                return null;
-                              }
-                              return (
-                                <div
-                                  className="flex space-x-2 items-center"
-                                  key={speaker.id}
-                                >
-                                  <span>{speaker.name || ""}</span>
-                                  {speaker.metadata?.audioSamples.map(
-                                    (sample) => (
-                                      <VideoComponent
-                                        key={sample.path}
-                                        filePath={sample.path}
-                                        customDescription={`transcript: ${sample.transcript}`}
-                                        className="max-w-[300px]"
-                                      />
-                                    )
-                                  )}
-                                  <Button
-                                    size="default"
-                                    variant="default"
-                                    onClick={() => {
-                                      setSelectedExistingSpeaker(speaker);
-                                      setShowMergeConfirm(true);
-                                    }}
-                                  >
-                                    <Check className="mr-2" />
-                                    same speaker
-                                  </Button>
-                                  <Button
-                                    size="default"
-                                    variant="outline"
-                                    onClick={() => {
-                                      const newSpeakers =
-                                        similarSpeakers.filter(
-                                          (s) => s.id !== speaker.id
-                                        );
-                                      setSimilarSpeakers(newSpeakers);
-                                      setSimilarSpeakerIndex(
-                                        Math.max(
-                                          0,
-                                          Math.min(
-                                            similarSpeakerIndex,
-                                            newSpeakers.length - 1
-                                          )
-                                        )
-                                      );
-                                    }}
-                                  >
-                                    <X className="mr-2" />
-                                    different speaker
-                                  </Button>
-                                  <Button
-                                    size="default"
-                                    className={
-                                      similarSpeakers.length === 1
-                                        ? "hidden"
-                                        : ""
-                                    }
-                                    variant="secondary"
-                                    onClick={() => {
-                                      setSimilarSpeakerIndex(
-                                        (index + 1) % similarSpeakers.length
-                                      );
-                                    }}
-                                  >
-                                    skip
-                                    <ChevronRight className="ml-2" />
-                                  </Button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
                     </div>
                   </div>
                 </div>
