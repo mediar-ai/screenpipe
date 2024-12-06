@@ -140,7 +140,8 @@
           "http://*:9000",
           "https://ai-proxy.i-f9f.workers.dev",
           "https://*.clerk.com",
-          "https://*.screenpi.pe"
+          "https://*.screenpi.pe",
+          "https://openrouter.ai"
         ],
         "font-src": [
           "https://fonts.gstatic.com",
