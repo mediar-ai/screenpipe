@@ -310,7 +310,6 @@ mod tests {
             device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
         };
 
-        let start_time = Instant::now();
 
         // Create the missing parameters
         let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

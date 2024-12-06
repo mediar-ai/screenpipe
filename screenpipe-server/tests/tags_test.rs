@@ -25,6 +25,10 @@ fn init() {
 
 async fn setup_test_app() -> (Router, Arc<AppState>) {
     let db = Arc::new(DatabaseManager::new("sqlite::memory:").await.unwrap());
+    sqlx::query("ALTER TABLE audio_transcriptions ADD COLUMN speaker_id INTEGER")
+        .execute(&db.pool)
+        .await
+        .unwrap();
     let app_state = Arc::new(AppState {
         db: db.clone(),
         vision_disabled: false,
@@ -34,7 +38,7 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         devices_status: HashMap::new(),
         app_start_time: Utc::now(),
         screenpipe_dir: PathBuf::from(""),
-        pipe_manager: Arc::new(PipeManager::new(PathBuf::from("")).0),
+        pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
         frame_cache: Some(Arc::new(
             FrameCache::new(PathBuf::from(""), db).await.unwrap(),
         )),
@@ -149,10 +153,6 @@ async fn test_add_tags_and_search() {
             ContentItem::Audio(audio) => {
                 assert!(audio.tags.contains(&"test".to_string()));
                 assert!(audio.tags.contains(&"audio".to_string()));
-            }
-            ContentItem::FTS(fts) => {
-                assert!(fts.tags.contains(&"test".to_string()));
-                assert!(fts.tags.contains(&"vision".to_string()));
             }
             ContentItem::UI(_) => {
                 assert!(false);
@@ -323,13 +323,13 @@ async fn test_search_by_multiple_tags() {
         .await
         .unwrap();
 
-    // Search for items with multiple tags
+    // Search for items with multiple tags, excluding UI content
     let search_response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/search?content_type=all")
+                .uri("/search?content_type=audio+ocr")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -354,12 +354,8 @@ async fn test_search_by_multiple_tags() {
                 assert!(audio.tags.contains(&"work".to_string()));
                 assert!(audio.tags.contains(&"call".to_string()));
             }
-            ContentItem::FTS(fts) => {
-                assert!(fts.tags.contains(&"work".to_string()));
-                assert!(fts.tags.contains(&"meeting".to_string()));
-            }
             ContentItem::UI(_) => {
-                
+                panic!("UI content should not be included in the results");
             }
         }
     }

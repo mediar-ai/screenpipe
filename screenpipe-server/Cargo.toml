@@ -92,10 +92,6 @@ reqwest = { workspace = true }
 # Concurrency
 crossbeam = { workspace = true }
 
-# Friend integration
-screenpipe-integrations = { path = "../screenpipe-integrations" }
-async-trait = "0.1.68"
-
 # filtering
 ndarray = "0.15.6"
 rust-stemmers = "1.2.0"

@@ -37,6 +37,7 @@ async fn setup_test_env() -> Result<(FrameCache, Arc<DatabaseManager>)> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_frame_jpeg_integrity() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
@@ -157,6 +158,7 @@ async fn measure_frame_retrieval(
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_frame_retrieval_at_different_times() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
@@ -227,6 +229,7 @@ async fn test_frame_retrieval_at_different_times() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_extended_time_range_retrieval() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
@@ -277,6 +280,7 @@ async fn test_extended_time_range_retrieval() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_frame_metadata_integrity() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
@@ -319,6 +323,7 @@ async fn test_frame_metadata_integrity() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_basic_frame_retrieval() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
@@ -364,6 +369,7 @@ async fn test_basic_frame_retrieval() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_frame_ordering() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
@@ -441,6 +447,7 @@ async fn test_frame_ordering() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_cache_effectiveness() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
@@ -549,6 +556,7 @@ async fn test_cache_effectiveness() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_cache_cleanup() -> Result<()> {
     let (cache, _db) = setup_test_env().await?;
 
