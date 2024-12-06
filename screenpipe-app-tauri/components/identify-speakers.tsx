@@ -14,7 +14,7 @@ import { X, Fingerprint, Check } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { keysToCamelCase } from "@/lib/utils";
+import { getFileSize, keysToCamelCase } from "@/lib/utils";
 import { VideoComponent } from "./video";
 import { MeetingSegment, Speaker } from "@/lib/types";
 
@@ -167,7 +167,26 @@ export default function IdentifySpeakers({
         keysToCamelCase<Speaker>
       );
 
-      setSimilarSpeakers(camelCaseResult);
+      let similarSpeakersResult: Speaker[] = [];
+      for (const speaker of camelCaseResult) {
+        let longestAudioPath = speaker.metadata?.audioPaths[0];
+        let longestAudioPathSize = -Infinity;
+        for (const path of speaker.metadata?.audioPaths || []) {
+          const size = await getFileSize(path);
+          if (size > longestAudioPathSize) {
+            longestAudioPath = path;
+            longestAudioPathSize = size;
+          }
+        }
+        similarSpeakersResult.push({
+          ...speaker,
+          metadata: {
+            audioPaths: [longestAudioPath],
+          },
+        });
+      }
+
+      setSimilarSpeakers(similarSpeakersResult);
     } catch (error) {
       console.error("error fetching similar speakers:", error);
       setError("failed to fetch similar speakers");
