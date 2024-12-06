@@ -1157,7 +1157,7 @@ export function Settings({ className }: { className?: string }) {
                       <div>
                         <h4 className="text-sm font-medium">overlay shortcut</h4>
                         <p className="text-xs text-muted-foreground">
-                          quick access to your screen history
+                          show screenpipe ontop of other apps
                         </p>
                       </div>
                     </div>
