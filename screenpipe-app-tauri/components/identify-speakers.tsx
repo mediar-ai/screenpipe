@@ -508,8 +508,11 @@ export default function IdentifySpeakers({
                             onFocus={() => {
                               setShowSpeakerNames(true);
                             }}
-                            onBlur={() => {
-                              setShowSpeakerNames(false);
+                            onBlur={(e) => {
+                              // Add a small delay to allow the click event to fire first
+                              setTimeout(() => {
+                                setShowSpeakerNames(false);
+                              }, 200);
                             }}
                             value={speakerSearchTerm}
                             name="speakerName"
@@ -548,7 +551,7 @@ export default function IdentifySpeakers({
                                       <li
                                         key={speaker.id}
                                         className="px-3 py-2 hover:bg-gray-100 cursor-pointer truncate"
-                                        onClick={() => {
+                                        onClick={(e) => {
                                           setSpeakerSearchTerm(speaker.name);
                                           setSelectedExistingSpeaker(speaker);
                                           setShowMergeConfirm(true);
