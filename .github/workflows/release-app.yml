@@ -113,14 +113,17 @@ jobs:
             args: "--target aarch64-apple-darwin --features metal,beta"
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin"
+            shell: bash
           - platform: "macos-latest" # for Intel based macs.
             args: "--target x86_64-apple-darwin --features metal,beta"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
+            shell: bash
           - platform: [self-hosted, Windows, X64] # Windows x86_64
             args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
+            shell: pwsh
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -129,7 +132,8 @@ jobs:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
       - name: Run steps
-        uses: ./.github/workflows/windows-steps
+        uses: ./.github/workflows/steps
+        secrets: inherit
 
   retry-win:
     needs: publish-tauri
@@ -144,6 +148,7 @@ jobs:
             args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
+            shell: pwsh
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -152,4 +157,5 @@ jobs:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
       - name: Run steps
-        uses: ./.github/workflows/windows-steps
+        uses: ./.github/workflows/steps
+        secrets: inherit
