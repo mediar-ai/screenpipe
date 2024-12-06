@@ -23,7 +23,7 @@ use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-use tracing::{info, debug, error};
+use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -219,9 +219,8 @@ async fn main() -> anyhow::Result<()> {
     match ensure_screenpipe_in_path().await {
         Ok(_) => info!("screenpipe is available and properly set in the PATH"),
         Err(e) => {
-            error!("screenpipe PATH check failed: {}", e);
-            error!("please ensure screenpipe is installed correctly and is in your PATH");
-            h.capture_error("please ensure screenpipe is installed correctly and is in your PATH");
+            warn!("screenpipe PATH check failed: {}", e);
+            warn!("please ensure screenpipe is installed correctly and is in your PATH");
             // do not crash
         }
     }
