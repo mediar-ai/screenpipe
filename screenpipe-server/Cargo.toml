@@ -99,7 +99,7 @@ rust-stemmers = "1.2.0"
 # base64
 base64 = "0.22.1"
 
-uuid = "1.5.0"
+uuid = { version = "1.5.0", features = ["v4"] }
 
 tempfile = "3.3.0"
 
