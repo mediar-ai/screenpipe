@@ -27,6 +27,8 @@ use crate::db_types::{
 use crate::db_types::{ContentType, UiContent};
 use crate::db_types::{SearchResult, TimeSeriesChunk};
 
+use futures::future::try_join_all;
+
 pub struct DatabaseManager {
     pub pool: SqlitePool,
 }
@@ -789,6 +791,7 @@ impl DatabaseManager {
                 audio_transcriptions.speaker_id
             FROM {}
             JOIN audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
+            JOIN speakers on audio_transcriptions.speaker_id = speakers.id
             LEFT JOIN audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
             LEFT JOIN tags ON audio_tags.tag_id = tags.id
             {}
@@ -796,6 +799,7 @@ impl DatabaseManager {
                 AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
                 AND (?4 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?4)
                 AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
+                AND (speakers.hallucination = 0 OR speakers.hallucination IS NULL)
             GROUP BY audio_transcriptions.audio_chunk_id, audio_transcriptions.offset_index
             ORDER BY audio_transcriptions.timestamp DESC
             LIMIT ?6 OFFSET ?7
@@ -814,17 +818,16 @@ impl DatabaseManager {
             .fetch_all(&self.pool)
             .await?;
 
-        Ok(raw_results
-            .into_iter()
-            .map(|raw| {
-                let speaker = match raw.speaker_id {
-                    Some(id) => match self.get_speaker_by_id(id).await? {
-                        speaker => Some(speaker),
-                    },
-                    None => None,
-                };
-                
-                AudioResult {
+        let futures = raw_results.into_iter().map(|raw| async move {
+            let speaker = match raw.speaker_id {
+                Some(id) => match self.get_speaker_by_id(id).await {
+                    Ok(speaker) => Some(speaker),
+                    Err(_) => None,
+                },
+                None => None,
+            };
+
+            Ok::<AudioResult, sqlx::Error>(AudioResult {
                 audio_chunk_id: raw.audio_chunk_id,
                 transcription: raw.transcription,
                 timestamp: raw.timestamp,
@@ -842,10 +845,10 @@ impl DatabaseManager {
                     DeviceType::Output
                 },
                 speaker,
-            }})
-            .collect();
+            })
+        });
 
-        Ok(audio_results)
+        Ok(try_join_all(futures).await?.into_iter().collect())
     }
 
     pub async fn get_frame(&self, frame_id: i64) -> Result<Option<(String, i64)>, sqlx::Error> {
@@ -1504,7 +1507,8 @@ impl DatabaseManager {
             WITH RecentAudioPaths AS (
                 SELECT DISTINCT
                     s.id as speaker_id,
-                    ac.file_path
+                    ac.file_path,
+                    at.transcription
                 FROM speakers s
                 JOIN audio_transcriptions at ON s.id = at.speaker_id
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
@@ -1536,10 +1540,20 @@ impl DatabaseManager {
                 s.name,
                 CASE 
                     WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
-                    THEN json_object('audio_paths', json_group_array(DISTINCT rap.file_path))
+                    THEN json_object('audio_samples', json_group_array(
+                        json_object(
+                            'path', rap.file_path,
+                            'transcript', rap.transcription
+                        )
+                    ))
                     ELSE json_patch(
                         json(s.metadata), 
-                        json_object('audio_paths', json_group_array(DISTINCT rap.file_path))
+                        json_object('audio_samples', json_group_array(
+                            json_object(
+                                'path', rap.file_path,
+                                'transcript', rap.transcription
+                            )
+                        ))
                     )
                 END as metadata,
                 COUNT(at.id) as transcription_count
@@ -1664,7 +1678,8 @@ impl DatabaseManager {
             WITH RecentAudioPaths AS (
                 SELECT DISTINCT
                     s.id as speaker_id,
-                    ac.file_path
+                    ac.file_path,
+                    at.transcription
                 FROM speakers s
                 JOIN audio_transcriptions at ON s.id = at.speaker_id
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
@@ -1685,10 +1700,16 @@ impl DatabaseManager {
                 s.name,
                 CASE 
                     WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
-                    THEN json_object('audio_paths', json_group_array(DISTINCT rap.file_path))
+                    THEN json_object('audio_samples', json_group_array(json_object(
+                        'path', rap.file_path,
+                        'transcript', rap.transcription
+                    )))
                     ELSE json_patch(
                         json(s.metadata), 
-                        json_object('audio_paths', json_group_array(DISTINCT rap.file_path))
+                        json_object('audio_samples', json_group_array(json_object(
+                            'path', rap.file_path,
+                            'transcript', rap.transcription
+                        )))
                     )
                 END as metadata
             FROM speaker_embeddings se

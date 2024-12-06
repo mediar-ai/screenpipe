@@ -17,6 +17,7 @@ import { Input } from "./ui/input";
 import { getFileSize, keysToCamelCase } from "@/lib/utils";
 import { VideoComponent } from "./video";
 import { MeetingSegment, Speaker } from "@/lib/types";
+import { isSea } from "node:sea";
 
 interface UnnamedSpeaker {
   id: number;
@@ -53,6 +54,15 @@ export default function IdentifySpeakers({
     useState(false);
   const [speakerIdentified, setSpeakerIdentified] = useState(false);
   const [similarSpeakerIndex, setSimilarSpeakerIndex] = useState(0);
+  const [showRemoveSpeakerConfirm, setShowRemoveSpeakerConfirm] =
+    useState(false);
+  const [showSpeakerNames, setShowSpeakerNames] = useState(false);
+
+  useEffect(() => {
+    if (!isSearching && speakers.length > 0) {
+      setShowSpeakerNames(true);
+    }
+  }, [isSearching, speakers]);
 
   useEffect(() => {
     if (speakerSearchTerm) {
@@ -163,25 +173,30 @@ export default function IdentifySpeakers({
         ...speaker,
         metadata: speaker.metadata ? JSON.parse(speaker.metadata) : undefined,
       }));
-      const camelCaseResult = updatedUnnamedSpeakers.map(
+      const camelCaseResult: Speaker[] = updatedUnnamedSpeakers.map(
         keysToCamelCase<Speaker>
       );
 
       let similarSpeakersResult: Speaker[] = [];
       for (const speaker of camelCaseResult) {
-        let longestAudioPath = speaker.metadata?.audioPaths[0];
+        let longestAudioSample = speaker.metadata?.audioSamples[0];
         let longestAudioPathSize = -Infinity;
-        for (const path of speaker.metadata?.audioPaths || []) {
-          const size = await getFileSize(path);
+        for (const sample of speaker.metadata?.audioSamples || []) {
+          const size = await getFileSize(sample.path);
           if (size > longestAudioPathSize) {
-            longestAudioPath = path;
+            longestAudioSample = sample;
             longestAudioPathSize = size;
           }
         }
         similarSpeakersResult.push({
           ...speaker,
           metadata: {
-            audioPaths: [longestAudioPath],
+            audioSamples: [
+              {
+                path: longestAudioSample?.path || "",
+                transcript: longestAudioSample?.transcript || "",
+              },
+            ],
           },
         });
       }
@@ -235,14 +250,15 @@ export default function IdentifySpeakers({
     try {
       await fetchUnnamedSpeakers();
       toast({
-        title: "meetings refreshed",
-        description: "your meeting history has been updated.",
+        title: "speakers refreshed",
+        description: "your speaker identification has been updated.",
       });
     } catch (error) {
       console.error("error refreshing meetings:", error);
       toast({
         title: "refresh failed",
-        description: "failed to refresh meetings. please try again.",
+        description:
+          "failed to refresh speaker identification. please try again.",
         variant: "destructive",
       });
     } finally {
@@ -267,10 +283,29 @@ export default function IdentifySpeakers({
       });
       setSpeakerIdentified(true);
     } catch (error) {
-      console.error("Error updating speaker name:", error);
+      console.error("error updating speaker name:", error);
       toast({
-        title: "Error",
-        description: "Failed to update speaker name. Please try again.",
+        title: "error",
+        description: "failed to update speaker name. please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveSpeaker = async () => {
+    // use the endpoint /speakers/remove to remove the speaker
+    try {
+      await fetch(`http://localhost:3030/speakers/remove`, {
+        method: "POST",
+        body: JSON.stringify({
+          speaker_id: unnamedSpeakers[currentSpeakerIndex].id,
+        }),
+      });
+    } catch (error) {
+      console.error("error removing speaker:", error);
+      toast({
+        title: "error",
+        description: "failed to remove speaker. please try again.",
         variant: "destructive",
       });
     }
@@ -292,8 +327,8 @@ export default function IdentifySpeakers({
         });
 
         toast({
-          title: "Speakers merged",
-          description: "The speakers have been successfully merged",
+          title: "speakers merged",
+          description: "the speakers have been successfully merged",
         });
 
         if (selectedExistingSpeaker.name) {
@@ -317,10 +352,10 @@ export default function IdentifySpeakers({
           }))
         );
       } catch (error) {
-        console.error("Error merging speakers:", error);
+        console.error("error merging speakers:", error);
         toast({
-          title: "Error",
-          description: "Failed to merge speakers. Please try again.",
+          title: "error",
+          description: "failed to merge speakers. please try again.",
           variant: "destructive",
         });
       }
@@ -341,11 +376,10 @@ export default function IdentifySpeakers({
         },
       });
     } catch (error) {
-      console.error("Error marking speaker as hallucination:", error);
+      console.error("error ignoring speaker:", error);
       toast({
-        title: "Error",
-        description:
-          "Failed to mark speaker as hallucination. Please try again.",
+        title: "error",
+        description: "failed to ignore speaker. please try again.",
         variant: "destructive",
       });
     }
@@ -377,21 +411,13 @@ export default function IdentifySpeakers({
         <DialogHeader className="py-4">
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center">
-              Identify speakers based on recent audio clips
+              identify speakers based on recent audio clips
               <Badge variant="secondary" className="ml-2">
                 experimental
               </Badge>
             </div>
           </DialogTitle>
         </DialogHeader>
-        <DialogDescription className="mb-4 text-sm text-gray-600">
-          this page helps you identify and manage speakers detected in your
-          audio clips. you can listen to up to 3 clips of each speaker, assign
-          them names, or mark them as hallucinations if they were incorrectly
-          detected. you can also tell us if another speaker is the same by
-          listening to the other recordings. this helps improve the accuracy of
-          speaker identification in your recordings.
-        </DialogDescription>
         <div className="flex-grow overflow-auto min-h-[600px] flex flex-col">
           {loading ? (
             <div className="space-y-6 min-h-[600px]">
@@ -434,10 +460,7 @@ export default function IdentifySpeakers({
                     <div className="p-4 border rounded h-full">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-2">
-                          <span className="font-medium">
-                            Speaker {currentSpeakerIndex + 1} of{" "}
-                            {unnamedSpeakers.length}
-                          </span>
+                          <span className="font-medium">identify speaker</span>
                         </div>
                       </div>
                       <form
@@ -451,6 +474,12 @@ export default function IdentifySpeakers({
                         <div className="flex items-center space-x-2">
                           <div className="relative flex-1 max-w-xs">
                             <Input
+                              onFocus={() => {
+                                setShowSpeakerNames(true);
+                              }}
+                              onBlur={() => {
+                                setShowSpeakerNames(false);
+                              }}
                               value={speakerSearchTerm}
                               name="speakerName"
                               onChange={(e) => {
@@ -482,7 +511,7 @@ export default function IdentifySpeakers({
                                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
                                   </div>
                                 ) : (
-                                  speakers.length > 0 && (
+                                  showSpeakerNames && (
                                     <ul className="py-1">
                                       {speakers.map((speaker) => (
                                         <li
@@ -492,6 +521,7 @@ export default function IdentifySpeakers({
                                             setSpeakerSearchTerm(speaker.name);
                                             setSelectedExistingSpeaker(speaker);
                                             setShowMergeConfirm(true);
+                                            setShowSpeakerNames(false);
                                           }}
                                         >
                                           {speaker.name}
@@ -505,43 +535,50 @@ export default function IdentifySpeakers({
                           </div>
                           <Button
                             type="submit"
+                            disabled={!speakerSearchTerm}
                             size="sm"
                             onClick={(e) => {
                               e.preventDefault();
                               setShowNameUpdateConfirm(true);
                             }}
                           >
-                            Update Name
+                            update name
                           </Button>
                           <Button
                             type="button"
-                            variant="destructive"
+                            variant="outline"
                             onClick={async () => {
                               setShowHallucinationConfirm(true);
                             }}
                           >
-                            Mark as Hallucination
+                            nobody is speaking
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={async () => {
+                              setShowRemoveSpeakerConfirm(true);
+                            }}
+                          >
+                            remove speaker
                           </Button>
                         </div>
                       </form>
 
                       <div className="mt-4">
                         <p className="text-sm text-gray-500 mb-2">
-                          Audio Samples:
+                          audio samples:
                         </p>
                         <div className="grid grid-cols-3 gap-2">
                           {unnamedSpeakers[
                             currentSpeakerIndex
-                          ].metadata?.audioPaths
+                          ].metadata?.audioSamples
                             .slice(0, 3)
-                            .map((path, index) => (
+                            .map((sample, index) => (
                               <VideoComponent
                                 key={index}
-                                filePath={path}
-                                customDescription={`${index + 1} of ${
-                                  unnamedSpeakers[currentSpeakerIndex].metadata
-                                    ?.audioPaths.length
-                                }`}
+                                filePath={sample.path}
+                                customDescription={`transcript: ${sample.transcript}`}
                               />
                             ))}
                         </div>
@@ -553,14 +590,14 @@ export default function IdentifySpeakers({
                               handleRefresh();
                             }}
                           >
-                            Next Speaker
+                            next speaker
                           </Button>
                         </div>
                       )}
                       <div className="mt-8">
                         {similarSpeakers.length > 0 && (
                           <p className="text-sm text-gray-500 mb-4">
-                            Is this the same speaker?
+                            is this the same speaker?
                           </p>
                         )}
                         {isFetchingSimilarSpeakers ? (
@@ -579,14 +616,16 @@ export default function IdentifySpeakers({
                                   key={speaker.id}
                                 >
                                   <span>{speaker.name || ""}</span>
-                                  {speaker.metadata?.audioPaths.map((path) => (
-                                    <VideoComponent
-                                      key={path}
-                                      filePath={path}
-                                      customDescription={` `}
-                                      className="max-w-[300px]"
-                                    />
-                                  ))}
+                                  {speaker.metadata?.audioSamples.map(
+                                    (sample) => (
+                                      <VideoComponent
+                                        key={sample.path}
+                                        filePath={sample.path}
+                                        customDescription={`transcript: ${sample.transcript}`}
+                                        className="max-w-[300px]"
+                                      />
+                                    )
+                                  )}
                                   <Button
                                     size="default"
                                     variant="default"
@@ -595,20 +634,29 @@ export default function IdentifySpeakers({
                                       setShowMergeConfirm(true);
                                     }}
                                   >
-                                    Same Speaker
+                                    same speaker
                                   </Button>
                                   <Button
                                     size="default"
-                                    variant="destructive"
+                                    variant="outline"
                                     onClick={() => {
-                                      setSimilarSpeakers(
+                                      const newSpeakers =
                                         similarSpeakers.filter(
                                           (s) => s.id !== speaker.id
+                                        );
+                                      setSimilarSpeakers(newSpeakers);
+                                      setSimilarSpeakerIndex(
+                                        Math.max(
+                                          0,
+                                          Math.min(
+                                            similarSpeakerIndex,
+                                            newSpeakers.length - 1
+                                          )
                                         )
                                       );
                                     }}
                                   >
-                                    Different Speaker
+                                    different speaker
                                   </Button>
                                   <Button
                                     size="default"
@@ -624,7 +672,7 @@ export default function IdentifySpeakers({
                                       );
                                     }}
                                   >
-                                    Skip
+                                    skip
                                   </Button>
                                 </div>
                               );
@@ -646,10 +694,9 @@ export default function IdentifySpeakers({
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Confirm Hallucination</DialogTitle>
+            <DialogTitle>confirm</DialogTitle>
             <DialogDescription>
-              Are you sure you want to mark this speaker as a hallucination?
-              This action cannot be undone.
+              are you sure you nobody is speaking? this action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end space-x-2">
@@ -657,21 +704,22 @@ export default function IdentifySpeakers({
               variant="outline"
               onClick={() => setShowHallucinationConfirm(false)}
             >
-              Cancel
+              cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="default"
               onClick={async () => {
                 await handleMarkSpeakerAsHallucination();
                 setShowHallucinationConfirm(false);
                 toast({
-                  title: "Speaker marked as hallucination",
+                  title: "speaker ignored",
                   description:
                     "This speaker will be ignored in future processing",
                 });
+                setSpeakerIdentified(true);
               }}
             >
-              Confirm
+              confirm
             </Button>
           </div>
         </DialogContent>
@@ -682,19 +730,19 @@ export default function IdentifySpeakers({
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Confirm Name Update</DialogTitle>
+            <DialogTitle>confirm name update</DialogTitle>
             <DialogDescription>
-              Are you sure you want to update this speaker&apos;s name to &quot;
+              are you sure you want to update this speaker&apos;s name to &quot;
               {speakerSearchTerm}
               &quot;?
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end space-x-2">
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => setShowNameUpdateConfirm(false)}
             >
-              Cancel
+              cancel
             </Button>
             <Button
               onClick={async () => {
@@ -706,7 +754,7 @@ export default function IdentifySpeakers({
                 });
               }}
             >
-              Confirm
+              confirm
             </Button>
           </div>
         </DialogContent>
@@ -714,14 +762,24 @@ export default function IdentifySpeakers({
       <Dialog open={showMergeConfirm} onOpenChange={setShowMergeConfirm}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Merge Speakers</DialogTitle>
-            <DialogDescription>
-              Do you want to merge this speaker with existing speaker &quot;
-              {selectedExistingSpeaker?.name}&quot;? This will combine their
-              audio samples and future recordings.
-            </DialogDescription>
+            <DialogTitle>merge speakers</DialogTitle>
+            {selectedExistingSpeaker?.name ? (
+              <DialogDescription>
+                do you want to merge this speaker with existing speaker
+                {` "${selectedExistingSpeaker?.name}"`}? this will combine their
+                audio samples and future recordings.
+              </DialogDescription>
+            ) : (
+              <DialogDescription>
+                do you want to merge this speaker? this will combine their audio
+                samples and future recordings.
+              </DialogDescription>
+            )}
           </DialogHeader>
           <div className="flex justify-end space-x-2">
+            <Button variant="ghost" onClick={() => setShowMergeConfirm(false)}>
+              cancel
+            </Button>
             {selectedExistingSpeaker?.name && (
               <Button
                 variant="outline"
@@ -730,16 +788,51 @@ export default function IdentifySpeakers({
                   // Still update the name without merging
                   handleUpdateSpeakerName(selectedExistingSpeaker?.name || "");
                   toast({
-                    title: "Speaker renamed",
+                    title: "speaker renamed",
                     description:
-                      "The speaker name has been updated without merging",
+                      "the speaker name has been updated without merging",
                   });
                 }}
               >
-                Just Update Name
+                just update name
               </Button>
             )}
-            <Button onClick={handleMergeSpeakers}>Merge Speakers</Button>
+
+            <Button onClick={handleMergeSpeakers}>merge speakers</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={showRemoveSpeakerConfirm}
+        onOpenChange={setShowRemoveSpeakerConfirm}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>confirm remove speaker</DialogTitle>
+            <DialogDescription>
+              are you sure you want to remove this speaker? this action cannot
+              be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowRemoveSpeakerConfirm(false)}
+            >
+              cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                await handleRemoveSpeaker();
+                setShowRemoveSpeakerConfirm(false);
+                toast({
+                  title: "speaker removed",
+                  description: "the speaker has been removed",
+                });
+              }}
+            >
+              confirm
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
