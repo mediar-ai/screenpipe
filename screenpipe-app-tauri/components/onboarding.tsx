@@ -1,12 +1,10 @@
 import localforage from "localforage";
-import React, { useState, useEffect } from "react";
-import { useToast } from "@/components/ui/use-toast";
+import React, { useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { onboardingFlow } from './onboarding/entities/constants';
 import { useOnboardingFlow } from "./onboarding/context/onboarding-context";
-import {useMemo} from 'react';
 
 const setFirstTimeUserFlag = async () => {
   await localforage.setItem("isFirstTimeUser", false);
@@ -58,19 +56,6 @@ export default Onboarding;
 
 export const T = () => {
   const { currentStep, track, handleNextSlide } = useOnboardingFlow()
-
-  const step = useMemo(() => {
-    return onboardingFlow[currentStep]
-  },[currentStep])
-
-  if (step.condition.isConditional) {
-    if (track[step.condition.conditionStep!][step.condition.conditionProperty!] === step.condition.value) {
-      return onboardingFlow[currentStep].component()
-    } else {
-      handleNextSlide()
-      return null
-    }
-  }
 
   return (
     <>

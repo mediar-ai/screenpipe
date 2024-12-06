@@ -10,47 +10,10 @@ import {
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import posthog from "posthog-js";
 import { useOnboardingFlow } from "./context/onboarding-context";
-
-interface OnboardingSelectionProps {
-  className?: string;
-  selectedOptions: string[] | null;
-  handleOptionClick: (option: string) => void;
-  handleNextSlide: () => void;
-  handlePrevSlide: () => void;
-}
-
-const OPTIONS = [
-  {
-    key: "personalUse",
-    icon: UserRound,
-    label: "personal use",
-    description:
-      "personal knowledge management, productivity, custom dev, etc.",
-  },
-  {
-    key: "professionalUse",
-    icon: BriefcaseBusiness,
-    label: "professional use",
-    description:
-      "out of the box productivity, meeting summaries, automation, etc.",
-  },
-  {
-    key: "developmentlUse",
-    icon: Wrench,
-    label: "development purpose",
-    description:
-      "integrate in your business product, build on top, resell, etc.",
-  },
-  {
-    key: "otherUse",
-    icon: SlidersHorizontal,
-    label: "other",
-    description: "", // TODO editable
-  },
-];
+import { onboardingFlow } from './entities/constants';
 
 const SelectionItem: React.FC<{
-  option: (typeof OPTIONS)[number];
+  option: any;
   isSelected: boolean | undefined;
   onClick: () => void;
 }> = ({ option, isSelected, onClick }) => {
@@ -72,7 +35,7 @@ const SelectionItem: React.FC<{
 };
 
 const OnboardingSelection = () => {
-  const { handleNextSlide, handlePrevSlide } = useOnboardingFlow();
+  const { handleNextSlide, handlePrevSlide, process: onboardingFlow, currentStep } = useOnboardingFlow();
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
 
   const removeOption = (option: string) => {
@@ -122,7 +85,7 @@ const OnboardingSelection = () => {
         <span className="text-[15px] w-full text-center text-muted-foreground mb-2">
           you can select multiple options:
         </span>
-        {OPTIONS.map((option) => (
+        {onboardingFlow[currentStep].meta.options.map((option: any) => (
           <SelectionItem
             key={option.key}
             option={option}

@@ -24,7 +24,7 @@ const OnboardingIntro = () => {
       <video
         width="600px"
         className="mt-2 rounded-md"
-        autoPlay
+        // autoPlay
         controls
         preload="true"
       >

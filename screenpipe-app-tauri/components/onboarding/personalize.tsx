@@ -1,30 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { TextSearch, BotMessageSquare } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
-
-const PERSONALIZATION_OPTIONS = [
-  {
-    key: "withoutAI",
-    icon: TextSearch,
-    title: "conventional search",
-    description:
-      "use advanced search capabilities on top of your 24/7 recordings or the pipe store",
-    note: "no api key needed.",
-  },
-  {
-    key: "withAI",
-    icon: BotMessageSquare,
-    title: "ai-enhanced Search",
-    description:
-      "use ai capabilities to summarize your recordings, extract insights, or use meeting summaries.",
-    note: "api key required.",
-  },
-];
+import { useOnboardingFlow } from "./context/onboarding-context";
+import OnboardingNavigation from "./navigation";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { useToast } from "../ui/use-toast";
 
 const CardItem: React.FC<{
-  option: (typeof PERSONALIZATION_OPTIONS)[number];
+  option:any;
   isSelected: boolean;
   onClick: () => void;
 }> = ({ option, isSelected, onClick }) => {
@@ -33,19 +16,14 @@ const CardItem: React.FC<{
   return (
     <div className="relative group h-[270px]">
       <div
+        data-isSelected={isSelected}
         className={`absolute h-full !mt-[-5px] inset-0 rounded-lg transition-all duration-300 ease-out group-hover:before:opacity-100 group-hover:before:scale-100 
         before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-black dark:before:border-white before:opacity-0 before:scale-95 before:transition-all 
-        before:duration-300 before:ease-out ${
-          isSelected ? "before:!border-none" : ""
-        }`}
+        before:duration-300 before:ease-out data-[isSelected=true]:before:!border-none`}
       />
       <Card
-        className={`p-4 h-full !mt-[-5px] cursor-pointer bg-white dark:bg-gray-800 hover:bg-accent transition-all relative z-[1] duration-300 ease-out group-hover:scale-[0.98]
-        ${
-          isSelected
-            ? "bg-accent transition-transform relative border-2 border-black dark:border-white"
-            : ""
-        }`}
+        data-isSelected={isSelected}
+        className={"p-4 h-full !mt-[-5px] cursor-pointer bg-white dark:bg-gray-800 hover:bg-accent transition-all relative z-[1] duration-300 ease-out group-hover:scale-[0.98] data-[isSelected=true]:bg-accent data-[isSelected=true]:transition-transform data-[isSelected=true]:relative data-[isSelected=true]:border-2 data-[isSelected=true]:border-black data-[isSelected=true]:dark:border-white"}
         onClick={onClick}
       >
         <CardContent className="flex flex-col w-[250px] justify-center">
@@ -62,6 +40,48 @@ const CardItem: React.FC<{
 };
 
 const OnboardingPersonalize = () => {
+  const { process, currentStep, handlePrevSlide, handleNextSlide } = useOnboardingFlow()
+  const { updateSettings } = useSettings()
+  const { toast } = useToast()
+  const [isAi, setIsAi] = useState(false)
+
+  function handleSelectionChange(mode:string) {
+    console.log(mode)
+    if (mode === 'withAI') {
+      setIsAi(!isAi)
+    } else {
+      setIsAi(false)
+    }
+  }
+
+  const handleNextWithPreference = async () => {
+    try {
+      if (isAi) {
+        await updateSettings({ withAi: true });
+        toast({
+          title: "success",
+          description: "ai-search was enabled successfully",
+          variant: "default",
+        });
+      } else  {
+        await updateSettings({ withAi: false });
+        toast({
+          title: "success",
+          description: "conventional search was enabled successfully",
+          variant: "default",
+        });
+      }
+
+      handleNextSlide({ withAi: isAi })
+    } catch (error: any) {
+      toast({
+        title: "error",
+        description: error,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div
       className={`w-full flex justify-center flex-col relative`}
@@ -77,15 +97,24 @@ const OnboardingPersonalize = () => {
         </DialogTitle>
       </DialogHeader>
       <div className="flex w-full justify-around mt-6">
-        {PERSONALIZATION_OPTIONS.map((option) => (
+        {process[currentStep].meta.options.map((option:any) => (
           <CardItem
             key={option.key}
             option={option}
-            isSelected={false}
-            onClick={() => console.log(option.key)}
+            isSelected={option.key === 'withAI' ? isAi : !isAi}
+            onClick={() => handleSelectionChange(option.key)}
           />
         ))}
       </div>
+      <OnboardingNavigation
+        className="mt-9"
+        nextBtnText="next"
+        prevBtnText="previous"
+        handlePrevSlide={handlePrevSlide}
+        handleNextSlide={async () => {
+          await handleNextWithPreference();
+        }}
+      />
     </div>
   );
 };

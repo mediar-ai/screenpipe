@@ -9,8 +9,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useOnboardingFlow } from "./context/onboarding-context";
 
 const OnboardingInstructions = () => {
+  const { handlePrevSlide } = useOnboardingFlow();
   return (
     <div className={`w-full flex justify-center flex-col overflow-y-auto`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
@@ -104,6 +106,15 @@ const OnboardingInstructions = () => {
       </div>
 
       <div className="h-[100px] my-16" />
+      <OnboardingNavigation
+        className="mt-9"
+        nextBtnText="next"
+        prevBtnText="previous"
+        handlePrevSlide={handlePrevSlide}
+        handleNextSlide={async () => {
+          // await handleNextWithPreference();
+        }}
+      />
     </div>
   );
 };

@@ -21,10 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import OnboardingNavigation from "./navigation";
+import { useOnboardingFlow } from "./context/onboarding-context";
 
 const OnboardingAPISetup = () => {
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
+  const { handlePrevSlide } = useOnboardingFlow();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [areAllInputsFilled, setAreAllInputsFilled] = React.useState(false);
@@ -423,6 +426,16 @@ const OnboardingAPISetup = () => {
         don&apos;t have api key ? set up ollama locally
         <ArrowUpRight className="inline w-4 h-4 ml-1 " />
       </a>
+
+      <OnboardingNavigation
+        className="mt-9"
+        nextBtnText="next"
+        prevBtnText="previous"
+        handlePrevSlide={handlePrevSlide}
+        handleNextSlide={async () => {
+          // await handleNextWithPreference();
+        }}
+      />
     </div>
   );
 };

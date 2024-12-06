@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import { onboardingFlow, processBase, taskBase } from '../entities/constants';
+import { onboardingFlow } from '../entities/constants';
 import { useOnboarding } from '@/lib/hooks/use-onboarding';
+import { processBase, taskBase } from '../entities/types';
 
 type OnboardingFlowContextType = {
   process: ( taskBase | processBase )[];
@@ -22,22 +23,53 @@ export const OnboardingFlowProvider = ({ children }: OnboardingFlowProviderProps
   const [track, setTrack] = useState<Record<string,any>>({});
   const [currentStep, setCurrentStep] = useState<number>(0);
   const { setShowOnboarding } = useOnboarding()
-  console.log({process})
-  const handleNextSlide = (meta?: any) => {
-    console.log("NEXT SLIDE")
+
+  const handleIfLastStep = () => {
     if ((process.length - 1) === currentStep) {
       setShowOnboarding(false)
     }
-    const newTrack = track
+  }
 
-    newTrack[process[currentStep].slug] = meta
-    setTrack(newTrack)
+  const handleStepChange = (givenStep: number, goForward: boolean) => {
+    let nexStepIndex = goForward ? givenStep + 1 : givenStep - 1
+    let nextStep = process[nexStepIndex]
 
-    setCurrentStep((prevStep) => prevStep + 1);
+    if (nextStep.condition.isConditional && nextStep.condition.conditions) {
+      let conditionsAreMet = false
+
+      for (const condition of nextStep.condition.conditions) {
+        if (track[condition.conditionStep!][condition.conditionProperty!] === condition.value) {
+          conditionsAreMet = true
+        } else {
+          conditionsAreMet = false
+        }
+      }
+
+      if (conditionsAreMet) {
+        setCurrentStep(nexStepIndex);
+      } else {
+        handleStepChange(nexStepIndex, goForward)
+        return null
+      }
+    }
+
+    setCurrentStep(nexStepIndex)
+  }
+
+  const handleNextSlide = (meta?: any) => {
+    handleIfLastStep()
+
+    if (meta) {
+      const newTrack = track
+      newTrack[process[currentStep].slug] = meta
+      setTrack(newTrack)
+    }
+
+    handleStepChange(currentStep, true)
   };
 
   const handlePrevSlide = () => {
-    setCurrentStep((prevStep) => Math.max(prevStep - 1, 0));
+    handleStepChange(currentStep, false)
   };
 
   return (

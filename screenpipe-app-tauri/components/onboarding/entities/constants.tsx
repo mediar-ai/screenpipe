@@ -1,3 +1,4 @@
+import { BotMessageSquare, BriefcaseBusiness, SlidersHorizontal, TextSearch, UserRound, Wrench } from "lucide-react"
 import OnboardingAPISetup from "../api-setup"
 import OnboardingDevConfig from "../dev-configuration"
 import OnboardingDevOrNonDev from "../dev-or-non-dev"
@@ -7,126 +8,118 @@ import OnboardingPersonalize from "../personalize"
 import OnboardingPipes from "../pipes"
 import OnboardingStatus from "../status"
 import OnboardingSelection from "../usecases-selection"
+import { taskBase } from "./types"
 
-const oldprocess = {
-    intro:{
-      slug: 'intro',
-      optional: true,
-      component: () => OnboardingIntro
-    },
-    setup:{
-      slug: 'setup',
-      optional: true,
-      component: () => OnboardingStatus
-    },
-    selection:{
-      slug: 'selection',
-      optional: false,
-      component: ()=> OnboardingSelection
-    },
-    personalize:{
-      slug: 'personalize',
-      optional: false,
-      component: () => OnboardingPersonalize
-    },
-    apiSetup:{
-      slug: 'apiSetup',
-      optional: false,
-      component: () => OnboardingAPISetup
-    },
-    devOrNonDev:{
-      slug: 'devOrNonDev',
-      optional: false,
-      component: () => OnboardingDevOrNonDev
-    },
-    devConfig:{
-      slug: 'devConfig',
-      optional: true,
-      component: () => OnboardingDevConfig,
-    },
-    pipes:{
-      slug: 'pipes',
-      optional: true,
-      component: () => OnboardingPipes
-    },
-    instructions:{
-      slug: 'instructions',
-      optional: true,
-      component: () => OnboardingInstructions
-    }
-}
-  
-const devProcess: Record<string, taskBase|processBase> = {
-    devConfig:{
+const devProcess: taskBase[] = [
+    {
         type: 'TASK',
         slug: 'devConfig',
         optional: true,
         component: () => <OnboardingDevConfig/>,
         condition:{
-            isConditional: false,
-        }
+            isConditional: true,
+            conditions: [
+                {
+                    conditionStep: 'devOrNonDev',
+                    conditionProperty: 'devMode',
+                    value: true
+                }
+            ]
+        },
     },
-    pipes:{
+    {
         type: 'TASK',
         slug: 'pipes',
         optional: true,
         component: () => <OnboardingPipes/>,
         condition:{
-            isConditional: false,
-        }
+            isConditional: true,
+            conditions: [
+                {
+                    conditionStep: 'devOrNonDev',
+                    conditionProperty: 'devMode',
+                    value: true
+                }
+            ]
+        },
     }
-}
+]
 
-const standardProcess: Record<string, taskBase|processBase>  = {
-    personalize:{
+const standardProcess: taskBase[]  = [
+    {
         type: 'TASK',
         slug: 'personalize',
         optional: false,
         component: () => <OnboardingPersonalize/>,
         condition:{
-            isConditional: false,
+            isConditional: true,
+            conditions: [
+                {
+                    conditionStep: 'devOrNonDev',
+                    conditionProperty: 'devMode',
+                    value: false
+                }
+            ]
+        },
+        meta: {
+            options: [
+                {
+                    key: "withoutAI",
+                    icon: TextSearch,
+                    title: "conventional search",
+                    description:
+                      "use advanced search capabilities on top of your 24/7 recordings or the pipe store",
+                    note: "no api key needed.",
+                  },
+                  {
+                    key: "withAI",
+                    icon: BotMessageSquare,
+                    title: "ai-enhanced Search",
+                    description:
+                      "use ai capabilities to summarize your recordings, extract insights, or use meeting summaries.",
+                    note: "api key required.",
+                  },
+            ]
         }
     },
-    apiSetup:{
+    {
         type: 'TASK',
         slug: 'apiSetup',
         optional: true,
         component: () => <OnboardingAPISetup/>,
         condition:{
-            isConditional: false,
+            isConditional: true,
+            conditions: [
+                {
+                    conditionStep: 'devOrNonDev',
+                    conditionProperty: 'devMode',
+                    value: false
+                },
+                {
+                    conditionStep: 'personalize',
+                    conditionProperty: 'withAi',
+                    value: true
+                },
+            ]
         }
     },
-    instructions:{
+    {
         type: 'TASK',
         slug: 'instructions',
         optional: true,
         component: () => <OnboardingInstructions/>,
         condition:{
-            isConditional: false,
-        }
+            isConditional: true,
+            conditions: [
+                {
+                    conditionStep: 'devOrNonDev',
+                    conditionProperty: 'devMode',
+                    value: false
+                }
+            ]
+        },
     }
-}
-
-type stepBase = {
-    slug: string,
-    optional: boolean,
-    condition: {
-        isConditional: boolean,
-        conditionProperty?: string,
-        value?: any,
-        conditionStep?: string
-    }
-}
-
-export type taskBase = stepBase & {
-    type: 'TASK',
-    component: () => React.ReactElement
-}
-
-export type processBase = stepBase & {
-    type: 'PROCESS',
-    tasks: Record<string, taskBase | processBase>
-}
+]
 
 export const onboardingFlow: (taskBase)[] = [
     {
@@ -145,6 +138,37 @@ export const onboardingFlow: (taskBase)[] = [
         condition:{
             isConditional: false,
         },
+        meta: {
+            options: [
+                {
+                key: "personalUse",
+                icon: UserRound,
+                label: "personal use",
+                description:
+                    "personal knowledge management, productivity, custom dev, etc.",
+                },
+                {
+                key: "professionalUse",
+                icon: BriefcaseBusiness,
+                label: "professional use",
+                description:
+                    "out of the box productivity, meeting summaries, automation, etc.",
+                },
+                {
+                key: "developmentlUse",
+                icon: Wrench,
+                label: "development purpose",
+                description:
+                    "integrate in your business product, build on top, resell, etc.",
+                },
+                {
+                key: "otherUse",
+                icon: SlidersHorizontal,
+                label: "other",
+                description: "", // TODO editable
+                },
+            ]
+        },
         component: () => <OnboardingSelection/>
     },
     {
@@ -154,7 +178,25 @@ export const onboardingFlow: (taskBase)[] = [
         condition:{
             isConditional: false,
         },
-        component: () => <OnboardingDevOrNonDev/>
+        component: () => <OnboardingDevOrNonDev/>,
+        meta: {
+            options: [
+                {
+                  key: "standardMode",
+                  icon: UserRound,
+                  title: "standard mode",
+                  description:
+                    "screenpipe takes care of everything for you, making it easy and stress-free.",
+                },
+                {
+                  key: "devMode",
+                  icon: Wrench,
+                  title: "dev mode",
+                  description:
+                    "run the CLI on top of the UI, and customize screenpipe to fit your needs.",
+                },
+            ]
+        }
     },
     {
         type: 'TASK',
@@ -163,31 +205,8 @@ export const onboardingFlow: (taskBase)[] = [
         condition:{
             isConditional: false,
         },
-        component: () => <OnboardingStatus/>
+        component: () => <OnboardingStatus/>,
     },
-    {
-        type: 'TASK',
-        slug: 'devProcess',
-        optional: true,
-        condition:{
-            isConditional: true,
-            conditionStep: 'devOrNonDev',
-            conditionProperty: 'devMode',
-            value: true
-        },
-        // tasks: devProcess,
-        component: ()=> <h1>hey</h1>
-    },
-    {
-        type: 'TASK',
-        slug: 'standardProcess',
-        optional: true,
-        condition:{
-            isConditional: true,
-            conditionStep: 'devOrNonDev',
-            conditionProperty: 'devMode',
-            value: false
-        },
-        component: () => <h1>hohoho</h1>
-    }
+    ...devProcess,
+    ...standardProcess
 ]
