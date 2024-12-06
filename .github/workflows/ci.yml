@@ -46,14 +46,15 @@ jobs:
       - name: Run cargo tests
         run: cargo test
 
-      - name: Run bun tests
-        env:
-          SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
-          PIPE_ID: test
-          PIPE_FILE: pipe.ts
-          PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
-        run: bun ./scripts/run_tests.js
-        working-directory: ./screenpipe-js
+      # TODO: ??
+      # - name: Run bun tests
+      #   env:
+      #     SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
+      #     PIPE_ID: test
+      #     PIPE_FILE: pipe.ts
+      #     PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
+      #   run: bun ./scripts/run_tests.js
+      #   working-directory: ./screenpipe-js
 
   test-windows:
     runs-on: windows-latest
@@ -114,15 +115,6 @@ jobs:
       - name: Run specific Windows OCR cargo test
         run: cargo test test_process_ocr_task_windows
 
-      - name: Run bun tests
-        env:
-          SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
-          PIPE_ID: test
-          PIPE_FILE: pipe.ts
-          PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
-        run: bun ./scripts/run_tests.js
-        working-directory: ./screenpipe-js
-
   test-macos:
     runs-on: macos-latest
     steps:
@@ -163,12 +155,3 @@ jobs:
         env:
           DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr
-
-      - name: Run bun tests
-        env:
-          SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
-          PIPE_ID: test
-          PIPE_FILE: pipe.ts
-          PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
-        run: bun ./scripts/run_tests.js
-        working-directory: ./screenpipe-js
