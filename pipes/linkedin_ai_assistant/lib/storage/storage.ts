@@ -2,16 +2,26 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ProfileVisit, State, Message, ProfileStore, ProfileDetails, MessageStore } from './types';
 
-const STORAGE_DIR = path.join(__dirname);
+const STORAGE_DIR = path.join(process.cwd(), 'lib', 'storage');
 console.log('storage directory:', STORAGE_DIR);
 
+async function ensureStorageDir() {
+    try {
+        await fs.access(STORAGE_DIR);
+    } catch {
+        await fs.mkdir(STORAGE_DIR, { recursive: true });
+        console.log('created storage directory:', STORAGE_DIR);
+    }
+}
+
 export async function loadState(): Promise<State> {
+    await ensureStorageDir();
     try {
         const statePath = path.join(STORAGE_DIR, 'state.json');
-        console.log('attempting to load state from:', statePath);
+        // console.log('attempting to load state from:', statePath);
         
         const data = await fs.readFile(statePath, 'utf-8');
-        console.log('raw state data:', data.slice(0, 200) + '...');
+        // console.log('raw state data:', data.slice(0, 200) + '...');
         
         const state = JSON.parse(data);
         console.log('parsed state:', {
@@ -67,6 +77,7 @@ export async function updateOrAddProfileVisit(state: State, newVisit: ProfileVis
 }
 
 export async function loadMessages(): Promise<MessageStore> {
+    await ensureStorageDir();
     try {
         const data = await fs.readFile(path.join(STORAGE_DIR, 'messages.json'), 'utf-8');
         return JSON.parse(data);

@@ -1,7 +1,7 @@
 {
   "messages": {
     "https://www.linkedin.com/in/nicolaswaern/": {
-      "timestamp": "2024-12-03T02:35:04.777Z",
+      "timestamp": "2024-12-05T05:56:01.331Z",
       "messages": [
         {
           "text": "What areas are you working on?",
@@ -11,7 +11,7 @@
       ]
     },
     "https://www.linkedin.com/in/dashatimbush/": {
-      "timestamp": "2024-12-03T02:35:16.228Z",
+      "timestamp": "2024-12-05T05:40:38.323Z",
       "messages": [
         {
           "text": "Hey Dasha, it's amazing to see how your work with CastingForm is revolutionizing talent representation in Hollywood—congrats on all your success!",
@@ -81,11 +81,16 @@
       ]
     },
     "https://www.linkedin.com/in/kushal1/": {
-      "timestamp": "2024-12-03T03:14:24.980Z",
+      "timestamp": "2024-12-05T05:10:36.947Z",
       "messages": [
         {
           "text": "Hey Kushal, it's impressive to see how you're driving innovation at Xoxoday and supporting startups as an angel investor!",
           "timestamp": "2024-12-03T03:14:24.979Z",
+          "sender": "LLM"
+        },
+        {
+          "text": "Hey Kushal, it's impressive to see how you're making waves with Xoxoday and supporting startups as an angel investor!",
+          "timestamp": "2024-12-05T05:10:36.946Z",
           "sender": "LLM"
         }
       ]
@@ -116,6 +121,76 @@
         {
           "text": "Hey Oleg, I'm really impressed by your dedication to supporting early-stage entrepreneurs and your extensive experience in venture capital—keep up the great work!",
           "timestamp": "2024-12-03T18:07:58.564Z",
+          "sender": "LLM"
+        }
+      ]
+    },
+    "https://www.linkedin.com/in/d0znpp/": {
+      "timestamp": "2024-12-05T04:06:34.266Z",
+      "messages": [
+        {
+          "text": "Привет Иван, впечатляет как ты ведёшь Wallarm в решении задач API-безопасности(Edited)",
+          "timestamp": "2024-12-03",
+          "sender": "Matthew Diakonov"
+        }
+      ]
+    },
+    "https://www.linkedin.com/in/abhishek-sinha-80001b6/": {
+      "timestamp": "2024-12-05T00:48:45.675Z",
+      "messages": [
+        {
+          "text": "Hey Abhishek, it's awesome to see how you're leading Nelumbium Capital with such impactful engagements and insights across the finance industry!",
+          "timestamp": "2024-12-03",
+          "sender": "Matthew Diakonov"
+        }
+      ]
+    },
+    "https://www.linkedin.com/in/daryna-vinichuk-941278266/": {
+      "timestamp": "2024-12-05T03:08:18.793Z",
+      "messages": [
+        {
+          "text": "Hey Daryna, it’s impressive to see how you’re helping founders with digital product design at Jazters!",
+          "timestamp": "2024-12-03",
+          "sender": "Matthew Diakonov"
+        }
+      ]
+    },
+    "https://www.linkedin.com/in/howard-polinski-3328321/": {
+      "timestamp": "2024-12-05T05:01:16.874Z",
+      "messages": [
+        {
+          "text": "Hi Matthew, thanks for reaching out. I see that you are in the tech space as well. Interesting projects of yours. Wish you every success!",
+          "timestamp": "2024-12-03",
+          "sender": "Howard Polinski"
+        }
+      ]
+    },
+    "https://www.linkedin.com/in/samrahkazmi/": {
+      "timestamp": "2024-12-05T04:06:50.417Z",
+      "messages": [
+        {
+          "text": "Hey Samrah, it's amazing to see how you're leading the charge in AI and fintech while inspiring change and innovation across industries!",
+          "timestamp": "2024-12-05T04:06:50.416Z",
+          "sender": "LLM"
+        }
+      ]
+    },
+    "https://www.linkedin.com/in/ililic/": {
+      "timestamp": "2024-12-05T04:28:31.829Z",
+      "messages": [
+        {
+          "text": "Hey Igor, impressive work with Blackcomb Software—your dedication to anticipating crypto trends and providing actionable insights is truly making a difference in the DeFi space!",
+          "timestamp": "2024-12-05T04:28:31.828Z",
+          "sender": "LLM"
+        }
+      ]
+    },
+    "https://www.linkedin.com/in/eryka-lehr/": {
+      "timestamp": "2024-12-05T04:28:46.441Z",
+      "messages": [
+        {
+          "text": "Hey Eryka, congrats on your AR/VR certificate from MIT—your dedication to learning and innovation is truly inspiring!",
+          "timestamp": "2024-12-05T04:28:46.440Z",
           "sender": "LLM"
         }
       ]

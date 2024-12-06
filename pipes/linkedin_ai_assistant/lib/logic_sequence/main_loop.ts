@@ -2,33 +2,51 @@ import fs from 'fs/promises';
 import { extractProfileElements } from '../simple_actions/extract_profiles_from_search_results';
 import { navigateToSearch } from '../simple_actions/go_to_search_results';
 import templates from '../storage/templates.json';
-import { setupBrowser } from '../simple_actions/browser_setup';
+import { setupBrowser } from '../browser_setup';
 import { ProfileDetails, ProfileVisit, State, ProfileElement } from '../storage/types';
 import { extractProfileText } from '../simple_actions/extract_profile_details_from_page';
 import { clickMutualConnections } from '../simple_actions/click_mutual_connection';
 import { clickFirstMessageButton } from '../simple_actions/click_message';
 import { clickFirstProfile } from '../simple_actions/click_first_profile_in_the_list';
 import { getMessages } from '../simple_actions/extract_messages';
-import { loadState, updateOrAddProfileVisit, updateMultipleProfileVisits, saveMessages, scheduleMessage, saveState } from '../storage/storage';
+import {
+    loadState,
+    updateOrAddProfileVisit,
+    updateMultipleProfileVisits,
+    saveMessages,
+    scheduleMessage,
+    saveState,
+    saveProfile
+} from '../storage/storage';
 import { callGPT4 } from '../simple_actions/llm_call';
 import { writeMessage } from '../simple_actions/write_message';
 import { clickSend } from '../simple_actions/click_send';
-import { saveProfile } from '../storage/storage';
 import { cleanProfileUrl } from '../simple_actions/extract_profiles_from_search_results';
 import { closeAllMessageDialogues } from '../simple_actions/close_dialogues';
 import { hasRecentMessages } from '../simple_actions/check_recent_messages';
 
-async function startAutomation() {
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+export async function startAutomation() {
     console.log('starting automation...');
     const state = await loadState();
     console.log('state loaded');
     
-    const { browser, page } = await setupBrowser();
+    // Change the fetch to use absolute URL
+    const statusResponse = await fetch(`${BASE_URL}/api/chrome/status`);
+    const statusData = await statusResponse.json();
+    
+    if (statusData.status !== 'connected' || !statusData.wsUrl) {
+        throw new Error('chrome not connected');
+    }
+    
+    // Use the shared browser setup
+    const { browser, page } = await setupBrowser(statusData.wsUrl);
     
     console.log('navigating to linkedin...');
-    await navigateToSearch(page, templates.request_for_intro_prompt_to_AI);
+    await navigateToSearch(page, templates.paste_here_url_from_linkedin_with_2nd_grade_connections);
     
-    // close any open dialogues before proceeding
+    // Close any open dialogues before proceeding
     console.log('closing any open message dialogues...');
     await closeAllMessageDialogues(page);
     
@@ -48,13 +66,13 @@ async function startAutomation() {
             }
         };
     }).filter(profile => profile.profileUrl);
-
+    
     await updateMultipleProfileVisits(state, profiles);
     
     const MAX_PROFILES = 2;
     let processedCount = 0;
     
-    // Process up to 5 profiles in the queue
+    // Process up to MAX_PROFILES profiles in the queue
     while (state.toVisitProfiles.length > 0 && processedCount < MAX_PROFILES) {
         console.log(`\nProcessing profile ${processedCount + 1}/${MAX_PROFILES}`);
         const profileToVisit = state.toVisitProfiles.shift()!;
@@ -78,7 +96,7 @@ async function startAutomation() {
             console.log('extracted profile details:', JSON.stringify(profileDetails).slice(0, 100) + '...');
             
             await saveProfile(cleanUrl, profileDetails);
-
+    
             // New workflow steps
             // Click mutual connections
             await clickMutualConnections(page);
@@ -88,10 +106,11 @@ async function startAutomation() {
             
             // Extract details from the new profile
             const newProfileDetails = await extractProfileText(page);
+            const newProfileUrl = cleanProfileUrl(page.url());
             console.log('extracted mutual connection profile details:', JSON.stringify(newProfileDetails).slice(0, 100) + '...');
             
-            await saveProfile(page.url(), newProfileDetails);
-
+            await saveProfile(newProfileUrl, newProfileDetails);
+    
             // Update action status to 'scheduled' for both profiles
             await updateOrAddProfileVisit(state, {
                 timestamp: new Date().toISOString(),
@@ -103,7 +122,7 @@ async function startAutomation() {
             
             await updateOrAddProfileVisit(state, {
                 timestamp: new Date().toISOString(),
-                profileUrl: page.url(),
+                profileUrl: newProfileUrl,
                 actions: {
                     [`to request intro to ${profileDetails.name}`]: 'scheduled'
                 }
@@ -111,32 +130,49 @@ async function startAutomation() {
             
             // Click message button
             await clickFirstMessageButton(page);
-
+    
             // Export messages
             const messages = await getMessages(page);
             if (messages.length === 0) {
                 console.log('no existing messages found, this might be a new conversation');
             }
-
-            await saveMessages(page.url(), messages);
-
+    
+            await saveMessages(newProfileUrl, messages);
+    
             if (hasRecentMessages(messages)) {
-                console.log('recent messages detected, skipping automation');
+                console.log('recent messages detected, scheduling follow up');
+                
+                // Call LLM even when recent messages exist
+                const llmResponse = await callGPT4(
+                    `Profile details: ${JSON.stringify(newProfileDetails)}
+                    ${templates.llm_appraisal_prompt}`
+                );
+                console.log('llm response:', JSON.stringify(llmResponse.content).slice(0, 100) + '...');
+                
+                // Schedule the LLM message for later instead of sending immediately
+                await scheduleMessage(
+                    state,
+                    newProfileUrl,
+                    llmResponse.content,
+                    'when recent messages reviewed'
+                );
+    
                 await updateOrAddProfileVisit(state, {
                     timestamp: new Date().toISOString(),
-                    profileUrl: page.url(),
+                    profileUrl: newProfileUrl,
                     actions: {
                         'recent messages detected': 'to review'
                     }
                 });
-                // close any open dialogues before proceeding
+    
+                // Close any open dialogues before proceeding
                 console.log('closing any open message dialogues...');
                 await closeAllMessageDialogues(page);
                 processedCount++;
-
+    
                 continue; // exit the try block
             }
-
+    
             // Call LLM 
             const llmResponse = await callGPT4(
                 `Profile details: ${JSON.stringify(newProfileDetails)}
@@ -151,12 +187,12 @@ async function startAutomation() {
             // Send the message
             await clickSend(page);
             
-            // close any open dialogues before proceeding
+            // Close any open dialogues before proceeding
             console.log('closing any open message dialogues...');
             await closeAllMessageDialogues(page);
-
+    
             // Add LLM message to existing messages
-            await saveMessages(page.url(), [{
+            await saveMessages(newProfileUrl, [{
                 text: llmResponse.content,
                 timestamp: new Date().toISOString(),
                 sender: 'LLM'
@@ -166,7 +202,7 @@ async function startAutomation() {
             // Schedule intro request for later
             await scheduleMessage(
                 state,
-                page.url(),
+                newProfileUrl,
                 templates.request_for_intro_prompt_to_AI.replace('${fullName}', profileDetails.name || 'your connection'),
                 'replied to previous message'
             );    

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-switch": "^1.1.1",
     "@screenpipe/js": "latest",
     "@tauri-apps/api": "^2.1.1",
     "chrome-launcher": "^1.1.2",
@@ -18,6 +19,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
+    "framer-motion": "^11.13.1",
     "litellm": "^0.12.0",
     "lucide-react": "^0.462.0",
     "next": "14.2.15",
@@ -26,7 +28,8 @@
     "react": "^18",
     "react-dom": "^18",
     "tailwind-merge": "^2.5.5",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0",

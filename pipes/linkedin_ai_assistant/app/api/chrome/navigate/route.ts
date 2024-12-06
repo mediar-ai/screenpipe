@@ -6,34 +6,18 @@ async function navigateToPage(page: Page, url: string) {
     try {
         console.log('starting navigation');
         
-        // Set longer timeout and handle common errors
+        // Set longer timeout but keep navigation simple
         await page.setDefaultNavigationTimeout(60000);
         
-        // Enable request interception to handle potential issues
-        await page.setRequestInterception(true);
-
-        // Define request interception handler
-        const requestHandler = (request: any) => {
-            if (['image', 'font'].includes(request.resourceType())) {
-                request.abort(); // Abort unnecessary requests to speed up navigation
-            } else {
-                request.continue(); // Continue processing other requests
-            }
-        };
-
-        // Attach the request handler
-        page.on('request', requestHandler);
-
-        // Navigate to the target URL
+        // Navigate to the target URL with same settings as search navigation
         const response = await page.goto(url, {
-            waitUntil: 'domcontentloaded', // Use 'domcontentloaded' to prevent potential hanging with 'networkidle0'
+            waitUntil: 'domcontentloaded',
             timeout: 60000
         });
 
-        // Remove the request handler after navigation completes
-        page.off('request', requestHandler);
+        // Wait for the main content to load
+        await page.waitForSelector('body', { timeout: 30000 });
 
-        // Return navigation results
         return {
             status: response?.status() || 0,
             finalUrl: page.url()
@@ -41,7 +25,7 @@ async function navigateToPage(page: Page, url: string) {
 
     } catch (error) {
         console.error('navigation error:', error);
-        throw error; // Rethrow error to be caught in the POST handler
+        throw error;
     }
 }
 

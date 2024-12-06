@@ -121,14 +121,6 @@
       ]
     },
     {
-      "timestamp": "2024-12-03T02:08:40.248Z",
-      "profileUrl": "https://www.linkedin.com/in/michaeldowning/",
-      "actions": {
-        "to request intro to John Samuelson": "scheduled",
-        "recent messages detected": "to review"
-      }
-    },
-    {
       "timestamp": "2024-12-03T02:39:11.477Z",
       "profileUrl": "https://www.linkedin.com/in/johnqhsu",
       "actions": {
@@ -178,16 +170,22 @@
       }
     },
     {
-      "timestamp": "2024-12-03T03:14:19.933Z",
+      "timestamp": "2024-12-05T05:10:32.404Z",
       "profileUrl": "https://www.linkedin.com/in/kushal1/",
       "actions": {
-        "to request intro to Ayush Aggarwal": "scheduled"
+        "to request intro to Ayush Aggarwal": "scheduled",
+        "to request intro to Dr Ramya (DRS) Singh, PhD": "scheduled"
       },
       "scheduledMessages": [
         {
           "text": "I noticed that you are connected with Ayush Aggarwal. I'm currently working on this cool software https://screenpi.pe/#business that capture knowledge from employee computers and processes it with on-premise LLMs. Can you make an intro?",
           "condition": "replied to previous message",
           "timestamp": "2024-12-03T03:14:24.980Z"
+        },
+        {
+          "text": "I noticed that you are connected with Dr Ramya (DRS) Singh, PhD. I'm currently working on this cool software https://screenpi.pe/#business that capture knowledge from employee computers and processes it with on-premise LLMs. Can you make an intro?",
+          "condition": "replied to previous message",
+          "timestamp": "2024-12-05T05:10:36.947Z"
         }
       ]
     },
@@ -253,85 +251,169 @@
           "timestamp": "2024-12-03T18:07:58.564Z"
         }
       ]
-    }
-  ],
-  "toVisitProfiles": [
+    },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T00:48:33.349Z",
       "profileUrl": "https://www.linkedin.com/in/sharmila-ravi-a794a21",
       "actions": {
-        "to request intro to Sharmila Ravi": "not done"
+        "to request intro to Sharmila Ravi": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T04:06:34.267Z",
+      "profileUrl": "https://www.linkedin.com/in/d0znpp/",
+      "actions": {
+        "to request intro to Sharmila Ravi": "scheduled",
+        "recent messages detected": "to review",
+        "to request intro to Hany (Hany Sayed) Sayed": "scheduled"
+      }
+    },
+    {
+      "timestamp": "2024-12-05T00:48:45.395Z",
       "profileUrl": "https://www.linkedin.com/in/eduardhamamjian",
       "actions": {
-        "to request intro to Eduard Hamamjian": "not done"
+        "to request intro to Eduard Hamamjian": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T00:48:45.675Z",
+      "profileUrl": "https://www.linkedin.com/in/abhishek-sinha-80001b6/",
+      "actions": {
+        "to request intro to Eduard Hamamjian": "scheduled",
+        "recent messages detected": "to review"
+      }
+    },
+    {
+      "timestamp": "2024-12-05T03:08:18.578Z",
       "profileUrl": "https://www.linkedin.com/in/micha%C3%ABl-van-de-poppe-07450528",
       "actions": {
-        "to request intro to Michaël van de Poppe": "not done"
+        "to request intro to Michaël van de Poppe": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T03:08:18.793Z",
+      "profileUrl": "https://www.linkedin.com/in/daryna-vinichuk-941278266/",
+      "actions": {
+        "to request intro to Michaël van de Poppe": "scheduled",
+        "recent messages detected": "to review"
+      }
+    },
+    {
+      "timestamp": "2024-12-05T03:08:30.067Z",
       "profileUrl": "https://www.linkedin.com/in/marcin-kotarba-ph-d-82a668",
       "actions": {
-        "to request intro to Marcin Kotarba, Ph.D.": "not done"
+        "to request intro to Marcin Kotarba, Ph.D.": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T05:01:17.961Z",
+      "profileUrl": "https://www.linkedin.com/in/howard-polinski-3328321/",
+      "actions": {
+        "to request intro to Marcin Kotarba, Ph.D.": "scheduled",
+        "recent messages detected": "to review",
+        "to request intro to Sergey S": "scheduled"
+      },
+      "scheduledMessages": [
+        {
+          "text": "Hey Howard, it's impressive to see your continued success with P2 Invest and your strategic role in the acquisition of Rachuneo!",
+          "condition": "when recent messages reviewed",
+          "timestamp": "2024-12-05T05:01:17.961Z"
+        }
+      ]
+    },
+    {
+      "timestamp": "2024-12-05T04:06:34.038Z",
       "profileUrl": "https://www.linkedin.com/in/hanymc",
       "actions": {
-        "to request intro to Hany Sayed": "not done"
+        "to request intro to Hany Sayed": "not done",
+        "to request intro to Hany (Hany Sayed) Sayed": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T04:06:45.499Z",
       "profileUrl": "https://www.linkedin.com/in/ikerzubizarreta",
       "actions": {
-        "to request intro to Iker ZUBIZARRETA Abando": "not done"
+        "to request intro to Iker ZUBIZARRETA Abando": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T04:06:45.500Z",
+      "profileUrl": "https://www.linkedin.com/in/samrahkazmi/",
+      "actions": {
+        "to request intro to Iker ZUBIZARRETA Abando": "scheduled"
+      },
+      "scheduledMessages": [
+        {
+          "text": "I noticed that you are connected with Iker ZUBIZARRETA Abando. I'm currently working on this cool software https://screenpi.pe/#business that capture knowledge from employee computers and processes it with on-premise LLMs. Can you make an intro?",
+          "condition": "replied to previous message",
+          "timestamp": "2024-12-05T04:06:50.417Z"
+        }
+      ]
+    },
+    {
+      "timestamp": "2024-12-05T04:28:26.604Z",
       "profileUrl": "https://www.linkedin.com/in/virginieguignardlegros",
       "actions": {
-        "to request intro to Virginie Guignard Legros": "not done"
+        "to request intro to Virginie Guignard Legros": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T04:28:26.604Z",
+      "profileUrl": "https://www.linkedin.com/in/ililic/",
+      "actions": {
+        "to request intro to Virginie Guignard Legros": "scheduled"
+      },
+      "scheduledMessages": [
+        {
+          "text": "I noticed that you are connected with Virginie Guignard Legros. I'm currently working on this cool software https://screenpi.pe/#business that capture knowledge from employee computers and processes it with on-premise LLMs. Can you make an intro?",
+          "condition": "replied to previous message",
+          "timestamp": "2024-12-05T04:28:31.829Z"
+        }
+      ]
+    },
+    {
+      "timestamp": "2024-12-05T04:28:41.920Z",
       "profileUrl": "https://www.linkedin.com/in/aklen",
       "actions": {
-        "to request intro to Aklen Altinel": "not done"
+        "to request intro to Aklen Altinel": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T04:28:41.920Z",
+      "profileUrl": "https://www.linkedin.com/in/eryka-lehr/",
+      "actions": {
+        "to request intro to Aklen Altinel": "scheduled"
+      },
+      "scheduledMessages": [
+        {
+          "text": "I noticed that you are connected with Aklen Altinel. I'm currently working on this cool software https://screenpi.pe/#business that capture knowledge from employee computers and processes it with on-premise LLMs. Can you make an intro?",
+          "condition": "replied to previous message",
+          "timestamp": "2024-12-05T04:28:46.442Z"
+        }
+      ]
+    },
+    {
+      "timestamp": "2024-12-05T05:01:16.662Z",
       "profileUrl": "https://www.linkedin.com/in/sergeyselin",
       "actions": {
-        "to request intro to Sergey S": "not done"
+        "to request intro to Sergey S": "scheduled"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T05:01:22.361Z",
       "profileUrl": "https://www.linkedin.com/in/angelgomezruiz",
       "actions": {
         "to request intro to Angel Gómez - Security, Compliance and Mainframe S.": "not done"
       }
     },
     {
-      "timestamp": "2024-12-03T01:18:20.444Z",
+      "timestamp": "2024-12-05T05:10:32.403Z",
       "profileUrl": "https://www.linkedin.com/in/dramyasingh",
       "actions": {
-        "to request intro to Dr Ramya Singh, PhD": "not done"
+        "to request intro to Dr Ramya Singh, PhD": "not done",
+        "to request intro to Dr Ramya (DRS) Singh, PhD": "scheduled"
       }
     }
-  ]
+  ],
+  "toVisitProfiles": []
 }
