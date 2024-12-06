@@ -24,7 +24,6 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
-use tauri_plugin_dialog::MessageDialogButtons;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::StoreBuilder;
@@ -41,7 +40,6 @@ mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
-use tauri_plugin_dialog::DialogExt;
 
 mod commands;
 mod llm_sidecar;
@@ -58,7 +56,6 @@ pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
 
-mod migrations;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -172,6 +169,9 @@ async fn main() {
             commands::stop_recording,
             icons::get_app_icon,
             commands::open_auth_window,
+            commands::check_all_permissions,
+            commands::trigger_audio_permission,
+            commands::check_microphone_permissions,
         ])
         .setup(|app| {
             // Logging setup

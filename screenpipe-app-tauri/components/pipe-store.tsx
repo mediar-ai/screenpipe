@@ -17,6 +17,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { toast } from "./ui/use-toast";
 import { Input } from "./ui/input";
+import { Switch } from "./ui/switch";
 import {
   Download,
   Plus,
@@ -24,10 +25,10 @@ import {
   ExternalLink,
   FolderOpen,
   RefreshCw,
+  Search,
   Power,
-  Link,
-  Heart,
   Puzzle,
+  X,
 } from "lucide-react";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
@@ -41,14 +42,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { homeDir, join } from "@tauri-apps/api/path";
+import { join } from "@tauri-apps/api/path";
 import { convertHtmlToMarkdown } from "@/lib/utils";
-import LogViewer from "./log-viewer-v2";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { LogFileButton } from "./log-file-button";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { StripeSubscriptionButton } from "./stripe-subscription-button";
@@ -60,6 +55,7 @@ export interface Pipe {
   source: string;
   fullDescription: string;
   config?: Record<string, any>;
+  author?: string;
 }
 
 interface CorePipe {
@@ -99,10 +95,26 @@ const corePipes: CorePipe[] = [
   },
 ];
 
+const getAuthorFromSource = (source: string): string => {
+  if (!source) return 'Unknown';
+  if (!source.startsWith('http')) return 'Local';
+  
+  try {
+    // Extract author from GitHub URL
+    // Format: https://github.com/author/repo/...
+    const match = source.match(/github\.com\/([^\/]+)/);
+    return match ? match[1] : 'Unknown';
+  } catch {
+    return 'Unknown';
+  }
+};
+
 const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const [pipes, setPipes] = useState<Pipe[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const { health } = useHealthCheck();
   const { getDataDir } = useSettings();
   const { user, checkLoomSubscription } = useUser();
@@ -132,7 +144,6 @@ const PipeDialog: React.FC = () => {
       });
       // Refresh the pipe list and installed pipes
       await fetchInstalledPipes();
-      setSelectedPipe(null);
     } catch (error) {
       console.error("failed to reset pipes:", error);
       toast({
@@ -141,41 +152,29 @@ const PipeDialog: React.FC = () => {
         variant: "destructive",
       });
     } finally {
-      setSelectedPipe(null);
       setPipes([]);
     }
   };
 
   const fetchInstalledPipes = async () => {
-    if (!health || health?.status === "error") {
-      return;
-    }
+    if (!health || health?.status === "error") return;
+    
     const dataDir = await getDataDir();
     try {
       const response = await fetch("http://localhost:3030/pipes/list");
-      if (!response.ok) {
-        throw new Error("failed to fetch installed pipes");
-      }
+      if (!response.ok) throw new Error("failed to fetch installed pipes");
+      
       const data = (await response.json()).data;
-
       for (const pipe of data) {
         const pathToReadme = await join(dataDir, "pipes", pipe.id, "README.md");
         try {
           const readme = await readFile(pathToReadme);
-          const readmeString = new TextDecoder().decode(readme);
-          pipe.fullDescription = convertHtmlToMarkdown(readmeString);
+          pipe.fullDescription = convertHtmlToMarkdown(new TextDecoder().decode(readme));
         } catch (error) {
-          console.warn(`no readme found for pipe ${pipe.id}`);
           pipe.fullDescription = "no description available for this pipe.";
         }
       }
       setPipes(data);
-      if (selectedPipe) {
-        const updatedSelectedPipe = data.find(
-          (pipe: Pipe) => pipe.id === selectedPipe.id
-        );
-        setSelectedPipe(updatedSelectedPipe || null);
-      }
     } catch (error) {
       console.error("Error fetching installed pipes:", error);
       toast({
@@ -206,7 +205,7 @@ const PipeDialog: React.FC = () => {
       if (!response.ok) {
         throw new Error("failed to download pipe");
       }
-      const data = await response.json();
+      await response.json();
 
       toast({
         title: "pipe downloaded",
@@ -240,43 +239,26 @@ const PipeDialog: React.FC = () => {
         enabled: !pipe.enabled,
       });
 
-      if (!pipe.enabled) {
-        await fetch(`http://localhost:3030/pipes/enable`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ pipe_id: pipe.id }),
-        });
+      const endpoint = pipe.enabled ? "disable" : "enable";
+      const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pipe_id: pipe.id }),
+      });
 
-        toast({
-          title: "enabling pipe",
-          description: "this may take a few moments...",
-        });
-      } else {
-        await fetch(`http://localhost:3030/pipes/disable`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ pipe_id: pipe.id }),
-        });
+      if (!response.ok) throw new Error(`failed to ${endpoint} pipe`);
 
-        toast({
-          title: "disabling pipe",
-          description: "this may take a few moments...",
-        });
-      }
+      toast({
+        title: `${endpoint}ing pipe`,
+        description: "this may take a few moments...",
+      });
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      if (selectedPipe && selectedPipe.id === pipe.id) {
-        setSelectedPipe((prevPipe) =>
-          prevPipe ? { ...prevPipe, enabled: !prevPipe.enabled } : null
-        );
-      }
+      await fetchInstalledPipes();
     } catch (error) {
-      console.error("Failed to toggle pipe:", error);
+      console.error(`Failed to ${pipe.enabled ? "disable" : "enable"} pipe:`, error);
       toast({
         title: "error toggling pipe",
         description: "please try again or check the logs for more information.",
@@ -326,7 +308,6 @@ const PipeDialog: React.FC = () => {
         });
       } finally {
         setNewRepoUrl("");
-        setSelectedPipe(null);
       }
     }
   };
@@ -351,7 +332,6 @@ const PipeDialog: React.FC = () => {
       });
     }
   };
-
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       try {
@@ -380,7 +360,6 @@ const PipeDialog: React.FC = () => {
       }
     }
   };
-
   const handleDeletePipe = async (pipe: Pipe) => {
     try {
       posthog.capture("delete_pipe", {
@@ -391,269 +370,231 @@ const PipeDialog: React.FC = () => {
         description: "please wait...",
       });
 
-      const response = await fetch(`http://localhost:3030/pipes/delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ pipe_id: pipe.id }),
-      });
-
-      if (!response.ok) {
-        throw new Error("failed to delete pipe");
-      }
-
       await fetchInstalledPipes();
-      setSelectedPipe(null);
-      toast({
-        title: "pipe deleted",
-        description: "the pipe has been successfully removed.",
-      });
     } catch (error) {
       console.error("failed to delete pipe:", error);
-      toast({
-        title: "error deleting pipe",
-        description: "please try again or check the logs for more information.",
-        variant: "destructive",
-      });
     }
   };
 
-  const renderPipeContent = () => {
-    if (!selectedPipe) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-lg mb-4">no pipe selected</p>
-          {/* <FeatureRequestLink /> */}
-          {!health ||
-            (health?.status === "error" && (
-              <p className="mt-4 text-sm text-gray-500 text-center">
-                screenpipe is not running.
-                <br />
-                please start screenpipe to use the pipe store.
-              </p>
-            ))}
-        </div>
-      );
-    }
+  const allPipes = [...pipes, ...corePipes
+    .filter(cp => !pipes.some(p => p.id === cp.id))
+    .map(cp => ({
+      id: cp.id,
+      fullDescription: cp.description,
+      source: cp.url,
+      enabled: false,
+    }))];
+
+  const filteredPipes = allPipes.filter(pipe => 
+    pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
+    (!showInstalledOnly || pipe.enabled)
+  );
+
+  const renderPipeDetails = () => {
+    if (!selectedPipe) return null;
 
     return (
-      <>
-        <h2 className="text-2xl font-bold mb-2">{selectedPipe.id}</h2>
-
-        <div className="flex space-x-2 mb-4">
-          {selectedPipe.id === "pipe-for-loom" &&
-          !selectedPipe.enabled &&
-          !hasLoomSubscription ? (
-            <StripeSubscriptionButton
-              onSubscriptionComplete={() => handleToggleEnabled(selectedPipe)}
-            />
-          ) : (
-            <Button
-              onClick={() => handleToggleEnabled(selectedPipe)}
-              variant={selectedPipe.enabled ? "default" : "outline"}
-              disabled={health?.status === "error"}
-            >
-              <Power className="mr-2 h-4 w-4" />
-              {selectedPipe.enabled ? "disable" : "enable"}
-            </Button>
-          )}
-          {!selectedPipe.source?.startsWith("https://") && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={() => handleRefreshFromDisk(selectedPipe)}
-                    variant="outline"
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    refresh
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>refresh the code from your local disk</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-
-          {selectedPipe.source?.startsWith("http") && (
-            <Button
-              onClick={() => openUrl(selectedPipe.source)}
-              variant="outline"
-            >
-              <ExternalLink className="h-4 w-4" />
-            </Button>
-          )}
-          <LogFileButton />
-          <Button
-            onClick={() => handleDeletePipe(selectedPipe)}
-            variant="outline"
-          >
-            <Trash2 className=" h-4 w-4" />
-          </Button>
-        </div>
-        <Separator className="my-4" />
-
-        {selectedPipe && selectedPipe.enabled && selectedPipe?.config?.port && (
-          <div className="mt-4 h-[400px]">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-xl font-semibold">pipe ui</h3>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  openUrl(`http://localhost:${selectedPipe.config!.port}`)
-                }
+      <div 
+        className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out"
+        style={{ transform: selectedPipe ? 'translateX(0)' : 'translateX(100%)' }}
+      >
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between p-4 border-b bg-muted/30">
+            <div className="flex items-center gap-3">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setSelectedPipe(null)}
+                className="hover:bg-muted"
               >
-                <ExternalLink className="mr-2 h-4 w-4" />
-                open in browser
+                <X className="h-4 w-4" />
               </Button>
+              <h2 className="text-lg font-medium">{selectedPipe.id}</h2>
+              <Badge variant="outline" className="font-mono text-xs">
+                by {getAuthorFromSource(selectedPipe.source)}
+              </Badge>
             </div>
-            <iframe
-              src={`http://localhost:${selectedPipe.config.port}`}
-              className="w-full h-full border-0"
-            />
+            <div className="flex items-center gap-2">
+              {selectedPipe.source?.startsWith("http") && (
+                <Button
+                  onClick={() => openUrl(selectedPipe.source)}
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                >
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                  source
+                </Button>
+              )}
+              <LogFileButton className="text-xs" />
+            </div>
           </div>
-        )}
 
-        {selectedPipe.enabled && (
-          <>
-            {/* <Collapsible
-              open={isLogOpen}
-              onOpenChange={setIsLogOpen}
-              className="w-full mt-4"
-            >
-              <div className="flex items-center justify-between w-full">
-                <CollapsibleTrigger className="flex items-center justify-between p-2 flex-grow border-b border-gray-200">
-                  screenpipe logs
-                  <span>{isLogOpen ? "▲" : "▼"}</span>
-                </CollapsibleTrigger>
+          <div className="flex flex-1 overflow-hidden">
+            <div className="w-[240px] border-r p-4 space-y-4 bg-muted/10">
+              {selectedPipe.id === "pipe-for-loom" &&
+              !selectedPipe.enabled &&
+              !hasLoomSubscription ? (
+                <StripeSubscriptionButton
+                  onSubscriptionComplete={() => handleToggleEnabled(selectedPipe)}
+                />
+              ) : (
+                <Button
+                  onClick={() => handleToggleEnabled(selectedPipe)}
+                  variant={selectedPipe.enabled ? "default" : "outline"}
+                  disabled={health?.status === "error"}
+                  className="w-full"
+                  size="sm"
+                >
+                  <Power className="mr-2 h-3.5 w-3.5" />
+                  {selectedPipe.enabled ? "disable" : "enable"}
+                </Button>
+              )}
+              
+              <div className="space-y-2">
+                {!selectedPipe.source?.startsWith("https://") && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={() => handleRefreshFromDisk(selectedPipe)}
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                        >
+                          <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                          refresh
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>refresh the code from your local disk</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                <Button
+                  onClick={() => handleDeletePipe(selectedPipe)}
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  delete
+                </Button>
               </div>
-              <CollapsibleContent>
-                <LogViewer className="mt-2" />
-              </CollapsibleContent>
-            </Collapsible>
-            <Separator className="my-4" /> */}
 
-            <PipeConfigForm
-              pipe={selectedPipe}
-              onConfigSave={handleConfigSave}
-            />
-          </>
-        )}
+              {selectedPipe.enabled && (
+                <div className="space-y-3 pt-4 border-t">
+                  <h3 className="text-sm font-medium">configuration</h3>
+                  <PipeConfigForm
+                    pipe={selectedPipe}
+                    onConfigSave={handleConfigSave}
+                  />
+                </div>
+              )}
+            </div>
 
-        {selectedPipe.fullDescription && (
-          <div className="mt-4">
-            <h3 className="text-xl font-semibold mb-2">about this pipe</h3>
-            <MemoizedReactMarkdown
-              className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
-              remarkPlugins={[remarkGfm, remarkMath]}
-              components={{
-                p({ children }) {
-                  return <p className="mb-2 last:mb-0">{children}</p>;
-                },
-                code({ node, className, children, ...props }) {
-                  const content = String(children).replace(/\n$/, "");
-                  const match = /language-(\w+)/.exec(className || "");
-
-                  if (!match) {
-                    return (
-                      <code
-                        className="py-0.5 rounded-sm font-mono text-sm"
-                        {...props}
+            <div className="flex-1 overflow-y-auto">
+              <div className="max-w-3xl mx-auto p-8 space-y-8">
+                {selectedPipe.enabled && selectedPipe?.config?.port && (
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-medium">pipe ui</h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          openUrl(`http://localhost:${selectedPipe.config!.port}`)
+                        }
                       >
-                        {content}
-                      </code>
-                    );
-                  }
-
-                  return (
-                    <CodeBlock
-                      key={Math.random()}
-                      language={(match && match[1]) || ""}
-                      value={content}
-                      {...props}
-                    />
-                  );
-                },
-                a({ href, children }) {
-                  console.log("Processing link:", href);
-                  const isDirectVideo =
-                    href?.match(/\.(mp4|webm|ogg)$/) ||
-                    href?.includes("user-attachments/assets");
-                  const youtubeMatch = href?.match(
-                    /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
-                  );
-
-                  console.log("Is direct video:", isDirectVideo);
-                  console.log("Is YouTube video:", !!youtubeMatch);
-
-                  if (isDirectVideo) {
-                    return (
-                      <RetryableVideo
-                        src={href}
-                        maxRetries={3}
-                        retryDelay={1000}
-                      />
-                    );
-                  } else if (youtubeMatch) {
-                    const videoId = youtubeMatch[1];
-                    return (
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        open in browser
+                      </Button>
+                    </div>
+                    <div className="rounded-lg border overflow-hidden bg-background">
                       <iframe
-                        width="100%"
-                        height="315"
-                        src={`https://www.youtube.com/embed/${videoId}`}
-                        frameBorder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="max-w-full"
-                        style={{ maxHeight: "400px" }}
-                      ></iframe>
-                    );
-                  }
+                        src={`http://localhost:${selectedPipe.config.port}`}
+                        className="w-full h-[600px] border-0"
+                      />
+                    </div>
+                  </div>
+                )}
 
-                  // If it's not recognized as a video, log this info
-                  console.log(
-                    "Link not recognized as video, rendering as normal link"
-                  );
-                  return (
-                    <a href={href} target="_blank" rel="noopener noreferrer">
-                      {children}
-                    </a>
-                  );
-                },
-                video({ src }) {
-                  console.log("vid", src);
-                  return (
-                    <video
-                      src={src}
-                      className="max-w-full h-auto"
-                      style={{ maxHeight: "400px" }}
-                    />
-                  );
-                },
-                img({ src, alt }) {
-                  console.log("img", src);
-                  return (
-                    <img
-                      src={src}
-                      alt={alt}
-                      className="max-w-full h-auto"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.onerror = null;
-                        target.src = "path/to/fallback/image.png";
-                      }}
-                    />
-                  );
-                },
-              }}
-            >
-              {selectedPipe.fullDescription.replace(/Â/g, "")}
-            </MemoizedReactMarkdown>
+                {selectedPipe.fullDescription && (
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">about this pipe</h3>
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <MemoizedReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        components={{
+                          p({ children }) {
+                            return <p className="mb-2 last:mb-0">{children}</p>;
+                          },
+                          code({ node, className, children, ...props }) {
+                            const content = String(children).replace(/\n$/, "");
+                            const match = /language-(\w+)/.exec(className || "");
+
+                            return match ? (
+                              <CodeBlock
+                                key={Math.random()}
+                                language={(match && match[1]) || ""}
+                                value={content}
+                                {...props}
+                              />
+                            ) : (
+                              <code className="py-0.5 rounded-sm font-mono text-sm" {...props}>
+                                {content}
+                              </code>
+                            );
+                          },
+                          a({ href, children }) {
+                            const isDirectVideo = href?.match(/\.(mp4|webm|ogg)$/) ||
+                              href?.includes("user-attachments/assets");
+                            const youtubeMatch = href?.match(
+                              /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
+                            );
+
+                            if (isDirectVideo) {
+                              return (
+                                <RetryableVideo
+                                  src={href}
+                                  maxRetries={3}
+                                  retryDelay={1000}
+                                />
+                              );
+                            } else if (youtubeMatch) {
+                              return (
+                                <iframe
+                                  width="100%"
+                                  height="315"
+                                  src={`https://www.youtube.com/embed/${youtubeMatch[1]}`}
+                                  frameBorder="0"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                  className="max-w-full"
+                                  style={{ maxHeight: "400px" }}
+                                />
+                              );
+                            }
+
+                            return (
+                              <a href={href} target="_blank" rel="noopener noreferrer">
+                                {children}
+                              </a>
+                            );
+                          },
+                        }}
+                      >
+                        {selectedPipe.fullDescription.replace(/Â/g, "")}
+                      </MemoizedReactMarkdown>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        )}
-      </>
+        </div>
+      </div>
     );
   };
 
@@ -696,160 +637,208 @@ const PipeDialog: React.FC = () => {
     }
   };
 
-  const renderCorePipes = () => (
-    <div className="mb-3">
-      <h3 className="text-lg font-semibold mb-2">try these pipes</h3>
-      <div className="flex flex-col overflow-hidden space-y-2">
-        {corePipes.map((pipe) => (
-          <Card key={pipe.id} className="p-4">
-            <div className="flex justify-between items-start mb-2">
-              <h4 className="font-medium text-lg">{pipe.id}</h4>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openUrl(pipe.url);
-                }}
-              >
-                <ExternalLink className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-sm text-gray-500 mb-4">{pipe.description}</p>
-            <Button
-              size="sm"
-              className="w-full"
-              onClick={() => handleDownloadPipe(pipe.url)}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              add pipe
-            </Button>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderContent = () => {
-    if (!health || health?.status === "error") {
-      return (
-        <div className="flex flex-col items-center justify-center h-[500px]">
-          <p className="text-lg mb-4 text-center">screenpipe is not running</p>
-          <p className="text-sm text-gray-500 text-center">
-            please start screenpipe to use the pipe store.
-            <br />
-            you can do this by clicking the status badge in the top right
-            corner.
-          </p>
-        </div>
-      );
-    }
+  if (!health || health?.status === "error") {
     return (
-      <div className="flex flex-col h-[550px]">
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-3/5 pr-4 overflow-y-auto">
-            {renderCorePipes()}
-            <Separator className="my-4" />
-            <h3 className="text-lg font-semibold mb-2">your pipes</h3>
-            {pipes.map((pipe: Pipe) => (
-              <Card
-                key={pipe.id}
-                className="cursor-pointer hover:bg-gray-100 mb-2 p-2"
-                onClick={() => setSelectedPipe(pipe)}
-              >
-                <div className="flex justify-between items-start">
-                  <h3>{pipe.id}</h3>
-                </div>
-              </Card>
-            ))}
-            <Card className="mb-2 p-2">
-              <Input
-                type="url"
-                placeholder="enter repo url"
-                value={newRepoUrl}
-                onChange={(e) => setNewRepoUrl(e.target.value)}
-              />
-              <Button
-                className="mt-2 w-full"
-                onClick={handleAddOwnPipe}
-                disabled={!newRepoUrl}
-              >
-                <Plus className="mr-2" size={16} />
-                add your own pipe
-              </Button>
-              <Button
-                className="mt-2 w-full"
-                onClick={handleLoadFromLocalFolder}
-                variant="outline"
-              >
-                <FolderOpen className="mr-2" size={16} />
-                load from local folder
-              </Button>
-            </Card>
-          </div>
-          <div className="w-full pl-4 border-l overflow-y-auto">
-            {renderPipeContent()}
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center p-8 h-full">
+        <p className="text-lg text-center text-gray-600">
+          screenpipe is not running.
+          <br />
+          please start screenpipe to use the pipe store.
+          <br />
+          you can do this by clicking the status badge in the top right corner.
+        </p>
       </div>
     );
-  };
+  }
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="cursor-pointer">
-          <Puzzle className="h-[1.2rem] w-[1.2rem]" />
-          <span className="sr-only">pipe store</span>
+        <Button variant="ghost" size="icon">
+          <Puzzle className="h-5 w-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full ">
-        <DialogHeader>
-          <DialogTitle>
-            pipe store
-            <Badge variant="secondary" className="ml-2">
-              experimental
-            </Badge>
-          </DialogTitle>
-          <div className="absolute top-4 right-20">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" onClick={handleResetAllPipes}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    reset all pipes
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>use this if running into issues with the pipe store</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+      <DialogContent className="max-w-[1000px] max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="px-6 py-4 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <DialogTitle className="text-xl">pipe store</DialogTitle>
+              <Badge variant="secondary">experimental</Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleResetAllPipes}
+                      className="flex items-center gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      reset all pipes
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>remove all pipes and start fresh</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="px-6 py-4 space-y-4">
+            <p className="text-sm text-gray-600">
+              screenpipe&apos;s store is a collection of plugins called &quot;pipes&quot; that are available to install.
+              <br />
+              it will process, annotate, automate in your screenpipe&apos;s data, or anything else you can imagine that help you get more out of your recordings.
+              <br />
+              revenue from paid pipes goes directly to community contributors who maintain them.
+              <br />
+              <a href="#" className="text-blue-500 hover:underline">read the docs</a>
+            </p>
+
+            <div className="flex items-center gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="search community plugins..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">show installed only</span>
+                <Switch
+                  checked={showInstalledOnly}
+                  onCheckedChange={setShowInstalledOnly}
+                />
+              </div>
+            </div>
+
+            <div className="text-sm text-gray-500">
+              showing {filteredPipes.length} plugins:
+            </div>
           </div>
 
-          <DialogDescription>
-            screenpipe&apos;s store is a collection of plugins called
-            &quot;pipes&quot; that are available to install.
-            <br />
-            it will process, annotate, automate in your screenpipe&apos;s data,
-            or anything else you can imagine that help you get more out of your
-            recordings.
-            <br />
-            revenue from paid pipes goes directly to community contributors who
-            maintain them.
-            <br />
-            <a
-              href="https://docs.screenpi.pe/docs/plugins"
-              className="text-blue-500 hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {" "}
-              read the docs
-            </a>
-          </DialogDescription>
-        </DialogHeader>
-        {renderContent()}
+          <div className="flex-1 overflow-y-auto px-6">
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                {filteredPipes.map((pipe) => (
+                  <div
+                    key={pipe.id}
+                    className="border rounded-lg p-4 hover:bg-muted/40 transition-colors cursor-pointer"
+                    onClick={() => setSelectedPipe(pipe)}
+                  >
+                    <div className="flex flex-col h-full">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium truncate">{pipe.id}</h3>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="truncate">by {getAuthorFromSource(pipe.source)}</span>
+                            {pipe.source?.startsWith('http') ? (
+                              <ExternalLink className="h-3 w-3 flex-shrink-0 cursor-pointer" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openUrl(pipe.source);
+                                }}
+                              />
+                            ) : (
+                              <FolderOpen className="h-3 w-3 flex-shrink-0" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <span className="text-sm text-muted-foreground">0</span>
+                          {pipe.enabled ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleEnabled(pipe);
+                              }}
+                            >
+                              <Power className="h-3.5 w-3.5 text-primary" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadPipe(pipe.source);
+                              }}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-2 flex-1 prose prose-sm dark:prose-invert max-w-none">
+                        <MemoizedReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          components={{
+                            p({ children }) {
+                              return <p className="line-clamp-2 m-0">{children}</p>;
+                            },
+                            h1: ({ children }) => <span>{children}</span>,
+                            h2: ({ children }) => <span>{children}</span>,
+                            h3: ({ children }) => <span>{children}</span>,
+                            h4: ({ children }) => <span>{children}</span>,
+                            h5: ({ children }) => <span>{children}</span>,
+                            h6: ({ children }) => <span>{children}</span>,
+                            img: () => null, // Hide images in list view
+                            pre: ({ children }) => <span>{children}</span>,
+                            code: ({ children }) => <span className="font-mono text-xs">{children}</span>,
+                          }}
+                        >
+                          {pipe.fullDescription?.replace(/Â/g, "") || ""}
+                        </MemoizedReactMarkdown>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2">
+                        Updated recently
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-3">
+                <h3 className="text-lg font-medium">add your own pipe</h3>
+                <Input
+                  type="url"
+                  placeholder="enter github url or local path"
+                  value={newRepoUrl}
+                  onChange={(e) => setNewRepoUrl(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    onClick={handleAddOwnPipe}
+                    disabled={!newRepoUrl}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    add your own pipe
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={handleLoadFromLocalFolder}
+                    variant="outline"
+                  >
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                    load from local folder
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {selectedPipe && renderPipeDetails()}
       </DialogContent>
     </Dialog>
   );

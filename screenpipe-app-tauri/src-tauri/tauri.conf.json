@@ -101,16 +101,6 @@
         "transparent": true,
         "alwaysOnTop": true,
         "label": "timeline"
-      },
-      {
-        "width": 400,
-        "height": 200,
-        "decorations": false,
-        "url": "/migration",
-        "label": "migration",
-        "title": "database upgrade",
-        "resizable": false,
-        "transparent": true
       }
     ],
     "security": {

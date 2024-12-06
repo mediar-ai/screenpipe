@@ -23,7 +23,7 @@ use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-use tracing::{info, debug, error};
+use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -74,6 +74,12 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("tokenizers=error".parse().unwrap())
         .add_directive("rusty_tesseract=error".parse().unwrap())
         .add_directive("symphonia=error".parse().unwrap());
+
+    // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)    
+    // which is noise
+    #[cfg(target_os = "windows")]
+    let env_filter = env_filter
+        .add_directive("xcap::platform::impl_window=off".parse().unwrap());
 
     let env_filter = env::var("SCREENPIPE_LOG")
         .unwrap_or_default()
@@ -138,11 +144,10 @@ async fn main() -> anyhow::Result<()> {
 
                     // Trigger keyboard permission request
                     if let Err(e) = trigger_keyboard_permission() {
-                        error!("Failed to trigger keyboard permission: {:?}", e);
-                        error!("Please grant keyboard permission manually in System Preferences.");
-                        h.capture_error("Please grant keyboard permission manually in System Preferences.");
+                        warn!("failed to trigger keyboard permission: {:?}", e);
+                        warn!("please grant keyboard permission manually in System Preferences.");
                     } else {
-                        info!("Keyboard permission requested. Please grant permission if prompted.");
+                        info!("keyboard permission requested. please grant permission if prompted.");
                     }
                 }
                 use screenpipe_audio::{trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel};
@@ -150,20 +155,18 @@ async fn main() -> anyhow::Result<()> {
 
                 // Trigger audio permission request
                 if let Err(e) = trigger_audio_permission() {
-                    error!("Failed to trigger audio permission: {:?}", e);
-                    error!("Please grant microphone permission manually in System Preferences.");
-                    h.capture_error("Please grant microphone permission manually in System Preferences.");
+                    warn!("failed to trigger audio permission: {:?}", e);
+                    warn!("please grant microphone permission manually in System Preferences.");
                 } else {
-                    info!("Audio permission requested. Please grant permission if prompted.");
+                    info!("audio permission requested. please grant permission if prompted.");
                 }
 
                 // Trigger screen capture permission request
                 if let Err(e) = trigger_screen_capture_permission() {
-                    error!("Failed to trigger screen capture permission: {:?}", e);
-                    error!("Please grant screen recording permission manually in System Preferences.");
-                    h.capture_error("Please grant microphone permission manually in System Preferences.");
+                    warn!("failed to trigger screen capture permission: {:?}", e);
+                    warn!("please grant screen recording permission manually in System Preferences.");
                 } else {
-                    info!("Screen capture permission requested. Please grant permission if prompted.");
+                    info!("screen capture permission requested. please grant permission if prompted.");
                 }
 
                 // this command just download models and stuff (useful to have specific step to display in UI)
@@ -184,9 +187,8 @@ async fn main() -> anyhow::Result<()> {
                 match check_ffmpeg().await {
                     Ok(_) => info!("FFmpeg is working properly"),
                     Err(e) => {
-                        error!("FFmpeg check failed: {}", e);
-                        error!("Please ensure FFmpeg is installed correctly and is in your PATH");
-                        h.capture_error("Please ensure FFmpeg is installed correctly and is in your PATH");
+                        warn!("ffmpeg check failed: {}", e);
+                        warn!("please ensure ffmpeg is installed correctly and is in your PATH");
                         return Err(e.into());
                     }
                 }
@@ -213,9 +215,8 @@ async fn main() -> anyhow::Result<()> {
     match ensure_screenpipe_in_path().await {
         Ok(_) => info!("screenpipe is available and properly set in the PATH"),
         Err(e) => {
-            error!("screenpipe PATH check failed: {}", e);
-            error!("please ensure screenpipe is installed correctly and is in your PATH");
-            h.capture_error("please ensure screenpipe is installed correctly and is in your PATH");
+            warn!("screenpipe PATH check failed: {}", e);
+            warn!("please ensure screenpipe is installed correctly and is in your PATH");
             // do not crash
         }
     }
@@ -466,7 +467,7 @@ async fn main() -> anyhow::Result<()> {
 
     println!("┌─────────────────────┬────────────────────────────────────┐");
     println!("│ setting             │ value                              │");
-    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("├───────────────────���─┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
     println!(
         "│ audio chunk duration│ {:<34} │",
