@@ -1,7 +1,12 @@
-Thank you for providing the commit details. Based on the commit message ix settings update\, I will add the following entry to the changelog:
+### **New Features:**
+- **Speed up queries with FTS:** Improved query performance by implementing full-text search functionality.
+- **Add reset settings button:** Provided users with the ability to reset settings conveniently.
+
+### **Improvements:**
+- N/A
 
 ### **Fixes:**
-- **Fixed settings update issue:** Resolved issue with settings update to ensure proper functionality.
+- N/A
 
-#### **Full Changelog:** [7d776..69bfd](https://github.com/mediar-ai/screenpipe/compare/7d776..69bfd)
+#### **Full Changelog:** [28e75..eb5dd](https://github.com/mediar-ai/screenpipe/compare/28e75..eb5dd)
 
