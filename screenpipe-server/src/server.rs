@@ -1308,7 +1308,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
             axum::http::header::CACHE_CONTROL,
         ]); // Important for SSE
 
-    Router::new()
+    let router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
         .route("/vision/list", post(api_list_monitors))
@@ -1323,12 +1323,19 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
-        .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))
-        .layer(cors)
+        .route("/experimental/frames/merge", post(merge_frames_handler))
+        .layer(cors);
+
+    #[cfg(feature = "experimental")]
+    {
+        router = router.route("/experimental/input_control", post(input_control_handler));
+    }
+
+    router
 }
 
 // Add the new handler
