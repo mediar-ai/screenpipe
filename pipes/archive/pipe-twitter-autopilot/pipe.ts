@@ -371,7 +371,7 @@ export PIPE_ID="pipe-twitter-autopilot"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-twitter-autopilot"
 
-bun run examples/typescript/pipe-twitter-autopilot/pipe.ts
+bun run pipes/pipe-twitter-autopilot/pipe.ts
  */
 
 // ... existing code ...

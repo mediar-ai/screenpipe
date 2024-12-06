@@ -36,7 +36,7 @@ wanna tweak it? check `pipe.ts` to adjust the ai prompt or modify the comment ge
 #### cli usage
 
 ```
-screenpipe download https://github.com/mediar-ai/screenpipe/edit/main/examples/typescript/pipe-llama32-comment-linear-while-you-work
+screenpipe download https://github.com/mediar-ai/screenpipe/edit/main/pipes/pipe-llama32-comment-linear-while-you-work
 screenpipe enable pipe-llama32-comment-linear-while-you-work
 screenpipe 
 ```

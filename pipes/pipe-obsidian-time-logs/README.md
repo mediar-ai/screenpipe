@@ -34,7 +34,7 @@ automates logging of work to obsidian using screenpipe and openai/ollama
 
 5. run the pipe:
    ```
-   screenpipe pipe download ./examples/typescript/pipe-obsidian-time-logs
+   screenpipe pipe download ./pipes/pipe-obsidian-time-logs
    screenpipe pipe enable pipe-obsidian-time-logs
    screenpipe
    ```

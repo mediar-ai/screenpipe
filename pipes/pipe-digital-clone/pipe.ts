@@ -139,7 +139,7 @@ Instructions to run this pipe:
 
 3. run the pipe:
    ```
-   screenpipe pipe download ./examples/typescript/pipe-ngrok
+   screenpipe pipe download ./pipes/pipe-ngrok
    screenpipe pipe enable pipe-ngrok
    screenpipe
    ```
@@ -152,7 +152,7 @@ export PIPE_ID="pipe-digital-clone"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-digital-clone"
 
-bun run examples/typescript/pipe-digital-clone/pipe.ts
+bun run pipes/pipe-digital-clone/pipe.ts
 ```
 
 # Using curl

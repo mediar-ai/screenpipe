@@ -311,6 +311,6 @@ export PIPE_ID="pipe-find-leads-with-exa-ai"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-find-leads-with-exa-ai"
 
-bun run examples/typescript/pipe-find-leads-with-exa-ai/pipe.ts
+bun run pipes/pipe-find-leads-with-exa-ai/pipe.ts
 
 */

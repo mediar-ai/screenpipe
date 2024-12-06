@@ -169,7 +169,7 @@ Instructions to run this pipe:
 
 5. run the pipe:
    ```
-   screenpipe pipe download ./examples/typescript/pipe-screen-to-crm
+   screenpipe pipe download ./pipes/pipe-screen-to-crm
    screenpipe pipe enable screen-to-crm
    screenpipe 
    ```

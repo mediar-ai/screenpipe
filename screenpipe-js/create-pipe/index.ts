@@ -150,7 +150,7 @@ async function main() {
         "mediar-ai",
         "screenpipe",
         "main",
-        "examples/typescript/pipe-simple-nextjs",
+        "pipes/pipe-simple-nextjs",
         directory
       );
 
@@ -174,7 +174,7 @@ async function main() {
         "mediar-ai",
         "screenpipe",
         "main",
-        "examples/typescript/pipe-obsidian-time-logs",
+        "pipes/pipe-obsidian-time-logs",
         directory
       );
 

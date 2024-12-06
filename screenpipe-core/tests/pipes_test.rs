@@ -117,7 +117,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let screenpipe_dir = temp_dir.path().to_path_buf();
 
-        let github_url = "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text";
+        let github_url = "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-stream-ocr-text";
         let result = download_pipe(github_url, screenpipe_dir.clone()).await;
 
         assert!(

@@ -100,7 +100,7 @@ export PIPE_ID="pipe-keyword-notification"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-keyword-notification"
 
-bun run examples/typescript/pipe-keyword-notification/pipe.ts
+bun run pipes/pipe-keyword-notification/pipe.ts
 ```
 
 This pipe will:

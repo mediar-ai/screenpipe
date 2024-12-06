@@ -214,7 +214,7 @@ export PIPE_ID="pipe-anthropic-computer-use-meeting-assistant"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-anthropic-computer-use-meeting-assistant"
 
-bun run examples/typescript/pipe-anthropic-computer-use-meeting-assistant/pipe.ts
+bun run pipes/pipe-anthropic-computer-use-meeting-assistant/pipe.ts
  */
 
 

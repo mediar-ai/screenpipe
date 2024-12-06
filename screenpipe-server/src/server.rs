@@ -1541,16 +1541,16 @@ curl "http://localhost:3030/pipes/list" | jq
 # Download a new pipe
 curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
-     -d '{"url": "./examples/typescript/pipe-stream-ocr-text"}' | jq
+     -d '{"url": "./pipes/pipe-stream-ocr-text"}' | jq
 
 curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
-     -d '{"url": "./examples/typescript/pipe-security-check"}' | jq
+     -d '{"url": "./pipes/pipe-security-check"}' | jq
 
 
 curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
-     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"}' | jq
+     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-stream-ocr-text"}' | jq
 
 
 # Get info for a specific pipe

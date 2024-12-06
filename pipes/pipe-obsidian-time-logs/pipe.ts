@@ -200,7 +200,7 @@ Instructions to run this pipe:
 
 5. run the pipe:
    ```
-   screenpipe pipe download ./examples/typescript/pipe-obsidian-time-logs
+   screenpipe pipe download ./pipes/pipe-obsidian-time-logs
    screenpipe pipe enable pipe-obsidian-time-logs
    screenpipe
    ```

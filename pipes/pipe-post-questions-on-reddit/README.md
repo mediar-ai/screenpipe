@@ -108,7 +108,7 @@ can be used through CLI also, you can tweak the `pipe.json` to your needs, mine 
       "description": "Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance."
     }
   ],
-  "source": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit",
+  "source": "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit",
   "enabled": true
 }
 ```

@@ -81,7 +81,7 @@ can be used through CLI also, you can tweak the `pipe.json` to your needs, mine 
       "value": "your-github-personal-access-token"
     }
   ],
-  "source": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-screen-time-storyteller",
+  "source": "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-screen-time-storyteller",
   "enabled": true
 }
 ```
