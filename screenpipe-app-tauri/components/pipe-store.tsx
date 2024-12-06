@@ -376,12 +376,14 @@ const PipeDialog: React.FC = () => {
     }
   };
 
-  const allPipes = [...pipes, ...corePipes.map(cp => ({
-    id: cp.id,
-    fullDescription: cp.description,
-    source: cp.url,
-    enabled: false,
-  }))];
+  const allPipes = [...pipes, ...corePipes
+    .filter(cp => !pipes.some(p => p.id === cp.id))
+    .map(cp => ({
+      id: cp.id,
+      fullDescription: cp.description,
+      source: cp.url,
+      enabled: false,
+    }))];
 
   const filteredPipes = allPipes.filter(pipe => 
     pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -393,23 +395,43 @@ const PipeDialog: React.FC = () => {
 
     return (
       <div 
-        className="fixed inset-y-0 right-0 w-[400px] bg-background border-l shadow-lg transform transition-transform duration-200 ease-in-out"
+        className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out"
         style={{ transform: selectedPipe ? 'translateX(0)' : 'translateX(100%)' }}
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-6 border-b">
-            <h2 className="text-xl font-semibold">{selectedPipe.id}</h2>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => setSelectedPipe(null)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center justify-between p-4 border-b bg-muted/30">
+            <div className="flex items-center gap-3">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setSelectedPipe(null)}
+                className="hover:bg-muted"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+              <h2 className="text-lg font-medium">{selectedPipe.id}</h2>
+              <Badge variant="outline" className="font-mono text-xs">
+                by {getAuthorFromSource(selectedPipe.source)}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedPipe.source?.startsWith("http") && (
+                <Button
+                  onClick={() => openUrl(selectedPipe.source)}
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                >
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                  source
+                </Button>
+              )}
+              <LogFileButton className="text-xs" />
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-1 overflow-hidden">
+            <div className="w-[240px] border-r p-4 space-y-4 bg-muted/10">
               {selectedPipe.id === "pipe-for-loom" &&
               !selectedPipe.enabled &&
               !hasLoomSubscription ? (
@@ -422,13 +444,14 @@ const PipeDialog: React.FC = () => {
                   variant={selectedPipe.enabled ? "default" : "outline"}
                   disabled={health?.status === "error"}
                   className="w-full"
+                  size="sm"
                 >
-                  <Power className="mr-2 h-4 w-4" />
+                  <Power className="mr-2 h-3.5 w-3.5" />
                   {selectedPipe.enabled ? "disable" : "enable"}
                 </Button>
               )}
               
-              <div className="flex gap-2 w-full">
+              <div className="space-y-2">
                 {!selectedPipe.source?.startsWith("https://") && (
                   <TooltipProvider>
                     <Tooltip>
@@ -436,9 +459,10 @@ const PipeDialog: React.FC = () => {
                         <Button
                           onClick={() => handleRefreshFromDisk(selectedPipe)}
                           variant="outline"
-                          className="flex-1"
+                          size="sm"
+                          className="w-full"
                         >
-                          <RefreshCw className="mr-2 h-4 w-4" />
+                          <RefreshCw className="mr-2 h-3.5 w-3.5" />
                           refresh
                         </Button>
                       </TooltipTrigger>
@@ -448,132 +472,126 @@ const PipeDialog: React.FC = () => {
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                {selectedPipe.source?.startsWith("http") && (
-                  <Button
-                    onClick={() => openUrl(selectedPipe.source)}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    open source
-                  </Button>
-                )}
-                <LogFileButton className="flex-1" />
                 <Button
                   onClick={() => handleDeletePipe(selectedPipe)}
                   variant="outline"
-                  className="flex-1"
+                  size="sm"
+                  className="w-full text-destructive hover:text-destructive"
                 >
-                  <Trash2 className="mr-2 h-4 w-4" />
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
                   delete
                 </Button>
               </div>
-            </div>
 
-            {selectedPipe.enabled && selectedPipe?.config?.port && (
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium">pipe ui</h3>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      openUrl(`http://localhost:${selectedPipe.config!.port}`)
-                    }
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    open in browser
-                  </Button>
-                </div>
-                <div className="rounded-lg border overflow-hidden">
-                  <iframe
-                    src={`http://localhost:${selectedPipe.config.port}`}
-                    className="w-full h-[400px] border-0"
+              {selectedPipe.enabled && (
+                <div className="space-y-3 pt-4 border-t">
+                  <h3 className="text-sm font-medium">configuration</h3>
+                  <PipeConfigForm
+                    pipe={selectedPipe}
+                    onConfigSave={handleConfigSave}
                   />
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {selectedPipe.enabled && (
-              <div>
-                <h3 className="text-lg font-medium mb-4">configuration</h3>
-                <PipeConfigForm
-                  pipe={selectedPipe}
-                  onConfigSave={handleConfigSave}
-                />
-              </div>
-            )}
-
-            {selectedPipe.fullDescription && (
-              <div>
-                <h3 className="text-lg font-medium mb-4">about this pipe</h3>
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <MemoizedReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkMath]}
-                    components={{
-                      p({ children }) {
-                        return <p className="mb-2 last:mb-0">{children}</p>;
-                      },
-                      code({ node, className, children, ...props }) {
-                        const content = String(children).replace(/\n$/, "");
-                        const match = /language-(\w+)/.exec(className || "");
-
-                        return match ? (
-                          <CodeBlock
-                            key={Math.random()}
-                            language={(match && match[1]) || ""}
-                            value={content}
-                            {...props}
-                          />
-                        ) : (
-                          <code className="py-0.5 rounded-sm font-mono text-sm" {...props}>
-                            {content}
-                          </code>
-                        );
-                      },
-                      a({ href, children }) {
-                        const isDirectVideo = href?.match(/\.(mp4|webm|ogg)$/) ||
-                          href?.includes("user-attachments/assets");
-                        const youtubeMatch = href?.match(
-                          /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
-                        );
-
-                        if (isDirectVideo) {
-                          return (
-                            <RetryableVideo
-                              src={href}
-                              maxRetries={3}
-                              retryDelay={1000}
-                            />
-                          );
-                        } else if (youtubeMatch) {
-                          return (
-                            <iframe
-                              width="100%"
-                              height="315"
-                              src={`https://www.youtube.com/embed/${youtubeMatch[1]}`}
-                              frameBorder="0"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                              className="max-w-full"
-                              style={{ maxHeight: "400px" }}
-                            />
-                          );
+            <div className="flex-1 overflow-y-auto">
+              <div className="max-w-3xl mx-auto p-8 space-y-8">
+                {selectedPipe.enabled && selectedPipe?.config?.port && (
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-medium">pipe ui</h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          openUrl(`http://localhost:${selectedPipe.config!.port}`)
                         }
+                      >
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        open in browser
+                      </Button>
+                    </div>
+                    <div className="rounded-lg border overflow-hidden bg-background">
+                      <iframe
+                        src={`http://localhost:${selectedPipe.config.port}`}
+                        className="w-full h-[600px] border-0"
+                      />
+                    </div>
+                  </div>
+                )}
 
-                        return (
-                          <a href={href} target="_blank" rel="noopener noreferrer">
-                            {children}
-                          </a>
-                        );
-                      },
-                    }}
-                  >
-                    {selectedPipe.fullDescription.replace(/Â/g, "")}
-                  </MemoizedReactMarkdown>
-                </div>
+                {selectedPipe.fullDescription && (
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">about this pipe</h3>
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <MemoizedReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        components={{
+                          p({ children }) {
+                            return <p className="mb-2 last:mb-0">{children}</p>;
+                          },
+                          code({ node, className, children, ...props }) {
+                            const content = String(children).replace(/\n$/, "");
+                            const match = /language-(\w+)/.exec(className || "");
+
+                            return match ? (
+                              <CodeBlock
+                                key={Math.random()}
+                                language={(match && match[1]) || ""}
+                                value={content}
+                                {...props}
+                              />
+                            ) : (
+                              <code className="py-0.5 rounded-sm font-mono text-sm" {...props}>
+                                {content}
+                              </code>
+                            );
+                          },
+                          a({ href, children }) {
+                            const isDirectVideo = href?.match(/\.(mp4|webm|ogg)$/) ||
+                              href?.includes("user-attachments/assets");
+                            const youtubeMatch = href?.match(
+                              /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
+                            );
+
+                            if (isDirectVideo) {
+                              return (
+                                <RetryableVideo
+                                  src={href}
+                                  maxRetries={3}
+                                  retryDelay={1000}
+                                />
+                              );
+                            } else if (youtubeMatch) {
+                              return (
+                                <iframe
+                                  width="100%"
+                                  height="315"
+                                  src={`https://www.youtube.com/embed/${youtubeMatch[1]}`}
+                                  frameBorder="0"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                  className="max-w-full"
+                                  style={{ maxHeight: "400px" }}
+                                />
+                              );
+                            }
+
+                            return (
+                              <a href={href} target="_blank" rel="noopener noreferrer">
+                                {children}
+                              </a>
+                            );
+                          },
+                        }}
+                      >
+                        {selectedPipe.fullDescription.replace(/Â/g, "")}
+                      </MemoizedReactMarkdown>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -712,14 +730,14 @@ const PipeDialog: React.FC = () => {
                 {filteredPipes.map((pipe) => (
                   <div
                     key={pipe.id}
-                    className="border rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                    className="border rounded-lg p-4 hover:bg-muted/40 transition-colors cursor-pointer"
                     onClick={() => setSelectedPipe(pipe)}
                   >
                     <div className="flex flex-col h-full">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <h3 className="font-medium truncate">{pipe.id}</h3>
-                          <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span className="truncate">by {getAuthorFromSource(pipe.source)}</span>
                             {pipe.source?.startsWith('http') ? (
                               <ExternalLink className="h-3 w-3 flex-shrink-0 cursor-pointer" 
@@ -734,7 +752,7 @@ const PipeDialog: React.FC = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          <span className="text-sm text-gray-500">0</span>
+                          <span className="text-sm text-muted-foreground">0</span>
                           {pipe.enabled ? (
                             <Button
                               size="sm"
@@ -744,7 +762,7 @@ const PipeDialog: React.FC = () => {
                                 handleToggleEnabled(pipe);
                               }}
                             >
-                              <Power className="h-4 w-4 text-primary" />
+                              <Power className="h-3.5 w-3.5 text-primary" />
                             </Button>
                           ) : (
                             <Button
@@ -755,15 +773,33 @@ const PipeDialog: React.FC = () => {
                                 handleDownloadPipe(pipe.source);
                               }}
                             >
-                              <Download className="h-4 w-4" />
+                              <Download className="h-3.5 w-3.5" />
                             </Button>
                           )}
                         </div>
                       </div>
-                      <p className="text-sm text-gray-600 mt-2 line-clamp-2 flex-1">
-                        {pipe.fullDescription}
-                      </p>
-                      <div className="text-xs text-gray-500 mt-2">
+                      <div className="text-sm text-muted-foreground mt-2 flex-1 prose prose-sm dark:prose-invert max-w-none">
+                        <MemoizedReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          components={{
+                            p({ children }) {
+                              return <p className="line-clamp-2 m-0">{children}</p>;
+                            },
+                            h1: ({ children }) => <span>{children}</span>,
+                            h2: ({ children }) => <span>{children}</span>,
+                            h3: ({ children }) => <span>{children}</span>,
+                            h4: ({ children }) => <span>{children}</span>,
+                            h5: ({ children }) => <span>{children}</span>,
+                            h6: ({ children }) => <span>{children}</span>,
+                            img: () => null, // Hide images in list view
+                            pre: ({ children }) => <span>{children}</span>,
+                            code: ({ children }) => <span className="font-mono text-xs">{children}</span>,
+                          }}
+                        >
+                          {pipe.fullDescription?.replace(/Â/g, "") || ""}
+                        </MemoizedReactMarkdown>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2">
                         Updated recently
                       </div>
                     </div>
