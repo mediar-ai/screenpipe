@@ -244,8 +244,18 @@ jobs:
           # Verify installation
           & "C:\Program Files\7-Zip\7z.exe" i
 
-      - name: Install LLVM and Clang
+      - name: Cache LLVM
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Program Files\LLVM
+            ${{ runner.temp }}\llvm
+          key: llvm-10.0-windows-${{ hashFiles('.github/workflows/release-app.yml') }}
+
+      - name: Install LLVM and Clang
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' && steps.cache-llvm.outputs.cache-hit != 'true'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
@@ -482,8 +492,18 @@ jobs:
           # Verify installation
           & "C:\Program Files\7-Zip\7z.exe" i
 
-      - name: Install LLVM and Clang
+      - name: Cache LLVM
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Program Files\LLVM
+            ${{ runner.temp }}\llvm
+          key: llvm-10.0-windows-${{ hashFiles('.github/workflows/release-app.yml') }}
+
+      - name: Install LLVM and Clang
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' && steps.cache-llvm.outputs.cache-hit != 'true'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
