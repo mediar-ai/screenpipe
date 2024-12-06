@@ -4,7 +4,8 @@
   "local": true,
   "windows": [
     "main",
-    "timeline"
+    "timeline",
+    "search"
   ],
   "permissions": [
     "core:event:allow-listen",

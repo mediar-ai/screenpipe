@@ -6,7 +6,6 @@ import { PrettyLink } from "@/components/pretty-link";
 import HealthStatus from "@/components/screenpipe-status";
 
 import React from "react";
-import PipeDialog from "@/components/pipe-store";
 import MeetingHistory from "@/components/meeting-history";
 import {
   DropdownMenu,
@@ -14,7 +13,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Heart, Menu, Bell, Play, Folder } from "lucide-react";
+import {
+  MessageSquare,
+  Heart,
+  Menu,
+  Bell,
+  Play,
+  Folder,
+  Search,
+} from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
   InboxMessageAction,
@@ -112,6 +119,10 @@ export default function Header() {
     await invoke("show_timeline");
   };
 
+  const handleShowSearch = async () => {
+    await invoke("show_search");
+  };
+
   return (
     <div>
       {isLoading ? (
@@ -125,7 +136,6 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
-            <PipeDialog />
             <Settings />
             <Button
               variant="ghost"
@@ -144,6 +154,17 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="mr-4" align="end">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={handleShowSearch}
+                  disabled={!health || health.status === "error"}
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  <span>search</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer p-0">
+                  <MeetingHistory />
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={handleShowTimeline}

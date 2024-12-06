@@ -171,5 +171,6 @@ struct PipeInfo {
 #[derive(Deserialize)]
 struct PipeListResponse {
     data: Vec<PipeInfo>,
+    #[allow(dead_code)]
     success: bool,
 }

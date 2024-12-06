@@ -67,7 +67,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("submitting config:", config);
-    
+
     if (!config?.fields) {
       console.log("no config fields found, aborting");
       return;
@@ -411,6 +411,11 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <h3 className="text-lg font-semibold">pipe configuration</h3>
+      {config?.fields && config.fields.length > 0 && (
+        <Button type="submit" onClick={handleSubmit}>
+          save configuration
+        </Button>
+      )}
       {config?.fields?.map((field: FieldConfig) => (
         <div key={field.name} className="space-y-2">
           <Label htmlFor={field.name} className="font-medium">
@@ -418,7 +423,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
           </Label>
           {renderConfigInput(field)}
           <MemoizedReactMarkdown
-            className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
+            className="prose prose-sm break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
             remarkPlugins={[remarkGfm, remarkMath]}
             components={{
               p({ children }) {
@@ -466,9 +471,6 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
           </MemoizedReactMarkdown>
         </div>
       ))}
-      {config?.fields && config.fields.length > 0 && (
-        <Button type="submit" onClick={handleSubmit}>save configuration</Button>
-      )}
     </form>
   );
 };

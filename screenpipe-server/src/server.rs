@@ -1437,13 +1437,16 @@ pub async fn delete_pipe_handler(
                 "message": "pipe deleted successfully"
             })),
         ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
+        Err(e) => {
+            error!("failed to delete pipe: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
                 "success": false,
                 "error": format!("failed to delete pipe: {}", e)
-            })),
-        ),
+                })),
+            )
+        }
     }
 }
 

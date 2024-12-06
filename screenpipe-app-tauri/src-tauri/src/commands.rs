@@ -397,15 +397,6 @@ pub fn check_microphone_permissions() -> bool {
 pub fn check_screen_capture_permissions() -> bool {
     #[cfg(target_os = "macos")]
     {
-        use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
-        
-        // Check if the app has screen capture permissions
-        let options = {
-            let key = CFString::new("AXTrustedCheckOptionPrompt");
-            let value = CFBoolean::false_value();
-            let pairs = &[(key, value)];
-            core_foundation::dictionary::CFDictionary::from_CFType_pairs(pairs)
-        };
 
         unsafe {
             let func_ptr = libc::dlsym(
@@ -424,5 +415,29 @@ pub fn check_screen_capture_permissions() -> bool {
     #[cfg(not(target_os = "macos"))]
     {
         true // Windows and Linux don't require explicit screen capture permissions
+    }
+}
+
+#[tauri::command]
+pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("search") {
+        #[cfg(target_os = "macos")]
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+        let _ = window.set_decorations(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "search",
+            tauri::WebviewUrl::App("search.html".into()),
+        )
+        .title("search")
+        .decorations(true)
+        .transparent(true)
+        .center()
+        .build()
+        .unwrap();
     }
 }

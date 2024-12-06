@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,9 +20,6 @@ import { Progress } from "@/components/ui/progress";
 import { DateTimePicker } from "./date-time-picker";
 import { Badge } from "./ui/badge";
 import {
-  AlertCircle,
-  AlignLeft,
-  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -31,17 +30,16 @@ import {
   Loader2,
   Search,
   Send,
-  X,
   Square,
-  Settings,
   Clock,
   Check,
+  Plus,
 } from "lucide-react";
 import { useToast } from "./ui/use-toast";
 import posthog from "posthog-js";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { convertToCoreMessages, generateId, Message, streamText } from "ai";
+import { generateId, Message } from "ai";
 import { OpenAI } from "openai";
 import { ChatMessage } from "./chat-message-v2";
 import { spinner } from "./spinner";
@@ -70,19 +68,19 @@ import {
 import { Separator } from "./ui/separator";
 import { ContextUsageIndicator } from "./context-usage-indicator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { formatISO } from "date-fns";
 import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "./ui/codeblock";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { encode, removeDuplicateSelections } from "@/lib/utils";
 import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { SearchHistory } from "@/lib/types/history";
+import { platform } from "@tauri-apps/plugin-os";
 
 interface SearchChatProps {
   currentSearchId: string | null;
+  setCurrentSearchId: (searchId: string | null) => void;
   onAddSearch: (searchParams: any, results: any[]) => Promise<string>;
   searches: SearchHistory[];
 }
@@ -202,6 +200,7 @@ const getContextAroundKeyword = (
 
 export function SearchChat({
   currentSearchId,
+  setCurrentSearchId,
   onAddSearch,
   searches,
 }: SearchChatProps) {
@@ -518,7 +517,7 @@ export function SearchChat({
     // Track AI usage metrics
     posthog.capture("ai_chat_usage", {
       agent: selectedAgent.name,
-      total_chars: floatingInput.length + selectedContentLength
+      total_chars: floatingInput.length + selectedContentLength,
     });
 
     const userMessage = {
@@ -695,7 +694,7 @@ export function SearchChat({
       setTotalResults(response.pagination.total);
 
       // Save search to history
-      await onAddSearch(searchParams, response.data);
+      // await onAddSearch(searchParams, response.data);
     } catch (error) {
       console.error("search error:", error);
       toast({
@@ -991,43 +990,59 @@ export function SearchChat({
 
   // Add effect to restore search when currentSearchId changes
   useEffect(() => {
-    if (currentSearchId) {
-      const selectedSearch = searches.find((s) => s.id === currentSearchId);
-      if (selectedSearch) {
-        // Restore search parameters
-        setQuery(selectedSearch.searchParams.q || "");
-        setContentType(selectedSearch.searchParams.content_type);
-        setLimit(selectedSearch.searchParams.limit);
-        setStartDate(new Date(selectedSearch.searchParams.start_time));
-        setEndDate(new Date(selectedSearch.searchParams.end_time));
-        setAppName(selectedSearch.searchParams.app_name || "");
-        setWindowName(selectedSearch.searchParams.window_name || "");
-        setIncludeFrames(selectedSearch.searchParams.include_frames);
-        setMinLength(selectedSearch.searchParams.min_length);
-        setMaxLength(selectedSearch.searchParams.max_length);
+    // if (currentSearchId) {
+    const selectedSearch = searches.find((s) => s.id === currentSearchId);
+    if (selectedSearch) {
+      // Restore search parameters
+      setQuery(selectedSearch.searchParams.q || "");
+      setContentType(selectedSearch.searchParams.content_type);
+      setLimit(selectedSearch.searchParams.limit);
+      setStartDate(new Date(selectedSearch.searchParams.start_time));
+      setEndDate(new Date(selectedSearch.searchParams.end_time));
+      setAppName(selectedSearch.searchParams.app_name || "");
+      setWindowName(selectedSearch.searchParams.window_name || "");
+      setIncludeFrames(selectedSearch.searchParams.include_frames);
+      setMinLength(selectedSearch.searchParams.min_length);
+      setMaxLength(selectedSearch.searchParams.max_length);
 
-        // Restore results
-        setResults(selectedSearch.results);
-        setTotalResults(selectedSearch.results.length);
-        setHasSearched(true);
-        setShowExamples(false);
+      // Restore results
+      setResults(selectedSearch.results);
+      setTotalResults(selectedSearch.results.length);
+      setHasSearched(true);
+      setShowExamples(false);
 
-        // Restore messages if any
-        if (selectedSearch.messages) {
-          setChatMessages(
-            selectedSearch.messages.map((msg) => ({
-              id: msg.id,
-              role: msg.type === "ai" ? "assistant" : "user",
-              content: msg.content,
-            }))
-          );
-        }
+      // Restore messages if any
+      if (selectedSearch.messages) {
+        setChatMessages(
+          selectedSearch.messages.map((msg) => ({
+            id: msg.id,
+            role: msg.type === "ai" ? "assistant" : "user",
+            content: msg.content,
+          }))
+        );
       }
     }
+    // }
   }, [currentSearchId, searches]);
 
+  const handleNewSearch = () => {
+    // setCurrentSearchId(null);
+    location.reload();
+    // Add any other reset logic you need
+  };
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
+      <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
+        {/* <SidebarTrigger className="h-8 w-8" /> */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleNewSearch}
+          className="h-8 w-8"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
       {/* Content Type Checkboxes and Code Button */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-4">
@@ -1052,7 +1067,7 @@ export function SearchChat({
               </Tooltip>
             </TooltipProvider>
           </div>
-          {settings.platform === "macos" && (
+          {platform() === "macos" && (
             <div className="flex items-center space-x-1">
               <Checkbox
                 id="ui-type"
@@ -1143,6 +1158,8 @@ export function SearchChat({
           }}
           placeholder="keyword search, you may leave it blank"
           className="w-[350px]"
+          autoCorrect="off"
+          autoComplete="off"
         />
 
         {/* Window name filter - increased width */}
@@ -1631,10 +1648,12 @@ export function SearchChat({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <ContextUsageIndicator
-                        currentSize={calculateSelectedContentLength()}
-                        maxSize={MAX_CONTENT_LENGTH}
-                      />
+                      <span>
+                        <ContextUsageIndicator
+                          currentSize={calculateSelectedContentLength()}
+                          maxSize={MAX_CONTENT_LENGTH}
+                        />
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>

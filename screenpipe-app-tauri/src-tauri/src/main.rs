@@ -165,6 +165,7 @@ async fn main() {
             commands::check_all_permissions,
             commands::trigger_audio_permission,
             commands::check_microphone_permissions,
+            commands::show_search,
         ])
         .setup(|app| {
             // Logging setup
