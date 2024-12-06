@@ -256,10 +256,29 @@ jobs:
 
       - name: Install LLVM and Clang
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' && steps.cache-llvm.outputs.cache-hit != 'true'
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "10.0"
-          directory: "C:\\Program Files\\LLVM"
+        shell: powershell
+        run: |
+          # Create LLVM directory with proper permissions
+          $llvmPath = "C:\Program Files\LLVM"
+          if (!(Test-Path $llvmPath)) {
+            sudo mkdir -Force $llvmPath
+            sudo chmod 777 $llvmPath
+          }
+          
+          # Download LLVM installer
+          $installerPath = "$env:TEMP\LLVM-10.0.0-win64.exe"
+          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/LLVM-10.0.0-win64.exe" -OutFile $installerPath
+          
+          # Run installer silently
+          Start-Process -FilePath $installerPath -ArgumentList "/S /D=$llvmPath" -Wait
+          
+          # Clean up
+          Remove-Item $installerPath -Force
+          
+          # Verify installation
+          if (!(Test-Path "$llvmPath\bin\clang.exe")) {
+            throw "LLVM installation failed"
+          }
 
       - name: Run pre_build.js
         env:
