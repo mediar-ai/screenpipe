@@ -13,6 +13,7 @@ runs:
 
     - name: Update version in Cargo.toml
       if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform == 'macos-latest'
+      shell: bash
       run: |
         sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
 
@@ -33,6 +34,7 @@ runs:
 
     - name: Install Rust
       if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      shell: pwsh
       run: |
         Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
         .\rustup-init.exe -y
@@ -89,10 +91,12 @@ runs:
 
     - name: Install dependencies
       if: matrix.platform == 'macos-latest'
+      shell: bash
       run: |
         brew install ffmpeg
 
     - name: Install frontend dependencies
+      shell: ${{ matrix.shell }}
       working-directory: ./screenpipe-app-tauri
       run: bun install
 
@@ -128,13 +132,15 @@ runs:
         directory: "C:\\Program Files\\LLVM"
 
     - name: Run pre_build.js
+      shell: ${{ matrix.shell }}
       env:
         SKIP_SCREENPIPE_SETUP: true
-        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./screenpipe-app-tauri
+      run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+      working-directory: ./screenpipe-app-tauri
 
     - name: Build CLI
       if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
+      shell: bash
       run: |
         if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
         export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -145,14 +151,16 @@ runs:
 
     - name: Build CLI on Windows
       if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      shell: pwsh
       env:
         CARGO_PROFILE_RELEASE_STRIP: symbols
         CARGO_PROFILE_RELEASE_PANIC: abort
         CARGO_PROFILE_RELEASE_INCREMENTAL: false
-        run: cargo build --release -p screenpipe-server ${{ matrix.args }}
+      run: cargo build --release -p screenpipe-server ${{ matrix.args }}
 
-        # Run pre build again to copy the CLI into app
+      # Run pre build again to copy the CLI into app
     - name: Run pre_build.js
+      shell: ${{ matrix.shell }}
       run: |
         bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
       working-directory: ./screenpipe-app-tauri
@@ -165,6 +173,7 @@ runs:
 
     - name: Copy library for MKL
       if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+      shell: pwsh
       run: |
         # Install pip first
         Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
@@ -183,29 +192,29 @@ runs:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         # for release
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # for macos signing
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      # https://tauri.app/v1/guides/distribution/sign-macos
-      CI: true
-      # Optimize for build speed on Windows
-      CARGO_PROFILE_RELEASE_LTO: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
-      CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
-      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
-      # Enable incremental compilation for Windows
-      CARGO_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
-      # Windows specific optimizations (only applied when building for Windows)
-      CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
-      CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
-      CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
-      RUSTFLAGS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
-      VCPKG_STATIC_LINKAGE: "true"
-      KNF_STATIC_CRT: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '1' || '' }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # for macos signing
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # https://tauri.app/v1/guides/distribution/sign-macos
+        CI: true
+        # Optimize for build speed on Windows
+        CARGO_PROFILE_RELEASE_LTO: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
+        CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
+        CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
+        # Enable incremental compilation for Windows
+        CARGO_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
+        # Windows specific optimizations (only applied when building for Windows)
+        CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
+        CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
+        CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
+        RUSTFLAGS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
+        VCPKG_STATIC_LINKAGE: "true"
+        KNF_STATIC_CRT: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '1' || '' }}
       with:
         args: ${{ matrix.tauri-args }}
         projectPath: "./screenpipe-app-tauri"
