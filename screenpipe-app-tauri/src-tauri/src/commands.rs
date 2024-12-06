@@ -1,5 +1,5 @@
 use crate::get_data_dir;
-use serde::{Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tauri::Manager;
 use tracing::info;
@@ -309,4 +309,120 @@ pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Resul
     });
 
     Ok(())
+}
+
+#[derive(Debug, Serialize)]
+pub struct PermissionsStatus {
+    screen_capture: bool,
+    microphone: bool,
+    accessibility: bool,
+}
+
+#[tauri::command]
+pub fn check_all_permissions() -> PermissionsStatus {
+    PermissionsStatus {
+        screen_capture: check_screen_capture_permissions(),
+        microphone: check_microphone_permissions(),
+        accessibility: check_accessibility_permissions(),
+    }
+}
+
+#[tauri::command]
+pub fn trigger_audio_permission() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use core_foundation::{base::TCFType, string::CFString};
+
+        unsafe {
+            let av_media_type = CFString::new("avfa"); // Audio media type
+
+            // First check if we can find the function
+            let func_ptr = libc::dlsym(
+                libc::RTLD_DEFAULT,
+                "AVCaptureDevice_requestAccessForMediaType\0".as_ptr() as *const _,
+            );
+
+            if func_ptr.is_null() {
+                return Err("Could not find AVCaptureDevice API".to_string());
+            }
+
+            let func: extern "C" fn(*const core_foundation::string::__CFString) -> bool =
+                std::mem::transmute(func_ptr);
+
+            // Call the function with proper error handling
+            match std::panic::catch_unwind(|| func(av_media_type.as_concrete_TypeRef())) {
+                Ok(_) => Ok(()),
+                Err(_) => Err("Failed to request audio permission".to_string()),
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(()) // Windows and Linux don't require explicit microphone permissions
+    }
+}
+
+#[tauri::command]
+pub fn check_microphone_permissions() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use core_foundation::{base::TCFType, string::CFString};
+        
+        unsafe {
+            let av_media_type = CFString::new("avfa");
+            let func_ptr = libc::dlsym(
+                libc::RTLD_DEFAULT,
+                "AVCaptureDevice_authorizationStatusForMediaType\0".as_ptr() as *const _,
+            );
+            
+            if !func_ptr.is_null() {
+                let func: extern "C" fn(*const core_foundation::string::__CFString) -> i32 =
+                    std::mem::transmute(func_ptr);
+                let status = func(av_media_type.as_concrete_TypeRef());
+                // 3 = AVAuthorizationStatusAuthorized
+                return status == 3;
+            }
+            false
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        true // Windows and Linux don't require explicit microphone permissions
+    }
+}
+
+#[tauri::command]
+pub fn check_screen_capture_permissions() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
+        
+        // Check if the app has screen capture permissions
+        let options = {
+            let key = CFString::new("AXTrustedCheckOptionPrompt");
+            let value = CFBoolean::false_value();
+            let pairs = &[(key, value)];
+            core_foundation::dictionary::CFDictionary::from_CFType_pairs(pairs)
+        };
+
+        unsafe {
+            let func_ptr = libc::dlsym(
+                libc::RTLD_DEFAULT,
+                "CGRequestScreenCaptureAccess\0".as_ptr() as *const _,
+            );
+            
+            if !func_ptr.is_null() {
+                let func: extern "C" fn() -> bool = std::mem::transmute(func_ptr);
+                return func();
+            }
+            false
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        true // Windows and Linux don't require explicit screen capture permissions
+    }
 }
