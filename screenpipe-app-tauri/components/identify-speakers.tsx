@@ -10,7 +10,15 @@ import {
 } from "@/components/ui/dialog";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "./ui/use-toast";
-import { X, Fingerprint, Check } from "lucide-react";
+import {
+  X,
+  Fingerprint,
+  Check,
+  ChevronRight,
+  Save,
+  Ghost,
+  Trash,
+} from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -505,7 +513,7 @@ export default function IdentifySpeakers({
                               className="w-full"
                             />
                             {speakerSearchTerm && (
-                              <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg">
+                              <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
                                 {isSearching ? (
                                   <div className="flex justify-center items-center p-4">
                                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
@@ -516,7 +524,7 @@ export default function IdentifySpeakers({
                                       {speakers.map((speaker) => (
                                         <li
                                           key={speaker.id}
-                                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer truncate"
                                           onClick={() => {
                                             setSpeakerSearchTerm(speaker.name);
                                             setSelectedExistingSpeaker(speaker);
@@ -542,6 +550,7 @@ export default function IdentifySpeakers({
                               setShowNameUpdateConfirm(true);
                             }}
                           >
+                            <Save className="mr-2" />
                             update name
                           </Button>
                           <Button
@@ -551,6 +560,7 @@ export default function IdentifySpeakers({
                               setShowHallucinationConfirm(true);
                             }}
                           >
+                            <Ghost className="mr-2" />
                             nobody is speaking
                           </Button>
                           <Button
@@ -560,6 +570,7 @@ export default function IdentifySpeakers({
                               setShowRemoveSpeakerConfirm(true);
                             }}
                           >
+                            <Trash className="mr-2" />
                             remove speaker
                           </Button>
                         </div>
@@ -591,6 +602,7 @@ export default function IdentifySpeakers({
                             }}
                           >
                             next speaker
+                            <ChevronRight className="ml-2" />
                           </Button>
                         </div>
                       )}
@@ -634,6 +646,7 @@ export default function IdentifySpeakers({
                                       setShowMergeConfirm(true);
                                     }}
                                   >
+                                    <Check className="mr-2" />
                                     same speaker
                                   </Button>
                                   <Button
@@ -656,6 +669,7 @@ export default function IdentifySpeakers({
                                       );
                                     }}
                                   >
+                                    <X className="mr-2" />
                                     different speaker
                                   </Button>
                                   <Button
@@ -673,6 +687,7 @@ export default function IdentifySpeakers({
                                     }}
                                   >
                                     skip
+                                    <ChevronRight className="ml-2" />
                                   </Button>
                                 </div>
                               );
