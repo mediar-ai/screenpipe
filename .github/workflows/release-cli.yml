@@ -109,14 +109,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          target: x86_64-pc-windows-msvc
-          cache: true
-          rustflags: ""
+      - name: Install Rust
+        run: |
+          Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
+          .\rustup-init.exe -y
 
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -125,6 +121,19 @@ jobs:
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
+
+      - name: Install 7zip
+        shell: powershell
+        run: |
+          $7zipUrl = "https://7-zip.org/a/7z2301-x64.exe"
+          $7zipInstaller = "7z-installer.exe"
+          Invoke-WebRequest -Uri $7zipUrl -OutFile $7zipInstaller
+          Start-Process -FilePath .\$7zipInstaller -Args "/S" -Wait
+          Remove-Item $7zipInstaller
+          # Add 7zip to PATH and make it persistent for subsequent steps
+          echo "C:\Program Files\7-Zip" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Verify installation
+          & "C:\Program Files\7-Zip\7z.exe" i
 
       - uses: actions/cache@v4
         with:
@@ -144,30 +153,38 @@ jobs:
           cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Set version
-        shell: bash
+        shell: pwsh
         run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=$(git ls-remote --tags --refs --sort="version:refname" | tail -n1 | sed 's/.*\///' | sed 's/^v//')
-          fi
-          if [[ -z "$VERSION" ]]; then
-            VERSION="0.0.0"
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Set version to: $VERSION"
+          $VERSION = if ($env:GITHUB_REF -match "refs/tags/*") {
+              $env:GITHUB_REF -replace "refs/tags/v", ""
+          } else {
+              $tags = git ls-remote --tags --refs --sort="version:refname"
+              if ($tags) {
+                  $latestTag = ($tags -split "`n")[-1] -replace ".*/v", ""
+                  $latestTag
+              } else {
+                  "0.0.0"
+              }
+          }
+          if ([string]::IsNullOrEmpty($VERSION)) {
+              $VERSION = "0.0.0"
+          }
+          "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "Set version to: $VERSION"
 
       - name: Create deployment package
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc/bin
-          cp target/x86_64-pc-windows-msvc/release/screenpipe.exe screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc/bin/
-          7z a screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc.zip ./screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc/*
+          $packageDir = "screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc"
+          New-Item -Path "$packageDir/bin" -ItemType Directory -Force
+          Copy-Item "target/x86_64-pc-windows-msvc/release/screenpipe.exe" "$packageDir/bin/"
+          7z a "$packageDir.zip" "./$packageDir/*"
 
       - name: Calculate SHA256
-        shell: bash
+        shell: pwsh
         run: |
-          echo "WIN_SHA256=$(certutil -hashfile screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc.zip SHA256 | findstr /v "hash")" >> $GITHUB_ENV
+          $hash = Get-FileHash "screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc.zip" -Algorithm SHA256
+          "WIN_SHA256=$($hash.Hash)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
