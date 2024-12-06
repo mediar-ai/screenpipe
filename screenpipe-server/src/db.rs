@@ -1541,7 +1541,7 @@ impl DatabaseManager {
                 CASE 
                     WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
                     THEN json_object('audio_samples', json_group_array(
-                        json_object(
+                        DISTINCT json_object(
                             'path', rap.file_path,
                             'transcript', rap.transcription
                         )
@@ -1549,7 +1549,7 @@ impl DatabaseManager {
                     ELSE json_patch(
                         json(s.metadata), 
                         json_object('audio_samples', json_group_array(
-                            json_object(
+                            DISTINCT json_object(
                                 'path', rap.file_path,
                                 'transcript', rap.transcription
                             )
@@ -1700,13 +1700,13 @@ impl DatabaseManager {
                 s.name,
                 CASE 
                     WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
-                    THEN json_object('audio_samples', json_group_array(json_object(
+                    THEN json_object('audio_samples', json_group_array(DISTINCT json_object(
                         'path', rap.file_path,
                         'transcript', rap.transcription
                     )))
                     ELSE json_patch(
                         json(s.metadata), 
-                        json_object('audio_samples', json_group_array(json_object(
+                        json_object('audio_samples', json_group_array(DISTINCT json_object(
                             'path', rap.file_path,
                             'transcript', rap.transcription
                         )))

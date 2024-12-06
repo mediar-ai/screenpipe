@@ -674,6 +674,8 @@ mod tests {
             .as_array()
             .expect("Audio Samples should be an array");
 
+        println!("Audio samples: {:?}", audio_samples);
+
         assert_eq!(audio_samples.len(), 3);
     }
 
