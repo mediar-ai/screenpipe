@@ -129,7 +129,7 @@ jobs:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
       - name: Run steps
-        uses: ./.github/workflows/release-app-steps.yml
+        uses: ./.github/workflows/windows-steps
 
   retry-win:
     needs: publish-tauri
@@ -152,4 +152,4 @@ jobs:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
       - name: Run steps
-        uses: ./.github/workflows/release-app-steps.yml
+        uses: ./.github/workflows/windows-steps
