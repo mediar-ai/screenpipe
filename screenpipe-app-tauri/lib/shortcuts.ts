@@ -10,6 +10,13 @@ export async function registerShortcuts({
   startRecordingShortcut: string;
   disabledShortcuts: Shortcut[];
 }) {
+  console.log("registerShortcuts params: ", {
+    showScreenpipeShortcut,
+    startRecordingShortcut,
+    disabledShortcuts,
+    enabledShowScreenpipe: !disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE),
+    enabledStartRecording: !disabledShortcuts.includes(Shortcut.START_RECORDING),
+  });
   invoke("update_show_screenpipe_shortcut", {
     new_shortcut: showScreenpipeShortcut,
     enabled: !disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE),

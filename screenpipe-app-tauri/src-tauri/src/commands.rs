@@ -1,13 +1,12 @@
 use crate::{get_data_dir, kill_all_sreenpipes, spawn_screenpipe, SidecarState};
 use log::debug;
-use serde::{Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use tracing::{info, error};
 use tokio::time::{sleep, Duration};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 // Global flag to track if we're currently processing a shortcut
 static PROCESSING_SHORTCUT: AtomicBool = AtomicBool::new(false);

@@ -39,6 +39,10 @@ import {
   X,
   Play,
   Loader2,
+  Search,
+  Video,
+  Info,
+  Pencil,
 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
@@ -570,7 +574,7 @@ export function Settings({ className }: { className?: string }) {
   const handleShortcutToggle = useCallback((checked: boolean) => {
     try {
       let newDisabledShortcuts = [...settings.disabledShortcuts];
-      if (!checked) {
+      if (checked) {
         newDisabledShortcuts.push(Shortcut.SHOW_SCREENPIPE);
       } else {
         newDisabledShortcuts = newDisabledShortcuts.filter(
@@ -595,8 +599,8 @@ export function Settings({ className }: { className?: string }) {
       });
 
       toast({
-        title: checked ? "shortcut enabled" : "shortcut disabled",
-        description: `Show screenpipe shortcut has been ${checked ? "enabled" : "disabled"}`,
+        title: !checked ? "shortcut enabled" : "shortcut disabled",
+        description: `Show screenpipe shortcut has been ${!checked ? "enabled" : "disabled"}`,
       });
     } catch (error) {
       console.error("Error toggling shortcut:", error);
@@ -611,7 +615,7 @@ export function Settings({ className }: { className?: string }) {
   const handleRecordingShortcutToggle = useCallback((checked: boolean) => {
     try {
       let newDisabledShortcuts = [...settings.disabledShortcuts];
-      if (!checked) {
+      if (checked) {
         newDisabledShortcuts.push(Shortcut.START_RECORDING);
       } else {
         newDisabledShortcuts = newDisabledShortcuts.filter(
@@ -619,6 +623,7 @@ export function Settings({ className }: { className?: string }) {
         );
       }
 
+      // Update both local and global settings
       setLocalSettings({
         ...localSettings,
         disabledShortcuts: newDisabledShortcuts,
@@ -627,6 +632,7 @@ export function Settings({ className }: { className?: string }) {
         disabledShortcuts: newDisabledShortcuts,
       });
 
+      // Re-register shortcuts with new disabled state
       registerShortcuts({
         showScreenpipeShortcut: settings.showScreenpipeShortcut,
         startRecordingShortcut: settings.startRecordingShortcut,
@@ -634,8 +640,8 @@ export function Settings({ className }: { className?: string }) {
       });
 
       toast({
-        title: checked ? "shortcut enabled" : "shortcut disabled",
-        description: `Recording shortcut has been ${checked ? "enabled" : "disabled"}`,
+        title: !checked ? "shortcut enabled" : "shortcut disabled",
+        description: `Recording shortcut has been ${!checked ? "enabled" : "disabled"}`,
       });
     } catch (error) {
       console.error("Error toggling recording shortcut:", error);
@@ -1130,112 +1136,193 @@ export function Settings({ className }: { className?: string }) {
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="p-4">
             <CardHeader>
-              <CardTitle className="text-center">shortcuts</CardTitle>
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                keyboard shortcuts
+                <Badge variant="secondary" className="text-xs">
+                  system-wide
+                </Badge>
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <ul className="space-y-4">
-                <li className="flex items-center justify-between">
-                  <span className="text-sm font-medium">start recording</span>
-                  <div className="relative w-[12rem]">
-                    {listeningFor === 'recording' ? (
-                      <div className="border border-blue-300 rounded-lg text-gray-500 w-full h-[2.5rem] bg-gray-100 flex items-center justify-between px-2 overflow-hidden">
-                        <span className="truncate text-sm">
-                          {recordingKey ? parseKeyboardShortcut([...recordingModifiers, recordingKey].join('+')) : 'listening...'}
-                        </span>
-                        <div className="flex items-center gap-1 ml-2">
-                          {recordingKey && (
-                            <button
-                              type="button"
-                              onClick={handleSetRecordingShortcut}
-                              className="text-blue-500 hover:text-blue-600"
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setListeningFor(null)}
-                            className="text-gray-400 hover:text-gray-500"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
+            <CardContent className="space-y-6">
+              {/* Overlay Shortcut */}
+              <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-md bg-secondary">
+                        <Search className="h-4 w-4" />
                       </div>
-                    ) : (
-                      <Button
-                        onClick={() => setListeningFor('recording')}
-                        className="w-full h-[2.5rem] justify-between overflow-hidden bg-black text-white hover:bg-black/90"
-                      >
-                        <span>{parseKeyboardShortcut(currentRecordingShortcut)}</span>
-                        <span className="ml-2 text-xs text-gray-400">edit</span>
-                      </Button>
-                    )}
-                  </div>
-                </li>
-
-                <li className="flex items-center justify-between">
-                  <span className="text-sm font-medium">show screenpipe</span>
-                  <div className="relative w-[12rem]">
-                    {listeningFor === 'show' ? (
-                      <div className="border border-blue-300 rounded-lg text-gray-500 w-full h-[2.5rem] bg-gray-100 flex items-center justify-between px-2 overflow-hidden">
-                        <span className="truncate text-sm">
-                          {nonModifierKey ? parseKeyboardShortcut([...selectedModifiers, nonModifierKey].join('+')) : 'listening...'}
-                        </span>
-                        <div className="flex items-center gap-1 ml-2">
-                          {nonModifierKey && (
-                            <button
-                              type="button"
-                              onClick={handleSetShortcut}
-                              className="text-blue-500 hover:text-blue-600"
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setListeningFor(null)}
-                            className="text-gray-400 hover:text-gray-500"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
+                      <div>
+                        <h4 className="text-sm font-medium">overlay shortcut</h4>
+                        <p className="text-xs text-muted-foreground">
+                          quick access to your screen history
+                        </p>
                       </div>
-                    ) : (
-                      <Button
-                        onClick={() => setListeningFor('show')}
-                        className="w-full h-[2.5rem] justify-between overflow-hidden bg-black text-white hover:bg-black/90"
-                      >
-                        <span>{parseKeyboardShortcut(currentShortcut)}</span>
-                        <span className="ml-2 text-xs text-gray-400">edit</span>
-                      </Button>
-                    )}
+                    </div>
+                    <Button 
+                      variant={settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE) ? "destructive" : "outline"}
+                      onClick={() => handleShortcutToggle(!settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE))}
+                      className="gap-2"
+                    >
+                      {settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE) ? (
+                        <>
+                          <X className="h-4 w-4" />
+                          disabled
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4" />
+                          enabled
+                        </>
+                      )}
+                    </Button>
                   </div>
-                </li>
-              </ul>
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      {listeningFor === 'show' ? (
+                        <div className="flex items-center gap-2 h-5 px-2 rounded border bg-muted animate-pulse">
+                          <span className="text-[10px] text-muted-foreground">
+                            {nonModifierKey ? parseKeyboardShortcut([...selectedModifiers, nonModifierKey].join('+')) : 'press keys...'}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {nonModifierKey && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-4 w-4 p-0"
+                                onClick={handleSetShortcut}
+                              >
+                                <Check className="h-3 w-3" />
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-4 w-4 p-0"
+                              onClick={() => setListeningFor(null)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {settings.showScreenpipeShortcut.split('+').map((key, i) => (
+                            <kbd key={i} className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                              {parseKeyboardShortcut(key)}
+                            </kbd>
+                          ))}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 px-1.5"
+                            onClick={() => setListeningFor('show')}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    <Badge variant={settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE) ? "destructive" : "secondary"} className="text-[10px]">
+                      {settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE) ? "inactive" : "active"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
 
-              <div className="mt-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="shortcutEnabled" className="text-sm">
-                    disable overlay shortcut
-                  </Label>
-                  <Switch
-                    id="shortcutEnabled"
-                    checked={!settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)}
-                    onCheckedChange={handleShortcutToggle}
-                  />
+              {/* Recording Shortcut */}
+              <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-md bg-secondary">
+                        <Video className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-medium">recording shortcut</h4>
+                        <p className="text-xs text-muted-foreground">
+                          start/stop screen recording instantly
+                        </p>
+                      </div>
+                    </div>
+                    <Button 
+                      variant={settings.disabledShortcuts.includes(Shortcut.START_RECORDING) ? "destructive" : "outline"}
+                      onClick={() => handleRecordingShortcutToggle(!settings.disabledShortcuts.includes(Shortcut.START_RECORDING))}
+                      className="gap-2"
+                    >
+                      {settings.disabledShortcuts.includes(Shortcut.START_RECORDING) ? (
+                        <>
+                          <X className="h-4 w-4" />
+                          disabled
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4" />
+                          enabled
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      {listeningFor === 'recording' ? (
+                        <div className="flex items-center gap-2 h-5 px-2 rounded border bg-muted animate-pulse">
+                          <span className="text-[10px] text-muted-foreground">
+                            {recordingKey ? parseKeyboardShortcut([...recordingModifiers, recordingKey].join('+')) : 'press keys...'}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {recordingKey && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-4 w-4 p-0"
+                                onClick={handleSetRecordingShortcut}
+                              >
+                                <Check className="h-3 w-3" />
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-4 w-4 p-0"
+                              onClick={() => setListeningFor(null)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {settings.startRecordingShortcut.split('+').map((key, i) => (
+                            <kbd key={i} className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                              {parseKeyboardShortcut(key)}
+                            </kbd>
+                          ))}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 px-1.5"
+                            onClick={() => setListeningFor('recording')}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    <Badge variant={settings.disabledShortcuts.includes(Shortcut.START_RECORDING) ? "destructive" : "secondary"} className="text-[10px]">
+                      {settings.disabledShortcuts.includes(Shortcut.START_RECORDING) ? "inactive" : "active"}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="recordingShortcutEnabled" className="text-sm">
-                    disable recording shortcut
-                  </Label>
-                  <Switch
-                    id="recordingShortcutEnabled"
-                    checked={!settings.disabledShortcuts.includes(Shortcut.START_RECORDING)}
-                    onCheckedChange={handleRecordingShortcutToggle}
-                  />
-                </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground mt-2">
+                <p className="flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  shortcuts work system-wide, even when screenpipe is in the background
+                </p>
               </div>
             </CardContent>
           </Card>
