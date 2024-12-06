@@ -58,8 +58,13 @@ export default function Home() {
     registerShortcuts({
       showScreenpipeShortcut: settings.showScreenpipeShortcut,
       disabledShortcuts: settings.disabledShortcuts,
+      startRecordingShortcut: settings.startRecordingShortcut,
     });
-  }, [settings.showScreenpipeShortcut, settings.disabledShortcuts]);
+  }, [
+    settings.showScreenpipeShortcut,
+    settings.disabledShortcuts,
+    settings.startRecordingShortcut,
+  ]);
 
   useEffect(() => {
     if (settings.userId) {

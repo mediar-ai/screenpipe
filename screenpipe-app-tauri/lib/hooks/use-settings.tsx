@@ -23,9 +23,10 @@ export type EmbeddedLLMConfig = {
 
 export enum Shortcut {
   SHOW_SCREENPIPE = "show_screenpipe",
+  START_RECORDING = "start_recording",
 }
 
-export type Settings= {
+export type Settings = {
   openaiApiKey: string;
   deepgramApiKey: string;
   isLoading: boolean;
@@ -51,22 +52,23 @@ export type Settings= {
   fps: number;
   vadSensitivity: VadSensitivity;
   analyticsEnabled: boolean;
-  audioChunkDuration: number; // new field
-  useChineseMirror: boolean; // Add this line
+  audioChunkDuration: number;
+  useChineseMirror: boolean;
   embeddedLLM: EmbeddedLLMConfig;
   languages: Language[];
   enableBeta: boolean;
   showScreenpipeShortcut: string;
+  startRecordingShortcut: string;
   isFirstTimeUser: boolean;
-  enableFrameCache: boolean; // Add this line
-  enableUiMonitoring: boolean; // Add this line
-  platform: string; // Add this line
+  enableFrameCache: boolean;
+  enableUiMonitoring: boolean;
+  platform: string;
   disabledShortcuts: Shortcut[];
 }
 
 const DEFAULT_SETTINGS: Settings = {
   openaiApiKey: "",
-  deepgramApiKey: "", // for now we hardcode our key (dw about using it, we have bunch of credits)
+  deepgramApiKey: "",
   isLoading: true,
   aiModel: "gpt-4o",
   installedPipes: [],
@@ -96,8 +98,8 @@ const DEFAULT_SETTINGS: Settings = {
   fps: 0.5,
   vadSensitivity: "high",
   analyticsEnabled: true,
-  audioChunkDuration: 30, // default to 10 seconds
-  useChineseMirror: false, // Add this line
+  audioChunkDuration: 30,
+  useChineseMirror: false,
   languages: [],
   embeddedLLM: {
     enabled: false,
@@ -106,10 +108,11 @@ const DEFAULT_SETTINGS: Settings = {
   },
   enableBeta: false,
   showScreenpipeShortcut: "Super+Alt+S",
+  startRecordingShortcut: "Super+Alt+R",
   isFirstTimeUser: true,
-  enableFrameCache: true, // Add this line
-  enableUiMonitoring: false, // Change from true to false
-  platform: "unknown", // Add this line
+  enableFrameCache: true,
+  enableUiMonitoring: false,
+  platform: "unknown",
   disabledShortcuts: [],
 };
 
@@ -173,10 +176,8 @@ export function useSettings() {
       const updatedSettings = { ...settings, [key]: defaultSettings[key] };
       setSettings(updatedSettings);
       await store!.set(key, defaultSettings[key]);
-      // No need to call save() as we're using autoSave: true
     } catch (error) {
       console.error(`failed to reset setting ${key}:`, error);
-      // revert local state if store update fails
       setSettings(settings);
     }
   };
@@ -204,7 +205,7 @@ export function useSettings() {
       setSettings({...userSettings, isLoading: false});
     } catch (error) {
       console.error("failed to load settings:", error);
-      setSettings((prevSettings) => ({ ...prevSettings,  isLoading: false }));
+      setSettings((prevSettings) => ({ ...prevSettings, isLoading: false }));
     }
   };
 
@@ -221,21 +222,18 @@ export function useSettings() {
       const updatedSettings = { ...settings, ...newSettings };
       setSettings(updatedSettings);
 
-      // update the store for the fields that were changed
       for (const key in newSettings) {
         if (newSettings[key as keyof Settings]) {
           console.log(
             `Setting ${key}:`,
             updatedSettings[key as keyof Settings]
-          ); // Add this line
+          );
           await store!.set(key, updatedSettings[key as keyof Settings]);
         }
       }
       await store!.save();
-      // no need to call save() as we're using autoSave: true
     } catch (error) {
       console.error("failed to update settings:", error);
-      // revert local state if store update fails
       setSettings(settings);
     }
   };
@@ -264,8 +262,8 @@ async function initStore() {
   store = await createStore(storePath);
 }
 
-function createDefaultSettingsObject(currentPlatform: string){
-  let defaultSettings = DEFAULT_SETTINGS
+function createDefaultSettingsObject(currentPlatform: string): Settings {
+  let defaultSettings = DEFAULT_SETTINGS;
 
   const ocrModel =
     currentPlatform === "macos"
@@ -274,29 +272,29 @@ function createDefaultSettingsObject(currentPlatform: string){
       ? "windows-native"
       : "tesseract";
 
-  defaultSettings.ocrEngine = ocrModel
-  defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1
+  defaultSettings.ocrEngine = ocrModel;
+  defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
 
   defaultSettings.ignoredWindows = [
     ...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
     ...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []) 
-  ]
+  ];
 
-  return defaultSettings
+  return defaultSettings;
 }
 
 async function createUserSettings(
   store: Store,
   currentPlatform: string
 ): Promise<Settings> {
-  let defaultSettingsObject = createDefaultSettingsObject(currentPlatform)
+  let defaultSettingsObject = createDefaultSettingsObject(currentPlatform);
 
-  let userSettingsObject: Record<string,any> = {}
+  let userSettingsObject: Record<string, any> = {};
 
   for (const key of Object.keys(defaultSettingsObject)) {
     userSettingsObject[key] = 
-      await store.get(key) || defaultSettingsObject[key as keyof Settings]
+      await store.get(key) || defaultSettingsObject[key as keyof Settings];
   }
 
-  return userSettingsObject as Settings
+  return userSettingsObject as Settings;
 }
