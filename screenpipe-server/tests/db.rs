@@ -670,11 +670,11 @@ mod tests {
         let metadata: serde_json::Value =
             serde_json::from_str(&speaker_3.metadata).expect("Metadata should be valid JSON");
 
-        let audio_paths = metadata["audio_paths"]
+        let audio_samples = metadata["audio_samples"]
             .as_array()
-            .expect("Audio paths should be an array");
+            .expect("Audio Samples should be an array");
 
-        assert_eq!(audio_paths.len(), 3);
+        assert_eq!(audio_samples.len(), 3);
     }
 
     #[tokio::test]
