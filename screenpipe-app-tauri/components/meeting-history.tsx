@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/card";
 import { ValueOf } from "next/dist/shared/lib/constants";
 import { Checkbox } from "./ui/checkbox";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -142,6 +143,7 @@ export default function MeetingHistory() {
   const [customIdentifyPrompt, setCustomIdentifyPrompt] = useState<string>(
     "please identify the participants in this meeting transcript. provide a comma-separated list of one or two word names or roles or characteristics. if it's not possible to identify, respond with n/a."
   );
+  const { health } = useHealthCheck();
 
   useEffect(() => {
     if (posthog) {
@@ -664,6 +666,7 @@ export default function MeetingHistory() {
         <Button
           variant="ghost"
           className="pl-2"
+          disabled={!health || health.status === "error"}
           onClick={(e) => {
             e.stopPropagation();
             setIsOpen(true);

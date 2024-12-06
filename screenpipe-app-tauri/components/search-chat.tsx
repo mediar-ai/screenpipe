@@ -274,6 +274,12 @@ export function SearchChat({
   // Add new state near the top with other state declarations
   const [hideDeselected, setHideDeselected] = useState(false);
 
+  const [currentPlatform, setCurrentPlatform] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentPlatform(platform());
+  }, []);
+
   // Update content type when checkboxes change
   const handleContentTypeChange = (type: "ocr" | "audio" | "ui") => {
     const newTypes = { ...selectedTypes, [type]: !selectedTypes[type] };
@@ -1067,7 +1073,7 @@ export function SearchChat({
               </Tooltip>
             </TooltipProvider>
           </div>
-          {platform() === "macos" && (
+          {currentPlatform === "macos" && (
             <div className="flex items-center space-x-1">
               <Checkbox
                 id="ui-type"

@@ -210,6 +210,132 @@
     "os:allow-os-type",
     "core:path:default",
     "process:default",
-    "store:default"
+    "store:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "screenpipe-pipe-list",
+          "cmd": "screenpipe",
+          "args": [
+            "pipe",
+            "list",
+            "--output",
+            "json"
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "screenpipe-pipe-download",
+          "cmd": "screenpipe",
+          "args": [
+            "pipe",
+            "download",
+            {
+              "validator": "\\S+"
+            },
+            "--output",
+            "json"
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "screenpipe-pipe-enable",
+          "cmd": "screenpipe",
+          "args": [
+            "pipe",
+            "enable",
+            {
+              "validator": "\\S+"
+            }
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "screenpipe-pipe-disable",
+          "cmd": "screenpipe",
+          "args": [
+            "pipe",
+            "disable",
+            {
+              "validator": "\\S+"
+            }
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "screenpipe-pipe-update",
+          "cmd": "screenpipe",
+          "args": [
+            "pipe",
+            "update",
+            {
+              "validator": "\\S+"
+            },
+            {
+              "validator": "\\{.*\\}"
+            }
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "screenpipe-pipe-delete",
+          "cmd": "screenpipe",
+          "args": [
+            "pipe",
+            "delete",
+            {
+              "validator": "\\S+"
+            },
+            "--yes"
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "screenpipe-pipe-info",
+          "cmd": "screenpipe",
+          "args": [
+            "pipe",
+            "info",
+            {
+              "validator": "\\S+"
+            },
+            "--output",
+            "json"
+          ],
+          "sidecar": true
+        }
+      ]
+    }
   ]
 }

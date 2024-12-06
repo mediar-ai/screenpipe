@@ -143,7 +143,8 @@
           "https://ai-proxy.i-f9f.workers.dev",
           "https://*.clerk.com",
           "https://*.screenpi.pe",
-          "https://openrouter.ai"
+          "https://openrouter.ai",
+          "http://tauri.localhost"
         ],
         "font-src": [
           "https://fonts.gstatic.com",

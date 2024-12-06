@@ -185,10 +185,18 @@ const PipeStore: React.FC = () => {
 
     const dataDir = await getDataDir();
     try {
-      const response = await fetch("http://localhost:3030/pipes/list");
-      if (!response.ok) throw new Error("failed to fetch installed pipes");
+      const cmd = Command.sidecar("screenpipe", [
+        "pipe",
+        "list",
+        "--output",
+        "json",
+      ]);
+      const output = await cmd.execute();
+      const response = JSON.parse(output.stdout);
 
-      const data = (await response.json()).data;
+      if (!response.success) throw new Error("Failed to fetch installed pipes");
+
+      const data = response.data;
       for (const pipe of data) {
         const pathToReadme = await join(dataDir, "pipes", pipe.id, "README.md");
         try {
@@ -221,17 +229,19 @@ const PipeStore: React.FC = () => {
         description: "please wait...",
       });
 
-      const response = await fetch(`http://localhost:3030/pipes/download`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url }),
-      });
-      if (!response.ok) {
-        throw new Error("failed to download pipe");
+      const cmd = Command.sidecar("screenpipe", [
+        "pipe",
+        "download",
+        url,
+        "--output",
+        "json",
+      ]);
+      const output = await cmd.execute();
+      const response = JSON.parse(output.stdout);
+
+      if (!response.success) {
+        throw new Error(response.error || "Failed to download pipe");
       }
-      await response.json();
 
       toast({
         title: "pipe downloaded",
@@ -265,19 +275,12 @@ const PipeStore: React.FC = () => {
         enabled: !pipe.enabled,
       });
 
-      const endpoint = pipe.enabled ? "disable" : "enable";
-      const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ pipe_id: pipe.id }),
-      });
-
-      if (!response.ok) throw new Error(`failed to ${endpoint} pipe`);
+      const action = pipe.enabled ? "disable" : "enable";
+      const cmd = Command.sidecar("screenpipe", ["pipe", action, pipe.id]);
+      await cmd.execute();
 
       toast({
-        title: `${endpoint}ing pipe`,
+        title: `${action}ing pipe`,
         description: "this may take a few moments...",
       });
 
@@ -309,19 +312,20 @@ const PipeStore: React.FC = () => {
           description: "please wait...",
         });
 
-        const response = await fetch(`http://localhost:3030/pipes/download`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ url: newRepoUrl }),
-        });
+        const cmd = Command.sidecar("screenpipe", [
+          "pipe",
+          "download",
+          newRepoUrl,
+          "--output",
+          "json",
+        ]);
+        const output = await cmd.execute();
+        const response = JSON.parse(output.stdout);
 
-        if (!response.ok) {
-          throw new Error("failed to download pipe");
+        if (!response.success) {
+          throw new Error(response.error || "Failed to download pipe");
         }
 
-        // refresh the pipe list
         await fetchInstalledPipes();
 
         toast({
@@ -364,16 +368,15 @@ const PipeStore: React.FC = () => {
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       try {
-        const response = await fetch(`http://localhost:3030/pipes/update`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ pipe_id: selectedPipe.id, config }),
-        });
-        if (!response.ok) {
-          throw new Error("failed to update pipe config");
-        }
+        const configStr = JSON.stringify(config);
+        const cmd = Command.sidecar("screenpipe", [
+          "pipe",
+          "update",
+          selectedPipe.id,
+          configStr,
+        ]);
+        await cmd.execute();
+
         toast({
           title: "Configuration saved",
           description: "The pipe configuration has been updated.",
@@ -399,17 +402,13 @@ const PipeStore: React.FC = () => {
         description: "please wait...",
       });
 
-      const response = await fetch(`http://localhost:3030/pipes/delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ pipe_id: pipe.id }),
-      });
-
-      if (!response.ok) {
-        throw new Error("failed to delete pipe");
-      }
+      const cmd = Command.sidecar("screenpipe", [
+        "pipe",
+        "delete",
+        pipe.id,
+        "--yes",
+      ]);
+      await cmd.execute();
 
       await fetchInstalledPipes();
 
@@ -844,9 +843,9 @@ const PipeStore: React.FC = () => {
                 </Button>
               </div>
               <div className="text-sm text-muted-foreground">
-                <a 
-                  href="https://docs.screenpi.pe/docs/plugins" 
-                  target="_blank" 
+                <a
+                  href="https://docs.screenpi.pe/docs/plugins"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="hover:underline flex items-center gap-1"
                 >

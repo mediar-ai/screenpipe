@@ -162,9 +162,6 @@ export default function Header() {
                   <Search className="mr-2 h-4 w-4" />
                   <span>search</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer p-0">
-                  <MeetingHistory />
-                </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={handleShowTimeline}

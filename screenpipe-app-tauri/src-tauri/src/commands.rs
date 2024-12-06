@@ -311,7 +311,7 @@ pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Resul
     Ok(())
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct PermissionsStatus {
     screen_capture: bool,
     microphone: bool,
@@ -334,25 +334,40 @@ pub fn trigger_audio_permission() -> Result<(), String> {
         use core_foundation::{base::TCFType, string::CFString};
 
         unsafe {
+            // First try to load the AVFoundation framework
+            let framework = libc::dlopen(
+                "/System/Library/Frameworks/AVFoundation.framework/AVFoundation\0".as_ptr() as *const _,
+                libc::RTLD_LAZY,
+            );
+
+            if framework.is_null() {
+                return Err("Could not load AVFoundation framework".to_string());
+            }
+
             let av_media_type = CFString::new("avfa"); // Audio media type
 
-            // First check if we can find the function
             let func_ptr = libc::dlsym(
-                libc::RTLD_DEFAULT,
+                framework,
                 "AVCaptureDevice_requestAccessForMediaType\0".as_ptr() as *const _,
             );
 
             if func_ptr.is_null() {
+                libc::dlclose(framework);
                 return Err("Could not find AVCaptureDevice API".to_string());
             }
 
             let func: extern "C" fn(*const core_foundation::string::__CFString) -> bool =
                 std::mem::transmute(func_ptr);
 
-            // Call the function with proper error handling
             match std::panic::catch_unwind(|| func(av_media_type.as_concrete_TypeRef())) {
-                Ok(_) => Ok(()),
-                Err(_) => Err("Failed to request audio permission".to_string()),
+                Ok(_) => {
+                    libc::dlclose(framework);
+                    Ok(())
+                }
+                Err(_) => {
+                    libc::dlclose(framework);
+                    Err("Failed to request audio permission".to_string())
+                }
             }
         }
     }
@@ -371,6 +386,7 @@ pub fn check_microphone_permissions() -> bool {
         
         unsafe {
             let av_media_type = CFString::new("avfa");
+            // Use authorizationStatus instead of requesting
             let func_ptr = libc::dlsym(
                 libc::RTLD_DEFAULT,
                 "AVCaptureDevice_authorizationStatusForMediaType\0".as_ptr() as *const _,
@@ -389,7 +405,7 @@ pub fn check_microphone_permissions() -> bool {
 
     #[cfg(not(target_os = "macos"))]
     {
-        true // Windows and Linux don't require explicit microphone permissions
+        true
     }
 }
 
@@ -397,11 +413,11 @@ pub fn check_microphone_permissions() -> bool {
 pub fn check_screen_capture_permissions() -> bool {
     #[cfg(target_os = "macos")]
     {
-
         unsafe {
+            // Only check status without requesting
             let func_ptr = libc::dlsym(
                 libc::RTLD_DEFAULT,
-                "CGRequestScreenCaptureAccess\0".as_ptr() as *const _,
+                "CGPreflightScreenCaptureAccess\0".as_ptr() as *const _,
             );
             
             if !func_ptr.is_null() {
@@ -414,7 +430,7 @@ pub fn check_screen_capture_permissions() -> bool {
 
     #[cfg(not(target_os = "macos"))]
     {
-        true // Windows and Linux don't require explicit screen capture permissions
+        true
     }
 }
 
@@ -440,4 +456,27 @@ pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
         .build()
         .unwrap();
     }
+}
+
+// Add this new command
+#[tauri::command]
+pub async fn poll_permissions(duration_secs: u64) -> Result<Vec<PermissionsStatus>, String> {
+    let mut results = Vec::new();
+    let start = std::time::Instant::now();
+    let duration = std::time::Duration::from_secs(duration_secs);
+
+    while start.elapsed() < duration {
+        let status = check_all_permissions();
+        results.push(status.clone());
+
+        // If all permissions are granted, we can stop polling
+        if status.screen_capture && status.microphone && status.accessibility {
+            break;
+        }
+
+        // Sleep for 1 second between checks
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
+
+    Ok(results)
 }

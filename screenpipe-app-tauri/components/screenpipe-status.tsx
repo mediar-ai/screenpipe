@@ -443,6 +443,60 @@ const HealthStatus = ({ className }: { className?: string }) => {
     }
   };
 
+  const handlePermissionButton = async (type: 'screen' | 'audio' | 'accessibility') => {
+    const toastId = toast({
+      title: `checking ${type} permissions`,
+      description: "please wait...",
+      duration: Infinity,
+    });
+
+    try {
+      // Trigger the permission dialog
+      if (type === 'screen') {
+        await invoke("open_screen_capture_preferences");
+      } else if (type === 'audio') {
+        await invoke("trigger_audio_permission");
+      } else {
+        await invoke("open_accessibility_preferences");
+      }
+
+      // Start polling permissions for 30 seconds
+      const permissionResults = await invoke<PermissionsStatus[]>("poll_permissions", { 
+        duration_secs: 30 
+      });
+
+      // Get the last result
+      const finalStatus = permissionResults[permissionResults.length - 1];
+      
+      // Update permissions state
+      setPermissions(finalStatus);
+
+      // Update toast based on result
+      const granted = type === 'screen' ? finalStatus.screen_capture : 
+                     type === 'audio' ? finalStatus.microphone :
+                     finalStatus.accessibility;
+
+      toastId.update({
+        id: toastId.id,
+        title: granted ? "permission granted" : "permission check complete",
+        description: granted ? 
+          `${type} permission was successfully granted` : 
+          `please try granting ${type} permission again if needed`,
+        duration: 3000,
+      });
+
+    } catch (error) {
+      console.error(`failed to handle ${type} permission:`, error);
+      toastId.update({
+        id: toastId.id,
+        title: "error",
+        description: `failed to handle ${type} permission`,
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
   return (
     <>
       <Badge
@@ -514,7 +568,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <Button 
                     variant="outline" 
                     className="w-[260px] text-sm justify-start"
-                    onClick={openScreenPermissions}
+                    onClick={() => handlePermissionButton('screen')}
                   >
                     <Lock className="h-4 w-4 mr-2" />
                     grant screen permission
@@ -545,7 +599,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <Button 
                     variant="outline"
                     className="w-[260px] text-sm justify-start"
-                    onClick={() => invoke("trigger_audio_permission")}
+                    onClick={() => handlePermissionButton('audio')}
                     disabled={settings.disableAudio}
                   >
                     <Lock className="h-4 w-4 mr-2" />
@@ -575,7 +629,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     <Button 
                       variant="outline"
                       className="w-[260px] text-sm justify-start"
-                      onClick={() => invoke("open_accessibility_preferences")}
+                      onClick={() => handlePermissionButton('accessibility')}
                     >
                       <Lock className="h-4 w-4 mr-2" />
                       grant accessibility permission
