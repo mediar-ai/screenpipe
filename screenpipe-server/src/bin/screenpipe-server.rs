@@ -75,6 +75,12 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("rusty_tesseract=error".parse().unwrap())
         .add_directive("symphonia=error".parse().unwrap());
 
+    // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)    
+    // which is noise
+    #[cfg(target_os = "windows")]
+    let env_filter = env_filter
+        .add_directive("xcap::platform::impl_window=off".parse().unwrap());
+
     let env_filter = env::var("SCREENPIPE_LOG")
         .unwrap_or_default()
         .split(',')
@@ -466,7 +472,7 @@ async fn main() -> anyhow::Result<()> {
 
     println!("┌─────────────────────┬────────────────────────────────────┐");
     println!("│ setting             │ value                              │");
-    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("├───────────────────���─┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
     println!(
         "│ audio chunk duration│ {:<34} │",
