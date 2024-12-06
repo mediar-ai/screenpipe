@@ -2,7 +2,10 @@
   "identifier": "migrated",
   "description": "permissions that were migrated from v1",
   "local": true,
-  "windows": ["main", "timeline"],
+  "windows": [
+    "main",
+    "timeline"
+  ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:default",
@@ -131,7 +134,11 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": ["pipe", "purge", "-y"],
+          "args": [
+            "pipe",
+            "purge",
+            "-y"
+          ],
           "sidecar": true
         }
       ]
@@ -142,7 +149,22 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": ["setup"],
+          "args": [
+            "setup"
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "screenpipe",
+          "cmd": "screenpipe",
+          "args": [
+            "migrate"
+          ],
           "sidecar": true
         }
       ]
@@ -153,7 +175,9 @@
         {
           "name": "ollama",
           "cmd": "ollama",
-          "args": ["serve"],
+          "args": [
+            "serve"
+          ],
           "sidecar": true
         }
       ]

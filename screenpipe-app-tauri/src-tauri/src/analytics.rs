@@ -98,9 +98,9 @@ impl AnalyticsManager {
 
     async fn track_enabled_pipes(&self) -> Result<(), Box<dyn std::error::Error>> {
         let pipes_url = format!("{}/pipes/list", self.local_api_base_url);
-        let pipes: Vec<PipeInfo> = self.client.get(&pipes_url).send().await?.json().await?;
+        let response: PipeListResponse = self.client.get(&pipes_url).send().await?.json().await?;
 
-        let enabled_pipes: Vec<String> = pipes
+        let enabled_pipes: Vec<String> = response.data
             .into_iter()
             .filter(|pipe| pipe.enabled)
             .map(|pipe| pipe.id)
@@ -166,4 +166,10 @@ pub fn start_analytics(
 struct PipeInfo {
     id: String,
     enabled: bool,
+}
+
+#[derive(Deserialize)]
+struct PipeListResponse {
+    data: Vec<PipeInfo>,
+    success: bool,
 }

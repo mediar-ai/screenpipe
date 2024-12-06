@@ -15,7 +15,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
 
-use crate::db::{FrameData, OCREntry};
+use crate::db_types::{FrameData, OCREntry};
 use crate::DatabaseManager;
 
 type FrameChannel = mpsc::Sender<TimeSeriesFrame>;
@@ -44,8 +44,8 @@ pub struct AudioEntry {
     pub duration_secs: f64,
 }
 
-impl From<crate::db::AudioEntry> for AudioEntry {
-    fn from(db_entry: crate::db::AudioEntry) -> Self {
+impl From<crate::db_types::AudioEntry> for AudioEntry {
+    fn from(db_entry: crate::db_types::AudioEntry) -> Self {
         Self {
             transcription: db_entry.transcription,
             device_name: db_entry.device_name,
@@ -343,28 +343,28 @@ impl FrameDiskCache {
 
     async fn cleanup(&mut self) -> Result<()> {
         debug!("starting cache cleanup");
-        
+
         // Calculate size limit in bytes
         let max_size_bytes = (self.config.max_cache_size_gb * 1024.0 * 1024.0 * 1024.0) as u64;
-        
+
         // Calculate retention cutoff
         let retention_cutoff = Utc::now() - Duration::days(self.config.frame_retention_days as i64);
-        
+
         let mut frames_to_remove = Vec::new();
-        
+
         // Identify frames to remove based on age and total size
         for (&(timestamp, ref device_id), _entry) in &self.entries {
             if timestamp < retention_cutoff {
                 frames_to_remove.push((timestamp, device_id.clone()));
                 continue;
             }
-            
+
             // If we're still over size limit, remove oldest frames
             if self.total_size > max_size_bytes {
                 frames_to_remove.push((timestamp, device_id.clone()));
             }
         }
-        
+
         // Remove identified frames
         for (timestamp, device_id) in frames_to_remove {
             if let Some(entry) = self.entries.remove(&(timestamp, device_id)) {
@@ -374,22 +374,22 @@ impl FrameDiskCache {
                 }
             }
         }
-        
+
         // Save updated index
         self.save_index().await?;
-        
+
         debug!(
             "cleanup complete - current cache size: {:.2} GB",
             self.total_size as f64 / (1024.0 * 1024.0 * 1024.0)
         );
-        
+
         Ok(())
     }
 }
 
 async fn run_cache_manager(mut cache: FrameDiskCache, mut rx: mpsc::Receiver<CacheMessage>) {
     let mut cleanup_interval = tokio::time::interval(tokio::time::Duration::from_secs(3600)); // Hourly cleanup
-    
+
     loop {
         tokio::select! {
             Some(msg) = rx.recv() => {
@@ -873,7 +873,7 @@ impl OrderedFrameStreamer {
 
     async fn push(&mut self, frame: TimeSeriesFrame) -> Result<()> {
         let ts = frame.timestamp;
-        
+
         // Initialize current_bucket if not set
         if self.current_bucket.is_none() {
             self.current_bucket = Some(ts);
@@ -909,7 +909,8 @@ impl OrderedFrameStreamer {
         };
 
         // Find frames ready to be sent (outside current bucket)
-        let mut ready_timestamps: Vec<DateTime<Utc>> = self.buffer
+        let mut ready_timestamps: Vec<DateTime<Utc>> = self
+            .buffer
             .keys()
             .filter(|ts| !bucket_range.contains(ts))
             .copied()
@@ -937,7 +938,10 @@ impl OrderedFrameStreamer {
 
             // Update current bucket
             self.current_bucket = self.buffer.keys().next().copied();
-            debug!("flushed bucket, new current bucket: {:?}", self.current_bucket);
+            debug!(
+                "flushed bucket, new current bucket: {:?}",
+                self.current_bucket
+            );
         }
 
         Ok(())
@@ -945,10 +949,7 @@ impl OrderedFrameStreamer {
 
     async fn finish(self) -> Result<()> {
         // Flush any remaining frames in buffer
-        let mut remaining: Vec<TimeSeriesFrame> = self.buffer
-            .into_values()
-            .flatten()
-            .collect();
+        let mut remaining: Vec<TimeSeriesFrame> = self.buffer.into_values().flatten().collect();
 
         // Sort remaining frames
         if self.descending {

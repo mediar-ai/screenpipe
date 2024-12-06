@@ -20,6 +20,7 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_dialog::MessageDialogButtons;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::StoreBuilder;
@@ -34,9 +35,9 @@ use updates::start_update_check;
 use uuid::Uuid;
 mod analytics;
 mod icons;
-
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
+use tauri_plugin_dialog::DialogExt;
 
 mod commands;
 mod llm_sidecar;
@@ -52,6 +53,8 @@ pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+
+mod migrations;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -95,7 +98,10 @@ async fn main() {
                 .expect("failed to execute process");
 
             if !output.status.success() {
-                error!("failed to set OLLAMA_ORIGINS: {}", String::from_utf8_lossy(&output.stderr));
+                error!(
+                    "failed to set OLLAMA_ORIGINS: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
             } else {
                 info!("permanently set OLLAMA_ORIGINS=* for user");
             }
@@ -392,6 +398,7 @@ async fn main() {
             }
 
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
+            let sidecar_manager_clone = sidecar_manager.clone();
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
@@ -403,13 +410,13 @@ async fn main() {
 
             if !use_dev_mode && !is_first_time_user {
                 tauri::async_runtime::spawn(async move {
-                    let mut manager = sidecar_manager.lock().await;
+                    let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.spawn(&app_handle).await {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
 
                     // Spawn a background task to check and restart periodically
-                    let mut manager = sidecar_manager.lock().await;
+                    let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.check_and_restart(&app_handle).await {
                         error!("Failed to restart sidecar: {}", e);
                     }

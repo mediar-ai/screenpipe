@@ -13,12 +13,12 @@ use futures::{
 use image::ImageFormat::{self};
 
 use crate::{
-    db::TagContentType,
+    db_types::{ContentType, SearchResult, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
-    ContentType, DatabaseManager, SearchResult,
+    DatabaseManager,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use base64::prelude::*;
@@ -129,7 +129,6 @@ pub struct PaginationInfo {
 pub enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
-    FTS(FTSContent),
     UI(UiContent),
 }
 
@@ -156,19 +155,6 @@ pub struct AudioContent {
     pub tags: Vec<String>,
     pub device_name: String,
     pub device_type: DeviceType,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct FTSContent {
-    pub text_id: i64,
-    pub matched_text: String,
-    pub frame_id: i64,
-    pub timestamp: DateTime<Utc>,
-    pub app_name: String,
-    pub window_name: String,
-    pub file_path: String,
-    pub original_frame_text: Option<String>,
-    pub tags: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -318,17 +304,6 @@ pub(crate) async fn search(
                 tags: audio.tags.clone(),
                 device_name: audio.device_name.clone(),
                 device_type: audio.device_type.clone(),
-            }),
-            SearchResult::FTS(fts) => ContentItem::FTS(FTSContent {
-                text_id: fts.text_id,
-                matched_text: fts.matched_text.clone(),
-                frame_id: fts.frame_id,
-                timestamp: fts.frame_timestamp,
-                app_name: fts.app_name.clone(),
-                window_name: fts.window_name.clone(),
-                file_path: fts.video_file_path.clone(),
-                original_frame_text: fts.original_frame_text.clone(),
-                tags: fts.tags.clone(),
             }),
             SearchResult::UI(ui) => ContentItem::UI(UiContent {
                 id: ui.id,
