@@ -521,6 +521,7 @@ pub fn update_start_recording_shortcut(
     }
 
     Ok(())
+}
 
 #[derive(Debug, Serialize)]
 pub struct PermissionsStatus {
@@ -636,4 +637,5 @@ pub fn check_screen_capture_permissions() -> bool {
     {
         true // Windows and Linux don't require explicit screen capture permissions
     }
+
 }
