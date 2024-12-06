@@ -135,18 +135,27 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <Button
-          onClick={launchChrome}
-          disabled={status === 'connecting'}
-          className="flex items-center gap-2"
-        >
-          <Chrome className="w-4 h-4" />
-          {status === 'connecting'
-            ? 'launching chrome...'
-            : status === 'connected'
-            ? 'relaunch chrome'
-            : 'launch'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={launchChrome}
+            disabled={status === 'connecting'}
+            className="flex items-center gap-2"
+          >
+            <Chrome className="w-4 h-4" />
+            {status === 'connecting'
+              ? 'launching chrome...'
+              : status === 'connected'
+              ? 'relaunch chrome'
+              : 'launch'}
+          </Button>
+          <Button
+            onClick={killChrome}
+            variant="destructive"
+            className="flex items-center gap-2"
+          >
+            exit chrome
+          </Button>
+        </div>
         <span className="text-xs text-gray-500">
           it will close your chrome browser, but you can restore tabs
         </span>

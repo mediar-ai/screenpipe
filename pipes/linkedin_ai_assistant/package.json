@@ -13,6 +13,7 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-switch": "^1.1.1",
     "@screenpipe/js": "latest",
+    "@sentry/nextjs": "^8.42.0",
     "@tauri-apps/api": "^2.1.1",
     "chrome-launcher": "^1.1.2",
     "class-variance-authority": "^0.7.1",

@@ -87,7 +87,10 @@ export async function loadMessages(): Promise<MessageStore> {
 }
 
 export async function saveMessages(profileUrl: string, newMessages: Message[]) {
+    // Load both message store and state
     const messageStore = await loadMessages();
+    const state = await loadState();
+    
     const existingMessages = messageStore.messages[profileUrl]?.messages || [];
     
     // filter out duplicates based on text and timestamp
@@ -98,11 +101,20 @@ export async function saveMessages(profileUrl: string, newMessages: Message[]) {
         )
     );
 
+    // Update message store
     messageStore.messages[profileUrl] = {
         timestamp: new Date().toISOString(),
         messages: [...existingMessages, ...uniqueNewMessages]
     };
     
+    // Update state timestamp for the profile
+    const profileIndex = state.visitedProfiles.findIndex(p => p.profileUrl === profileUrl);
+    if (profileIndex !== -1) {
+        state.visitedProfiles[profileIndex].timestamp = new Date().toISOString();
+        await saveState(state);
+    }
+    
+    // Save messages
     await fs.writeFile(
         path.join(STORAGE_DIR, 'messages.json'),
         JSON.stringify(messageStore, null, 2)

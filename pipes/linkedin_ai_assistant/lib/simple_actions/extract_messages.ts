@@ -7,7 +7,9 @@ export async function getMessages(page: Page): Promise<Message[]> {
         // First check if this is a new message dialogue
         const isNewMessage = await page.evaluate(() => {
             const header = document.querySelector('.msg-overlay-bubble-header__title');
-            return header?.textContent?.trim() === 'New message';
+            const headerText = header?.textContent?.trim();
+            console.log('message dialog header:', headerText);
+            return headerText === 'New message';
         });
 
         if (isNewMessage) {
@@ -15,27 +17,30 @@ export async function getMessages(page: Page): Promise<Message[]> {
             return [];
         }
 
-        // If not a new message, proceed with existing message extraction logic
+        // Proceed with existing message extraction logic
         const rawMessages = await page.evaluate(() => {
-            // Try to get all text content from the message window for debugging
-            const messageContainer = document.querySelector('.msg-conversation-listitem');
+            // Log the entire message container
+            const messageContainer = document.querySelector('.msg-s-message-list');
             if (messageContainer) {
-                console.log('found container:', messageContainer.textContent);
+                console.log('message container HTML:', messageContainer.innerHTML);
+            } else {
+                console.log('message container not found');
             }
 
             const messageElements = document.querySelectorAll('.msg-s-message-list__event');
+            console.log(`found ${messageElements.length} message events`);
+
             return Array.from(messageElements).map(el => {
-                const msg = {
-                    text: el.querySelector('.msg-s-event-listitem__body')?.textContent?.trim() || '',
-                    timestamp: el.querySelector('time')?.textContent?.trim(),
-                    sender: el.querySelector('.t-14.t-bold')?.textContent?.trim()
-                };
+                const text = el.querySelector('.msg-s-event-listitem__body')?.textContent?.trim() || '';
+                const timestamp = el.querySelector('time')?.textContent?.trim();
+                const sender = el.querySelector('.msg-s-event-listitem__name')?.textContent?.trim();
+                const msg = { text, timestamp, sender };
                 console.log('found message:', msg);
                 return msg;
             });
         });
 
-        // standardize timestamps before returning
+        // Standardize timestamps before returning
         const messages = standardizeTimestamps(rawMessages);
         console.log('standardized messages:', JSON.stringify(messages, null, 2));
         return messages;

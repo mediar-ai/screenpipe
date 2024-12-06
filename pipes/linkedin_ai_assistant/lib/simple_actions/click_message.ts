@@ -47,7 +47,14 @@ export async function clickFirstMessageButton(page: Page) {
             throw new Error('message modal not visible after click');
         }
         
+        // wait for message dialog title to appear
+        await page.waitForSelector('.msg-overlay-bubble-header__title', { timeout: 5000 });
         console.log('message modal opened and verified');
+        
+        // wait for message list to load
+        await page.waitForSelector('.msg-s-message-list__event', { timeout: 5000 });
+        console.log('messages loaded');
+        
     } catch (e) {
         console.error('failed to click message button or open modal:', e);
         throw e;
