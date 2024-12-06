@@ -4,14 +4,6 @@ import { TextSearch, BotMessageSquare } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 
-interface OnboardingPersonalizeProps {
-  handleOptionClick: (option: string) => void;
-  handleNextSlide: () => void;
-  handlePrevSlide: () => void;
-  selectedPersonalization?: string | null;
-  className?: string;
-}
-
 const PERSONALIZATION_OPTIONS = [
   {
     key: "withoutAI",
@@ -69,16 +61,10 @@ const CardItem: React.FC<{
   );
 };
 
-const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
-  className = "",
-  selectedPersonalization = "",
-  handleOptionClick,
-  handleNextSlide,
-  handlePrevSlide,
-}) => {
+const OnboardingPersonalize = () => {
   return (
     <div
-      className={`${className} w-full flex justify-center flex-col relative`}
+      className={`w-full flex justify-center flex-col relative`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
@@ -95,18 +81,11 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
           <CardItem
             key={option.key}
             option={option}
-            isSelected={selectedPersonalization === option.key}
-            onClick={() => handleOptionClick(option.key)}
+            isSelected={false}
+            onClick={() => console.log(option.key)}
           />
         ))}
       </div>
-      <OnboardingNavigation
-        className="mt-9"
-        handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
-        prevBtnText="previous"
-        nextBtnText="next"
-      />
     </div>
   );
 };

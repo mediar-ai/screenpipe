@@ -13,45 +13,30 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import React, { useEffect, useState } from "react";
 import NotificationHandler from "@/components/notification-handler";
-import ScreenpipeInstanceChecker from "@/components/screenpipe-instance-checker";
 import Header from "@/components/header";
-import { checkForAppUpdates } from "@/components/updater";
-import UpdateNotification from "@/components/update-notification";
 import { usePostHog } from "posthog-js/react";
-import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchChat } from "@/components/search-chat";
-import { Separator } from "@/components/ui/separator";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { registerShortcuts } from "@/lib/shortcuts";
 import { ChangelogDialog } from "@/components/changelog-dialog";
-import { AppSidebar } from "@/components/app-sidebar";
-import {
-  SidebarProvider,
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
 import { useSearchHistory } from "@/lib/hooks/use-search-history";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { platform } from "@tauri-apps/plugin-os";
+import { OnboardingFlowProvider } from "@/components/onboarding/context/onboarding-context";
 
 export default function Home() {
   const { settings } = useSettings();
   const posthog = usePostHog();
-  const { toast } = useToast();
-  const { showOnboarding, setShowOnboarding } = useOnboarding();
+  const { showOnboarding } = useOnboarding();
 
   const {
     searches,
     currentSearchId,
     setCurrentSearchId,
     addSearch,
-    deleteSearch,
-    isCollapsed,
-    toggleCollapse,
   } = useSearchHistory();
 
   useEffect(() => {
@@ -99,7 +84,11 @@ export default function Home() {
         </Button>
       </div>
       <NotificationHandler />
-      {showOnboarding && <Onboarding />}
+      {showOnboarding && 
+        <OnboardingFlowProvider>
+          <Onboarding />
+        </OnboardingFlowProvider>
+      }
       <ChangelogDialog />
       <Header />
       <div className="my-4" />

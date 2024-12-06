@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import { invoke } from "@tauri-apps/api/core";
+import { useOnboardingFlow } from "./context/onboarding-context";
 
 interface OnboardingDevOrNonDevProps {
   className?: string;
@@ -18,7 +19,7 @@ interface OnboardingDevOrNonDevProps {
 
 const DEV_OPTIONS = [
   {
-    key: "nonDevMode",
+    key: "standardMode",
     icon: UserRound,
     title: "standard mode",
     description:
@@ -60,38 +61,32 @@ const CardItem: React.FC<{
   );
 };
 
-const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
-  className = "",
-  selectedPreference = "",
-  handleOptionClick,
-  handleNextSlide,
-  handlePrevSlide,
-}) => {
+const OnboardingDevOrNonDev = () => {
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
-  const [localSettings, setLocalSettings] = useState(settings);
+  const { handleNextSlide, handlePrevSlide } = useOnboardingFlow();
+  const [isDevMode, setIsDevMode] = useState(false);
 
-  const handleNextWithPreference = async (option: string) => {
+  const handleNextWithPreference = async () => {
     try {
-      if (option === "devMode") {
+      if (isDevMode) {
         await updateSettings({ devMode: true });
-        setLocalSettings({ ...localSettings, devMode: true });
         toast({
           title: "success",
           description: "dev mode enabled successfully",
           variant: "default",
         });
-      } else if (option === "nonDevMode") {
+      } else  {
         await updateSettings({ devMode: false });
-        setLocalSettings({ ...localSettings, devMode: false });
         toast({
           title: "success",
           description: "screenpipe backend is in standard mode",
           variant: "default",
         });
-        // TODO: should give better user feedback
         await invoke("spawn_screenpipe");
       }
+
+      handleNextSlide({ devMode: isDevMode })
     } catch (error: any) {
       toast({
         title: "error",
@@ -101,9 +96,17 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
     }
   };
 
+  function handleDevModeChange(mode:string) {
+    if (mode === 'devMode') {
+      setIsDevMode(!isDevMode)
+    } else {
+      setIsDevMode(false)
+    }
+  }
+
   return (
     <div
-      className={`${className} w-full flex justify-around flex-col relative`}
+      className={`w-full flex justify-around flex-col relative`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
@@ -120,8 +123,8 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
           <CardItem
             key={option.key}
             option={option}
-            isSelected={selectedPreference === option.key}
-            onClick={() => handleOptionClick(option.key)}
+            isSelected={option.key === 'devMode' ? isDevMode : !isDevMode}
+            onClick={() => handleDevModeChange(option.key)}
           />
         ))}
       </div>
@@ -132,10 +135,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
         prevBtnText="previous"
         handlePrevSlide={handlePrevSlide}
         handleNextSlide={async () => {
-          if (selectedPreference) {
-            await handleNextWithPreference(selectedPreference);
-          }
-          handleNextSlide();
+          await handleNextWithPreference();
         }}
       />
     </div>

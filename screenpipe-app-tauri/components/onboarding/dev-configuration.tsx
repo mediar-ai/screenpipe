@@ -4,13 +4,6 @@ import { open } from "@tauri-apps/plugin-shell";
 import { platform } from "@tauri-apps/plugin-os";
 import { CodeBlock } from "@/components/onboarding/single-codeblock";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
-
-interface OnboardingDevConfigProps {
-  className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
-}
 
 interface devInstructionsItemsTypes {
   label: string;
@@ -20,11 +13,7 @@ interface devInstructionsItemsTypes {
 
 type devInstructionItems = Record<string, devInstructionsItemsTypes[]>;
 
-const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
-  className = "",
-  handlePrevSlide,
-  handleNextSlide,
-}) => {
+const OnboardingDevConfig = () => {
   const [instructions, setInstructions] = useState<devInstructionsItemsTypes[]>(
     []
   );
@@ -88,7 +77,7 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
   }, []);
 
   return (
-    <div className={`${className} w-full flex justify-center flex-col`}>
+    <div className={`w-full flex justify-center flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"
@@ -146,13 +135,6 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
         note: if you use dev mode, you will have to start and maintain the
         recording process yourself in the terminal
       </p>
-      <OnboardingNavigation
-        className="mt-6"
-        handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
-        prevBtnText="previous"
-        nextBtnText="next"
-      />
     </div>
   );
 };

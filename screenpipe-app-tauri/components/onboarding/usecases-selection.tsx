@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   UserRound,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import posthog from "posthog-js";
+import { useOnboardingFlow } from "./context/onboarding-context";
 
 interface OnboardingSelectionProps {
   className?: string;
@@ -56,12 +57,8 @@ const SelectionItem: React.FC<{
   const { icon: Icon, label, description } = option;
   return (
     <div
-      className={`w-[90%] flex items-center border prose prose-sm rounded-lg m-[10px] px-4 py-[10px] hover:bg-accent cursor-pointer
-        ${
-          isSelected
-            ? "bg-primary text-primary-foreground transition duration-300 hover:bg-primary/90"
-            : ""
-        }`}
+      data-isSelected={isSelected}
+      className={"w-[90%] flex items-center border prose prose-sm rounded-lg m-[10px] px-4 py-[10px] hover:bg-accent cursor-pointer data-[isSelected=true]:bg-primary data-[isSelected=true]:text-primary-foreground data-[isSelected=true]:transition data-[isSelected=true]:duration-300 data-[isSelected=true]:hover:bg-primary/90"}
       onClick={onClick}
     >
       <span className="float-left">
@@ -74,25 +71,42 @@ const SelectionItem: React.FC<{
   );
 };
 
-const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
-  className,
-  selectedOptions,
-  handleOptionClick,
-  handleNextSlide,
-  handlePrevSlide,
-}) => {
-  const handleNext = () => {
-    // Track selected options in Posthog
-    posthog.capture("onboarding_usecases_selected", {
-      selected_options: selectedOptions,
-    });
+const OnboardingSelection = () => {
+  const { handleNextSlide, handlePrevSlide } = useOnboardingFlow();
+  const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
 
-    // Call the original handleNextSlide function
+  const removeOption = (option: string) => {
+    setSelectedOptions((prevOptions) => {
+      const updatedOptions = new Set(prevOptions);
+      updatedOptions.delete(option);
+      return updatedOptions;
+    });
+  };
+
+  const addOption = (option: string) => {
+    setSelectedOptions((prevOptions) => new Set(prevOptions).add(option));
+  };
+
+  function handleOptionClick(option: string) {
+    if (selectedOptions.has(option)){
+      removeOption(option)
+    } else {
+      addOption(option)
+    }
+  }
+
+  const handleNext = () => {
+    if (process.env.NODE_ENV !== 'development') {
+      posthog.capture("onboarding_usecases_selected", {
+        selected_options: selectedOptions,
+      });
+    }
+
     handleNextSlide();
   };
 
   return (
-    <div className={`${className} flex flex-col h-full`}>
+    <div className={`flex flex-col h-full`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"
@@ -112,7 +126,7 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
           <SelectionItem
             key={option.key}
             option={option}
-            isSelected={selectedOptions?.includes(option.key)}
+            isSelected={selectedOptions?.has(option.key)}
             onClick={() => handleOptionClick(option.key)}
           />
         ))}
