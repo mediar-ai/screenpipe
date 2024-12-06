@@ -4,9 +4,6 @@
 name: Release App
 
 on:
-  # push:
-  #   tags:
-  #     - "v*"
   workflow_dispatch:
     inputs:
       commit_hash:
@@ -159,7 +156,6 @@ jobs:
 
       - name: Install Rust
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        shell: pwsh
         run: |
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
@@ -274,7 +270,7 @@ jobs:
 
       - name: Build CLI on Windows
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        shell: pwsh
+        shell: powershell
         env:
           CARGO_PROFILE_RELEASE_STRIP: symbols
           CARGO_PROFILE_RELEASE_PANIC: abort
@@ -390,6 +386,7 @@ jobs:
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
             shell: pwsh
+            target: x86_64-pc-windows-msvc
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -415,7 +412,6 @@ jobs:
 
       - name: Install Rust
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        shell: pwsh
         run: |
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
