@@ -456,47 +456,6 @@ async fn main() {
                 });
             }
 
-            // Add migration check before starting sidecar
-            let app_handle = app.handle().clone();
-            let sidecar_manager = sidecar_manager.clone();
-            let use_dev_mode = use_dev_mode;
-            let is_first_time_user = is_first_time_user;
-
-            tauri::async_runtime::spawn(async move {
-                match migrations::handle_database_migration(&app_handle).await {
-                    Ok(true) => {
-                        info!("database migration completed successfully");
-                        // Now we can start the sidecar as normal
-                        if !use_dev_mode && !is_first_time_user {
-                            let mut manager = sidecar_manager.lock().await;
-                            if let Err(e) = manager.spawn(&app_handle).await {
-                                error!("failed to spawn initial sidecar: {}", e);
-                            }
-                        }
-                    }
-                    Ok(false) => {
-                        info!("no migration needed or user cancelled");
-                        // Start sidecar as normal
-                        if !use_dev_mode && !is_first_time_user {
-                            let mut manager = sidecar_manager.lock().await;
-                            if let Err(e) = manager.spawn(&app_handle).await {
-                                error!("failed to spawn initial sidecar: {}", e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("failed to handle migration: {}", e);
-                        // Show error dialog
-                        let _ = app_handle
-                            .dialog()
-                            .message("failed to upgrade database")
-                            .title("migration error")
-                            .buttons(MessageDialogButtons::Ok)
-                            .blocking_show();
-                    }
-                }
-            });
-
             Ok(())
         })
         .build(tauri::generate_context!())

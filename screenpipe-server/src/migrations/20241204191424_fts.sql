@@ -111,6 +111,15 @@ CREATE INDEX IF NOT EXISTS idx_frames_timestamp ON frames(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audio_transcriptions_timestamp ON audio_transcriptions(timestamp);
 CREATE INDEX IF NOT EXISTS idx_ui_monitoring_timestamp ON ui_monitoring(timestamp);
 
+-- Add indexes for UI monitoring timestamp lookups
+CREATE INDEX IF NOT EXISTS idx_ui_monitoring_timestamp ON ui_monitoring(timestamp);
+CREATE INDEX IF NOT EXISTS idx_ui_monitoring_app ON ui_monitoring(app);
+CREATE INDEX IF NOT EXISTS idx_ui_monitoring_window ON ui_monitoring(window);
+
+-- Add compound indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_ui_monitoring_app_window ON ui_monitoring(app, window);
+CREATE INDEX IF NOT EXISTS idx_ui_monitoring_timestamp_app ON ui_monitoring(timestamp, app);
+
 -- Re-enable foreign keys after migration
 PRAGMA foreign_keys = ON;
 

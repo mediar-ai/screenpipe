@@ -13,6 +13,7 @@ use sqlx::TypeInfo;
 use sqlx::ValueRef;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::info;
 
 use std::collections::BTreeMap;
 use tokio::time::{timeout, Duration as TokioDuration};
@@ -75,13 +76,15 @@ impl DatabaseManager {
 
         let db_manager = DatabaseManager { pool };
 
+        info!("running migrations");
+
         // Run migrations after establishing the connection
         if let Err(e) = Self::run_migrations(&db_manager.pool).await {
             error!("Failed to run migrations: {}", e);
             return Err(e);
         }
 
-        debug!("migrations executed successfully.");
+        info!("migrations executed successfully.");
         Ok(db_manager)
     }
 
@@ -977,19 +980,31 @@ impl DatabaseManager {
                     } else {
                         "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
                     },
-                    if query.is_empty() { "1=1" } else { "ocr_text_fts MATCH ?1" },
+                    if query.is_empty() {
+                        "1=1"
+                    } else {
+                        "ocr_text_fts MATCH ?1"
+                    },
                     if query.is_empty() {
                         "audio_transcriptions"
                     } else {
                         "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
                     },
-                    if query.is_empty() { "1=1" } else { "audio_transcriptions_fts MATCH ?1" },
+                    if query.is_empty() {
+                        "1=1"
+                    } else {
+                        "audio_transcriptions_fts MATCH ?1"
+                    },
                     if query.is_empty() {
                         "ui_monitoring"
                     } else {
                         "ui_monitoring_fts JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id"
                     },
-                    if query.is_empty() { "1=1" } else { "ui_monitoring_fts MATCH ?1" }
+                    if query.is_empty() {
+                        "1=1"
+                    } else {
+                        "ui_monitoring_fts MATCH ?1"
+                    }
                 )
             }
             _ => return Ok(0),
@@ -1387,43 +1402,28 @@ impl DatabaseManager {
 
         let sql = format!(
             r#"
-            WITH matching_frames AS (
-                SELECT
-                    frames.id as frame_id,
-                    frames.video_chunk_id,
-                    frames.offset_index,
-                    frames.timestamp as frame_timestamp,
-                    ui_monitoring.id as ui_id,
-                    ui_monitoring.text_output,
-                    ui_monitoring.timestamp as ui_timestamp,
-                    ui_monitoring.app,
-                    ui_monitoring.window,
-                    ui_monitoring.initial_traversal_at,
-                    ABS(STRFTIME('%s', frames.timestamp) - STRFTIME('%s', ui_monitoring.timestamp)) as diff_seconds
-                FROM {}
-                JOIN frames ON
-                    ABS(STRFTIME('%s', frames.timestamp) - STRFTIME('%s', ui_monitoring.timestamp)) <= 1
-                {}
-                    AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
-                    AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
-                    AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
-                    AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
-                ORDER BY ui_monitoring.timestamp DESC
-                LIMIT ?6 OFFSET ?7
-            )
             SELECT
-                ui_id as id,
-                text_output,
-                ui_timestamp as timestamp,
-                app,
-                window,
-                initial_traversal_at,
+                ui_monitoring.id,
+                ui_monitoring.text_output,
+                ui_monitoring.timestamp,
+                ui_monitoring.app,
+                ui_monitoring.window,
+                ui_monitoring.initial_traversal_at,
                 video_chunks.file_path,
-                offset_index,
-                diff_seconds
-            FROM matching_frames
-            JOIN video_chunks ON matching_frames.video_chunk_id = video_chunks.id
-            ORDER BY ui_timestamp DESC
+                frames.offset_index
+            FROM {}
+            LEFT JOIN frames ON 
+                frames.timestamp BETWEEN 
+                    datetime(ui_monitoring.timestamp, '-1 seconds') 
+                    AND datetime(ui_monitoring.timestamp, '+1 seconds')
+            LEFT JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
+            {}
+                AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
+                AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
+                AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
+                AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
+            ORDER BY ui_monitoring.timestamp DESC
+            LIMIT ?6 OFFSET ?7
             "#,
             base_sql, where_clause
         );
