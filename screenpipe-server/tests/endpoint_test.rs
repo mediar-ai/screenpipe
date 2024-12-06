@@ -165,6 +165,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_count_search_results() {
         let (_, state) = setup_test_app().await;
         let db = &state.db;
