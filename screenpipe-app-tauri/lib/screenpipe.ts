@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { encode } from "./utils";
+import { Speaker } from "./types";
 
 // Define types based on the server's schema
 export type OCRContent = {
@@ -23,6 +24,7 @@ export type AudioContent = {
   tags: string[];
   device_name: string;
   device_type: string;
+  speaker: Speaker;
 };
 
 export type FTSContent = {
