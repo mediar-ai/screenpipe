@@ -5,6 +5,7 @@ mod pipes {
     use std::future::Future;
     use std::path::PathBuf;
     use std::pin::Pin;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
 
     use reqwest::Client;
@@ -640,6 +641,57 @@ mod pipes {
         None
     }
 
+    // Add this function to handle cron state persistence
+    pub async fn get_last_cron_execution(pipe_dir: &Path, path: &str) -> Result<Option<SystemTime>> {
+        let state_file = pipe_dir.join(".cron_state.json");
+
+        if !state_file.exists() {
+            return Ok(None);
+        }
+
+        let content = tokio::fs::read_to_string(state_file).await?;
+        let state: Value = serde_json::from_str(&content)?;
+
+        if let Some(last_run) = state.get(path).and_then(|v| v.as_u64()) {
+            Ok(Some(UNIX_EPOCH + std::time::Duration::from_secs(last_run)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // Add this function to save cron execution time
+    pub async fn save_cron_execution(pipe_dir: &Path, path: &str) -> Result<()> {
+        let state_file = pipe_dir.join(".cron_state.json");
+
+        let mut state: Value = if state_file.exists() {
+            let content = tokio::fs::read_to_string(&state_file).await?;
+            serde_json::from_str(&content)?
+        } else {
+            json!({})
+        };
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        if let Some(obj) = state.as_object_mut() {
+            obj.insert(path.to_string(), json!(now));
+        }
+
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(state_file)
+            .await?;
+
+        file.write_all(serde_json::to_string_pretty(&state)?.as_bytes())
+            .await?;
+        Ok(())
+    }
+
+    // Update the run_cron_schedule function
     async fn run_cron_schedule(
         pipe: &str,
         base_url: &str,
@@ -662,9 +714,30 @@ mod pipes {
             HeaderValue::from_str(&format!("Bearer {}", secret)).unwrap(),
         );
 
+        // Get pipe directory for state persistence
+        let screenpipe_dir = std::env::var("SCREENPIPE_DIR").expect("SCREENPIPE_DIR not set");
+        let pipe_dir = PathBuf::from(screenpipe_dir).join("pipes").join(pipe);
+
+        // Get last execution time
+        let last_run = match get_last_cron_execution(&pipe_dir, path).await {
+            Ok(time) => time,
+            Err(e) => {
+                error!("failed to get last cron execution: {}", e);
+                None
+            }
+        };
+
         loop {
             let now = chrono::Utc::now();
-            let next = match schedule.after(&now).next() {
+            let next = if let Some(last) = last_run {
+                // Get next occurrence after the last execution
+                let last_chrono = chrono::DateTime::<chrono::Utc>::from(last);
+                schedule.after(&last_chrono).next()
+            } else {
+                schedule.after(&now).next()
+            };
+
+            let next = match next {
                 Some(next) => next,
                 None => continue,
             };
@@ -683,7 +756,12 @@ mod pipes {
                 .await
             {
                 Ok(res) => {
-                    if !res.status().is_success() {
+                    if res.status().is_success() {
+                        // Save successful execution time
+                        if let Err(e) = save_cron_execution(&pipe_dir, path).await {
+                            error!("failed to save cron execution time: {}", e);
+                        }
+                    } else {
                         error!("cron job failed with status: {}", res.status());
                         if let Ok(text) = res.text().await {
                             error!("error response: {}", text);
