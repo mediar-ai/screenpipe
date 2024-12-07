@@ -1016,6 +1016,11 @@ export function SearchChat({
                 {new Date(item.content.timestamp).toLocaleString()}{" "}
                 {/* Display local time */}
               </p>
+              {item.type === "Audio" && item.content.speaker?.name && (
+                <p className="text-xs text-gray-400">
+                  {item.content.speaker.name}
+                </p>
+              )}
               {item.type === "OCR" && item.content.app_name && (
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-muted-foreground">app:</span>
