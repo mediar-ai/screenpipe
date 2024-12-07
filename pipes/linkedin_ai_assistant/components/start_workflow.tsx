@@ -51,7 +51,10 @@ export function StartWorkflow() {
       const response = await fetch('/api/workflow/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode })
+        body: JSON.stringify({ 
+          mode,
+          allowTruncate: true
+        })
       });
       
       if (!response.ok) {
