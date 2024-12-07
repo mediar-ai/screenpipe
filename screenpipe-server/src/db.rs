@@ -89,17 +89,11 @@ impl DatabaseManager {
     }
 
     async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-        match sqlx::migrate!("./src/migrations").run(pool).await {
+        let mut migrator = sqlx::migrate!("./src/migrations");
+        migrator.set_ignore_missing(true);
+        match migrator.run(pool).await {
             Ok(_) => Ok(()),
-            Err(e) => {
-                // Check if it's a version mismatch for our specific migration
-                if e.to_string().contains("20241110041538") {
-                    debug!("ignoring known migration mismatch for 20241110041538");
-                    Ok(())
-                } else {
-                    Err(e.into())
-                }
-            }
+            Err(e) => Err(e.into()),
         }
     }
 
