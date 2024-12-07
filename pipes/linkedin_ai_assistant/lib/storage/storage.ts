@@ -198,3 +198,74 @@ export async function updateMultipleProfileVisits(state: State, newVisits: Profi
     console.log('profile queue update:', summary);
     return summary;
 } 
+
+export interface Connection {
+    profileUrl: string;
+    status: 'pending' | 'accepted' | 'declined';
+    timestamp: string;
+}
+
+interface ConnectionsStore {
+    nextHarvestTime?: string;
+    connections: Record<string, Connection>;
+    isHarvesting?: boolean;
+    connectionsSent: number;
+}
+
+export async function loadConnections(): Promise<ConnectionsStore> {
+    await ensureStorageDir();
+    try {
+        const data = await fs.readFile(path.join(STORAGE_DIR, 'connections.json'), 'utf-8');
+        return JSON.parse(data);
+    } catch {
+        return {
+            connections: {},
+            connectionsSent: 0,
+            isHarvesting: false,
+        };
+    }
+}
+
+export async function saveConnection(connection: Connection) {
+    const connectionsStore = await loadConnections();
+    connectionsStore.connections[connection.profileUrl] = connection;
+
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`saved connection to ${connection.profileUrl} with status ${connection.status}`);
+}
+
+export async function saveNextHarvestTime(timestamp: string) {
+    const connectionsStore = await loadConnections();
+    connectionsStore.nextHarvestTime = timestamp;
+    
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`saved next harvest time: ${timestamp}`);
+}
+
+export async function saveHarvestingState(isHarvesting: boolean) {
+    const connectionsStore = await loadConnections();
+    connectionsStore.isHarvesting = isHarvesting;
+    
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`saved harvesting state: ${isHarvesting}`);
+}
+
+export async function updateConnectionsSent(connectionsSent: number) {
+    const connectionsStore = await loadConnections();
+    connectionsStore.connectionsSent = connectionsSent;
+
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`Updated connections sent count to ${connectionsSent}`);
+} 
