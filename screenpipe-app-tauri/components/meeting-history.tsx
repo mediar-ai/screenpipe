@@ -174,7 +174,6 @@ export default function MeetingHistory({ className }: { className?: string }) {
     try {
       const storedMeetings = (await getItem("meetings")) || [];
       setMeetings(storedMeetings);
-
       await fetchMeetings();
     } catch (err) {
       setError("failed to load meetings");
@@ -666,7 +665,11 @@ export default function MeetingHistory({ className }: { className?: string }) {
       <DialogTrigger asChild>
         <DropdownMenuItem
           className="cursor-pointer"
-          onClick={() => setIsOpen(true)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsOpen(true);
+          }}
           disabled={!health || health.status === "error"}
         >
           <Calendar className="mr-2 h-4 w-4" />
@@ -744,16 +747,16 @@ export default function MeetingHistory({ className }: { className?: string }) {
           </DialogTitle>
         </DialogHeader>
         <DialogDescription className="mb-4">
-          <p className="text-sm text-gray-600">
+          <span className="block text-sm text-gray-600">
             this page provides transcriptions and summaries of your daily
             meetings. it uses your ai settings to generate summaries. note:
             phrases like &quot;thank you&quot; or &quot;you know&quot; might be
             transcription errors. for better accuracy, consider using deepgram
             as the engine or adjust your prompt to ignore these.
-          </p>
-          <p className="text-sm text-gray-600 mt-2">
+          </span>
+          <span className="block text-sm text-gray-600 mt-2">
             <strong>make sure to setup your ai settings</strong>
-          </p>
+          </span>
         </DialogDescription>
         <div className="flex-grow overflow-auto">
           {loading ? (

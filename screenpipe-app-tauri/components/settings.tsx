@@ -546,9 +546,18 @@ export function Settings({ className }: { className?: string }) {
   };
 
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) {
+          window.location.reload();
+        }
+      }}
+    >
       <DialogTrigger asChild>
-        <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={(e) => e.preventDefault()}
+        >
           <div className="flex items-center">
             <Settings2 className="mr-2 h-4 w-4" />
             <span>settings</span>

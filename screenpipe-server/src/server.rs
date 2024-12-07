@@ -488,7 +488,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
     let audio_active = now - last_capture < 5; // Consider active if captured in last 5 seconds
 
-    let (last_frame, _, last_ui) = match state.db.get_latest_timestamps().await {
+    let (last_frame, audio, last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
         Err(e) => {
             error!("failed to get latest timestamps: {}", e);
@@ -563,18 +563,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "unhealthy",
             format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
                     unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
-            Some("if you're experiencing issues, please try the following steps:\n\
-                  1. restart the application.\n\
-                  2. if using a desktop app, reset your screenpipe os audio/screen recording permissions.\n\
-                  3. if the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
-                  4. last, here are some faq to help you troubleshoot: https://github.com/mediar-ai/screenpipe/blob/main/content/docs/notes.md".to_string())
+            Some("if you're experiencing issues, please try contacting us on discord".to_string())
         )
     };
 
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
         last_frame_timestamp: last_frame,
-        last_audio_timestamp: None,
+        last_audio_timestamp: audio,
         last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status: audio_status.to_string(),
