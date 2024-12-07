@@ -18,14 +18,13 @@ async function initStore() {
   const dataDir = await localDataDir();
   const storePath = await join(dataDir, "screenpipe", "store.bin");
   store = await createStore(storePath);
-  const entries = await store.entries();
-  console.log("store", entries);
 }
 
 async function checkSubscription(email: string): Promise<boolean> {
   try {
     const isDev = window.location.href.includes("localhost");
-    const baseUrl = isDev ? "http://localhost:3001" : "https://screenpi.pe";
+    // const baseUrl = isDev ? "http://localhost:3001" : "https://screenpi.pe";
+    const baseUrl = "https://screenpi.pe";
 
     const response = await fetch(`${baseUrl}/api/stripe-loom`, {
       method: "POST",
@@ -42,7 +41,6 @@ async function checkSubscription(email: string): Promise<boolean> {
     }
 
     const data = await response.json();
-    console.log("subscription data:", data);
     return data.hasActiveSubscription;
   } catch (error) {
     console.error("failed to check subscription:", error);

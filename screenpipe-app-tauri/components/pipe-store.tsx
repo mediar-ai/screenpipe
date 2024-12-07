@@ -250,9 +250,11 @@ const PipeStore: React.FC = () => {
     }
   };
 
+
   const handleToggleEnabled = async (pipe: Pipe) => {
     if (pipe.id === "pipe-for-loom" && !pipe.enabled) {
       const hasLoomSubscription = await checkLoomSubscription();
+      setHasLoomSubscription(hasLoomSubscription);
       if (!hasLoomSubscription) {
         toast({
           title: "subscription required",
@@ -599,7 +601,6 @@ const PipeStore: React.FC = () => {
                     <h3 className="text-lg font-medium">pipe ui</h3>
                     <Button
                       variant="outline"
-                      size="icon"
                       onClick={() =>
                         openUrl(`http://localhost:${selectedPipe.config!.port}`)
                       }

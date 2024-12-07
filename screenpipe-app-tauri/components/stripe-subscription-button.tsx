@@ -14,8 +14,21 @@ interface StripeSubscriptionButtonProps {
 export function StripeSubscriptionButton({
   onSubscriptionComplete,
 }: StripeSubscriptionButtonProps) {
-  const { isSignedIn, user } = useUser();
+  const { isSignedIn, user, checkLoomSubscription } = useUser();
   const [isSubscribed, setIsSubscribed] = useState(false);
+
+  useEffect(() => {
+    const checkSubscription = async () => {
+      if (user) {
+        const hasSubscription = await checkLoomSubscription();
+        setIsSubscribed(hasSubscription);
+        if (hasSubscription && onSubscriptionComplete) {
+          onSubscriptionComplete();
+        }
+      }
+    };
+    checkSubscription();
+  }, [user]);
 
   const handleSubscribe = async () => {
     posthog.capture("subscribe_button_clicked", {
@@ -53,14 +66,17 @@ export function StripeSubscriptionButton({
     }
   };
 
+  if (isSubscribed) {
+    return null;
+  }
+
   return (
     <Button
       onClick={handleSubscribe}
       variant="outline"
       className="h-8 min-w-[100px]"
-      disabled={isSubscribed}
     >
-      {isSubscribed ? "subscribed" : "subscribe - $10/month"}
+      subscribe - $10/month
     </Button>
   );
 }

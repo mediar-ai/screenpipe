@@ -280,28 +280,16 @@ jobs:
             throw "LLVM installation failed"
           }
 
-      - name: Run pre_build.js on Windows
+      - name: Install wget on Windows
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         shell: powershell
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: |
-          # Download wget directly instead of using Chocolatey
-          $wgetUrl = "https://eternallybored.org/misc/wget/1.21.4/64/wget.exe"
-          $wgetPath = "C:\Windows\System32\wget.exe"
-          
-          # Create a web client
-          $webClient = New-Object System.Net.WebClient
-          
-          # Download wget
-          $webClient.DownloadFile($wgetUrl, $wgetPath)
-          
-          # Now run the pre_build script
-          bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./screenpipe-app-tauri
+          # Install wget using winget
+          winget install --silent GnuWin32.Wget
 
-      - name: Run pre_build.js on non-Windows
-        if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
+      - name: Run pre_build.js
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
