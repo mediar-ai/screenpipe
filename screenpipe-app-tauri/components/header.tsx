@@ -25,6 +25,7 @@ import {
   Folder,
   Search,
   Book,
+  User,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -147,8 +148,8 @@ export default function Header() {
             <Button
               variant="ghost"
               size="icon"
-              className="cursor-pointer"
               onClick={() => setShowInbox(!showInbox)}
+              className="cursor-pointer h-8 w-8 p-0"
             >
               <Bell className="h-4 w-4" />
               <span className="sr-only">notifications</span>
@@ -158,24 +159,9 @@ export default function Header() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="cursor-pointer rounded-full h-8 w-8 p-0"
+                  className="cursor-pointer h-8 w-8 p-0"
                 >
-                  <Avatar>
-                    <AvatarImage
-                      src={user?.photoURL || "/avatar-placeholder.png"}
-                      alt={user?.displayName || "user avatar"}
-                    />
-                    <AvatarFallback>
-                      {user?.displayName
-                        ? user.displayName
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .toUpperCase()
-                            .slice(0, 2)
-                        : "SP"}
-                    </AvatarFallback>
-                  </Avatar>
+                  <User className="h-4 w-4" />
                   <span className="sr-only">user menu</span>
                 </Button>
               </DropdownMenuTrigger>

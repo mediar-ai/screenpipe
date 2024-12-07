@@ -280,7 +280,24 @@ jobs:
             throw "LLVM installation failed"
           }
 
-      - name: Run pre_build.js
+      - name: Run pre_build.js on Windows
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        env:
+          SKIP_SCREENPIPE_SETUP: true
+        run: |
+          # Install wget using Chocolatey
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          choco install -y wget
+          
+          # Now run the pre_build script
+          bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        working-directory: ./screenpipe-app-tauri
+
+      - name: Run pre_build.js on non-Windows
+        if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
