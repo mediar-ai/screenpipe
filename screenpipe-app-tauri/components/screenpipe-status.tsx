@@ -55,9 +55,9 @@ import { cn } from "@/lib/utils";
 import { Check, X } from "lucide-react";
 
 type PermissionsStatus = {
-  screen_capture: boolean;
-  microphone: boolean;
-  accessibility: boolean;
+  screenRecording: string;
+  microphone: string;
+  accessibility: string;
 };
 
 const HealthStatus = ({ className }: { className?: string }) => {
@@ -76,7 +76,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [isTroubleshootOpen, setIsTroubleshootOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [isDialogLoading, setIsDialogLoading] = useState(false);
-  const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
+  const [permissions, setPermissions] = useState<PermissionsStatus | null>(
+    null
+  );
 
   useEffect(() => {
     setIsMac(platform() === "macos");
@@ -97,9 +99,15 @@ const HealthStatus = ({ className }: { className?: string }) => {
   useEffect(() => {
     const checkPermissions = async () => {
       try {
-        const perms = await invoke<PermissionsStatus>("check_all_permissions");
-        console.log("perms", perms);
-        setPermissions(perms);
+        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
+          initialCheck: true
+        });
+        
+        setPermissions({
+          screenRecording: perms.screenRecording,
+          microphone: perms.microphone,
+          accessibility: perms.accessibility,
+        });
       } catch (error) {
         console.error("Failed to check permissions:", error);
       }
@@ -443,7 +451,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
     }
   };
 
-  const handlePermissionButton = async (type: 'screen' | 'audio' | 'accessibility') => {
+  const handlePermissionButton = async (type: "screen" | "audio" | "accessibility") => {
     const toastId = toast({
       title: `checking ${type} permissions`,
       description: "please wait...",
@@ -451,40 +459,40 @@ const HealthStatus = ({ className }: { className?: string }) => {
     });
 
     try {
-      // Trigger the permission dialog
-      if (type === 'screen') {
-        await invoke("open_screen_capture_preferences");
-      } else if (type === 'audio') {
-        await invoke("trigger_audio_permission");
-      } else {
-        await invoke("open_accessibility_preferences");
-      }
+      const permissionType = type === "screen" 
+        ? "screenRecording" 
+        : type === "audio" 
+        ? "microphone" 
+        : "accessibility";
 
-      // Start polling permissions for 30 seconds
-      const permissionResults = await invoke<PermissionsStatus[]>("poll_permissions", { 
-        duration_secs: 30 
+      await invoke("request_permission", {
+        permission: permissionType
       });
 
-      // Get the last result
-      const finalStatus = permissionResults[permissionResults.length - 1];
-      
-      // Update permissions state
-      setPermissions(finalStatus);
+      const perms = await invoke<PermissionsStatus>("do_permissions_check", {
+        initialCheck: false
+      });
 
-      // Update toast based on result
-      const granted = type === 'screen' ? finalStatus.screen_capture : 
-                     type === 'audio' ? finalStatus.microphone :
-                     finalStatus.accessibility;
+      setPermissions({
+        screenRecording: perms.screenRecording,
+        microphone: perms.microphone,
+        accessibility: perms.accessibility
+      });
+
+      const granted = type === "screen" 
+        ? perms.screenRecording === "Granted"
+        : type === "audio"
+        ? perms.microphone === "Granted"
+        : perms.accessibility === "Granted";
 
       toastId.update({
         id: toastId.id,
         title: granted ? "permission granted" : "permission check complete",
-        description: granted ? 
-          `${type} permission was successfully granted` : 
-          `please try granting ${type} permission again if needed`,
+        description: granted
+          ? `${type} permission was successfully granted`
+          : `please try granting ${type} permission again if needed`,
         duration: 3000,
       });
-
     } catch (error) {
       console.error(`failed to handle ${type} permission:`, error);
       toastId.update({
@@ -551,24 +559,33 @@ const HealthStatus = ({ className }: { className?: string }) => {
               {/* Screen Recording Status */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${health.frame_status === "ok" ? "bg-green-500" : "bg-red-500"}`} />
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      health.frame_status === "ok"
+                        ? "bg-green-500"
+                        : "bg-red-500"
+                    }`}
+                  />
                   <span className="text-sm">screen recording</span>
                   <span className="text-sm text-muted-foreground">
-                    status: {health.frame_status},
-                    last update: {formatTimestamp(health.last_frame_timestamp)}
+                    status: {health.frame_status}, last update:{" "}
+                    {formatTimestamp(health.last_frame_timestamp)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   {permissions && (
-                    <span>{permissions.screen_capture ? 
-                      <Check className="h-4 w-4 text-green-500" /> : 
-                      <X className="h-4 w-4 text-red-500" />}
+                    <span>
+                      {permissions.screenRecording ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <X className="h-4 w-4 text-red-500" />
+                      )}
                     </span>
                   )}
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-[260px] text-sm justify-start"
-                    onClick={() => handlePermissionButton('screen')}
+                    onClick={() => handlePermissionButton("screen")}
                   >
                     <Lock className="h-4 w-4 mr-2" />
                     grant screen permission
@@ -579,27 +596,39 @@ const HealthStatus = ({ className }: { className?: string }) => {
               {/* Audio Recording Status */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    settings.disableAudio ? "bg-gray-400" : 
-                    health.audio_status === "ok" ? "bg-green-500" : "bg-red-500"
-                  }`} />
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      settings.disableAudio
+                        ? "bg-gray-400"
+                        : health.audio_status === "ok"
+                        ? "bg-green-500"
+                        : "bg-red-500"
+                    }`}
+                  />
                   <span className="text-sm">audio recording</span>
                   <span className="text-sm text-muted-foreground">
-                    status: {settings.disableAudio ? "turned off" : health.audio_status},
-                    last update: {settings.disableAudio ? "n/a" : formatTimestamp(health.last_audio_timestamp)}
+                    status:{" "}
+                    {settings.disableAudio ? "turned off" : health.audio_status}
+                    , last update:{" "}
+                    {settings.disableAudio
+                      ? "n/a"
+                      : formatTimestamp(health.last_audio_timestamp)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   {permissions && (
-                    <span>{permissions.microphone ? 
-                      <Check className="h-4 w-4 text-green-500" /> : 
-                      <X className="h-4 w-4 text-red-500" />}
+                    <span>
+                      {permissions.microphone ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <X className="h-4 w-4 text-red-500" />
+                      )}
                     </span>
                   )}
-                  <Button 
+                  <Button
                     variant="outline"
                     className="w-[260px] text-sm justify-start"
-                    onClick={() => handlePermissionButton('audio')}
+                    onClick={() => handlePermissionButton("audio")}
                     disabled={settings.disableAudio}
                   >
                     <Lock className="h-4 w-4 mr-2" />
@@ -612,24 +641,33 @@ const HealthStatus = ({ className }: { className?: string }) => {
               {settings.enableUiMonitoring && (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${health.ui_status === "ok" ? "bg-green-500" : "bg-red-500"}`} />
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        health.ui_status === "ok"
+                          ? "bg-green-500"
+                          : "bg-red-500"
+                      }`}
+                    />
                     <span className="text-sm">ui monitoring</span>
                     <span className="text-sm text-muted-foreground">
-                      status: {health.ui_status},
-                      last update: {formatTimestamp(health.last_ui_timestamp)}
+                      status: {health.ui_status}, last update:{" "}
+                      {formatTimestamp(health.last_ui_timestamp)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     {permissions && (
-                      <span>{permissions.accessibility ? 
-                        <Check className="h-4 w-4 text-green-500" /> : 
-                        <X className="h-4 w-4 text-red-500" />}
+                      <span>
+                        {permissions.accessibility ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <X className="h-4 w-4 text-red-500" />
+                        )}
                       </span>
                     )}
-                    <Button 
+                    <Button
                       variant="outline"
                       className="w-[260px] text-sm justify-start"
-                      onClick={() => handlePermissionButton('accessibility')}
+                      onClick={() => handlePermissionButton("accessibility")}
                     >
                       <Lock className="h-4 w-4 mr-2" />
                       grant accessibility permission

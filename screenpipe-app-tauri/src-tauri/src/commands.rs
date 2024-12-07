@@ -22,28 +22,6 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
     }
 }
 
-#[cfg(target_os = "macos")]
-use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
-
-#[tauri::command]
-pub fn open_screen_capture_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-        .spawn()
-        .expect("failed to open system preferences");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn open_mic_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-        .spawn()
-        .expect("failed to open system preferences");
-}
-
 #[tauri::command]
 pub async fn load_pipe_config(
     app_handle: tauri::AppHandle<tauri::Wry>,
@@ -227,44 +205,9 @@ pub fn update_show_screenpipe_shortcut(
     Ok(())
 }
 
-#[tauri::command]
-pub fn open_accessibility_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        .spawn()
-        .expect("failed to open system preferences");
-}
 
-#[tauri::command]
-pub fn check_accessibility_permissions() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        // Check if the app has accessibility permissions
-        let options = {
-            let key = CFString::new("AXTrustedCheckOptionPrompt");
-            let value = CFBoolean::false_value();
-            let pairs = &[(key, value)];
-            core_foundation::dictionary::CFDictionary::from_CFType_pairs(pairs)
-        };
 
-        let trusted = unsafe {
-            let accessibility = CFString::new("AXIsProcessTrustedWithOptions");
-            let func: extern "C" fn(*const core_foundation::dictionary::CFDictionary) -> bool =
-                std::mem::transmute(libc::dlsym(
-                    libc::RTLD_DEFAULT,
-                    accessibility.to_string().as_ptr() as *const _,
-                ));
-            func(options.as_concrete_TypeRef() as *const _)
-        };
 
-        return trusted;
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        return true;
-    }
-}
 
 // Add these new structs
 #[derive(Debug, Serialize)]
@@ -311,128 +254,12 @@ pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Resul
     Ok(())
 }
 
-#[derive(Debug, Serialize, Clone)]
-pub struct PermissionsStatus {
-    screen_capture: bool,
-    microphone: bool,
-    accessibility: bool,
-}
 
-#[tauri::command]
-pub fn check_all_permissions() -> PermissionsStatus {
-    PermissionsStatus {
-        screen_capture: check_screen_capture_permissions(),
-        microphone: check_microphone_permissions(),
-        accessibility: check_accessibility_permissions(),
-    }
-}
 
-#[tauri::command]
-pub fn trigger_audio_permission() -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        use core_foundation::{base::TCFType, string::CFString};
 
-        unsafe {
-            // First try to load the AVFoundation framework
-            let framework = libc::dlopen(
-                "/System/Library/Frameworks/AVFoundation.framework/AVFoundation\0".as_ptr() as *const _,
-                libc::RTLD_LAZY,
-            );
 
-            if framework.is_null() {
-                return Err("Could not load AVFoundation framework".to_string());
-            }
 
-            let av_media_type = CFString::new("avfa"); // Audio media type
 
-            let func_ptr = libc::dlsym(
-                framework,
-                "AVCaptureDevice_requestAccessForMediaType\0".as_ptr() as *const _,
-            );
-
-            if func_ptr.is_null() {
-                libc::dlclose(framework);
-                return Err("Could not find AVCaptureDevice API".to_string());
-            }
-
-            let func: extern "C" fn(*const core_foundation::string::__CFString) -> bool =
-                std::mem::transmute(func_ptr);
-
-            match std::panic::catch_unwind(|| func(av_media_type.as_concrete_TypeRef())) {
-                Ok(_) => {
-                    libc::dlclose(framework);
-                    Ok(())
-                }
-                Err(_) => {
-                    libc::dlclose(framework);
-                    Err("Failed to request audio permission".to_string())
-                }
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok(()) // Windows and Linux don't require explicit microphone permissions
-    }
-}
-
-#[tauri::command]
-pub fn check_microphone_permissions() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        use core_foundation::{base::TCFType, string::CFString};
-        
-        unsafe {
-            let av_media_type = CFString::new("avfa");
-            // Use authorizationStatus instead of requesting
-            let func_ptr = libc::dlsym(
-                libc::RTLD_DEFAULT,
-                "AVCaptureDevice_authorizationStatusForMediaType\0".as_ptr() as *const _,
-            );
-            
-            if !func_ptr.is_null() {
-                let func: extern "C" fn(*const core_foundation::string::__CFString) -> i32 =
-                    std::mem::transmute(func_ptr);
-                let status = func(av_media_type.as_concrete_TypeRef());
-                // 3 = AVAuthorizationStatusAuthorized
-                return status == 3;
-            }
-            false
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        true
-    }
-}
-
-#[tauri::command]
-pub fn check_screen_capture_permissions() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        unsafe {
-            // Only check status without requesting
-            let func_ptr = libc::dlsym(
-                libc::RTLD_DEFAULT,
-                "CGPreflightScreenCaptureAccess\0".as_ptr() as *const _,
-            );
-            
-            if !func_ptr.is_null() {
-                let func: extern "C" fn() -> bool = std::mem::transmute(func_ptr);
-                return func();
-            }
-            false
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        true
-    }
-}
 
 #[tauri::command]
 pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -458,25 +285,3 @@ pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
     }
 }
 
-// Add this new command
-#[tauri::command]
-pub async fn poll_permissions(duration_secs: u64) -> Result<Vec<PermissionsStatus>, String> {
-    let mut results = Vec::new();
-    let start = std::time::Instant::now();
-    let duration = std::time::Duration::from_secs(duration_secs);
-
-    while start.elapsed() < duration {
-        let status = check_all_permissions();
-        results.push(status.clone());
-
-        // If all permissions are granted, we can stop polling
-        if status.screen_capture && status.microphone && status.accessibility {
-            break;
-        }
-
-        // Sleep for 1 second between checks
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    }
-
-    Ok(results)
-}

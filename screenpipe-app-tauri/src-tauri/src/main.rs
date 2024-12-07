@@ -42,15 +42,18 @@ mod llm_sidecar;
 mod server;
 mod sidecar;
 mod updates;
-pub use commands::check_accessibility_permissions;
-pub use commands::open_accessibility_preferences;
-pub use commands::open_screen_capture_preferences;
+mod permissions;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+
+
+pub use permissions::open_permission_settings;
+pub use permissions::request_permission;
+pub use permissions::do_permissions_check;
 
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
@@ -148,7 +151,9 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             kill_all_sreenpipes,
-            open_screen_capture_preferences,
+            permissions::open_permission_settings,
+            permissions::request_permission,
+            permissions::do_permissions_check,
             load_pipe_config,
             save_pipe_config,
             reset_all_pipes,
@@ -158,15 +163,9 @@ async fn main() {
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
             commands::show_timeline,
-            commands::open_accessibility_preferences,
-            commands::check_accessibility_permissions,
             icons::get_app_icon,
             commands::open_auth_window,
-            commands::check_all_permissions,
-            commands::trigger_audio_permission,
-            commands::check_microphone_permissions,
             commands::show_search,
-            commands::poll_permissions,
         ])
         .setup(|app| {
             // Logging setup

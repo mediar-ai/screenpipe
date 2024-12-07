@@ -580,7 +580,7 @@ const PipeStore: React.FC = () => {
           </div>
 
           <main className="flex-1 overflow-y-auto">
-            <div className="max-w-3xl mx-auto p-8">
+            <div className="max-w-3xl mx-auto p-8 ">
               {selectedPipe.enabled && selectedPipe?.config?.port && (
                 <div>
                   <div className="flex justify-between items-center mb-4">
@@ -687,16 +687,15 @@ const PipeStore: React.FC = () => {
     }
   };
 
-  console.log("selectedPipe", selectedPipe);
 
   if (selectedPipe) {
     return renderPipeDetails();
   }
 
   return (
-    <div className="overflow-hidden flex flex-col space-y-4">
-      <div className="flex flex-col flex-1 overflow-hidden space-y-4 p-4">
-        <div className="space-y-4">
+    <div className="overflow-hidden flex flex-col space-y-4 min-w-[800px]">
+      <div className="flex flex-col flex-1 overflow-hidden space-y-4 p-4 min-w-[800px]">
+        <div className="space-y-4 min-w-[800px]">
           <div className="flex flex-col  gap-4  w-[50%]">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -734,13 +733,9 @@ const PipeStore: React.FC = () => {
               </TooltipProvider>
             </div>
           </div>
-
-          <div className="text-sm text-gray-500">
-            showing {filteredPipes.length} pipes:
-          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6">
+        <div className="flex-1 overflow-y-auto ">
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               {filteredPipes.map((pipe) => (

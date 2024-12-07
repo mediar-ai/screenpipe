@@ -6,15 +6,11 @@ interface UserData {
   token: string;
   email: string;
   user_id: string;
+  displayName: string;
+  photoURL: string;
 }
 
-interface UserState {
-  isSignedIn: boolean;
-  isLoading: boolean;
-  error: string | null;
-  user: UserData | null;
-  checkLoomSubscription: () => Promise<boolean>;
-}
+
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
 

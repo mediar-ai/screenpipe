@@ -68,8 +68,8 @@ import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
-import { open } from '@tauri-apps/plugin-dialog';
-import { exists } from '@tauri-apps/plugin-fs';
+import { open } from "@tauri-apps/plugin-dialog";
+import { exists } from "@tauri-apps/plugin-fs";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
@@ -99,7 +99,9 @@ export function RecordingSettings({
   const [openMonitors, setOpenMonitors] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
   const [dataDirInputVisible, setDataDirInputVisible] = React.useState(false);
-  const [clickTimeout, setClickTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [clickTimeout, setClickTimeout] = useState<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const [windowsForIgnore, setWindowsForIgnore] = useState("");
   const [windowsForInclude, setWindowsForInclude] = useState("");
 
@@ -448,11 +450,11 @@ export function RecordingSettings({
       // Double Click
       clearTimeout(clickTimeout);
       setClickTimeout(null);
-      setDataDirInputVisible(true)
+      setDataDirInputVisible(true);
     } else {
       const timeout = setTimeout(() => {
         // Single Click
-        selectDataDir()
+        selectDataDir();
         setClickTimeout(null);
       }, 250);
       setClickTimeout(timeout);
@@ -460,19 +462,19 @@ export function RecordingSettings({
 
     async function selectDataDir() {
       try {
-        const dataDir = await getDataDir()
+        const dataDir = await getDataDir();
 
         const selected = await open({
           directory: true,
           multiple: false,
-          defaultPath: dataDir
+          defaultPath: dataDir,
         });
         // TODO: check permission of selected dir for server to write into
 
         if (selected) {
-          setLocalSettings({ ...localSettings, dataDir: selected })
+          setLocalSettings({ ...localSettings, dataDir: selected });
         } else {
-          console.log('canceled');
+          console.log("canceled");
         }
       } catch (error) {
         console.error("failed to change data directory:", error);
@@ -484,33 +486,36 @@ export function RecordingSettings({
         });
       }
     }
-  }
+  };
 
-  const handleDataDirInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDataDirInputChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const newValue = e.target.value;
     setLocalSettings({ ...localSettings, dataDir: newValue });
-  }
+  };
 
   const handleDataDirInputBlur = () => {
-    console.log('wcw blur');
-    setDataDirInputVisible(false)
-    validateDataDirInput()
-  }
+    console.log("wcw blur");
+    setDataDirInputVisible(false);
+    validateDataDirInput();
+  };
 
-  const handleDataDirInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      setDataDirInputVisible(false)
-      validateDataDirInput()
+  const handleDataDirInputKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === "Enter") {
+      setDataDirInputVisible(false);
+      validateDataDirInput();
     }
-  }
+  };
 
   const validateDataDirInput = async () => {
     try {
       if (await exists(localSettings.dataDir)) {
-        return
+        return;
       }
-    } catch (err) {
-    }
+    } catch (err) {}
 
     toast({
       title: "error",
@@ -520,7 +525,7 @@ export function RecordingSettings({
     });
 
     setLocalSettings({ ...localSettings, dataDir: settings.dataDir });
-  }
+  };
 
   const runSetup = async () => {
     setIsSetupRunning(true);
@@ -577,72 +582,11 @@ export function RecordingSettings({
     }
   };
 
-  const handleEnableBetaToggle = async (checked: boolean) => {
-    setLocalSettings({ ...localSettings, enableBeta: checked });
-
-    if (checked) {
-      try {
-        const command = ShellCommand.sidecar("screenpipe", ["setup"]);
-        const child = await command.spawn();
-
-        toast({
-          title: "setting up beta features",
-          description: "this may take a few minutes...",
-        });
-
-        const outputPromise = new Promise<string>((resolve, reject) => {
-          command.on("close", (data) => {
-            if (data.code !== 0) {
-              reject(new Error(`command failed with code ${data.code}`));
-            }
-          });
-          command.on("error", (error) => reject(new Error(error)));
-          command.stdout.on("data", (line) => {
-            console.log(line);
-            if (line.includes("screenpipe setup complete")) {
-              resolve("ok");
-            }
-          });
-        });
-
-        const timeoutPromise = new Promise(
-          (_, reject) =>
-            setTimeout(() => reject(new Error("setup timed out")), 900000) // 15 minutes
-        );
-
-        const result = await Promise.race([outputPromise, timeoutPromise]);
-
-        if (result === "ok") {
-          toast({
-            title: "beta features setup complete",
-            description: "you can now use the beta features.",
-          });
-        } else {
-          throw new Error("setup failed or timed out");
-        }
-      } catch (error) {
-        console.error("error setting up beta features:", error);
-        toast({
-          title: "error setting up beta features",
-          description:
-            "please try again or check the logs for more information.",
-          variant: "destructive",
-        });
-        // Revert the toggle if setup fails
-        setLocalSettings({ ...localSettings, enableBeta: false });
-      }
-    }
-  };
-
   const handleFrameCacheToggle = (checked: boolean) => {
     setLocalSettings({
       ...localSettings,
       enableFrameCache: checked,
     });
-  };
-
-  const handleShowTimeline = async () => {
-    await invoke("show_timeline");
   };
 
   const handleUiMonitoringToggle = async (checked: boolean) => {
@@ -983,35 +927,43 @@ export function RecordingSettings({
                 <span>data directory</span>
               </Label>
 
-              {
-                !dataDirInputVisible
-                  ?
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between"
-                    onClick={handleDataDirChange}
-                  >
-                    <div className="inline-block flex gap-4">
-                      {!!settings.dataDir ? "change directory" : "select directory"}
-                      {localSettings.dataDir === settings.dataDir ?
-                        <span className="text-muted-foreground text-sm"> current at: {settings.dataDir || "default directory"}</span> :
-                        <span className="text-muted-foreground text-sm"> change to: {localSettings.dataDir || "default directory"}</span>
-                      }
-                    </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                  : <Input
-                    id="dataDir"
-                    type="text"
-                    autoFocus={true}
-                    value={localSettings.dataDir}
-                    onChange={handleDataDirInputChange}
-                    onBlur={handleDataDirInputBlur}
-                    onKeyDown={handleDataDirInputKeyDown}
-                  >
-                  </Input>
-              }
+              {!dataDirInputVisible ? (
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between"
+                  onClick={handleDataDirChange}
+                >
+                  <div className="inline-block flex gap-4">
+                    {!!settings.dataDir
+                      ? "change directory"
+                      : "select directory"}
+                    {localSettings.dataDir === settings.dataDir ? (
+                      <span className="text-muted-foreground text-sm">
+                        {" "}
+                        current at: {settings.dataDir || "default directory"}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">
+                        {" "}
+                        change to:{" "}
+                        {localSettings.dataDir || "default directory"}
+                      </span>
+                    )}
+                  </div>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              ) : (
+                <Input
+                  id="dataDir"
+                  type="text"
+                  autoFocus={true}
+                  value={localSettings.dataDir}
+                  onChange={handleDataDirInputChange}
+                  onBlur={handleDataDirInputBlur}
+                  onKeyDown={handleDataDirInputKeyDown}
+                ></Input>
+              )}
             </div>
 
             <div className="flex flex-col space-y-2">

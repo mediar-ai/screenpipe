@@ -53,7 +53,8 @@ export default function Home() {
       {showOnboarding && <Onboarding />}
       <ChangelogDialog />
       <Header />
-      <div className="p-8">
+      <div className="h-[32px]"/>
+      <div className=" w-[90%]">
         <PipeStore />
       </div>
     </div>

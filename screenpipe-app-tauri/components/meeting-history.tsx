@@ -48,6 +48,7 @@ import {
 import { ValueOf } from "next/dist/shared/lib/constants";
 import { Checkbox } from "./ui/checkbox";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { DropdownMenuItem } from "./ui/dropdown-menu";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -123,7 +124,7 @@ interface AudioTranscription {
   content: AudioContent;
 }
 
-export default function MeetingHistory() {
+export default function MeetingHistory({ className }: { className?: string }) {
   const posthog = usePostHog();
   const { settings } = useSettings();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -663,18 +664,14 @@ export default function MeetingHistory() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          className="pl-2"
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onClick={() => setIsOpen(true)}
           disabled={!health || health.status === "error"}
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsOpen(true);
-          }}
         >
           <Calendar className="mr-2 h-4 w-4" />
-          meetings
-        </Button>
+          <span>meetings</span>
+        </DropdownMenuItem>
       </DialogTrigger>
       <DialogContent
         className="max-w-[90vw] w-full max-h-[90vh] h-full"

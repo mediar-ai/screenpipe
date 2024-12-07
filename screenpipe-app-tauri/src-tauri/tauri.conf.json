@@ -117,89 +117,12 @@
     ],
     "security": {
       "assetProtocol": {
-        "enable": false
-      },
-      "csp": {
-        "default-src": "'self' customprotocol: asset: http://localhost:* https://*.clerk.dev https://clerk.dev",
-        "connect-src": [
-          "ipc:",
-          "http://ipc.localhost",
-          "http://localhost:*",
-          "https://*.clerk.dev",
-          "https://clerk.dev",
-          "https://*.clerk.com",
-          "https://clerk.com",
-          "https://youtube.com",
-          "https://api.openai.com",
-          "http://localhost:3030",
-          "https://web.crabnebula.cloud",
-          "https://api.github.com",
-          "https://eu.i.posthog.com",
-          "https://github.com",
-          "https://*.githubusercontent.com",
-          "https://*.github.com",
-          "http://*:11434",
-          "http://*:9000",
-          "https://ai-proxy.i-f9f.workers.dev",
-          "https://*.clerk.com",
-          "https://*.screenpi.pe",
-          "https://openrouter.ai",
-          "http://tauri.localhost"
-        ],
-        "font-src": [
-          "https://fonts.gstatic.com",
-          "tauri://localhost",
-          "http://tauri.localhost"
-        ],
-        "media-src": "'self' mediadevices: asset: http://asset.localhost file: blob: tauri://localhost file: blob: https://youtube.com https://github.com https://youtu.be",
-        "img-src": [
-          "'self'",
-          "data:",
-          "https://*.clerk.dev",
-          "https://clerk.dev",
-          "https://*.clerk.com",
-          "https://clerk.com",
-          "https://*.githubusercontent.com",
-          "https://*.github.com",
-          "https://github.com",
-          "https://*.s3.amazonaws.com"
-        ],
-        "style-src": [
-          "'unsafe-inline'",
-          "'self'",
-          "https://fonts.googleapis.com",
-          "tauri://localhost",
-          "http://tauri.localhost",
-          "http://localhost:*",
-          "data:",
-          "*"
-        ],
-        "frame-src": [
-          "http://localhost:*",
-          "https://*.clerk.dev",
-          "https://clerk.dev",
-          "https://*.clerk.com",
-          "https://clerk.com",
-          "https://www.youtube.com"
-        ],
-        "script-src": [
-          "'unsafe-eval'",
-          "'unsafe-inline'",
-          "'self'",
-          "http://localhost:*",
-          "https://*.clerk.dev",
-          "https://clerk.dev",
-          "https://*.clerk.com",
-          "https://clerk.com",
-          "tauri://localhost",
-          "https://*.githubusercontent.com",
-          "https://*.github.com",
-          "https://*.s3.amazonaws.com",
-          "https://*.clerk.com",
-          "https://*.screenpi.pe",
-          "https://ai-proxy.i-f9f.workers.dev"
+        "enable": true,
+        "scope": [
+          "$APPDATA/**"
         ]
-      }
+      },
+      "csp": null
     },
     "macOSPrivateApi": true
   }
