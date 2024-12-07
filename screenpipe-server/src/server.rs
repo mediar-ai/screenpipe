@@ -92,6 +92,11 @@ pub(crate) struct SearchQuery {
     min_length: Option<usize>,
     #[serde(default)]
     max_length: Option<usize>,
+    #[serde(
+        deserialize_with = "from_comma_separated_array",
+        default = "default_speaker_ids"
+    )]
+    speaker_ids: Option<Vec<i64>>,
 }
 
 #[derive(Deserialize)]
@@ -256,7 +261,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -266,7 +271,8 @@ pub(crate) async fn search(
         query.app_name,
         query.window_name,
         query.min_length,
-        query.max_length
+        query.max_length,
+        query.speaker_ids
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -285,6 +291,7 @@ pub(crate) async fn search(
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
+            query.speaker_ids.clone(),
         ),
         state.db.count_search_results(
             query_str,
@@ -295,6 +302,7 @@ pub(crate) async fn search(
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
+            query.speaker_ids.clone(),
         ),
     )
     .await

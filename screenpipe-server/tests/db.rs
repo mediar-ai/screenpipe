@@ -13,8 +13,6 @@ mod tests {
     async fn setup_test_db() -> DatabaseManager {
         let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
 
-
-
         db
     }
 
@@ -47,6 +45,7 @@ mod tests {
                 None,
                 None,
                 Some("test"),
+                None,
                 None,
                 None,
                 None,
@@ -89,6 +88,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -100,6 +100,7 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -152,6 +153,7 @@ mod tests {
                 Some("window"),
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -163,6 +165,7 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -228,6 +231,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -239,6 +243,7 @@ mod tests {
                 ContentType::All,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -345,14 +350,14 @@ mod tests {
 
         // After inserting both audio transcriptions, let's check all audio entries
         let all_audio = db
-            .search_audio("", 100, 0, None, None, None, None)
+            .search_audio("", 100, 0, None, None, None, None, None)
             .await
             .unwrap();
         println!("All audio entries: {:?}", all_audio);
 
         // Then try specific search
         let audio_results = db
-            .search_audio("2", 100, 0, None, None, None, None)
+            .search_audio("2", 100, 0, None, None, None, None, None)
             .await
             .unwrap();
         println!("Audio results for '2': {:?}", audio_results);
@@ -372,6 +377,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -387,6 +393,7 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,
@@ -414,6 +421,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -428,6 +436,7 @@ mod tests {
                 0,
                 Some(start_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,
@@ -495,8 +504,10 @@ mod tests {
         .await
         .unwrap();
 
+        let audio_chunk_id2 = db.insert_audio_chunk("test_audio2.mp4").await.unwrap();
+
         db.insert_audio_transcription(
-            audio_chunk_id,
+            audio_chunk_id2,
             "Hello from audio 2",
             1,
             "",
@@ -521,6 +532,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -539,6 +551,7 @@ mod tests {
                 ContentType::Audio,
                 Some(start_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,
