@@ -27,6 +27,21 @@ mod pipes {
     use crate::pick_unused_port;
     use once_cell::sync::Lazy;
 
+    // Add near other imports
+    use rand::distributions::Alphanumeric;
+    use rand::{thread_rng, Rng};
+    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+    use std::str::FromStr;
+
+    // Add this function to generate a secure cron secret
+    fn generate_cron_secret() -> String {
+        thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(32)
+            .map(char::from)
+            .collect()
+    }
+
     // Update this function near the top of the file
     fn sanitize_pipe_name(name: &str) -> String {
         let re = Regex::new(r"[^a-zA-Z0-9_-]").unwrap();
@@ -77,7 +92,50 @@ mod pipes {
             let pipe_config: Value = serde_json::from_str(&pipe_json)?;
 
             if pipe_config["is_nextjs"] == json!(true) {
-                info!("running next.js pipe: {}", pipe);
+                // Handle cron jobs if they exist
+                if let Some(crons) = pipe_config.get("crons").and_then(Value::as_array) {
+                    let port = pipe_config["port"].as_u64().unwrap_or(3000) as u16;
+                    let base_url = format!("http://localhost:{}", port);
+
+                    // Generate a CRON_SECRET if not exists
+                    let cron_secret = generate_cron_secret();
+
+                    // Add CRON_SECRET to environment variables
+                    env_vars.push(("CRON_SECRET".to_string(), cron_secret.clone()));
+
+                    // Clone the crons array before the loop
+                    let crons = crons.to_vec();
+
+                    for cron in crons {
+                        let path = cron["path"]
+                            .as_str()
+                            .ok_or_else(|| anyhow::anyhow!("missing path"))?
+                            .to_string();
+                        let schedule = cron["schedule"]
+                            .as_str()
+                            .ok_or_else(|| anyhow::anyhow!("missing schedule"))?
+                            .to_string();
+
+                        // Validate cron expression
+                        cron::Schedule::from_str(&schedule)
+                            .map_err(|e| anyhow::anyhow!("invalid cron: {}", e))?;
+
+                        let base_url = base_url.clone();
+                        let pipe_clone = pipe.to_string();
+                        let secret_clone = cron_secret.clone();
+
+                        tokio::spawn(async move {
+                            run_cron_schedule(
+                                &pipe_clone,
+                                &base_url,
+                                &path,
+                                &secret_clone,
+                                &schedule,
+                            )
+                            .await;
+                        });
+                    }
+                }
 
                 // Install dependencies using bun
                 info!("installing dependencies for next.js pipe");
@@ -580,6 +638,61 @@ mod pipes {
 
         error!("bun not found");
         None
+    }
+
+    async fn run_cron_schedule(
+        pipe: &str,
+        base_url: &str,
+        path: &str,
+        secret: &str,
+        schedule: &str,
+    ) {
+        let schedule = match cron::Schedule::from_str(schedule) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("invalid cron schedule: {}", e);
+                return;
+            }
+        };
+
+        let client = reqwest::Client::new();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", secret)).unwrap(),
+        );
+
+        loop {
+            let now = chrono::Utc::now();
+            let next = match schedule.after(&now).next() {
+                Some(next) => next,
+                None => continue,
+            };
+
+            let duration = (next - now)
+                .to_std()
+                .unwrap_or(tokio::time::Duration::from_secs(1));
+            tokio::time::sleep(duration).await;
+
+            debug!("executing cron job for pipe {} at path {}", pipe, path);
+
+            match client
+                .get(&format!("{}{}", base_url, path))
+                .headers(headers.clone())
+                .send()
+                .await
+            {
+                Ok(res) => {
+                    if !res.status().is_success() {
+                        error!("cron job failed with status: {}", res.status());
+                        if let Ok(text) = res.text().await {
+                            error!("error response: {}", text);
+                        }
+                    }
+                }
+                Err(e) => error!("failed to execute cron job: {}", e),
+            }
+        }
     }
 }
 
