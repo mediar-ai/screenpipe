@@ -47,33 +47,32 @@ export async function clickFirstMessageButton(page: Page) {
             throw new Error('message modal not visible after click');
         }
         
+        // wait for message dialog title to appear
+        await page.waitForSelector('.msg-overlay-bubble-header__title', { timeout: 5000 });
         console.log('message modal opened and verified');
+        
+        // Try to wait for either message list or compose window
+        await Promise.race([
+            page.waitForSelector('.msg-s-message-list__event', { timeout: 5000 })
+                .then(() => console.log('existing messages loaded')),
+            page.waitForSelector('.msg-form__contenteditable', { timeout: 5000 })
+                .then(() => console.log('new message compose window loaded'))
+        ]);
+        
+        // Verify we're in either state
+        const state = await page.evaluate(() => {
+            return {
+                hasMessageList: !!document.querySelector('.msg-s-message-list__event'),
+                hasComposeWindow: !!document.querySelector('.msg-form__contenteditable')
+            };
+        });
+        
+        if (!state.hasMessageList && !state.hasComposeWindow) {
+            throw new Error('neither message list nor compose window found');
+        }
+        
     } catch (e) {
         console.error('failed to click message button or open modal:', e);
         throw e;
     }
 }
-// add main function to test
-// async function main() {
-//     try {
-//         const { browser, page } = await setupBrowser();
-//         console.log('starting message button test');
-        
-//         await clickFirstMessageButton(page);
-        
-//         // wait a bit to see the results
-//         await new Promise(r => setTimeout(r, 2000));
-        
-//         await browser.close();
-//         console.log('test completed');
-//     } catch (e) {
-//         console.error('test failed:', e);
-//         // process.exit(1);
-//     }
-// }
-
-// // run if this file is being executed directly
-// if (require.main === module) {
-//     main();
-// }
-

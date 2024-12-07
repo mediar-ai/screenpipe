@@ -1,12 +1,27 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { Chrome, ArrowRight, CheckCircle, LogIn } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Chrome, ArrowRight, CheckCircle, LogIn, Loader2 } from "lucide-react";
 
-export function LaunchLinkedInChromeSession() {
-  const [status, setStatus] = useState<'connecting' | 'connected' | 'error' | 'idle'>('idle');
-  const [loginStatus, setLoginStatus] = useState<'checking' | 'logged_in' | 'logged_out' | null>(null);
+interface Props {
+  loginStatus: 'checking' | 'logged_in' | 'logged_out' | null;
+  setLoginStatus: (status: 'checking' | 'logged_in' | 'logged_out' | null) => void;
+}
+
+type StatusType = 'connecting' | 'connected' | 'error' | 'idle';
+
+export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Props) {
+  const [status, setStatus] = useState<StatusType>('idle');
+  const [loginCheckInterval, setLoginCheckInterval] = useState<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (loginCheckInterval) {
+        clearInterval(loginCheckInterval);
+      }
+    };
+  }, [loginCheckInterval]);
 
   const killChrome = async () => {
     try {
@@ -44,15 +59,16 @@ export function LaunchLinkedInChromeSession() {
 
         if (data.status === 'connected') {
           setStatus('connected');
+          // Automatically navigate to LinkedIn when Chrome connects
+          await navigateToLinkedIn();
           return;
         }
       } catch (error) {
-        console.error('Error checking debugger status:', error);
+        console.error('error checking debugger status:', error);
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
       attempts++;
     }
-    // If polling fails after max attempts
     setStatus('error');
   };
 
@@ -66,9 +82,23 @@ export function LaunchLinkedInChromeSession() {
       
       if (!response.ok) throw new Error('Failed to check login status');
       const data = await response.json();
-      setLoginStatus(data.isLoggedIn ? 'logged_in' : 'logged_out');
+      const isLoggedIn = data.isLoggedIn;
+      setLoginStatus(isLoggedIn ? 'logged_in' : 'logged_out');
+
+      if (isLoggedIn && loginCheckInterval) {
+        clearInterval(loginCheckInterval);
+        setLoginCheckInterval(null);
+      }
+      else if (!isLoggedIn && !loginCheckInterval) {
+        const interval = setInterval(() => checkLoginStatus(wsUrl), 5000);
+        setLoginCheckInterval(interval);
+      }
     } catch (error) {
       console.error('failed to check login status:', error);
+      if (loginCheckInterval) {
+        clearInterval(loginCheckInterval);
+        setLoginCheckInterval(null);
+      }
     }
   };
 
@@ -106,44 +136,39 @@ export function LaunchLinkedInChromeSession() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2">
-        <Button
-          onClick={launchChrome}
-          disabled={status === 'connecting'}
-          className="flex items-center gap-2"
-        >
-          <Chrome className="w-4 h-4" />
-          {status === 'connecting'
-            ? 'launching chrome...'
-            : status === 'connected'
-            ? 'relaunch chrome'
-            : 'launch chrome'}
-        </Button>
-
-        {status === 'connected' && (
-          <Button
-            onClick={killChrome}
-            variant="destructive"
-            className="flex items-center gap-2"
-          >
-            kill chrome
-          </Button>
-        )}
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          {(status === 'idle' || status === 'connecting') && (
+            <Button
+              onClick={launchChrome}
+              disabled={status === 'connecting'}
+              className="flex items-center gap-2"
+            >
+              <Chrome className="w-4 h-4" />
+              {status === 'connecting' ? 'launching chrome...' : 'launch'}
+            </Button>
+          )}
+          {status === 'connected' && (
+            <Button
+              onClick={killChrome}
+              variant="destructive"
+              className="flex items-center gap-2"
+            >
+              restart chrome
+            </Button>
+          )}
+        </div>
+        <span className="text-xs text-gray-500">
+          it will close your chrome browser, but you can restore tabs
+        </span>
       </div>
 
       {status === 'connected' && (
         <>
-          <Button
-            onClick={navigateToLinkedIn}
-            className="flex items-center gap-2"
-          >
-            <ArrowRight className="w-4 h-4" />
-            navigate to linkedin
-          </Button>
-
           {loginStatus === 'checking' && (
-            <div className="text-sm text-gray-500">
-              checking login status...
+            <div className="text-sm text-gray-500 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              checking linkedin login...
             </div>
           )}
           {loginStatus === 'logged_in' && (
