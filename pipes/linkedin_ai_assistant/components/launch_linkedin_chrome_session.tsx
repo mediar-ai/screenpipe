@@ -2,15 +2,17 @@
 
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { Chrome, ArrowRight, CheckCircle, LogIn } from "lucide-react";
+import { Chrome, ArrowRight, CheckCircle, LogIn, Loader2 } from "lucide-react";
 
 interface Props {
   loginStatus: 'checking' | 'logged_in' | 'logged_out' | null;
   setLoginStatus: (status: 'checking' | 'logged_in' | 'logged_out' | null) => void;
 }
 
+type StatusType = 'connecting' | 'connected' | 'error' | 'idle';
+
 export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Props) {
-  const [status, setStatus] = useState<'connecting' | 'connected' | 'error' | 'idle'>('idle');
+  const [status, setStatus] = useState<StatusType>('idle');
   const [loginCheckInterval, setLoginCheckInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -136,25 +138,25 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <div className="flex gap-2">
-          <Button
-            onClick={launchChrome}
-            disabled={status === 'connecting'}
-            className="flex items-center gap-2"
-          >
-            <Chrome className="w-4 h-4" />
-            {status === 'connecting'
-              ? 'launching chrome...'
-              : status === 'connected'
-              ? 'relaunch chrome'
-              : 'launch'}
-          </Button>
-          <Button
-            onClick={killChrome}
-            variant="destructive"
-            className="flex items-center gap-2"
-          >
-            exit chrome
-          </Button>
+          {(status === 'idle' || status === 'connecting') && (
+            <Button
+              onClick={launchChrome}
+              disabled={status === 'connecting'}
+              className="flex items-center gap-2"
+            >
+              <Chrome className="w-4 h-4" />
+              {status === 'connecting' ? 'launching chrome...' : 'launch'}
+            </Button>
+          )}
+          {status === 'connected' && (
+            <Button
+              onClick={killChrome}
+              variant="destructive"
+              className="flex items-center gap-2"
+            >
+              restart chrome
+            </Button>
+          )}
         </div>
         <span className="text-xs text-gray-500">
           it will close your chrome browser, but you can restore tabs
@@ -164,8 +166,9 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
       {status === 'connected' && (
         <>
           {loginStatus === 'checking' && (
-            <div className="text-sm text-gray-500">
-              checking login status...
+            <div className="text-sm text-gray-500 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              checking linkedin login...
             </div>
           )}
           {loginStatus === 'logged_in' && (

@@ -161,6 +161,10 @@ export async function updateMultipleProfileVisits(state: State, newVisits: Profi
     state.visitedProfiles = state.visitedProfiles || [];
     state.toVisitProfiles = state.toVisitProfiles || [];
 
+    let alreadyVisitedCount = 0;
+    let alreadyQueuedCount = 0;
+    let newlyQueuedCount = 0;
+
     for (const newVisit of newVisits) {
         const alreadyVisited = state.visitedProfiles.some(
             visit => visit.profileUrl === newVisit.profileUrl
@@ -170,11 +174,27 @@ export async function updateMultipleProfileVisits(state: State, newVisits: Profi
             visit => visit.profileUrl === newVisit.profileUrl
         );
 
-        if (!alreadyVisited && !alreadyQueued) {
+        if (alreadyVisited) {
+            alreadyVisitedCount++;
+        } else if (alreadyQueued) {
+            alreadyQueuedCount++;
+        } else {
             state.toVisitProfiles.push(newVisit);
+            newlyQueuedCount++;
         }
     }
 
     await saveState(state);
-    console.log(`added ${newVisits.length} profiles to visit queue`);
+    
+    const summary = {
+        total: newVisits.length,
+        alreadyVisited: alreadyVisitedCount,
+        alreadyQueued: alreadyQueuedCount,
+        newlyQueued: newlyQueuedCount,
+        currentQueueSize: state.toVisitProfiles.length,
+        totalVisited: state.visitedProfiles.length
+    };
+    
+    console.log('profile queue update:', summary);
+    return summary;
 } 

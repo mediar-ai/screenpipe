@@ -8,11 +8,18 @@ export async function POST() {
   try {
     console.log('attempting to launch chrome');
 
+    // Kill any existing Chrome instances first
+    await quitChrome();
+    await quitBrowser();
+
     const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
     const chromeLaunchCommand = `"${chromePath}" --remote-debugging-port=9222 --restore-last-session`;
     const chromeProcess = exec(chromeLaunchCommand, { detached: true, stdio: 'ignore' });
 
     chromeProcess.unref();
+
+    // Give Chrome a moment to start
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     console.log('chrome launch initiated');
     return NextResponse.json({ success: true });

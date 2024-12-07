@@ -27,6 +27,8 @@ export default function StateViewer() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!showTable) return;
+
       try {
         const [stateRes, profilesRes, messagesRes] = await Promise.all([
           fetch('/api/state'),
@@ -57,9 +59,11 @@ export default function StateViewer() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 1000);
-    return () => clearInterval(interval);
-  }, []);
+    const interval = showTable ? setInterval(fetchData, 1000) : null;
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showTable]);
 
   if (!data) {
     return <div className="p-4">loading...</div>;

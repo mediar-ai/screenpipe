@@ -1,71 +1,91 @@
 import { Message } from '../storage/types';
 import { addDays, format, parse, startOfToday } from 'date-fns';
 
-// map weekday names to numbers (0 = sunday)
-const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-// helper to check if string matches "Month Day" format (e.g. "Nov 6")
-const isMonthDayFormat = (str: string) => /^[A-Za-z]{3}\s+\d{1,2}$/.test(str);
-
 export function standardizeTimestamps(messages: Message[]): Message[] {
-    let currentDate: Date | null = null;
     const today = startOfToday();
     const currentYear = today.getFullYear();
+    let lastValidTimestamp: string | null = null;
 
     return messages.map(msg => {
         if (!msg.timestamp) return msg;
         const timestamp = msg.timestamp.toLowerCase();
+        console.log('processing timestamp:', timestamp);
 
         try {
-            // handle relative dates first
-            if (timestamp === 'today') {
-                currentDate = today;
-            } else if (timestamp === 'yesterday') {
-                currentDate = addDays(today, -1);
-            } else if (WEEKDAYS.includes(timestamp)) {
-                // find the most recent occurrence of this weekday
-                const dayIndex = WEEKDAYS.indexOf(timestamp);
-                const todayIndex = today.getDay();
+            let date: Date;
+            const now = new Date();
+
+            // Handle different timestamp formats
+            if (timestamp.includes('today')) {
+                date = now;
+            } else if (timestamp.includes('yesterday')) {
+                date = addDays(now, -1);
+            } else if (timestamp.match(/^monday|tuesday|wednesday|thursday|friday|saturday|sunday/)) {
+                // Handle "Monday 5:50 PM" format
+                const [dayName, time, period] = timestamp.split(' ');
+                const [hours, minutes] = time.split(':');
+                
+                // Find the most recent occurrence of this weekday
+                const dayIndex = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(dayName);
+                const todayIndex = now.getDay();
                 const daysAgo = (todayIndex - dayIndex + 7) % 7;
-                currentDate = addDays(today, -daysAgo);
-            } else if (timestamp.includes(':')) {
-                // it's a time - use current date
-                if (!currentDate) currentDate = today;
-                const timeDate = parse(timestamp, 'h:mm a', currentDate);
+                date = addDays(now, -daysAgo);
+
+                // Set the time
+                let hour = parseInt(hours);
+                if (period === 'pm' && hour !== 12) hour += 12;
+                if (period === 'am' && hour === 12) hour = 0;
+                date.setHours(hour, parseInt(minutes));
+            } else if (timestamp.match(/^[a-z]{3}\s+\d{1,2}\s+\d{1,2}:\d{2}\s+[ap]m/)) {
+                // Handle "Nov 6 12:54 PM" format
+                const [month, day, time, period] = timestamp.split(' ');
+                const [hours, minutes] = time.split(':');
+                
+                const monthMap: { [key: string]: number } = {
+                    'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+                    'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+                };
+                
+                date = new Date(currentYear, monthMap[month], parseInt(day));
+                let hour = parseInt(hours);
+                if (period === 'pm' && hour !== 12) hour += 12;
+                if (period === 'am' && hour === 12) hour = 0;
+                date.setHours(hour, parseInt(minutes));
+            } else if (timestamp.match(/^\d{1,2}:\d{2}\s+[ap]m/)) {
+                // Handle time-only format using the last known date
+                const [time, period] = timestamp.split(' ');
+                const [hours, minutes] = time.split(':');
+                
+                date = lastValidTimestamp ? 
+                    new Date(lastValidTimestamp) : 
+                    now;
+                
+                let hour = parseInt(hours);
+                if (period === 'pm' && hour !== 12) hour += 12;
+                if (period === 'am' && hour === 12) hour = 0;
+                date.setHours(hour, parseInt(minutes));
+            } else {
+                // Use last known timestamp if format is unknown
                 return {
                     ...msg,
-                    timestamp: format(timeDate, "yyyy-MM-dd'T'HH:mm:ss")
+                    timestamp: lastValidTimestamp || msg.timestamp
                 };
-            } else if (isMonthDayFormat(timestamp)) {
-                // handle "Month Day" format (e.g. "Nov 6")
-                currentDate = parse(`${timestamp} ${currentYear}`, 'MMM d yyyy', new Date());
-            } else {
-                // try full date format (e.g. "Jul 9, 2023")
-                currentDate = parse(timestamp, 'MMM d, yyyy', new Date());
             }
 
-            // return standardized date without time
+            const standardizedTimestamp = format(date, "yyyy-MM-dd'T'HH:mm:ss");
+            lastValidTimestamp = standardizedTimestamp;
+            
             return {
                 ...msg,
-                timestamp: format(currentDate!, 'yyyy-MM-dd')
+                timestamp: standardizedTimestamp
             };
         } catch (e) {
             console.error('failed to parse timestamp:', timestamp, e);
-            return msg;
+            return {
+                ...msg,
+                timestamp: lastValidTimestamp || msg.timestamp
+            };
         }
     });
 }
-// test function
-// if (require.main === module) {
-//     const testMessages = [
-//         { text: 'YC', timestamp: 'Jul 9, 2023', sender: 'Matthew' },
-//         { text: 'msg1', timestamp: '8:05 PM', sender: 'Louis' },
-//         { text: 'msg2', timestamp: 'Today', sender: 'Matthew' },
-//         { text: 'msg3', timestamp: '9:28 PM', sender: 'Matthew' },
-//         { text: 'msg4', timestamp: 'Sunday', sender: 'Matthew' },
-//     ];
-
-//     console.log('standardized messages:', 
-//         JSON.stringify(standardizeTimestamps(testMessages), null, 2));
-// }
 
