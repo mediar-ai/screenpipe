@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import { keysToCamelCase } from "@/lib/utils";
+import { cn, keysToCamelCase } from "@/lib/utils";
 import { HelpCircle } from "lucide-react";
 import {
   Card,
@@ -132,13 +132,20 @@ interface AudioTranscription {
   content: AudioContent;
 }
 
-export default function MeetingHistory({ className }: { className?: string }) {
+export default function MeetingHistory({
+  showMeetingHistory,
+  setShowMeetingHistory,
+  className,
+}: {
+  showMeetingHistory: boolean;
+  setShowMeetingHistory: (show: boolean) => void;
+  className?: string;
+}) {
   const posthog = usePostHog();
   const { settings } = useSettings();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isIdentifying, setIsIdentifying] = useState(false);
   const { toast } = useToast();
@@ -161,21 +168,21 @@ export default function MeetingHistory({ className }: { className?: string }) {
   }, [posthog, settings.userId]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (showMeetingHistory) {
       loadMeetings();
       posthog?.capture("meeting_history_opened", {
         userId: settings.userId,
       });
     }
-  }, [isOpen]);
+  }, [showMeetingHistory]);
 
   useEffect(() => {
     setShowError(!!error);
   }, [error]);
 
   useEffect(() => {
-    console.log("Dialog state changed:", isOpen);
-  }, [isOpen]);
+    console.log("Dialog state changed:", showMeetingHistory);
+  }, [showMeetingHistory]);
 
   async function loadMeetings() {
     setLoading(true);
@@ -615,20 +622,17 @@ export default function MeetingHistory({ className }: { className?: string }) {
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={showMeetingHistory} onOpenChange={setShowMeetingHistory}>
       <DialogTrigger asChild>
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsOpen(true);
-          }}
-          disabled={!health || health.status === "error"}
+        <div
+          className={cn(
+            "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+            className
+          )}
         >
           <Calendar className="mr-2 h-4 w-4" />
           <span>meetings</span>
-        </DropdownMenuItem>
+        </div>
       </DialogTrigger>
       <DialogContent
         className="max-w-[90vw] w-full max-h-[90vh] h-full"

@@ -33,7 +33,7 @@ import {
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 import { Badge } from "@/components/ui/badge"; // Add this import
-import { parseKeyboardShortcut } from "@/lib/utils"; // Add this import
+import { cn, parseKeyboardShortcut } from "@/lib/utils"; // Add this import
 
 import {
   Eye,
@@ -64,7 +64,6 @@ import {
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { DropdownMenuItem } from "./ui/dropdown-menu";
 
 export function Settings({ className }: { className?: string }) {
   const {
@@ -528,15 +527,18 @@ export function Settings({ className }: { className?: string }) {
       }}
     >
       <DialogTrigger asChild>
-        <DropdownMenuItem
-          className="cursor-pointer"
+        <div
+          className={cn(
+            "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+            className
+          )}
           onSelect={(e) => e.preventDefault()}
         >
           <div className="flex items-center">
             <Settings2 className="mr-2 h-4 w-4" />
             <span>settings</span>
           </div>
-        </DropdownMenuItem>
+        </div>
       </DialogTrigger>
 
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
