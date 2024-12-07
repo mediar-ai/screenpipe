@@ -1,5 +1,5 @@
 {
-  "name": "pipe-phi3.5-engineering-team-logs",
+  "name": "pipe-notion-table-logs",
   "module": "pipe.ts",
   "type": "module",
   "devDependencies": {

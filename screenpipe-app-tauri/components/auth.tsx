@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { useUser } from "@/lib/hooks/use-user";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import posthog from "posthog-js";
+import { DropdownMenuItem } from "./ui/dropdown-menu";
+import { LogIn } from "lucide-react";
 
 export function AuthButton() {
   const { isSignedIn, user } = useUser();
@@ -27,17 +29,14 @@ export function AuthButton() {
   return (
     <div>
       {isSignedIn ? (
-        <Button variant="ghost" onClick={handleSignIn}>
-          <Avatar>
-            <AvatarFallback>
-              {user?.email.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-        </Button>
+        <span className="p-2 text-sm text-muted-foreground select-none [-webkit-user-select:none]">
+          {user?.email}
+        </span>
       ) : (
-        <Button variant="outline" onClick={handleSignIn}>
-          sign in
-        </Button>
+        <DropdownMenuItem className="cursor-pointer" onClick={handleSignIn}>
+          <LogIn className="mr-2 h-4 w-4" />
+          <span>sign in</span>
+        </DropdownMenuItem>
       )}
     </div>
   );

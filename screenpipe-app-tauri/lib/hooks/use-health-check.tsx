@@ -83,7 +83,6 @@ export function useHealthCheck() {
       //   console.log("set healthy icon:");
       // }
 
-
       if (isHealthChanged(healthRef.current, data)) {
         setHealth(data);
         healthRef.current = data;
@@ -95,7 +94,7 @@ export function useHealthCheck() {
         return;
       }
 
-      console.error("Health check error:", error);
+      // console.error("Health check error:", error);
       if (!isServerDown) {
         setIsServerDown(true);
         // await invoke("set_tray_unhealth_icon");

@@ -1,6 +1,14 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   X,
   ChevronDown,
@@ -50,6 +58,125 @@ interface InboxMessagesProps {
   onClose: () => void;
 }
 
+const MessageCard = React.memo(
+  ({
+    message,
+    onDelete,
+    onExpand,
+    expandedMessages,
+    toggleMessageExpansion,
+    handleAction,
+    formatDate,
+  }: any) => (
+    <Card
+      className={`mb-4 w-full ${
+        message.read ? "bg-secondary/50" : "bg-background"
+      }`}
+    >
+      <CardHeader className="flex flex-row items-center justify-between py-2">
+        <div className="flex items-center space-x-2 flex-1 mr-2 max-w-[70%]">
+          <Bot className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          <h3 className="text-sm font-semibold truncate" title={message.title}>
+            {message.title}
+          </h3>
+        </div>
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {formatDate(message.date)}
+        </span>
+      </CardHeader>
+      <CardContent className="py-2">
+        <div className="w-full overflow-hidden">
+          <Suspense fallback={<div>loading...</div>}>
+            <MemoizedReactMarkdown
+              className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-[35vw] text-sm"
+              remarkPlugins={[remarkGfm, remarkMath]}
+              components={{
+                p: ({ children }) => (
+                  <p className="mb-2 last:mb-0">{children}</p>
+                ),
+                a: ({ href, children, ...props }) => {
+                  const isExternal =
+                    href?.startsWith("http") || href?.startsWith("https");
+                  return (
+                    <a
+                      href={href}
+                      target={isExternal ? "_blank" : undefined}
+                      rel={isExternal ? "noopener noreferrer" : undefined}
+                      className="break-all text-blue-500 hover:underline"
+                      {...props}
+                    >
+                      {children}
+                    </a>
+                  );
+                },
+              }}
+            >
+              {expandedMessages.has(message.id)
+                ? message.body || ""
+                : message.body?.length > 150
+                ? `${message.body.slice(0, 150)}...`
+                : message.body || ""}
+            </MemoizedReactMarkdown>
+          </Suspense>
+        </div>
+        {message.body && message.body.length > 150 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => toggleMessageExpansion(message.id)}
+            className="text-xs mt-2"
+          >
+            {expandedMessages.has(message.id) ? (
+              <>
+                <ChevronUp className="mr-1 h-4 w-4" />
+                show less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="mr-1 h-4 w-4" />
+                show more
+              </>
+            )}
+          </Button>
+        )}
+      </CardContent>
+      <CardFooter className="flex justify-end space-x-2 py-2">
+        {message.actions?.map((action: InboxMessageAction) => (
+          <Button
+            key={`${message.id}-${action.action}`}
+            variant="outline"
+            size="sm"
+            onClick={() => handleAction(action.action, action.port)}
+            className="text-xs"
+          >
+            {action.label}
+          </Button>
+        ))}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDelete(message.id)}
+          className="text-xs"
+        >
+          <X className="mr-1 h-4 w-4" />
+          dismiss
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onExpand(message)}
+          className="text-xs"
+        >
+          <Maximize2 className="mr-1 h-4 w-4" />
+          expand
+        </Button>
+      </CardFooter>
+    </Card>
+  )
+);
+
+MessageCard.displayName = "MessageCard";
+
 export function InboxMessages({
   messages,
   onMessageRead,
@@ -62,18 +189,26 @@ export function InboxMessages({
   const [dialogMessage, setDialogMessage] = useState<Message | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const inboxRef = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
 
-  console.log("messages", messages);
+  const unreadMessages = messages.filter((msg) => !msg.read);
 
-  const handleMarkAllAsRead = () => {
+  const virtualizer = useVirtualizer({
+    count: unreadMessages.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 200,
+    overscan: 5,
+  });
+
+  const handleMarkAllAsRead = useCallback(() => {
     messages.forEach((msg) => {
       if (!msg.read) {
         onMessageRead(msg.id);
       }
     });
-  };
+  }, [messages, onMessageRead]);
 
-  const toggleMessageExpansion = (id: string) => {
+  const toggleMessageExpansion = useCallback((id: string) => {
     setExpandedMessages((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(id)) {
@@ -83,39 +218,36 @@ export function InboxMessages({
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const truncateContent = (content: string | undefined, maxLength: number) => {
-    if (!content) return "";
-    if (content.length <= maxLength) return content;
-    return content.slice(0, maxLength) + "...";
-  };
-
-  const formatDate = (dateString: string) => {
+  const formatDate = useCallback((dateString: string) => {
     const date = new Date(dateString);
     return format(date, "MMM d, yyyy 'at' h:mm a");
-  };
+  }, []);
 
-  const openDialog = (message: Message) => {
-    setDialogMessage(message);
-    setDialogOpen(true);
-    if (!message.read) {
-      onMessageRead(message.id);
-    }
-  };
+  const openDialog = useCallback(
+    (message: Message) => {
+      setDialogMessage(message);
+      setDialogOpen(true);
+      if (!message.read) {
+        onMessageRead(message.id);
+      }
+    },
+    [onMessageRead]
+  );
 
-  const closeDialog = () => {
+  const closeDialog = useCallback(() => {
     setDialogOpen(false);
-  };
+  }, []);
 
-  const handleDeleteAndClose = () => {
+  const handleDeleteAndClose = useCallback(() => {
     if (dialogMessage) {
       onMessageDelete(dialogMessage.id);
       closeDialog();
     }
-  };
+  }, [dialogMessage, onMessageDelete, closeDialog]);
 
-  const handleAction = async (actionId: string, port: number) => {
+  const handleAction = useCallback(async (actionId: string, port: number) => {
     try {
       const response = await fetch(`http://localhost:${port}/action`, {
         method: "POST",
@@ -129,10 +261,9 @@ export function InboxMessages({
     } catch (error) {
       console.error("failed to send action callback:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    // Trigger PostHog event when the inbox is opened
     posthog.capture("inbox opened");
 
     function handleClickOutside(event: MouseEvent) {
@@ -158,7 +289,7 @@ export function InboxMessages({
         <Card className="w-full">
           <CardHeader className="flex flex-row items-center justify-between">
             <h2 className="text-lg font-semibold">inbox messages</h2>
-            {messages.filter((msg) => !msg.read).length > 0 && (
+            {unreadMessages.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
@@ -170,127 +301,46 @@ export function InboxMessages({
               </Button>
             )}
           </CardHeader>
-          <CardContent className="min-h-[200px] w-[45vw]">
-            {messages.filter((msg) => !msg.read).length === 0 ? (
+          <CardContent className="min-h-[200px] w-[45vw]" ref={parentRef}>
+            {unreadMessages.length === 0 ? (
               <div className="flex h-full w-full items-center justify-center text-sm text-gray-500">
                 no new messages
               </div>
             ) : (
-              messages
-                .filter((msg) => !msg.read)
-                .map((message) => (
-                  <Card
-                    key={message.id}
-                    className={`mb-4 w-full ${
-                      message.read ? "bg-secondary/50" : "bg-background"
-                    }`}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between py-2">
-                      <div className="flex items-center space-x-2 flex-1 mr-2 max-w-[70%]">
-                        <Bot className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                        <h3
-                          className="text-sm font-semibold truncate"
-                          title={message.title}
-                        >
-                          {message.title}
-                        </h3>
-                      </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDate(message.date)}
-                      </span>
-                    </CardHeader>
-                    <CardContent className="py-2">
-                      <div className="w-full overflow-hidden">
-                        <MemoizedReactMarkdown
-                          className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-[35vw] text-sm"
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          components={{
-                            p: ({ children }) => (
-                              <p className="mb-2 last:mb-0">{children}</p>
-                            ),
-                            a: ({ node, href, children, ...props }) => {
-                              const isExternal =
-                                href?.startsWith("http") ||
-                                href?.startsWith("https");
-                              return (
-                                <a
-                                  href={href}
-                                  target={isExternal ? "_blank" : undefined}
-                                  rel={
-                                    isExternal
-                                      ? "noopener noreferrer"
-                                      : undefined
-                                  }
-                                  className="break-all text-blue-500 hover:underline"
-                                  {...props}
-                                >
-                                  {children}
-                                </a>
-                              );
-                            },
-                          }}
-                        >
-                          {expandedMessages.has(message.id)
-                            ? message.body || ""
-                            : truncateContent(message.body, 150)}
-                        </MemoizedReactMarkdown>
-                      </div>
-                      {message.body && message.body.length > 150 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleMessageExpansion(message.id)}
-                          className="text-xs mt-2"
-                        >
-                          {expandedMessages.has(message.id) ? (
-                            <>
-                              <ChevronUp className="mr-1 h-4 w-4" />
-                              show less
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="mr-1 h-4 w-4" />
-                              show more
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </CardContent>
-                    <CardFooter className="flex justify-end space-x-2 py-2">
-                      {message.actions?.map((action) => (
-                        <Button
-                          key={`${message.id}-${action.action}`}
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            handleAction(action.action, action.port);
-                          }}
-                          className="text-xs"
-                        >
-                          {action.label}
-                        </Button>
-                      ))}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onMessageDelete(message.id)}
-                        className="text-xs"
-                      >
-                        <X className="mr-1 h-4 w-4" />
-                        dismiss
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDialog(message)}
-                        className="text-xs"
-                      >
-                        <Maximize2 className="mr-1 h-4 w-4" />
-                        expand
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                ))
+              <div
+                style={{
+                  height: `${virtualizer.getTotalSize()}px`,
+                  width: "100%",
+                  position: "relative",
+                }}
+              >
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                  const message = unreadMessages[virtualRow.index];
+                  return (
+                    <div
+                      key={message.id}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      <MessageCard
+                        message={message}
+                        onDelete={onMessageDelete}
+                        onExpand={openDialog}
+                        expandedMessages={expandedMessages}
+                        toggleMessageExpansion={toggleMessageExpansion}
+                        handleAction={handleAction}
+                        formatDate={formatDate}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -311,37 +361,37 @@ export function InboxMessages({
               <DialogTitle>{dialogMessage?.title}</DialogTitle>
             </DialogHeader>
             <div className="mt-4">
-              <MemoizedReactMarkdown
-                className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0"
-                remarkPlugins={[remarkGfm, remarkMath]}
-                components={{
-                  p: ({ children }) => (
-                    <p className="mb-2 last:mb-0">{children}</p>
-                  ),
-                  a: ({ node, href, children, ...props }) => (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="break-all"
-                      {...props}
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-              >
-                {dialogMessage?.body || ""}
-              </MemoizedReactMarkdown>
+              <Suspense fallback={<div>loading...</div>}>
+                <MemoizedReactMarkdown
+                  className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0"
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  components={{
+                    p: ({ children }) => (
+                      <p className="mb-2 last:mb-0">{children}</p>
+                    ),
+                    a: ({ href, children, ...props }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-all"
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    ),
+                  }}
+                >
+                  {dialogMessage?.body || ""}
+                </MemoizedReactMarkdown>
+              </Suspense>
             </div>
             <div className="flex justify-end space-x-2 mt-4">
               {dialogMessage?.actions?.map((action) => (
                 <Button
                   key={`dialog-${dialogMessage.id}-${action.action}`}
                   variant="outline"
-                  onClick={() => {
-                    console.log(`Dialog action clicked: ${action.label}`);
-                  }}
+                  onClick={() => handleAction(action.action, action.port)}
                 >
                   {action.label}
                 </Button>

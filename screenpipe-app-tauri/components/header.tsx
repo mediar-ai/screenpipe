@@ -6,15 +6,27 @@ import { PrettyLink } from "@/components/pretty-link";
 import HealthStatus from "@/components/screenpipe-status";
 
 import React from "react";
-import PipeDialog from "@/components/pipe-store";
 import MeetingHistory from "@/components/meeting-history";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Heart, Menu, Bell, Play, Folder } from "lucide-react";
+import {
+  MessageSquare,
+  Heart,
+  Menu,
+  Bell,
+  Play,
+  Folder,
+  Search,
+  Book,
+  User,
+} from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
   InboxMessageAction,
@@ -39,12 +51,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Calendar } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useUser } from "@/lib/hooks/use-user";
+import { AuthButton } from "./auth";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const { health } = useHealthCheck();
   const { settings } = useSettings();
+  const { user } = useUser();
 
   // const isLoading = !health;
   const isLoading = false; // ! testing - had issue with this before
@@ -112,6 +128,10 @@ export default function Header() {
     await invoke("show_timeline");
   };
 
+  const handleShowSearch = async () => {
+    await invoke("show_search");
+  };
+
   return (
     <div>
       {isLoading ? (
@@ -125,76 +145,109 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
-            <PipeDialog />
-            <Settings />
             <Button
               variant="ghost"
               size="icon"
-              className="cursor-pointer"
               onClick={() => setShowInbox(!showInbox)}
+              className="cursor-pointer h-8 w-8 p-0"
             >
-              <Bell className="h-[1.2rem] w-[1.2rem]" />
+              <Bell className="h-4 w-4" />
               <span className="sr-only">notifications</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="cursor-pointer">
-                  <Menu className="h-[1.2rem] w-[1.2rem]" />
-                  <span className="sr-only">menu</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="cursor-pointer h-8 w-8 p-0"
+                >
+                  <User className="h-4 w-4" />
+                  <span className="sr-only">user menu</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="mr-4" align="end">
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={handleShowTimeline}
-                  disabled={
-                    !settings.enableFrameCache ||
-                    !health ||
-                    health.status === "error"
-                  }
-                >
-                  <Clock className="mr-2 h-4 w-4" />
-                  <span>timeline</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer p-0">
-                  <MeetingHistory />
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() =>
-                    open(
-                      "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
-                    )
-                  }
-                >
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  <span>send feedback</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() =>
-                    open(
-                      "https://twitter.com/intent/tweet?text=here's%20how%20i%20use%20@screen_pipe%20...%20%5Bscreenshot%5D%20an%20awesome%20tool%20for%20..."
-                    )
-                  }
-                >
-                  <Heart className="mr-2 h-4 w-4" />
-                  <span>support us</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() => setShowOnboarding(true)}
-                >
-                  <Play className="mr-2 h-4 w-4" />
-                  <span>show onboarding</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() => setShowChangelogDialog(true)}
-                >
-                  <Folder className="mr-2 h-4 w-4" />
-                  <span>show changelog</span>
-                </DropdownMenuItem>
+                <DropdownMenuLabel>account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <AuthButton />
+                  <DropdownMenuSeparator />
+                  <Settings />
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={handleShowSearch}
+                    disabled={!health || health.status === "error"}
+                  >
+                    <Search className="mr-2 h-4 w-4" />
+                    <span>search</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={handleShowTimeline}
+                    disabled={
+                      !settings.enableFrameCache ||
+                      !health ||
+                      health.status === "error"
+                    }
+                  >
+                    <Clock className="mr-2 h-4 w-4" />
+                    <span>timeline</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer p-0">
+                    <MeetingHistory />
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => open("https://docs.screenpi.pe")}
+                  >
+                    <Book className="mr-2 h-4 w-4" />
+                    <span>check docs</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() =>
+                      open(
+                        "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
+                      )
+                    }
+                  >
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    <span>send feedback</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() =>
+                      open(
+                        "https://twitter.com/intent/tweet?text=here's%20how%20i%20use%20@screen_pipe%20...%20%5Bscreenshot%5D%20an%20awesome%20tool%20for%20..."
+                      )
+                    }
+                  >
+                    <Heart className="mr-2 h-4 w-4" />
+                    <span>support us</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setShowOnboarding(true)}
+                  >
+                    <Play className="mr-2 h-4 w-4" />
+                    <span>show onboarding</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setShowChangelogDialog(true)}
+                  >
+                    <Folder className="mr-2 h-4 w-4" />
+                    <span>show changelog</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

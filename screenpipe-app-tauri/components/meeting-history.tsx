@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/card";
 import { ValueOf } from "next/dist/shared/lib/constants";
 import { Checkbox } from "./ui/checkbox";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { DropdownMenuItem } from "./ui/dropdown-menu";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -122,7 +124,7 @@ interface AudioTranscription {
   content: AudioContent;
 }
 
-export default function MeetingHistory() {
+export default function MeetingHistory({ className }: { className?: string }) {
   const posthog = usePostHog();
   const { settings } = useSettings();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -142,6 +144,7 @@ export default function MeetingHistory() {
   const [customIdentifyPrompt, setCustomIdentifyPrompt] = useState<string>(
     "please identify the participants in this meeting transcript. provide a comma-separated list of one or two word names or roles or characteristics. if it's not possible to identify, respond with n/a."
   );
+  const { health } = useHealthCheck();
 
   useEffect(() => {
     if (posthog) {
@@ -171,7 +174,6 @@ export default function MeetingHistory() {
     try {
       const storedMeetings = (await getItem("meetings")) || [];
       setMeetings(storedMeetings);
-
       await fetchMeetings();
     } catch (err) {
       setError("failed to load meetings");
@@ -661,17 +663,18 @@ export default function MeetingHistory() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          className="pl-2"
+        <DropdownMenuItem
+          className="cursor-pointer"
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             setIsOpen(true);
           }}
+          disabled={!health || health.status === "error"}
         >
           <Calendar className="mr-2 h-4 w-4" />
-          meetings
-        </Button>
+          <span>meetings</span>
+        </DropdownMenuItem>
       </DialogTrigger>
       <DialogContent
         className="max-w-[90vw] w-full max-h-[90vh] h-full"
@@ -744,16 +747,16 @@ export default function MeetingHistory() {
           </DialogTitle>
         </DialogHeader>
         <DialogDescription className="mb-4">
-          <p className="text-sm text-gray-600">
+          <span className="block text-sm text-gray-600">
             this page provides transcriptions and summaries of your daily
             meetings. it uses your ai settings to generate summaries. note:
             phrases like &quot;thank you&quot; or &quot;you know&quot; might be
             transcription errors. for better accuracy, consider using deepgram
             as the engine or adjust your prompt to ignore these.
-          </p>
-          <p className="text-sm text-gray-600 mt-2">
+          </span>
+          <span className="block text-sm text-gray-600 mt-2">
             <strong>make sure to setup your ai settings</strong>
-          </p>
+          </span>
         </DialogDescription>
         <div className="flex-grow overflow-auto">
           {loading ? (
