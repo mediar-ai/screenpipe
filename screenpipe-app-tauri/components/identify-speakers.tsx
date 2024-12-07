@@ -333,6 +333,8 @@ export default function IdentifySpeakers({
           speaker_id: unnamedSpeakers[currentSpeakerIndex].id,
         }),
       });
+
+      handleRefresh();
     } catch (error) {
       console.error("error removing speaker:", error);
       toast({
