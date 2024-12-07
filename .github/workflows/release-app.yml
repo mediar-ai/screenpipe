@@ -264,17 +264,17 @@ jobs:
             sudo mkdir -Force $llvmPath
             sudo chmod 777 $llvmPath
           }
-          
+
           # Download LLVM installer
           $installerPath = "$env:TEMP\LLVM-10.0.0-win64.exe"
           Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/LLVM-10.0.0-win64.exe" -OutFile $installerPath
-          
+
           # Run installer silently
           Start-Process -FilePath $installerPath -ArgumentList "/S /D=$llvmPath" -Wait
-          
+
           # Clean up
           Remove-Item $installerPath -Force
-          
+
           # Verify installation
           if (!(Test-Path "$llvmPath\bin\clang.exe")) {
             throw "LLVM installation failed"
@@ -286,11 +286,15 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: |
-          # Install wget using Chocolatey
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          choco install -y wget
+          # Download wget directly instead of using Chocolatey
+          $wgetUrl = "https://eternallybored.org/misc/wget/1.21.4/64/wget.exe"
+          $wgetPath = "C:\Windows\System32\wget.exe"
+          
+          # Create a web client
+          $webClient = New-Object System.Net.WebClient
+          
+          # Download wget
+          $webClient.DownloadFile($wgetUrl, $wgetPath)
           
           # Now run the pre_build script
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
