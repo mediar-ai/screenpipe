@@ -119,7 +119,27 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
-    let _log_guard = setup_logging(&local_data_dir, &cli)?;
+    // Only set up logging if we're not running a pipe command with JSON output
+    let should_log = match &cli.command {
+        Some(Command::Pipe { subcommand }) => {
+            matches!(
+                subcommand,
+                PipeCommand::List { output: OutputFormat::Text } |
+                PipeCommand::Download { output: OutputFormat::Text, .. } |
+                PipeCommand::Info { output: OutputFormat::Text, .. } |
+                PipeCommand::Enable { .. } |
+                PipeCommand::Disable { .. } |
+                PipeCommand::Update { .. } |
+                PipeCommand::Purge { .. } |
+                PipeCommand::Delete { .. }
+            )
+        }
+        _ => true,
+    };
+
+    if should_log {
+        let _log_guard = setup_logging(&local_data_dir, &cli)?;
+    }
 
     let h = Highlight::init(HighlightConfig {
         project_id:String::from("82688"),
@@ -465,9 +485,9 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌─────────────────────┬────────────────────────────────────┐");
+    println!("┌─────────────────────┬──────────��─────────────────────────┐");
     println!("│ setting             │ value                              │");
-    println!("├───────────────────���─┼────────────────────────────────────┤");
+    println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
     println!(
         "│ audio chunk duration│ {:<34} │",

@@ -315,7 +315,7 @@ mod pipes {
 
                 // Update pipe.json to indicate it's a Next.js project
                 let mut pipe_config = if let Some(existing_json) = &existing_config {
-                    serde_json::from_str(&existing_json.as_str().unwrap())?
+                    existing_json.clone()
                 } else if pipe_json_path.exists() {
                     let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
                     serde_json::from_str(&pipe_json)?
