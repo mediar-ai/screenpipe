@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { useUser } from "@/lib/hooks/use-user";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import posthog from "posthog-js";
-import { DropdownMenuItem } from "./ui/dropdown-menu";
 import { LogIn } from "lucide-react";
 
 export function AuthButton() {
@@ -33,10 +32,10 @@ export function AuthButton() {
           {user?.email}
         </span>
       ) : (
-        <DropdownMenuItem className="cursor-pointer" onClick={handleSignIn}>
+        <div className="p-2 m-0" onClick={handleSignIn}>
           <LogIn className="mr-2 h-4 w-4" />
           <span>sign in</span>
-        </DropdownMenuItem>
+        </div>
       )}
     </div>
   );
