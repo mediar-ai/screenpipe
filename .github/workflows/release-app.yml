@@ -286,8 +286,19 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: |
-          # Install wget using winget
-          choco install wget -y
+          # Try chocolatey first
+          if (Get-Command choco -ErrorAction SilentlyContinue) {
+            choco install wget -y
+          } else {
+            # Direct download if chocolatey not available
+            $wgetUrl = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
+            $wgetZip = "wget.zip"
+            Invoke-WebRequest -Uri $wgetUrl -OutFile $wgetZip
+            Expand-Archive -Path $wgetZip -DestinationPath "C:\Windows\System32" -Force
+            Remove-Item $wgetZip
+          }
+          # Verify wget is available
+          wget --version
 
       - name: Run pre_build.js
         env:
