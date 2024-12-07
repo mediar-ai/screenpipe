@@ -135,6 +135,10 @@ export const screenpipeQuery = z.object({
     .number()
     .default(10000)
     .describe("Maximum length of the text to include in the response"),
+  speaker_ids: z
+    .string()
+    .describe("Comma separated list of speaker ids to filter by")
+    .optional(),
 });
 
 export const screenpipeMultiQuery = z.object({
@@ -173,7 +177,8 @@ export async function queryScreenpipe(
     if (params.app_name) queryParams.append("app_name", params.app_name);
     if (params.window_name)
       queryParams.append("window_name", params.window_name);
-
+    if (params.speaker_ids)
+      queryParams.append("speaker_ids", params.speaker_ids);
     const url = `http://localhost:3030/search?${queryParams.toString()}`;
     console.log("calling screenpipe", url);
 

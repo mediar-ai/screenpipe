@@ -83,6 +83,7 @@ fn bench_search(c: &mut Criterion) {
                                 None,
                                 None,
                                 None,
+                                None,
                             )
                             .await
                             .unwrap()
