@@ -293,9 +293,18 @@ jobs:
             # Direct download if chocolatey not available
             $wgetUrl = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
             $wgetZip = "wget.zip"
+            $wgetDir = "$env:USERPROFILE\wget"
+            
+            # Create wget directory
+            New-Item -ItemType Directory -Force -Path $wgetDir
+            
+            # Download and extract wget
             Invoke-WebRequest -Uri $wgetUrl -OutFile $wgetZip
-            Expand-Archive -Path $wgetZip -DestinationPath "C:\Windows\System32" -Force
+            Expand-Archive -Path $wgetZip -DestinationPath $wgetDir -Force
             Remove-Item $wgetZip
+            
+            # Add to PATH for this session
+            $env:Path = "$wgetDir;$env:Path"
           }
           # Verify wget is available
           wget --version
