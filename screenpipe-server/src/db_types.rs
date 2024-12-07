@@ -81,9 +81,10 @@ pub struct AudioResultRaw {
     pub tags: Option<String>,
     pub device_name: String,
     pub is_input_device: bool,
+    pub speaker_id: Option<i64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct Speaker {
     pub id: i64,
     pub name: String,
@@ -101,6 +102,7 @@ pub struct AudioResult {
     pub tags: Vec<String>,
     pub device_name: String,
     pub device_type: DeviceType,
+    pub speaker: Option<Speaker>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -171,4 +173,11 @@ impl ToString for ContentSource {
             ContentSource::Audio => "audio".to_string(),
         }
     }
-} 
+}
+
+#[derive(Debug, FromRow)]
+pub struct AudioChunk {
+    pub id: i64,
+    pub file_path: String,
+    pub timestamp: DateTime<Utc>,
+}

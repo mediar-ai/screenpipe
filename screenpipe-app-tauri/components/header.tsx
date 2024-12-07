@@ -26,6 +26,7 @@ import {
   Search,
   Book,
   User,
+  Fingerprint,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -54,9 +55,12 @@ import { Calendar } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useUser } from "@/lib/hooks/use-user";
 import { AuthButton } from "./auth";
+import IdentifySpeakers from "./identify-speakers";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showMeetingHistory, setShowMeetingHistory] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const { health } = useHealthCheck();
   const { settings } = useSettings();
@@ -145,6 +149,41 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="cursor-pointer"
+                      onClick={handleShowTimeline}
+                      disabled={
+                        !settings.enableFrameCache ||
+                        !health ||
+                        health.status === "error"
+                      }
+                    >
+                      <Clock className="mr-2 h-4 w-4" />
+                      timeline
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                {!settings.enableFrameCache && (
+                  <TooltipContent>
+                    <p>enable timeline in settings first</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+            <MeetingHistory
+              showMeetingHistory={showMeetingHistory}
+              setShowMeetingHistory={setShowMeetingHistory}
+            />
+            <Settings
+              showSettings={showSettings}
+              setShowSettings={setShowSettings}
+            />
             <Button
               variant="ghost"
               size="icon"
@@ -169,9 +208,23 @@ export default function Header() {
                 <DropdownMenuLabel>account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <AuthButton />
+                  <DropdownMenuItem className="cursor-pointer p-0">
+                    <AuthButton />
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <Settings />
+                  <DropdownMenuItem
+                    className="cursor-pointer p-0"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowSettings(true);
+                    }}
+                  >
+                    <Settings
+                      showSettings={showSettings}
+                      setShowSettings={setShowSettings}
+                    />
+                  </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
@@ -195,8 +248,22 @@ export default function Header() {
                     <Clock className="mr-2 h-4 w-4" />
                     <span>timeline</span>
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowMeetingHistory(true);
+                    }}
+                    disabled={!health || health.status === "error"}
+                  >
+                    <MeetingHistory
+                      showMeetingHistory={showMeetingHistory}
+                      setShowMeetingHistory={setShowMeetingHistory}
+                    />
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="cursor-pointer p-0">
-                    <MeetingHistory />
+                    <IdentifySpeakers />
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
