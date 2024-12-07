@@ -223,39 +223,6 @@ export async function queryScreenpipe(
   }
 }
 
-export function extractJsonFromLlmResponse(response: string): any {
-  let cleaned = response.replace(/^```(?:json)?\s*|\s*```$/g, "");
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    cleaned = jsonMatch[0];
-  }
-  cleaned = cleaned.replace(/^[^{]*/, "").replace(/[^}]*$/, "");
-  cleaned = cleaned.replace(/\\n/g, "").replace(/\n/g, "");
-  cleaned = cleaned.replace(/"(\\"|[^"])*"/g, (match) => {
-    return match.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  });
-
-  try {
-    return JSON.parse(cleaned);
-  } catch (error) {
-    console.warn("failed to parse json:", error);
-    cleaned = cleaned
-      .replace(/,\s*}/g, "}")
-      .replace(/'/g, '"')
-      .replace(/(\w+):/g, '"$1":')
-      .replace(/:\s*'([^']*)'/g, ': "$1"')
-      .replace(/\\"/g, '"')
-      .replace(/"{/g, '{"')
-      .replace(/}"/g, '"}');
-
-    try {
-      return JSON.parse(cleaned);
-    } catch (secondError) {
-      console.warn("failed to parse json after attempted fixes:", secondError);
-      throw new Error("invalid json format in llm response");
-    }
-  }
-}
 
 export interface InboxMessage {
   title: string;

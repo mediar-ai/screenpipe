@@ -8,7 +8,7 @@ import { Tabs, Tab } from 'nextra/components'
 
   plugins come in two flavors:
   - **pipes**: native plugins that run within screenpipe's sandboxed environment. written in typescript/javascript. pipes can be either:
-    - UI-based: with NextJS for user interaction
+    - UI-based: with NextJS for user interaction (e.g. think of screenpipe as a local Vercel powered by your 24/7 context)
     - Headless: running in the background without a visual interface with cron, etc.
 </MotionDiv>
 
@@ -18,10 +18,10 @@ import { Tabs, Tab } from 'nextra/components'
 think of pipes like a local Zapier which costs 10x & 10x less friction - no auth needed, with full context of your screen and audio data.
 
 #### for developers
-- **zero infrastructure**: run locally, no servers or complex setups
+- **zero infrastructure**: run locally, no servers or complex setups, access to your auth tokens (unlike Zapier)
 - **typescript + bun**: blazing fast development
-- **full context**: rich OCR & audio transcription APIs
-- **monetization ready**: early access to pipe store with Stripe integration
+- **full context**: rich OCR, desktop scrapping, keyboard/mouse, and audio transcription APIs
+- **monetization ready**: Stripe integration to monetize your pipes
 - **bounty program**: earn $100+ for building pipes or promoting screenpipe
 - **open source**: contribute to augmenting collective human intelligence
 
@@ -80,13 +80,12 @@ the CLI will guide you through setting up your pipe
 
 | **pipe**                          | **description**                                  | **link**                          |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------- |
-| **linkedin ai assistant**| ai-powered linkedin networking              | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant)                         |
-| **for loom**    | enhance loom recordings with ai           | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom)                         |
-| **notion table logs**| generate team work logs and add to notion table              | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs)                         |
-| **reddit questions**    | post questions based on screen activity           | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit)                         |
-| **llama32 linear comments** | comment on tasks while you work | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-llama32-comment-linear-while-you-work)                         |
-| **meeting summary email**    | send meeting summaries via email                 | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-anthropic-computer-use-meeting-assistant)                         |
-| **obsidian time logs**         | log work activities to obsidian    | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs)                         |
+| **linkedin ai assistant**| automate business development by getting customers or connections on auto-pilot on linkedin              | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant)                         |
+| **loom**    | generate looms from your screenpipe data              | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom)                         |
+| **notion table logs**| automate team reporting by generating team work logs and adding to notion table              | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs)                         |
+| **reddit questions**    | automate reddit marketing by posting questions based on screen activity           | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit)                         |
+| **linear comments** | automate product management by AI commenting on linear tasks while you work | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-llama32-comment-linear-while-you-work)                         |
+| **obsidian time logs**         | automate your second brain by logging activities to obsidian    | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs)                         |
 
 </MotionDiv>
 
@@ -134,8 +133,11 @@ key features:
 - `pipe.queryScreenpipe`: query screen/audio data
 - `pipe.scheduler`: cron-like scheduling
 - `pipe.input`: programmatic UI control
+- (experimental) [vercel-like crons](https://vercel.com/docs/cron-jobs/manage-cron-jobs) - just replace `vercel.json` by `pipe.json` (only work for nextjs pipes)
 
-[full API reference](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/main.ts)
+[JS implementation (ask AI)](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/main.ts)
+
+[Rust implementation (ask AI)](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/pipes.rs)
 
 ### bounties & monetization
 
