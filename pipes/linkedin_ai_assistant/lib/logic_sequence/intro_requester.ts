@@ -51,7 +51,7 @@ export async function startAutomation(maxProfiles: number = Infinity) {
         
         // Navigation
         updateWorkflowStep('navigation', 'running', 'navigating to linkedin search');
-        await navigateToSearch(page, templates.paste_here_url_from_linkedin_with_2nd_grade_connections);
+        await navigateToSearch(page, templates.paste_here_url_from_linkedin_with_2nd_grade_connections, { allowTruncate: true });
         updateWorkflowStep('navigation', 'done');
         
         // Close any open dialogues before proceeding
@@ -60,8 +60,8 @@ export async function startAutomation(maxProfiles: number = Infinity) {
         
         // Profile extraction
         updateWorkflowStep('extraction', 'running', 'extracting profiles from search');
-        const profileElements = await extractProfileElements(page);
-        updateWorkflowStep('extraction', 'done', `found ${profileElements.length} profiles`);
+        const profileElements = await extractProfileElements(page, { maxProfiles: 100 });
+        updateWorkflowStep('extraction', 'done', `found ${profileElements.length} profiles (truncated to 100 if needed)`);
         
         const profiles: ProfileVisit[] = profileElements.map((element: ProfileElement) => {
             const cleanUrl = cleanProfileUrl(element.href || '');
