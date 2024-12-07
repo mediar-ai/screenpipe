@@ -7,7 +7,7 @@
     "ai": "^4.0.9",
     "ollama-ai-provider": "^1.0.0",
     "@ai-sdk/openai": "^1.0.5",
-    "@screenpipe/js": "^0.1.1"
+    "@screenpipe/js": "^0.1.3"
   },
   "devDependencies": {
     "@types/bun": "latest"

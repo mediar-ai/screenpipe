@@ -169,7 +169,12 @@ export async function sendDesktopNotification(
 
 export function loadPipeConfig(): PipeConfig {
   try {
-    const configPath = `${process.env.SCREENPIPE_DIR}/pipes/${process.env.PIPE_ID}/pipe.json`;
+    // Try to get path from env vars, fallback to current directory
+    const baseDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const pipeId =
+      process.env.PIPE_ID || require("path").basename(process.cwd());
+    const configPath = `${baseDir}/pipes/${pipeId}/pipe.json`;
+
     const configContent = fs.readFileSync(configPath, "utf8");
     const parsedConfig: ParsedConfig = JSON.parse(configContent);
     const config: PipeConfig = {};
@@ -222,7 +227,6 @@ export async function queryScreenpipe(
     return null;
   }
 }
-
 
 export interface InboxMessage {
   title: string;
