@@ -14,5 +14,5 @@ want a better version of this? we've added this example as a "pipe" (plugin) in 
 https://github.com/user-attachments/assets/b1040d00-76ab-465f-83c8-4af70654490c
 
 
-get it [here](https://screenpi.pe/onboarding)
+get it [here](https://screenpi.pe)
 
