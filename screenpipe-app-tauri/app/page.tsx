@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { platform } from "@tauri-apps/plugin-os";
 import PipeStore from "@/components/pipe-store";
+import { OnboardingFlowProvider } from "@/components/onboarding/context/onboarding-context";
 
 export default function Home() {
   const { settings } = useSettings();

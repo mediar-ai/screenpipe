@@ -9,6 +9,7 @@ import OnboardingPipes from "../pipes"
 import OnboardingStatus from "../status"
 import OnboardingSelection from "../usecases-selection"
 import { taskBase } from "./types"
+import { AnimatedBeamDemo } from "../screenpipe-component"
 
 const devProcess: taskBase[] = [
     {
@@ -169,7 +170,7 @@ export const onboardingFlow: (taskBase)[] = [
                 },
             ]
         },
-        component: () => <OnboardingSelection/>
+        component: () => <AnimatedBeamDemo/>
     },
     {
         type: 'TASK',
