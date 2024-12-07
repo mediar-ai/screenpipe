@@ -6,12 +6,13 @@ export function cleanProfileUrl(url: string): string {
     return url.split('?')[0];
 }
 
-export async function extractProfileElements(page: Page): Promise<ProfileElement[]> {
+export async function extractProfileElements(page: Page, options?: { maxProfiles?: number }): Promise<ProfileElement[]> {
     let allProfiles: ProfileElement[] = [];
     let hasNextPage = true;
     let pageNum = 1;
+    const maxProfiles = options?.maxProfiles || Infinity;
 
-    while (hasNextPage) {
+    while (hasNextPage && allProfiles.length < maxProfiles) {
         console.log(`\n=== Extracting profiles from page ${pageNum} ===\n`);
         
         // wait for profiles to load
@@ -52,13 +53,22 @@ export async function extractProfileElements(page: Page): Promise<ProfileElement
             href: el.href ? cleanProfileUrl(el.href) : null
         }));
 
-        allProfiles = [...allProfiles, ...cleanedElements];
+        // Only add profiles up to the max limit
+        const remainingSlots = maxProfiles - allProfiles.length;
+        const elementsToAdd = cleanedElements.slice(0, remainingSlots);
+        allProfiles = [...allProfiles, ...elementsToAdd];
 
         // log current page profiles
-        console.log(`Found ${cleanedElements.length} profiles on page ${pageNum}`);
-        cleanedElements.forEach((profile, index) => {
+        console.log(`Found ${elementsToAdd.length} profiles on page ${pageNum}`);
+        elementsToAdd.forEach((profile, index) => {
             console.log(`${index + 1}: ${profile.text}, ${profile.href}`);
         });
+
+        // Stop if we've reached the max profiles
+        if (allProfiles.length >= maxProfiles) {
+            console.log(`reached maximum of ${maxProfiles} profiles, stopping extraction`);
+            break;
+        }
 
         // check for next page button and click if exists
         hasNextPage = await page.evaluate(() => {
