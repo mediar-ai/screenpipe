@@ -308,7 +308,7 @@ jobs:
 
           # Add to PATH for current session only
           $env:Path = "$wgetDir;$env:Path"
-          
+
           # Verify installation
           & "$wgetDir\wget.exe" --version
 
@@ -542,6 +542,30 @@ jobs:
           echo "C:\Program Files\7-Zip" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           # Verify installation
           & "C:\Program Files\7-Zip\7z.exe" i
+
+      - name: Install unzip
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          $unzipUrl = "https://downloads.sourceforge.net/gnuwin32/unzip-6.0-bin.zip"
+          $unzipPath = "$env:TEMP\unzip.zip"
+          $unzipDir = "C:\unzip"
+          
+          # Download unzip
+          Invoke-WebRequest -Uri $unzipUrl -OutFile $unzipPath
+          
+          # Create directory and extract
+          New-Item -ItemType Directory -Force -Path $unzipDir
+          & "C:\Program Files\7-Zip\7z.exe" x $unzipPath -o"$unzipDir"
+          
+          # Add to PATH
+          echo "$unzipDir\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          
+          # Clean up
+          Remove-Item $unzipPath -Force
+          
+          # Verify installation
+          & "$unzipDir\bin\unzip.exe" -h
 
       - name: Cache LLVM
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
