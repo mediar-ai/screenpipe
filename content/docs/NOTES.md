@@ -25,6 +25,7 @@ Abort trap: 6
   i'll investigate this issue now, in the meantime you can do this:
 
   ```
+  brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
   brew install screenpipe
   ```
 
