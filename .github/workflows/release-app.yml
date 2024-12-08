@@ -348,7 +348,8 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.11"
+          cache: 'pip'
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
@@ -586,7 +587,8 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.11"
+          cache: 'pip'
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
