@@ -66,6 +66,18 @@ fn install_bun() {
 }
 
 #[cfg(target_os = "windows")]
+fn find_unzip() -> Option<std::path::PathBuf> {
+    let paths = [
+        // check PATH first
+        which::which("unzip").ok(),
+        // fallback to common GnuWin32 location
+        Some(std::path::PathBuf::from(r"C:\Program Files (x86)\GnuWin32\bin\unzip.exe")),
+    ];
+
+    paths.into_iter().flatten().find(|p| p.exists())
+}
+
+#[cfg(target_os = "windows")]
 fn install_onnxruntime() {
     // Set static CRT for Windows MSVC target
     if env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() == "msvc" {
@@ -77,10 +89,13 @@ fn install_onnxruntime() {
     let resp = reqwest::blocking::get(url).expect("request failed");
     let body = resp.bytes().expect("body invalid");
     fs::write("./onnxruntime-win-x64-gpu-1.19.2.zip", &body);
-    let status = Command::new("unzip")
+    let unzip_path = find_unzip().expect("could not find unzip executable - please install it via GnuWin32 or add it to PATH");
+    
+    let status = Command::new(unzip_path)
         .args(["onnxruntime-win-x64-gpu-1.19.2.zip"])
         .status()
-        .expect("failed to execute process");
+        .expect("failed to execute unzip");
+    
     if !status.success() {
         panic!("failed to install onnx binary");
     }
