@@ -194,5 +194,5 @@ fn get_ffmpeg_install_dir() -> Result<PathBuf, anyhow::Error> {
 #[cfg(not(target_os = "macos"))]
 fn get_ffmpeg_install_dir() -> Result<PathBuf, anyhow::Error> {
     // Your existing logic for other platforms
-    sidecar_dir().map_err(|e| anyhow!(e))
+    sidecar_dir().map_err(|e| anyhow::anyhow!(e))
 }

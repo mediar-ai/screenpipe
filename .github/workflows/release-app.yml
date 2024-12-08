@@ -306,10 +306,9 @@ jobs:
           Expand-Archive -Path $wgetZip -DestinationPath $wgetDir -Force
           Remove-Item $wgetZip
 
-          # Add to PATH
+          # Add to PATH for current session only
           $env:Path = "$wgetDir;$env:Path"
-          [Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::Machine)
-
+          
           # Verify installation
           & "$wgetDir\wget.exe" --version
 

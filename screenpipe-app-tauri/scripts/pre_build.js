@@ -56,6 +56,7 @@ async function findWget() {
 		'C:\\Program Files\\Git\\mingw64\\bin\\wget.exe',
 		'C:\\msys64\\usr\\bin\\wget.exe',
 		'C:\\Windows\\System32\\wget.exe',
+		'C:\\wget\\wget.exe',
 		'wget' // This will work if wget is in PATH
 	];
 

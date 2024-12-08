@@ -3,11 +3,11 @@
   "module": "pipe.ts",
   "type": "module",
   "dependencies": {
-    "zod": "^3.23.8",
-    "ai": "^4.0.9",
-    "ollama-ai-provider": "^1.0.0",
-    "@ai-sdk/openai": "^1.0.5",
-    "@screenpipe/js": "^0.1.3"
+    "@ai-sdk/openai": "^1.0.7",
+    "@screenpipe/js": "0.1.3",
+    "ai": "^4.0.13",
+    "ollama-ai-provider": "^1.1.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/bun": "latest"
