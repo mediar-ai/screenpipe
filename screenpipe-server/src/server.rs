@@ -13,12 +13,12 @@ use futures::{
 use image::ImageFormat::{self};
 
 use crate::{
-    db::TagContentType,
+    db_types::{ContentType, SearchResult, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
     video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
-    ContentType, DatabaseManager, SearchResult,
+    DatabaseManager,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use base64::prelude::*;
@@ -129,7 +129,6 @@ pub struct PaginationInfo {
 pub enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
-    FTS(FTSContent),
     UI(UiContent),
 }
 
@@ -156,19 +155,6 @@ pub struct AudioContent {
     pub tags: Vec<String>,
     pub device_name: String,
     pub device_type: DeviceType,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct FTSContent {
-    pub text_id: i64,
-    pub matched_text: String,
-    pub frame_id: i64,
-    pub timestamp: DateTime<Utc>,
-    pub app_name: String,
-    pub window_name: String,
-    pub file_path: String,
-    pub original_frame_text: Option<String>,
-    pub tags: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -318,17 +304,6 @@ pub(crate) async fn search(
                 tags: audio.tags.clone(),
                 device_name: audio.device_name.clone(),
                 device_type: audio.device_type.clone(),
-            }),
-            SearchResult::FTS(fts) => ContentItem::FTS(FTSContent {
-                text_id: fts.text_id,
-                matched_text: fts.matched_text.clone(),
-                frame_id: fts.frame_id,
-                timestamp: fts.frame_timestamp,
-                app_name: fts.app_name.clone(),
-                window_name: fts.window_name.clone(),
-                file_path: fts.video_file_path.clone(),
-                original_frame_text: fts.original_frame_text.clone(),
-                tags: fts.tags.clone(),
             }),
             SearchResult::UI(ui) => ContentItem::UI(UiContent {
                 id: ui.id,
@@ -513,7 +488,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
     let audio_active = now - last_capture < 5; // Consider active if captured in last 5 seconds
 
-    let (last_frame, _, last_ui) = match state.db.get_latest_timestamps().await {
+    let (last_frame, audio, last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
         Err(e) => {
             error!("failed to get latest timestamps: {}", e);
@@ -588,18 +563,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "unhealthy",
             format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
                     unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
-            Some("if you're experiencing issues, please try the following steps:\n\
-                  1. restart the application.\n\
-                  2. if using a desktop app, reset your screenpipe os audio/screen recording permissions.\n\
-                  3. if the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
-                  4. last, here are some faq to help you troubleshoot: https://github.com/mediar-ai/screenpipe/blob/main/content/docs/notes.md".to_string())
+            Some("if you're experiencing issues, please try contacting us on discord".to_string())
         )
     };
 
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
         last_frame_timestamp: last_frame,
-        last_audio_timestamp: None,
+        last_audio_timestamp: audio,
         last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status: audio_status.to_string(),
@@ -1333,7 +1304,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
             axum::http::header::CACHE_CONTROL,
         ]); // Important for SSE
 
-    Router::new()
+    let router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
         .route("/vision/list", post(api_list_monitors))
@@ -1348,12 +1319,19 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
-        .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))
-        .layer(cors)
+        .route("/experimental/frames/merge", post(merge_frames_handler))
+        .layer(cors);
+
+    #[cfg(feature = "experimental")]
+    {
+        router = router.route("/experimental/input_control", post(input_control_handler));
+    }
+
+    router
 }
 
 // Add the new handler
@@ -1455,13 +1433,16 @@ pub async fn delete_pipe_handler(
                 "message": "pipe deleted successfully"
             })),
         ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
+        Err(e) => {
+            error!("failed to delete pipe: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
                 "success": false,
                 "error": format!("failed to delete pipe: {}", e)
-            })),
-        ),
+                })),
+            )
+        }
     }
 }
 
@@ -1566,16 +1547,16 @@ curl "http://localhost:3030/pipes/list" | jq
 # Download a new pipe
 curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
-     -d '{"url": "./examples/typescript/pipe-stream-ocr-text"}' | jq
+     -d '{"url": "./pipes/pipe-stream-ocr-text"}' | jq
 
 curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
-     -d '{"url": "./examples/typescript/pipe-security-check"}' | jq
+     -d '{"url": "./pipes/pipe-security-check"}' | jq
 
 
 curl -X POST "http://localhost:3030/pipes/download" \
      -H "Content-Type: application/json" \
-     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"}' | jq
+     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-stream-ocr-text"}' | jq
 
 
 # Get info for a specific pipe

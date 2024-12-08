@@ -9,3 +9,67 @@ Rules:
 - Coding: NextJS: make sure to use tailwind, typescript, shadcn, lucide, magicui, and framer-motion to make UIs amazing
 - Coding: Make sure to escape html thing like quotes etc properly. Only when necessary
 - Coding: When writing react or html code make sure to use thing like &apos; instead of ". Only when necessary (e.g inside quote themselves)
+
+// Code Examples & Context:
+
+// 1. Logging Style
+// Always lowercase, use println! in tests
+````rust
+println!("starting pipe: {}", name);
+println!("error occurred: {:?}", err);
+````
+
+// 2. Error Handling in Rust
+````rust
+use anyhow::{Result, Context};
+
+async fn process_data() -> Result<()> {
+    let data = fetch_data().await.context("failed to fetch data")?;
+    process(data).await.context("failed to process data")?;
+    Ok(())
+}
+````
+
+// 3. Async Patterns
+````rust
+// Prefer channels over mutex
+let (tx, rx) = tokio::sync::mpsc::channel(32);
+
+// Instead of mutex
+let data = Arc::new(tokio::sync::RwLock::new(Vec::new()));
+````
+
+// 4. NextJS/UI Style
+````typescript
+// Use tailwind + shadcn
+export default function Component() {
+  return (
+    <div className="flex flex-col space-y-4 bg-background text-foreground">
+      <Button variant="outline">action</Button>
+    </div>
+  )
+}
+````
+
+// 5. Screenpipe API Usage
+````typescript
+// Query example
+await pipe.queryScreenpipe({
+  q: "meeting notes",
+  contentType: "ocr",
+  limit: 10
+});
+
+// Notification example
+await pipe.sendDesktopNotification({
+  title: "task completed",
+  body: "processing finished"
+});
+````
+
+// Key Principles:
+// - Fast for machines: Use channels, avoid mutex
+// - Easy for humans: Clear error messages, consistent logging
+// - Black & white UI: Clean, pixelated/scientific style
+// - Context-aware: Always leverage screen/audio context
+// - Cross-platform: Works on macos, windows, linux

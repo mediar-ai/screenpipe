@@ -1,0 +1,19 @@
+{
+  "name": "pipe-digital-clone",
+  "module": "pipe.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.0.5",
+    "@ngrok/ngrok": "^1.4.1",
+    "ai": "^4.0.10",
+    "express": "^4.21.1",
+    "ollama-ai-provider": "^1.0.0",
+    "zod": "^3.23.8"
+  }
+}

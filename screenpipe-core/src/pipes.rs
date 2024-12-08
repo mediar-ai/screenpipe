@@ -5,6 +5,7 @@ mod pipes {
     use std::future::Future;
     use std::path::PathBuf;
     use std::pin::Pin;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
 
     use reqwest::Client;
@@ -26,6 +27,21 @@ mod pipes {
 
     use crate::pick_unused_port;
     use once_cell::sync::Lazy;
+
+    // Add near other imports
+    use rand::distributions::Alphanumeric;
+    use rand::{thread_rng, Rng};
+    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+    use std::str::FromStr;
+
+    // Add this function to generate a secure cron secret
+    fn generate_cron_secret() -> String {
+        thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(32)
+            .map(char::from)
+            .collect()
+    }
 
     // Update this function near the top of the file
     fn sanitize_pipe_name(name: &str) -> String {
@@ -77,7 +93,50 @@ mod pipes {
             let pipe_config: Value = serde_json::from_str(&pipe_json)?;
 
             if pipe_config["is_nextjs"] == json!(true) {
-                info!("running next.js pipe: {}", pipe);
+                // Handle cron jobs if they exist
+                if let Some(crons) = pipe_config.get("crons").and_then(Value::as_array) {
+                    let port = pipe_config["port"].as_u64().unwrap_or(3000) as u16;
+                    let base_url = format!("http://localhost:{}", port);
+
+                    // Generate a CRON_SECRET if not exists
+                    let cron_secret = generate_cron_secret();
+
+                    // Add CRON_SECRET to environment variables
+                    env_vars.push(("CRON_SECRET".to_string(), cron_secret.clone()));
+
+                    // Clone the crons array before the loop
+                    let crons = crons.to_vec();
+
+                    for cron in crons {
+                        let path = cron["path"]
+                            .as_str()
+                            .ok_or_else(|| anyhow::anyhow!("missing path"))?
+                            .to_string();
+                        let schedule = cron["schedule"]
+                            .as_str()
+                            .ok_or_else(|| anyhow::anyhow!("missing schedule"))?
+                            .to_string();
+
+                        // Validate cron expression
+                        cron::Schedule::from_str(&schedule)
+                            .map_err(|e| anyhow::anyhow!("invalid cron: {}", e))?;
+
+                        let base_url = base_url.clone();
+                        let pipe_clone = pipe.to_string();
+                        let secret_clone = cron_secret.clone();
+
+                        tokio::spawn(async move {
+                            run_cron_schedule(
+                                &pipe_clone,
+                                &base_url,
+                                &path,
+                                &secret_clone,
+                                &schedule,
+                            )
+                            .await;
+                        });
+                    }
+                }
 
                 // Install dependencies using bun
                 info!("installing dependencies for next.js pipe");
@@ -315,7 +374,7 @@ mod pipes {
 
                 // Update pipe.json to indicate it's a Next.js project
                 let mut pipe_config = if let Some(existing_json) = &existing_config {
-                    serde_json::from_str(&existing_json.as_str().unwrap())?
+                    existing_json.clone()
                 } else if pipe_json_path.exists() {
                     let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
                     serde_json::from_str(&pipe_json)?
@@ -580,6 +639,138 @@ mod pipes {
 
         error!("bun not found");
         None
+    }
+
+    // Add this function to handle cron state persistence
+    pub async fn get_last_cron_execution(pipe_dir: &Path, path: &str) -> Result<Option<SystemTime>> {
+        let state_file = pipe_dir.join(".cron_state.json");
+
+        if !state_file.exists() {
+            return Ok(None);
+        }
+
+        let content = tokio::fs::read_to_string(state_file).await?;
+        let state: Value = serde_json::from_str(&content)?;
+
+        if let Some(last_run) = state.get(path).and_then(|v| v.as_u64()) {
+            Ok(Some(UNIX_EPOCH + std::time::Duration::from_secs(last_run)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // Add this function to save cron execution time
+    pub async fn save_cron_execution(pipe_dir: &Path, path: &str) -> Result<()> {
+        let state_file = pipe_dir.join(".cron_state.json");
+
+        let mut state: Value = if state_file.exists() {
+            let content = tokio::fs::read_to_string(&state_file).await?;
+            serde_json::from_str(&content)?
+        } else {
+            json!({})
+        };
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        if let Some(obj) = state.as_object_mut() {
+            obj.insert(path.to_string(), json!(now));
+        }
+
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(state_file)
+            .await?;
+
+        file.write_all(serde_json::to_string_pretty(&state)?.as_bytes())
+            .await?;
+        Ok(())
+    }
+
+    // Update the run_cron_schedule function
+    async fn run_cron_schedule(
+        pipe: &str,
+        base_url: &str,
+        path: &str,
+        secret: &str,
+        schedule: &str,
+    ) {
+        let schedule = match cron::Schedule::from_str(schedule) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("invalid cron schedule: {}", e);
+                return;
+            }
+        };
+
+        let client = reqwest::Client::new();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", secret)).unwrap(),
+        );
+
+        // Get pipe directory for state persistence
+        let screenpipe_dir = std::env::var("SCREENPIPE_DIR").expect("SCREENPIPE_DIR not set");
+        let pipe_dir = PathBuf::from(screenpipe_dir).join("pipes").join(pipe);
+
+        // Get last execution time
+        let last_run = match get_last_cron_execution(&pipe_dir, path).await {
+            Ok(time) => time,
+            Err(e) => {
+                error!("failed to get last cron execution: {}", e);
+                None
+            }
+        };
+
+        loop {
+            let now = chrono::Utc::now();
+            let next = if let Some(last) = last_run {
+                // Get next occurrence after the last execution
+                let last_chrono = chrono::DateTime::<chrono::Utc>::from(last);
+                schedule.after(&last_chrono).next()
+            } else {
+                schedule.after(&now).next()
+            };
+
+            let next = match next {
+                Some(next) => next,
+                None => continue,
+            };
+
+            let duration = (next - now)
+                .to_std()
+                .unwrap_or(tokio::time::Duration::from_secs(1));
+            tokio::time::sleep(duration).await;
+
+            debug!("executing cron job for pipe {} at path {}", pipe, path);
+
+            match client
+                .get(&format!("{}{}", base_url, path))
+                .headers(headers.clone())
+                .send()
+                .await
+            {
+                Ok(res) => {
+                    if res.status().is_success() {
+                        // Save successful execution time
+                        if let Err(e) = save_cron_execution(&pipe_dir, path).await {
+                            error!("failed to save cron execution time: {}", e);
+                        }
+                    } else {
+                        error!("cron job failed with status: {}", res.status());
+                        if let Ok(text) = res.text().await {
+                            error!("error response: {}", text);
+                        }
+                    }
+                }
+                Err(e) => error!("failed to execute cron job: {}", e),
+            }
+        }
     }
 }
 

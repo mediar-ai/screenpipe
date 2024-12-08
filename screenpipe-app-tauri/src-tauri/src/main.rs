@@ -34,7 +34,6 @@ use updates::start_update_check;
 use uuid::Uuid;
 mod analytics;
 mod icons;
-
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
 
@@ -43,13 +42,19 @@ mod llm_sidecar;
 mod server;
 mod sidecar;
 mod updates;
-pub use commands::open_screen_capture_preferences;
+mod permissions;
 pub use commands::reset_all_pipes;
+pub use commands::set_tray_health_icon;
+pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
-pub use commands::open_accessibility_preferences;
-pub use commands::check_accessibility_permissions;
+
+
+pub use permissions::open_permission_settings;
+pub use permissions::request_permission;
+pub use permissions::do_permissions_check;
+
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -82,6 +87,26 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
+
+    // Set permanent OLLAMA_ORIGINS env var on Windows if not present
+    #[cfg(target_os = "windows")]
+    {
+        if env::var("OLLAMA_ORIGINS").is_err() {
+            let output = std::process::Command::new("setx")
+                .args(&["OLLAMA_ORIGINS", "*"])
+                .output()
+                .expect("failed to execute process");
+
+            if !output.status.success() {
+                error!(
+                    "failed to set OLLAMA_ORIGINS: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            } else {
+                info!("permanently set OLLAMA_ORIGINS=* for user");
+            }
+        }
+    }
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
@@ -126,17 +151,21 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             kill_all_sreenpipes,
-            open_screen_capture_preferences,
+            permissions::open_permission_settings,
+            permissions::request_permission,
+            permissions::do_permissions_check,
             load_pipe_config,
             save_pipe_config,
             reset_all_pipes,
+            set_tray_unhealth_icon,
+            set_tray_health_icon,
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
             commands::show_timeline,
-            commands::open_accessibility_preferences,
-            commands::check_accessibility_permissions,
-            icons::get_app_icon
+            icons::get_app_icon,
+            commands::open_auth_window,
+            commands::show_search,
         ])
         .setup(|app| {
             // Logging setup
@@ -150,18 +179,21 @@ async fn main() {
                 .filename_prefix("screenpipe-app")
                 .filename_suffix("log")
                 .max_log_files(5)
-                .build(&get_data_dir(&app.handle()).unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")))?;
+                .build(
+                    &get_data_dir(&app.handle())
+                        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
+                )?;
 
             // Create a custom layer for file logging
             let file_layer = tracing_subscriber::fmt::layer()
                 .with_writer(file_appender)
                 .with_ansi(false)
-                .with_filter(EnvFilter::new("info"));
+                .with_filter(EnvFilter::new("info,hyper=error,tower_http=error"));
 
             // Create a custom layer for console logging
             let console_layer = tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stdout)
-                .with_filter(EnvFilter::new("debug"));
+                .with_filter(EnvFilter::new("info,hyper=error,tower_http=error"));
 
             // Initialize the tracing subscriber with both layers
             tracing_subscriber::registry()
@@ -367,6 +399,7 @@ async fn main() {
             }
 
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
+            let sidecar_manager_clone = sidecar_manager.clone();
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
@@ -378,13 +411,13 @@ async fn main() {
 
             if !use_dev_mode && !is_first_time_user {
                 tauri::async_runtime::spawn(async move {
-                    let mut manager = sidecar_manager.lock().await;
+                    let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.spawn(&app_handle).await {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
 
                     // Spawn a background task to check and restart periodically
-                    let mut manager = sidecar_manager.lock().await;
+                    let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.check_and_restart(&app_handle).await {
                         error!("Failed to restart sidecar: {}", e);
                     }
@@ -429,6 +462,7 @@ async fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
+    // set_tray_unhealth_icon(app.app_handle().clone());
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");

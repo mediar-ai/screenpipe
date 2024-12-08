@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from 'react';
 import localforage from 'localforage';
 import { SearchHistory } from '../types/history';

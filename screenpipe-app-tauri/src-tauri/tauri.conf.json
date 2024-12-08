@@ -26,7 +26,9 @@
       "icons/512x512.png",
       "icons/1024x1024.png",
       "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/screenpipe-logo-tray-failed.png",
+      "icons/screenpipe-logo-tray-black.png"
     ],
     "longDescription": "",
     "resources": [
@@ -99,34 +101,28 @@
         "transparent": true,
         "alwaysOnTop": true,
         "label": "timeline"
+      },
+      {
+        "title": "search",
+        "url": "/search",
+        "label": "search",
+        "width": 1200,
+        "height": 1000,
+        "minWidth": 1000,
+        "minHeight": 600,
+        "visible": false,
+        "decorations": true,
+        "transparent": true
       }
     ],
     "security": {
       "assetProtocol": {
-        "enable": false
+        "enable": true,
+        "scope": [
+          "$APPDATA/**"
+        ]
       },
-      "csp": {
-        "default-src": "'self' customprotocol: asset:",
-        "connect-src": "ipc: http://ipc.localhost https://youtube.com https://api.openai.com http://localhost:3030 http://localhost:* https://web.crabnebula.cloud https://api.github.com https://eu.i.posthog.com https://github.com https://*.githubusercontent.com https://*.github.com http://*:11434 http://*:9000 https://ai-proxy.i-f9f.workers.dev *",
-        "font-src": [
-          "https://fonts.gstatic.com",
-          "tauri://localhost",
-          "http://tauri.localhost"
-        ],
-        "media-src": "'self' mediadevices: asset: http://asset.localhost file: blob: tauri://localhost file: blob: https://youtube.com https://github.com https://youtu.be",
-        "img-src": "'self' asset: http://asset.localhost blob: data: https://*.githubusercontent.com https://*.github.com https://github.com https://*.s3.amazonaws.com",
-        "style-src": [
-          "'unsafe-inline'",
-          "'self'",
-          "https://fonts.googleapis.com",
-          "tauri://localhost",
-          "http://tauri.localhost",
-          "http://localhost:*",
-          "data:",
-          "*"
-        ],
-        "frame-src": "https://www.youtube.com http://localhost:*"
-      }
+      "csp": null
     },
     "macOSPrivateApi": true
   }
