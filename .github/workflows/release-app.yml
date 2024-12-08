@@ -286,28 +286,32 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: |
-          # Try chocolatey first
-          if (Get-Command choco -ErrorAction SilentlyContinue) {
-            choco install wget -y
-          } else {
-            # Direct download if chocolatey not available
-            $wgetUrl = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
-            $wgetZip = "wget.zip"
-            $wgetDir = "$env:USERPROFILE\wget"
-            
-            # Create wget directory
-            New-Item -ItemType Directory -Force -Path $wgetDir
-            
-            # Download and extract wget
-            Invoke-WebRequest -Uri $wgetUrl -OutFile $wgetZip
-            Expand-Archive -Path $wgetZip -DestinationPath $wgetDir -Force
-            Remove-Item $wgetZip
-            
-            # Add to PATH for this session
-            $env:Path = "$wgetDir;$env:Path"
+          # Remove wget alias if it exists
+          if (Test-Path Alias:wget) {
+            Remove-Item Alias:wget -Force
           }
-          # Verify wget is available
-          wget --version
+
+          # Create wget directory
+          $wgetDir = "C:\wget"
+          New-Item -ItemType Directory -Force -Path $wgetDir
+
+          # Download wget executable
+          $wgetUrl = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
+          $wgetZip = "$wgetDir\wget.zip"
+
+          # Use Invoke-WebRequest to download
+          Invoke-WebRequest -Uri $wgetUrl -OutFile $wgetZip
+
+          # Extract wget
+          Expand-Archive -Path $wgetZip -DestinationPath $wgetDir -Force
+          Remove-Item $wgetZip
+
+          # Add to PATH
+          $env:Path = "$wgetDir;$env:Path"
+          [Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::Machine)
+
+          # Verify installation
+          & "$wgetDir\wget.exe" --version
 
       - name: Run pre_build.js
         env:

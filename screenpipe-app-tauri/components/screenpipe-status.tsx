@@ -100,9 +100,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
     const checkPermissions = async () => {
       try {
         const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: true
+          initialCheck: true,
         });
-        
+
         setPermissions({
           screenRecording: perms.screenRecording,
           microphone: perms.microphone,
@@ -451,7 +451,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
     }
   };
 
-  const handlePermissionButton = async (type: "screen" | "audio" | "accessibility") => {
+  const handlePermissionButton = async (
+    type: "screen" | "audio" | "accessibility"
+  ) => {
     const toastId = toast({
       title: `checking ${type} permissions`,
       description: "please wait...",
@@ -459,31 +461,33 @@ const HealthStatus = ({ className }: { className?: string }) => {
     });
 
     try {
-      const permissionType = type === "screen" 
-        ? "screenRecording" 
-        : type === "audio" 
-        ? "microphone" 
-        : "accessibility";
+      const permissionType =
+        type === "screen"
+          ? "screenRecording"
+          : type === "audio"
+          ? "microphone"
+          : "accessibility";
 
       await invoke("request_permission", {
-        permission: permissionType
+        permission: permissionType,
       });
 
       const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-        initialCheck: false
+        initialCheck: false,
       });
 
       setPermissions({
         screenRecording: perms.screenRecording,
         microphone: perms.microphone,
-        accessibility: perms.accessibility
+        accessibility: perms.accessibility,
       });
 
-      const granted = type === "screen" 
-        ? perms.screenRecording === "Granted"
-        : type === "audio"
-        ? perms.microphone === "Granted"
-        : perms.accessibility === "Granted";
+      const granted =
+        type === "screen"
+          ? perms.screenRecording === "Granted"
+          : type === "audio"
+          ? perms.microphone === "Granted"
+          : perms.accessibility === "Granted";
 
       toastId.update({
         id: toastId.id,
@@ -680,22 +684,24 @@ const HealthStatus = ({ className }: { className?: string }) => {
             <Separator className="my-12" />
             <DevModeSettings localDataDir={localDataDir} />
 
-            <Collapsible
-              open={isLogOpen}
-              onOpenChange={setIsLogOpen}
-              className="w-full mt-4"
-            >
-              <div className="flex items-center justify-between w-full">
-                <CollapsibleTrigger className="flex items-center justify-between p-2 flex-grow border-b border-gray-200">
-                  recorder logs
-                  <span>{isLogOpen ? "▲" : "▼"}</span>
-                </CollapsibleTrigger>
-                <LogFileButton />
-              </div>
-              <CollapsibleContent>
-                <LogViewer className="mt-2" />
-              </CollapsibleContent>
-            </Collapsible>
+            {!isMac ? null : (
+              <Collapsible
+                open={isLogOpen}
+                onOpenChange={setIsLogOpen}
+                className="w-full mt-4"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <CollapsibleTrigger className="flex items-center justify-between p-2 flex-grow border-b border-gray-200">
+                    recorder logs
+                    <span>{isLogOpen ? "▲" : "▼"}</span>
+                  </CollapsibleTrigger>
+                  <LogFileButton />
+                </div>
+                <CollapsibleContent>
+                  <LogViewer className="mt-2" />
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           </div>
         </DialogContent>
       </Dialog>
