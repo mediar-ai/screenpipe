@@ -1,12 +1,5 @@
-### **New Features:**
-- **Speed up queries with FTS:** Improved query performance by implementing full-text search functionality.
-- **Add reset settings button:** Provided users with the ability to reset settings conveniently.
-
-### **Improvements:**
-- N/A
-
 ### **Fixes:**
-- N/A
+- **Fixed ffmpeg issue on macOS Tauri app:** Resolved a bug causing issues with ffmpeg on macOS Tauri app for smoother functionality.
 
-#### **Full Changelog:** [28e75..eb5dd](https://github.com/mediar-ai/screenpipe/compare/28e75..eb5dd)
+#### **Full Changelog:** [19498..fb8e2](https://github.com/mediar-ai/screenpipe/compare/19498..fb8e2)
 
