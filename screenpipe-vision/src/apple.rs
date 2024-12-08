@@ -1,8 +1,7 @@
 use image::DynamicImage;
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use uuid::Uuid;
+use std::{ffi::c_void, ptr::null_mut};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct OcrResultBBox {
@@ -26,54 +25,70 @@ struct OcrResult {
     overall_confidence: f32,
 }
 
+#[no_mangle]
+#[cfg(target_os = "macos")]
+extern "C" fn release_callback(_refcon: *mut c_void, _data_ptr: *const *const c_void) {
+    // Implement your release logic here
+}
+
 #[cfg(target_os = "macos")]
 pub fn perform_ocr_apple(
     image: &DynamicImage,
     _languages: Vec<screenpipe_core::Language>,
-) -> String {
+) -> (String, String, Option<f64>) {
     use cidre::{
+        cv::{PixelBuf, PixelFormat},
         ns,
         vn::{self, ImageRequestHandler, RecognizeTextRequest},
     };
+    use image::GenericImageView;
 
-    let default_ocr_result = serde_json::to_string(&OcrResult {
-        ocr_result: String::new(),
-        overall_confidence: 0.0,
-        text_elements: Vec::new(),
-    })
+    let rgb = image.to_rgba8();
+    let raw_data = rgb.as_raw();
+    let (width, height) = image.dimensions();
+
+    let mut overall_confidence = 0.0;
+    let default_ocr_result = (
+        String::from(""),
+        String::from("[]"),
+        Some(overall_confidence),
+    );
+
+    let width = usize::try_from(width).unwrap();
+    let height = usize::try_from(height).unwrap();
+
+    let pixel_buf = PixelBuf::new_with_bytes(
+        width,
+        height,
+        raw_data.as_ptr() as *mut c_void,
+        width * 4,
+        release_callback,
+        null_mut(),
+        PixelFormat::_32_ARGB,
+        None,
+    )
     .unwrap();
 
-    let file_name = Uuid::new_v4().as_urn().to_string();
-    let temp_path = PathBuf::from(std::env::temp_dir()).join(file_name + ".png");
-    let _ = image.save(&temp_path);
-
-    let file_uri = format!("file://{}", temp_path.to_str().unwrap());
-    let url = ns::Url::with_string(&ns::String::with_str(&file_uri));
-
-    let handler = ImageRequestHandler::with_url(&url.unwrap(), None);
+    let handler = ImageRequestHandler::with_cv_pixel_buf(&pixel_buf, None).unwrap();
     let mut request = RecognizeTextRequest::new();
     // Recognize all languages
     request.set_revision(3);
     let requests = ns::Array::<vn::Request>::from_slice(&[&request]);
     let result = handler.perform(&requests);
 
-    std::fs::remove_file(temp_path).unwrap_or_default();
-
     if result.is_err() {
+        drop(pixel_buf);
         return default_ocr_result;
     }
 
-    // let results = request.results();
-
     if let Some(results) = request.results() {
         if !results.is_empty() {
-            let mut ocr_results_vec: Vec<OcrTextElement> = Vec::new();
-            let mut overall_confidence: f32 = 0.0;
+            let mut ocr_results_vec: Vec<serde_json::Value> = Vec::new();
             let mut ocr_text: String = String::new();
             results.iter().for_each(|result| {
                 let observation_result = result.top_candidates(1).get(0).unwrap();
                 let text = observation_result.string();
-                let confidence = observation_result.confidence();
+                let confidence = observation_result.confidence() as f64;
                 let bbox = observation_result
                     .bounding_box_for_range(ns::Range::new(0, text.len()))
                     .unwrap()
@@ -83,30 +98,38 @@ pub fn perform_ocr_apple(
                 let height = bbox.size.height;
                 let width = bbox.size.width;
 
-                ocr_results_vec.push(OcrTextElement {
-                    text: text.to_string(),
-                    bounding_box: vec![OcrResultBBox {
-                        x,
-                        y,
-                        height,
-                        width,
-                    }],
-                    confidence,
-                });
+                ocr_results_vec.push(serde_json::json!({
+                    "level": "0",
+                    "page_num": "0",
+                    "block_num": "0",
+                    "par_num": "0",
+                    "line_num": "0",
+                    "word_num": "0",
+                    "left": x.to_string(),
+                    "top": y.to_string(),
+                    "width": width.to_string(),
+                    "height": height.to_string(),
+                    "conf": confidence.to_string(),
+                    "text": text.to_string(),
+                }));
 
                 overall_confidence += confidence;
-                ocr_text += &(text.to_string() + "\n");
+                ocr_text.push_str(text.to_string().as_str());
             });
-            let result_string = serde_json::to_string(&OcrResult {
-                overall_confidence,
-                ocr_result: ocr_text.to_string(),
-                text_elements: ocr_results_vec,
-            })
-            .unwrap();
-            return result_string;
+
+            let json_output_string = serde_json::to_string(&ocr_results_vec).unwrap_or_else(|e| {
+                error!("Failed to serialize JSON output: {}", e);
+                "[]".to_string()
+            });
+
+            println!("{:?}", ocr_text.to_string());
+            drop(pixel_buf);
+
+            return (ocr_text, json_output_string, Some(overall_confidence));
         }
     }
 
+    drop(pixel_buf);
     return default_ocr_result;
 }
 
