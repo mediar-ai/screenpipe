@@ -18,9 +18,11 @@ import { useSettings } from "@/lib/hooks/use-settings";
 export const LogFileButton = ({
   className,
   isAppLog = false,
+  size = "8",
 }: {
   className?: string;
   isAppLog?: boolean;
+  size?: "8" | "10" | "12";
 }) => {
   const { toast } = useToast();
   const { copyToClipboard } = useCopyToClipboard({ timeout: 3000 });
@@ -61,10 +63,10 @@ export const LogFileButton = ({
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className={cn("h-8 w-8", size === "8" && "h-8 w-8", size === "10" && "h-10 w-10", size === "12" && "h-12 w-12")}  
               onClick={handleOpenLogFile}
             >
-              <FileText className="h-4 w-4" />
+              <FileText className={cn("h-4 w-4", size === "8" && "h-4 w-4", size === "10" && "h-6 w-6", size === "12" && "h-8 w-8")} />
             </Button>
           </TooltipTrigger>
           <TooltipContent>

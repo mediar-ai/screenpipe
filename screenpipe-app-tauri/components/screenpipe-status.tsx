@@ -71,7 +71,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isDialogLoading, setIsDialogLoading] = useState(false);
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(
-    null,
+    null
   );
 
   useEffect(() => {
@@ -130,7 +130,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
     audioStatus: string,
     uiStatus: string,
     audioDisabled: boolean,
-    uiMonitoringEnabled: boolean,
+    uiMonitoringEnabled: boolean
   ) => {
     if (status === "loading") return "bg-yellow-500";
     const isVisionOk = frameStatus === "ok" || frameStatus === "disabled";
@@ -147,7 +147,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
     audioStatus: string,
     uiStatus: string,
     audioDisabled: boolean,
-    uiMonitoringEnabled: boolean,
+    uiMonitoringEnabled: boolean
   ) => {
     if (status === "loading")
       return "screenpipe is starting up. this may take a few minutes...";
@@ -187,7 +187,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
     health.audio_status,
     health.ui_status,
     settings.disableAudio,
-    settings.enableUiMonitoring,
+    settings.enableUiMonitoring
   );
   const statusMessage = getStatusMessage(
     health.status,
@@ -195,7 +195,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
     health.audio_status,
     health.ui_status,
     settings.disableAudio,
-    settings.enableUiMonitoring,
+    settings.enableUiMonitoring
   );
 
   const handleOpenStatusDialog = async () => {
@@ -220,7 +220,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   };
 
   const handlePermissionButton = async (
-    type: "screen" | "audio" | "accessibility",
+    type: "screen" | "audio" | "accessibility"
   ) => {
     const toastId = toast({
       title: `checking ${type} permissions`,
@@ -233,8 +233,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
         type === "screen"
           ? "screenRecording"
           : type === "audio"
-            ? "microphone"
-            : "accessibility";
+          ? "microphone"
+          : "accessibility";
 
       await invoke("request_permission", {
         permission: permissionType,
@@ -254,8 +254,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
         type === "screen"
           ? perms.screenRecording === "Granted"
           : type === "audio"
-            ? perms.microphone === "Granted"
-            : perms.accessibility === "Granted";
+          ? perms.microphone === "Granted"
+          : perms.accessibility === "Granted";
 
       toastId.update({
         id: toastId.id,
@@ -283,7 +283,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
         variant="outline"
         className={cn(
           "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
-          isDialogLoading && "opacity-50 pointer-events-none",
+          isDialogLoading && "opacity-50 pointer-events-none"
         )}
         onClick={handleOpenStatusDialog}
       >
@@ -307,6 +307,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
           <DialogHeader className="flex flex-row items-center justify-between">
             <DialogTitle>screenpipe status</DialogTitle>
             <div className="flex space-x-2">
+              <LogFileButton size="10" />
+
               <Button
                 variant="outline"
                 onClick={handleOpenDataDir}
@@ -365,8 +367,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       settings.disableAudio
                         ? "bg-gray-400"
                         : health.audio_status === "ok"
-                          ? "bg-green-500"
-                          : "bg-red-500"
+                        ? "bg-green-500"
+                        : "bg-red-500"
                     }`}
                   />
                   <span className="text-sm">audio recording</span>
@@ -455,7 +457,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     recorder logs
                     <span>{isLogOpen ? "▲" : "▼"}</span>
                   </CollapsibleTrigger>
-                  <LogFileButton />
                 </div>
                 <CollapsibleContent>
                   <LogViewer className="mt-2" />
