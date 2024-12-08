@@ -25,9 +25,9 @@ export default function Home() {
         {loginStatus === 'logged_in' && (
           <>
             <HarvestClosestConnections />
-            {/* <TemplateEditor initialTemplate={template} />
+            <TemplateEditor initialTemplate={template} />
             <StartWorkflow />
-            <StateViewer /> */}
+            <StateViewer />
           </>
         )}
       </main>
