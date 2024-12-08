@@ -231,9 +231,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
           </Card>
 
           <div className="relative">
-            <Badge className="bg-white text-gray-800 hover:bg-white/80 text-xs absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
-              expert only
-            </Badge>
+            
             <Card className="p-8">
               <CardContent>
                 <div className="flex items-center space-x-2">

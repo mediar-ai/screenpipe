@@ -50,20 +50,69 @@ import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Check, X } from "lucide-react";
+
+type PermissionsStatus = {
+  screenRecording: string;
+  microphone: string;
+  accessibility: string;
+};
 
 const HealthStatus = ({ className }: { className?: string }) => {
-  const { health } = useHealthCheck();
+  const {
+    health,
+    isServerDown,
+    isLoading: healthCheckLoading,
+    debouncedFetchHealth,
+  } = useHealthCheck();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMac, setIsMac] = useState(false);
   const { settings, getDataDir } = useSettings();
-  const [localDataDir, setLocalDataDir] = useState('');
+  const [localDataDir, setLocalDataDir] = useState("");
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isFixingSetup, setIsFixingSetup] = useState(false);
   const [isTroubleshootOpen, setIsTroubleshootOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [isDialogLoading, setIsDialogLoading] = useState(false);
+  const [permissions, setPermissions] = useState<PermissionsStatus | null>(
+    null
+  );
 
   useEffect(() => {
     setIsMac(platform() === "macos");
+  }, []);
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      debouncedFetchHealth();
+    };
+
+    window.addEventListener("settings-updated", handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener("settings-updated", handleSettingsUpdate);
+    };
+  }, [debouncedFetchHealth]);
+
+  useEffect(() => {
+    const checkPermissions = async () => {
+      try {
+        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
+          initialCheck: true,
+        });
+
+        setPermissions({
+          screenRecording: perms.screenRecording,
+          microphone: perms.microphone,
+          accessibility: perms.accessibility,
+        });
+      } catch (error) {
+        console.error("Failed to check permissions:", error);
+      }
+    };
+    checkPermissions();
   }, []);
 
   const openScreenPermissions = async () => {
@@ -89,7 +138,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
   const handleOpenDataDir = async () => {
     try {
-      const dataDir = await getDataDir()
+      const dataDir = await getDataDir();
       await open(dataDir);
     } catch (error) {
       console.error("failed to open data directory:", error);
@@ -112,8 +161,10 @@ const HealthStatus = ({ className }: { className?: string }) => {
   ) => {
     if (status === "loading") return "bg-yellow-500";
     const isVisionOk = frameStatus === "ok" || frameStatus === "disabled";
-    const isAudioOk = audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
-    const isUiOk = uiStatus === "ok" || uiStatus === "disabled" || !uiMonitoringEnabled;
+    const isAudioOk =
+      audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
+    const isUiOk =
+      uiStatus === "ok" || uiStatus === "disabled" || !uiMonitoringEnabled;
     return isVisionOk && isAudioOk && isUiOk ? "bg-green-500" : "bg-red-500";
   };
 
@@ -380,22 +431,104 @@ const HealthStatus = ({ className }: { className?: string }) => {
   );
 
   const handleOpenStatusDialog = async () => {
-    setLocalDataDir(await getDataDir())
-    setIsDialogOpen(true)
-  }
+    if (isDialogLoading) return; // Prevent multiple clicks while loading
+
+    try {
+      setIsDialogLoading(true);
+      const dir = await getDataDir();
+      setLocalDataDir(dir);
+      setIsDialogOpen(true);
+    } catch (error) {
+      console.error("Failed to open status dialog:", error);
+      toast({
+        title: "Error",
+        description: "Failed to open status dialog. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      setIsDialogLoading(false);
+    }
+  };
+
+  const handlePermissionButton = async (
+    type: "screen" | "audio" | "accessibility"
+  ) => {
+    const toastId = toast({
+      title: `checking ${type} permissions`,
+      description: "please wait...",
+      duration: Infinity,
+    });
+
+    try {
+      const permissionType =
+        type === "screen"
+          ? "screenRecording"
+          : type === "audio"
+          ? "microphone"
+          : "accessibility";
+
+      await invoke("request_permission", {
+        permission: permissionType,
+      });
+
+      const perms = await invoke<PermissionsStatus>("do_permissions_check", {
+        initialCheck: false,
+      });
+
+      setPermissions({
+        screenRecording: perms.screenRecording,
+        microphone: perms.microphone,
+        accessibility: perms.accessibility,
+      });
+
+      const granted =
+        type === "screen"
+          ? perms.screenRecording === "Granted"
+          : type === "audio"
+          ? perms.microphone === "Granted"
+          : perms.accessibility === "Granted";
+
+      toastId.update({
+        id: toastId.id,
+        title: granted ? "permission granted" : "permission check complete",
+        description: granted
+          ? `${type} permission was successfully granted`
+          : `please try granting ${type} permission again if needed`,
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error(`failed to handle ${type} permission:`, error);
+      toastId.update({
+        id: toastId.id,
+        title: "error",
+        description: `failed to handle ${type} permission`,
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
 
   return (
     <>
       <Badge
         variant="outline"
-        className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
+        className={cn(
+          "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
+          isDialogLoading && "opacity-50 pointer-events-none"
+        )}
         onClick={handleOpenStatusDialog}
       >
-        <Activity className="mr-2 h-4 w-4" />
+        {isDialogLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Activity className="mr-2 h-4 w-4" />
+        )}
         status{" "}
         <span
-          className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${statusColor === "bg-red-500" ? "animate-pulse" : ""
-            }`}
+          className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
+            statusColor === "bg-red-500" ? "animate-pulse" : ""
+          }`}
         />
       </Badge>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -414,41 +547,136 @@ const HealthStatus = ({ className }: { className?: string }) => {
                 <Folder className="h-4 w-4 mr-2" />
                 view saved data
               </Button>
-              <Button
+              {/* TODO: too buggy */}
+              {/* <Button
                 variant="outline"
                 onClick={() => setIsTroubleshootOpen(true)}
               >
                 <Wrench className="h-4 w-4 mr-2" />
                 troubleshoot
-              </Button>
+              </Button> */}
             </div>
           </DialogHeader>
           <div className="flex-grow overflow-auto">
             <p className="text-sm mb-4 font-semibold">{statusMessage}</p>
-            <div className="space-y-2 text-xs mb-4">
+            <div className="space-y-2 text-sm">
               {/* Screen Recording Status */}
-              <div className="flex items-center">
-                <div className={`w-2 h-2 rounded-full ${health.frame_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
-                <span>screen recording</span>
-                <span className="text-muted-foreground ml-2">status: {health.frame_status},</span>
-                <span className="text-muted-foreground ml-2">last update: {formatTimestamp(health.last_frame_timestamp)}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      health.frame_status === "ok"
+                        ? "bg-green-500"
+                        : "bg-red-500"
+                    }`}
+                  />
+                  <span className="text-sm">screen recording</span>
+                  <span className="text-sm text-muted-foreground">
+                    status: {health.frame_status}, last update:{" "}
+                    {formatTimestamp(health.last_frame_timestamp)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {permissions && (
+                    <span>
+                      {permissions.screenRecording ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <X className="h-4 w-4 text-red-500" />
+                      )}
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    className="w-[260px] text-sm justify-start"
+                    onClick={() => handlePermissionButton("screen")}
+                  >
+                    <Lock className="h-4 w-4 mr-2" />
+                    grant screen permission
+                  </Button>
+                </div>
               </div>
 
               {/* Audio Recording Status */}
-              <div className="flex items-center">
-                <div className={`w-2 h-2 rounded-full ${settings.disableAudio ? "bg-gray-400" : health.audio_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
-                <span>audio recording</span>
-                <span className="text-muted-foreground ml-2">status: {settings.disableAudio ? "turned off" : health.audio_status},</span>
-                <span className="text-muted-foreground ml-2">last update: {settings.disableAudio ? "n/a" : formatTimestamp(health.last_audio_timestamp)}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      settings.disableAudio
+                        ? "bg-gray-400"
+                        : health.audio_status === "ok"
+                        ? "bg-green-500"
+                        : "bg-red-500"
+                    }`}
+                  />
+                  <span className="text-sm">audio recording</span>
+                  <span className="text-sm text-muted-foreground">
+                    status:{" "}
+                    {settings.disableAudio ? "turned off" : health.audio_status}
+                    , last update:{" "}
+                    {settings.disableAudio
+                      ? "n/a"
+                      : formatTimestamp(health.last_audio_timestamp)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {permissions && (
+                    <span>
+                      {permissions.microphone ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <X className="h-4 w-4 text-red-500" />
+                      )}
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    className="w-[260px] text-sm justify-start"
+                    onClick={() => handlePermissionButton("audio")}
+                    disabled={settings.disableAudio}
+                  >
+                    <Lock className="h-4 w-4 mr-2" />
+                    grant audio permission
+                  </Button>
+                </div>
               </div>
 
-              {/* UI Monitoring Status - Only show if enabled */}
+              {/* UI Monitoring Status */}
               {settings.enableUiMonitoring && (
-                <div className="flex items-center">
-                  <div className={`w-2 h-2 rounded-full ${health.ui_status === "ok" ? "bg-green-500" : "bg-red-500"} mr-2`} />
-                  <span>ui monitoring</span>
-                  <span className="text-muted-foreground ml-2">status: {health.ui_status},</span>
-                  <span className="text-muted-foreground ml-2">last update: {formatTimestamp(health.last_ui_timestamp)}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        health.ui_status === "ok"
+                          ? "bg-green-500"
+                          : "bg-red-500"
+                      }`}
+                    />
+                    <span className="text-sm">ui monitoring</span>
+                    <span className="text-sm text-muted-foreground">
+                      status: {health.ui_status}, last update:{" "}
+                      {formatTimestamp(health.last_ui_timestamp)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {permissions && (
+                      <span>
+                        {permissions.accessibility ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <X className="h-4 w-4 text-red-500" />
+                        )}
+                      </span>
+                    )}
+                    <Button
+                      variant="outline"
+                      className="w-[260px] text-sm justify-start"
+                      onClick={() => handlePermissionButton("accessibility")}
+                    >
+                      <Lock className="h-4 w-4 mr-2" />
+                      grant accessibility permission
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -456,7 +684,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
             <Separator className="my-12" />
             <DevModeSettings localDataDir={localDataDir} />
 
-            {isMac ? (
+            {!isMac ? null : (
               <Collapsible
                 open={isLogOpen}
                 onOpenChange={setIsLogOpen}
@@ -473,10 +701,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <LogViewer className="mt-2" />
                 </CollapsibleContent>
               </Collapsible>
-            ) : (
-              <div className="flex justify-end mt-4">
-                <LogFileButton />
-              </div>
             )}
           </div>
         </DialogContent>

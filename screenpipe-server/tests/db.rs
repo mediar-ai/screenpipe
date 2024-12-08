@@ -4,11 +4,22 @@ mod tests {
 
     use chrono::Utc;
     use screenpipe_audio::{AudioDevice, DeviceType};
-    use screenpipe_server::{ContentType, DatabaseManager, SearchResult};
+    use screenpipe_server::{
+        db_types::{ContentType, SearchResult},
+        DatabaseManager,
+    };
     use screenpipe_vision::OcrEngine;
 
     async fn setup_test_db() -> DatabaseManager {
-        DatabaseManager::new("sqlite::memory:").await.unwrap()
+        let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
+
+        // Add speaker_id column temporarily for tests
+        sqlx::query("ALTER TABLE audio_transcriptions ADD COLUMN speaker_id INTEGER")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+        db
     }
 
     #[tokio::test]
@@ -23,7 +34,7 @@ mod tests {
             frame_id,
             "Hello, world!",
             "",
-            "",
+            "test",
             "",
             Arc::new(OcrEngine::Tesseract),
             false,
@@ -39,7 +50,7 @@ mod tests {
                 0,
                 None,
                 None,
-                None,
+                Some("test"),
                 None,
                 None,
                 None,
@@ -69,6 +80,23 @@ mod tests {
         )
         .await
         .unwrap();
+
+        let em_results = db
+            .search(
+                "audio",
+                ContentType::Audio,
+                100,
+                0,
+                None,
+                None,
+                Some("test"),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(em_results.len(), 0);
 
         let results = db
             .search(
@@ -116,6 +144,23 @@ mod tests {
 
         assert_eq!(a, 1);
 
+        let em_results = db
+            .search(
+                "",
+                ContentType::Audio,
+                100,
+                0,
+                None,
+                None,
+                Some("app"),
+                Some("window"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(em_results.len(), 0);
+
         let results = db
             .search(
                 "",
@@ -154,7 +199,7 @@ mod tests {
             frame_id,
             "Hello from OCR",
             "",
-            "",
+            "app",
             "",
             Arc::new(OcrEngine::Tesseract),
             false,
@@ -174,6 +219,23 @@ mod tests {
         )
         .await
         .unwrap();
+
+        let one_result = db
+            .search(
+                "Hello",
+                ContentType::All,
+                100,
+                0,
+                None,
+                None,
+                Some("app"),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(one_result.len(), 1);
 
         let results = db
             .search(
@@ -264,23 +326,41 @@ mod tests {
         .await
         .unwrap();
 
-        db.insert_audio_transcription(
-            audio_chunk_id,
-            "Hello from audio 2",
-            1,
-            "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
-            None,
-        )
-        .await
-        .unwrap();
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        // Add this check
-        let audio_results = db
-            .search_audio("Hello from audio 2", 100, 0, None, None, None, None)
+        let insert_result = db
+            .insert_audio_transcription(
+                audio_chunk_id,
+                "Hello from audio 2",
+                1,
+                "",
+                &AudioDevice::new("test".to_string(), DeviceType::Output),
+                None,
+            )
+            .await;
+        println!("Second audio insert result: {:?}", insert_result);
+
+        let raw_transcriptions: Vec<(String, Option<i64>)> =
+            sqlx::query_as("SELECT transcription, speaker_id FROM audio_transcriptions")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        println!("Raw transcriptions in DB: {:?}", raw_transcriptions);
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+        // After inserting both audio transcriptions, let's check all audio entries
+        let all_audio = db
+            .search_audio("", 100, 0, None, None, None, None)
             .await
             .unwrap();
-        println!("Audio results after insertion: {:?}", audio_results);
+        println!("All audio entries: {:?}", all_audio);
+
+        // Then try specific search
+        let audio_results = db
+            .search_audio("2", 100, 0, None, None, None, None)
+            .await
+            .unwrap();
+        println!("Audio results for '2': {:?}", audio_results);
+
         let end_time = Utc::now();
 
         // Test search with full time range

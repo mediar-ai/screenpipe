@@ -1,37 +1,36 @@
+use crate::get_data_dir;
+use serde::Serialize;
 use serde_json::Value;
 use tauri::Manager;
 use tracing::info;
-use crate::get_data_dir;
-
-#[cfg(target_os = "macos")]
-use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
 
 #[tauri::command]
-pub fn open_screen_capture_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-        .spawn()
-        .expect("failed to open system preferences");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn open_mic_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-        .spawn()
-        .expect("failed to open system preferences");
+pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
+        let _ = main_tray.set_icon(Some(
+            tauri::image::Image::from_path("icons/screenpipe-logo-tray-failed.png").unwrap(),
+        ));
+    }
 }
 
 #[tauri::command]
-pub async fn load_pipe_config(app_handle: tauri::AppHandle<tauri::Wry>, pipe_name: String) -> Result<Value, String> {
+pub fn set_tray_health_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
+        let _ = main_tray.set_icon(Some(
+            tauri::image::Image::from_path("icons/screenpipe-logo-tray-black.png").unwrap(),
+        ));
+    }
+}
+
+#[tauri::command]
+pub async fn load_pipe_config(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    pipe_name: String,
+) -> Result<Value, String> {
     info!("Loading pipe config for {}", pipe_name);
     let default_path = get_data_dir(&app_handle)
         .map(|path| path.join("pipes"))
         .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe").join("pipes"));
-
 
     let config_path = default_path.join(pipe_name).join("pipe.json");
     info!("Config path: {}", config_path.to_string_lossy());
@@ -44,7 +43,11 @@ pub async fn load_pipe_config(app_handle: tauri::AppHandle<tauri::Wry>, pipe_nam
 }
 
 #[tauri::command]
-pub async fn save_pipe_config(app_handle: tauri::AppHandle<tauri::Wry>, pipe_name: String, config: Value) -> Result<(), String> {
+pub async fn save_pipe_config(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    pipe_name: String,
+    config: Value,
+) -> Result<(), String> {
     info!("Saving pipe config for {}", pipe_name);
     let default_path = get_data_dir(&app_handle)
         .map(|path| path.join("pipes"))
@@ -139,6 +142,7 @@ const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 pub fn update_show_screenpipe_shortcut(
     app_handle: tauri::AppHandle<tauri::Wry>,
     new_shortcut: String,
+    enabled: bool,
 ) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
@@ -168,6 +172,14 @@ pub fn update_show_screenpipe_shortcut(
         }
     };
 
+    if !enabled {
+        let _ = app_handle
+            .global_shortcut()
+            .unregister(show_window_shortcut);
+
+        return Ok(());
+    }
+
     // Register the new shortcut
     if let Err(e) = app_handle.global_shortcut().on_shortcut(
         show_window_shortcut,
@@ -193,41 +205,83 @@ pub fn update_show_screenpipe_shortcut(
     Ok(())
 }
 
-#[tauri::command]
-pub fn open_accessibility_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        .spawn()
-        .expect("failed to open system preferences");
+
+
+
+
+// Add these new structs
+#[derive(Debug, Serialize)]
+pub struct AuthStatus {
+    authenticated: bool,
+    message: Option<String>,
 }
 
+// Command to open the auth window
 #[tauri::command]
-pub fn check_accessibility_permissions() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        // Check if the app has accessibility permissions
-        let options = {
-            let key = CFString::new("AXTrustedCheckOptionPrompt");
-            let value = CFBoolean::false_value();
-            let pairs = &[(key, value)];
-            core_foundation::dictionary::CFDictionary::from_CFType_pairs(pairs)
-        };
+pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    let auth_url = "http://localhost:3001/login";
+    #[cfg(not(debug_assertions))]
+    let auth_url = "https://screenpi.pe/login";
 
-        let trusted = unsafe {
-            let accessibility = CFString::new("AXIsProcessTrustedWithOptions");
-            let func: extern "C" fn(*const core_foundation::dictionary::CFDictionary) -> bool =
-                std::mem::transmute(libc::dlsym(
-                    libc::RTLD_DEFAULT,
-                    accessibility.to_string().as_ptr() as *const _,
-                ));
-            func(options.as_concrete_TypeRef() as *const _)
-        };
-
-        return trusted;
+    // If window exists, try to close it and wait a bit
+    if let Some(existing_window) = app_handle.get_webview_window("auth") {
+        let _ = existing_window.destroy();
+        // Give it a moment to properly close
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
-    #[cfg(not(target_os = "macos"))]
-    {
-        return true;
+
+    let window = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        "auth",
+        tauri::WebviewUrl::External(auth_url.parse().unwrap()),
+    )
+    .title("screenpipe auth")
+    .center()
+    .build()
+    .map_err(|e| format!("failed to open auth window: {}", e))?;
+
+    // Add close event listener to cleanup the window
+    let window_handle = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Destroyed = event {
+            if let Some(w) = window_handle.get_webview_window("auth") {
+                let _ = w.close();
+            }
+        }
+    });
+
+    Ok(())
+}
+
+
+
+
+
+
+
+
+#[tauri::command]
+pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("search") {
+        #[cfg(target_os = "macos")]
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+        let _ = window.set_decorations(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "search",
+            tauri::WebviewUrl::App("search.html".into()),
+        )
+        .title("search")
+        .decorations(true)
+        .transparent(true)
+        .center()
+        .build()
+        .unwrap();
     }
 }
+

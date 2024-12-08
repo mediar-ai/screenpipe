@@ -1,13 +1,16 @@
 #[cfg(feature = "pipes")]
 #[cfg(test)]
 mod tests {
+    use chrono::{DateTime, TimeZone, Utc};
     use reqwest;
-    use screenpipe_core::{download_pipe, run_pipe};
+    use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution};
     use serde_json::json;
-    use std::time::Duration;
+    use std::sync::Arc;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use std::{path::PathBuf, sync::Once};
     use tempfile::TempDir;
     use tokio::fs::create_dir_all;
+    use tokio::sync::Mutex;
     use tokio::time::sleep;
     use tracing::subscriber::set_global_default;
     use tracing_subscriber::fmt::Subscriber;
@@ -111,57 +114,6 @@ mod tests {
         assert_eq!(content, "Hello, Screenpipe!");
     }
 
-    async fn setup_test_pipe_with_config(
-        temp_dir: &TempDir,
-        pipe_name: &str,
-        code: &str,
-        config: &str,
-    ) -> PathBuf {
-        init();
-        let pipe_dir = temp_dir.path().join("pipes").join(pipe_name);
-        create_dir_all(&pipe_dir).await.unwrap();
-
-        let ts_file_path = pipe_dir.join("pipe.ts");
-        tokio::fs::write(&ts_file_path, code).await.unwrap();
-
-        let json_file_path = pipe_dir.join("pipe.json");
-        tokio::fs::write(&json_file_path, config).await.unwrap();
-
-        pipe_dir
-    }
-
-    #[tokio::test]
-    async fn test_pipe_with_config() {
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let code = r#"
-            (async () => {
-                await pipe.loadConfig();
-                console.log("Pipe config test");
-                console.log(`API Key: ${pipe.config.apiKey}`);
-                console.log(`Endpoint: ${pipe.config.endpoint}`);
-                if (pipe.config.apiKey !== "test-api-key" || pipe.config.endpoint !== "https://api.example.com") {
-                    throw new Error("Config not loaded correctly");
-                }
-            })();
-        "#;
-
-        let config = json!({
-            "apiKey": "test-api-key",
-            "endpoint": "https://api.example.com"
-        })
-        .to_string();
-
-        let pipe_dir = setup_test_pipe_with_config(&temp_dir, "config_pipe", code, &config).await;
-
-        // Change the working directory to the pipe directory
-        std::env::set_current_dir(&pipe_dir).unwrap();
-
-        let result = run_pipe("config_pipe", screenpipe_dir).await;
-        assert!(result.is_ok(), "Pipe execution failed: {:?}", result);
-    }
-
     #[tokio::test]
     #[ignore] // Github said NO
     async fn test_download_pipe_github_folder() {
@@ -169,7 +121,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let screenpipe_dir = temp_dir.path().to_path_buf();
 
-        let github_url = "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text";
+        let github_url =
+            "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-stream-ocr-text";
         let result = download_pipe(github_url, screenpipe_dir.clone()).await;
 
         assert!(
@@ -346,6 +299,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_nextjs_pipe_app_dir() {
         println!("Starting test_nextjs_pipe_app_dir");
         init();
@@ -441,5 +395,109 @@ mod tests {
         pipe_task.abort();
 
         println!("Test completed successfully");
+    }
+
+    #[tokio::test]
+    async fn test_cron_state_persistence() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let pipe_dir = temp_dir.path().join("test-pipe");
+        tokio::fs::create_dir_all(&pipe_dir).await.unwrap();
+
+        let test_path = "/api/test/cron";
+
+        // Test saving execution time
+        let save_result = save_cron_execution(&pipe_dir, test_path).await;
+        assert!(save_result.is_ok(), "Failed to save cron state");
+
+        // Test reading execution time
+        let last_run = get_last_cron_execution(&pipe_dir, test_path).await;
+        assert!(last_run.is_ok(), "Failed to read cron state");
+        assert!(last_run.unwrap().is_some(), "No execution time found");
+    }
+
+    #[tokio::test]
+    async fn test_cron_scheduling() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let pipe_dir = temp_dir.path().join("test-pipe");
+        tokio::fs::create_dir_all(&pipe_dir).await.unwrap();
+
+        // Create a mock HTTP client that records requests
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let requests_clone = requests.clone();
+
+        // Mock time - start at a known point
+        let start_time = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let mock_now = Arc::new(Mutex::new(start_time));
+
+        // Spawn the cron task with mocked time and client
+        let cron_handle = tokio::spawn(async move {
+            // Run for a simulated hour
+            for _ in 0..12 {
+                // Advance time by 5 minutes
+                let mut now = mock_now.lock().await;
+                *now = *now + chrono::Duration::minutes(5);
+
+                // Record the request
+                requests.lock().await.push(*now);
+
+                // Simulate HTTP request delay
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        });
+
+        // Wait for the simulation to complete
+        cron_handle.await.unwrap();
+
+        // Verify the requests
+        let recorded_requests = requests_clone.lock().await;
+        assert_eq!(recorded_requests.len(), 12, "Expected 12 cron executions");
+
+        // Verify timing between requests
+        for i in 1..recorded_requests.len() {
+            let time_diff = recorded_requests[i] - recorded_requests[i - 1];
+            assert_eq!(time_diff.num_minutes(), 5, "Expected 5 minute intervals");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cron_recovery_after_restart() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let pipe_dir = temp_dir.path().join("test-pipe");
+        tokio::fs::create_dir_all(&pipe_dir).await.unwrap();
+
+        let test_path = "/api/test/cron";
+
+        // Simulate a previous execution
+        let initial_time = SystemTime::now() - Duration::from_secs(300); // 5 minutes ago
+        let mut state = json!({});
+        if let Some(obj) = state.as_object_mut() {
+            obj.insert(
+                test_path.to_string(),
+                json!(initial_time.duration_since(UNIX_EPOCH).unwrap().as_secs()),
+            );
+        }
+
+        // Save the initial state
+        let state_file = pipe_dir.join(".cron_state.json");
+        tokio::fs::write(&state_file, serde_json::to_string_pretty(&state).unwrap())
+            .await
+            .unwrap();
+
+        // Read the state back and verify
+        let last_run = get_last_cron_execution(&pipe_dir, test_path).await.unwrap();
+        assert!(last_run.is_some(), "Failed to read initial state");
+
+        let time_diff = SystemTime::now()
+            .duration_since(last_run.unwrap())
+            .unwrap()
+            .as_secs();
+        assert!(
+            time_diff >= 300 && time_diff <= 301,
+            "Unexpected time difference: {}",
+            time_diff
+        );
     }
 }

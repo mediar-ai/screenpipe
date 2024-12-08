@@ -42,6 +42,9 @@ rand = "0.8.5"
 
 once_cell = "1.19.0"
 
+cron = "0.13.0"
+chrono = "0.4.38"
+
 [features]
 default = ["pipes", "security"]
 llm = ["candle", "candle-nn", "candle-transformers", "tokenizers", "hf-hub"]

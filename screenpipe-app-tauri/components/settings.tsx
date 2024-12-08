@@ -11,7 +11,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useSettings, AIProviderType } from "@/lib/hooks/use-settings";
+import {
+  useSettings,
+  AIProviderType,
+  Shortcut,
+} from "@/lib/hooks/use-settings";
 import {
   Tooltip,
   TooltipContent,
@@ -19,7 +23,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 import { Badge } from "@/components/ui/badge"; // Add this import
@@ -55,9 +65,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { AuthButton } from "./auth";
+import { DropdownMenuItem } from "./ui/dropdown-menu";
 
 export function Settings({ className }: { className?: string }) {
-  const { settings, updateSettings, resetSetting } = useSettings();
+  const { settings, updateSettings, resetSetting, resetSettings } =
+    useSettings();
+  const { debouncedFetchHealth } = useHealthCheck();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<
@@ -73,6 +88,10 @@ export function Settings({ className }: { className?: string }) {
   const [embeddedAIStatus, setEmbeddedAIStatus] = useState<
     "idle" | "running" | "error"
   >("idle");
+
+  const [disabledShortcuts, setDisabledShortcuts] = useState<Shortcut[]>(
+    settings.disabledShortcuts
+  );
 
   useEffect(() => {
     setCurrentShortcut(settings.showScreenpipeShortcut);
@@ -121,6 +140,7 @@ export function Settings({ className }: { className?: string }) {
     updateSettings({ showScreenpipeShortcut: newShortcut });
     registerShortcuts({
       showScreenpipeShortcut: newShortcut,
+      disabledShortcuts,
     });
 
     setCurrentShortcut(newShortcut);
@@ -473,27 +493,83 @@ export function Settings({ className }: { className?: string }) {
   // Use the useInterval hook to periodically check the status
   useInterval(checkEmbeddedAIStatus, 10000); // Check every 10 seconds
 
+  const handleShortcutToggle = (checked: boolean) => {
+    console.log("handleShortcutToggle", checked);
+    let newDisabledShortcuts = [...localSettings.disabledShortcuts];
+    if (!checked) {
+      newDisabledShortcuts.push(Shortcut.SHOW_SCREENPIPE);
+    } else {
+      newDisabledShortcuts = newDisabledShortcuts.filter(
+        (shortcut) => shortcut !== Shortcut.SHOW_SCREENPIPE
+      );
+    }
+
+    setLocalSettings({
+      ...localSettings,
+      disabledShortcuts: newDisabledShortcuts,
+    });
+    updateSettings({
+      disabledShortcuts: newDisabledShortcuts,
+    });
+
+    registerShortcuts({
+      showScreenpipeShortcut: settings.showScreenpipeShortcut,
+      disabledShortcuts: newDisabledShortcuts,
+    });
+  };
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      debouncedFetchHealth();
+    };
+
+    window.addEventListener("settings-updated", handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener("settings-updated", handleSettingsUpdate);
+    };
+  }, [debouncedFetchHealth]);
+
+  const handleResetSettings = async () => {
+    try {
+      await resetSettings();
+      toast({
+        title: "settings were reset successfully",
+      });
+    } catch (e) {
+      console.log(e);
+      toast({
+        title: "can't reset your settings",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Dialog
       onOpenChange={(open) => {
         if (!open) {
-          // hack bcs something does not update settings for some reason
-          window.location.reload(); // TODO: event trigger
+          window.location.reload();
         }
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className={className}>
-          <Settings2 className="h-5 w-5" />
-          <span className="sr-only">settings</span>
-        </Button>
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={(e) => e.preventDefault()}
+        >
+          <div className="flex items-center">
+            <Settings2 className="mr-2 h-4 w-4" />
+            <span>settings</span>
+          </div>
+        </DropdownMenuItem>
       </DialogTrigger>
+
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle>settings</DialogTitle>
-            <Badge className="mr-4">$200 cloud credits</Badge>
-          </div>
+          <DialogTitle>
+            <div className="flex items-center gap-4">settings</div>
+          </DialogTitle>
           <DialogDescription>
             choose your AI provider, enter necessary credentials, and more.
           </DialogDescription>
@@ -667,7 +743,6 @@ export function Settings({ className }: { className?: string }) {
                     <Textarea
                       id="customPrompt"
                       value={localSettings.customPrompt}
-                      defaultValue={localSettings.customPrompt}
                       onChange={handleCustomPromptChange}
                       className="min-h-[100px]"
                       placeholder="enter your custom prompt here"
@@ -940,47 +1015,94 @@ export function Settings({ className }: { className?: string }) {
               <CardTitle className="text-center">shortcuts</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center">
-              <h2 className="text-lg font-semibold mb-4">
-                set shortcut for screenpipe overlay
-              </h2>
-              <p className="text-sm text-muted-foreground mb-4">
-                use the following options to set a keyboard shortcut for showing
-                the screenpipe overlay.
-              </p>
-              <div className="flex items-center gap-2 mb-4">
-                {["ctrl", "alt", "shift", "super"].map((modifier) => (
-                  <label key={modifier} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedModifiers.includes(modifier)}
-                      onChange={() => toggleModifier(modifier)}
-                    />
-                    <span className="ml-2">
-                      {parseKeyboardShortcut(modifier)}
-                    </span>
-                  </label>
-                ))}
-                <input
-                  type="text"
-                  value={nonModifierKey}
-                  onChange={handleNonModifierKeyChange}
-                  placeholder="enter key"
-                  className="border p-1"
-                />
-                <button
-                  onClick={handleSetShortcut}
-                  className={`btn btn-primary ${
-                    !isShortcutChanged ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                  disabled={!isShortcutChanged}
-                >
-                  set shortcut
-                </button>
+              <div
+                className={
+                  settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)
+                    ? "opacity-50 pointer-events-none"
+                    : ""
+                }
+              >
+                <h2 className="text-lg font-semibold mb-4">
+                  set shortcut for screenpipe overlay
+                </h2>
+                <p className="text-sm text-muted-foreground mb-4">
+                  use the following options to set a keyboard shortcut for
+                  showing the screenpipe overlay.
+                </p>
+                <div className="flex items-center gap-2 mb-4">
+                  {["ctrl", "alt", "shift", "super"].map((modifier) => (
+                    <label key={modifier} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedModifiers.includes(modifier)}
+                        onChange={() => toggleModifier(modifier)}
+                      />
+                      <span className="ml-2">
+                        {parseKeyboardShortcut(modifier)}
+                      </span>
+                    </label>
+                  ))}
+                  <input
+                    type="text"
+                    value={nonModifierKey}
+                    onChange={handleNonModifierKeyChange}
+                    placeholder="enter key"
+                    className="border p-1"
+                  />
+                  <button
+                    onClick={handleSetShortcut}
+                    className={`btn btn-primary ${
+                      !isShortcutChanged ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                    disabled={!isShortcutChanged}
+                  >
+                    set shortcut
+                  </button>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground text-center">
+                  current shortcut: {parseKeyboardShortcut(currentShortcut)}
+                </p>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground text-center">
-                current shortcut: {parseKeyboardShortcut(currentShortcut)}
+              <div className="w-full flex justify-center gap-2 items-center">
+                <Label htmlFor="shortcutEnabled" className="mt-2 text-sm">
+                  {settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)
+                    ? "enable shortcut"
+                    : "disable shortcut"}
+                </Label>
+                <Switch
+                  id="shortcutEnabled"
+                  checked={
+                    !settings.disabledShortcuts.includes(
+                      Shortcut.SHOW_SCREENPIPE
+                    )
+                  }
+                  onCheckedChange={handleShortcutToggle}
+                  className="mt-2"
+                />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border border-[#fab1b6] overflow-hidden">
+            <CardHeader>
+              <CardTitle className="text-center">reset settings</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <p className="text-sm text-muted-foreground mb-4">
+                permanently reset settings to their default values.
               </p>
             </CardContent>
+            <CardFooter className="bg-[#fdedee] border-t border-[#fab1b6] flex justify-between items-center p-5">
+              <p className="text-sm text-muted-foreground">
+                this action is not reversible — please continue with caution.
+              </p>
+              <Button
+                variant={"destructive"}
+                onClick={() => handleResetSettings()}
+                disabled={false}
+              >
+                reset settings
+              </Button>
+            </CardFooter>
           </Card>
         </div>
       </DialogContent>
