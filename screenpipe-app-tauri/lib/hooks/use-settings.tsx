@@ -49,6 +49,7 @@ export type Settings= {
   aiUrl: string;
   aiMaxContextChars: number;
   fps: number;
+  timelineFps: number;
   vadSensitivity: VadSensitivity;
   analyticsEnabled: boolean;
   audioChunkDuration: number; // new field
@@ -94,6 +95,7 @@ const DEFAULT_SETTINGS: Settings = {
   aiUrl: "https://api.openai.com/v1",
   aiMaxContextChars: 30000,
   fps: 0.5,
+  timelineFps: 0.1,
   vadSensitivity: "high",
   analyticsEnabled: true,
   audioChunkDuration: 30, // default to 10 seconds

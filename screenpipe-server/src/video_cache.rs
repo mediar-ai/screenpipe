@@ -458,6 +458,7 @@ impl FrameCache {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         frame_tx: FrameChannel,
+        target_fps: f64,
     ) -> Result<()> {
         let mut extraction_queue = HashMap::new();
         let mut total_frames = 0;
@@ -545,6 +546,7 @@ impl FrameCache {
                     tasks,
                     frame_tx.clone(),
                     self.cache_tx.clone(),
+                    target_fps,
                 )
                 .await?;
                 total_frames += extracted;
@@ -561,6 +563,7 @@ impl FrameCache {
         duration_minutes: i64,
         frame_tx: Sender<TimeSeriesFrame>,
         descending: bool,
+        target_fps: f64,
     ) -> Result<()> {
         let start = timestamp - Duration::minutes(duration_minutes / 2);
         let end = timestamp + Duration::minutes(duration_minutes / 2);
@@ -575,7 +578,7 @@ impl FrameCache {
             let cache_clone = self.clone();
             tokio::spawn(async move {
                 let result = cache_clone
-                    .extract_frames_batch(start, end, extract_tx)
+                    .extract_frames_batch(start, end, extract_tx, target_fps)
                     .await;
                 debug!("extraction task completed: {:?}", result.is_ok());
                 result
@@ -636,6 +639,7 @@ async fn extract_frame(
     tasks: Vec<(FrameData, OCREntry)>,
     frame_tx: FrameChannel,
     cache_tx: mpsc::Sender<CacheMessage>,
+    target_fps: f64,
 ) -> Result<usize> {
     if !is_video_file_complete(&ffmpeg, &video_file_path).await? {
         debug!("skipping incomplete video file: {}", video_file_path);
@@ -655,11 +659,11 @@ async fn extract_frame(
     let output_pattern = temp_dir.path().join("frame%d.jpg");
 
     // Calculate frame interval based on target FPS
-    let frame_interval = (source_fps / 0.1).round() as i64; // Using 0.1 as target FPS
+    let frame_interval = (source_fps / target_fps).round() as i64; // Using 0.1 as target FPS
 
     debug!(
         "extracting frames with interval {} (source: {}fps, target: {}fps)",
-        frame_interval, source_fps, 0.1
+        frame_interval, source_fps, target_fps
     );
 
     // Calculate which frames to extract
