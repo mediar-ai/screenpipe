@@ -284,12 +284,23 @@ const PipeStore: React.FC = () => {
         throw new Error(data.error);
       }
 
+      // Immediately update the local state
+      setPipes(prevPipes => 
+        prevPipes.map(p => 
+          p.id === pipe.id ? { ...p, enabled: !p.enabled } : p
+        )
+      );
+
+      // If we're in the details view, update the selected pipe too
+      setSelectedPipe(prev => 
+        prev?.id === pipe.id ? { ...prev, enabled: !prev.enabled } : prev
+      );
+
       toast({
-        title: `${endpoint}ing pipe`,
-        description: "this may take a few moments...",
+        title: `pipe ${endpoint}d`,
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Still fetch the latest state from the server to ensure consistency
       await fetchInstalledPipes();
     } catch (error) {
       console.error(`Failed to ${pipe.enabled ? "disable" : "enable"} pipe:`, error);

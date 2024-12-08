@@ -31,6 +31,21 @@ fn find_ffmpeg_path_internal() -> Option<PathBuf> {
     }
     debug!("ffmpeg not found in PATH");
 
+    // Check in $HOME/.local/bin on macOS
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let local_bin = PathBuf::from(home).join(".local").join("bin");
+            debug!("Checking $HOME/.local/bin: {:?}", local_bin);
+            let ffmpeg_in_local_bin = local_bin.join(EXECUTABLE_NAME);
+            if ffmpeg_in_local_bin.exists() {
+                debug!("Found ffmpeg in $HOME/.local/bin: {:?}", ffmpeg_in_local_bin);
+                return Some(ffmpeg_in_local_bin);
+            }
+            debug!("ffmpeg not found in $HOME/.local/bin");
+        }
+    }
+
     // Check in current working directory
     if let Ok(cwd) = std::env::current_dir() {
         debug!("Current working directory: {:?}", cwd);
