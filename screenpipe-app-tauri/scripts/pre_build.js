@@ -280,7 +280,8 @@ if (platform == 'windows') {
 	}
 
 	// Setup vcpkg packages with environment variables set inline
-	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} ${process.env.VCPKG_ROOT}\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
+	// TODO is this even used? dont we use build.rs for this?
+	// await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} ${process.env.VCPKG_ROOT}\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {

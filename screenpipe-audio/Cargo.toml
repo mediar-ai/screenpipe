@@ -11,6 +11,7 @@ edition = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [build-dependencies]
 reqwest = { workspace = true }
+which = "7.0.0"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
