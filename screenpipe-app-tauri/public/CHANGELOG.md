@@ -1,12 +1,12 @@
 ### **New Features:**
-- **Speed up queries with FTS:** Improved query performance by implementing full-text search functionality.
-- **Add reset settings button:** Provided users with the ability to reset settings conveniently.
+- No new features added.
 
 ### **Improvements:**
-- N/A
+- **Improved settings update:** Fixed an issue where settings were not updating correctly, ensuring a smoother user experience.
 
 ### **Fixes:**
-- N/A
+- **Fixed cursor rules update:** Updated cursor rules functionality for better accuracy.
+- **Fixed Windows build:** Resolved issues with the Windows build for enhanced stability and performance.
 
-#### **Full Changelog:** [28e75..eb5dd](https://github.com/mediar-ai/screenpipe/compare/28e75..eb5dd)
+#### **Full Changelog:** [98cc4..f8d68](https://github.com/mediar-ai/screenpipe/compare/98cc4..f8d68)
 

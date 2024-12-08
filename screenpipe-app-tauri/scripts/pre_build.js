@@ -56,6 +56,7 @@ async function findWget() {
 		'C:\\Program Files\\Git\\mingw64\\bin\\wget.exe',
 		'C:\\msys64\\usr\\bin\\wget.exe',
 		'C:\\Windows\\System32\\wget.exe',
+		'C:\\wget\\wget.exe',
 		'wget' // This will work if wget is in PATH
 	];
 
@@ -279,7 +280,7 @@ if (platform == 'windows') {
 	}
 
 	// Setup vcpkg packages with environment variables set inline
-	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} C:\\vcpkg\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
+	await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} ${process.env.VCPKG_ROOT}\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {

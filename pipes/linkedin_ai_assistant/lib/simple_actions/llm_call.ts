@@ -1,39 +1,47 @@
-import { completion } from 'litellm';
-import { config } from 'dotenv';
-
-// load environment variables
-config();
-
-interface LLMResponse {
-  content: string;
-  model: string;
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
+import { LLMResponse } from '../storage/types';
 
 async function callGPT4(prompt: string): Promise<LLMResponse> {
   try {
-    const response = await completion({
+    const messages = [
+      {
+        role: 'system',
+        content: ''
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ];
+
+    const body = {
       model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      apiKey: process.env.OPENAI_API_KEY,
+      messages,
       temperature: 0.5,
-      max_tokens: 4000,
+      stream: false
+    };
+
+    const response = await fetch('https://ai-proxy.i-f9f.workers.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     });
 
-    // ensure content exists and handle potential null/undefined
-    if (!response.choices[0]?.message?.content) {
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error.message || 'unknown error');
+    }
+
+    if (!data.choices?.[0]?.message?.content) {
       throw new Error('no content in response');
     }
 
-    // extract the relevant data from response
     const result: LLMResponse = {
-      content: response.choices[0].message.content,
-      model: response.model || 'unknown',
-      usage: response.usage || {
+      content: data.choices[0].message.content,
+      model: data.model || 'unknown',
+      usage: data.usage || {
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0,
@@ -47,20 +55,4 @@ async function callGPT4(prompt: string): Promise<LLMResponse> {
   }
 }
 
-// example usage
-async function main() {
-  const prompt = 'explain quantum computing in simple terms';
-  try {
-    const result = await callGPT4(prompt);
-    console.log('response:', result.content);
-    console.log('model:', result.model);
-    console.log('token usage:', result.usage);
-  } catch (error) {
-    console.error('main error:', error);
-  }
-}
-
-// uncomment to run the example
-// main();
-
-export { callGPT4, LLMResponse };
+export { callGPT4 };

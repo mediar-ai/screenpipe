@@ -198,19 +198,18 @@ async function main() {
 
     console.log("\nto get started:");
     console.log(chalk.cyan(`cd ${directory}`));
-    console.log(chalk.cyan("bun install"));
+    console.log(chalk.cyan("bun install    # or use: npm install, pnpm install, yarn"));
 
     if (pipeType === "ui") {
-      console.log(chalk.cyan("bun dev"));
+      console.log(chalk.cyan("bun dev      # or use: npm run dev, pnpm dev, yarn dev"));
     } else {
-      // TODO make these shits non mandatory
       console.log(
         chalk.cyan(`export SCREENPIPE_DIR="$HOME/.screenpipe"
 export PIPE_ID="${pipeName}"
 export PIPE_FILE="pipe.ts"
 export PIPE_DIR="$SCREENPIPE_DIR/pipes/${pipeName}"
 
-bun run pipe.ts
+bun run pipe.ts    # or use: npm run pipe.ts, pnpm pipe.ts, yarn pipe.ts
         `)
       );
     }

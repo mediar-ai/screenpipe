@@ -2,16 +2,26 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ProfileVisit, State, Message, ProfileStore, ProfileDetails, MessageStore } from './types';
 
-const STORAGE_DIR = path.join(__dirname);
+const STORAGE_DIR = path.join(process.cwd(), 'lib', 'storage');
 console.log('storage directory:', STORAGE_DIR);
 
+async function ensureStorageDir() {
+    try {
+        await fs.access(STORAGE_DIR);
+    } catch {
+        await fs.mkdir(STORAGE_DIR, { recursive: true });
+        console.log('created storage directory:', STORAGE_DIR);
+    }
+}
+
 export async function loadState(): Promise<State> {
+    await ensureStorageDir();
     try {
         const statePath = path.join(STORAGE_DIR, 'state.json');
-        console.log('attempting to load state from:', statePath);
+        // console.log('attempting to load state from:', statePath);
         
         const data = await fs.readFile(statePath, 'utf-8');
-        console.log('raw state data:', data.slice(0, 200) + '...');
+        // console.log('raw state data:', data.slice(0, 200) + '...');
         
         const state = JSON.parse(data);
         console.log('parsed state:', {
@@ -67,6 +77,7 @@ export async function updateOrAddProfileVisit(state: State, newVisit: ProfileVis
 }
 
 export async function loadMessages(): Promise<MessageStore> {
+    await ensureStorageDir();
     try {
         const data = await fs.readFile(path.join(STORAGE_DIR, 'messages.json'), 'utf-8');
         return JSON.parse(data);
@@ -76,7 +87,10 @@ export async function loadMessages(): Promise<MessageStore> {
 }
 
 export async function saveMessages(profileUrl: string, newMessages: Message[]) {
+    // Load both message store and state
     const messageStore = await loadMessages();
+    const state = await loadState();
+    
     const existingMessages = messageStore.messages[profileUrl]?.messages || [];
     
     // filter out duplicates based on text and timestamp
@@ -87,11 +101,20 @@ export async function saveMessages(profileUrl: string, newMessages: Message[]) {
         )
     );
 
+    // Update message store
     messageStore.messages[profileUrl] = {
         timestamp: new Date().toISOString(),
         messages: [...existingMessages, ...uniqueNewMessages]
     };
     
+    // Update state timestamp for the profile
+    const profileIndex = state.visitedProfiles.findIndex(p => p.profileUrl === profileUrl);
+    if (profileIndex !== -1) {
+        state.visitedProfiles[profileIndex].timestamp = new Date().toISOString();
+        await saveState(state);
+    }
+    
+    // Save messages
     await fs.writeFile(
         path.join(STORAGE_DIR, 'messages.json'),
         JSON.stringify(messageStore, null, 2)
@@ -138,6 +161,10 @@ export async function updateMultipleProfileVisits(state: State, newVisits: Profi
     state.visitedProfiles = state.visitedProfiles || [];
     state.toVisitProfiles = state.toVisitProfiles || [];
 
+    let alreadyVisitedCount = 0;
+    let alreadyQueuedCount = 0;
+    let newlyQueuedCount = 0;
+
     for (const newVisit of newVisits) {
         const alreadyVisited = state.visitedProfiles.some(
             visit => visit.profileUrl === newVisit.profileUrl
@@ -147,11 +174,98 @@ export async function updateMultipleProfileVisits(state: State, newVisits: Profi
             visit => visit.profileUrl === newVisit.profileUrl
         );
 
-        if (!alreadyVisited && !alreadyQueued) {
+        if (alreadyVisited) {
+            alreadyVisitedCount++;
+        } else if (alreadyQueued) {
+            alreadyQueuedCount++;
+        } else {
             state.toVisitProfiles.push(newVisit);
+            newlyQueuedCount++;
         }
     }
 
     await saveState(state);
-    console.log(`added ${newVisits.length} profiles to visit queue`);
+    
+    const summary = {
+        total: newVisits.length,
+        alreadyVisited: alreadyVisitedCount,
+        alreadyQueued: alreadyQueuedCount,
+        newlyQueued: newlyQueuedCount,
+        currentQueueSize: state.toVisitProfiles.length,
+        totalVisited: state.visitedProfiles.length
+    };
+    
+    console.log('profile queue update:', summary);
+    return summary;
+} 
+
+export interface Connection {
+    profileUrl: string;
+    status: 'pending' | 'accepted' | 'declined';
+    timestamp: string;
+}
+
+interface ConnectionsStore {
+    nextHarvestTime?: string;
+    connections: Record<string, Connection>;
+    isHarvesting?: boolean;
+    connectionsSent: number;
+}
+
+export async function loadConnections(): Promise<ConnectionsStore> {
+    await ensureStorageDir();
+    try {
+        const data = await fs.readFile(path.join(STORAGE_DIR, 'connections.json'), 'utf-8');
+        return JSON.parse(data);
+    } catch {
+        return {
+            connections: {},
+            connectionsSent: 0,
+            isHarvesting: false,
+        };
+    }
+}
+
+export async function saveConnection(connection: Connection) {
+    const connectionsStore = await loadConnections();
+    connectionsStore.connections[connection.profileUrl] = connection;
+
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`saved connection to ${connection.profileUrl} with status ${connection.status}`);
+}
+
+export async function saveNextHarvestTime(timestamp: string) {
+    const connectionsStore = await loadConnections();
+    connectionsStore.nextHarvestTime = timestamp;
+    
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`saved next harvest time: ${timestamp}`);
+}
+
+export async function saveHarvestingState(isHarvesting: boolean) {
+    const connectionsStore = await loadConnections();
+    connectionsStore.isHarvesting = isHarvesting;
+    
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`saved harvesting state: ${isHarvesting}`);
+}
+
+export async function updateConnectionsSent(connectionsSent: number) {
+    const connectionsStore = await loadConnections();
+    connectionsStore.connectionsSent = connectionsSent;
+
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`Updated connections sent count to ${connectionsSent}`);
 } 

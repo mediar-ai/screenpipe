@@ -286,8 +286,31 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: |
-          # Install wget using winget
-          choco install wget -y
+          # Remove wget alias if it exists
+          if (Test-Path Alias:wget) {
+            Remove-Item Alias:wget -Force
+          }
+
+          # Create wget directory
+          $wgetDir = "C:\wget"
+          New-Item -ItemType Directory -Force -Path $wgetDir
+
+          # Download wget executable
+          $wgetUrl = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
+          $wgetZip = "$wgetDir\wget.zip"
+
+          # Use Invoke-WebRequest to download
+          Invoke-WebRequest -Uri $wgetUrl -OutFile $wgetZip
+
+          # Extract wget
+          Expand-Archive -Path $wgetZip -DestinationPath $wgetDir -Force
+          Remove-Item $wgetZip
+
+          # Add to PATH for current session only
+          $env:Path = "$wgetDir;$env:Path"
+          
+          # Verify installation
+          & "$wgetDir\wget.exe" --version
 
       - name: Run pre_build.js
         env:
