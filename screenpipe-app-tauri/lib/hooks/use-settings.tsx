@@ -221,21 +221,18 @@ export function useSettings() {
       const updatedSettings = { ...settings, ...newSettings };
       setSettings(updatedSettings);
 
-      // update the store for the fields that were changed
+      // Update all changed fields regardless of their values
       for (const key in newSettings) {
-        if (newSettings[key as keyof Settings]) {
+        if (Object.prototype.hasOwnProperty.call(newSettings, key)) {
           console.log(
             `Setting ${key}:`,
             updatedSettings[key as keyof Settings]
-          ); // Add this line
+          );
           await store!.set(key, updatedSettings[key as keyof Settings]);
         }
       }
-      await store!.save();
-      // no need to call save() as we're using autoSave: true
     } catch (error) {
       console.error("failed to update settings:", error);
-      // revert local state if store update fails
       setSettings(settings);
     }
   };

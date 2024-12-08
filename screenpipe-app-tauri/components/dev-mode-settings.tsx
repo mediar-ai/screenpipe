@@ -63,18 +63,12 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
   #    Example: screenpipe --fps 1 `;
 
   const logPath =
-  os === "windows"
-      ? `${dataDir}\\screenpipe.${
-          new Date().toISOString().split("T")[0]
-    }.log`
-      : `${dataDir}/screenpipe.${
-          new Date().toISOString().split("T")[0]
-    }.log`;
+    os === "windows"
+      ? `${dataDir}\\screenpipe.${new Date().toISOString().split("T")[0]}.log`
+      : `${dataDir}/screenpipe.${new Date().toISOString().split("T")[0]}.log`;
 
   const dbPath =
-    os === "windows"
-      ? `${dataDir}\\db.sqlite`
-      : `${dataDir}/db.sqlite`;
+    os === "windows" ? `${dataDir}\\db.sqlite` : `${dataDir}/db.sqlite`;
 
   const baseCommand =
     baseInstructions +
@@ -89,13 +83,13 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
       baseCommand +
       `# Stream the log:
   type "${logPath}"
-  
+
   # Scroll the logs:
   more "${logPath}"
-  
+
   # View last 10 frames:
   sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-  
+
   # View last 10 audio transcriptions:
   sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
     );
@@ -104,13 +98,13 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
       baseCommand +
       `# Stream the log:
   tail -f "${logPath}"
-  
+
   # Scroll the logs:
   less "${logPath}"
-  
+
   # View last 10 frames:
   sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-  
+
   # View last 10 audio transcriptions:
   sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
     );
@@ -125,12 +119,19 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
   const handleDevModeToggle = async (checked: boolean) => {
     try {
       await updateSettings({ devMode: checked });
-      setLocalSettings({ ...localSettings, devMode: checked });
+      setLocalSettings((prev) => ({ ...prev, devMode: checked }));
     } catch (error) {
-      console.error("Failed to update dev mode:", error);
-      // Add error handling, e.g., show a toast notification
+      console.error("failed to update dev mode:", error);
+      toast({
+        title: "error",
+        description: "failed to save dev mode setting",
+        variant: "destructive",
+      });
     }
   };
+  console.log("settings:", settings);
+  console.log("localSettings:", localSettings);
+
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -231,7 +232,6 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
           </Card>
 
           <div className="relative">
-            
             <Card className="p-8">
               <CardContent>
                 <div className="flex items-center space-x-2">
@@ -295,7 +295,10 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
             did you run screenpipe backend? either click start on the right, or
             thru CLI 👇
           </p>
-          <CodeBlock language="bash" value={getDebuggingCommands(platform(), localDataDir)} />
+          <CodeBlock
+            language="bash"
+            value={getDebuggingCommands(platform(), localDataDir)}
+          />
 
           <div className="mt-4 text-sm text-gray-500">
             <p>or, for more advanced queries:</p>
