@@ -1,16 +1,5 @@
 "use client";
-
-import { Settings } from "@/components/settings";
 import { useSettings } from "@/lib/hooks/use-settings";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-
 import React, { useEffect } from "react";
 import NotificationHandler from "@/components/notification-handler";
 import Header from "@/components/header";
@@ -20,11 +9,9 @@ import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { registerShortcuts } from "@/lib/shortcuts";
 import { ChangelogDialog } from "@/components/changelog-dialog";
-
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
 import { platform } from "@tauri-apps/plugin-os";
 import PipeStore from "@/components/pipe-store";
+import { OnboardingFlowProvider } from "@/components/onboarding/context/onboarding-context";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -50,7 +37,11 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center flex-1">
       <NotificationHandler />
-      {showOnboarding && <Onboarding />}
+      {showOnboarding && 
+        <OnboardingFlowProvider>
+          <Onboarding />
+        </OnboardingFlowProvider>
+      }
       <ChangelogDialog />
       <Header />
       <div className="h-[32px]"/>

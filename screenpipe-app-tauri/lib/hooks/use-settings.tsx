@@ -30,6 +30,7 @@ export type Settings= {
   deepgramApiKey: string;
   isLoading: boolean;
   aiModel: string;
+  withAi: boolean;
   installedPipes: Pipe[];
   userId: string;
   customPrompt: string;
@@ -78,6 +79,7 @@ const DEFAULT_SETTINGS: Settings = {
 - Always answer my question/intent, do not make up things
 
 `,
+  withAi: false,
   devMode: false,
   audioTranscriptionEngine: "deepgram",
   ocrEngine: "default",
