@@ -83,7 +83,7 @@ fn bench_apple_vision_ocr(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("Performance", ""), |b| {
         b.iter(|| {
             let result = perform_ocr_apple(black_box(&image), vec![]);
-            assert!(!result.is_empty(), "OCR failed");
+            assert!(!result.0.is_empty(), "OCR failed");
         })
     });
 
@@ -107,7 +107,7 @@ fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
                 let result = perform_ocr_apple(black_box(&image), vec![]);
                 total_duration += start.elapsed();
 
-                let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
+                let accuracy = calculate_accuracy(&result.0.as_str(), EXPECTED_KEYWORDS);
                 total_accuracy += accuracy;
             }
 

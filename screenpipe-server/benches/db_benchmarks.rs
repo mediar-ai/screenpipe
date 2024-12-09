@@ -3,7 +3,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
 use screenpipe_audio::AudioDevice;
-use screenpipe_server::{ContentType, DatabaseManager};
+use screenpipe_server::{db_types::ContentType, DatabaseManager};
 use screenpipe_vision::OcrEngine;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
