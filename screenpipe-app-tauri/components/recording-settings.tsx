@@ -63,6 +63,12 @@ import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
 
+type PermissionsStatus = {
+  screenRecording: string;
+  microphone: string;
+  accessibility: string;
+};
+
 interface AudioDevice {
   name: string;
   is_default: boolean;
@@ -571,8 +577,10 @@ export function RecordingSettings({
     try {
       if (checked) {
         // Check accessibility permissions first
-        const hasPermission = await invoke("check_accessibility_permissions");
-        if (!hasPermission) {
+        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
+          initialCheck: false,
+        });
+        if (!perms.accessibility) {
           toast({
             title: "accessibility permission required",
             description:
