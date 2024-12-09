@@ -147,7 +147,6 @@ pub fn start_analytics(
             if let Err(e) = analytics_manager.send_event("app_started", None).await {
                 error!("Failed to send initial PostHog event: {}", e);
             }
-            info!("Analytics started");
         }
     });
 

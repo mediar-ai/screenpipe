@@ -114,8 +114,8 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
 };
 
 export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
-  const { settings, updateSettings } = useSettings();
-  const [localSettings, setLocalSettings] = useState(settings);
+  const { settings, updateSettings, localSettings, setLocalSettings } =
+    useSettings();
   const handleDevModeToggle = async (checked: boolean) => {
     try {
       await updateSettings({ devMode: checked });
@@ -129,15 +129,9 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
       });
     }
   };
-  console.log("settings:", settings);
-  console.log("localSettings:", localSettings);
 
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-
-  useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
 
   const handleStartScreenpipe = async () => {
     setIsLoading(true);

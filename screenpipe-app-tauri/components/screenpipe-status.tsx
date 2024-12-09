@@ -67,8 +67,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const { settings, getDataDir } = useSettings();
   const [localDataDir, setLocalDataDir] = useState("");
   const [isLogOpen, setIsLogOpen] = useState(false);
-  const [isFixingSetup, setIsFixingSetup] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
   const [isDialogLoading, setIsDialogLoading] = useState(false);
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(
     null
@@ -77,18 +75,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
   useEffect(() => {
     setIsMac(platform() === "macos");
   }, []);
-
-  useEffect(() => {
-    const handleSettingsUpdate = () => {
-      debouncedFetchHealth();
-    };
-
-    window.addEventListener("settings-updated", handleSettingsUpdate);
-
-    return () => {
-      window.removeEventListener("settings-updated", handleSettingsUpdate);
-    };
-  }, [debouncedFetchHealth]);
 
   useEffect(() => {
     const checkPermissions = async () => {

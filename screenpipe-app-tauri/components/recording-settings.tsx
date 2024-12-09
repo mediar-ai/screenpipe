@@ -52,17 +52,6 @@ import {
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
 import { Slider } from "./ui/slider";
-import { IconCode } from "./ui/icons";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
-import { CodeBlock } from "./ui/codeblock";
-import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
@@ -120,7 +109,7 @@ export function RecordingSettings({
 
   useEffect(() => {
     const checkPlatform = async () => {
-      const currentPlatform = await platform();
+      const currentPlatform = platform();
       setIsMacOS(currentPlatform === "macos");
     };
     checkPlatform();
@@ -223,7 +212,6 @@ export function RecordingSettings({
         monitorIds: localSettings.monitorIds,
         audioDevices: localSettings.audioDevices,
         usePiiRemoval: localSettings.usePiiRemoval,
-        restartInterval: localSettings.restartInterval,
         disableAudio: localSettings.disableAudio,
         ignoredWindows: localSettings.ignoredWindows,
         includedWindows: localSettings.includedWindows,
@@ -372,10 +360,6 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, usePiiRemoval: checked });
   };
 
-  const handleRestartIntervalChange = (value: number[]) => {
-    setLocalSettings({ ...localSettings, restartInterval: value[0] });
-  };
-
   const handleDisableAudioChange = (checked: boolean) => {
     setLocalSettings({ ...localSettings, disableAudio: checked });
   };
@@ -413,12 +397,6 @@ export function RecordingSettings({
     const currentPlatform = platform();
     return (
       <>
-        {/* <SelectItem value="unstructured">
-          <div className="flex items-center justify-between w-full space-x-2">
-            <span>unstructured</span>
-            <Badge variant="secondary">cloud</Badge>
-          </div>
-        </SelectItem> */}
         {currentPlatform === "linux" && (
           <SelectItem value="tesseract">tesseract</SelectItem>
         )}
@@ -998,48 +976,6 @@ export function RecordingSettings({
                     </Tooltip>
                   </TooltipProvider>
                 </Label>
-              </div>
-            </div>
-            <div className="flex flex-col space-y-2">
-              <Label
-                htmlFor="restartInterval"
-                className="flex items-center space-x-2"
-              >
-                <span>restart interval (minutes)</span>
-                <Badge variant="outline" className="ml-2">
-                  experimental
-                </Badge>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        (not recommended) set how often the recording process
-                        should restart.
-                        <br />
-                        30 minutes is the minimum interval.
-                        <br />
-                        this can help mitigate potential issues.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <div className="flex items-center space-x-4">
-                <Slider
-                  id="restartInterval"
-                  min={0}
-                  max={1440} // 24 hours
-                  step={30}
-                  value={[localSettings.restartInterval]}
-                  onValueChange={handleRestartIntervalChange}
-                  className="flex-grow"
-                />
-                <span className="w-16 text-right">
-                  {localSettings.restartInterval} min
-                </span>
               </div>
             </div>
 
