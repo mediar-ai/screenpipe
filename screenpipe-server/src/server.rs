@@ -1486,7 +1486,6 @@ async fn merge_speakers_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<MergeSpeakersRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
-    error!("merging speakers: {:?}", payload);
     let speaker_to_keep_id = payload.speaker_to_keep_id;
     let speaker_to_merge_id = payload.speaker_to_merge_id;
 

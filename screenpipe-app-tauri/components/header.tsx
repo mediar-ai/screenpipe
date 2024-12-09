@@ -1,12 +1,9 @@
 "use client";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Settings } from "@/components/settings";
-import { PrettyLink } from "@/components/pretty-link";
 import HealthStatus from "@/components/screenpipe-status";
 
 import React from "react";
-import MeetingHistory from "@/components/meeting-history";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +16,6 @@ import {
 import {
   MessageSquare,
   Heart,
-  Menu,
   Bell,
   Play,
   Folder,
@@ -34,8 +30,7 @@ import {
   InboxMessages,
   Message,
 } from "@/components/inbox-messages";
-import { useState, useRef, useEffect } from "react";
-import Onboarding from "@/components/onboarding";
+import { useState, useEffect } from "react";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
@@ -52,15 +47,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Calendar } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useUser } from "@/lib/hooks/use-user";
 import { AuthButton } from "./auth";
-import IdentifySpeakers from "./identify-speakers";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showMeetingHistory, setShowMeetingHistory] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const { health } = useHealthCheck();
   const { settings } = useSettings();
@@ -141,6 +133,14 @@ export default function Header() {
     await invoke("show_search");
   };
 
+  const handleShowMeetingHistory = async () => {
+    await invoke("show_meetings");
+  };
+
+  const handleShowIdentifySpeakers = async () => {
+    await invoke("show_identify_speakers");
+  };
+
   return (
     <div>
       {isLoading ? (
@@ -181,10 +181,15 @@ export default function Header() {
                 )}
               </Tooltip>
             </TooltipProvider>
-            <MeetingHistory
-              showMeetingHistory={showMeetingHistory}
-              setShowMeetingHistory={setShowMeetingHistory}
-            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleShowMeetingHistory}
+              className="cursor-pointer"
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+              <span>meetings</span>
+            </Button>
             <Settings
               showSettings={showSettings}
               setShowSettings={setShowSettings}
@@ -255,20 +260,18 @@ export default function Header() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     className="cursor-pointer"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowMeetingHistory(true);
-                    }}
+                    onClick={handleShowMeetingHistory}
                     disabled={!health || health.status === "error"}
                   >
-                    <MeetingHistory
-                      showMeetingHistory={showMeetingHistory}
-                      setShowMeetingHistory={setShowMeetingHistory}
-                    />
+                    <Calendar className="mr-2 h-4 w-4" />
+                    <span>meetings</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer p-0">
-                    <IdentifySpeakers />
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={handleShowIdentifySpeakers}
+                  >
+                    <Fingerprint className="mr-2 h-4 w-4" />
+                    <span>identify speakers</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

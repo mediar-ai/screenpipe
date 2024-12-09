@@ -749,6 +749,28 @@ mod tests {
             .await
             .unwrap();
 
+        // for each speaker, insert 2 audio chunks
+        for speaker in [speaker_1.clone(), speaker_2.clone()] {
+            for i in 0..2 {
+                let audio_chunk_id = db
+                    .insert_audio_chunk(&format!("audio{}{}", speaker.id, i))
+                    .await
+                    .unwrap();
+
+                // insert audio transcription
+                db.insert_audio_transcription(
+                    audio_chunk_id,
+                    "test transcription",
+                    0,
+                    "",
+                    &AudioDevice::new("test".to_string(), DeviceType::Output),
+                    Some(speaker.id),
+                )
+                .await
+                .unwrap();
+            }
+        }
+
         db.merge_speakers(speaker_1.id, speaker_2.id).await.unwrap();
 
         let speakers = db.search_speakers("").await.unwrap();

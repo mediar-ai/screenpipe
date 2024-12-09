@@ -22,10 +22,11 @@ import {
 import { usePostHog } from "posthog-js/react";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { getFileSize, keysToCamelCase } from "@/lib/utils";
+import { cn, getFileSize, keysToCamelCase } from "@/lib/utils";
 import { VideoComponent } from "./video";
 import { AudioSample, MeetingSegment, Speaker } from "@/lib/types";
 import { isSea } from "node:sea";
+import { motion } from "framer-motion";
 
 interface UnnamedSpeaker {
   id: number;
@@ -34,16 +35,21 @@ interface UnnamedSpeaker {
 }
 
 export default function IdentifySpeakers({
+  showIdentifySpeakers,
+  setShowIdentifySpeakers,
   segments,
+  className,
 }: {
+  showIdentifySpeakers: boolean;
+  setShowIdentifySpeakers: (show: boolean) => void;
   segments?: MeetingSegment[];
+  className?: string;
 }) {
   const posthog = usePostHog();
   const { settings } = useSettings();
   const [unnamedSpeakers, setUnnamedSpeakers] = useState<Speaker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
   const [showError, setShowError] = useState(false);
   const [currentSpeakerIndex, setCurrentSpeakerIndex] = useState(0);
@@ -100,7 +106,7 @@ export default function IdentifySpeakers({
   }, [segments]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (showIdentifySpeakers) {
       loadUnnamedSpeakers();
       posthog?.capture("identify_speakers_opened", {
         userId: settings.userId,
@@ -119,7 +125,7 @@ export default function IdentifySpeakers({
       setCurrentSpeakerIndex(0);
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [isOpen, settings.userId, posthog]);
+  }, [showIdentifySpeakers, settings.userId, posthog]);
 
   useEffect(() => {
     setShowError(!!error);
@@ -420,20 +426,20 @@ export default function IdentifySpeakers({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={showIdentifySpeakers} onOpenChange={setShowIdentifySpeakers}>
       <DialogTrigger asChild>
         {!segments ? (
           <Button
             variant="ghost"
             className="h-[20px] px-0 py-0"
-            onClick={() => setIsOpen(true)}
+            onClick={() => setShowIdentifySpeakers(true)}
           >
             <Fingerprint className="mr-2 h-4 w-4" />
             <span>identify speakers</span>
           </Button>
         ) : (
           <Button
-            onClick={() => setIsOpen(true)}
+            onClick={() => setShowIdentifySpeakers(true)}
             size="sm"
             className="text-xs bg-black text-white hover:bg-gray-800"
           >

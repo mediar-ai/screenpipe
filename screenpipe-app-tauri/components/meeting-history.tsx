@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -159,6 +161,17 @@ export default function MeetingHistory({
   const [customIdentifyPrompt, setCustomIdentifyPrompt] = useState<string>(
     "please identify the participants in this meeting transcript. provide a comma-separated list of one or two word names or roles or characteristics. if it's not possible to identify, respond with n/a."
   );
+  const [openIdentifyDialogs, setOpenIdentifyDialogs] = useState<{
+    [key: number]: boolean;
+  }>({});
+
+  // Add this function to handle individual dialog states
+  const handleIdentifyDialog = (meetingGroup: number, isOpen: boolean) => {
+    setOpenIdentifyDialogs((prev) => ({
+      ...prev,
+      [meetingGroup]: isOpen,
+    }));
+  };
   const { health } = useHealthCheck();
 
   useEffect(() => {
@@ -623,17 +636,6 @@ export default function MeetingHistory({
 
   return (
     <Dialog open={showMeetingHistory} onOpenChange={setShowMeetingHistory}>
-      <DialogTrigger asChild>
-        <div
-          className={cn(
-            "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-            className
-          )}
-        >
-          <Calendar className="mr-2 h-4 w-4" />
-          <span>meetings</span>
-        </div>
-      </DialogTrigger>
       <DialogContent
         className="max-w-[90vw] w-full max-h-[90vh] h-full"
         onClick={(e) => {
@@ -830,7 +832,18 @@ export default function MeetingHistory({
                                 </TooltipProvider>
                               </div>
                               <div className="flex items-center justify-end">
-                                <IdentifySpeakers segments={meeting.segments} />
+                                <IdentifySpeakers
+                                  showIdentifySpeakers={
+                                    openIdentifyDialogs[meeting.meetingGroup]
+                                  }
+                                  setShowIdentifySpeakers={(isOpen) =>
+                                    handleIdentifyDialog(
+                                      meeting.meetingGroup,
+                                      isOpen
+                                    )
+                                  }
+                                  segments={meeting.segments}
+                                />
                               </div>
                             </div>
                           </div>
