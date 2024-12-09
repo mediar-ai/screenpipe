@@ -34,7 +34,7 @@ extern "C" fn release_callback(_refcon: *mut c_void, _data_ptr: *const *const c_
 #[cfg(target_os = "macos")]
 pub fn perform_ocr_apple(
     image: &DynamicImage,
-    _languages: Vec<screenpipe_core::Language>,
+    languages: Vec<screenpipe_core::Language>,
 ) -> (String, String, Option<f64>) {
     use cidre::{
         cv::{PixelBuf, PixelFormat},
@@ -46,6 +46,12 @@ pub fn perform_ocr_apple(
     let rgb = image.to_rgba8();
     let raw_data = rgb.as_raw();
     let (width, height) = image.dimensions();
+
+    let languages = get_apple_languages(languages);
+    let mut languages_slice = ns::ArrayMut::<ns::String>::with_capacity(languages.len());
+    languages.iter().for_each(|language| {
+        languages_slice.push(&ns::String::with_str(language.as_str()));
+    });
 
     let mut overall_confidence = 0.0;
     let default_ocr_result = (
@@ -73,6 +79,7 @@ pub fn perform_ocr_apple(
     let mut request = RecognizeTextRequest::new();
     // Recognize all languages
     request.set_revision(3);
+    request.set_recognition_langs(&languages_slice);
     let requests = ns::Array::<vn::Request>::from_slice(&[&request]);
     let result = handler.perform(&requests);
 
@@ -133,50 +140,28 @@ pub fn perform_ocr_apple(
 }
 
 #[cfg(target_os = "macos")]
-pub fn parse_apple_ocr_result(json_result: &str) -> (String, String, Option<f64>) {
-    let parsed_result: serde_json::Value = serde_json::from_str(json_result).unwrap_or_else(|e| {
-        error!("Failed to parse JSON output: {}", e);
-        serde_json::json!({
-            "ocr_result": "",
-            "text_elements": [],
-            "overall_confidence": 0.0
-        })
-    });
+fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
+    use screenpipe_core::Language;
 
-    let text = parsed_result["ocr_result"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
-    let text_elements = parsed_result["text_elements"]
-        .as_array()
-        .unwrap_or(&vec![])
-        .clone();
-    let overall_confidence = parsed_result["overall_confidence"].as_f64();
-
-    let json_output: Vec<serde_json::Value> = text_elements
-        .iter()
-        .map(|element| {
-            serde_json::json!({
-                "level": "0",
-                "page_num": "0",
-                "block_num": "0",
-                "par_num": "0",
-                "line_num": "0",
-                "word_num": "0",
-                "left": element["bounding_box"]["x"].as_f64().unwrap_or(0.0).to_string(),
-                "top": element["bounding_box"]["y"].as_f64().unwrap_or(0.0).to_string(),
-                "width": element["bounding_box"]["width"].as_f64().unwrap_or(0.0).to_string(),
-                "height": element["bounding_box"]["height"].as_f64().unwrap_or(0.0).to_string(),
-                "conf": element["confidence"].as_f64().unwrap_or(0.0).to_string(),
-                "text": element["text"].as_str().unwrap_or("").to_string()
-            })
-        })
-        .collect();
-
-    let json_output_string = serde_json::to_string(&json_output).unwrap_or_else(|e| {
-        error!("Failed to serialize JSON output: {}", e);
-        "[]".to_string()
-    });
-
-    (text, json_output_string, overall_confidence)
+    let mut langs: Vec<String> = Vec::new();
+    for lang in languages {
+        let lang_str = match lang {
+            Language::English => "en-US",
+            Language::Spanish => "es-ES",
+            Language::French => "fr-FR",
+            Language::German => "de-DE",
+            Language::Italian => "it-IT",
+            Language::Portuguese => "pt-BR",
+            Language::Russian => "ru-RU",
+            Language::Chinese => "zh-Hans",
+            Language::Korean => "ko-KR",
+            Language::Japanese => "ja-JP",
+            Language::Ukrainian => "uk-UA",
+            Language::Thai => "th-TH",
+            Language::Arabic => "ar-SA",
+            _ => continue,
+        };
+        langs.push(lang_str.to_string());
+    }
+    langs
 }
