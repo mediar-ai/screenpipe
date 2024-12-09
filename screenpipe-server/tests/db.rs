@@ -13,11 +13,7 @@ mod tests {
     async fn setup_test_db() -> DatabaseManager {
         let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
 
-        // Add speaker_id column temporarily for tests
-        sqlx::query("ALTER TABLE audio_transcriptions ADD COLUMN speaker_id INTEGER")
-            .execute(&db.pool)
-            .await
-            .unwrap();
+
 
         db
     }
