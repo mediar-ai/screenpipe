@@ -1,6 +1,4 @@
 #[cfg(target_os = "macos")]
-use crate::apple::parse_apple_ocr_result;
-#[cfg(target_os = "macos")]
 use crate::apple::perform_ocr_apple;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;

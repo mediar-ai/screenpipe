@@ -63,23 +63,30 @@ pub fn perform_ocr_apple(
     let width = usize::try_from(width).unwrap();
     let height = usize::try_from(height).unwrap();
 
-    let pixel_buf = PixelBuf::new_with_bytes(
-        width,
-        height,
-        raw_data.as_ptr() as *mut c_void,
-        width * 4,
-        release_callback,
-        null_mut(),
-        PixelFormat::_32_ARGB,
-        None,
-    )
-    .unwrap();
+    let mut pixel_buf_out = None;
+
+    let pixel_buf = unsafe {
+        PixelBuf::create_with_bytes_in(
+            width,
+            height,
+            PixelFormat::_32_ARGB,
+            raw_data.as_ptr() as *mut c_void,
+            width * 4,
+            release_callback,
+            null_mut(),
+            None,
+            &mut pixel_buf_out,
+            None,
+        )
+        .to_result_unchecked(pixel_buf_out)
+    }.unwrap();
 
     let handler = ImageRequestHandler::with_cv_pixel_buf(&pixel_buf, None).unwrap();
     let mut request = RecognizeTextRequest::new();
     // Recognize all languages
-    request.set_revision(3);
     request.set_recognition_langs(&languages_slice);
+    request.set_uses_lang_correction(true);
+    request.set_recognition_level(vn::RequestTextRecognitionLevel::Accurate);
     let requests = ns::Array::<vn::Request>::from_slice(&[&request]);
     let result = handler.perform(&requests);
 
