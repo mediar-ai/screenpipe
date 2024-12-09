@@ -214,7 +214,7 @@ export function useSettings() {
       const updatedSettings = { ...settings, ...newSettings };
 
       // Save each setting individually to the store
-      for (const [key, value] of Object.entries(updatedSettings)) {
+      for (const [key, value] of Object.entries(newSettings)) {
         await store!.set(key, value);
       }
 
