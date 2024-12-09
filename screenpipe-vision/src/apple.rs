@@ -122,7 +122,6 @@ pub fn perform_ocr_apple(
                 "[]".to_string()
             });
 
-            println!("{:?}", ocr_text.to_string());
             drop(pixel_buf);
 
             return (ocr_text, json_output_string, Some(overall_confidence));
