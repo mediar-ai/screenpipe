@@ -40,7 +40,7 @@ fn apple_ocr_benchmark(c: &mut Criterion) {
 
                 let result = perform_ocr_apple(&image, vec![]);
                 assert!(
-                    result.contains("receiver_count"),
+                    result.0.contains("receiver_count"),
                     "OCR failed: {:?}",
                     result
                 );

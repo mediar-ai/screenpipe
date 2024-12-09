@@ -1,6 +1,4 @@
 #[cfg(target_os = "macos")]
-use crate::apple::parse_apple_ocr_result;
-#[cfg(target_os = "macos")]
 use crate::apple::perform_ocr_apple;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
@@ -215,7 +213,7 @@ pub async fn process_ocr_task(
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
             OcrEngine::AppleNative => {
-                parse_apple_ocr_result(&perform_ocr_apple(&window_image, languages.clone()))
+                perform_ocr_apple(&window_image, languages.clone())
             }
             _ => {
                 return Err(std::io::Error::new(
