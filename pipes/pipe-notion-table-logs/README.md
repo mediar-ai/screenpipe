@@ -1,9 +1,9 @@
-### phi3.5 engineering team logs
+### pipe notion table logs
 
 ![Rocks screenshot (56)](https://github.com/user-attachments/assets/9838f8ac-696d-43fc-b269-d3f40f16a76f)
 
 
-automates logging of engineering work to notion using screenpipe and phi3.5 ai.
+automates logging of work to notion using screenpipe and ai.
 
 #### quick setup
 

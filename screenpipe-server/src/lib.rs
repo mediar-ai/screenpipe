@@ -6,7 +6,7 @@ pub mod db;
 pub mod db_types;
 pub mod filtering;
 pub mod highlight;
-mod pipe_manager;
+pub mod pipe_manager;
 mod plugin;
 mod resource_monitor;
 mod server;

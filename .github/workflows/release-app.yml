@@ -308,7 +308,7 @@ jobs:
 
           # Add to PATH for current session only
           $env:Path = "$wgetDir;$env:Path"
-          
+
           # Verify installation
           & "$wgetDir\wget.exe" --version
 
@@ -348,7 +348,8 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.11"
+          cache: 'pip'
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
@@ -543,6 +544,7 @@ jobs:
           # Verify installation
           & "C:\Program Files\7-Zip\7z.exe" i
 
+
       - name: Cache LLVM
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         id: cache-llvm
@@ -585,7 +587,8 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.11"
+          cache: 'pip'
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
