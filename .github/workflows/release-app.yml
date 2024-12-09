@@ -160,17 +160,35 @@ jobs:
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
 
-      - uses: actions/cache@v4
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
+          # Specify custom cache key
+          key: ${{ runner.os }}-rust-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          # Cache these paths
+          cache-directories: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/${{ matrix.target }}/release/deps
-            target/${{ matrix.target }}/release/build
-          key: ${{ matrix.platform }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}-v1
+            target/${{ matrix.target }}
+            screenpipe-app-tauri/src-tauri/target
+          # Shared cache across branches
+          shared-key: "rust-cache-${{ matrix.target }}"
+          # Save cache even on failed builds
+          save-if: true
+
+      - name: Cache Build Artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            target/${{ matrix.target }}/release
+            screenpipe-app-tauri/src-tauri/target/release
+          key: ${{ runner.os }}-artifacts-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-cargo-v1-
+            ${{ runner.os }}-artifacts-${{ matrix.target }}-
 
       - name: Cache Homebrew packages
         if: matrix.platform == 'macos-latest'
@@ -348,8 +366,8 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: 'pip'
+          python-version: "3.10"
+          architecture: "x64"
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
@@ -544,7 +562,6 @@ jobs:
           # Verify installation
           & "C:\Program Files\7-Zip\7z.exe" i
 
-
       - name: Cache LLVM
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         id: cache-llvm
@@ -587,8 +604,7 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: 'pip'
+          python-version: "3.13"
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
