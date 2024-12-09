@@ -159,9 +159,12 @@ async fn main() -> anyhow::Result<()> {
         _ => true,
     };
 
-    if should_log {
-        let _log_guard = setup_logging(&local_data_dir, &cli)?;
-    }
+    // Store the guard in a variable that lives for the entire main function
+    let _log_guard = if should_log {
+        Some(setup_logging(&local_data_dir, &cli)?)
+    } else {
+        None
+    };
 
     let h = Highlight::init(HighlightConfig {
         project_id: String::from("82688"),
@@ -585,7 +588,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Add languages section
-    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("├─────────────────────┼───────────────────────────────────���┤");
     println!("│ languages           │                                    │");
     const MAX_ITEMS_TO_DISPLAY: usize = 5;
 

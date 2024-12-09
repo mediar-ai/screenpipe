@@ -55,6 +55,7 @@ interface InboxMessagesProps {
   messages: Message[];
   onMessageRead: (id: string) => void;
   onMessageDelete: (id: string) => void;
+  onClearAll: () => void;
   onClose: () => void;
 }
 
@@ -181,6 +182,7 @@ export function InboxMessages({
   messages,
   onMessageRead,
   onMessageDelete,
+  onClearAll,
   onClose,
 }: InboxMessagesProps) {
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(
@@ -290,15 +292,26 @@ export function InboxMessages({
           <CardHeader className="flex flex-row items-center justify-between">
             <h2 className="text-lg font-semibold">inbox messages</h2>
             {unreadMessages.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleMarkAllAsRead}
-                className="text-xs"
-              >
-                <CheckSquare className="mr-1 h-4 w-4" />
-                mark all as read
-              </Button>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleMarkAllAsRead}
+                  className="text-xs"
+                >
+                  <CheckSquare className="mr-1 h-4 w-4" />
+                  mark all as read
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onClearAll}
+                  className="text-xs"
+                >
+                  <X className="mr-1 h-4 w-4" />
+                  clear all
+                </Button>
+              </div>
             )}
           </CardHeader>
           <CardContent className="min-h-[200px] w-[45vw]" ref={parentRef}>

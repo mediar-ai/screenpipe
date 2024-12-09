@@ -121,6 +121,11 @@ export default function Header() {
     });
   };
 
+  const handleClearAll = async () => {
+    setMessages([]);
+    await localforage.setItem("inboxMessages", []);
+  };
+
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
 
@@ -257,6 +262,7 @@ export default function Header() {
                 messages={messages}
                 onMessageRead={handleMessageRead}
                 onMessageDelete={handleMessageDelete}
+                onClearAll={handleClearAll}
                 onClose={() => setShowInbox(false)}
               />
             </div>
