@@ -1,0 +1,34 @@
+# Configuration for request-info - https://github.com/behaviorbot/request-info
+
+# custom comment to reply with
+requestInfoReplyComment: >
+  hey! thanks for the contribution. would you mind adding more details about:
+  - what problem you're trying to solve
+  - why this change is needed
+  - any relevant context or screenshots
+  
+  this helps us review and merge faster! 🚀
+
+# default titles to check (must be lowercase)
+requestInfoDefaultTitles:
+  - update readme.md
+  - updates
+  - fix
+  - patch
+  - wip
+
+# label for insufficient info
+requestInfoLabelToAdd: needs-more-info
+
+# require more info than templates
+checkIssueTemplate: true
+checkPullRequestTemplate: true
+
+# which events to check
+requestInfoOn:
+  pullRequest: true
+  issue: true
+
+# exclude certain users (add your main contributors)
+requestInfoUserstoExclude:
+  - louis030195
