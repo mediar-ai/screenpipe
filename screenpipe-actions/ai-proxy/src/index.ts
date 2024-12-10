@@ -1,6 +1,6 @@
 // import { DurableObject } from "cloudflare:workers";
-import { Env } from './types'
-import { Langfuse } from "langfuse-node";
+import { Env } from './types';
+import { Langfuse } from 'langfuse-node';
 
 /**
  * Welcome to Cloudflare Workers! This is your first Durable Objects application.
@@ -53,29 +53,29 @@ export default {
 		const langfuse = new Langfuse({
 			publicKey: env.LANGFUSE_PUBLIC_KEY,
 			secretKey: env.LANGFUSE_SECRET_KEY,
-			baseUrl: "https://us.cloud.langfuse.com"
+			baseUrl: 'https://us.cloud.langfuse.com',
 		});
 
 		langfuse.debug();
-		langfuse.on("error", (error) => {
-			console.error("langfuse error:", error);
+		langfuse.on('error', (error) => {
+			console.error('langfuse error:', error);
 		});
 
 		// CORS headers
 		const corsHeaders = {
-			"Access-Control-Allow-Origin": "*", // Or specify your app's origin
-			"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-			"Access-Control-Allow-Headers": "Content-Type, Authorization, User-Agent",
+			'Access-Control-Allow-Origin': '*', // Or specify your app's origin
+			'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+			'Access-Control-Allow-Headers': 'Content-Type, Authorization, User-Agent',
 		};
 
 		// Handle CORS preflight requests
-		if (request.method === "OPTIONS") {
-			return new Response(null, { 
+		if (request.method === 'OPTIONS') {
+			return new Response(null, {
 				headers: {
 					...corsHeaders,
 					// Add this line to handle preflight requests for all headers
-					"Access-Control-Allow-Headers": request.headers.get("Access-Control-Request-Headers") || "",
-				}
+					'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || '',
+				},
 			});
 		}
 
@@ -84,9 +84,9 @@ export default {
 			const path = url.pathname;
 
 			if (path === '/test') {
-				return new Response('ai proxy is working!', { 
+				return new Response('ai proxy is working!', {
 					status: 200,
-					headers: corsHeaders
+					headers: corsHeaders,
 				});
 			}
 
@@ -95,91 +95,93 @@ export default {
 				const isStreaming = body.stream === true;
 
 				const trace = langfuse.trace({
-					id: "ai_call_" + Date.now(),
-					name: "ai_call",
-					metadata: { expectJson: body.response_format?.type === "json_object", streaming: isStreaming }
+					id: 'ai_call_' + Date.now(),
+					name: 'ai_call',
+					metadata: { expectJson: body.response_format?.type === 'json_object', streaming: isStreaming },
 				});
 
 				const generation = trace.generation({
-					name: "openai_completion",
+					name: 'openai_completion',
 					startTime: new Date(),
 					model: body.model,
 					modelParameters: {
 						temperature: body.temperature,
-						expectJson: body.response_format?.type === "json_object",
-						streaming: isStreaming
+						expectJson: body.response_format?.type === 'json_object',
+						streaming: isStreaming,
 					},
 					input: body.messages,
-					output: null
+					output: null,
 				});
 
 				if (isStreaming) {
 					const { readable, writable } = new TransformStream();
 					const writer = writable.getWriter();
 
-					ctx.waitUntil((async () => {
-						try {
-							const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-								method: "POST",
-								headers: {
-									"Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-									"Content-Type": "application/json",
-								},
-								body: JSON.stringify(body),
-							});
+					ctx.waitUntil(
+						(async () => {
+							try {
+								const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+									method: 'POST',
+									headers: {
+										Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+										'Content-Type': 'application/json',
+									},
+									body: JSON.stringify(body),
+								});
 
-							if (!openaiResponse.ok) {
-								const errorData = await openaiResponse.json();
-								throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
+								if (!openaiResponse.ok) {
+									const errorData = await openaiResponse.json();
+									throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
+								}
+
+								const reader = openaiResponse.body?.getReader();
+								if (!reader) {
+									throw new Error('Failed to get reader from OpenAI response');
+								}
+
+								while (true) {
+									const { done, value } = await reader.read();
+									if (done) break;
+									await writer.write(value);
+								}
+
+								generation.end({
+									completionStartTime: new Date(),
+									output: 'Streaming response completed',
+									endTime: new Date(),
+									status: 'success',
+								});
+							} catch (error) {
+								console.error('Error in OpenAI stream:', error);
+								generation.end({
+									completionStartTime: new Date(),
+									completion: error.message,
+									endTime: new Date(),
+									status: 'error',
+								});
+								await writer.write(new TextEncoder().encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+							} finally {
+								await writer.close();
 							}
+						})()
+					);
 
-							const reader = openaiResponse.body?.getReader();
-							if (!reader) {
-								throw new Error("Failed to get reader from OpenAI response");
-							}
-
-							while (true) {
-								const { done, value } = await reader.read();
-								if (done) break;
-								await writer.write(value);
-							}
-
-							generation.end({
-								completionStartTime: new Date(),
-								output: "Streaming response completed",
-								endTime: new Date(),
-								status: "success"
-							});
-						} catch (error) {
-							console.error("Error in OpenAI stream:", error);
-							generation.end({
-								completionStartTime: new Date(),
-								completion: error.message,
-								endTime: new Date(),
-								status: "error"
-							});
-							await writer.write(new TextEncoder().encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
-						} finally {
-							await writer.close();
-						}
-					})());
-
-					return new Response(readable, { 
-						headers: { 
+					return new Response(readable, {
+						headers: {
 							...corsHeaders,
-							"Content-Type": "text/event-stream",
-							"Cache-Control": "no-cache",
-							"Connection": "keep-alive"
-						}
+							'Content-Type': 'text/event-stream',
+							'Cache-Control': 'no-cache',
+							Connection: 'keep-alive',
+						},
 					});
 				} else {
 					// Non-streaming response
 					try {
-						const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-							method: "POST",
+						const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+							method: 'POST',
 							headers: {
-								"Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-								"Content-Type": "application/json",
+								Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+								'Content-Type': 'application/json',
 							},
 							body: JSON.stringify(body),
 						});
@@ -195,48 +197,101 @@ export default {
 							completionStartTime: new Date(),
 							output: data.choices[0]?.message?.content,
 							endTime: new Date(),
-							status: "success"
+							status: 'success',
 						});
 
-						return new Response(JSON.stringify(data), { 
-							headers: { 
+						return new Response(JSON.stringify(data), {
+							headers: {
 								...corsHeaders,
-								"Content-Type": "application/json"
-							}
+								'Content-Type': 'application/json',
+							},
 						});
 					} catch (error) {
-						console.error("Error in OpenAI request:", error);
+						console.error('Error in OpenAI request:', error);
 						generation.end({
 							completionStartTime: new Date(),
 							completion: error.message,
 							endTime: new Date(),
-							status: "error"
+							status: 'error',
 						});
-						return new Response(JSON.stringify({ error: error.message }), { 
+						return new Response(JSON.stringify({ error: error.message }), {
 							status: 500,
-							headers: { 
+							headers: {
 								...corsHeaders,
-								"Content-Type": "application/json"
-							}
+								'Content-Type': 'application/json',
+							},
 						});
 					}
 				}
 			}
 
-			return new Response("not found", { 
+			if (path === '/v1/transcribe' && request.method === 'POST') {
+				const formData = await request.formData();
+				const audioFile = formData.get('audio') as File;
+				const languages = formData.get('languages')?.toString().split(',') || [];
+
+				if (!audioFile) {
+					return new Response(JSON.stringify({ error: 'no audio file provided' }), {
+						status: 400,
+						headers: {
+							...corsHeaders,
+							'Content-Type': 'application/json',
+						},
+					});
+				}
+
+				try {
+					const deepgramResponse = await fetch(
+						'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true' +
+							(languages.length > 0 ? '&' + languages.map((lang) => `detect_language=${lang}`).join('&') : ''),
+						{
+							method: 'POST',
+							headers: {
+								Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
+								'Content-Type': audioFile.type,
+							},
+							body: await audioFile.arrayBuffer(),
+						}
+					);
+
+					if (!deepgramResponse.ok) {
+						const errorData = await deepgramResponse.json();
+						throw new Error(`Deepgram API error: ${JSON.stringify(errorData)}`);
+					}
+
+					const data = await deepgramResponse.json();
+					return new Response(JSON.stringify(data), {
+						headers: {
+							...corsHeaders,
+							'Content-Type': 'application/json',
+						},
+					});
+				} catch (error) {
+					console.error('Error in Deepgram request:', error);
+					return new Response(JSON.stringify({ error: error.message }), {
+						status: 500,
+						headers: {
+							...corsHeaders,
+							'Content-Type': 'application/json',
+						},
+					});
+				}
+			}
+
+			return new Response('not found', {
 				status: 404,
-				headers: corsHeaders
+				headers: corsHeaders,
 			});
 		} catch (error) {
-			console.error("error in fetch:", error);
-			return new Response("an error occurred", { 
+			console.error('error in fetch:', error);
+			return new Response('an error occurred', {
 				status: 500,
-				headers: corsHeaders
+				headers: corsHeaders,
 			});
 		} finally {
 			await langfuse.shutdownAsync();
 		}
-	}
+	},
 } satisfies ExportedHandler<Env>;
 
 interface Env {
@@ -244,25 +299,42 @@ interface Env {
 	LANGFUSE_PUBLIC_KEY: string;
 	LANGFUSE_SECRET_KEY: string;
 	ANTHROPIC_API_KEY: string;
+	DEEPGRAM_API_KEY: string;
 }
 
-// test
-// curl -X POST https://ai-proxy.i-f9f.workers.dev/v1/chat/completions \
-//   -H "Content-Type: application/json" \
-//   -H "Authorization: Bearer YOUR_API_KEY" \
-//   -d '{
-//     "model": "gpt-4o",
-//     "messages": [
-//       {
-//         "role": "system",
-//         "content": "You are a helpful assistant."
-//       },
-//       {
-//         "role": "user",
-//         "content": "Tell me a short joke."
-//       }
-//     ],
-//     "stream": true
-//   }' | while read -r line; do
-//     echo "$line" | sed 's/^data: //g' | jq -r '.choices[0].delta.content // empty' 2>/dev/null
-//   done | tr -d '\n'
+/*
+terminal 1
+
+cd screenpipe-actions/ai-proxy
+wrangler dev
+
+
+terminal 2
+
+curl http://localhost:8787/test
+
+curl -X POST http://localhost:8787/v1/transcribe \
+  -F "audio=@./screenpipe-audio/test_data/poetic_kapil_gupta.wav" \
+  -F "languages=en,fr"
+
+
+curl -X POST https://ai-proxy.i-f9f.workers.dev/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_API_KEY" \
+-d '{
+"model": "gpt-4o",
+"messages": [
+	{
+	"role": "system",
+	"content": "You are a helpful assistant."
+	},
+	{
+	"role": "user",
+	"content": "Tell me a short joke."
+	}
+],
+"stream": true
+}' | while read -r line; do
+echo "$line" | sed 's/^data: //g' | jq -r '.choices[0].delta.content // empty' 2>/dev/null
+done | tr -d '\n'
+*/
