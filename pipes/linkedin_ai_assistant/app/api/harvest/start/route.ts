@@ -41,6 +41,9 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: any) {
     console.error('error starting harvesting:', error);
-    return NextResponse.json({ message: error.message.toLowerCase() }, { status: 500 });
+    return NextResponse.json(
+      { message: error.message.toLowerCase() },
+      { status: 500 }
+    );
   }
 }
