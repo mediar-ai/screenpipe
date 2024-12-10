@@ -166,6 +166,8 @@ async fn main() {
             icons::get_app_icon,
             commands::open_auth_window,
             commands::show_search,
+            commands::show_meetings,
+            commands::show_identify_speakers,
         ])
         .setup(|app| {
             // Logging setup

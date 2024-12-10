@@ -87,7 +87,8 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("info".parse().unwrap())
         .add_directive("tokenizers=error".parse().unwrap())
         .add_directive("rusty_tesseract=error".parse().unwrap())
-        .add_directive("symphonia=error".parse().unwrap());
+        .add_directive("symphonia=error".parse().unwrap())
+        .add_directive("hf_hub=error".parse().unwrap());
 
     // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
     // which is noise

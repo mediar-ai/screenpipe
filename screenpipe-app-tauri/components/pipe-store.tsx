@@ -35,6 +35,7 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { StripeSubscriptionButton } from "./stripe-subscription-button";
 import { useUser } from "@/lib/hooks/use-user";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
+import { PublishDialog } from "./publish-dialog";
 
 export interface Pipe {
   enabled: boolean;
@@ -47,36 +48,45 @@ export interface Pipe {
 
 interface CorePipe {
   id: string;
+  name: string;
   description: string;
   url: string;
 }
 
 const corePipes: CorePipe[] = [
   {
+    id: "pipe-linkedin-ai-assistant",
+    name: "linkedin ai assistant",
+    description: "ai assistant that helps you write better linkedin posts and engage with your network",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant",
+  },
+  {
     id: "pipe-for-loom",
+    name: "loom generator",
     description: "generate looms from your screenpipe data",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom",
   },
   {
     id: "pipe-obsidian-time-logs",
-    description:
-      "continuously write logs of your days in an obsidian table using ollama+llama3.2",
+    name: "obsidian time logger",
+    description: "continuously write logs of your days in an obsidian table using ollama+llama3.2",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs",
   },
   {
     id: "pipe-post-questions-on-reddit",
-    description:
-      "get more followers, promote your content/product while being useful, without doing any work",
+    name: "reddit question bot",
+    description: "get more followers, promote your content/product while being useful, without doing any work",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit",
   },
   {
     id: "pipe-notion-table-logs",
-    description:
-      "continuously write logs of your days in a notion table using ollama",
+    name: "notion time logger",
+    description: "continuously write logs of your days in a notion table using ollama",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs",
   },
   {
     id: "pipe-simple-nextjs",
+    name: "keyword analytics",
     description: "show most used keywords",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-simple-nextjs",
   },
@@ -134,6 +144,18 @@ const truncateDescription = (description: string, maxLines: number = 4) => {
 
   const result = visibleLines.join("\n");
   return lineCount >= maxLines ? result + "..." : result;
+};
+
+const getFriendlyName = (id: string, corePipes: CorePipe[]): string => {
+  const corePipe = corePipes.find(cp => cp.id === id);
+  if (corePipe) return corePipe.name;
+  
+  // Convert pipe-name-format to Title Case if no match found
+  return id
+    .replace('pipe-', '')
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 };
 
 const PipeStore: React.FC = () => {
@@ -243,13 +265,12 @@ const PipeStore: React.FC = () => {
     } catch (error) {
       console.error("Failed to download pipe:", error);
       toast({
-        title: "error downloading pipe", 
+        title: "error downloading pipe",
         description: "please try again or check the logs for more information.",
         variant: "destructive",
       });
     }
   };
-
 
   const handleToggleEnabled = async (pipe: Pipe) => {
     if (pipe.id === "pipe-for-loom" && !pipe.enabled) {
@@ -285,14 +306,14 @@ const PipeStore: React.FC = () => {
       }
 
       // Immediately update the local state
-      setPipes(prevPipes => 
-        prevPipes.map(p => 
+      setPipes((prevPipes) =>
+        prevPipes.map((p) =>
           p.id === pipe.id ? { ...p, enabled: !p.enabled } : p
         )
       );
 
       // If we're in the details view, update the selected pipe too
-      setSelectedPipe(prev => 
+      setSelectedPipe((prev) =>
         prev?.id === pipe.id ? { ...prev, enabled: !prev.enabled } : prev
       );
 
@@ -303,7 +324,10 @@ const PipeStore: React.FC = () => {
       // Still fetch the latest state from the server to ensure consistency
       await fetchInstalledPipes();
     } catch (error) {
-      console.error(`Failed to ${pipe.enabled ? "disable" : "enable"} pipe:`, error);
+      console.error(
+        `Failed to ${pipe.enabled ? "disable" : "enable"} pipe:`,
+        error
+      );
       toast({
         title: "error toggling pipe",
         description: "please try again or check the logs for more information.",
@@ -330,7 +354,7 @@ const PipeStore: React.FC = () => {
           },
           body: JSON.stringify({ url: newRepoUrl }),
         });
-        
+
         const data = await response.json();
 
         if (!data.success) {
@@ -489,7 +513,9 @@ const PipeStore: React.FC = () => {
             >
               <X className="h-4 w-4" />
             </Button>
-            <h2 className="text-lg font-medium">{selectedPipe.id}</h2>
+            <h2 className="text-lg font-medium">
+              {getFriendlyName(selectedPipe.id, corePipes)}
+            </h2>
             <Badge variant="outline" className="font-mono text-xs">
               by {getAuthorFromSource(selectedPipe.source)}
             </Badge>
@@ -685,8 +711,8 @@ const PipeStore: React.FC = () => {
 
   const handleCardClick = async (pipe: Pipe) => {
     // Check if pipe is already installed by looking in the pipes array
-    const isInstalled = pipes.some(p => p.id === pipe.id);
-    
+    const isInstalled = pipes.some((p) => p.id === pipe.id);
+
     if (!isInstalled && pipe.source) {
       try {
         // If pipe is not installed, download it first
@@ -694,22 +720,28 @@ const PipeStore: React.FC = () => {
         // Fetch the updated pipe data and wait for it
         const response = await fetch("http://localhost:3030/pipes/list");
         const data = await response.json();
-        
+
         if (!data.success) throw new Error("Failed to fetch installed pipes");
-        
+
         // Get the data dir and fetch README for the new pipe
         const dataDir = await getDataDir();
         const updatedPipe = data.data.find((p: Pipe) => p.id === pipe.id);
-        
+
         if (updatedPipe) {
-          const pathToReadme = await join(dataDir, "pipes", pipe.id, "README.md");
+          const pathToReadme = await join(
+            dataDir,
+            "pipes",
+            pipe.id,
+            "README.md"
+          );
           try {
             const readme = await readFile(pathToReadme);
             updatedPipe.fullDescription = convertHtmlToMarkdown(
               new TextDecoder().decode(readme)
             );
           } catch (error) {
-            updatedPipe.fullDescription = "no description available for this pipe.";
+            updatedPipe.fullDescription =
+              "no description available for this pipe.";
           }
           // Update pipes state and set selected pipe
           setPipes(data.data);
@@ -719,17 +751,17 @@ const PipeStore: React.FC = () => {
         console.error("Failed to download and show pipe:", error);
         toast({
           title: "error showing pipe details",
-          description: "please try again or check the logs for more information.",
+          description:
+            "please try again or check the logs for more information.",
           variant: "destructive",
         });
       }
     } else {
       // For already installed pipes, find the installed version
-      const installedPipe = pipes.find(p => p.id === pipe.id);
+      const installedPipe = pipes.find((p) => p.id === pipe.id);
       setSelectedPipe(installedPipe || pipe);
     }
   };
-
 
   if (selectedPipe) {
     return renderPipeDetails();
@@ -790,7 +822,9 @@ const PipeStore: React.FC = () => {
                   <div className="flex flex-col h-full">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium truncate">{pipe.id}</h3>
+                        <h3 className="font-medium truncate">
+                          {getFriendlyName(pipe.id, corePipes)}
+                        </h3>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span className="truncate">
                             by {getAuthorFromSource(pipe.source)}
@@ -812,13 +846,14 @@ const PipeStore: React.FC = () => {
                         {pipe.enabled ? (
                           <Button
                             size="icon"
-                            variant="outline"
+                            variant={pipe.enabled ? "default" : "outline"}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleToggleEnabled(pipe);
                             }}
+                            className={`${pipe.enabled ? 'bg-primary hover:bg-primary/90' : 'hover:bg-muted'}`}
                           >
-                            <Power className="h-3.5 w-3.5 " />
+                            <Power className="h-3.5 w-3.5" />
                           </Button>
                         ) : (
                           <Button
@@ -851,7 +886,10 @@ const PipeStore: React.FC = () => {
             </div>
 
             <div className="border rounded-lg p-4 space-y-3 w-[50%] mx-auto">
-              <h3 className="text-lg font-medium">add your own pipe</h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-medium">add your own pipe</h3>
+                <PublishDialog app={selectedPipe} />
+              </div>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Input

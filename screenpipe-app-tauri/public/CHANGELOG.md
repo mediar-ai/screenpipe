@@ -1,5 +1,5 @@
-### **Improvements:**
-- **Made log button more visible:** Improved visibility of the log button for easier access and usage.
+### **Fixes:**
+- **Fixed UI monitoring accessibility setting:** Resolved issue with UI monitoring accessibility setting for improved user experience.
 
-#### **Full Changelog:** [4e532..1bd7f](https://github.com/mediar-ai/screenpipe/compare/4e532..1bd7f)
+#### **Full Changelog:** [648c8..589c8](https://github.com/mediar-ai/screenpipe/compare/648c8..589c8)
 

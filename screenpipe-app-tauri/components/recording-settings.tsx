@@ -63,6 +63,12 @@ import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
 
+type PermissionsStatus = {
+  screenRecording: string;
+  microphone: string;
+  accessibility: string;
+};
+
 interface AudioDevice {
   name: string;
   is_default: boolean;
@@ -226,6 +232,7 @@ export function RecordingSettings({
         enableFrameCache: localSettings.enableFrameCache,
         enableUiMonitoring: localSettings.enableUiMonitoring,
         dataDir: localSettings.dataDir,
+        port: localSettings.port,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -571,8 +578,10 @@ export function RecordingSettings({
     try {
       if (checked) {
         // Check accessibility permissions first
-        const hasPermission = await invoke("check_accessibility_permissions");
-        if (!hasPermission) {
+        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
+          initialCheck: false,
+        });
+        if (!perms.accessibility) {
           toast({
             title: "accessibility permission required",
             description:
@@ -1347,59 +1356,6 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
             </div>
-            {/* {isMacOS && (
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="enable-beta-toggle"
-                  checked={localSettings.enableBeta}
-                  onCheckedChange={handleEnableBetaToggle}
-                />
-                <Label
-                  htmlFor="enable-beta-toggle"
-                  className="flex items-center space-x-2"
-                >
-                  <span>enable beta features</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4 cursor-default" />
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        <p>
-                          ⚠️ uses screenpipe cloud and may break screenpipe ⚠️
-                          <br />
-                          • we provide free ChatGPT credits
-                          <br />
-                          • may have privacy implications read our data privacy
-                          policy at
-                          <br />
-                          <a
-                            href="https://screenpi.pe/privacy"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline"
-                          >
-                            https://screenpi.pe/privacy
-                          </a>
-                          <br />
-                          enables experimental features like{" "}
-                          <a
-                            href="https://x.com/m13v_/status/1843868614165967343"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary underline"
-                          >
-                            double slash
-                          </a>
-                          <br />
-                          (only tested on US or German qwertz keyboards)
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </Label>
-              </div>
-            )} */}
             <div className="flex flex-col space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -1466,6 +1422,46 @@ export function RecordingSettings({
                 </Label>
               </div>
             )}
+            {/* <div className="flex flex-col space-y-2">
+              <Label htmlFor="port" className="flex items-center space-x-2">
+                <span>server port</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        port number for the screenpipe server.
+                        <br />
+                        default is 3030. change only if you have port conflicts.
+                        <br />
+                        requires restart to take effect.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Input
+                  id="port"
+                  type="number"
+                  min={1024}
+                  max={65535}
+                  value={localSettings.port}
+                  onChange={(e) => {
+                    const port = parseInt(e.target.value);
+                    if (!isNaN(port) && port >= 1024 && port <= 65535) {
+                      setLocalSettings({
+                        ...localSettings,
+                        port: port,
+                      });
+                    }
+                  }}
+                  className="w-32"
+                />
+              </div>
+            </div> */}
           </CardContent>
         </Card>
       </div>

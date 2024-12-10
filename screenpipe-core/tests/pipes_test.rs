@@ -1,7 +1,7 @@
 #[cfg(feature = "pipes")]
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, TimeZone, Utc};
+    use chrono::{TimeZone, Utc};
     use reqwest;
     use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution};
     use serde_json::json;

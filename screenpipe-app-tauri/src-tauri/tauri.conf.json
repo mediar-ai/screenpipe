@@ -11,12 +11,7 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": [
-      "app",
-      "dmg",
-      "appimage",
-      "nsis"
-    ],
+    "targets": ["app", "dmg", "appimage", "nsis"],
     "externalBin": [],
     "icon": [
       "icons/32x32.png",
@@ -31,34 +26,16 @@
       "icons/screenpipe-logo-tray-black.png"
     ],
     "longDescription": "",
-    "resources": [
-      "assets/*"
-    ],
+    "resources": ["assets/*"],
     "shortDescription": "",
     "fileAssociations": [
       {
         "description": "Video files",
-        "ext": [
-          "mp4",
-          "mkv",
-          "avi",
-          "mov",
-          "wmv",
-          "webm"
-        ]
+        "ext": ["mp4", "mkv", "avi", "mov", "wmv", "webm"]
       },
       {
         "description": "Audio files",
-        "ext": [
-          "mp3",
-          "wav",
-          "aac",
-          "flac",
-          "oga",
-          "ogg",
-          "opic",
-          "opus"
-        ]
+        "ext": ["mp3", "wav", "aac", "flac", "oga", "ogg", "opic", "opus"]
       }
     ]
   },
@@ -113,14 +90,35 @@
         "visible": false,
         "decorations": true,
         "transparent": true
+      },
+      {
+        "title": "meetings",
+        "url": "/meetings",
+        "label": "meetings",
+        "width": 1200,
+        "height": 1000,
+        "minWidth": 1000,
+        "minHeight": 600,
+        "visible": false,
+        "decorations": true,
+        "transparent": true
+      },
+      {
+        "title": "identify speakers",
+        "url": "/identify-speakers",
+        "label": "identify-speakers",
+        "visible": false,
+        "width": 1200,
+        "height": 850,
+        "minWidth": 1200,
+        "minHeight": 850,
+        "resizable": true
       }
     ],
     "security": {
       "assetProtocol": {
         "enable": true,
-        "scope": [
-          "$APPDATA/**"
-        ]
+        "scope": ["$APPDATA/**"]
       },
       "csp": null
     },

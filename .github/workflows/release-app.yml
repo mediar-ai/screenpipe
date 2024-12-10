@@ -364,16 +364,16 @@ jobs:
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        shell: pwsh
+        shell: powershell
         run: |
           mkdir omp
-          pip install intel-openmp --target omp
+          python -m pip install intel-openmp --target omp
           # Create mkl directory if it doesn't exist (ignore error if it does)
           mkdir screenpipe-app-tauri/src-tauri/mkl/ -ErrorAction SilentlyContinue
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.5.16
         env:
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -406,6 +406,7 @@ jobs:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
+          retryAttempts: 3
 
           # - name: Get version from Cargo.toml
           #   shell: bash
@@ -610,7 +611,7 @@ jobs:
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.5.16
         env:
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}

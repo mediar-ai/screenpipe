@@ -262,7 +262,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>start screenpipe backend</p>
+                          <p>start screenpipe recording</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -271,7 +271,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
               </CardContent>
               <CardFooter className="flex flex-col items-center">
                 <p className="text-sm text-muted-foreground">
-                  start or stop screenpipe backend
+                  start or stop screenpipe recording
                 </p>
                 <p className="text-xs text-muted-foreground">
                   (auto started when dev mode is off)
