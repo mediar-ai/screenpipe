@@ -81,6 +81,11 @@ module.exports = {
 			"0%, 100%": { opacity: "1" },
 			"50%": { opacity: "0" },
 		  },
+		  "border-beam": {
+			  "100%": {
+			  "offset-distance": "100%",
+			},
+		  },
 		  "accordion-down": {
 			from: {
 			  height: "0",
@@ -113,8 +118,21 @@ module.exports = {
 			  "background-position": "200%",
 			},
 		  },
+		  shine: {
+			"0%": {
+			  "background-position": "0% 0%",
+			},
+			"50%": {
+			  "background-position": "100% 100%",
+			},
+			to: {
+			  "background-position": "0% 0%",
+			},
+		  }
 		},
 		animation: {
+		  shine: "shine var(--duration) infinite linear",
+		  "border-beam": "border-beam calc(var(--duration)*1s) infinite linear",
 		  "accordion-down": "accordion-down 0.2s ease-out",
 		  "accordion-up": "accordion-up 0.2s ease-out",
 		  pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
