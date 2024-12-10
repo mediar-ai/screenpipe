@@ -190,10 +190,7 @@ export default function Header() {
               <Calendar className="mr-2 h-4 w-4" />
               <span>meetings</span>
             </Button>
-            <Settings
-              showSettings={showSettings}
-              setShowSettings={setShowSettings}
-            />
+            <Settings />
             <Button
               variant="ghost"
               size="icon"
@@ -230,10 +227,7 @@ export default function Header() {
                       setShowSettings(true);
                     }}
                   >
-                    <Settings
-                      showSettings={showSettings}
-                      setShowSettings={setShowSettings}
-                    />
+                    <Settings />
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
