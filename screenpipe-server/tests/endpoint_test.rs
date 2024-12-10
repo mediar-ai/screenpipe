@@ -29,15 +29,9 @@ mod tests {
         error: String,
     }
     async fn setup_test_app() -> (Router, Arc<AppState>) {
-        // env_logger::builder()
-        //     .filter_level(LevelFilter::Debug)
-        //     .init();
+
         let db = Arc::new(DatabaseManager::new("sqlite::memory:").await.unwrap());
-        // Add speaker_id column temporarily for tests
-        sqlx::query("ALTER TABLE audio_transcriptions ADD COLUMN speaker_id INTEGER")
-            .execute(&db.pool)
-            .await
-            .unwrap();
+
         let app_state = Arc::new(AppState {
             db: db.clone(),
             vision_control: Arc::new(AtomicBool::new(false)),
@@ -490,5 +484,187 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(audio_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_recent_tasks_no_bleeding() {
+        let (_, state) = setup_test_app().await;
+        let db = &state.db;
+
+        // Setup test data with different timestamps
+        let now = Utc::now();
+        let old_timestamp = now - Duration::hours(4);
+        let recent_timestamp = now - Duration::seconds(15);
+
+        // Insert old data
+        let _ = db.insert_video_chunk("old_video.mp4", "test_device").await.unwrap();
+        let old_frame_id = db.insert_frame("test_device", None).await.unwrap();
+        
+        // Insert recent data
+        let _ = db.insert_video_chunk("recent_video.mp4", "test_device").await.unwrap();
+        let recent_frame_id = db.insert_frame("test_device", None).await.unwrap();
+
+        // Insert OCR data with different timestamps
+        sqlx::query("UPDATE frames SET timestamp = ? WHERE id = ?")
+            .bind(old_timestamp)
+            .bind(old_frame_id)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+        sqlx::query("UPDATE frames SET timestamp = ? WHERE id = ?")
+            .bind(recent_timestamp)
+            .bind(recent_frame_id)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+        let _ = db
+            .insert_ocr_text(
+                old_frame_id,
+                "old task: write documentation",
+                "",
+                "vscode",
+                "tasks.md",
+                Arc::new(OcrEngine::Tesseract),
+                false,
+            )
+            .await
+            .unwrap();
+
+        let _ = db
+            .insert_ocr_text(
+                recent_frame_id,
+                "current task: fix bug #123",
+                "",
+                "vscode",
+                "tasks.md",
+                Arc::new(OcrEngine::Tesseract),
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Search with 30-second window
+        let results = db
+            .search(
+                "task",
+                ContentType::OCR,
+                10,
+                0,
+                Some(now - Duration::seconds(30)),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Should only return the recent task
+        assert_eq!(results.len(), 1);
+        if let SearchResult::OCR(ocr_result) = &results[0] {
+            assert_eq!(ocr_result.ocr_text, "current task: fix bug #123");
+            assert!(ocr_result.timestamp >= now - Duration::seconds(30));
+        } else {
+            panic!("expected ocr result");
+        }
+
+        // Verify old task is not included
+        let old_results = db
+            .search(
+                "task",
+                ContentType::OCR,
+                10,
+                0,
+                Some(old_timestamp - Duration::seconds(1)),
+                Some(old_timestamp + Duration::seconds(1)),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(old_results.len(), 1);
+        if let SearchResult::OCR(ocr_result) = &old_results[0] {
+            assert_eq!(ocr_result.ocr_text, "old task: write documentation");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_recent_tasks_no_bleeding_production_db() {
+        // Get home directory safely
+        let home = std::env::var("HOME").expect("HOME environment variable not set");
+        let db_path = format!("{}/.screenpipe/db.sqlite", home);
+        
+        // Open database in read-only mode for safety
+        let db = Arc::new(
+            DatabaseManager::new(&format!("sqlite:{}?mode=ro", db_path))
+                .await
+                .unwrap(),
+        );
+
+        // Get current time for reference
+        let now = Utc::now();
+        let thirty_seconds_ago = now - Duration::seconds(30);
+        let four_hours_ago = now - Duration::hours(4);
+
+        // Search for recent content (last 30 seconds)
+        let recent_results = db
+            .search(
+                "",  // empty query to get all content
+                ContentType::OCR,
+                100,
+                0,
+                Some(thirty_seconds_ago),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        println!("found {} recent results", recent_results.len());
+        
+        // Search for older content (around 4 hours ago)
+        let old_results = db
+            .search(
+                "",
+                ContentType::OCR,
+                100,
+                0,
+                Some(four_hours_ago - Duration::minutes(5)),
+                Some(four_hours_ago + Duration::minutes(5)),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        println!("found {} old results", old_results.len());
+
+        // Print some sample data for analysis
+        for result in recent_results.iter().take(5) {
+            if let SearchResult::OCR(ocr) = result {
+                println!("recent: {} ({})", ocr.ocr_text, ocr.timestamp);
+                // Verify timestamp is actually recent
+                assert!(ocr.timestamp >= thirty_seconds_ago, 
+                    "found old data in recent results: {} at {}", 
+                    ocr.ocr_text, ocr.timestamp);
+            }
+        }
+
+        for result in old_results.iter().take(5) {
+            if let SearchResult::OCR(ocr) = result {
+                println!("old: {} ({})", ocr.ocr_text, ocr.timestamp);
+            }
+        }
     }
 }

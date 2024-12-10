@@ -30,10 +30,14 @@ below is the detailed api reference for screenpipe's core functionality.
 - `min_length` (int, optional): minimum content length
 - `max_length` (int, optional): maximum content length
 
-#### sample request:
+#### sample requests:
 
 ```bash
-curl "http://localhost:3030/search?q=meeting&content_type=ocr&limit=5&offset=0&include_frames=true"
+curl http://localhost:3030/health
+```
+
+```bash
+curl "http://localhost:3030/search?q=KEYWORD_QUERY_HERE&limit=10&offset=20"
 ```
 
 #### sample response:

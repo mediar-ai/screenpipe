@@ -17,12 +17,10 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const checkFirstTimeUser = async () => {
       const isFirstTime = await localforage.getItem<boolean>("isFirstTimeUser");
-      console.log("isFirstTime", isFirstTime);
       if (isFirstTime === null) {
         setShowOnboarding(true);
       }
     };
-    console.log("checkFirstTimeUser");
     checkFirstTimeUser();
   }, []);
   return (

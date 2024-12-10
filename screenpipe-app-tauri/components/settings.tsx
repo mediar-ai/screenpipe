@@ -23,7 +23,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 import { Badge } from "@/components/ui/badge"; // Add this import
@@ -42,9 +48,7 @@ import {
 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
-import { Command } from "@tauri-apps/plugin-shell";
 import { LogFileButton } from "./log-file-button";
-import { platform } from "@tauri-apps/plugin-os";
 
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
@@ -60,17 +64,22 @@ import {
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { AuthButton } from "./auth";
+import { DropdownMenuItem } from "./ui/dropdown-menu";
 
 export function Settings({ className }: { className?: string }) {
-  const { settings, updateSettings, resetSetting, resetSettings } = useSettings();
+  const {
+    settings,
+    updateSettings,
+    resetSetting,
+    resetSettings,
+    localSettings,
+    setLocalSettings,
+  } = useSettings();
   const { debouncedFetchHealth } = useHealthCheck();
-  const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<
     "idle" | "running" | "error"
   >("idle");
-  const [currentPlatform, setCurrentPlatform] = useState("unknown");
 
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [nonModifierKey, setNonModifierKey] = useState<string>("");
@@ -146,10 +155,6 @@ export function Settings({ className }: { className?: string }) {
   const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
   const isShortcutChanged = newShortcut !== currentShortcut;
 
-  useEffect(() => {
-    setCurrentPlatform(platform());
-  }, []);
-
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setLocalSettings({ ...localSettings, openaiApiKey: newValue });
@@ -223,10 +228,6 @@ export function Settings({ className }: { className?: string }) {
     setLocalSettings({ ...localSettings, embeddedLLM: newValue });
     updateSettings({ embeddedLLM: newValue });
   };
-
-  React.useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
 
   const startOllamaSidecar = async () => {
     setOllamaStatus("running");
@@ -451,13 +452,6 @@ export function Settings({ className }: { className?: string }) {
     }
   };
 
-  const isCustomUrl = ![
-    "https://api.openai.com/v1",
-    "http://localhost:11434/v1",
-    "https://ai-proxy.i-f9f.workers.dev/v1",
-    "embedded",
-  ].includes(localSettings.aiUrl);
-
   // Add this function to check the embedded AI status
   const checkEmbeddedAIStatus = useCallback(async () => {
     if (localSettings.embeddedLLM.enabled) {
@@ -510,63 +504,45 @@ export function Settings({ className }: { className?: string }) {
     });
   };
 
-  useEffect(() => {
-    const handleSettingsUpdate = () => {
-      debouncedFetchHealth();
-    };
-
-    window.addEventListener("settings-updated", handleSettingsUpdate);
-
-    return () => {
-      window.removeEventListener("settings-updated", handleSettingsUpdate);
-    };
-  }, [debouncedFetchHealth]);
-
   const handleResetSettings = async () => {
-    try{
-      await resetSettings()
+    try {
+      await resetSettings();
       toast({
         title: "settings were reset successfully",
       });
-    }catch(e){
-      console.log(e)
+    } catch (e) {
+      console.log(e);
       toast({
         title: "can't reset your settings",
         variant: "destructive",
       });
     }
-  }
+  };
 
   return (
     <Dialog
       onOpenChange={(open) => {
         if (!open) {
-          // Use a more reliable state update mechanism
-          const event = new CustomEvent("settings-updated");
-          window.dispatchEvent(event);
-
-          // Add a small delay before refetching health
-          setTimeout(() => {
-            debouncedFetchHealth();
-          }, 500);
-
           window.location.reload();
         }
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className={className}>
-          <Settings2 className="h-5 w-5" />
-          <span className="sr-only">settings</span>
-        </Button>
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={(e) => e.preventDefault()}
+        >
+          <div className="flex items-center">
+            <Settings2 className="mr-2 h-4 w-4" />
+            <span>settings</span>
+          </div>
+        </DropdownMenuItem>
       </DialogTrigger>
+
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            <div className="flex items-center gap-4">
-              settings
-              <AuthButton />
-            </div>
+            <div className="flex items-center gap-4">settings</div>
           </DialogTitle>
           <DialogDescription>
             choose your AI provider, enter necessary credentials, and more.
@@ -1080,30 +1056,27 @@ export function Settings({ className }: { className?: string }) {
               </div>
             </CardContent>
           </Card>
-          <Card
-            className="border border-[#fab1b6] overflow-hidden"
-          >
-              <CardHeader>
-                <CardTitle className="text-center">reset settings</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center">
-                <p className="text-sm text-muted-foreground mb-4">
-                  permanently reset settings to their default values.
-                </p>
-              </CardContent>
-              <CardFooter className="bg-[#fdedee] border-t border-[#fab1b6] flex justify-between items-center p-5">
-                <p className="text-sm text-muted-foreground">
-                  this action is not reversible — please continue with caution.
-                </p>
-                <Button
-                    variant={'destructive'}
-                    onClick={()=>handleResetSettings()}
-                    disabled={false}
-                  >
-                   reset settings
-                  </Button>
-              </CardFooter>
-
+          <Card className="border border-[#fab1b6] overflow-hidden">
+            <CardHeader>
+              <CardTitle className="text-center">reset settings</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <p className="text-sm text-muted-foreground mb-4">
+                permanently reset settings to their default values.
+              </p>
+            </CardContent>
+            <CardFooter className="bg-[#fdedee] border-t border-[#fab1b6] flex justify-between items-center p-5">
+              <p className="text-sm text-muted-foreground">
+                this action is not reversible — please continue with caution.
+              </p>
+              <Button
+                variant={"destructive"}
+                onClick={() => handleResetSettings()}
+                disabled={false}
+              >
+                reset settings
+              </Button>
+            </CardFooter>
           </Card>
         </div>
       </DialogContent>

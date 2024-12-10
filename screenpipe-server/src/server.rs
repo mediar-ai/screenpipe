@@ -488,7 +488,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
     let audio_active = now - last_capture < 5; // Consider active if captured in last 5 seconds
 
-    let (last_frame, _, last_ui) = match state.db.get_latest_timestamps().await {
+    let (last_frame, audio, last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
         Err(e) => {
             error!("failed to get latest timestamps: {}", e);
@@ -563,18 +563,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "unhealthy",
             format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
                     unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
-            Some("if you're experiencing issues, please try the following steps:\n\
-                  1. restart the application.\n\
-                  2. if using a desktop app, reset your screenpipe os audio/screen recording permissions.\n\
-                  3. if the problem persists, please contact support with the details of this health check at louis@screenpi.pe.\n\
-                  4. last, here are some faq to help you troubleshoot: https://github.com/mediar-ai/screenpipe/blob/main/content/docs/notes.md".to_string())
+            Some("if you're experiencing issues, please try contacting us on discord".to_string())
         )
     };
 
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
         last_frame_timestamp: last_frame,
-        last_audio_timestamp: None,
+        last_audio_timestamp: audio,
         last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status: audio_status.to_string(),
@@ -1308,7 +1304,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
             axum::http::header::CACHE_CONTROL,
         ]); // Important for SSE
 
-    Router::new()
+    let router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
         .route("/vision/list", post(api_list_monitors))
@@ -1323,12 +1319,19 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
-        .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))
-        .layer(cors)
+        .route("/experimental/frames/merge", post(merge_frames_handler))
+        .layer(cors);
+
+    #[cfg(feature = "experimental")]
+    {
+        router = router.route("/experimental/input_control", post(input_control_handler));
+    }
+
+    router
 }
 
 // Add the new handler
@@ -1430,13 +1433,16 @@ pub async fn delete_pipe_handler(
                 "message": "pipe deleted successfully"
             })),
         ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
+        Err(e) => {
+            error!("failed to delete pipe: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
                 "success": false,
                 "error": format!("failed to delete pipe: {}", e)
-            })),
-        ),
+                })),
+            )
+        }
     }
 }
 

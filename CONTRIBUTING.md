@@ -170,24 +170,6 @@ we follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) fold
 
 AI is quite bad when files are big, we should try to keep small so we move faster (also it's nice for humans too 🤓)
 
-### ai system prompt
-
-i use cursor with this prompt to help me with the code:
-
-```
-Rules:
-- Coding: louis is working on screenpipe most of the time, it's an open source app, lib, and CLI, that record screens & mics 24/7, extract OCR & STT, save to local db, connect to AI, do magic, it's written in Rust + Tauri and we write plugins (pipes) in TS + Bun. the Rust CLI is embedded as a sidecar in Tauri. it works on macos, windows, linux
-- Coding: always keep my style black and white, with some nerdy style and fonts pixelated / scientific style
-- Coding: do not remove @ts-ignore except if i explicitly ask you
-- Coding: always use lower case for logging stuff or UI
-- Coding: Rust: always use anyhow error, tokio instead of std stuff, avoid mutex if you can, prefer channels, write code easy to read for humans, fast for machines
-- Coding: when i ask to give me the full code it means FULL, no fucking // rest of the code comments GIVE ME THE FULL CODE
-- Coding: if it seems like you lack some context about a niche lib just ask me to provide the source code and i will (instead of providing a bad answer)
-- Coding: NextJS: make sure to use tailwind, typescript, shadcn, lucide, magicui, and framer-motion to make UIs amazing
-- Coding: Make sure to escape html thing like quotes etc properly. Only when necessary
-- Coding: When writing react or html code make sure to use thing like &apos; instead of ". Only when necessary (e.g inside quote themselves)
-```
-
 ### principles 
 
 - **user fanatic: focus on building what people want and bring maximum value.**

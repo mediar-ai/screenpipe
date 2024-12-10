@@ -142,10 +142,12 @@ fn get_exe_by_reg_key(
                     if let Ok(display_name) = app_key.get_value::<String, _>("DisplayName") {
                         if display_name.to_lowercase().contains(&app_name.to_lowercase()) {
                             if let Ok(path) = app_key.get_value::<String, _>("DisplayIcon") {
-                                let cleaned_path = path.split(',').next().unwrap_or(&path).to_string();
+                                let cleaned_path = path.split(',').next()
+                                    .unwrap_or(&path).to_string().trim_matches('"').to_string();
                                 return Some(cleaned_path);
                             } else if let Ok(path) = app_key.get_value::<String, _>("(default)") {
-                                let cleaned_path = path.split(',').next().unwrap_or(&path).to_string();
+                                let cleaned_path = path.split(',').next()
+                                    .unwrap_or(&path).to_string().trim_matches('"').to_string();
                                 return Some(cleaned_path);
                             }
                         }

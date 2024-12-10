@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { generateObject } from "ai";
-import { createOllama } from "ollama-ai-provider";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOllama, ollama } from "ollama-ai-provider";
 import { pipe, ContentItem } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -15,18 +14,10 @@ const workLog = z.object({
 
 type WorkLog = z.infer<typeof workLog>;
 
-function getAIProvider(config: any) {
-  if (config.openaiApiKey.length > 0 && config.gptModel.length > 0) {
-    return createOpenAI({
-      apiKey: config.openaiApiKey,
-    });
-  }
-  return createOllama({ baseURL: config.ollamaApiUrl });
-}
+
 
 async function generateWorkLog(
   screenData: ContentItem[],
-  provider: any,
   model: string,
   customPrompt?: string
 ): Promise<WorkLog> {
@@ -45,9 +36,10 @@ async function generateWorkLog(
     Estimate time spent in minutes based on the activities timestamps.`;
 
   const prompt = customPrompt || defaultPrompt;
+  const provider = ollama(model);
 
   const response = await generateObject({
-    model: provider(model),
+    model: provider,
     messages: [{ role: "user", content: prompt }],
     schema: workLog,
   });
@@ -108,7 +100,6 @@ function streamWorkLogs(): void {
   const pageSize = config.pageSize;
   const model = config.gptModel || config.ollamaModel;
 
-  const provider = getAIProvider(config);
   pipe.inbox.send({
     title: "obsidian time logs stream started",
     body: `monitoring work activity every ${config.interval / 1000} seconds`,
@@ -131,7 +122,6 @@ function streamWorkLogs(): void {
         if (screenData && screenData.data.length > 0) {
           const logEntry = await generateWorkLog(
             screenData.data,
-            provider,
             model,
             customPrompt
           );
@@ -171,6 +161,15 @@ function streamWorkLogs(): void {
 streamWorkLogs();
 
 /*
+
+
+# these are mandatory env variables
+export SCREENPIPE_DIR="$HOME/.screenpipe"
+export PIPE_ID="pipe-obsidian-time-logs"
+export PIPE_FILE="pipe.ts"
+export PIPE_DIR="$SCREENPIPE_DIR/pipes/pipe-obsidian-time-logs"
+
+bun run pipes/pipe-obsidian-time-logs/pipe.ts
 
 Instructions to run this pipe:
 

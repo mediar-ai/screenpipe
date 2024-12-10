@@ -1,5 +1,5 @@
 use crate::get_data_dir;
-use serde::{Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tauri::Manager;
 use tracing::info;
@@ -20,28 +20,6 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
             tauri::image::Image::from_path("icons/screenpipe-logo-tray-black.png").unwrap(),
         ));
     }
-}
-
-#[cfg(target_os = "macos")]
-use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
-
-#[tauri::command]
-pub fn open_screen_capture_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-        .spawn()
-        .expect("failed to open system preferences");
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub fn open_mic_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-        .spawn()
-        .expect("failed to open system preferences");
 }
 
 #[tauri::command]
@@ -227,44 +205,9 @@ pub fn update_show_screenpipe_shortcut(
     Ok(())
 }
 
-#[tauri::command]
-pub fn open_accessibility_preferences() {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        .spawn()
-        .expect("failed to open system preferences");
-}
 
-#[tauri::command]
-pub fn check_accessibility_permissions() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        // Check if the app has accessibility permissions
-        let options = {
-            let key = CFString::new("AXTrustedCheckOptionPrompt");
-            let value = CFBoolean::false_value();
-            let pairs = &[(key, value)];
-            core_foundation::dictionary::CFDictionary::from_CFType_pairs(pairs)
-        };
 
-        let trusted = unsafe {
-            let accessibility = CFString::new("AXIsProcessTrustedWithOptions");
-            let func: extern "C" fn(*const core_foundation::dictionary::CFDictionary) -> bool =
-                std::mem::transmute(libc::dlsym(
-                    libc::RTLD_DEFAULT,
-                    accessibility.to_string().as_ptr() as *const _,
-                ));
-            func(options.as_concrete_TypeRef() as *const _)
-        };
 
-        return trusted;
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        return true;
-    }
-}
 
 // Add these new structs
 #[derive(Debug, Serialize)]
@@ -310,3 +253,35 @@ pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Resul
 
     Ok(())
 }
+
+
+
+
+
+
+
+
+#[tauri::command]
+pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("search") {
+        #[cfg(target_os = "macos")]
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+        let _ = window.set_decorations(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "search",
+            tauri::WebviewUrl::App("search.html".into()),
+        )
+        .title("search")
+        .decorations(true)
+        .transparent(true)
+        .center()
+        .build()
+        .unwrap();
+    }
+}
+

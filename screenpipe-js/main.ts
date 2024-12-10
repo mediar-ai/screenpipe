@@ -169,7 +169,12 @@ export async function sendDesktopNotification(
 
 export function loadPipeConfig(): PipeConfig {
   try {
-    const configPath = `${process.env.SCREENPIPE_DIR}/pipes/${process.env.PIPE_ID}/pipe.json`;
+    // Try to get path from env vars, fallback to current directory
+    const baseDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const pipeId =
+      process.env.PIPE_ID || require("path").basename(process.cwd());
+    const configPath = `${baseDir}/pipes/${pipeId}/pipe.json`;
+
     const configContent = fs.readFileSync(configPath, "utf8");
     const parsedConfig: ParsedConfig = JSON.parse(configContent);
     const config: PipeConfig = {};
@@ -220,40 +225,6 @@ export async function queryScreenpipe(
   } catch (error) {
     console.error("error querying screenpipe:", error);
     return null;
-  }
-}
-
-export function extractJsonFromLlmResponse(response: string): any {
-  let cleaned = response.replace(/^```(?:json)?\s*|\s*```$/g, "");
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    cleaned = jsonMatch[0];
-  }
-  cleaned = cleaned.replace(/^[^{]*/, "").replace(/[^}]*$/, "");
-  cleaned = cleaned.replace(/\\n/g, "").replace(/\n/g, "");
-  cleaned = cleaned.replace(/"(\\"|[^"])*"/g, (match) => {
-    return match.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  });
-
-  try {
-    return JSON.parse(cleaned);
-  } catch (error) {
-    console.warn("failed to parse json:", error);
-    cleaned = cleaned
-      .replace(/,\s*}/g, "}")
-      .replace(/'/g, '"')
-      .replace(/(\w+):/g, '"$1":')
-      .replace(/:\s*'([^']*)'/g, ': "$1"')
-      .replace(/\\"/g, '"')
-      .replace(/"{/g, '{"')
-      .replace(/}"/g, '"}');
-
-    try {
-      return JSON.parse(cleaned);
-    } catch (secondError) {
-      console.warn("failed to parse json after attempted fixes:", secondError);
-      throw new Error("invalid json format in llm response");
-    }
   }
 }
 

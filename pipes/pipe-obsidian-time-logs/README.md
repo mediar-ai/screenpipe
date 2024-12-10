@@ -9,10 +9,10 @@ automates logging of work to obsidian using screenpipe and openai/ollama
 #### quick setup
 
 1. install screenpipe and git clone this repo
-    ```
-    git clone https://github.com/mediar-ai/screenpipe.git
-    cd screenpipe
-    ```
+```
+git clone https://github.com/mediar-ai/screenpipe.git
+cd screenpipe
+```
 
 2. set up AI provider:
    Option 1 - OpenAI:
@@ -33,11 +33,11 @@ automates logging of work to obsidian using screenpipe and openai/ollama
    - pageSize: number of screen records to process
 
 5. run the pipe:
-   ```
-   screenpipe pipe download ./pipes/pipe-obsidian-time-logs
-   screenpipe pipe enable pipe-obsidian-time-logs
-   screenpipe
-   ```
+```
+screenpipe pipe download ./pipes/pipe-obsidian-time-logs
+screenpipe pipe enable pipe-obsidian-time-logs
+screenpipe
+```
 
 The pipe will:
 - Monitor your screen activity at the configured interval

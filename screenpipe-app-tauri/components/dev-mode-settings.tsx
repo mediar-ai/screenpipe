@@ -63,18 +63,12 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
   #    Example: screenpipe --fps 1 `;
 
   const logPath =
-  os === "windows"
-      ? `${dataDir}\\screenpipe.${
-          new Date().toISOString().split("T")[0]
-    }.log`
-      : `${dataDir}/screenpipe.${
-          new Date().toISOString().split("T")[0]
-    }.log`;
+    os === "windows"
+      ? `${dataDir}\\screenpipe.${new Date().toISOString().split("T")[0]}.log`
+      : `${dataDir}/screenpipe.${new Date().toISOString().split("T")[0]}.log`;
 
   const dbPath =
-    os === "windows"
-      ? `${dataDir}\\db.sqlite`
-      : `${dataDir}/db.sqlite`;
+    os === "windows" ? `${dataDir}\\db.sqlite` : `${dataDir}/db.sqlite`;
 
   const baseCommand =
     baseInstructions +
@@ -89,13 +83,13 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
       baseCommand +
       `# Stream the log:
   type "${logPath}"
-  
+
   # Scroll the logs:
   more "${logPath}"
-  
+
   # View last 10 frames:
   sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-  
+
   # View last 10 audio transcriptions:
   sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
     );
@@ -104,13 +98,13 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
       baseCommand +
       `# Stream the log:
   tail -f "${logPath}"
-  
+
   # Scroll the logs:
   less "${logPath}"
-  
+
   # View last 10 frames:
   sqlite3 "${dbPath}" "SELECT * FROM frames ORDER BY timestamp DESC LIMIT 10;"
-  
+
   # View last 10 audio transcriptions:
   sqlite3 "${dbPath}" "SELECT * FROM audio_transcriptions ORDER BY timestamp DESC LIMIT 10;"`
     );
@@ -120,23 +114,24 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
 };
 
 export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
-  const { settings, updateSettings } = useSettings();
-  const [localSettings, setLocalSettings] = useState(settings);
+  const { settings, updateSettings, localSettings, setLocalSettings } =
+    useSettings();
   const handleDevModeToggle = async (checked: boolean) => {
     try {
       await updateSettings({ devMode: checked });
-      setLocalSettings({ ...localSettings, devMode: checked });
+      setLocalSettings((prev) => ({ ...prev, devMode: checked }));
     } catch (error) {
-      console.error("Failed to update dev mode:", error);
-      // Add error handling, e.g., show a toast notification
+      console.error("failed to update dev mode:", error);
+      toast({
+        title: "error",
+        description: "failed to save dev mode setting",
+        variant: "destructive",
+      });
     }
   };
+
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-
-  useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
 
   const handleStartScreenpipe = async () => {
     setIsLoading(true);
@@ -231,9 +226,6 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
           </Card>
 
           <div className="relative">
-            <Badge className="bg-white text-gray-800 hover:bg-white/80 text-xs absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
-              expert only
-            </Badge>
             <Card className="p-8">
               <CardContent>
                 <div className="flex items-center space-x-2">
@@ -270,7 +262,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>start screenpipe backend</p>
+                          <p>start screenpipe recording</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -279,7 +271,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
               </CardContent>
               <CardFooter className="flex flex-col items-center">
                 <p className="text-sm text-muted-foreground">
-                  start or stop screenpipe backend
+                  start or stop screenpipe recording
                 </p>
                 <p className="text-xs text-muted-foreground">
                   (auto started when dev mode is off)
@@ -297,7 +289,10 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
             did you run screenpipe backend? either click start on the right, or
             thru CLI 👇
           </p>
-          <CodeBlock language="bash" value={getDebuggingCommands(platform(), localDataDir)} />
+          <CodeBlock
+            language="bash"
+            value={getDebuggingCommands(platform(), localDataDir)}
+          />
 
           <div className="mt-4 text-sm text-gray-500">
             <p>or, for more advanced queries:</p>

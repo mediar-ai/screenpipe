@@ -26,7 +26,7 @@ jobs:
       - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ocr-benchmark-data
+          name: apple-ocr-benchmark-data
           path: ocr_output.txt
 
   tesseract_ocr_benchmark:
@@ -48,7 +48,7 @@ jobs:
       - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ocr-benchmark-data
+          name: tesseract-ocr-benchmark-data
           path: ocr_output.txt
 
   windows_ocr_benchmark:
@@ -67,7 +67,7 @@ jobs:
       - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ocr-benchmark-data
+          name: windows-ocr-benchmark-data
           path: ocr_output.txt
 
   stt_benchmark:
@@ -107,7 +107,6 @@ jobs:
       - name: Download benchmark data
         uses: actions/download-artifact@v3
         with:
-          name: ocr-benchmark-data
           path: ./cache/ocr
 
       - name: Download STT benchmark data

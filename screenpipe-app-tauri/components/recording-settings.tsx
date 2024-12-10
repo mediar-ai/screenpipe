@@ -52,27 +52,22 @@ import {
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
 import { Slider } from "./ui/slider";
-import { IconCode } from "./ui/icons";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
-import { CodeBlock } from "./ui/codeblock";
-import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
 import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
-import { open } from '@tauri-apps/plugin-dialog';
-import { exists } from '@tauri-apps/plugin-fs';
+import { open } from "@tauri-apps/plugin-dialog";
+import { exists } from "@tauri-apps/plugin-fs";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
+
+type PermissionsStatus = {
+  screenRecording: string;
+  microphone: string;
+  accessibility: string;
+};
 
 interface AudioDevice {
   name: string;
@@ -99,7 +94,9 @@ export function RecordingSettings({
   const [openMonitors, setOpenMonitors] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
   const [dataDirInputVisible, setDataDirInputVisible] = React.useState(false);
-  const [clickTimeout, setClickTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [clickTimeout, setClickTimeout] = useState<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const [windowsForIgnore, setWindowsForIgnore] = useState("");
   const [windowsForInclude, setWindowsForInclude] = useState("");
 
@@ -118,7 +115,7 @@ export function RecordingSettings({
 
   useEffect(() => {
     const checkPlatform = async () => {
-      const currentPlatform = await platform();
+      const currentPlatform = platform();
       setIsMacOS(currentPlatform === "macos");
     };
     checkPlatform();
@@ -221,7 +218,6 @@ export function RecordingSettings({
         monitorIds: localSettings.monitorIds,
         audioDevices: localSettings.audioDevices,
         usePiiRemoval: localSettings.usePiiRemoval,
-        restartInterval: localSettings.restartInterval,
         disableAudio: localSettings.disableAudio,
         ignoredWindows: localSettings.ignoredWindows,
         includedWindows: localSettings.includedWindows,
@@ -236,6 +232,7 @@ export function RecordingSettings({
         enableFrameCache: localSettings.enableFrameCache,
         enableUiMonitoring: localSettings.enableUiMonitoring,
         dataDir: localSettings.dataDir,
+        port: localSettings.port,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -370,10 +367,6 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, usePiiRemoval: checked });
   };
 
-  const handleRestartIntervalChange = (value: number[]) => {
-    setLocalSettings({ ...localSettings, restartInterval: value[0] });
-  };
-
   const handleDisableAudioChange = (checked: boolean) => {
     setLocalSettings({ ...localSettings, disableAudio: checked });
   };
@@ -411,12 +404,6 @@ export function RecordingSettings({
     const currentPlatform = platform();
     return (
       <>
-        {/* <SelectItem value="unstructured">
-          <div className="flex items-center justify-between w-full space-x-2">
-            <span>unstructured</span>
-            <Badge variant="secondary">cloud</Badge>
-          </div>
-        </SelectItem> */}
         {currentPlatform === "linux" && (
           <SelectItem value="tesseract">tesseract</SelectItem>
         )}
@@ -448,11 +435,11 @@ export function RecordingSettings({
       // Double Click
       clearTimeout(clickTimeout);
       setClickTimeout(null);
-      setDataDirInputVisible(true)
+      setDataDirInputVisible(true);
     } else {
       const timeout = setTimeout(() => {
         // Single Click
-        selectDataDir()
+        selectDataDir();
         setClickTimeout(null);
       }, 250);
       setClickTimeout(timeout);
@@ -460,19 +447,19 @@ export function RecordingSettings({
 
     async function selectDataDir() {
       try {
-        const dataDir = await getDataDir()
+        const dataDir = await getDataDir();
 
         const selected = await open({
           directory: true,
           multiple: false,
-          defaultPath: dataDir
+          defaultPath: dataDir,
         });
         // TODO: check permission of selected dir for server to write into
 
         if (selected) {
-          setLocalSettings({ ...localSettings, dataDir: selected })
+          setLocalSettings({ ...localSettings, dataDir: selected });
         } else {
-          console.log('canceled');
+          console.log("canceled");
         }
       } catch (error) {
         console.error("failed to change data directory:", error);
@@ -484,33 +471,36 @@ export function RecordingSettings({
         });
       }
     }
-  }
+  };
 
-  const handleDataDirInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDataDirInputChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const newValue = e.target.value;
     setLocalSettings({ ...localSettings, dataDir: newValue });
-  }
+  };
 
   const handleDataDirInputBlur = () => {
-    console.log('wcw blur');
-    setDataDirInputVisible(false)
-    validateDataDirInput()
-  }
+    console.log("wcw blur");
+    setDataDirInputVisible(false);
+    validateDataDirInput();
+  };
 
-  const handleDataDirInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      setDataDirInputVisible(false)
-      validateDataDirInput()
+  const handleDataDirInputKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === "Enter") {
+      setDataDirInputVisible(false);
+      validateDataDirInput();
     }
-  }
+  };
 
   const validateDataDirInput = async () => {
     try {
       if (await exists(localSettings.dataDir)) {
-        return
+        return;
       }
-    } catch (err) {
-    }
+    } catch (err) {}
 
     toast({
       title: "error",
@@ -520,7 +510,7 @@ export function RecordingSettings({
     });
 
     setLocalSettings({ ...localSettings, dataDir: settings.dataDir });
-  }
+  };
 
   const runSetup = async () => {
     setIsSetupRunning(true);
@@ -577,63 +567,6 @@ export function RecordingSettings({
     }
   };
 
-  const handleEnableBetaToggle = async (checked: boolean) => {
-    setLocalSettings({ ...localSettings, enableBeta: checked });
-
-    if (checked) {
-      try {
-        const command = ShellCommand.sidecar("screenpipe", ["setup"]);
-        const child = await command.spawn();
-
-        toast({
-          title: "setting up beta features",
-          description: "this may take a few minutes...",
-        });
-
-        const outputPromise = new Promise<string>((resolve, reject) => {
-          command.on("close", (data) => {
-            if (data.code !== 0) {
-              reject(new Error(`command failed with code ${data.code}`));
-            }
-          });
-          command.on("error", (error) => reject(new Error(error)));
-          command.stdout.on("data", (line) => {
-            console.log(line);
-            if (line.includes("screenpipe setup complete")) {
-              resolve("ok");
-            }
-          });
-        });
-
-        const timeoutPromise = new Promise(
-          (_, reject) =>
-            setTimeout(() => reject(new Error("setup timed out")), 900000) // 15 minutes
-        );
-
-        const result = await Promise.race([outputPromise, timeoutPromise]);
-
-        if (result === "ok") {
-          toast({
-            title: "beta features setup complete",
-            description: "you can now use the beta features.",
-          });
-        } else {
-          throw new Error("setup failed or timed out");
-        }
-      } catch (error) {
-        console.error("error setting up beta features:", error);
-        toast({
-          title: "error setting up beta features",
-          description:
-            "please try again or check the logs for more information.",
-          variant: "destructive",
-        });
-        // Revert the toggle if setup fails
-        setLocalSettings({ ...localSettings, enableBeta: false });
-      }
-    }
-  };
-
   const handleFrameCacheToggle = (checked: boolean) => {
     setLocalSettings({
       ...localSettings,
@@ -641,16 +574,14 @@ export function RecordingSettings({
     });
   };
 
-  const handleShowTimeline = async () => {
-    await invoke("show_timeline");
-  };
-
   const handleUiMonitoringToggle = async (checked: boolean) => {
     try {
       if (checked) {
         // Check accessibility permissions first
-        const hasPermission = await invoke("check_accessibility_permissions");
-        if (!hasPermission) {
+        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
+          initialCheck: false,
+        });
+        if (!perms.accessibility) {
           toast({
             title: "accessibility permission required",
             description:
@@ -983,35 +914,43 @@ export function RecordingSettings({
                 <span>data directory</span>
               </Label>
 
-              {
-                !dataDirInputVisible
-                  ?
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between"
-                    onClick={handleDataDirChange}
-                  >
-                    <div className="inline-block flex gap-4">
-                      {!!settings.dataDir ? "change directory" : "select directory"}
-                      {localSettings.dataDir === settings.dataDir ?
-                        <span className="text-muted-foreground text-sm"> current at: {settings.dataDir || "default directory"}</span> :
-                        <span className="text-muted-foreground text-sm"> change to: {localSettings.dataDir || "default directory"}</span>
-                      }
-                    </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                  : <Input
-                    id="dataDir"
-                    type="text"
-                    autoFocus={true}
-                    value={localSettings.dataDir}
-                    onChange={handleDataDirInputChange}
-                    onBlur={handleDataDirInputBlur}
-                    onKeyDown={handleDataDirInputKeyDown}
-                  >
-                  </Input>
-              }
+              {!dataDirInputVisible ? (
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between"
+                  onClick={handleDataDirChange}
+                >
+                  <div className="inline-block flex gap-4">
+                    {!!settings.dataDir
+                      ? "change directory"
+                      : "select directory"}
+                    {localSettings.dataDir === settings.dataDir ? (
+                      <span className="text-muted-foreground text-sm">
+                        {" "}
+                        current at: {settings.dataDir || "default directory"}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">
+                        {" "}
+                        change to:{" "}
+                        {localSettings.dataDir || "default directory"}
+                      </span>
+                    )}
+                  </div>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              ) : (
+                <Input
+                  id="dataDir"
+                  type="text"
+                  autoFocus={true}
+                  value={localSettings.dataDir}
+                  onChange={handleDataDirInputChange}
+                  onBlur={handleDataDirInputBlur}
+                  onKeyDown={handleDataDirInputKeyDown}
+                ></Input>
+              )}
             </div>
 
             <div className="flex flex-col space-y-2">
@@ -1046,48 +985,6 @@ export function RecordingSettings({
                     </Tooltip>
                   </TooltipProvider>
                 </Label>
-              </div>
-            </div>
-            <div className="flex flex-col space-y-2">
-              <Label
-                htmlFor="restartInterval"
-                className="flex items-center space-x-2"
-              >
-                <span>restart interval (minutes)</span>
-                <Badge variant="outline" className="ml-2">
-                  experimental
-                </Badge>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        (not recommended) set how often the recording process
-                        should restart.
-                        <br />
-                        30 minutes is the minimum interval.
-                        <br />
-                        this can help mitigate potential issues.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <div className="flex items-center space-x-4">
-                <Slider
-                  id="restartInterval"
-                  min={0}
-                  max={1440} // 24 hours
-                  step={30}
-                  value={[localSettings.restartInterval]}
-                  onValueChange={handleRestartIntervalChange}
-                  className="flex-grow"
-                />
-                <span className="w-16 text-right">
-                  {localSettings.restartInterval} min
-                </span>
               </div>
             </div>
 
@@ -1459,59 +1356,6 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
             </div>
-            {/* {isMacOS && (
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="enable-beta-toggle"
-                  checked={localSettings.enableBeta}
-                  onCheckedChange={handleEnableBetaToggle}
-                />
-                <Label
-                  htmlFor="enable-beta-toggle"
-                  className="flex items-center space-x-2"
-                >
-                  <span>enable beta features</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4 cursor-default" />
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        <p>
-                          ⚠️ uses screenpipe cloud and may break screenpipe ⚠️
-                          <br />
-                          • we provide free ChatGPT credits
-                          <br />
-                          • may have privacy implications read our data privacy
-                          policy at
-                          <br />
-                          <a
-                            href="https://screenpi.pe/privacy"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline"
-                          >
-                            https://screenpi.pe/privacy
-                          </a>
-                          <br />
-                          enables experimental features like{" "}
-                          <a
-                            href="https://x.com/m13v_/status/1843868614165967343"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary underline"
-                          >
-                            double slash
-                          </a>
-                          <br />
-                          (only tested on US or German qwertz keyboards)
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </Label>
-              </div>
-            )} */}
             <div className="flex flex-col space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -1578,6 +1422,46 @@ export function RecordingSettings({
                 </Label>
               </div>
             )}
+            {/* <div className="flex flex-col space-y-2">
+              <Label htmlFor="port" className="flex items-center space-x-2">
+                <span>server port</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        port number for the screenpipe server.
+                        <br />
+                        default is 3030. change only if you have port conflicts.
+                        <br />
+                        requires restart to take effect.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Input
+                  id="port"
+                  type="number"
+                  min={1024}
+                  max={65535}
+                  value={localSettings.port}
+                  onChange={(e) => {
+                    const port = parseInt(e.target.value);
+                    if (!isNaN(port) && port >= 1024 && port <= 65535) {
+                      setLocalSettings({
+                        ...localSettings,
+                        port: port,
+                      });
+                    }
+                  }}
+                  className="w-32"
+                />
+              </div>
+            </div> */}
           </CardContent>
         </Card>
       </div>

@@ -25,10 +25,7 @@ fn init() {
 
 async fn setup_test_app() -> (Router, Arc<AppState>) {
     let db = Arc::new(DatabaseManager::new("sqlite::memory:").await.unwrap());
-    sqlx::query("ALTER TABLE audio_transcriptions ADD COLUMN speaker_id INTEGER")
-        .execute(&db.pool)
-        .await
-        .unwrap();
+
     let app_state = Arc::new(AppState {
         db: db.clone(),
         vision_disabled: false,
