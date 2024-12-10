@@ -3,9 +3,7 @@ const nextConfig = {
   images: {
     domains: ['screenpi.pe'],
   },
-  experimental: {
-    darkMode: false,
-  },
+  experimental: {},
 };
 
 export default nextConfig;
