@@ -1,4 +1,11 @@
+#[cfg(target_os = "macos")]
+use cidre::{
+    cv::{PixelBuf, PixelFormat},
+    ns,
+    vn::{self, ImageRequestHandler, RecognizeTextRequest},
+};
 use image::DynamicImage;
+use image::GenericImageView;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::{ffi::c_void, ptr::null_mut};
@@ -34,24 +41,12 @@ extern "C" fn release_callback(_refcon: *mut c_void, _data_ptr: *const *const c_
 #[cfg(target_os = "macos")]
 pub fn perform_ocr_apple(
     image: &DynamicImage,
-    languages: Vec<screenpipe_core::Language>,
+    languages: &ns::ArrayMut<ns::String>,
 ) -> (String, String, Option<f64>) {
-    use cidre::{
-        cv::{PixelBuf, PixelFormat},
-        ns,
-        vn::{self, ImageRequestHandler, RecognizeTextRequest},
-    };
-    use image::GenericImageView;
-
-    let rgb = image.to_rgba8();
-    let raw_data = rgb.as_raw();
     let (width, height) = image.dimensions();
-
-    let languages = get_apple_languages(languages);
-    let mut languages_slice = ns::ArrayMut::<ns::String>::with_capacity(languages.len());
-    languages.iter().for_each(|language| {
-        languages_slice.push(&ns::String::with_str(language.as_str()));
-    });
+    let rgb = image.grayscale().to_luma8();
+    let raw_data = rgb.as_raw();
+    // let pixels = image.pixels();
 
     let mut overall_confidence = 0.0;
     let default_ocr_result = (
@@ -69,9 +64,9 @@ pub fn perform_ocr_apple(
         PixelBuf::create_with_bytes_in(
             width,
             height,
-            PixelFormat::_32_ARGB,
+            PixelFormat::ONE_COMPONENT_8,
             raw_data.as_ptr() as *mut c_void,
-            width * 4,
+            width,
             release_callback,
             null_mut(),
             None,
@@ -79,14 +74,14 @@ pub fn perform_ocr_apple(
             None,
         )
         .to_result_unchecked(pixel_buf_out)
-    }.unwrap();
+    }
+    .unwrap();
 
     let handler = ImageRequestHandler::with_cv_pixel_buf(&pixel_buf, None).unwrap();
     let mut request = RecognizeTextRequest::new();
     // Recognize all languages
-    request.set_recognition_langs(&languages_slice);
-    request.set_uses_lang_correction(true);
-    request.set_recognition_level(vn::RequestTextRecognitionLevel::Accurate);
+    request.set_recognition_langs(&languages);
+    request.set_uses_lang_correction(false);
     let requests = ns::Array::<vn::Request>::from_slice(&[&request]);
     let result = handler.perform(&requests);
 
@@ -144,31 +139,4 @@ pub fn perform_ocr_apple(
 
     drop(pixel_buf);
     return default_ocr_result;
-}
-
-#[cfg(target_os = "macos")]
-fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
-    use screenpipe_core::Language;
-
-    let mut langs: Vec<String> = Vec::new();
-    for lang in languages {
-        let lang_str = match lang {
-            Language::English => "en-US",
-            Language::Spanish => "es-ES",
-            Language::French => "fr-FR",
-            Language::German => "de-DE",
-            Language::Italian => "it-IT",
-            Language::Portuguese => "pt-BR",
-            Language::Russian => "ru-RU",
-            Language::Chinese => "zh-Hans",
-            Language::Korean => "ko-KR",
-            Language::Japanese => "ja-JP",
-            Language::Ukrainian => "uk-UA",
-            Language::Thai => "th-TH",
-            Language::Arabic => "ar-SA",
-            _ => continue,
-        };
-        langs.push(lang_str.to_string());
-    }
-    langs
 }

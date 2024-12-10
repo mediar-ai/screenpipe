@@ -7,6 +7,7 @@ use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image, save_text_files};
 use anyhow::{anyhow, Result};
+use cidre::ns;
 use image::DynamicImage;
 use log::{debug, error};
 use screenpipe_core::Language;
@@ -201,6 +202,14 @@ pub async fn process_ocr_task(
     let mut total_confidence = 0.0;
     let mut window_count = 0;
 
+    #[cfg(target_os = "macos")]
+    use ns;
+    let apple_languages = get_apple_languages(languages.clone());
+    let mut languages_slice = ns::ArrayMut::<ns::String>::with_capacity(apple_languages.len());
+    apple_languages.iter().for_each(|language| {
+        languages_slice.push(&ns::String::with_str(language.as_str()));
+    });
+
     for (window_image, window_app_name, window_name, focused) in window_images {
         let (window_text, window_json_output, confidence) = match ocr_engine {
             OcrEngine::Unstructured => perform_ocr_cloud(&window_image, languages.clone())
@@ -212,9 +221,7 @@ pub async fn process_ocr_task(
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => {
-                perform_ocr_apple(&window_image, languages.clone())
-            }
+            OcrEngine::AppleNative => perform_ocr_apple(&window_image, &languages_slice),
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -300,4 +307,31 @@ pub fn trigger_screen_capture_permission() -> Result<()> {
     // The mere attempt to capture it should trigger the permission request
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
+    use screenpipe_core::Language;
+
+    let mut langs: Vec<String> = Vec::new();
+    for lang in languages {
+        let lang_str = match lang {
+            Language::English => "en-US",
+            Language::Spanish => "es-ES",
+            Language::French => "fr-FR",
+            Language::German => "de-DE",
+            Language::Italian => "it-IT",
+            Language::Portuguese => "pt-BR",
+            Language::Russian => "ru-RU",
+            Language::Chinese => "zh-Hans",
+            Language::Korean => "ko-KR",
+            Language::Japanese => "ja-JP",
+            Language::Ukrainian => "uk-UA",
+            Language::Thai => "th-TH",
+            Language::Arabic => "ar-SA",
+            _ => continue,
+        };
+        langs.push(lang_str.to_string());
+    }
+    langs
 }
