@@ -29,7 +29,6 @@ mod tests {
         error: String,
     }
     async fn setup_test_app() -> (Router, Arc<AppState>) {
-
         let db = Arc::new(DatabaseManager::new("sqlite::memory:").await.unwrap());
 
         let app_state = Arc::new(AppState {
@@ -223,14 +222,34 @@ mod tests {
 
         // Test counting all results
         let count = db
-            .count_search_results("test*", ContentType::All, None, None, None, None, None, None)
+            .count_search_results(
+                "test*",
+                ContentType::All,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(count, 3);
 
         // Test counting only OCR results
         let count = db
-            .count_search_results("OCR", ContentType::OCR, None, None, None, None, None, None)
+            .count_search_results(
+                "OCR",
+                ContentType::OCR,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(count, 2);
@@ -240,6 +259,7 @@ mod tests {
             .count_search_results(
                 "audio",
                 ContentType::Audio,
+                None,
                 None,
                 None,
                 None,
@@ -262,6 +282,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -276,6 +297,7 @@ mod tests {
                 None,
                 None,
                 Some("TestWindow2"),
+                None,
                 None,
                 None,
             )
@@ -294,6 +316,7 @@ mod tests {
                 None,
                 Some(30),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -310,6 +333,7 @@ mod tests {
                 None,
                 None,
                 Some(25),
+                None,
             )
             .await
             .unwrap();
@@ -387,6 +411,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -399,6 +424,7 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::minutes(1)),
+                None,
                 None,
                 None,
                 None,
@@ -418,6 +444,7 @@ mod tests {
                 0,
                 None,
                 Some(now - Duration::minutes(10)),
+                None,
                 None,
                 None,
                 None,
@@ -444,6 +471,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -465,6 +493,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -475,6 +504,7 @@ mod tests {
                 "audio",
                 ContentType::Audio,
                 Some(two_hours_ago - Duration::minutes(100)),
+                None,
                 None,
                 None,
                 None,
@@ -497,11 +527,17 @@ mod tests {
         let recent_timestamp = now - Duration::seconds(15);
 
         // Insert old data
-        let _ = db.insert_video_chunk("old_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("old_video.mp4", "test_device")
+            .await
+            .unwrap();
         let old_frame_id = db.insert_frame("test_device", None).await.unwrap();
-        
+
         // Insert recent data
-        let _ = db.insert_video_chunk("recent_video.mp4", "test_device").await.unwrap();
+        let _ = db
+            .insert_video_chunk("recent_video.mp4", "test_device")
+            .await
+            .unwrap();
         let recent_frame_id = db.insert_frame("test_device", None).await.unwrap();
 
         // Insert OCR data with different timestamps
@@ -558,6 +594,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -584,6 +621,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -599,7 +637,7 @@ mod tests {
         // Get home directory safely
         let home = std::env::var("HOME").expect("HOME environment variable not set");
         let db_path = format!("{}/.screenpipe/db.sqlite", home);
-        
+
         // Open database in read-only mode for safety
         let db = Arc::new(
             DatabaseManager::new(&format!("sqlite:{}?mode=ro", db_path))
@@ -615,11 +653,12 @@ mod tests {
         // Search for recent content (last 30 seconds)
         let recent_results = db
             .search(
-                "",  // empty query to get all content
+                "", // empty query to get all content
                 ContentType::OCR,
                 100,
                 0,
                 Some(thirty_seconds_ago),
+                None,
                 None,
                 None,
                 None,
@@ -630,7 +669,7 @@ mod tests {
             .unwrap();
 
         println!("found {} recent results", recent_results.len());
-        
+
         // Search for older content (around 4 hours ago)
         let old_results = db
             .search(
@@ -640,6 +679,7 @@ mod tests {
                 0,
                 Some(four_hours_ago - Duration::minutes(5)),
                 Some(four_hours_ago + Duration::minutes(5)),
+                None,
                 None,
                 None,
                 None,
@@ -655,9 +695,12 @@ mod tests {
             if let SearchResult::OCR(ocr) = result {
                 println!("recent: {} ({})", ocr.ocr_text, ocr.timestamp);
                 // Verify timestamp is actually recent
-                assert!(ocr.timestamp >= thirty_seconds_ago, 
-                    "found old data in recent results: {} at {}", 
-                    ocr.ocr_text, ocr.timestamp);
+                assert!(
+                    ocr.timestamp >= thirty_seconds_ago,
+                    "found old data in recent results: {} at {}",
+                    ocr.ocr_text,
+                    ocr.timestamp
+                );
             }
         }
 

@@ -154,43 +154,7 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="cursor-pointer"
-                      onClick={handleShowTimeline}
-                      disabled={
-                        !settings.enableFrameCache ||
-                        !health ||
-                        health.status === "error"
-                      }
-                    >
-                      <Clock className="mr-2 h-4 w-4" />
-                      timeline
-                    </Button>
-                  </div>
-                </TooltipTrigger>
-                {!settings.enableFrameCache && (
-                  <TooltipContent>
-                    <p>enable timeline in settings first</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleShowMeetingHistory}
-              className="cursor-pointer"
-            >
-              <Calendar className="mr-2 h-4 w-4" />
-              <span>meetings</span>
-            </Button>
-            <Settings />
+            
             <Button
               variant="ghost"
               size="icon"
