@@ -1,12 +1,9 @@
 "use client";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Settings } from "@/components/settings";
-import { PrettyLink } from "@/components/pretty-link";
 import HealthStatus from "@/components/screenpipe-status";
 
 import React from "react";
-import MeetingHistory from "@/components/meeting-history";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,13 +16,13 @@ import {
 import {
   MessageSquare,
   Heart,
-  Menu,
   Bell,
   Play,
   Folder,
   Search,
   Book,
   User,
+  Fingerprint,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -33,8 +30,7 @@ import {
   InboxMessages,
   Message,
 } from "@/components/inbox-messages";
-import { useState, useRef, useEffect } from "react";
-import Onboarding from "@/components/onboarding";
+import { useState, useEffect } from "react";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
@@ -51,12 +47,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Calendar } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useUser } from "@/lib/hooks/use-user";
 import { AuthButton } from "./auth";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const { health } = useHealthCheck();
   const { settings } = useSettings();
@@ -137,6 +133,14 @@ export default function Header() {
     await invoke("show_search");
   };
 
+  const handleShowMeetingHistory = async () => {
+    await invoke("show_meetings");
+  };
+
+  const handleShowIdentifySpeakers = async () => {
+    await invoke("show_identify_speakers");
+  };
+
   return (
     <div>
       {isLoading ? (
@@ -150,6 +154,43 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="cursor-pointer"
+                      onClick={handleShowTimeline}
+                      disabled={
+                        !settings.enableFrameCache ||
+                        !health ||
+                        health.status === "error"
+                      }
+                    >
+                      <Clock className="mr-2 h-4 w-4" />
+                      timeline
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                {!settings.enableFrameCache && (
+                  <TooltipContent>
+                    <p>enable timeline in settings first</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleShowMeetingHistory}
+              className="cursor-pointer"
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+              <span>meetings</span>
+            </Button>
+            <Settings />
             <Button
               variant="ghost"
               size="icon"
@@ -174,9 +215,20 @@ export default function Header() {
                 <DropdownMenuLabel>account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <AuthButton />
+                  <DropdownMenuItem className="cursor-pointer p-0">
+                    <AuthButton />
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <Settings />
+                  <DropdownMenuItem
+                    className="cursor-pointer p-0"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowSettings(true);
+                    }}
+                  >
+                    <Settings />
+                  </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
@@ -200,8 +252,20 @@ export default function Header() {
                     <Clock className="mr-2 h-4 w-4" />
                     <span>timeline</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer p-0">
-                    <MeetingHistory />
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={handleShowMeetingHistory}
+                    disabled={!health || health.status === "error"}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    <span>meetings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={handleShowIdentifySpeakers}
+                  >
+                    <Fingerprint className="mr-2 h-4 w-4" />
+                    <span>identify speakers</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
