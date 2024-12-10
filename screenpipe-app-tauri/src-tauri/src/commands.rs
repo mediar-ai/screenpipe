@@ -135,6 +135,61 @@ pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
         .unwrap();
     }
 }
+#[tauri::command]
+pub fn show_meetings(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("meetings") {
+        #[cfg(target_os = "macos")]
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+        // let _ = window.set_visible_on_all_workspaces(true);
+        // let _ = window.set_always_on_top(true);
+        let _ = window.set_decorations(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "meetings",
+            tauri::WebviewUrl::App("meetings.html".into()),
+        )
+        .title("meetings")
+        .decorations(true)
+        .transparent(true)
+        // .always_on_top(true)
+        // .visible_on_all_workspaces(true) // Added this
+        .center()
+        .build()
+        .unwrap();
+    }
+}
+
+#[tauri::command]
+pub fn show_identify_speakers(app_handle: tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("identify-speakers") {
+        #[cfg(target_os = "macos")]
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+        // let _ = window.set_visible_on_all_workspaces(true);
+        // let _ = window.set_always_on_top(true);
+        let _ = window.set_decorations(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "identify-speakers",
+            tauri::WebviewUrl::App("identify-speakers.html".into()),
+        )
+        .title("identify-speakers")
+        .decorations(true)
+        .transparent(true)
+        // .always_on_top(true)
+        // .visible_on_all_workspaces(true) // Added this
+        .center()
+        .build()
+        .unwrap();
+    }
+}
 
 const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 

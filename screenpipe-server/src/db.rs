@@ -21,11 +21,13 @@ use tokio::time::{timeout, Duration as TokioDuration};
 use zerocopy::AsBytes;
 
 use crate::db_types::{
-    AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult, OCRResultRaw, Speaker,
-    TagContentType,
+    AudioChunk, AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult,
+    OCRResultRaw, Speaker, TagContentType,
 };
 use crate::db_types::{ContentType, UiContent};
 use crate::db_types::{SearchResult, TimeSeriesChunk};
+
+use futures::future::try_join_all;
 
 pub struct DatabaseManager {
     pub pool: SqlitePool,
@@ -150,13 +152,14 @@ impl DatabaseManager {
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
-        let affected =
-            sqlx::query("UPDATE audio_transcriptions SET transcription = ?1 WHERE id = ?2")
-                .bind(transcription)
-                .bind(audio_chunk_id)
-                .execute(&mut *tx)
-                .await?
-                .rows_affected();
+        let affected = sqlx::query(
+            "UPDATE audio_transcriptions SET transcription = ?1 WHERE audio_chunk_id = ?2",
+        )
+        .bind(transcription)
+        .bind(audio_chunk_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
 
         // Commit the transaction for the full transcription
         tx.commit().await?;
@@ -216,7 +219,7 @@ impl DatabaseManager {
         &self,
         embedding: &[f32],
     ) -> Result<Option<Speaker>, SqlxError> {
-        let speaker_threshold = 0.6;
+        let speaker_threshold = 0.5;
         let bytes: &[u8] = embedding.as_bytes();
 
         // Using subquery with LIMIT 1 instead of JOIN
@@ -443,6 +446,7 @@ impl DatabaseManager {
         window_name: Option<&str>,
         min_length: Option<usize>,
         max_length: Option<usize>,
+        speaker_ids: Option<Vec<i64>>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
@@ -464,7 +468,14 @@ impl DatabaseManager {
                                 max_length,
                             ),
                             self.search_audio(
-                                query, limit, offset, start_time, end_time, min_length, max_length
+                                query,
+                                limit,
+                                offset,
+                                start_time,
+                                end_time,
+                                min_length,
+                                max_length,
+                                speaker_ids
                             ),
                             self.search_ui_monitoring(
                                 query,
@@ -530,7 +541,14 @@ impl DatabaseManager {
                 if app_name.is_none() && window_name.is_none() {
                     let audio_results = self
                         .search_audio(
-                            query, limit, offset, start_time, end_time, min_length, max_length,
+                            query,
+                            limit,
+                            offset,
+                            start_time,
+                            end_time,
+                            min_length,
+                            max_length,
+                            speaker_ids,
                         )
                         .await?;
                     results.extend(audio_results.into_iter().map(SearchResult::Audio));
@@ -560,6 +578,7 @@ impl DatabaseManager {
                         end_time,
                         min_length,
                         max_length,
+                        speaker_ids,
                     )
                     .await?;
                 let ui_results = self
@@ -616,6 +635,7 @@ impl DatabaseManager {
                         end_time,
                         min_length,
                         max_length,
+                        speaker_ids,
                     )
                     .await?;
                 let ocr_results = self
@@ -761,7 +781,15 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
         min_length: Option<usize>,
         max_length: Option<usize>,
+        speaker_ids: Option<Vec<i64>>,
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
+        let mut json_array: String = "[]".to_string();
+        if let Some(ids) = speaker_ids {
+            if !ids.is_empty() {
+                json_array = serde_json::to_string(&ids).unwrap_or_default();
+            }
+        }
+
         let base_sql = if query.is_empty() {
             "audio_transcriptions"
         } else {
@@ -785,9 +813,11 @@ impl DatabaseManager {
                 audio_transcriptions.transcription_engine,
                 GROUP_CONCAT(tags.name, ',') as tags,
                 audio_transcriptions.device as device_name,
-                audio_transcriptions.is_input_device
+                audio_transcriptions.is_input_device,
+                audio_transcriptions.speaker_id
             FROM {}
             JOIN audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
+            LEFT JOIN speakers on audio_transcriptions.speaker_id = speakers.id
             LEFT JOIN audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
             LEFT JOIN tags ON audio_tags.tag_id = tags.id
             {}
@@ -795,9 +825,11 @@ impl DatabaseManager {
                 AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
                 AND (?4 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?4)
                 AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
+                AND speakers.hallucination = 0
+                AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
             GROUP BY audio_transcriptions.audio_chunk_id, audio_transcriptions.offset_index
             ORDER BY audio_transcriptions.timestamp DESC
-            LIMIT ?6 OFFSET ?7
+            LIMIT ?7 OFFSET ?8
             "#,
             base_sql, where_clause
         );
@@ -808,14 +840,22 @@ impl DatabaseManager {
             .bind(end_time)
             .bind(min_length.map(|l| l as i64))
             .bind(max_length.map(|l| l as i64))
+            .bind(json_array)
             .bind(limit)
             .bind(offset)
             .fetch_all(&self.pool)
             .await?;
 
-        Ok(raw_results
-            .into_iter()
-            .map(|raw| AudioResult {
+        let futures = raw_results.into_iter().map(|raw| async move {
+            let speaker = match raw.speaker_id {
+                Some(id) => match self.get_speaker_by_id(id).await {
+                    Ok(speaker) => Some(speaker),
+                    Err(_) => None,
+                },
+                None => None,
+            };
+
+            Ok::<AudioResult, sqlx::Error>(AudioResult {
                 audio_chunk_id: raw.audio_chunk_id,
                 transcription: raw.transcription,
                 timestamp: raw.timestamp,
@@ -832,8 +872,11 @@ impl DatabaseManager {
                 } else {
                     DeviceType::Output
                 },
+                speaker,
             })
-            .collect())
+        });
+
+        Ok(try_join_all(futures).await?.into_iter().collect())
     }
 
     pub async fn get_frame(&self, frame_id: i64) -> Result<Option<(String, i64)>, sqlx::Error> {
@@ -855,6 +898,7 @@ impl DatabaseManager {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn count_search_results(
         &self,
         query: &str,
@@ -865,7 +909,15 @@ impl DatabaseManager {
         window_name: Option<&str>,
         min_length: Option<usize>,
         max_length: Option<usize>,
+        speaker_ids: Option<Vec<i64>>,
     ) -> Result<usize, sqlx::Error> {
+        let mut json_array: String = "[]".to_string();
+        if let Some(ids) = speaker_ids {
+            if !ids.is_empty() {
+                json_array = serde_json::to_string(&ids).unwrap_or_default();
+            }
+        }
+
         let sql = match content_type {
             ContentType::OCR => {
                 format!(
@@ -892,7 +944,7 @@ impl DatabaseManager {
             ContentType::Audio => {
                 format!(
                     r#"
-                    SELECT COUNT(DISTINCT audio_transcriptions.id)
+                    SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id)
                     FROM audio_transcriptions_fts 
                     JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id
                     WHERE {}
@@ -900,6 +952,7 @@ impl DatabaseManager {
                         AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
                         AND (?6 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?6)
                         AND (?7 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?7)
+                        AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
                     "#,
                     if query.is_empty() {
                         "1=1"
@@ -955,6 +1008,7 @@ impl DatabaseManager {
                             AND (?6 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?6)
                             AND (?7 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?7)
                             AND audio_transcriptions.transcription != ''
+                            AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
 
                         UNION ALL
 
@@ -982,7 +1036,7 @@ impl DatabaseManager {
                     if query.is_empty() {
                         "audio_transcriptions"
                     } else {
-                        "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
+                        "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.rowid = audio_transcriptions.id"
                     },
                     if query.is_empty() {
                         "1=1"
@@ -1012,6 +1066,7 @@ impl DatabaseManager {
             .bind(window_name)
             .bind(min_length.map(|len| len as i64))
             .bind(max_length.map(|len| len as i64))
+            .bind(json_array)
             .fetch_one(&self.pool)
             .await?;
 
@@ -1467,5 +1522,258 @@ impl DatabaseManager {
         .await?;
 
         Ok(tags.into_iter().map(|t| t.0).collect())
+    }
+
+    pub async fn get_audio_chunks_for_speaker(
+        &self,
+        speaker_id: i64,
+    ) -> Result<Vec<AudioChunk>, sqlx::Error> {
+        sqlx::query_as::<_, AudioChunk>(
+            "SELECT * FROM audio_chunks WHERE id IN (SELECT audio_chunk_id FROM audio_transcriptions WHERE speaker_id = ?)",
+        )
+            .bind(speaker_id)
+            .fetch_all(&self.pool)
+            .await
+    }
+
+    // get unnamed speakers
+    pub async fn get_unnamed_speakers(
+        &self,
+        limit: u32,
+        offset: u32,
+        speaker_ids: Option<Vec<i64>>,
+    ) -> Result<Vec<Speaker>, sqlx::Error> {
+        let base_query = r#"
+            WITH RecentAudioPaths AS (
+                SELECT DISTINCT
+                    s.id as speaker_id,
+                    ac.file_path,
+                    at.transcription
+                FROM speakers s
+                JOIN audio_transcriptions at ON s.id = at.speaker_id
+                JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+                WHERE (s.name = '' OR s.name IS NULL)
+                AND s.hallucination = 0
+                "#;
+
+        let speaker_filter = match &speaker_ids {
+            Some(ids) if !ids.is_empty() => {
+                let placeholders = vec!["?"; ids.len()].join(",");
+                format!("AND s.id IN ({})", placeholders)
+            }
+            _ => String::new(),
+        };
+
+        let query = format!(
+            r#"{}
+                {}
+                AND at.timestamp IN (
+                    SELECT timestamp
+                    FROM audio_transcriptions at2
+                    WHERE at2.speaker_id = s.id
+                    ORDER BY timestamp DESC
+                    LIMIT 3
+                )
+            )
+            SELECT 
+                s.id,
+                s.name,
+                CASE 
+                    WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
+                    THEN json_object('audio_samples', json_group_array(
+                        DISTINCT json_object(
+                            'path', rap.file_path,
+                            'transcript', rap.transcription
+                        )
+                    ))
+                    ELSE json_patch(
+                        json(s.metadata), 
+                        json_object('audio_samples', json_group_array(
+                            DISTINCT json_object(
+                                'path', rap.file_path,
+                                'transcript', rap.transcription
+                            )
+                        ))
+                    )
+                END as metadata,
+                COUNT(at.id) as transcription_count
+            FROM speakers s
+            JOIN RecentAudioPaths rap ON s.id = rap.speaker_id
+            JOIN audio_transcriptions at ON s.id = at.speaker_id
+            GROUP BY s.id
+            ORDER BY transcription_count DESC
+            LIMIT ? OFFSET ?
+            "#,
+            base_query, speaker_filter
+        );
+
+        let mut db_query = sqlx::query_as::<sqlx::Sqlite, Speaker>(&query);
+
+        // Add speaker_id bindings if present
+        if let Some(ids) = speaker_ids {
+            for id in ids {
+                db_query = db_query.bind(id);
+            }
+        }
+
+        // Add limit and offset last
+        db_query = db_query.bind(limit).bind(offset);
+
+        let res = db_query.fetch_all(&self.pool).await?;
+        Ok(res)
+    }
+
+    pub async fn merge_speakers(
+        &self,
+        speaker_to_keep_id: i64,
+        speaker_to_merge_id: i64,
+    ) -> Result<Speaker, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // for each audio transcription of the speaker to merge, update the speaker_id to the speaker to keep
+        sqlx::query("UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?")
+            .bind(speaker_to_keep_id)
+            .bind(speaker_to_merge_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // update speaker_embeddings
+        sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE speaker_id = ?")
+            .bind(speaker_to_keep_id)
+            .bind(speaker_to_merge_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // delete the speaker to merge
+        sqlx::query("DELETE FROM speakers WHERE id = ?")
+            .bind(speaker_to_merge_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+
+        self.get_speaker_by_id(speaker_to_keep_id).await
+    }
+
+    pub async fn search_speakers(&self, name_prefix: &str) -> Result<Vec<Speaker>, sqlx::Error> {
+        sqlx::query_as::<_, Speaker>(
+            "SELECT * FROM speakers WHERE name LIKE ? || '%' AND hallucination = 0",
+        )
+        .bind(name_prefix)
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    pub async fn delete_speaker(&self, id: i64) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Array of (query, operation description) tuples
+        let operations = [
+            (
+                "DELETE FROM audio_transcriptions WHERE speaker_id = ?",
+                "audio transcriptions",
+            ),
+            (
+                "DELETE FROM audio_chunks WHERE id IN (SELECT audio_chunk_id FROM audio_transcriptions WHERE speaker_id = ?)",
+                "audio chunks",
+            ),
+            (
+                "DELETE FROM speaker_embeddings WHERE speaker_id = ?",
+                "speaker embeddings",
+            ),
+            (
+                "DELETE FROM speakers WHERE id = ?",
+                "speaker",
+            ),
+        ];
+
+        // Execute each deletion operation
+        for (query, operation) in operations {
+            if let Err(e) = sqlx::query(query).bind(id).execute(&mut *tx).await {
+                error!("Failed to delete {} for speaker {}: {}", operation, id, e);
+                tx.rollback().await?;
+                return Err(e);
+            }
+            debug!("Successfully deleted {} for speaker {}", operation, id);
+        }
+
+        tx.commit().await.map_err(|e| {
+            error!("Failed to commit speaker deletion transaction: {}", e);
+            e
+        })?;
+
+        debug!("Successfully committed speaker deletion transaction");
+        Ok(())
+    }
+
+    pub async fn get_similar_speakers(
+        &self,
+        speaker_id: i64,
+        limit: u32,
+    ) -> Result<Vec<Speaker>, sqlx::Error> {
+        let threshold = 0.8;
+
+        sqlx::query_as::<sqlx::Sqlite, Speaker>(
+            r#"
+            WITH RecentAudioPaths AS (
+                SELECT DISTINCT
+                    s.id as speaker_id,
+                    ac.file_path,
+                    at.transcription
+                FROM speakers s
+                JOIN audio_transcriptions at ON s.id = at.speaker_id
+                JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+                AND s.hallucination = 0
+                AND at.timestamp IN (
+                    SELECT timestamp
+                    FROM audio_transcriptions at2
+                    WHERE at2.speaker_id = s.id
+                    ORDER BY timestamp DESC
+                    LIMIT 3
+                )
+            ),
+            speaker_embedding AS (
+                SELECT embedding FROM speaker_embeddings WHERE speaker_id = ?1
+            )
+            SELECT 
+                s.id,
+                s.name,
+                CASE 
+                    WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
+                    THEN json_object('audio_samples', json_group_array(DISTINCT json_object(
+                        'path', rap.file_path,
+                        'transcript', rap.transcription
+                    )))
+                    ELSE json_patch(
+                        json(s.metadata), 
+                        json_object('audio_samples', json_group_array(DISTINCT json_object(
+                            'path', rap.file_path,
+                            'transcript', rap.transcription
+                        )))
+                    )
+                END as metadata
+            FROM speaker_embeddings se
+            JOIN speakers s ON se.speaker_id = s.id
+            JOIN RecentAudioPaths rap ON s.id = rap.speaker_id
+            WHERE vec_distance_cosine(se.embedding, (SELECT embedding FROM speaker_embedding)) < ?2
+            AND se.speaker_id != ?1
+            GROUP BY s.id
+            ORDER BY vec_distance_cosine(se.embedding, (SELECT embedding FROM speaker_embedding))
+            LIMIT ?3"#,
+        )
+        .bind(speaker_id)
+        .bind(threshold)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    pub async fn mark_speaker_as_hallucination(&self, id: i64) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE speakers SET hallucination = TRUE WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 }

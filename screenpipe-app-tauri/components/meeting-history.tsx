@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +38,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import { keysToCamelCase } from "@/lib/utils";
+import { cn, keysToCamelCase } from "@/lib/utils";
 import { HelpCircle } from "lucide-react";
 import {
   Card,
@@ -49,6 +51,7 @@ import { ValueOf } from "next/dist/shared/lib/constants";
 import { Checkbox } from "./ui/checkbox";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { DropdownMenuItem } from "./ui/dropdown-menu";
+import IdentifySpeakers from "./identify-speakers";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -92,6 +95,7 @@ interface MeetingSegment {
   transcription: string;
   deviceName: string;
   deviceType: string;
+  speaker: Speaker;
 }
 
 interface Meeting {
@@ -108,6 +112,11 @@ interface Meeting {
   segments: MeetingSegment[];
 }
 
+interface Speaker {
+  id: number;
+  name: string;
+}
+
 interface AudioContent {
   chunkId: number;
   transcription: string;
@@ -117,6 +126,7 @@ interface AudioContent {
   tags: string[];
   deviceName: string;
   deviceType: string;
+  speaker: Speaker;
 }
 
 interface AudioTranscription {
@@ -124,13 +134,20 @@ interface AudioTranscription {
   content: AudioContent;
 }
 
-export default function MeetingHistory({ className }: { className?: string }) {
+export default function MeetingHistory({
+  showMeetingHistory,
+  setShowMeetingHistory,
+  className,
+}: {
+  showMeetingHistory: boolean;
+  setShowMeetingHistory: (show: boolean) => void;
+  className?: string;
+}) {
   const posthog = usePostHog();
   const { settings } = useSettings();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isIdentifying, setIsIdentifying] = useState(false);
   const { toast } = useToast();
@@ -144,6 +161,17 @@ export default function MeetingHistory({ className }: { className?: string }) {
   const [customIdentifyPrompt, setCustomIdentifyPrompt] = useState<string>(
     "please identify the participants in this meeting transcript. provide a comma-separated list of one or two word names or roles or characteristics. if it's not possible to identify, respond with n/a."
   );
+  const [openIdentifyDialogs, setOpenIdentifyDialogs] = useState<{
+    [key: number]: boolean;
+  }>({});
+
+  // Add this function to handle individual dialog states
+  const handleIdentifyDialog = (meetingGroup: number, isOpen: boolean) => {
+    setOpenIdentifyDialogs((prev) => ({
+      ...prev,
+      [meetingGroup]: isOpen,
+    }));
+  };
   const { health } = useHealthCheck();
 
   useEffect(() => {
@@ -153,21 +181,21 @@ export default function MeetingHistory({ className }: { className?: string }) {
   }, [posthog, settings.userId]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (showMeetingHistory) {
       loadMeetings();
       posthog?.capture("meeting_history_opened", {
         userId: settings.userId,
       });
     }
-  }, [isOpen]);
+  }, [showMeetingHistory]);
 
   useEffect(() => {
     setShowError(!!error);
   }, [error]);
 
   useEffect(() => {
-    console.log("Dialog state changed:", isOpen);
-  }, [isOpen]);
+    console.log("Dialog state changed:", showMeetingHistory);
+  }, [showMeetingHistory]);
 
   async function loadMeetings() {
     setLoading(true);
@@ -365,70 +393,6 @@ export default function MeetingHistory({ className }: { className?: string }) {
     }
   }
 
-  async function identifyParticipants(meeting: Meeting) {
-    setIsIdentifying(true);
-    posthog?.capture("participant_identification_started", {
-      userId: settings.userId,
-      meetingId: meeting.meetingGroup,
-    });
-    try {
-      const openai = new OpenAI({
-        apiKey: settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-        dangerouslyAllowBrowser: true,
-      });
-
-      const model = settings.aiModel;
-
-      const messages = [
-        {
-          role: "system" as const,
-          content: `you are an assistant that identifies participants in meeting transcripts. your goal is to provide a list of one or two or more word names or roles or characteristics.
-            
-            for example your rsponse could be:
-            Bob Smith (marketing), John Doe (sales), Jane Smith (ceo)
-            `,
-        },
-        {
-          role: "user" as const,
-          content: `${customIdentifyPrompt}\n\ntranscript with device types:\n\n${meeting.fullTranscription}`,
-        },
-      ];
-
-      const response = await openai.chat.completions.create({
-        model: model,
-        messages: messages,
-      });
-
-      const participants =
-        response.choices[0]?.message?.content || "no participants identified.";
-
-      // Update the meeting with the identified participants
-      const updatedMeeting = { ...meeting, participants };
-      const updatedMeetings = meetings.map((m) =>
-        m.meetingGroup === meeting.meetingGroup ? updatedMeeting : m
-      );
-      setMeetings(updatedMeetings);
-      await setItem("meetings", updatedMeetings);
-
-      toast({
-        title: "participants identified",
-        description:
-          "the meeting participants have been identified successfully.",
-      });
-    } catch (error) {
-      console.error("error identifying participants:", error);
-      toast({
-        title: "error",
-        description:
-          "failed to identify meeting participants. please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsIdentifying(false);
-    }
-  }
-
   function formatTimestamp(timestamp: string): string {
     const date = new Date(timestamp);
     return new Intl.DateTimeFormat("en-US", {
@@ -462,6 +426,16 @@ export default function MeetingHistory({ className }: { className?: string }) {
           ? new Date(transcriptions[index - 1].content.timestamp)
           : null;
 
+      // Get speaker name based on speaker info or device type
+      const speakerName =
+        trans.content.speaker?.name && trans.content.speaker.name.length > 0
+          ? trans.content.speaker.name
+          : trans.content.deviceType?.toLowerCase() === "input"
+          ? "you"
+          : trans.content.deviceType?.toLowerCase() === "output"
+          ? "others"
+          : "unknown";
+
       if (
         !currentMeeting ||
         (prevTime &&
@@ -475,13 +449,9 @@ export default function MeetingHistory({ className }: { className?: string }) {
           meetingGroup: meetingGroup,
           meetingStart: trans.content.timestamp,
           meetingEnd: trans.content.timestamp,
-          fullTranscription: `${formatTimestamp(trans.content.timestamp)} [${
-            trans.content.deviceType?.toLowerCase() === "input"
-              ? "you"
-              : trans.content.deviceType?.toLowerCase() === "output"
-              ? "others"
-              : "unknown"
-          }] ${trans.content.transcription}\n`,
+          fullTranscription: `${formatTimestamp(
+            trans.content.timestamp
+          )} [${speakerName}] ${trans.content.transcription}\n`,
           name: null,
           participants: null,
           summary: null,
@@ -492,25 +462,29 @@ export default function MeetingHistory({ className }: { className?: string }) {
               transcription: trans.content.transcription,
               deviceName: trans.content.deviceName,
               deviceType: trans.content.deviceType,
+              speaker: trans.content.speaker || {
+                id: -1,
+                name: speakerName,
+              },
             },
           ],
           deviceNames: new Set([trans.content.deviceName]),
         };
       } else if (currentMeeting) {
         currentMeeting.meetingEnd = trans.content.timestamp;
-        currentMeeting.fullTranscription += `${trans.content.timestamp} [${
-          trans.content.deviceType?.toLowerCase() === "input"
-            ? "you"
-            : trans.content.deviceType?.toLowerCase() === "output"
-            ? "others"
-            : "unknown"
-        }] ${trans.content.transcription}\n`;
+        currentMeeting.fullTranscription += `${formatTimestamp(
+          trans.content.timestamp
+        )} [${speakerName}] ${trans.content.transcription}\n`;
         currentMeeting.selectedDevices.add(trans.content.deviceName);
         currentMeeting.segments.push({
           timestamp: trans.content.timestamp,
           transcription: trans.content.transcription,
           deviceName: trans.content.deviceName,
           deviceType: trans.content.deviceType,
+          speaker: trans.content.speaker || {
+            id: -1,
+            name: speakerName,
+          },
         });
         currentMeeting.deviceNames.add(trans.content.deviceName);
       }
@@ -661,29 +635,15 @@ export default function MeetingHistory({ className }: { className?: string }) {
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsOpen(true);
-          }}
-          disabled={!health || health.status === "error"}
-        >
-          <Calendar className="mr-2 h-4 w-4" />
-          <span>meetings</span>
-        </DropdownMenuItem>
-      </DialogTrigger>
-      <DialogContent
-        className="max-w-[90vw] w-full max-h-[90vh] h-full"
+    <Card>
+      <CardContent
+        className="h-full"
         onClick={(e) => {
           e.stopPropagation();
         }}
       >
-        <DialogHeader className="py-4">
-          <DialogTitle className="flex items-center justify-between">
+        <CardHeader className="py-4">
+          <CardTitle className="flex items-center justify-between">
             <div className="flex items-center">
               meeting and conversation history
               <Badge variant="secondary" className="ml-2">
@@ -744,9 +704,9 @@ export default function MeetingHistory({ className }: { className?: string }) {
                 </Tooltip>
               </TooltipProvider>
             </div>
-          </DialogTitle>
-        </DialogHeader>
-        <DialogDescription className="mb-4">
+          </CardTitle>
+        </CardHeader>
+        <CardDescription className="mb-4">
           <span className="block text-sm text-gray-600">
             this page provides transcriptions and summaries of your daily
             meetings. it uses your ai settings to generate summaries. note:
@@ -757,7 +717,7 @@ export default function MeetingHistory({ className }: { className?: string }) {
           <span className="block text-sm text-gray-600 mt-2">
             <strong>make sure to setup your ai settings</strong>
           </span>
-        </DialogDescription>
+        </CardDescription>
         <div className="flex-grow overflow-auto">
           {loading ? (
             <div className="space-y-6">
@@ -854,56 +814,40 @@ export default function MeetingHistory({ className }: { className?: string }) {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <div className="mb-4">
-                          <div className="flex flex-col space-y-2">
-                            <div className="flex items-center justify-end mb-1">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <HelpCircle className="h-5 w-5 cursor-help text-gray-500" />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" align="end">
-                                    <p className="max-w-xs">
-                                      best practice for identification is to say
-                                      &quot;person talking about x, y, z, is
-                                      john ...&quot; this helps the ai to link
-                                      topics to specific individuals, improving
-                                      accuracy in participant identification.
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                            <Textarea
-                              rows={2}
-                              value={customIdentifyPrompt}
-                              onChange={(e) =>
-                                setCustomIdentifyPrompt(e.target.value)
-                              }
-                              placeholder="custom identify prompt (optional)"
-                              className="resize-none border rounded text-sm w-full"
-                            />
-                            <div className="flex items-center justify-between">
-                              <p>
-                                participants:{" "}
-                                {meeting.participants || "not identified"}
-                              </p>
-                              <Button
-                                onClick={() => identifyParticipants(meeting)}
-                                disabled={isIdentifying}
-                                size="sm"
-                                className="text-xs bg-black text-white hover:bg-gray-800"
-                              >
-                                {isIdentifying ? (
-                                  <Users className="h-4 w-4 mr-2 animate-pulse" />
-                                ) : (
-                                  <Users className="h-4 w-4 mr-2" />
-                                )}
-                                {isIdentifying ? "identifying..." : "identify"}
-                              </Button>
+                        {!meeting.segments.every((s) => s.speaker.name) && (
+                          <div className="mb-4">
+                            <div className="flex flex-col space-y-2">
+                              <div className="flex items-center justify-end mb-1">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <HelpCircle className="h-5 w-5 cursor-help text-gray-500" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" align="end">
+                                      <p className="max-w-xs">
+                                        identify speakers in your meetings
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
+                              <div className="flex items-center justify-end">
+                                <IdentifySpeakers
+                                  showIdentifySpeakers={
+                                    openIdentifyDialogs[meeting.meetingGroup]
+                                  }
+                                  setShowIdentifySpeakers={(isOpen) =>
+                                    handleIdentifyDialog(
+                                      meeting.meetingGroup,
+                                      isOpen
+                                    )
+                                  }
+                                  segments={meeting.segments}
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                         <div className="mb-4 relative">
                           <h4 className="font-semibold mb-2">transcription:</h4>
                           <Button
@@ -915,7 +859,10 @@ export default function MeetingHistory({ className }: { className?: string }) {
                                   )
                                   .map((s) => {
                                     return `${formatTimestamp(s.timestamp)} [${
-                                      s.deviceType?.toLowerCase() === "input"
+                                      s.speaker
+                                        ? s.speaker.name
+                                        : s.deviceType?.toLowerCase() ===
+                                          "input"
                                         ? "you"
                                         : "others"
                                     }] ${s.transcription}`;
@@ -944,7 +891,10 @@ export default function MeetingHistory({ className }: { className?: string }) {
                                 <React.Fragment key={i}>
                                   <span className="font-bold">
                                     {`${formatTimestamp(s.timestamp)} [${
-                                      s.deviceType?.toLowerCase() === "input"
+                                      s.speaker
+                                        ? s.speaker.name
+                                        : s.deviceType?.toLowerCase() ===
+                                          "input"
                                         ? "you"
                                         : "others"
                                     }]`}
@@ -1021,7 +971,7 @@ export default function MeetingHistory({ className }: { className?: string }) {
             </>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   );
 }

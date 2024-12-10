@@ -1,8 +1,10 @@
+import { stat } from "@tauri-apps/plugin-fs";
 import { platform } from "@tauri-apps/plugin-os";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { ContentItem } from "./screenpipe";
 import levenshtein from "js-levenshtein";
+import { Duration } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -138,4 +140,10 @@ export function stringToColor(str: string): string {
     color += ("00" + value.toString(16)).substr(-2);
   }
   return color;
+}
+
+export async function getFileSize(filePath: string): Promise<number> {
+  const { size } = await stat(filePath);
+
+  return size;
 }

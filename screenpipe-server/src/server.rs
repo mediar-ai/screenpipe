@@ -13,7 +13,7 @@ use futures::{
 use image::ImageFormat::{self};
 
 use crate::{
-    db_types::{ContentType, SearchResult, TagContentType},
+    db_types::{ContentType, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
@@ -30,7 +30,7 @@ use screenpipe_audio::{
 };
 use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -53,6 +53,8 @@ use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 use enigo::{Enigo, Key, Settings};
 
 use screenpipe_audio::LAST_AUDIO_CAPTURE;
+
+use std::str::FromStr;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
@@ -90,6 +92,11 @@ pub(crate) struct SearchQuery {
     min_length: Option<usize>,
     #[serde(default)]
     max_length: Option<usize>,
+    #[serde(
+        deserialize_with = "from_comma_separated_array",
+        default = "default_speaker_ids"
+    )]
+    speaker_ids: Option<Vec<i64>>,
 }
 
 #[derive(Deserialize)]
@@ -125,6 +132,28 @@ pub struct PaginationInfo {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateSpeakerRequest {
+    pub id: i64,
+    pub name: Option<String>,
+    pub metadata: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SearchSpeakersRequest {
+    pub name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteSpeakerRequest {
+    pub id: i64,
+}
+
+#[derive(Deserialize)]
+struct MarkAsHallucinationRequest {
+    speaker_id: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "content")]
 pub enum ContentItem {
     OCR(OCRContent),
@@ -155,6 +184,7 @@ pub struct AudioContent {
     pub tags: Vec<String>,
     pub device_name: String,
     pub device_type: DeviceType,
+    pub speaker: Option<Speaker>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -231,7 +261,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -241,7 +271,8 @@ pub(crate) async fn search(
         query.app_name,
         query.window_name,
         query.min_length,
-        query.max_length
+        query.max_length,
+        query.speaker_ids
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -260,6 +291,7 @@ pub(crate) async fn search(
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
+            query.speaker_ids.clone(),
         ),
         state.db.count_search_results(
             query_str,
@@ -270,6 +302,7 @@ pub(crate) async fn search(
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
+            query.speaker_ids.clone(),
         ),
     )
     .await
@@ -304,6 +337,7 @@ pub(crate) async fn search(
                 tags: audio.tags.clone(),
                 device_name: audio.device_name.clone(),
                 device_type: audio.device_type.clone(),
+                speaker: audio.speaker.clone(),
             }),
             SearchResult::UI(ui) => ContentItem::UI(UiContent {
                 id: ui.id,
@@ -1294,6 +1328,212 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
     }
 }
 
+#[derive(Deserialize, Debug)]
+pub struct GetUnnamedSpeakersRequest {
+    limit: u32,
+    offset: u32,
+    // comma separated list of speaker ids to include
+    #[serde(
+        deserialize_with = "from_comma_separated_array",
+        default = "default_speaker_ids"
+    )]
+    speaker_ids: Option<Vec<i64>>,
+}
+
+fn default_speaker_ids() -> Option<Vec<i64>> {
+    None
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GetSimilarSpeakersRequest {
+    speaker_id: i64,
+    limit: u32,
+}
+
+fn from_comma_separated_array<'de, D>(deserializer: D) -> Result<Option<Vec<i64>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(deserializer).unwrap_or(None);
+    let s = match s {
+        None => return Ok(None),
+        Some(s) => s,
+    };
+    s.split(',')
+        .map(|i| i64::from_str(i).map_err(serde::de::Error::custom))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
+async fn get_unnamed_speakers_handler(
+    State(state): State<Arc<AppState>>,
+    Query(request): Query<GetUnnamedSpeakersRequest>,
+) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
+    let speakers = state
+        .db
+        .get_unnamed_speakers(request.limit, request.offset, request.speaker_ids)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    // convert metadata to json
+    let speakers = speakers
+        .into_iter()
+        .map(|speaker| {
+            let mut metadata: Value = serde_json::from_str(&speaker.metadata).unwrap();
+            if let Some(audio_samples) = metadata.get("audio_samples").and_then(|v| v.as_array()) {
+                metadata["audio_samples"] = serde_json::to_value(audio_samples).unwrap();
+            }
+            Speaker {
+                metadata: metadata.to_string(),
+                ..speaker
+            }
+        })
+        .collect();
+
+    Ok(JsonResponse(speakers))
+}
+
+async fn update_speaker_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<UpdateSpeakerRequest>,
+) -> Result<JsonResponse<Speaker>, (StatusCode, JsonResponse<Value>)> {
+    let speaker_id = payload.id;
+
+    if let Some(name) = payload.name {
+        if let Err(e) = state.db.update_speaker_name(speaker_id, &name).await {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ));
+        }
+    }
+
+    if let Some(metadata) = payload.metadata {
+        if let Err(e) = state
+            .db
+            .update_speaker_metadata(speaker_id, &metadata)
+            .await
+        {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ));
+        }
+    }
+
+    Ok(JsonResponse(
+        state.db.get_speaker_by_id(speaker_id).await.unwrap(),
+    ))
+}
+
+async fn search_speakers_handler(
+    State(state): State<Arc<AppState>>,
+    Query(request): Query<SearchSpeakersRequest>,
+) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
+    let search_prefix = request.name.unwrap_or_default();
+    Ok(JsonResponse(
+        state.db.search_speakers(&search_prefix).await.unwrap(),
+    ))
+}
+
+async fn delete_speaker_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<DeleteSpeakerRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    // get audio_chunks for this speaker
+    let audio_chunks = state
+        .db
+        .get_audio_chunks_for_speaker(payload.id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    state.db.delete_speaker(payload.id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": e.to_string()})),
+        )
+    })?;
+
+    // delete all audio chunks from the file system
+    for audio_chunk in audio_chunks {
+        std::fs::remove_file(audio_chunk.file_path).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+    }
+
+    Ok(JsonResponse(json!({"success": true})))
+}
+
+async fn mark_as_hallucination_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<MarkAsHallucinationRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    let speaker_id = payload.speaker_id;
+
+    state
+        .db
+        .mark_speaker_as_hallucination(speaker_id)
+        .await
+        .unwrap();
+
+    Ok(JsonResponse(json!({"success": true})))
+}
+
+async fn merge_speakers_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<MergeSpeakersRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    let speaker_to_keep_id = payload.speaker_to_keep_id;
+    let speaker_to_merge_id = payload.speaker_to_merge_id;
+
+    state
+        .db
+        .merge_speakers(speaker_to_keep_id, speaker_to_merge_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string(), "speaker_to_keep_id": speaker_to_keep_id, "speaker_to_merge_id": speaker_to_merge_id})),
+            )
+        })?;
+
+    Ok(JsonResponse(json!({"success": true})))
+}
+
+async fn get_similar_speakers_handler(
+    State(state): State<Arc<AppState>>,
+    Query(request): Query<GetSimilarSpeakersRequest>,
+) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
+    let speaker_id = request.speaker_id;
+    let limit = request.limit;
+
+    let similar_speakers = state
+        .db
+        .get_similar_speakers(speaker_id, limit)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    Ok(JsonResponse(similar_speakers))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1323,6 +1563,16 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))
+        .route("/speakers/unnamed", get(get_unnamed_speakers_handler))
+        .route("/speakers/update", post(update_speaker_handler))
+        .route("/speakers/search", get(search_speakers_handler))
+        .route("/speakers/delete", post(delete_speaker_handler))
+        .route(
+            "/speakers/hallucination",
+            post(mark_as_hallucination_handler),
+        )
+        .route("/speakers/merge", post(merge_speakers_handler))
+        .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .layer(cors);
 
@@ -1450,6 +1700,12 @@ pub async fn delete_pipe_handler(
 #[derive(Debug, Deserialize)]
 pub struct DeletePipeRequest {
     pipe_id: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct MergeSpeakersRequest {
+    speaker_to_keep_id: i64,
+    speaker_to_merge_id: i64,
 }
 
 /*
