@@ -154,7 +154,7 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
               variant="destructive"
               className="flex items-center gap-2"
             >
-              restart chrome
+              exit chrome
             </Button>
           )}
         </div>

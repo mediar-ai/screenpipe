@@ -54,6 +54,11 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "pipe-linkedin-ai-assistant",
+    description: "ai assistant that helps you write better linkedin posts and engage with your network",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-linkedin-ai-assistant",
+  },
+  {
     id: "pipe-for-loom",
     description: "generate looms from your screenpipe data",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom",

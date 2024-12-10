@@ -10,12 +10,13 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import { debounce } from "lodash";
 
 interface TemplateEditorProps {
-  initialTemplate: Record<string, any>;
+  initialTemplate: any;
+  defaultOpen?: boolean;
 }
 
-export default function TemplateEditor({ initialTemplate }: TemplateEditorProps) {
-  const [template, setTemplate] = useState(initialTemplate);
-  const [isOpen, setIsOpen] = useState(true);
+export default function TemplateEditor({ initialTemplate, defaultOpen = true }: TemplateEditorProps) {
+  const [template, setTemplate] = useState(initialTemplate || {});
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [searchResults, setSearchResults] = useState<number | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -135,10 +136,12 @@ export default function TemplateEditor({ initialTemplate }: TemplateEditorProps)
 
   return (
     <div className="w-full max-w-7xl flex flex-col gap-6">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex items-center gap-2 w-full">
-          <h2 className="text-xl font-semibold">LinkedIn automation settings</h2>
-          <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "transform rotate-180" : ""}`} />
+          <h2 className="text-s font-semibold">settings</h2>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          />
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-6">
           <div className="flex flex-col gap-6">
