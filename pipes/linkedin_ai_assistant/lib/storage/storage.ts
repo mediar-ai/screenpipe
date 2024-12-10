@@ -201,8 +201,9 @@ export async function updateMultipleProfileVisits(state: State, newVisits: Profi
 
 export interface Connection {
     profileUrl: string;
-    status: 'pending' | 'accepted' | 'declined';
+    status: 'pending' | 'accepted' | 'declined' | 'email_required' | 'cooldown';
     timestamp: string;
+    cooldownUntil?: string;
 }
 
 interface ConnectionsStore {
