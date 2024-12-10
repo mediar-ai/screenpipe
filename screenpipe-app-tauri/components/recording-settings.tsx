@@ -1422,7 +1422,7 @@ export function RecordingSettings({
                 </Label>
               </div>
             )}
-            <div className="flex flex-col space-y-2">
+            {/* <div className="flex flex-col space-y-2">
               <Label htmlFor="port" className="flex items-center space-x-2">
                 <span>server port</span>
                 <TooltipProvider>
@@ -1461,7 +1461,7 @@ export function RecordingSettings({
                   className="w-32"
                 />
               </div>
-            </div>
+            </div> */}
           </CardContent>
         </Card>
       </div>
